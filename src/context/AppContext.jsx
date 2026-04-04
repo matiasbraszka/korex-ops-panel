@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
-import { USERS, CLIENT_ADS_DATA, PROCESS_STEPS } from '../utils/constants';
-import { mkClient, mkTask, today } from '../utils/helpers';
+import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
+import { mkClient, mkTask } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -32,6 +32,10 @@ export function AppProvider({ children }) {
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
   const lastPoll = useRef(0);
+  const clientsRef = useRef(clients);
+  const tasksRef = useRef(tasks);
+  clientsRef.current = clients;
+  tasksRef.current = tasks;
 
   // ── Inject Meta Metrics from CLIENT_ADS_DATA ──
   const injectMetaMetrics = useCallback((clientList) => {
@@ -102,7 +106,7 @@ export function AppProvider({ children }) {
       const taskRows = taskList.map(t => ({
         id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
-        step_idx: t.stepIdx, created_date: t.createdDate
+        description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -116,8 +120,8 @@ export function AppProvider({ children }) {
 
   // ── Save (localStorage + debounced Supabase) ──
   const save = useCallback((newClients, newTasks) => {
-    const c = newClients || clients;
-    const t = newTasks || tasks;
+    const c = newClients || clientsRef.current;
+    const t = newTasks || tasksRef.current;
     localStorage.setItem('korex_v6', JSON.stringify({ clients: c, tasks: t }));
     if (dbReady.current) {
       setSyncStatus('syncing');
@@ -136,57 +140,57 @@ export function AppProvider({ children }) {
         }
       }, 1500);
     }
-  }, [clients, tasks, dbSaveClient, dbSaveTask]);
+  }, [dbSaveClient, dbSaveTask]);
 
   // ── CRUD: Clients ──
   const createClient = useCallback((name, company, service, start, pm) => {
-    const c = mkClient(name, company, service, start, pm, clients.length);
-    const newClients = [...clients, c];
+    const c = mkClient(name, company, service, start, pm, clientsRef.current.length);
+    const newClients = [...clientsRef.current, c];
     const injected = injectMetaMetrics(newClients);
     setClients(injected);
-    save(injected, tasks);
+    save(injected, tasksRef.current);
     if (dbReady.current) dbSaveClient(c);
     return c;
-  }, [clients, tasks, save, dbSaveClient, injectMetaMetrics]);
+  }, [save, dbSaveClient, injectMetaMetrics]);
 
   const updateClient = useCallback((id, updates) => {
     setClients(prev => {
       const newClients = prev.map(c => c.id === id ? { ...c, ...updates } : c);
-      save(newClients, tasks);
+      save(newClients, tasksRef.current);
       const updated = newClients.find(c => c.id === id);
       if (updated && dbReady.current) dbSaveClient(updated);
       return newClients;
     });
-  }, [tasks, save, dbSaveClient]);
+  }, [save, dbSaveClient]);
 
   // ── CRUD: Tasks ──
   const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
-    const newTasks = [...tasks, t];
+    const newTasks = [...tasksRef.current, t];
     setTasks(newTasks);
-    save(clients, newTasks);
+    save(clientsRef.current, newTasks);
     if (dbReady.current) dbSaveTask(t);
     return t;
-  }, [clients, tasks, save, dbSaveTask]);
+  }, [save, dbSaveTask]);
 
   const updateTask = useCallback((id, updates) => {
     setTasks(prev => {
       const newTasks = prev.map(t => t.id === id ? { ...t, ...updates } : t);
-      save(clients, newTasks);
+      save(clientsRef.current, newTasks);
       const updated = newTasks.find(t => t.id === id);
       if (updated && dbReady.current) dbSaveTask(updated);
       return newTasks;
     });
-  }, [clients, save, dbSaveTask]);
+  }, [save, dbSaveTask]);
 
   const deleteTask = useCallback((id) => {
     setTasks(prev => {
       const newTasks = prev.filter(t => t.id !== id);
-      save(clients, newTasks);
+      save(clientsRef.current, newTasks);
       dbDeleteTask(id);
       return newTasks;
     });
-  }, [clients, save, dbDeleteTask]);
+  }, [save, dbDeleteTask]);
 
   // ── Auth ──
   const doLogin = useCallback((username, password) => {
@@ -312,7 +316,7 @@ export function AppProvider({ children }) {
           }
         });
         if (changed) {
-          localStorage.setItem('korex_v6', JSON.stringify({ clients, tasks: newTasks }));
+          localStorage.setItem('korex_v6', JSON.stringify({ clients: clientsRef.current, tasks: newTasks }));
           console.log('\u2713 Pulled updates from Supabase');
           return newTasks;
         }
@@ -321,7 +325,7 @@ export function AppProvider({ children }) {
     } catch (e) {
       /* silent fail on poll */
     }
-  }, [clients]);
+  }, []);
 
   // ── Init on mount ──
   useEffect(() => {
