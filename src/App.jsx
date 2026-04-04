@@ -1,0 +1,241 @@
+import { useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useApp } from './context/AppContext';
+import ClientsPage from './pages/ClientsPage';
+import TasksPage from './pages/TasksPage';
+import PublicidadPage from './pages/PublicidadPage';
+import InformePage from './pages/InformePage';
+import DashboardPage from './pages/DashboardPage';
+import FeedbackPage from './pages/FeedbackPage';
+import Modal from './components/Modal';
+import { today } from './utils/helpers';
+
+function LoginPage() {
+  const { doLogin } = useApp();
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const user = form.user.value;
+    const pass = form.pass.value;
+    const ok = doLogin(user, pass);
+    if (!ok) {
+      form.querySelector('.login-error').style.display = 'block';
+      form.pass.value = '';
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="w-full max-w-[380px] px-8">
+        <div className="text-center mb-10">
+          <div className="text-[52px] font-black tracking-[-3px] leading-none text-text">
+            m<span className="text-blue">k</span>
+          </div>
+          <p className="text-[10px] text-text3 tracking-[4px] uppercase mt-1.5">Metodo Korex</p>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <label className="block text-[13px] font-semibold text-text mb-2">Correo electronico</label>
+          <input
+            type="text"
+            name="user"
+            className="w-full bg-blue-bg2 border border-border rounded-[10px] py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
+            placeholder="usuario@email.com"
+            autoFocus
+          />
+          <label className="block text-[13px] font-semibold text-text mb-2">Contrasena</label>
+          <input
+            type="password"
+            name="pass"
+            className="w-full bg-blue-bg2 border border-border rounded-[10px] py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
+            placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+          />
+          <button
+            type="submit"
+            className="w-full py-3.5 bg-blue text-white border-none rounded-[10px] text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark"
+          >
+            Iniciar sesion
+          </button>
+          <div className="login-error text-red text-xs text-center mt-3.5 hidden">
+            Usuario o contrasena incorrectos
+          </div>
+        </form>
+        <div className="text-center mt-6">
+          <a href="#" className="text-blue text-[13px] no-underline">
+            {'\u00BF'}Olvidaste tu contrasena?
+          </a>
+        </div>
+        <div className="text-center mt-10 text-xs text-text3">
+          Politica de Privacidad &middot; Terminos y Condiciones
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MainLayout() {
+  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, taskProposals, createClient: ctxCreateClient, briefing } = useApp();
+  const [newClientModal, setNewClientModal] = useState(false);
+  const [ncForm, setNcForm] = useState({ name: '', company: '', service: '', date: '', pm: '', notes: '' });
+
+  const navItems = [
+    { id: 'dashboard',   label: 'Dashboard',   icon: '\u25A6' },
+    { id: 'clients',     label: 'Clientes',    icon: '\u2637' },
+    { id: 'publicidad',  label: 'Publicidad',  icon: '\u2739' },
+    { id: 'tasks',       label: 'Tareas',      icon: '\u2611' },
+    { id: 'informe',     label: 'Informe',     icon: '\u2709' },
+    { id: 'feedback',    label: 'Feedback',     icon: '\uD83D\uDCAC' },
+  ];
+
+  const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
+  const pendingProposals = taskProposals.filter(p => p.approval === 'pending').length;
+
+  const switchView = (v) => {
+    setView(v);
+    setSelectedId(null);
+  };
+
+  const titles = {
+    dashboard: ['Dashboard', 'KPIs de entrega de servicio'],
+    clients: ['Clientes', 'Vista general de todos los proyectos'],
+    publicidad: ['Publicidad', 'Metricas de Meta Ads por cliente'],
+    tasks: ['Tareas', 'Gestion de tareas por cliente'],
+    informe: ['Informe Diario', briefing?.date ? 'Ultimo: ' + briefing.date : 'Sin informe aun'],
+    feedback: ['Feedback', 'Feedback de todos los clientes'],
+  };
+
+  const [title, subtitle] = titles[view] || ['', ''];
+
+  const handleCreateClient = () => {
+    if (!ncForm.name.trim() || !ncForm.company.trim()) { alert('Completa nombre y empresa.'); return; }
+    ctxCreateClient(ncForm.name.trim(), ncForm.company.trim(), ncForm.service.trim(), ncForm.date || today(), ncForm.pm.trim());
+    setNewClientModal(false);
+    setNcForm({ name: '', company: '', service: '', date: '', pm: '', notes: '' });
+  };
+
+  const pages = {
+    dashboard: <DashboardPage />,
+    clients: <ClientsPage />,
+    publicidad: <PublicidadPage />,
+    tasks: <TasksPage />,
+    informe: <InformePage />,
+    feedback: <FeedbackPage />,
+  };
+
+  return (
+    <div className="flex min-h-screen">
+      {/* Sidebar */}
+      <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30">
+        <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
+          <div className="text-[22px] font-black text-text tracking-[-1px]">
+            m<span className="text-blue">k</span>
+          </div>
+          <div className="text-[9px] tracking-[3px] uppercase text-text3">METODO KOREX</div>
+        </div>
+        <nav className="p-3 flex-1">
+          <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Menu</div>
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => switchView(item.id)}
+              className={`flex items-center gap-2.5 py-2 px-3 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all duration-150
+                ${view === item.id ? 'text-blue bg-blue-bg font-semibold' : 'text-text2 bg-transparent hover:text-text hover:bg-surface2'}`}
+            >
+              <span className="text-base w-5 text-center">{item.icon}</span>
+              {item.label}
+              {item.id === 'tasks' && urgentCount > 0 && (
+                <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-[10px] min-w-[18px] text-center">{urgentCount}</span>
+              )}
+              {item.id === 'informe' && pendingProposals > 0 && (
+                <span className="ml-auto text-white text-[10px] font-bold py-[1px] px-1.5 rounded-[10px] min-w-[18px] text-center" style={{ background: 'var(--color-orange)' }}>{pendingProposals}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className="p-3.5 px-4 border-t border-border flex items-center gap-2.5">
+          <div
+            className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+            style={{ background: currentUser?.color + '18', color: currentUser?.color }}
+          >
+            {currentUser?.initials}
+          </div>
+          <div>
+            <div className="text-[13px] font-semibold">{currentUser?.name}</div>
+            <div className="text-[11px] text-text3">{currentUser?.role}</div>
+          </div>
+          <button
+            onClick={doLogout}
+            className="ml-auto bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red"
+            title="Cerrar sesion"
+          >
+            {'\u2192'}
+          </button>
+        </div>
+      </div>
+
+      {/* Main area */}
+      <div className="ml-[240px] flex-1 min-h-screen">
+        {/* Topbar */}
+        <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10">
+          <div>
+            <div className="text-[17px] font-bold">{title}</div>
+            <div className="text-xs text-text3">{subtitle}</div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-[10px] bg-surface2 ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
+              {syncStatus === 'syncing' ? '\u21BB Guardando...' : syncStatus === 'error' ? '\u2715 Error sync' : '\u25CF Sincronizado'}
+            </span>
+            {view === 'clients' && (
+              <button
+                className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5"
+                onClick={() => setNewClientModal(true)}
+              >
+                + Nuevo cliente
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="p-6 px-7">
+          {pages[view] || <div className="text-text3 text-center py-20">Vista no encontrada</div>}
+        </div>
+      </div>
+
+      {/* New Client Modal */}
+      <Modal
+        open={newClientModal}
+        onClose={() => setNewClientModal(false)}
+        title="Nuevo cliente"
+        footer={<>
+          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setNewClientModal(false)}>Cancelar</button>
+          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={handleCreateClient}>Crear</button>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Juan Garcia" value={ncForm.name} onChange={e => setNcForm(f => ({ ...f, name: e.target.value }))} /></div>
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Empresa</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Garcia Store" value={ncForm.company} onChange={e => setNcForm(f => ({ ...f, company: e.target.value }))} /></div>
+        </div>
+        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Funnel completo + Ads" value={ncForm.service} onChange={e => setNcForm(f => ({ ...f, service: e.target.value }))} /></div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Fecha inicio</label><input type="date" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" value={ncForm.date} onChange={e => setNcForm(f => ({ ...f, date: e.target.value }))} /></div>
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Responsable</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Jose Martin" value={ncForm.pm} onChange={e => setNcForm(f => ({ ...f, pm: e.target.value }))} /></div>
+        </div>
+        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Notas</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] resize-y min-h-[80px] leading-relaxed" value={ncForm.notes} onChange={e => setNcForm(f => ({ ...f, notes: e.target.value }))} /></div>
+      </Modal>
+    </div>
+  );
+}
+
+function App() {
+  const { currentUser } = useApp();
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/*" element={currentUser ? <MainLayout /> : <LoginPage />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;

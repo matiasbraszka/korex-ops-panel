@@ -1,0 +1,307 @@
+import { useState, useRef } from 'react';
+import { useApp } from '../context/AppContext';
+import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
+import { getStepName, getAllPhases } from '../utils/helpers';
+import Dropdown from '../components/Dropdown';
+
+export default function TasksPage() {
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, hideCompletedTasks, setHideCompletedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
+  const [addingTaskTo, setAddingTaskTo] = useState(null);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const [expandedTasks, setExpandedTasks] = useState({});
+  const dropdownRefs = useRef({});
+
+  const getRef = (key) => {
+    if (!dropdownRefs.current[key]) dropdownRefs.current[key] = { current: null };
+    return dropdownRefs.current[key];
+  };
+
+  const filterDefs = [
+    { key: 'all', label: 'Todas' },
+    { key: 'urgent', label: 'Urgentes' },
+    { key: 'in-progress', label: 'En progreso' },
+    { key: 'blocked', label: 'Bloqueadas' },
+    { key: 'done', label: 'Completadas' },
+  ];
+
+  const assignees = new Set();
+  tasks.forEach(t => { if (t.assignee) assignees.add(t.assignee); });
+  const assigneeList = [...assignees].sort();
+
+  let filteredTasks = [...tasks];
+  if (taskFilter === 'urgent') filteredTasks = filteredTasks.filter(t => t.priority === 'urgent');
+  if (taskFilter === 'in-progress') filteredTasks = filteredTasks.filter(t => t.status === 'in-progress');
+  if (taskFilter === 'blocked') filteredTasks = filteredTasks.filter(t => t.status === 'blocked' || t.status === 'retrasadas');
+  if (taskFilter === 'done') filteredTasks = filteredTasks.filter(t => t.status === 'done');
+  if (hideCompletedTasks && taskFilter !== 'done') filteredTasks = filteredTasks.filter(t => t.status !== 'done');
+
+  if (taskAssignee === 'mine' && currentUser) {
+    const myNames = [currentUser.name.toLowerCase(), currentUser.name.split(' ')[0].toLowerCase()];
+    const myTeam = TEAM.find(m => m.id === currentUser.id);
+    if (myTeam) myNames.push(myTeam.name.toLowerCase());
+    filteredTasks = filteredTasks.filter(t => t.assignee && myNames.includes(t.assignee.toLowerCase()));
+  } else if (taskAssignee !== 'all') {
+    filteredTasks = filteredTasks.filter(t => t.assignee && t.assignee.toLowerCase() === taskAssignee.toLowerCase());
+  }
+
+  const grouped = {};
+  clients.forEach(c => { grouped[c.id] = { client: c, tasks: [] }; });
+  filteredTasks.forEach(t => { if (grouped[t.clientId]) grouped[t.clientId].tasks.push(t); });
+
+  const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const groups = Object.values(grouped).filter(g => g.tasks.length > 0 || addingTaskTo === g.client.id);
+  groups.sort((a, b) => {
+    const am = a.tasks.length ? Math.min(...a.tasks.map(t => prioSort[t.priority] || 2)) : 9;
+    const bm = b.tasks.length ? Math.min(...b.tasks.map(t => prioSort[t.priority] || 2)) : 9;
+    return am - bm;
+  });
+
+  const inlineTaskKeydown = (e, clientId) => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      const stepSelect = document.getElementById('inline-task-step');
+      const stepIdx = stepSelect && stepSelect.value !== '' ? parseInt(stepSelect.value) : null;
+      createTask(e.target.value.trim(), clientId, '', 'normal', 'backlog', '', stepIdx);
+      e.target.value = '';
+      setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50);
+    }
+    if (e.key === 'Escape') setAddingTaskTo(null);
+  };
+
+  const startEditTitle = (taskId, el) => {
+    const t = tasks.find(x => x.id === taskId);
+    if (!t) return;
+    const input = document.createElement('input');
+    input.className = 'border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none w-full bg-white';
+    input.value = t.title;
+    let saved = false;
+    const doSave = () => { if (saved) return; saved = true; updateTask(taskId, { title: input.value.trim() || t.title }); };
+    input.onblur = doSave;
+    input.onkeydown = (ev) => { if (ev.key === 'Enter') input.blur(); if (ev.key === 'Escape') { input.value = t.title; input.blur(); } };
+    el.replaceWith(input);
+    input.focus();
+    input.select();
+  };
+
+  const renderTaskRow = (t) => {
+    const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
+    const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
+    const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
+    const stepName = getStepName(t, clients);
+    const hasDesc = !!(t.description || t.notes);
+    const isExpanded = expandedTasks[t.id];
+    const statusRef = getRef('status-' + t.id);
+    const stepRef = getRef('step-' + t.id);
+    const assigneeRef = getRef('assignee-' + t.id);
+    const prioRef = getRef('prio-' + t.id);
+
+    const client = clients.find(x => x.id === t.clientId);
+    const allPh = getAllPhases(client);
+    const customSteps = client?.customSteps || [];
+
+    const stepDropdownItems = [
+      { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null }) },
+    ];
+    let lastPhase = '';
+    PROCESS_STEPS.forEach((s, i) => {
+      if (s.phase !== lastPhase) {
+        lastPhase = s.phase;
+        stepDropdownItems.push({ divider: true, label: PHASES[s.phase]?.label || s.phase, color: PHASES[s.phase]?.color });
+      }
+      stepDropdownItems.push({ label: s.name, onClick: () => updateTask(t.id, { stepIdx: i }), style: { paddingLeft: 16, fontSize: 11 } });
+    });
+    customSteps.forEach((cs, ci) => {
+      stepDropdownItems.push({ label: cs.name, onClick: () => updateTask(t.id, { stepIdx: PROCESS_STEPS.length + ci }), style: { paddingLeft: 16, fontSize: 11, color: 'var(--color-blue)' } });
+    });
+
+    return (
+      <div key={t.id} className="border-b border-border last:border-b-0">
+        <div className="grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group" style={{ gridTemplateColumns: '28px 1fr 130px 120px 80px 36px' }}>
+          {/* Status icon */}
+          <div
+            ref={el => statusRef.current = el}
+            className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0"
+            style={{ background: ts.bg, color: ts.color, border: `1.5px solid ${ts.color}` }}
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'status-' + t.id ? null : 'status-' + t.id); }}
+            title={ts.label}
+          >{ts.icon}</div>
+          <Dropdown
+            open={openDropdown === 'status-' + t.id}
+            onClose={() => setOpenDropdown(null)}
+            anchorRef={statusRef}
+            items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+          />
+
+          {/* Title */}
+          <div className="min-w-0 flex items-center gap-1.5">
+            <span className="cursor-text py-[2px] px-1 rounded-[3px] whitespace-nowrap overflow-hidden text-ellipsis flex-1 hover:bg-surface2" onDoubleClick={(e) => startEditTitle(t.id, e.target)}>{t.title}</span>
+            {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" />}
+            <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+          </div>
+
+          {/* Step */}
+          <div
+            ref={el => stepRef.current = el}
+            className="cursor-pointer relative"
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'step-' + t.id ? null : 'step-' + t.id); }}
+          >
+            <div className={`text-[10px] py-[3px] px-2 rounded whitespace-nowrap overflow-hidden text-ellipsis max-w-[130px] transition-colors hover:bg-surface2 ${stepName ? 'text-text2' : 'text-text3 italic'}`}>{stepName || '+ Objetivo'}</div>
+          </div>
+          <Dropdown
+            open={openDropdown === 'step-' + t.id}
+            onClose={() => setOpenDropdown(null)}
+            anchorRef={stepRef}
+            items={stepDropdownItems}
+            minWidth={220}
+            maxHeight={300}
+          />
+
+          {/* Assignee */}
+          <div
+            ref={el => assigneeRef.current = el}
+            className="cursor-pointer relative"
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'assignee-' + t.id ? null : 'assignee-' + t.id); }}
+          >
+            <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-surface2">
+              {assignee ? (
+                <>
+                  <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ background: assignee.color + '18', color: assignee.color }}>{assignee.initials}</span>
+                  <span>{assignee.name}</span>
+                </>
+              ) : <span className="text-text3">+ Asignar</span>}
+            </div>
+          </div>
+          <Dropdown
+            open={openDropdown === 'assignee-' + t.id}
+            onClose={() => setOpenDropdown(null)}
+            anchorRef={assigneeRef}
+            items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
+          />
+
+          {/* Priority */}
+          <div
+            ref={el => prioRef.current = el}
+            className="cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'prio-' + t.id ? null : 'prio-' + t.id); }}
+          >
+            <div className="flex items-center gap-[2px] py-[2px] px-1.5 rounded text-[11px] font-semibold hover:bg-surface2" style={{ color: tp.color }}>{tp.flag} {tp.label}</div>
+          </div>
+          <Dropdown
+            open={openDropdown === 'prio-' + t.id}
+            onClose={() => setOpenDropdown(null)}
+            anchorRef={prioRef}
+            items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+          />
+
+          {/* Delete */}
+          <div className="flex items-center justify-center">
+            <button className="bg-transparent border-none text-text3 cursor-pointer text-sm py-[2px] rounded opacity-0 group-hover:opacity-100 transition-opacity hover:text-red" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
+          </div>
+        </div>
+
+        {/* Expandable description */}
+        {isExpanded && (
+          <div className="py-1.5 px-4 pb-3 text-xs text-text2 leading-relaxed bg-blue-bg2 border-t border-dashed border-border" style={{ paddingLeft: 44 }}>
+            <textarea
+              className="w-full border border-border rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[60px] outline-none bg-white focus:border-blue"
+              placeholder="Escribe una descripcion para esta tarea..."
+              defaultValue={t.description || ''}
+              onBlur={(e) => updateTask(t.id, { description: e.target.value })}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const clientsInGroups = new Set(groups.map(g => g.client.id));
+  const remaining = clients.filter(c => !clientsInGroups.has(c.id));
+
+  return (
+    <div>
+      {/* Filters */}
+      <div className="flex gap-1.5 items-center mb-4 flex-wrap">
+        {filterDefs.map(f => (
+          <button key={f.key} className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskFilter === f.key ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue hover:text-text'}`} onClick={() => setTaskFilter(f.key)}>{f.label}</button>
+        ))}
+        <span className="w-px h-5 bg-border mx-1" />
+        <button className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskAssignee === 'all' ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue'}`} onClick={() => setTaskAssignee('all')}>{'\uD83D\uDC65'} Todos</button>
+        <button className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskAssignee === 'mine' ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue'}`} onClick={() => setTaskAssignee('mine')}>{'\uD83D\uDC64'} Mis tareas</button>
+        {assigneeList.map(a => {
+          const m = TEAM.find(t => t.name.toLowerCase() === a.toLowerCase() || t.id === a);
+          return <button key={a} className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskAssignee === a ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue'}`} onClick={() => setTaskAssignee(a)}>{m ? m.name : a}</button>;
+        })}
+        <label className="ml-auto flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
+          <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
+        </label>
+      </div>
+
+      {!groups.length && !addingTaskTo && (
+        <>
+          <div className="text-center text-text3 text-xs py-[60px]">Sin tareas. Hace click en &quot;+ Agregar tarea&quot; debajo de un cliente.</div>
+          <div className="mt-3">
+            {clients.map(c => (
+              <div key={c.id} className="flex items-center gap-1.5 py-1.5 px-4 cursor-pointer text-text3 text-xs bg-white border border-border rounded-[10px] mb-1 hover:text-blue hover:bg-blue-bg2" onClick={() => setAddingTaskTo(c.id)}>+ Agregar tarea a <b className="ml-1">{c.name}</b></div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {groups.map(g => {
+        g.tasks.sort((a, b) => {
+          if (a.status === 'done' && b.status !== 'done') return 1;
+          if (b.status === 'done' && a.status !== 'done') return -1;
+          return (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2);
+        });
+        const collapsed = collapsedGroups[g.client.id];
+        const taskCount = g.tasks.filter(t => t.status !== 'done').length;
+
+        return (
+          <div key={g.client.id} className="mb-1.5 bg-white border border-border rounded-[10px] overflow-visible">
+            <div
+              className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold cursor-pointer select-none border-b border-border bg-surface2 hover:bg-surface3"
+              onClick={() => setCollapsedGroups(prev => ({ ...prev, [g.client.id]: !prev[g.client.id] }))}
+            >
+              <span className={`text-xs text-text3 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
+              <span>{g.client.name}</span>
+              <span className="bg-surface3 text-text2 text-[11px] font-semibold py-[1px] px-2 rounded-[10px]">{taskCount}</span>
+            </div>
+            {!collapsed && (
+              <div>
+                {g.tasks.map(t => renderTaskRow(t))}
+
+                {/* Inline new task */}
+                {addingTaskTo === g.client.id && (
+                  <div className="grid gap-2 py-1.5 px-4 items-center border-t border-border bg-blue-bg2" style={{ gridTemplateColumns: '28px 1fr 120px 80px 36px' }}>
+                    <div className="text-text3 text-[10px]">+</div>
+                    <div className="flex flex-col gap-1 flex-1">
+                      <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Escribe el nombre de la tarea y presiona Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, g.client.id)} />
+                      <select id="inline-task-step" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
+                        <option value="">Sin vincular a fase</option>
+                        {PROCESS_STEPS.map((s, i) => <option key={i} value={i}>{s.name}</option>)}
+                        {(g.client.customSteps || []).map((cs, ci) => <option key={'c' + ci} value={PROCESS_STEPS.length + ci}>{cs.name} (personalizado)</option>)}
+                      </select>
+                    </div>
+                    <div />
+                    <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" style={{ opacity: 1 }} onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button></div>
+                  </div>
+                )}
+
+                <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(g.client.id); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>+ Agregar tarea</div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Remaining clients */}
+      {remaining.length > 0 && taskFilter === 'all' && (
+        <div className="mt-2 py-1.5">
+          {remaining.filter(c => addingTaskTo !== c.id).slice(0, 5).map(c => (
+            <span key={c.id} className="inline-block py-1.5 px-3.5 rounded-[20px] border border-border bg-white text-text2 text-xs cursor-pointer m-0.5 hover:border-blue hover:text-text" onClick={() => { setAddingTaskTo(c.id); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>{c.name}</span>
+          ))}
+          {remaining.length > 5 && <span className="text-[11px] text-text3 ml-1">+{remaining.length - 5} mas</span>}
+        </div>
+      )}
+    </div>
+  );
+}
