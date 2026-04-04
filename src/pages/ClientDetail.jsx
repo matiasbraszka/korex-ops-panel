@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TASK_STATUS_ORDER, TEAM } from '../utils/constants';
-import { initials, progress, currentStep, getBottleneck, getPhaseTimings, getAllPhases, getStepNameForClient, daysAgo, daysBetween, fmtDate, clientPill, today } from '../utils/helpers';
+import { initials, progress, currentStep, getBottleneck, getPhaseTimings, getAllPhases, getStepNameForClient, daysAgo, daysBetween, fmtDate, clientPill, today, effectiveTime } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
@@ -24,6 +24,7 @@ export default function ClientDetail({ client: c }) {
   const [openTranscription, setOpenTranscription] = useState({});
   const [addingTaskToStep, setAddingTaskToStep] = useState(null);
   const [editingStartDate, setEditingStartDate] = useState(false);
+  const [expandedCompleted, setExpandedCompleted] = useState({});
 
   const dropdownRefs = useRef({});
 
@@ -236,7 +237,19 @@ export default function ClientDetail({ client: c }) {
     setAddingTaskToStep(null);
   };
 
-  const renderStepTaskRow = (t) => {
+  const renderTaskTimeBadge = (t, stepDays) => {
+    const etime = effectiveTime(t, c);
+    if (etime === null) return null;
+    const isDone = t.status === 'done';
+    const isOver = stepDays && etime > stepDays;
+    const color = isDone ? (isOver ? '#F97316' : '#22C55E') : (isOver ? '#F97316' : '#5B7CF5');
+    const bg = isDone ? (isOver ? '#FFF7ED' : '#ECFDF5') : (isOver ? '#FFF7ED' : '#EEF2FF');
+    return (
+      <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold ml-1" style={{ color, background: bg }}>{etime}d</span>
+    );
+  };
+
+  const renderStepTaskRow = (t, stepDays) => {
     const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
     const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
     const isDone = t.status === 'done';
@@ -271,7 +284,7 @@ export default function ClientDetail({ client: c }) {
           input.onkeydown = (ev) => { if (ev.key === 'Enter') input.blur(); if (ev.key === 'Escape') { input.value = t.title; input.blur(); } };
           e.target.replaceWith(input);
           input.focus(); input.select();
-        }}>{t.title}</span>
+        }}>{t.title}{(t.status === 'in-progress' || t.status === 'done') && renderTaskTimeBadge(t, stepDays)}</span>
         <div
           ref={el => assigneeRef.current = el}
           className="cursor-pointer relative"
@@ -396,20 +409,38 @@ export default function ClientDetail({ client: c }) {
         )}
       </div>
 
-      {/* Phase tabs */}
-      <div className="flex gap-1 bg-white border border-border rounded-[10px] p-1 mb-3.5 overflow-x-auto">
-        <button className={`py-[7px] px-3.5 rounded-md cursor-pointer text-xs font-medium whitespace-nowrap border-none font-sans ${phase === 'all' ? 'bg-blue text-white' : 'bg-transparent text-text2 hover:text-text hover:bg-surface2'}`} onClick={() => setPhase('all')}>Todos</button>
-        {Object.entries(allPh).map(([k, v]) => (
-          <button key={k} className={`py-[7px] px-3.5 rounded-md cursor-pointer text-xs font-medium whitespace-nowrap border-none font-sans ${phase === k ? 'bg-blue text-white' : 'bg-transparent text-text2 hover:text-text hover:bg-surface2'}`} onClick={() => setPhase(k)}>{v.label}</button>
-        ))}
-        <label className="ml-auto flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap px-2">
-          <input type="checkbox" checked={hideCompleted} onChange={(e) => setHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completados
-        </label>
-      </div>
+      {/* Phase bar - horizontal proportional segments */}
+      {(() => {
+        const phaseEntries = Object.entries(allPh);
+        const totalSteps = PROCESS_STEPS.length + customs.length;
+        return (
+          <div className="mb-3.5">
+            <div className="flex rounded-lg overflow-hidden h-[30px] cursor-pointer mb-2">
+              {phaseEntries.map(([k, v]) => {
+                const stepsInPhase = PROCESS_STEPS.filter(s => s.phase === k).length + customs.filter(cs => cs.phase === k).length;
+                const widthPct = totalSteps > 0 ? (stepsInPhase / totalSteps * 100) : 0;
+                if (widthPct === 0) return null;
+                const isActive = phase === k;
+                return (
+                  <div key={k} className="flex items-center justify-center text-[10px] font-semibold text-white whitespace-nowrap overflow-hidden transition-all" style={{ width: widthPct + '%', background: v.color, opacity: isActive || phase === 'all' ? 1 : 0.4 }} onClick={() => setPhase(prev => prev === k ? 'all' : k)} title={v.label}>
+                    {widthPct > 8 && v.label}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              <button className={`py-[5px] px-2.5 rounded-full cursor-pointer text-[10px] font-medium whitespace-nowrap border font-sans ${phase === 'all' ? 'bg-blue text-white border-blue' : 'bg-transparent text-text3 border-border hover:text-text hover:bg-surface2'}`} onClick={() => setPhase('all')}>Todos</button>
+              <label className="ml-auto flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
+                <input type="checkbox" checked={hideCompleted} onChange={(e) => setHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completados
+              </label>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Main grid */}
       <div className="grid gap-4 max-md:grid-cols-1" style={{ gridTemplateColumns: '1fr 320px' }}>
-        {/* Left: Timeline */}
+        {/* Left: Timeline - minimal vertical list */}
         <div>
           {phaseGroups.map(pg => {
             const phInfo = allPh[pg.phase] || { label: pg.phase, color: '#5B7CF5' };
@@ -421,71 +452,99 @@ export default function ClientDetail({ client: c }) {
             const pt = phaseTimings[pg.phase];
 
             return (
-              <div key={pg.phase} className="bg-white border border-border rounded-[10px] overflow-visible mb-3">
-                <div className="py-3 px-[18px] border-b border-border text-[13px] font-bold flex items-center justify-between">
-                  <span style={{ color: phInfo.color }}>
+              <div key={pg.phase} className="mb-4">
+                {/* Phase header - pill style */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="inline-flex items-center gap-1.5 py-[4px] px-2.5 rounded-full text-[11px] font-bold text-white" style={{ background: phInfo.color }}>
                     {phInfo.label}
-                    <button className="bg-transparent border-none cursor-pointer text-[10px] text-text3 ml-1" onClick={() => editPhaseTitle(pg.phase)} title="Renombrar fase">{'\u270E'}</button>
+                    <span className="text-[9px] font-normal opacity-80">{dn + customDone}/{standardSteps.length + customInPhase.length}</span>
                   </span>
-                  <span className="text-[11px] text-text3 font-normal">{dn + customDone}/{standardSteps.length + customInPhase.length}{pt?.actualDays != null ? ' \u00B7 ' + pt.actualDays + 'd' : ''}</span>
+                  <button className="bg-transparent border-none cursor-pointer text-[10px] text-text3 hover:text-text" onClick={() => editPhaseTitle(pg.phase)} title="Renombrar fase">{'\u270E'}</button>
+                  {pt?.actualDays != null && <span className="text-[10px] text-text3">{pt.actualDays}d</span>}
                 </div>
 
-                {pg.items.map(({ s, i, cs, isCustom, customIdx }) => {
-                  const cfg = STATUS[cs.status] || STATUS.pending;
-                  let d = null;
-                  if (cs.startDate && cs.endDate) d = daysBetween(cs.startDate, cs.endDate);
-                  else if (cs.startDate && cs.status !== 'pending') d = daysAgo(cs.startDate);
-                  const over = d !== null && d > s.days && cs.status !== 'completed';
-                  const stepTasks = clientTasks.filter(t => t.stepIdx === i);
-                  const deps = (!isCustom && s.dependsOn) ? s.dependsOn : [];
-                  const unmetDeps = deps.filter(di => c.steps[di] && c.steps[di].status !== 'completed');
-                  const depsBlocked = unmetDeps.length > 0 && cs.status !== 'completed';
-                  const depsLabel = unmetDeps.map(di => PROCESS_STEPS[di]?.name || '?').join(', ');
+                {/* Steps - flat list with colored left border */}
+                <div className="rounded-lg overflow-hidden" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
+                  {pg.items.map(({ s, i, cs, isCustom, customIdx }) => {
+                    const cfg = STATUS[cs.status] || STATUS.pending;
+                    const isCompleted = cs.status === 'completed';
+                    const isActive = cs.status === 'in-progress';
+                    let d = null;
+                    if (cs.startDate && cs.endDate) d = daysBetween(cs.startDate, cs.endDate);
+                    else if (cs.startDate && cs.status !== 'pending') d = daysAgo(cs.startDate);
+                    const over = d !== null && d > s.days && !isCompleted;
+                    const stepTasks = clientTasks.filter(t => t.stepIdx === i);
+                    const deps = (!isCustom && s.dependsOn) ? s.dependsOn : [];
+                    const unmetDeps = deps.filter(di => c.steps[di] && c.steps[di].status !== 'completed');
+                    const depsBlocked = unmetDeps.length > 0 && !isCompleted;
+                    const depsLabel = unmetDeps.map(di => PROCESS_STEPS[di]?.name || '?').join(', ');
+                    const isExpanded = expandedCompleted[`${pg.phase}_${i}`];
 
-                  return (
-                    <div key={i} className="flex items-start gap-3 py-3 px-[18px] border-b border-border last:border-b-0 hover:bg-blue-bg2" style={depsBlocked ? { opacity: 0.6 } : {}}>
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs" style={{ background: depsBlocked ? 'var(--color-surface3)' : cfg.color + '15', color: depsBlocked ? 'var(--color-text3)' : cfg.color }}>
-                        {depsBlocked ? '\uD83D\uDD12' : s.client ? '\uD83D\uDC64' : cfg.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold mb-[3px]">
-                          {isCustom ? s.name : getStepNameForClient(c, i)}
-                          {s.client && <span className="text-[9px] font-bold text-orange ml-1.5 uppercase tracking-[0.5px]">CLIENTE</span>}
-                          {isCustom && <span className="text-[9px] font-bold text-blue ml-1.5 uppercase tracking-[0.5px]">PERSONALIZADO</span>}
-                          <button className="bg-transparent border-none cursor-pointer text-[9px] text-text3 ml-1" onClick={() => editSectionTitle(isCustom ? customIdx : i, isCustom)} title="Renombrar">{'\u270E'}</button>
+                    // Completed steps: collapsed single line
+                    if (isCompleted && !isExpanded) {
+                      return (
+                        <div key={i} className="flex items-center gap-2 py-[6px] px-3 cursor-pointer hover:bg-surface2 group" onClick={() => setExpandedCompleted(prev => ({ ...prev, [`${pg.phase}_${i}`]: true }))}>
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: '#22C55E' }} />
+                          <span className="text-[13px] text-text3 line-through">{isCustom ? s.name : getStepNameForClient(c, i)}</span>
+                          {d !== null && <span className="text-[10px] text-text3 ml-auto">{d}d</span>}
+                          <button className="shrink-0 bg-transparent border-none text-text3 cursor-pointer text-[10px] opacity-0 group-hover:opacity-100 ml-1" onClick={(e) => { e.stopPropagation(); openStepModal(i, isCustom, isCustom ? customIdx : null); }}>{'\u270E'}</button>
                         </div>
+                      );
+                    }
+
+                    return (
+                      <div key={i} className={`py-2 px-3 ${isActive ? 'bg-blue-bg2' : ''} ${depsBlocked ? 'opacity-60' : ''}`}>
+                        {/* Collapse button for expanded completed */}
+                        {isCompleted && isExpanded && (
+                          <button className="text-[9px] text-text3 bg-transparent border-none cursor-pointer mb-1 hover:text-text font-sans" onClick={() => setExpandedCompleted(prev => ({ ...prev, [`${pg.phase}_${i}`]: false }))}>Colapsar</button>
+                        )}
+                        <div className="flex items-center gap-2">
+                          {/* Status dot - 8px */}
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: depsBlocked ? '#9CA3AF' : cfg.color }} />
+                          {/* Step name */}
+                          <span className="text-[13px] font-medium flex-1 min-w-0">
+                            {depsBlocked && <span className="mr-1">{'\uD83D\uDD12'}</span>}
+                            {isCustom ? s.name : getStepNameForClient(c, i)}
+                            {s.client && <span className="text-[9px] font-bold text-orange ml-1.5 uppercase tracking-[0.5px]">CLIENTE</span>}
+                            {isCustom && <span className="text-[9px] font-bold text-blue ml-1.5 uppercase tracking-[0.5px]">PERSONALIZADO</span>}
+                          </span>
+                          {/* Time badge */}
+                          <span className={`text-[10px] ${over ? 'text-orange font-semibold' : 'text-text3'}`}>{s.days}d{d !== null ? ` / ${d}d` : ''}{over ? ' (+' + (d - s.days) + ')' : ''}</span>
+                          {/* Responsible */}
+                          {cs.responsible && <span className="text-[10px] text-text3">{cs.responsible}</span>}
+                          {/* Edit buttons */}
+                          <div className="flex gap-1 shrink-0">
+                            <button className="bg-transparent border-none cursor-pointer text-[9px] text-text3 hover:text-text" onClick={() => editSectionTitle(isCustom ? customIdx : i, isCustom)} title="Renombrar">{'\u270E'}</button>
+                            <button className="bg-transparent border-none cursor-pointer text-[9px] text-text3 hover:text-text" onClick={() => openStepModal(i, isCustom, isCustom ? customIdx : null)}>{'\u2699'}</button>
+                            {isCustom && <button className="bg-transparent border-none cursor-pointer text-[9px] text-red hover:text-red" onClick={() => deleteCustomStep(customIdx)}>{'\u2715'}</button>}
+                          </div>
+                        </div>
+                        {/* Dependency warning */}
                         {depsBlocked && (
-                          <div className="text-[9px] text-orange mb-1 flex items-center gap-1">{'\uD83D\uDD12'} Requiere: {depsLabel}</div>
+                          <div className="text-[10px] text-orange ml-4 mt-0.5">Requiere: {depsLabel}</div>
                         )}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <StatusPill text={cfg.label} pillClass={cfg.pill} />
-                          <span className="text-[11px] text-text3">{'\u23F1'} {s.days}d</span>
-                          {d !== null && <span className={`text-[11px] ${over ? 'text-orange font-semibold' : 'text-text3'}`}>{d}d{over ? ' (+' + (d - s.days) + 'd)' : ''}</span>}
-                          {cs.responsible && <span className="text-[11px] text-text3">{'\uD83D\uDC64'} {cs.responsible}</span>}
-                        </div>
-                        {cs.notes && <div className="mt-1.5 text-[11px] text-text2 bg-surface2 py-1.5 px-2.5 rounded-md leading-relaxed">{cs.notes}</div>}
+                        {/* Notes */}
+                        {cs.notes && <div className="mt-1 ml-4 text-[11px] text-text2 bg-surface2 py-1 px-2 rounded leading-relaxed">{cs.notes}</div>}
+                        {/* Tasks as subtle sub-items */}
                         {stepTasks.length > 0 && (
-                          <div className="mt-1.5">{stepTasks.map(t => renderStepTaskRow(t))}</div>
+                          <div className="mt-1 ml-4">{stepTasks.map(t => renderStepTaskRow(t, s.days))}</div>
                         )}
+                        {/* Add task */}
                         {addingTaskToStep === i ? (
                           <input
-                            className="border border-blue rounded-[3px] py-[2px] px-1.5 text-[11px] font-sans outline-none w-[200px] mt-1"
+                            className="border border-blue rounded-[3px] py-[2px] px-1.5 text-[11px] font-sans outline-none w-[200px] mt-1 ml-4"
                             placeholder="Nombre de la tarea..."
                             autoFocus
                             onKeyDown={(e) => { if (e.key === 'Enter') handleStepTaskAdd(i, e.target.value); if (e.key === 'Escape') setAddingTaskToStep(null); }}
                             onBlur={(e) => handleStepTaskAdd(i, e.target.value)}
                           />
                         ) : (
-                          <button className="inline-flex items-center gap-1 text-[11px] text-text3 cursor-pointer mt-1 py-[2px] px-1.5 rounded bg-transparent border-none font-sans hover:text-blue hover:bg-blue-bg" onClick={() => setAddingTaskToStep(i)}>+ Tarea</button>
+                          <button className="inline-flex items-center gap-1 text-[10px] text-text3 cursor-pointer mt-0.5 ml-4 py-[1px] px-1 rounded bg-transparent border-none font-sans hover:text-blue hover:bg-blue-bg" onClick={() => setAddingTaskToStep(i)}>+ Tarea</button>
                         )}
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <button className="shrink-0 bg-transparent border border-border text-text3 w-[26px] h-[26px] rounded-md cursor-pointer text-[11px] flex items-center justify-center hover:bg-surface2 hover:text-text" onClick={() => openStepModal(i, isCustom, isCustom ? customIdx : null)}>{'\u270E'}</button>
-                        {isCustom && <button className="shrink-0 bg-transparent border border-border text-red w-[26px] h-[26px] rounded-md cursor-pointer text-[11px] flex items-center justify-center hover:bg-red-bg" style={{ borderColor: 'rgba(239,68,68,0.13)' }} onClick={() => deleteCustomStep(customIdx)}>{'\u2715'}</button>}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
@@ -495,16 +554,16 @@ export default function ClientDetail({ client: c }) {
             const hasSteps = customs.some(cs => cs.phase === cp.id) || PROCESS_STEPS.some(s => s.phase === cp.id);
             if (hasSteps || (phase !== 'all' && phase !== cp.id)) return null;
             return (
-              <div key={cp.id} className="bg-white border border-border rounded-[10px] overflow-visible mb-3">
-                <div className="py-3 px-[18px] border-b border-border text-[13px] font-bold flex items-center justify-between">
-                  <span style={{ color: cp.color }}>{cp.label}</span><span className="text-[11px] text-text3 font-normal">0/0</span>
+              <div key={cp.id} className="mb-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="inline-flex items-center gap-1.5 py-[4px] px-2.5 rounded-full text-[11px] font-bold text-white" style={{ background: cp.color }}>{cp.label} <span className="text-[9px] font-normal opacity-80">0/0</span></span>
                 </div>
-                <div className="py-3 px-4 text-text3 text-xs italic">Sin secciones aun. Agrega una seccion a esta fase.</div>
+                <div className="rounded-lg py-3 px-4 text-text3 text-xs italic" style={{ borderLeft: `3px solid ${cp.color}` }}>Sin secciones aun. Agrega una seccion a esta fase.</div>
               </div>
             );
           })}
 
-          <button className="flex items-center gap-1.5 text-text3 text-xs cursor-pointer py-2.5 px-[18px] border border-dashed border-border rounded-[10px] mt-2 bg-transparent font-sans w-full hover:text-blue hover:border-blue hover:bg-blue-bg2" onClick={() => { setCrTab('section'); setCrSectionForm({ name: '', phase: Object.keys(allPh)[0] || 'pre-onboarding', days: 7, resp: '' }); setCrPhaseName(''); setCustomRoadmapModal(true); }}>+ Agregar fase o seccion al roadmap</button>
+          <button className="flex items-center gap-1.5 text-text3 text-xs cursor-pointer py-2.5 px-[18px] border border-dashed border-border rounded-lg mt-2 bg-transparent font-sans w-full hover:text-blue hover:border-blue hover:bg-blue-bg2" onClick={() => { setCrTab('section'); setCrSectionForm({ name: '', phase: Object.keys(allPh)[0] || 'pre-onboarding', days: 7, resp: '' }); setCrPhaseName(''); setCustomRoadmapModal(true); }}>+ Agregar fase o seccion al roadmap</button>
         </div>
 
         {/* Right: Side panels */}

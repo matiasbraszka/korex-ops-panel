@@ -148,6 +148,17 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title, clientId, assignee: assignee || '', priority: priority || 'normal',
     stepIdx: stepIdx !== undefined && stepIdx !== null && stepIdx !== '' ? parseInt(stepIdx) : null,
-    status: status || 'backlog', notes: notes || '', description: '', createdDate: today()
+    status: status || 'backlog', notes: notes || '', description: '', createdDate: today(),
+    startedDate: null, completedDate: null, blockedSince: null
   };
+}
+
+export function effectiveTime(task, client) {
+  // Returns number of days the task has been actively worked on
+  // Excludes time when dependencies were blocking
+  if (!task.startedDate) return null;
+  const end = task.completedDate || today();
+  const total = daysBetween(task.startedDate, end);
+  // For now, return total days (dependency blocking is complex to track historically)
+  return total;
 }

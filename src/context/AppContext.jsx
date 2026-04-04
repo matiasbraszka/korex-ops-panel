@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
 import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
-import { mkClient, mkTask } from '../utils/helpers';
+import { mkClient, mkTask, today } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -75,7 +75,8 @@ export function AppProvider({ children }) {
       body: JSON.stringify({
         id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
-        description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate
+        description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
+        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null
       })
     });
   }, []);
@@ -106,7 +107,8 @@ export function AppProvider({ children }) {
       const taskRows = taskList.map(t => ({
         id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
-        description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate
+        description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
+        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -175,7 +177,20 @@ export function AppProvider({ children }) {
 
   const updateTask = useCallback((id, updates) => {
     setTasks(prev => {
-      const newTasks = prev.map(t => t.id === id ? { ...t, ...updates } : t);
+      const newTasks = prev.map(t => {
+        if (t.id !== id) return t;
+        const merged = { ...t, ...updates };
+        // Auto-set timing dates on status changes
+        if (updates.status && updates.status !== t.status) {
+          if (updates.status === 'in-progress' && !merged.startedDate) {
+            merged.startedDate = today();
+          }
+          if (updates.status === 'done') {
+            merged.completedDate = today();
+          }
+        }
+        return merged;
+      });
       save(clientsRef.current, newTasks);
       const updated = newTasks.find(t => t.id === id);
       if (updated && dbReady.current) dbSaveTask(updated);
@@ -239,7 +254,8 @@ export function AppProvider({ children }) {
         const mappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
           priority: t.priority, status: t.status, notes: t.notes,
-          description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date
+          description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
+          startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null
         }));
 
         const injected = injectMetaMetrics(mappedClients);
