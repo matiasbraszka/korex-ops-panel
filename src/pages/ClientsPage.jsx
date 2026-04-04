@@ -1,6 +1,6 @@
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
-import { initials, progress, currentStep, getBottleneck, daysAgo, fmtDate, clientPill } from '../utils/helpers';
+import { initials, progress, currentTask, getBottleneck, daysAgo, fmtDate, clientPill } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
 
@@ -24,7 +24,13 @@ export default function ClientsPage() {
 
   const t = clients.length;
   const b = clients.filter(c => (c.priority || 4) <= 2).length;
-  const l = clients.filter(c => c.steps[17] && c.steps[17].status === 'completed').length;
+  const l = clients.filter(c => {
+    // New system: check if lanzamiento roadmap task is done
+    const launchTask = tasks.find(tk => tk.clientId === c.id && tk.isRoadmapTask && tk.templateId === 'lanzamiento');
+    if (launchTask) return launchTask.status === 'done';
+    // Fallback to steps
+    return c.steps[17] && c.steps[17].status === 'completed';
+  }).length;
   const n = clients.filter(c => (c.priority || 4) === 5).length;
 
   const filterDefs = [
@@ -37,8 +43,16 @@ export default function ClientsPage() {
 
   let cls = [...clients].sort((a, bb) => (a.priority || 4) - (bb.priority || 4));
   if (filter === 'critical') cls = cls.filter(c => (c.priority || 4) <= 2);
-  if (filter === 'in-progress') cls = cls.filter(c => c.steps.some(s => s.status === 'in-progress'));
-  if (filter === 'waiting') cls = cls.filter(c => c.steps.some(s => s.status === 'waiting-client'));
+  if (filter === 'in-progress') cls = cls.filter(c => {
+    const rt = tasks.filter(tk => tk.clientId === c.id && tk.isRoadmapTask);
+    if (rt.length > 0) return rt.some(tk => tk.status === 'in-progress');
+    return c.steps.some(s => s.status === 'in-progress');
+  });
+  if (filter === 'waiting') cls = cls.filter(c => {
+    const rt = tasks.filter(tk => tk.clientId === c.id && tk.isRoadmapTask);
+    if (rt.length > 0) return rt.some(tk => tk.isClientTask && tk.status !== 'done');
+    return c.steps.some(s => s.status === 'waiting-client');
+  });
   if (filter === 'new') cls = cls.filter(c => (c.priority || 4) === 5);
 
   let lastPrio = null;
@@ -90,11 +104,11 @@ export default function ClientsPage() {
       {cls.map(c => {
         const p = c.priority || 4;
         const pcfg = PRIO_CLIENT[p];
-        const cur = currentStep(c);
-        const pct = progress(c);
+        const cur = currentTask(c, tasks);
+        const pct = progress(c, tasks);
         const days = daysAgo(c.startDate);
-        const bottleneck = getBottleneck(c);
-        const pill = clientPill(c);
+        const bottleneck = getBottleneck(c, tasks);
+        const pill = clientPill(c, tasks);
 
         const adsBadge = c.metaMetrics && c.metaMetrics.adsActive
           ? <span className="inline-flex items-center gap-[3px] text-[9px] font-semibold py-[1px] px-1.5 rounded-lg whitespace-nowrap bg-green-bg text-[#16A34A]">{'\u25CF'} Ads</span>
@@ -139,7 +153,7 @@ export default function ClientsPage() {
                   </div>
                 )}
               </div>
-              <div className="text-[11px] text-text2 max-md:hidden">{cur ? PHASES[cur.def.phase]?.label : 'Lanzado'}</div>
+              <div className="text-[11px] text-text2 max-md:hidden">{cur ? PHASES[cur.phase]?.label : 'Lanzado'}</div>
               <div className="text-center max-md:hidden">
                 <strong className="text-[15px]">{days}</strong>
                 <div className="text-[9px] text-text3">dias</div>

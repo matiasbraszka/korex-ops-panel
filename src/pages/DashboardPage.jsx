@@ -7,16 +7,24 @@ export default function DashboardPage() {
   const { clients, tasks } = useApp();
 
   const totalClients = clients.length;
-  const launched = clients.filter(c => c.steps[17] && c.steps[17].status === 'completed').length;
-  const avgProgress = totalClients ? Math.round(clients.reduce((s, c) => s + progress(c), 0) / totalClients) : 0;
-  const blockedClients = clients.filter(c => c.steps.some(s => s.status === 'blocked')).length;
+  const launched = clients.filter(c => {
+    const lt = tasks.find(t => t.clientId === c.id && t.isRoadmapTask && t.templateId === 'lanzamiento');
+    if (lt) return lt.status === 'done';
+    return c.steps[17] && c.steps[17].status === 'completed';
+  }).length;
+  const avgProgress = totalClients ? Math.round(clients.reduce((s, c) => s + progress(c, tasks), 0) / totalClients) : 0;
+  const blockedClients = clients.filter(c => {
+    const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
+    if (rt.length > 0) return rt.some(t => t.status === 'blocked');
+    return c.steps.some(s => s.status === 'blocked');
+  }).length;
 
   // Phase timing averages
   const phaseAvgs = {};
   Object.keys(PHASES).forEach(phase => {
     let totalDays = 0, count = 0;
     clients.forEach(c => {
-      const t = getPhaseTimings(c);
+      const t = getPhaseTimings(c, tasks);
       if (t[phase] && t[phase].actualDays !== null && t[phase].allDone) { totalDays += t[phase].actualDays; count++; }
     });
     const avg = count > 0 ? Math.round(totalDays / count) : null;
@@ -24,14 +32,22 @@ export default function DashboardPage() {
     phaseAvgs[phase] = { avg, expected, count };
   });
 
-  // Average completion time per step
+  // Average completion time per roadmap task (or step for old clients)
   const stepAvgs = PROCESS_STEPS.map((ps, idx) => {
     let totalDays = 0, count = 0;
     clients.forEach(c => {
-      const cs = c.steps[idx];
-      if (cs && cs.status === 'completed' && cs.startDate && cs.endDate) {
-        const d = daysBetween(cs.startDate, cs.endDate);
+      // Try roadmap tasks first
+      const rt = tasks.find(t => t.clientId === c.id && t.isRoadmapTask && t.templateId === ps.id);
+      if (rt && rt.status === 'done' && rt.startedDate && rt.completedDate) {
+        const d = daysBetween(rt.startedDate, rt.completedDate);
         if (d !== null && d >= 0) { totalDays += d; count++; }
+      } else {
+        // Fallback to steps
+        const cs = c.steps[idx];
+        if (cs && cs.status === 'completed' && cs.startDate && cs.endDate) {
+          const d = daysBetween(cs.startDate, cs.endDate);
+          if (d !== null && d >= 0) { totalDays += d; count++; }
+        }
       }
     });
     const avg = count > 0 ? Math.round((totalDays / count) * 10) / 10 : null;
@@ -60,24 +76,29 @@ export default function DashboardPage() {
   // Overdue alerts
   const overdueSteps = [];
   clients.forEach(c => {
-    c.steps.forEach((cs, idx) => {
-      if (cs.status === 'in-progress' && cs.startDate) {
-        const d = daysAgo(cs.startDate);
-        if (d > PROCESS_STEPS[idx].days) {
-          overdueSteps.push({ clientName: c.name, stepName: PROCESS_STEPS[idx].name, days: d, est: PROCESS_STEPS[idx].days, type: 'step' });
+    // Only use steps for clients without roadmap tasks
+    const hasRT = tasks.some(t => t.clientId === c.id && t.isRoadmapTask);
+    if (!hasRT) {
+      c.steps.forEach((cs, idx) => {
+        if (cs.status === 'in-progress' && cs.startDate) {
+          const d = daysAgo(cs.startDate);
+          if (d > PROCESS_STEPS[idx].days) {
+            overdueSteps.push({ clientName: c.name, stepName: PROCESS_STEPS[idx].name, days: d, est: PROCESS_STEPS[idx].days, type: 'step' });
+          }
         }
-      }
-    });
+      });
+    }
   });
   const overdueTasks = tasks.filter(t => {
     if (t.status !== 'in-progress' || !t.startedDate) return false;
     const d = daysAgo(t.startedDate);
+    if (t.isRoadmapTask && t.estimatedDays) return d > t.estimatedDays;
     if (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length) return d > PROCESS_STEPS[t.stepIdx].days;
     return d > 7; // default threshold
   }).map(t => {
     const client = clients.find(x => x.id === t.clientId);
     const d = daysAgo(t.startedDate);
-    const est = t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : 7;
+    const est = t.isRoadmapTask && t.estimatedDays ? t.estimatedDays : (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : 7);
     return { clientName: client?.name || '?', stepName: t.title, days: d, est, type: 'task' };
   });
   const allOverdue = [...overdueSteps, ...overdueTasks].sort((a, b) => (b.days - b.est) - (a.days - a.est));
@@ -208,7 +229,7 @@ export default function DashboardPage() {
 
         {/* Average completion time per step */}
         <div className="bg-white border border-border rounded-[14px] py-5 px-6" style={{ gridColumn: '1 / -1' }}>
-          <div className="text-sm font-bold mb-3.5">Tiempo promedio por seccion</div>
+          <div className="text-sm font-bold mb-3.5">Tiempo promedio por tarea del roadmap</div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[11px]">
               <thead>
@@ -250,8 +271,12 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {clients.filter(c => c.steps.some(s => s.status !== 'pending')).map(c => {
-                  const timings = getPhaseTimings(c);
+                {clients.filter(c => {
+                const hasRT = tasks.some(t => t.clientId === c.id && t.isRoadmapTask);
+                if (hasRT) return tasks.some(t => t.clientId === c.id && t.isRoadmapTask && t.status !== 'backlog');
+                return c.steps.some(s => s.status !== 'pending');
+              }).map(c => {
+                  const timings = getPhaseTimings(c, tasks);
                   let total = 0;
                   return (
                     <tr key={c.id}>

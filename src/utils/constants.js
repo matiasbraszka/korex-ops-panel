@@ -1,24 +1,27 @@
-export const PROCESS_STEPS = [
+export const DEFAULT_TASKS_TEMPLATE = [
   { id: 'registro',      name: 'Registro en finanzas',             phase: 'pre-onboarding',  days: 1,  client: false, dependsOn: [] },
   { id: 'investigacion', name: 'Investigacion Pre-onboarding',     phase: 'pre-onboarding',  days: 2,  client: false, dependsOn: [] },
   { id: 'carpetas',      name: 'Armado de carpetas Drive',         phase: 'pre-onboarding',  days: 1,  client: false, dependsOn: [] },
   { id: 'onboarding',    name: 'Onboarding + Config Meta',         phase: 'onboarding',      days: 2,  client: false, dependsOn: [] },
-  { id: 'estrategia',    name: 'Estrategia, Avatar, Puntos clave', phase: 'primera-entrega', days: 3,  client: false, dependsOn: [3] },
-  { id: 'guiones-ads',   name: 'Guiones de anuncios',              phase: 'primera-entrega', days: 7,  client: false, dependsOn: [4] },
-  { id: 'guion-vsl',     name: 'Guion VSL',                        phase: 'primera-entrega', days: 7,  client: false, dependsOn: [4] },
-  { id: 'landing-texto', name: 'Pre-landing, landing, formulario', phase: 'primera-entrega', days: 7,  client: false, dependsOn: [4] },
-  { id: 'revision',      name: 'REVISION DEL CLIENTE',             phase: 'primera-entrega', days: 7,  client: true,  dependsOn: [4, 5, 6, 7] },
-  { id: 'correcciones',  name: 'Correcciones',                     phase: 'primera-entrega', days: 3,  client: false, dependsOn: [8] },
-  { id: 'grabacion',     name: 'GRABACION DEL CLIENTE',            phase: 'primera-entrega', days: 7,  client: true,  dependsOn: [8] },
-  { id: 'edicion',       name: 'Edicion anuncios y VSL',           phase: 'primera-entrega', days: 4,  client: false, dependsOn: [10] },
-  { id: 'diseno',        name: 'Diseno de la landing',             phase: 'primera-entrega', days: 3,  client: false, dependsOn: [7, 8] },
-  { id: 'revision-dis',  name: 'REVISION DISENO',                  phase: 'primera-entrega', days: 3,  client: true,  dependsOn: [12] },
-  { id: 'codigo',        name: 'Pasar a codigo el funnel',         phase: 'primera-entrega', days: 4,  client: false, dependsOn: [13] },
+  { id: 'estrategia',    name: 'Estrategia, Avatar, Puntos clave', phase: 'primera-entrega', days: 3,  client: false, dependsOn: ['onboarding'] },
+  { id: 'guiones-ads',   name: 'Guiones de anuncios',              phase: 'primera-entrega', days: 7,  client: false, dependsOn: ['estrategia'] },
+  { id: 'guion-vsl',     name: 'Guion VSL',                        phase: 'primera-entrega', days: 7,  client: false, dependsOn: ['estrategia'] },
+  { id: 'landing-texto', name: 'Pre-landing, landing, formulario', phase: 'primera-entrega', days: 7,  client: false, dependsOn: ['estrategia'] },
+  { id: 'revision',      name: 'REVISION DEL CLIENTE',             phase: 'primera-entrega', days: 7,  client: true,  dependsOn: ['estrategia', 'guiones-ads', 'guion-vsl', 'landing-texto'] },
+  { id: 'correcciones',  name: 'Correcciones',                     phase: 'primera-entrega', days: 3,  client: false, dependsOn: ['revision'] },
+  { id: 'grabacion',     name: 'GRABACION DEL CLIENTE',            phase: 'primera-entrega', days: 7,  client: true,  dependsOn: ['revision'] },
+  { id: 'edicion',       name: 'Edicion anuncios y VSL',           phase: 'primera-entrega', days: 4,  client: false, dependsOn: ['grabacion'] },
+  { id: 'diseno',        name: 'Diseno de la landing',             phase: 'primera-entrega', days: 3,  client: false, dependsOn: ['landing-texto', 'revision'] },
+  { id: 'revision-dis',  name: 'REVISION DISENO',                  phase: 'primera-entrega', days: 3,  client: true,  dependsOn: ['diseno'] },
+  { id: 'codigo',        name: 'Pasar a codigo el funnel',         phase: 'primera-entrega', days: 4,  client: false, dependsOn: ['revision-dis'] },
   { id: 'vincular',      name: 'Vincular cuenta y metricas',       phase: 'primera-entrega', days: 3,  client: false, dependsOn: [] },
-  { id: 'reunion',       name: 'REUNION DE PRESENTACION',          phase: 'primera-entrega', days: 1,  client: true,  dependsOn: [14, 15] },
-  { id: 'lanzamiento',   name: 'Lanzamiento de Ads',               phase: 'lanzamiento',     days: 1,  client: false, dependsOn: [16] },
-  { id: 'auditoria',     name: 'Auditoria y mejora continua',      phase: 'auditoria',       days: 30, client: false, dependsOn: [17] },
+  { id: 'reunion',       name: 'REUNION DE PRESENTACION',          phase: 'primera-entrega', days: 1,  client: true,  dependsOn: ['codigo', 'vincular'] },
+  { id: 'lanzamiento',   name: 'Lanzamiento de Ads',               phase: 'lanzamiento',     days: 1,  client: false, dependsOn: ['reunion'] },
+  { id: 'auditoria',     name: 'Auditoria y mejora continua',      phase: 'auditoria',       days: 30, client: false, dependsOn: ['lanzamiento'] },
 ];
+
+// Backward compatibility alias
+export const PROCESS_STEPS = DEFAULT_TASKS_TEMPLATE;
 
 export const PHASES = {
   'pre-onboarding':  { label: 'Pre-Onboarding',  color: '#8B5CF6' },

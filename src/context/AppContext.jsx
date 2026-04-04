@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
 import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
-import { mkClient, mkTask, today } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -76,7 +76,9 @@ export function AppProvider({ children }) {
         id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
         description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
-        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null
+        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
+        phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
+        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false
       })
     });
   }, []);
@@ -108,7 +110,9 @@ export function AppProvider({ children }) {
         id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
         description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
-        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null
+        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
+        phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
+        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -150,10 +154,17 @@ export function AppProvider({ children }) {
     const newClients = [...clientsRef.current, c];
     const injected = injectMetaMetrics(newClients);
     setClients(injected);
-    save(injected, tasksRef.current);
-    if (dbReady.current) dbSaveClient(c);
+    // Create default roadmap tasks for the new client
+    const defaultTasks = createDefaultTasks(c.id);
+    const newTasks = [...tasksRef.current, ...defaultTasks];
+    setTasks(newTasks);
+    save(injected, newTasks);
+    if (dbReady.current) {
+      dbSaveClient(c);
+      defaultTasks.forEach(t => dbSaveTask(t));
+    }
     return c;
-  }, [save, dbSaveClient, injectMetaMetrics]);
+  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics]);
 
   const updateClient = useCallback((id, updates) => {
     setClients(prev => {
@@ -255,7 +266,9 @@ export function AppProvider({ children }) {
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
           priority: t.priority, status: t.status, notes: t.notes,
           description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
-          startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null
+          startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
+          phase: t.phase || null, dependsOn: t.depends_on || null, isRoadmapTask: t.is_roadmap_task || false,
+          templateId: t.template_id || null, estimatedDays: t.estimated_days || null, isClientTask: t.is_client_task || false
         }));
 
         const injected = injectMetaMetrics(mappedClients);

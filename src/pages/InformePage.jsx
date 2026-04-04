@@ -17,9 +17,21 @@ export default function InformePage() {
     let report = `# Informe de Operaciones \u2014 ${new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}\n\n`;
 
     const totalClients = clients.length;
-    const blocked = clients.filter(c => c.steps.some(s => s.status === 'blocked')).length;
-    const waiting = clients.filter(c => c.steps.some(s => s.status === 'waiting-client')).length;
-    const launched = clients.filter(c => c.steps[17] && c.steps[17].status === 'completed').length;
+    const blocked = clients.filter(c => {
+      const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
+      if (rt.length > 0) return rt.some(t => t.status === 'blocked');
+      return c.steps.some(s => s.status === 'blocked');
+    }).length;
+    const waiting = clients.filter(c => {
+      const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
+      if (rt.length > 0) return rt.some(t => t.isClientTask && t.status !== 'done');
+      return c.steps.some(s => s.status === 'waiting-client');
+    }).length;
+    const launched = clients.filter(c => {
+      const lt = tasks.find(t => t.clientId === c.id && t.isRoadmapTask && t.templateId === 'lanzamiento');
+      if (lt) return lt.status === 'done';
+      return c.steps[17] && c.steps[17].status === 'completed';
+    }).length;
     const urgentTasks = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
     const blockedTasks = tasks.filter(t => t.status === 'blocked' || t.status === 'retrasadas').length;
 
@@ -32,18 +44,22 @@ export default function InformePage() {
     if (critical.length) {
       report += `## Clientes criticos y urgentes\n`;
       critical.forEach(c => {
-        const bn = getBottleneck(c);
-        const pct = progress(c);
+        const bn = getBottleneck(c, tasks);
+        const pct = progress(c, tasks);
         report += `- **${c.name}** (${c.company}) \u2014 ${pct}% \u2014 ${bn || 'Sin bloqueo'}\n`;
       });
       report += '\n';
     }
 
-    const blockedClients = clients.filter(c => c.steps.some(s => s.status === 'blocked'));
+    const blockedClients = clients.filter(c => {
+      const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
+      if (rt.length > 0) return rt.some(t => t.status === 'blocked');
+      return c.steps.some(s => s.status === 'blocked');
+    });
     if (blockedClients.length) {
       report += `## Clientes bloqueados\n`;
       blockedClients.forEach(c => {
-        const bn = getBottleneck(c);
+        const bn = getBottleneck(c, tasks);
         report += `- **${c.name}**: ${bn}\n`;
       });
       report += '\n';

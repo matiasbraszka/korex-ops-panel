@@ -1,4 +1,4 @@
-import { PROCESS_STEPS, PHASES } from './constants';
+import { PROCESS_STEPS, DEFAULT_TASKS_TEMPLATE, PHASES } from './constants';
 
 export function today() {
   return new Date().toISOString().substr(0, 10);
@@ -22,17 +22,60 @@ export function fmtDate(d) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
 }
 
-export function progress(c) {
+/**
+ * Returns roadmap tasks for a client.
+ */
+export function getRoadmapTasks(clientId, tasks) {
+  return tasks.filter(t => t.clientId === clientId && t.isRoadmapTask);
+}
+
+/**
+ * Returns true if the client has roadmap tasks (new system).
+ */
+export function hasRoadmapTasks(clientId, tasks) {
+  return tasks.some(t => t.clientId === clientId && t.isRoadmapTask);
+}
+
+/**
+ * Progress: % of completed roadmap tasks (or steps for backward compat).
+ */
+export function progress(c, tasks) {
+  if (tasks && hasRoadmapTasks(c.id, tasks)) {
+    const rt = getRoadmapTasks(c.id, tasks);
+    if (rt.length === 0) return 0;
+    return Math.round(rt.filter(t => t.status === 'done').length / rt.length * 100);
+  }
+  // Fallback to steps
+  if (!c.steps || c.steps.length === 0) return 0;
   return Math.round(c.steps.filter(s => s.status === 'completed').length / c.steps.length * 100);
 }
 
+/**
+ * currentStep (backward compat) — finds first non-completed step.
+ */
 export function currentStep(c) {
+  if (!c.steps) return null;
   for (let i = 0; i < c.steps.length; i++) {
     if (c.steps[i].status !== 'completed') {
       return { def: PROCESS_STEPS[i], cs: c.steps[i], idx: i };
     }
   }
   return null;
+}
+
+/**
+ * currentTask — finds the first non-completed roadmap task.
+ */
+export function currentTask(c, tasks) {
+  if (tasks && hasRoadmapTasks(c.id, tasks)) {
+    const rt = getRoadmapTasks(c.id, tasks);
+    const notDone = rt.find(t => t.status !== 'done');
+    return notDone || null;
+  }
+  // Fallback: use currentStep
+  const cs = currentStep(c);
+  if (!cs) return null;
+  return { title: cs.def.name, phase: cs.def.phase };
 }
 
 export function getStepName(task, clients) {
@@ -66,21 +109,45 @@ export function getAllPhases(c) {
   return merged;
 }
 
-export function getBottleneck(c) {
+/**
+ * getBottleneck: uses tasks if available, else falls back to steps.
+ */
+export function getBottleneck(c, tasks) {
   if (c.bottleneck) return c.bottleneck;
-  // Check blocked steps
+
+  if (tasks && hasRoadmapTasks(c.id, tasks)) {
+    const rt = getRoadmapTasks(c.id, tasks);
+    // Check blocked tasks
+    const blocked = rt.find(t => t.status === 'blocked');
+    if (blocked) return `Bloqueado en: ${blocked.title}${blocked.assignee ? ' \u2014 ' + blocked.assignee : ''}`;
+    // Check overdue in-progress
+    for (const t of rt) {
+      if (t.status === 'in-progress' && t.startedDate) {
+        const d = daysAgo(t.startedDate);
+        const est = t.estimatedDays || 7;
+        if (d > est) {
+          return `${t.title} con retraso (${d}d de ${est}d)${t.assignee ? ' \u2014 ' + t.assignee : ''}`;
+        }
+      }
+    }
+    // Current task
+    const cur = rt.find(t => t.status !== 'done');
+    if (cur && cur.assignee) return `${cur.title} \u2014 ${cur.assignee}`;
+    if (cur) return cur.title;
+    return '';
+  }
+
+  // Fallback to steps
   for (let i = 0; i < c.steps.length; i++) {
     if (c.steps[i].status === 'blocked') {
       return `Bloqueado en: ${PROCESS_STEPS[i].name}${c.steps[i].responsible ? ' \u2014 ' + c.steps[i].responsible : ''}`;
     }
   }
-  // Check waiting-client
   for (let i = 0; i < c.steps.length; i++) {
     if (c.steps[i].status === 'waiting-client') {
       return `Esperando cliente: ${PROCESS_STEPS[i].name}`;
     }
   }
-  // Check overdue in-progress
   for (let i = 0; i < c.steps.length; i++) {
     if (c.steps[i].status === 'in-progress' && c.steps[i].startDate) {
       const d = daysAgo(c.steps[i].startDate);
@@ -89,14 +156,37 @@ export function getBottleneck(c) {
       }
     }
   }
-  // Current step
   const cur = currentStep(c);
   if (cur && cur.cs.responsible) return `${cur.def.name} \u2014 ${cur.cs.responsible}`;
   if (cur) return cur.def.name;
   return '';
 }
 
-export function getPhaseTimings(c) {
+/**
+ * getPhaseTimings: uses tasks if available, else steps.
+ */
+export function getPhaseTimings(c, tasks) {
+  if (tasks && hasRoadmapTasks(c.id, tasks)) {
+    const rt = getRoadmapTasks(c.id, tasks);
+    const timings = {};
+    Object.keys(PHASES).forEach(phase => {
+      const tasksInPhase = rt.filter(t => t.phase === phase);
+      let firstStart = null, lastEnd = null, totalDays = 0, expectedDays = 0;
+      tasksInPhase.forEach(t => {
+        expectedDays += t.estimatedDays || 0;
+        if (t.startedDate && (!firstStart || t.startedDate < firstStart)) firstStart = t.startedDate;
+        if (t.completedDate && (!lastEnd || t.completedDate > lastEnd)) lastEnd = t.completedDate;
+        if (t.startedDate && t.status === 'done' && t.completedDate) totalDays += daysBetween(t.startedDate, t.completedDate);
+        else if (t.startedDate && t.status !== 'backlog') totalDays += daysAgo(t.startedDate);
+      });
+      const allDone = tasksInPhase.length > 0 && tasksInPhase.every(t => t.status === 'done');
+      const actualDays = firstStart && lastEnd ? daysBetween(firstStart, lastEnd) : (firstStart ? daysAgo(firstStart) : null);
+      timings[phase] = { expectedDays, actualDays, firstStart, lastEnd, allDone, totalDays };
+    });
+    return timings;
+  }
+
+  // Fallback to steps
   const timings = {};
   Object.keys(PHASES).forEach(phase => {
     const stepsInPhase = PROCESS_STEPS.map((s, i) => ({ s, i, cs: c.steps[i] })).filter(x => x.s.phase === phase);
@@ -116,11 +206,17 @@ export function getPhaseTimings(c) {
 }
 
 /**
- * Returns an object describing the client's pill status (not HTML).
- * { text, pillClass }
- * pillClass is one of: 'pill-green', 'pill-red', 'pill-yellow', 'pill-blue', 'pill-gray'
+ * clientPill: pill status for the client list.
  */
-export function clientPill(c) {
+export function clientPill(c, tasks) {
+  if (tasks && hasRoadmapTasks(c.id, tasks)) {
+    const rt = getRoadmapTasks(c.id, tasks);
+    if (rt.every(t => t.status === 'done')) return { text: '\u2713 Completado', pillClass: 'pill-green' };
+    if (rt.some(t => t.status === 'blocked')) return { text: 'Bloqueado', pillClass: 'pill-red' };
+    if (rt.some(t => t.status === 'in-progress')) return { text: 'En progreso', pillClass: 'pill-blue' };
+    return { text: 'Pendiente', pillClass: 'pill-gray' };
+  }
+  // Fallback
   if (!currentStep(c)) return { text: '\u2713 Completado', pillClass: 'pill-green' };
   if (c.steps.some(s => s.status === 'blocked')) return { text: 'Bloqueado', pillClass: 'pill-red' };
   if (c.steps.some(s => s.status === 'waiting-client')) return { text: 'Esp. cliente', pillClass: 'pill-yellow' };
@@ -143,6 +239,33 @@ export function mkClient(name, company, service, start, pm, clientCount = 0) {
   };
 }
 
+/**
+ * Creates 19 default roadmap tasks from DEFAULT_TASKS_TEMPLATE for a new client.
+ */
+export function createDefaultTasks(clientId) {
+  return DEFAULT_TASKS_TEMPLATE.map(tpl => ({
+    id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + tpl.id,
+    title: tpl.name,
+    clientId,
+    phase: tpl.phase,
+    status: 'backlog',
+    assignee: '',
+    priority: 'normal',
+    stepIdx: null,
+    dependsOn: [...tpl.dependsOn],
+    isRoadmapTask: true,
+    templateId: tpl.id,
+    estimatedDays: tpl.days,
+    isClientTask: tpl.client,
+    notes: '',
+    description: '',
+    createdDate: today(),
+    startedDate: null,
+    completedDate: null,
+    blockedSince: null,
+  }));
+}
+
 export function mkTask(title, clientId, assignee, priority, status, notes, stepIdx) {
   return {
     id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
@@ -154,11 +277,8 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
 }
 
 export function effectiveTime(task, client) {
-  // Returns number of days the task has been actively worked on
-  // Excludes time when dependencies were blocking
   if (!task.startedDate) return null;
   const end = task.completedDate || today();
   const total = daysBetween(task.startedDate, end);
-  // For now, return total days (dependency blocking is complex to track historically)
   return total;
 }

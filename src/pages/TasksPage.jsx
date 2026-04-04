@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, getAllPhases, effectiveTime } from '../utils/helpers';
+import { getStepName, effectiveTime } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 
 export default function TasksPage() {
@@ -95,11 +95,13 @@ export default function TasksPage() {
     const prioRef = getRef('prio-' + t.id);
 
     const client = clients.find(x => x.id === t.clientId);
-    const allPh = getAllPhases(client);
     const customSteps = client?.customSteps || [];
 
+    // Phase display for roadmap tasks
+    const phaseInfo = t.phase ? PHASES[t.phase] : null;
+
     const stepDropdownItems = [
-      { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null }) },
+      { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null, phase: null }) },
     ];
     let lastPhase = '';
     PROCESS_STEPS.forEach((s, i) => {
@@ -107,7 +109,7 @@ export default function TasksPage() {
         lastPhase = s.phase;
         stepDropdownItems.push({ divider: true, label: PHASES[s.phase]?.label || s.phase, color: PHASES[s.phase]?.color });
       }
-      stepDropdownItems.push({ label: s.name, onClick: () => updateTask(t.id, { stepIdx: i }), style: { paddingLeft: 16, fontSize: 11 } });
+      stepDropdownItems.push({ label: s.name, onClick: () => updateTask(t.id, { stepIdx: i, phase: s.phase }), style: { paddingLeft: 16, fontSize: 11 } });
     });
     customSteps.forEach((cs, ci) => {
       stepDropdownItems.push({ label: cs.name, onClick: () => updateTask(t.id, { stepIdx: PROCESS_STEPS.length + ci }), style: { paddingLeft: 16, fontSize: 11, color: 'var(--color-blue)' } });
@@ -155,7 +157,10 @@ export default function TasksPage() {
             className="cursor-pointer relative"
             onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'step-' + t.id ? null : 'step-' + t.id); }}
           >
-            <div className={`text-[10px] py-[3px] px-2 rounded whitespace-nowrap overflow-hidden text-ellipsis max-w-[130px] transition-colors hover:bg-surface2 ${stepName ? 'text-text2' : 'text-text3 italic'}`}>{stepName || '+ Objetivo'}</div>
+            <div className={`text-[10px] py-[3px] px-2 rounded whitespace-nowrap overflow-hidden text-ellipsis max-w-[130px] transition-colors hover:bg-surface2 ${stepName || phaseInfo ? 'text-text2' : 'text-text3 italic'}`}>
+              {phaseInfo && !stepName && <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />{phaseInfo.label}</span>}
+              {stepName || (!phaseInfo ? '+ Objetivo' : '')}
+            </div>
           </div>
           <Dropdown
             open={openDropdown === 'step-' + t.id}
