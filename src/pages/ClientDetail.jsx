@@ -13,6 +13,8 @@ export default function ClientDetail({ client: c }) {
   const [phase, setPhase] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [stepModal, setStepModal] = useState(null); // { idx, isCustom, customIdx }
+  const [depsModal, setDepsModal] = useState(null); // { idx } - only for standard steps
+  const [depsForm, setDepsForm] = useState([]);
   const [editModal, setEditModal] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState(false);
   const [clientFbModal, setClientFbModal] = useState(false);
@@ -70,24 +72,48 @@ export default function ClientDetail({ client: c }) {
     const newCustomSteps = [...(c.customSteps || [])];
     const newHistory = [...c.history];
 
+    // Auto-set dates based on status change
+    const autoForm = { ...stepForm };
     if (isCustom) {
+      const old = newCustomSteps[customIdx].status;
+      if (autoForm.status !== old) {
+        if (autoForm.status === 'in-progress' && !autoForm.startDate) autoForm.startDate = today();
+        if (autoForm.status === 'completed' && !autoForm.endDate) autoForm.endDate = today();
+      }
       const cs = { ...newCustomSteps[customIdx] };
-      const old = cs.status;
-      Object.assign(cs, stepForm);
+      Object.assign(cs, autoForm);
       newCustomSteps[customIdx] = cs;
-      if (old !== stepForm.status) {
-        newHistory.push({ text: `${cs.name} \u2192 ${STATUS[stepForm.status]?.label || stepForm.status}`, date: today(), color: STATUS[stepForm.status]?.color || '#5B7CF5' });
+      if (old !== autoForm.status) {
+        newHistory.push({ text: `${cs.name} \u2192 ${STATUS[autoForm.status]?.label || autoForm.status}`, date: today(), color: STATUS[autoForm.status]?.color || '#5B7CF5' });
       }
       updateClient(c.id, { customSteps: newCustomSteps, history: newHistory });
     } else {
       const old = newSteps[idx].status;
-      newSteps[idx] = { ...newSteps[idx], ...stepForm };
-      if (old !== stepForm.status) {
-        newHistory.push({ text: `${PROCESS_STEPS[idx].name} \u2192 ${STATUS[stepForm.status]?.label || stepForm.status}`, date: today(), color: STATUS[stepForm.status]?.color || '#5B7CF5' });
+      if (autoForm.status !== old) {
+        if (autoForm.status === 'in-progress' && !autoForm.startDate) autoForm.startDate = today();
+        if (autoForm.status === 'completed' && !autoForm.endDate) autoForm.endDate = today();
+      }
+      newSteps[idx] = { ...newSteps[idx], ...autoForm };
+      if (old !== autoForm.status) {
+        newHistory.push({ text: `${PROCESS_STEPS[idx].name} \u2192 ${STATUS[autoForm.status]?.label || autoForm.status}`, date: today(), color: STATUS[autoForm.status]?.color || '#5B7CF5' });
       }
       updateClient(c.id, { steps: newSteps, history: newHistory });
     }
     setStepModal(null);
+  };
+
+  // Dependencies modal
+  const openDepsModal = (idx) => {
+    const currentDeps = c.steps[idx]?.dependsOn || PROCESS_STEPS[idx]?.dependsOn || [];
+    setDepsForm([...currentDeps]);
+    setDepsModal({ idx });
+  };
+  const saveDeps = () => {
+    if (!depsModal) return;
+    const newSteps = [...c.steps];
+    newSteps[depsModal.idx] = { ...newSteps[depsModal.idx], dependsOn: [...depsForm] };
+    updateClient(c.id, { steps: newSteps });
+    setDepsModal(null);
   };
 
   // Edit client modal
@@ -474,7 +500,7 @@ export default function ClientDetail({ client: c }) {
                     else if (cs.startDate && cs.status !== 'pending') d = daysAgo(cs.startDate);
                     const over = d !== null && d > s.days && !isCompleted;
                     const stepTasks = clientTasks.filter(t => t.stepIdx === i);
-                    const deps = (!isCustom && s.dependsOn) ? s.dependsOn : [];
+                    const deps = (!isCustom && cs.dependsOn) ? cs.dependsOn : ((!isCustom && s.dependsOn) ? s.dependsOn : []);
                     const unmetDeps = deps.filter(di => c.steps[di] && c.steps[di].status !== 'completed');
                     const depsBlocked = unmetDeps.length > 0 && !isCompleted;
                     const depsLabel = unmetDeps.map(di => PROCESS_STEPS[di]?.name || '?').join(', ');
@@ -509,12 +535,17 @@ export default function ClientDetail({ client: c }) {
                             {isCustom && <span className="text-[9px] font-bold text-blue ml-1.5 uppercase tracking-[0.5px]">PERSONALIZADO</span>}
                           </span>
                           {/* Time badge */}
-                          <span className={`text-[10px] ${over ? 'text-orange font-semibold' : 'text-text3'}`}>{s.days}d{d !== null ? ` / ${d}d` : ''}{over ? ' (+' + (d - s.days) + ')' : ''}</span>
+                          {isCompleted && d !== null ? (
+                            <span className={`text-[10px] font-semibold ${d > s.days ? 'text-orange' : 'text-green'}`}>Completado en {d}d</span>
+                          ) : (
+                            <span className={`text-[10px] ${over ? 'text-orange font-semibold' : 'text-text3'}`}>Est: {s.days}d{d !== null && cs.status !== 'pending' ? <>{' '}<span className={d > s.days ? 'text-orange font-semibold' : 'text-green'}>Real: {d}d</span></> : ''}{over ? ' (+' + (d - s.days) + ')' : ''}</span>
+                          )}
                           {/* Responsible */}
                           {cs.responsible && <span className="text-[10px] text-text3">{cs.responsible}</span>}
                           {/* Edit buttons */}
                           <div className="flex gap-1 shrink-0">
                             <button className="bg-transparent border-none cursor-pointer text-[9px] text-text3 hover:text-text" onClick={() => editSectionTitle(isCustom ? customIdx : i, isCustom)} title="Renombrar">{'\u270E'}</button>
+                            {!isCustom && <button className="bg-transparent border-none cursor-pointer text-[9px] text-text3 hover:text-blue" onClick={() => openDepsModal(i)} title="Configurar dependencias">{'\uD83D\uDD17'}</button>}
                             <button className="bg-transparent border-none cursor-pointer text-[9px] text-text3 hover:text-text" onClick={() => openStepModal(i, isCustom, isCustom ? customIdx : null)}>{'\u2699'}</button>
                             {isCustom && <button className="bg-transparent border-none cursor-pointer text-[9px] text-red hover:text-red" onClick={() => deleteCustomStep(customIdx)}>{'\u2715'}</button>}
                           </div>
@@ -814,6 +845,49 @@ export default function ClientDetail({ client: c }) {
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Tipo</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={cfbForm.type} onChange={e => setCfbForm(f => ({ ...f, type: e.target.value }))}><option value="request">Pedido</option><option value="complaint">Queja</option><option value="suggestion">Sugerencia</option><option value="problem">Problema</option></select></div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Detalle de la fuente</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="Ej: Lo comento en la llamada del 01/04" value={cfbForm.sourceDetail} onChange={e => setCfbForm(f => ({ ...f, sourceDetail: e.target.value }))} /></div>
+      </Modal>
+
+      {/* Dependencies Modal */}
+      <Modal
+        open={!!depsModal}
+        onClose={() => setDepsModal(null)}
+        title="Configurar dependencias"
+        maxWidth={440}
+        footer={<>
+          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setDepsModal(null)}>Cancelar</button>
+          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={saveDeps}>Guardar</button>
+        </>}
+      >
+        {depsModal && (
+          <div>
+            <p className="text-xs text-text2 mb-3">Que secciones deben completarse antes de <strong>{PROCESS_STEPS[depsModal.idx]?.name}</strong>?</p>
+            {(() => {
+              let lastPhase = '';
+              return PROCESS_STEPS.slice(0, depsModal.idx).map((ps, pi) => {
+                const showPhase = ps.phase !== lastPhase;
+                lastPhase = ps.phase;
+                const phInfo = PHASES[ps.phase];
+                return (
+                  <div key={pi}>
+                    {showPhase && <div className="text-[10px] font-bold mt-2.5 mb-1 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: phInfo?.color || '#5B7CF5' }} />{phInfo?.label || ps.phase}</div>}
+                    <label className="flex items-center gap-2 py-[5px] px-2 rounded cursor-pointer text-xs hover:bg-surface2">
+                      <input
+                        type="checkbox"
+                        className="cursor-pointer"
+                        checked={depsForm.includes(pi)}
+                        onChange={(e) => {
+                          if (e.target.checked) setDepsForm(prev => [...prev, pi]);
+                          else setDepsForm(prev => prev.filter(x => x !== pi));
+                        }}
+                      />
+                      {getStepNameForClient(c, pi)}
+                    </label>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
       </Modal>
 
       {/* Custom Roadmap Modal */}

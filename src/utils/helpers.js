@@ -137,7 +137,7 @@ export function mkClient(name, company, service, start, pm, clientCount = 0) {
     slackChannel: '', slackChannelId: '', metaAds: [], metaMetrics: null,
     customSteps: [], customPhases: [], clientFeedbacks: [],
     stepNameOverrides: {}, phaseNameOverrides: {},
-    steps: PROCESS_STEPS.map(() => ({ status: 'pending', startDate: '', endDate: '', responsible: '', notes: '' })),
+    steps: PROCESS_STEPS.map((ps, idx) => ({ status: 'pending', startDate: '', endDate: '', responsible: '', notes: '', dependsOn: ps.dependsOn ? [...ps.dependsOn] : [] })),
     feedback: [],
     history: [{ text: 'Cliente creado', date: start || today(), color: '#5B7CF5' }]
   };

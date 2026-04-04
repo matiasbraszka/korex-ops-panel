@@ -1,6 +1,6 @@
 import { useApp } from '../context/AppContext';
 import { PHASES, PROCESS_STEPS, TASK_STATUS, TEAM } from '../utils/constants';
-import { progress, getPhaseTimings } from '../utils/helpers';
+import { progress, getPhaseTimings, daysBetween, daysAgo, today } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 
 export default function DashboardPage() {
@@ -23,6 +23,64 @@ export default function DashboardPage() {
     const expected = PROCESS_STEPS.filter(s => s.phase === phase).reduce((s, x) => s + x.days, 0);
     phaseAvgs[phase] = { avg, expected, count };
   });
+
+  // Average completion time per step
+  const stepAvgs = PROCESS_STEPS.map((ps, idx) => {
+    let totalDays = 0, count = 0;
+    clients.forEach(c => {
+      const cs = c.steps[idx];
+      if (cs && cs.status === 'completed' && cs.startDate && cs.endDate) {
+        const d = daysBetween(cs.startDate, cs.endDate);
+        if (d !== null && d >= 0) { totalDays += d; count++; }
+      }
+    });
+    const avg = count > 0 ? Math.round((totalDays / count) * 10) / 10 : null;
+    const delta = avg !== null ? Math.round((avg - ps.days) * 10) / 10 : null;
+    return { name: ps.name, est: ps.days, avg, delta, count };
+  });
+
+  // Team velocity
+  const now = today();
+  const monthStart = now.substring(0, 7) + '-01';
+  const teamVelocity = TEAM.map(m => {
+    const myTasks = tasks.filter(t => t.assignee?.toLowerCase() === m.name.toLowerCase() || t.assignee === m.id);
+    const completedThisMonth = myTasks.filter(t => t.status === 'done' && t.completedDate && t.completedDate >= monthStart);
+    const inProgress = myTasks.filter(t => t.status === 'in-progress');
+    let totalCompletionDays = 0, completionCount = 0;
+    myTasks.forEach(t => {
+      if (t.status === 'done' && t.startedDate && t.completedDate) {
+        const d = daysBetween(t.startedDate, t.completedDate);
+        if (d !== null && d >= 0) { totalCompletionDays += d; completionCount++; }
+      }
+    });
+    const avgDays = completionCount > 0 ? Math.round((totalCompletionDays / completionCount) * 10) / 10 : null;
+    return { ...m, completedThisMonth: completedThisMonth.length, inProgress: inProgress.length, avgDays };
+  });
+
+  // Overdue alerts
+  const overdueSteps = [];
+  clients.forEach(c => {
+    c.steps.forEach((cs, idx) => {
+      if (cs.status === 'in-progress' && cs.startDate) {
+        const d = daysAgo(cs.startDate);
+        if (d > PROCESS_STEPS[idx].days) {
+          overdueSteps.push({ clientName: c.name, stepName: PROCESS_STEPS[idx].name, days: d, est: PROCESS_STEPS[idx].days, type: 'step' });
+        }
+      }
+    });
+  });
+  const overdueTasks = tasks.filter(t => {
+    if (t.status !== 'in-progress' || !t.startedDate) return false;
+    const d = daysAgo(t.startedDate);
+    if (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length) return d > PROCESS_STEPS[t.stepIdx].days;
+    return d > 7; // default threshold
+  }).map(t => {
+    const client = clients.find(x => x.id === t.clientId);
+    const d = daysAgo(t.startedDate);
+    const est = t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : 7;
+    return { clientName: client?.name || '?', stepName: t.title, days: d, est, type: 'task' };
+  });
+  const allOverdue = [...overdueSteps, ...overdueTasks].sort((a, b) => (b.days - b.est) - (a.days - a.est));
 
   // Tasks by assignee
   const teamLoad = TEAM.map(m => {
@@ -94,6 +152,87 @@ export default function DashboardPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Team velocity */}
+        <div className="bg-white border border-border rounded-[14px] py-5 px-6">
+          <div className="text-sm font-bold mb-3.5">Velocidad del equipo</div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-surface2">
+                  <th className="py-1.5 px-2 text-left border border-border">Miembro</th>
+                  <th className="py-1.5 px-2 text-center border border-border">Prom. dias</th>
+                  <th className="py-1.5 px-2 text-center border border-border">Hechas (mes)</th>
+                  <th className="py-1.5 px-2 text-center border border-border">En progreso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamVelocity.map(m => (
+                  <tr key={m.id}>
+                    <td className="py-[5px] px-2 border border-border font-semibold">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                        {m.name}
+                      </span>
+                    </td>
+                    <td className="py-[5px] px-2 text-center border border-border">{m.avgDays !== null ? m.avgDays + 'd' : '-'}</td>
+                    <td className="py-[5px] px-2 text-center border border-border font-semibold" style={{ color: m.completedThisMonth > 0 ? 'var(--color-green)' : 'var(--color-text3)' }}>{m.completedThisMonth}</td>
+                    <td className="py-[5px] px-2 text-center border border-border" style={{ color: m.inProgress > 0 ? 'var(--color-blue)' : 'var(--color-text3)' }}>{m.inProgress}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Overdue alerts */}
+        <div className="bg-white border border-border rounded-[14px] py-5 px-6">
+          <div className="text-sm font-bold mb-3.5 flex items-center gap-2">Alertas de retraso <span className="text-[11px] font-normal text-text3">({allOverdue.length})</span></div>
+          {allOverdue.length === 0 ? (
+            <div className="text-center text-text3 text-xs py-5">Sin retrasos detectados</div>
+          ) : (
+            <div className="max-h-[250px] overflow-y-auto">
+              {allOverdue.slice(0, 15).map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2 py-[6px] border-b border-border last:border-b-0 text-xs">
+                  <span className="text-[10px]">{item.type === 'step' ? '\u26A0\uFE0F' : '\uD83D\uDDD2'}</span>
+                  <span className="font-semibold text-text min-w-[80px]">{item.clientName}</span>
+                  <span className="text-text2 flex-1 truncate">{item.stepName}</span>
+                  <span className="font-semibold text-orange shrink-0">{item.days}d / {item.est}d</span>
+                  <span className="text-[9px] font-bold text-red shrink-0">+{item.days - item.est}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Average completion time per step */}
+        <div className="bg-white border border-border rounded-[14px] py-5 px-6" style={{ gridColumn: '1 / -1' }}>
+          <div className="text-sm font-bold mb-3.5">Tiempo promedio por seccion</div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-surface2">
+                  <th className="py-1.5 px-2 text-left border border-border">Seccion</th>
+                  <th className="py-1.5 px-2 text-center border border-border">Est. (dias)</th>
+                  <th className="py-1.5 px-2 text-center border border-border">Prom. real</th>
+                  <th className="py-1.5 px-2 text-center border border-border">Delta</th>
+                  <th className="py-1.5 px-2 text-center border border-border">Muestra</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stepAvgs.map((sa, idx) => (
+                  <tr key={idx}>
+                    <td className="py-[5px] px-2 border border-border font-semibold">{sa.name}</td>
+                    <td className="py-[5px] px-2 text-center border border-border text-text2">{sa.est}d</td>
+                    <td className="py-[5px] px-2 text-center border border-border" style={{ color: sa.avg !== null && sa.avg > sa.est ? 'var(--color-red)' : 'var(--color-green)', fontWeight: sa.avg !== null ? 600 : 400 }}>{sa.avg !== null ? sa.avg + 'd' : '-'}</td>
+                    <td className="py-[5px] px-2 text-center border border-border" style={{ color: sa.delta !== null ? (sa.delta > 0 ? 'var(--color-red)' : 'var(--color-green)') : 'var(--color-text3)', fontWeight: sa.delta !== null ? 600 : 400 }}>{sa.delta !== null ? (sa.delta > 0 ? '+' : '') + sa.delta + 'd' : '-'}</td>
+                    <td className="py-[5px] px-2 text-center border border-border text-text3">{sa.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Phase timing per client table */}

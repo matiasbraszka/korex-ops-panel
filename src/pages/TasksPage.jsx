@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, getAllPhases } from '../utils/helpers';
+import { getStepName, getAllPhases, effectiveTime } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 
 export default function TasksPage() {
@@ -134,6 +134,17 @@ export default function TasksPage() {
           {/* Title */}
           <div className="min-w-0 flex items-center gap-1.5">
             <span className="cursor-text py-[2px] px-1 rounded-[3px] whitespace-nowrap overflow-hidden text-ellipsis flex-1 hover:bg-surface2" onDoubleClick={(e) => startEditTitle(t.id, e.target)}>{t.title}</span>
+            {(() => {
+              const client = clients.find(x => x.id === t.clientId);
+              const etime = effectiveTime(t, client);
+              if (etime === null) return null;
+              const isDone = t.status === 'done';
+              const stepDays = t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null;
+              const isOver = stepDays && etime > stepDays;
+              const color = isDone ? (isOver ? '#F97316' : '#22C55E') : (isOver ? '#F97316' : '#5B7CF5');
+              const bg = isDone ? (isOver ? '#FFF7ED' : '#ECFDF5') : (isOver ? '#FFF7ED' : '#EEF2FF');
+              return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>{etime}d</span>;
+            })()}
             {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" />}
             <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
           </div>
