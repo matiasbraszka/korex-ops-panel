@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { PROCESS_STEPS, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
+import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
 import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, effectiveTime } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
@@ -203,6 +203,15 @@ export default function ClientDetail({ client: c }) {
       setCollapsedPhases(prev => ({ ...prev, [phaseKey]: !isCollapsed(phaseKey, phaseGroups.find(g => g.phaseKey === phaseKey)?.allDone) }));
     };
 
+    // Priority cycle order
+    const prioOrder = ['urgent', 'high', 'normal', 'low'];
+    const prioColors = { urgent: '#EF4444', high: '#F97316', normal: '#5B7CF5', low: '#9CA3AF' };
+    const cyclePriority = (t) => {
+      const idx = prioOrder.indexOf(t.priority);
+      const next = prioOrder[(idx + 1) % prioOrder.length];
+      updateTask(t.id, { priority: next });
+    };
+
     // Render a single task row
     const renderTaskRow = (t, isLast) => {
       const blocked = isTaskBlocked(t);
@@ -214,8 +223,12 @@ export default function ClientDetail({ client: c }) {
       const est = t.estimatedDays || null;
       const isExpanded = expandedTasks[t.id];
 
+      // Due date logic
+      const isOverdue = t.dueDate && t.status !== 'done' && !blocked && t.dueDate < today();
+
       const statusRef = getDropdownRef('rd-status-' + t.id);
       const assigneeRef = getDropdownRef('rd-assignee-' + t.id);
+      const phaseChangeRef = getDropdownRef('rd-phase-' + t.id);
 
       // Status icon
       let statusIcon, statusColor;
@@ -302,9 +315,35 @@ export default function ClientDetail({ client: c }) {
               <span className="text-[10px] text-blue-500 shrink-0 w-[80px] text-right font-semibold">{etime}d</span>
             )}
 
-            {/* Priority flag */}
-            {(t.priority === 'urgent' || t.priority === 'high') && (
-              <span className="text-[10px] font-semibold shrink-0" style={{ color: tp.color }}>{tp.flag}</span>
+            {/* Priority cycle dot (FIX 1) */}
+            <span
+              className="w-[14px] h-[14px] rounded-full shrink-0 cursor-pointer border border-white hover:scale-125 transition-transform"
+              style={{ background: prioColors[t.priority] || '#5B7CF5' }}
+              title={`Prioridad: ${tp.label} (click para cambiar)`}
+              onClick={(e) => { e.stopPropagation(); cyclePriority(t); }}
+            />
+
+            {/* Phase change dot (FIX 3) */}
+            <div
+              ref={el => phaseChangeRef.current = el}
+              className="cursor-pointer shrink-0"
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-phase-' + t.id ? null : 'rd-phase-' + t.id); }}
+              title="Cambiar fase"
+            >
+              <span className="w-[14px] h-[14px] rounded-sm shrink-0 inline-block border border-gray-200 hover:scale-125 transition-transform" style={{ background: (allPh[resolvePhase(t)] || { color: '#9CA3AF' }).color }} />
+            </div>
+            <Dropdown
+              open={openDropdown === 'rd-phase-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={phaseChangeRef}
+              items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
+            />
+
+            {/* Due date (FIX 6) */}
+            {t.dueDate && (
+              <span className={`text-[9px] shrink-0 font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} title={`Vence: ${t.dueDate}`}>
+                {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+              </span>
             )}
 
             {/* Description indicator */}
@@ -391,6 +430,20 @@ export default function ClientDetail({ client: c }) {
                   anchorRef={getDropdownRef('rd-prio2-' + t.id)}
                   items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => { updateTask(t.id, { priority: k }); setOpenDropdown(null); } }))}
                 />
+
+                {/* Due date input (FIX 6) */}
+                <div className="inline-flex items-center gap-1 text-[10px]" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-gray-400">{'\uD83D\uDCC5'}</span>
+                  <input
+                    type="date"
+                    className="border border-gray-200 rounded py-[2px] px-1.5 text-[10px] font-sans outline-none bg-white focus:border-blue-400 w-[110px]"
+                    value={t.dueDate || ''}
+                    onChange={(e) => updateTask(t.id, { dueDate: e.target.value || null })}
+                  />
+                  {t.dueDate && (
+                    <button className="text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-[10px] font-sans" onClick={() => updateTask(t.id, { dueDate: null })}>{'\u2715'}</button>
+                  )}
+                </div>
 
                 {/* Delete */}
                 <button
@@ -904,32 +957,54 @@ export default function ClientDetail({ client: c }) {
           if (!currentTask) return <div className="text-xs text-text3">Tarea no encontrada</div>;
           const otherTasks = clientTasks.filter(t => t.id !== depsModal);
           const currentDeps = currentTask.dependsOn || [];
+
+          // Group other tasks by phase (FIX 4)
+          const resolvePhaseForDep = (t) => {
+            if (t.phase) return t.phase;
+            if (t.stepIdx != null && PROCESS_STEPS[t.stepIdx]) return PROCESS_STEPS[t.stepIdx].phase;
+            return '_unphased';
+          };
+          const depPhaseKeys = [...Object.keys(allPh), '_unphased'];
+          const depPhaseGroups = depPhaseKeys.map(pk => {
+            const phInfo = pk === '_unphased' ? { label: 'Sin fase', color: '#9CA3AF' } : (allPh[pk] || { label: pk, color: '#9CA3AF' });
+            const tasksInPhase = otherTasks.filter(t => resolvePhaseForDep(t) === pk);
+            return { pk, phInfo, tasksInPhase };
+          }).filter(g => g.tasksInPhase.length > 0);
+
           return (
             <div>
               <div className="text-xs text-text2 mb-3">Selecciona las tareas que deben completarse antes de <strong>{currentTask.title}</strong>:</div>
               {otherTasks.length === 0 ? (
                 <div className="text-xs text-text3 py-4 text-center">No hay otras tareas en este cliente</div>
               ) : (
-                <div className="max-h-[300px] overflow-y-auto space-y-1">
-                  {otherTasks.map(t => {
-                    const isChecked = currentDeps.includes(t.id);
-                    const isDone = t.status === 'done';
-                    return (
-                      <label key={t.id} className={`flex items-center gap-2.5 py-2 px-3 rounded-md cursor-pointer text-xs hover:bg-gray-50 ${isDone ? 'opacity-50' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            const newDeps = isChecked ? currentDeps.filter(d => d !== t.id) : [...currentDeps, t.id];
-                            updateTask(depsModal, { dependsOn: newDeps });
-                          }}
-                          className="cursor-pointer"
-                        />
-                        <span className={`flex-1 ${isDone ? 'line-through text-text3' : 'text-text'}`}>{t.title}</span>
-                        {isDone && <span className="text-[9px] text-green-500 font-semibold">COMPLETADA</span>}
-                      </label>
-                    );
-                  })}
+                <div className="max-h-[350px] overflow-y-auto">
+                  {depPhaseGroups.map(({ pk, phInfo, tasksInPhase }) => (
+                    <div key={pk} className="mb-2">
+                      <div className="flex items-center gap-1.5 py-1.5 px-1 sticky top-0 bg-white z-[1]">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: phInfo.color }} />
+                        <span className="text-[11px] font-bold" style={{ color: phInfo.color }}>{phInfo.label}</span>
+                      </div>
+                      {tasksInPhase.map(t => {
+                        const isChecked = currentDeps.includes(t.id);
+                        const isDone = t.status === 'done';
+                        return (
+                          <label key={t.id} className={`flex items-center gap-2.5 py-1.5 px-3 pl-6 rounded-md cursor-pointer text-xs hover:bg-gray-50 ${isDone ? 'opacity-50' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                const newDeps = isChecked ? currentDeps.filter(d => d !== t.id) : [...currentDeps, t.id];
+                                updateTask(depsModal, { dependsOn: newDeps });
+                              }}
+                              className="cursor-pointer"
+                            />
+                            <span className={`flex-1 ${isDone ? 'line-through text-text3' : 'text-text'}`}>{t.title}</span>
+                            {isDone && <span className="text-[9px] text-green-500 font-semibold">COMPLETADA</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

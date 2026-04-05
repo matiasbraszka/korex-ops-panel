@@ -1,15 +1,33 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, effectiveTime } from '../utils/helpers';
+import { getStepName, effectiveTime, today, fmtDate, getAllPhases } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
+import Modal from '../components/Modal';
 
 export default function TasksPage() {
   const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, hideCompletedTasks, setHideCompletedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
+  const [depsModal, setDepsModal] = useState(null);
   const dropdownRefs = useRef({});
+
+  // Dependency checking (FIX 5)
+  const isTaskBlocked = (task) => {
+    if (!task.dependsOn || task.dependsOn.length === 0) return false;
+    if (task.status === 'done') return false;
+    return task.dependsOn.some(depId => {
+      const depTask = tasks.find(t => t.id === depId);
+      return depTask && depTask.status !== 'done';
+    });
+  };
+  const getBlockingNames = (task) => {
+    if (!task.dependsOn || task.dependsOn.length === 0) return [];
+    return task.dependsOn
+      .map(depId => { const d = tasks.find(t => t.id === depId); return d && d.status !== 'done' ? d.title : null; })
+      .filter(Boolean);
+  };
 
   const getRef = (key) => {
     if (!dropdownRefs.current[key]) dropdownRefs.current[key] = { current: null };
@@ -95,6 +113,10 @@ export default function TasksPage() {
     const assigneeRef = getRef('assignee-' + t.id);
     const prioRef = getRef('prio-' + t.id);
 
+    const blocked = isTaskBlocked(t);
+    const blockingNames = blocked ? getBlockingNames(t) : [];
+    const isOverdue = t.dueDate && t.status !== 'done' && !blocked && t.dueDate < today();
+
     const client = clients.find(x => x.id === t.clientId);
 
     // Phase display for roadmap tasks
@@ -116,7 +138,7 @@ export default function TasksPage() {
 
     return (
       <div key={t.id} className="border-b border-border last:border-b-0">
-        <div className="grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group" style={{ gridTemplateColumns: '28px 1fr 130px 120px 80px 36px' }}>
+        <div className={`grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '28px 1fr 130px 120px 80px 36px' }}>
           {/* Status icon */}
           <div
             ref={el => statusRef.current = el}
@@ -133,21 +155,33 @@ export default function TasksPage() {
           />
 
           {/* Title */}
-          <div className="min-w-0 flex items-center gap-1.5">
-            <span className="cursor-text py-[2px] px-1 rounded-[3px] whitespace-nowrap overflow-hidden text-ellipsis flex-1 hover:bg-surface2" onDoubleClick={(e) => startEditTitle(t.id, e.target)}>{t.title}</span>
-            {(() => {
-              const client = clients.find(x => x.id === t.clientId);
-              const etime = effectiveTime(t, client);
-              if (etime === null) return null;
-              const isDone = t.status === 'done';
-              const stepDays = t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null;
-              const isOver = stepDays && etime > stepDays;
-              const color = isDone ? (isOver ? '#F97316' : '#22C55E') : (isOver ? '#F97316' : '#5B7CF5');
-              const bg = isDone ? (isOver ? '#FFF7ED' : '#ECFDF5') : (isOver ? '#FFF7ED' : '#EEF2FF');
-              return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>{etime}d</span>;
-            })()}
-            {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" />}
-            <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+          <div className="min-w-0 flex flex-col gap-0.5">
+            <div className="flex items-center gap-1.5">
+              {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
+              <span className="cursor-text py-[2px] px-1 rounded-[3px] whitespace-nowrap overflow-hidden text-ellipsis flex-1 hover:bg-surface2" onDoubleClick={(e) => startEditTitle(t.id, e.target)}>{t.title}</span>
+              {(() => {
+                const client = clients.find(x => x.id === t.clientId);
+                const etime = effectiveTime(t, client);
+                if (etime === null) return null;
+                const isDone = t.status === 'done';
+                const stepDays = t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null;
+                const isOver = stepDays && etime > stepDays;
+                const color = isDone ? (isOver ? '#F97316' : '#22C55E') : (isOver ? '#F97316' : '#5B7CF5');
+                const bg = isDone ? (isOver ? '#FFF7ED' : '#ECFDF5') : (isOver ? '#FFF7ED' : '#EEF2FF');
+                return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>{etime}d</span>;
+              })()}
+              {t.dueDate && (
+                <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium shrink-0 ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>
+                  {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+                </span>
+              )}
+              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" />}
+              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
+              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+            </div>
+            {blocked && blockingNames.length > 0 && (
+              <div className="text-[10px] text-red-500 pl-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+            )}
           </div>
 
           {/* Step */}

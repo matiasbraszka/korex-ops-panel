@@ -59,6 +59,7 @@ export function AppProvider({ children }) {
         start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
         priority: c.priority, bottleneck: c.bottleneck, notes: c.notes,
         steps: c.steps, feedback: c.feedback, history: c.history,
+        phone: c.phone || '',
         slack_channel: c.slackChannel || '', slack_channel_id: c.slackChannelId || '',
         meta_ads: c.metaAds || [], custom_steps: c.customSteps || [],
         custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
@@ -78,7 +79,8 @@ export function AppProvider({ children }) {
         description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
         phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
-        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false
+        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+        due_date: t.dueDate || null
       })
     });
   }, []);
@@ -96,6 +98,7 @@ export function AppProvider({ children }) {
         start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
         priority: c.priority, bottleneck: c.bottleneck, notes: c.notes,
         steps: c.steps, feedback: c.feedback, history: c.history,
+        phone: c.phone || '',
         slack_channel: c.slackChannel || '', slack_channel_id: c.slackChannelId || '',
         meta_ads: c.metaAds || [], custom_steps: c.customSteps || [],
         custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
@@ -112,7 +115,8 @@ export function AppProvider({ children }) {
         description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
         phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
-        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false
+        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+        due_date: t.dueDate || null
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -149,8 +153,8 @@ export function AppProvider({ children }) {
   }, [dbSaveClient, dbSaveTask]);
 
   // ── CRUD: Clients ──
-  const createClient = useCallback((name, company, service, start, pm) => {
-    const c = mkClient(name, company, service, start, pm, clientsRef.current.length);
+  const createClient = useCallback((name, company, service, start, pm, extraFields = {}) => {
+    const c = mkClient(name, company, service, start, pm, clientsRef.current.length, extraFields);
     const newClients = [...clientsRef.current, c];
     const injected = injectMetaMetrics(newClients);
     setClients(injected);
@@ -256,6 +260,7 @@ export function AppProvider({ children }) {
           startDate: c.start_date, pm: c.pm, color: c.color, status: c.status,
           priority: c.priority, bottleneck: c.bottleneck, notes: c.notes,
           steps: c.steps || [], feedback: c.feedback || [], history: c.history || [],
+          phone: c.phone || '', avatarUrl: c.avatar_url || '',
           slackChannel: c.slack_channel || '', slackChannelId: c.slack_channel_id || '',
           metaAds: c.meta_ads || [], customSteps: c.custom_steps || [],
           customPhases: c.custom_phases || [], clientFeedbacks: c.client_feedbacks || [],
@@ -268,7 +273,8 @@ export function AppProvider({ children }) {
           description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
           startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
           phase: t.phase || null, dependsOn: t.depends_on || null, isRoadmapTask: t.is_roadmap_task || false,
-          templateId: t.template_id || null, estimatedDays: t.estimated_days || null, isClientTask: t.is_client_task || false
+          templateId: t.template_id || null, estimatedDays: t.estimated_days || null, isClientTask: t.is_client_task || false,
+          dueDate: t.due_date || null
         }));
 
         const injected = injectMetaMetrics(mappedClients);
