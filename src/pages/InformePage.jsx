@@ -185,13 +185,13 @@ export default function InformePage() {
 
   return (
     <div>
-      {/* Two-column layout: Report left, Suggestions right */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: pending.length > 0 ? '1fr 280px' : '1fr' }}>
+      {/* Two-column layout: Report left, Suggestions right — stacks on mobile */}
+      <div className="grid gap-5 max-md:!grid-cols-1 max-md:gap-3" style={{ gridTemplateColumns: pending.length > 0 ? '1fr 280px' : '1fr' }}>
 
         {/* Left column: Report */}
         <div>
           {stored && stored.text ? (
-            <div className="bg-white border border-gray-200 rounded-xl py-6 px-7">
+            <div className="bg-white border border-gray-200 rounded-xl py-6 px-7 max-md:py-4 max-md:px-4 max-md:rounded-lg">
               <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-gray-100">
                 <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase">Informe diario</span>
                 <span className="text-sm text-gray-500 font-medium">{formatDate()}</span>
@@ -212,7 +212,7 @@ export default function InformePage() {
 
         {/* Right column: Suggestions (only if pending) */}
         {pending.length > 0 && (
-          <div className="sticky top-[76px] self-start max-h-[calc(100vh-100px)] overflow-y-auto">
+          <div className="sticky top-[76px] self-start max-h-[calc(100vh-100px)] overflow-y-auto max-md:static max-md:max-h-none">
             <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
               {'\u26A1'} Sugerencias ({pending.length})
             </div>
@@ -248,7 +248,7 @@ export default function InformePage() {
       </div>
 
       {/* Feedback section — below the report */}
-      <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5">
+      <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5 max-md:py-4 max-md:px-4 max-md:mt-3 max-md:rounded-lg">
         <div className="text-sm font-semibold mb-1 text-gray-800">Feedback sobre el informe</div>
         <div className="text-[11px] text-gray-400 mb-3">Deja correcciones o contexto adicional. La IA lo usara para mejorar los proximos informes.</div>
         <div className="flex gap-2">

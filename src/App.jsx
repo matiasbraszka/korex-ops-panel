@@ -128,8 +128,8 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar */}
-      <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30">
+      {/* Sidebar — hidden on mobile */}
+      <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
         <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
           <div className="text-[22px] font-black text-text tracking-[-1px]">
             m<span className="text-blue">k</span>
@@ -177,31 +177,63 @@ function MainLayout() {
         </div>
       </div>
 
+      {/* Bottom nav — mobile only */}
+      <div className="hidden max-md:flex fixed bottom-0 left-0 right-0 bg-white border-t border-border z-30 justify-around items-center px-1 py-1 safe-bottom">
+        {navItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => switchView(item.id)}
+            className={`flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1
+              ${view === item.id ? 'text-blue bg-blue-bg' : 'text-text3 bg-transparent'}`}
+          >
+            <span className="text-[18px] leading-none">{item.icon}</span>
+            <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
+            {item.id === 'tasks' && urgentCount > 0 && (
+              <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{urgentCount}</span>
+            )}
+            {item.id === 'informe' && pendingProposals > 0 && (
+              <span className="absolute -top-0.5 right-1 text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center" style={{ background: 'var(--color-orange)' }}>{pendingProposals}</span>
+            )}
+          </button>
+        ))}
+        <button
+          onClick={doLogout}
+          className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
+          title="Cerrar sesion"
+        >
+          <span className="text-[18px] leading-none">{'\u2192'}</span>
+          <span className="text-[9px] font-medium leading-none">Salir</span>
+        </button>
+      </div>
+
       {/* Main area */}
-      <div className="ml-[240px] flex-1 min-h-screen">
+      <div className="ml-[240px] flex-1 min-h-screen max-md:ml-0 max-md:pb-16">
         {/* Topbar */}
-        <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10">
-          <div>
-            <div className="text-[17px] font-bold">{title}</div>
-            <div className="text-xs text-text3">{subtitle}</div>
+        <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10 max-md:px-4 max-md:h-[52px]">
+          <div className="flex items-center gap-2.5 max-md:gap-2 min-w-0">
+            <div className="hidden max-md:block text-[18px] font-black text-text tracking-[-1px] shrink-0">m<span className="text-blue">k</span></div>
+            <div className="min-w-0">
+              <div className="text-[17px] font-bold max-md:text-[15px] truncate">{title}</div>
+              <div className="text-xs text-text3 max-md:text-[10px] truncate max-md:hidden">{subtitle}</div>
+            </div>
           </div>
-          <div className="flex items-center gap-2.5">
-            <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-[10px] bg-surface2 ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
+          <div className="flex items-center gap-2.5 max-md:gap-1.5 shrink-0">
+            <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-[10px] bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
               {syncStatus === 'syncing' ? '\u21BB Guardando...' : syncStatus === 'error' ? '\u2715 Error sync' : '\u25CF Sincronizado'}
             </span>
             {view === 'clients' && (
               <button
-                className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5"
+                className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 max-md:py-1 max-md:px-2 max-md:text-[11px]"
                 onClick={() => setNewClientModal(true)}
               >
-                + Nuevo cliente
+                + <span className="max-md:hidden">Nuevo cliente</span><span className="hidden max-md:inline">Nuevo</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Content area */}
-        <div className="p-6 px-7">
+        <div className="p-6 px-7 max-md:p-3 max-md:px-3">
           {pages[view] || <div className="text-text3 text-center py-20">Vista no encontrada</div>}
         </div>
       </div>

@@ -125,17 +125,17 @@ export default function FeedbackPage() {
       ]} />
 
       {/* Filters + Add button */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="flex items-center gap-2 mb-4 flex-wrap max-md:gap-1.5 max-md:mb-3">
         {['all', 'cliente', 'usuario', 'mentor', 'equipo', 'agente'].map(key => {
           const cfg = key === 'all' ? { label: 'Todos', color: '#6B7280', bg: '#F0F2F5' } : SOURCE_CONFIG[key];
           return (
-            <button key={key} className={`py-1.5 px-3 rounded-full text-xs font-medium cursor-pointer font-sans border ${sourceFilter === key ? 'text-white border-transparent' : 'bg-white border-border text-text2 hover:border-blue'}`}
+            <button key={key} className={`py-1.5 px-3 rounded-full text-xs font-medium cursor-pointer font-sans border max-md:py-1 max-md:px-2 max-md:text-[11px] ${sourceFilter === key ? 'text-white border-transparent' : 'bg-white border-border text-text2 hover:border-blue'}`}
               style={sourceFilter === key ? { background: cfg.color } : {}}
               onClick={() => setSourceFilter(key)}
             >{cfg.label}</button>
           );
         })}
-        <button className="ml-auto py-1.5 px-3 rounded-md bg-blue text-white text-xs font-medium cursor-pointer font-sans border-none hover:bg-blue-dark" onClick={() => setAddModal(true)}>+ Agregar feedback</button>
+        <button className="ml-auto py-1.5 px-3 rounded-md bg-blue text-white text-xs font-medium cursor-pointer font-sans border-none hover:bg-blue-dark max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={() => setAddModal(true)}>+ Agregar</button>
       </div>
 
       {!allFb.length && (
@@ -146,9 +146,9 @@ export default function FeedbackPage() {
         const srcCfg = SOURCE_CONFIG[f.source] || SOURCE_CONFIG.cliente;
         const prio = prioCfg(f.priority);
         return (
-          <div key={i} className="bg-white border border-border rounded-[10px] p-4 mb-2.5 group">
+          <div key={i} className="bg-white border border-border rounded-[10px] p-4 mb-2.5 group max-md:p-3">
             {/* Header */}
-            <div className="flex items-center gap-2 mb-2.5">
+            <div className="flex items-center gap-2 mb-2.5 max-md:flex-wrap max-md:gap-1.5">
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold cursor-pointer shrink-0" style={{ background: c.color + '15', color: c.color }} onClick={() => openClient(c.id)}>{initials(c.name)}</div>
               <div className="font-semibold text-[13px] cursor-pointer hover:text-blue" onClick={() => openClient(c.id)}>{c.name}</div>
               <span className="py-[2px] px-2 rounded-full text-[10px] font-bold" style={{ background: srcCfg.bg, color: srcCfg.color }}>{srcCfg.label}</span>

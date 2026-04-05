@@ -153,7 +153,8 @@ export default function TasksPage() {
 
     return (
       <div key={t.id} className="border-b border-border last:border-b-0">
-        <div className={`grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '28px 1fr 130px 120px 80px 36px' }}>
+        {/* Desktop row */}
+        <div className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '28px 1fr 130px 120px 80px 36px' }}>
           {/* Status icon */}
           <div
             ref={el => statusRef.current = el}
@@ -300,9 +301,122 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Expandable description */}
+        {/* Mobile card */}
+        <div className={`md:hidden py-2.5 px-3 text-xs group ${blocked ? 'opacity-60' : ''}`} onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>
+          <div className="flex items-start gap-2">
+            <div
+              ref={el => statusRef.current = el}
+              className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
+              style={{ background: ts.bg, color: ts.color, border: `1.5px solid ${ts.color}` }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'status-' + t.id ? null : 'status-' + t.id); }}
+            >{ts.icon}</div>
+            <Dropdown
+              open={openDropdown === 'status-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={statusRef}
+              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-1">
+                {blocked && <span className="shrink-0 text-[11px]">{'\uD83D\uDD12'}</span>}
+                <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {phaseInfo && (
+                  <span
+                    ref={el => stepRef.current = el}
+                    className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer"
+                    style={{ background: phaseInfo.color + '18', color: phaseInfo.color }}
+                    onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'step-' + t.id ? null : 'step-' + t.id); }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />
+                    {phaseInfo.label}
+                  </span>
+                )}
+                <Dropdown
+                  open={openDropdown === 'step-' + t.id}
+                  onClose={() => setOpenDropdown(null)}
+                  anchorRef={stepRef}
+                  items={stepDropdownItems}
+                  minWidth={220}
+                  maxHeight={300}
+                />
+                <span
+                  ref={el => prioRef.current = el}
+                  className="text-[10px] font-semibold cursor-pointer"
+                  style={{ color: tp.color }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'prio-' + t.id ? null : 'prio-' + t.id); }}
+                >{tp.flag} {tp.label}</span>
+                <Dropdown
+                  open={openDropdown === 'prio-' + t.id}
+                  onClose={() => setOpenDropdown(null)}
+                  anchorRef={prioRef}
+                  items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+                />
+                {(() => {
+                  const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
+                  const elapsed = getElapsedDays(t, clientTasks);
+                  if (elapsed <= 0) return null;
+                  const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
+                  const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
+                  const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
+                  return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est ? `/${est}d` : ''}</span>;
+                })()}
+                {(() => {
+                  const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                  const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
+                  if (assigneeMembers.length === 0) return null;
+                  return (
+                    <div
+                      ref={el => assigneeRef.current = el}
+                      className="flex items-center cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'assignee-' + t.id ? null : 'assignee-' + t.id); }}
+                    >
+                      {assigneeMembers.slice(0, 2).map((am, ai) => (
+                        <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }}>{am.initials}</span>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                  const toggleAssignee = (memberName) => {
+                    const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                    const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
+                    const updated = exists ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase()) : [...current, memberName];
+                    updateTask(t.id, { assignee: updated.join(', ') });
+                  };
+                  return (
+                    <Dropdown
+                      open={openDropdown === 'assignee-' + t.id}
+                      onClose={() => setOpenDropdown(null)}
+                      anchorRef={assigneeRef}
+                      keepOpen
+                      items={[
+                        { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                        ...TEAM.map(m => {
+                          const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
+                          return {
+                            node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                            onClick: () => toggleAssignee(m.name),
+                          };
+                        })
+                      ]}
+                    />
+                  );
+                })()}
+              </div>
+              {blocked && blockingNames.length > 0 && (
+                <div className="text-[10px] text-red-500 mt-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+              )}
+            </div>
+            <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 shrink-0" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
+          </div>
+        </div>
+
+        {/* Expandable description — shared */}
         {isExpanded && (
-          <div className="py-1.5 px-4 pb-3 text-xs text-text2 leading-relaxed bg-blue-bg2 border-t border-dashed border-border" style={{ paddingLeft: 44 }}>
+          <div className="py-1.5 px-4 pl-[44px] pb-3 text-xs text-text2 leading-relaxed bg-blue-bg2 border-t border-dashed border-border max-md:px-3 max-md:pl-3">
             <textarea
               className="w-full border border-border rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[60px] outline-none bg-white focus:border-blue mb-2"
               placeholder="Escribe una descripcion para esta tarea..."
@@ -336,6 +450,9 @@ export default function TasksPage() {
                 />
                 <span className="text-text3">dias</span>
               </div>
+              <div className="md:hidden flex gap-1.5 w-full mt-1">
+                <button className="py-1 px-2 rounded text-[10px] bg-blue-bg text-blue border-none cursor-pointer font-sans" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}>{'\uD83D\uDD17'} Dependencias</button>
+              </div>
             </div>
           </div>
         )}
@@ -354,9 +471,9 @@ export default function TasksPage() {
   return (
     <div>
       {/* Filters */}
-      <div className="flex gap-2.5 items-center mb-4">
+      <div className="flex gap-2.5 items-center mb-4 max-md:flex-wrap max-md:gap-1.5">
         <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue"
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue max-md:flex-1 max-md:min-w-0"
           value={taskFilter}
           onChange={(e) => setTaskFilter(e.target.value)}
         >
@@ -365,7 +482,7 @@ export default function TasksPage() {
           ))}
         </select>
         <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue"
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue max-md:flex-1 max-md:min-w-0"
           value={taskAssignee}
           onChange={(e) => setTaskAssignee(e.target.value)}
         >
@@ -375,7 +492,7 @@ export default function TasksPage() {
             <option key={m.id} value={m.name}>{m.name}</option>
           ))}
         </select>
-        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
+        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none max-md:w-full">
           <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
         </label>
       </div>
@@ -418,17 +535,16 @@ export default function TasksPage() {
 
                 {/* Inline new task */}
                 {addingTaskTo === g.client.id && (
-                  <div className="grid gap-2 py-1.5 px-4 items-center border-t border-border bg-blue-bg2" style={{ gridTemplateColumns: '28px 1fr 120px 80px 36px' }}>
-                    <div className="text-text3 text-[10px]">+</div>
-                    <div className="flex flex-col gap-1 flex-1">
-                      <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Escribe el nombre de la tarea y presiona Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, g.client.id)} />
+                  <div className="flex gap-2 py-2 px-4 items-center border-t border-border bg-blue-bg2 max-md:px-3 max-md:flex-wrap">
+                    <div className="text-text3 text-[10px] max-md:hidden">+</div>
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Nombre de la tarea + Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, g.client.id)} />
                       <select id="inline-task-phase" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
                         <option value="">Sin vincular a fase</option>
                         {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         {(g.client.customPhases || []).map(cp => <option key={cp.id} value={cp.id}>{cp.label}</option>)}
                       </select>
                     </div>
-                    <div />
                     <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" style={{ opacity: 1 }} onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button></div>
                   </div>
                 )}
@@ -476,16 +592,15 @@ export default function TasksPage() {
 
               {/* Inline new task for Korex */}
               {addingTaskTo === korexClientId && (
-                <div className="grid gap-2 py-1.5 px-4 items-center border-t border-border bg-blue-bg2" style={{ gridTemplateColumns: '28px 1fr 120px 80px 36px' }}>
-                  <div className="text-text3 text-[10px]">+</div>
-                  <div className="flex flex-col gap-1 flex-1">
-                    <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Escribe el nombre de la tarea y presiona Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, korexClientId)} />
+                <div className="flex gap-2 py-2 px-4 items-center border-t border-border bg-blue-bg2 max-md:px-3 max-md:flex-wrap">
+                  <div className="text-text3 text-[10px] max-md:hidden">+</div>
+                  <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Nombre de la tarea + Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, korexClientId)} />
                     <select id="inline-task-phase" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
                       <option value="">Sin vincular a fase</option>
                       {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                     </select>
                   </div>
-                  <div />
                   <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" style={{ opacity: 1 }} onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button></div>
                 </div>
               )}

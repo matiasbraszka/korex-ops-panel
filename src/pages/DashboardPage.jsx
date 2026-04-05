@@ -125,7 +125,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5">
       {/* A. Team x Client table */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-3">Equipo x Cliente</div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[11px]">
@@ -182,13 +182,16 @@ export default function DashboardPage() {
             const bn = memberBottlenecks[m.id];
             if (!bn) return null;
             return (
-              <div key={m.id} className="text-[11px] text-gray-600" style={{ display: 'grid', gridTemplateColumns: '18px 80px 10px 1fr', alignItems: 'center', gap: '6px' }}>
-                <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
-                <span className="font-semibold text-gray-800" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                <span className="text-gray-400 text-center">|</span>
+              <div key={m.id} className="text-[11px] text-gray-600 grid max-md:!flex max-md:flex-col max-md:gap-0.5 max-md:py-1.5 max-md:border-b max-md:border-gray-100" style={{ gridTemplateColumns: '18px 80px 10px 1fr', alignItems: 'center', gap: '6px' }}>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                  <span className="font-semibold text-gray-800 md:hidden">{m.name}</span>
+                </span>
+                <span className="font-semibold text-gray-800 max-md:hidden" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                <span className="text-gray-400 text-center max-md:hidden">|</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
-                  <span className="text-gray-500" style={{ flexShrink: 0 }}>Principal cuello de botella:</span>
-                  <span className="text-red-500 font-medium" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bn}</span>
+                  <span className="text-gray-500 max-md:hidden" style={{ flexShrink: 0 }}>Principal cuello de botella:</span>
+                  <span className="text-red-500 font-medium max-md:text-[10px]" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bn}</span>
                 </span>
               </div>
             );
@@ -197,7 +200,7 @@ export default function DashboardPage() {
       </div>
 
       {/* B. Team velocity table */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-3">Velocidad del equipo</div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[11px]">
@@ -258,7 +261,7 @@ export default function DashboardPage() {
         return (
           <div className="space-y-4">
             {/* Blocking tasks */}
-            <div className="bg-white border rounded-xl p-5 overflow-hidden" style={{ borderColor: 'rgba(239,68,68,0.25)', borderLeftWidth: '4px', borderLeftColor: '#EF4444' }}>
+            <div className="bg-white border rounded-xl p-5 overflow-hidden max-md:p-3 max-md:rounded-lg" style={{ borderColor: 'rgba(239,68,68,0.25)', borderLeftWidth: '4px', borderLeftColor: '#EF4444' }}>
               <div className="text-sm font-bold mb-1 flex items-center gap-2 text-red-500">{'\uD83D\uDD12'} Cuellos de botella</div>
               <div className="text-[11px] text-gray-400 mb-3">Tareas que estan bloqueando a otras tareas dependientes</div>
               {blockingItems.length === 0 ? (
@@ -271,7 +274,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Overdue tasks */}
-            <div className="bg-white border rounded-xl p-5 overflow-hidden" style={{ borderColor: 'rgba(249,115,22,0.25)', borderLeftWidth: '4px', borderLeftColor: '#F97316' }}>
+            <div className="bg-white border rounded-xl p-5 overflow-hidden max-md:p-3 max-md:rounded-lg" style={{ borderColor: 'rgba(249,115,22,0.25)', borderLeftWidth: '4px', borderLeftColor: '#F97316' }}>
               <div className="text-sm font-bold mb-1 flex items-center gap-2 text-orange-500">{'\u23F0'} Retrasos</div>
               <div className="text-[11px] text-gray-400 mb-3">Tareas que superaron su tiempo estimado pero no bloquean a otras</div>
               {overdueItems.length === 0 ? (

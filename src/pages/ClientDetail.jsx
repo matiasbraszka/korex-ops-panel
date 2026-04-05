@@ -299,7 +299,7 @@ export default function ClientDetail({ client: c }) {
         <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''}`}>
           {/* Main row - CSS Grid for consistent alignment */}
           <div
-            className={`hover:bg-gray-50 cursor-pointer ${rowBg}`}
+            className={`hover:bg-gray-50 cursor-pointer ${rowBg} max-md:!grid-cols-none max-md:!flex max-md:items-start max-md:gap-2 max-md:py-2.5 max-md:px-3`}
             style={{ display: 'grid', gridTemplateColumns: '16px 20px 1fr 90px 80px 70px 30px', alignItems: 'center', gap: '4px', padding: '7px 12px' }}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           >
@@ -318,11 +318,11 @@ export default function ClientDetail({ client: c }) {
               items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
             />
 
-            {/* Col 2: Tree connector */}
-            <span className="text-gray-300 text-[11px] text-center select-none">{isLast ? '\u2514' : '\u251C'}</span>
+            {/* Col 2: Tree connector — hidden on mobile */}
+            <span className="text-gray-300 text-[11px] text-center select-none max-md:hidden">{isLast ? '\u2514' : '\u251C'}</span>
 
-            {/* Col 3: Task name (flexible) */}
-            <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {/* Col 3: Task name (flexible) — on mobile this is the main content area */}
+            <div className="max-md:flex-1 max-md:min-w-0 max-md:flex-wrap" style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
               {editingTitle === t.id ? (
                 <input
                   className="w-full border border-blue-400 rounded py-0.5 px-1.5 text-[13px] font-sans outline-none"
@@ -335,8 +335,8 @@ export default function ClientDetail({ client: c }) {
                 />
               ) : (
                 <span
-                  className={`text-[13px] leading-tight ${t.status === 'done' ? 'text-text3' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
-                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  className={`text-[13px] leading-tight max-md:text-[12px] max-md:whitespace-normal max-md:break-words ${t.status === 'done' ? 'text-text3' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
                   onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(t.id); setEditTitleValue(t.title); }}
                 >
                   {t.title}
@@ -347,13 +347,13 @@ export default function ClientDetail({ client: c }) {
               )}
               {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ flexShrink: 0 }} title="Tiene descripcion" />}
               {t.dueDate && (
-                <span className={`text-[9px] font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} style={{ flexShrink: 0, whiteSpace: 'nowrap' }} title={`Vence: ${t.dueDate}`}>
+                <span className={`text-[9px] font-medium max-md:hidden ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} style={{ flexShrink: 0, whiteSpace: 'nowrap' }} title={`Vence: ${t.dueDate}`}>
                   {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
                 </span>
               )}
             </div>
 
-            {/* Col 4: Assignee (90px fixed) */}
+            {/* Col 4: Assignee (90px fixed) — hidden on mobile */}
             {(() => {
               const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
               const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
@@ -364,7 +364,7 @@ export default function ClientDetail({ client: c }) {
                 updateTask(t.id, { assignee: updated.join(', ') });
               };
               return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
+                <div className="max-md:hidden" style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
                   <div
                     ref={el => assigneeRef.current = el}
                     className="cursor-pointer"
@@ -404,8 +404,8 @@ export default function ClientDetail({ client: c }) {
               );
             })()}
 
-            {/* Col 5: Time display (80px fixed) */}
-            <div style={{ textAlign: 'right', minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+            {/* Col 5: Time display (80px fixed) — hidden on mobile */}
+            <div className="max-md:hidden" style={{ textAlign: 'right', minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
               {editingEstDays === t.id ? (
                 <input
                   type="number"
@@ -443,8 +443,8 @@ export default function ClientDetail({ client: c }) {
               )}
             </div>
 
-            {/* Col 6: Priority flag (70px fixed) */}
-            <div style={{ minWidth: 0 }}>
+            {/* Col 6: Priority flag (70px fixed) — hidden on mobile */}
+            <div className="max-md:hidden" style={{ minWidth: 0 }}>
               <div
                 ref={el => prioRef.current = el}
                 className="cursor-pointer"
@@ -460,8 +460,8 @@ export default function ClientDetail({ client: c }) {
               />
             </div>
 
-            {/* Col 7: Actions (30px fixed) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1px', minWidth: 0 }}>
+            {/* Col 7: Actions (30px fixed) — hidden on mobile */}
+            <div className="max-md:hidden" style={{ display: 'flex', alignItems: 'center', gap: '1px', minWidth: 0 }}>
               {/* Move phase */}
               <div
                 ref={el => movePhaseRef.current = el}
@@ -734,19 +734,19 @@ export default function ClientDetail({ client: c }) {
       </button>
 
       {/* Hero */}
-      <div className="bg-white border border-border rounded-[14px] p-6 mb-5">
-        <div className="flex items-start gap-4">
-          <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center font-extrabold text-xl shrink-0" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <div className="text-xl font-extrabold tracking-tight">{c.name}</div>
+      <div className="bg-white border border-border rounded-[14px] p-6 mb-5 max-md:p-4 max-md:rounded-[10px] max-md:mb-3">
+        <div className="flex items-start gap-4 max-md:gap-3">
+          <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center font-extrabold text-xl shrink-0 max-md:w-[40px] max-md:h-[40px] max-md:text-base" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-xl font-extrabold tracking-tight max-md:text-[17px]">{c.name}</div>
               <span className="inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold" style={{ background: pcfg.color + '12', color: pcfg.color }}>{pcfg.label}</span>
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>
-            <div className="text-[13px] text-text2 mt-0.5">{c.company}</div>
-            <div className="flex gap-4 mt-2.5 flex-wrap">
-              <span className="text-xs text-text2 flex items-center gap-1">{'\uD83D\uDCE6'} {c.service || '\u2014'}</span>
-              <span className="text-xs text-text2 flex items-center gap-1">
+            <div className="text-[13px] text-text2 mt-0.5 max-md:text-[12px]">{c.company}</div>
+            <div className="flex gap-4 mt-2.5 flex-wrap max-md:gap-2 max-md:mt-2">
+              <span className="text-xs text-text2 flex items-center gap-1 max-md:text-[11px]">{'\uD83D\uDCE6'} {c.service || '\u2014'}</span>
+              <span className="text-xs text-text2 flex items-center gap-1 max-md:text-[11px]">
                 {'\uD83D\uDCC5'}{' '}
                 {editingStartDate ? (
                   <input type="date" className="border border-blue rounded py-[2px] px-1.5 text-xs font-sans outline-none" defaultValue={c.startDate || ''} autoFocus onBlur={(e) => handleInlineStartDate(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} />
@@ -755,12 +755,12 @@ export default function ClientDetail({ client: c }) {
                 )}{' '}
                 {'\u00B7'} Dia {days}
               </span>
-              <span className="text-xs text-text2 flex items-center gap-1">{'\uD83D\uDC64'} {c.pm || '\u2014'}</span>
-              {ct > 0 && <span className="text-xs text-blue flex items-center gap-1">{'\uD83D\uDDD2'} {ct} tareas</span>}
+              <span className="text-xs text-text2 flex items-center gap-1 max-md:hidden">{'\uD83D\uDC64'} {c.pm || '\u2014'}</span>
+              {ct > 0 && <span className="text-xs text-blue flex items-center gap-1 max-md:text-[11px]">{'\uD83D\uDDD2'} {ct} tareas</span>}
             </div>
           </div>
-          <div className="flex gap-2 ml-auto">
-            <button className="py-1.5 px-2.5 rounded-md border border-border bg-white text-text2 text-xs cursor-pointer font-sans hover:bg-surface2 hover:text-text" onClick={openEditModal}>Editar</button>
+          <div className="flex gap-2 ml-auto shrink-0">
+            <button className="py-1.5 px-2.5 rounded-md border border-border bg-white text-text2 text-xs cursor-pointer font-sans hover:bg-surface2 hover:text-text max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={openEditModal}>Editar</button>
           </div>
         </div>
 
@@ -777,7 +777,7 @@ export default function ClientDetail({ client: c }) {
       </div>
 
       {/* Main grid */}
-      <div className="grid gap-4 max-md:grid-cols-1" style={{ gridTemplateColumns: '1fr 320px' }}>
+      <div className="grid gap-4 max-md:!grid-cols-1" style={{ gridTemplateColumns: '1fr 320px' }}>
         {/* Left: Kanban Roadmap */}
         <div>
           <div className="text-sm font-bold mb-3">Roadmap</div>

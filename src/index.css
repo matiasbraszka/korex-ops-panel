@@ -40,3 +40,21 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text3); }
+
+/* Safe area for iOS bottom nav */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Report tables responsive */
+@media (max-width: 767px) {
+  .report-table {
+    font-size: 10px;
+    display: block;
+    overflow-x: auto;
+  }
+  .report-table th, .report-table td {
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+}

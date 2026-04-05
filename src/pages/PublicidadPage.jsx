@@ -29,7 +29,7 @@ export default function PublicidadPage() {
       {activeClients.length > 0 && (
         <>
           <div className="text-[13px] font-bold mb-2.5">Detalle por cliente activo</div>
-          <div className="grid gap-3.5 mb-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
+          <div className="grid gap-3.5 mb-5 max-md:gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))' }}>
             {activeClients.map(c => {
               const m = c.metaMetrics;
               const cs = currSymbol(m.currency || 'USD');
@@ -60,7 +60,7 @@ export default function PublicidadPage() {
       )}
 
       {/* Report table */}
-      <div className="bg-white border border-border rounded-[10px] p-[18px] mb-5">
+      <div className="bg-white border border-border rounded-[10px] p-[18px] mb-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-1">Informe de publicidad</div>
         <div className="text-[11px] text-text3 mb-3">Metricas de los ultimos 7 dias. Solo campanas con eventos de conversion de nuestro funnel.</div>
         <div className="overflow-x-auto">

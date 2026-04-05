@@ -65,7 +65,7 @@ export default function ClientsPage() {
     <div>
       {/* Briefing card */}
       <div
-        className="border rounded-[14px] py-3.5 px-[18px] mb-5 relative cursor-pointer transition-all duration-150 hover:shadow-sm"
+        className="border rounded-[14px] py-3.5 px-[18px] mb-5 relative cursor-pointer transition-all duration-150 hover:shadow-sm max-md:py-3 max-md:px-3.5 max-md:mb-3 max-md:rounded-[10px]"
         style={{ background: 'linear-gradient(135deg, var(--color-blue-bg2), var(--color-surface))', borderColor: 'rgba(91,124,245,0.13)' }}
         onClick={() => setView('informe')}
       >
@@ -89,11 +89,11 @@ export default function ClientsPage() {
       ]} />
 
       {/* Filters */}
-      <div className="flex gap-1.5 items-center mb-4 flex-wrap">
+      <div className="flex gap-1.5 items-center mb-4 flex-wrap max-md:gap-1 max-md:mb-3">
         {filterDefs.map(f => (
           <button
             key={f.key}
-            className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans transition-all duration-150 ${filter === f.key ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue hover:text-text'}`}
+            className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans transition-all duration-150 max-md:py-1 max-md:px-2.5 max-md:text-[11px] ${filter === f.key ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue hover:text-text'}`}
             onClick={() => setFilter(f.key)}
           >
             {f.label}
@@ -135,19 +135,19 @@ export default function ClientsPage() {
           <div key={c.id}>
             {prioLabel}
             <div
-              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-[10px] mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:grid-cols-[30px_1fr_32px]"
+              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-[10px] mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
               style={{ gridTemplateColumns: '36px 1.5fr 110px 60px 120px 90px 28px' }}
               onClick={() => setSelectedId(c.id)}
             >
-              <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-[11px]" style={{ background: c.color + '15', color: c.color }}>
+              <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-[11px] max-md:w-[30px] max-md:h-[30px] max-md:text-[10px]" style={{ background: c.color + '15', color: c.color }}>
                 {initials(c.name)}
               </div>
-              <div>
-                <div className="font-semibold text-[13px]">
-                  {c.name} <span className="font-normal text-[11px] text-text3">{c.company}</span> {adsBadge}
+              <div className="min-w-0">
+                <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
+                  <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span> {adsBadge}
                 </div>
                 {bottleneck ? (
-                  <div className="text-[10px] text-red font-medium mt-[3px] flex items-center gap-[3px]">{'\u26A1'} {bottleneck}</div>
+                  <div className="text-[10px] text-red font-medium mt-[3px] flex items-center gap-[3px]">{'\u26A1'} <span className="truncate">{bottleneck}</span></div>
                 ) : (
                   <div className="text-[10px] text-green mt-0.5">Sin bloqueos</div>
                 )}
@@ -156,6 +156,16 @@ export default function ClientsPage() {
                     CPL: {c.metaMetrics.currency === 'EUR' ? '\u20AC' : '$'}{c.metaMetrics.avgCpl7d?.toFixed(2) || '\u2014'} {'\u00B7'} {c.metaMetrics.totalConversions7d || 0} leads 7d
                   </div>
                 )}
+                {/* Mobile-only: progress + pill inline */}
+                <div className="hidden max-md:flex items-center gap-2 mt-1.5">
+                  <div className="flex-1 h-1 bg-surface3 rounded-sm overflow-hidden max-w-[80px]">
+                    <div className="h-full rounded-sm" style={{ width: pct + '%', background: c.color }} />
+                  </div>
+                  <span className="text-[10px] text-text3 font-semibold">{pct}%</span>
+                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-[20px] text-[9px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
+                    {pill.text}
+                  </span>
+                </div>
               </div>
               <div className="text-[11px] text-text2 max-md:hidden">{cur ? PHASES[cur.phase]?.label : 'Lanzado'}</div>
               <div className="text-center max-md:hidden">
@@ -170,12 +180,12 @@ export default function ClientsPage() {
                   <div className="text-[11px] text-text3 font-semibold min-w-[32px] text-right">{pct}%</div>
                 </div>
               </div>
-              <div>
+              <div className="max-md:hidden">
                 <span className={`inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
                   {pill.text}
                 </span>
               </div>
-              <div className="text-text3 text-center">&rsaquo;</div>
+              <div className="text-text3 text-center max-md:self-center">&rsaquo;</div>
             </div>
           </div>
         );
