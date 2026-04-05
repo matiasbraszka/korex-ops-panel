@@ -22,8 +22,19 @@ export default function DashboardPage() {
   teamMembers.forEach(m => { matrix[m.id] = {}; memberTotals[m.id] = 0; });
   activeClients.forEach(c => { clientTotals[c.id] = 0; });
 
+  // Helper: check if a task is blocked by unmet dependencies
+  const isBlockedByDeps = (task) => {
+    if (!task.dependsOn || task.dependsOn.length === 0) return false;
+    const clientTasks = tasks.filter(t => t.clientId === task.clientId);
+    return task.dependsOn.some(depId => {
+      const dep = clientTasks.find(t => t.id === depId);
+      return dep && dep.status !== 'done';
+    });
+  };
+
   tasks.forEach(t => {
     if (t.status === 'done') return;
+    if (isBlockedByDeps(t)) return; // Skip tasks blocked by dependencies
     const names = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
     const client = activeClients.find(c => c.id === t.clientId);
     if (!client) return;

@@ -48,10 +48,14 @@ export default function TasksPage() {
     { key: 'done', label: 'Completadas' },
   ];
 
-  // Exclude Korex tasks from assignee filter counts
-  const assignees = new Set();
-  tasks.filter(t => t.clientId !== korexClientId).forEach(t => { if (t.assignee) t.assignee.split(',').map(s => s.trim()).filter(Boolean).forEach(a => assignees.add(a)); });
-  const assigneeList = [...assignees].sort();
+  // Build assignee filter from TEAM members who have at least one task assigned
+  const assigneeList = TEAM.filter(m => {
+    return tasks.some(t => {
+      if (t.clientId === korexClientId || !t.assignee) return false;
+      const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return parts.includes(m.name.toLowerCase()) || parts.includes(m.id);
+    });
+  });
 
   let filteredTasks = [...tasks];
   if (taskFilter === 'urgent') filteredTasks = filteredTasks.filter(t => t.priority === 'urgent');
@@ -251,8 +255,6 @@ export default function TasksPage() {
                         {assigneeMembers.length > 2 && (
                           <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border border-white" style={{ marginLeft: '-6px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
                         )}
-                        {assigneeMembers.length === 1 && <span className="ml-1">{assigneeMembers[0].name}</span>}
-                        {assigneeMembers.length > 1 && <span className="ml-1 text-text3">{assigneeMembers.length} personas</span>}
                       </div>
                     ) : <span className="text-text3">+ Asignar</span>}
                   </div>
@@ -369,10 +371,9 @@ export default function TasksPage() {
         >
           <option value="all">Encargado: Todos</option>
           <option value="mine">Mis tareas</option>
-          {assigneeList.map(a => {
-            const m = TEAM.find(t => t.name.toLowerCase() === a.toLowerCase() || t.id === a);
-            return <option key={a} value={a}>{m ? m.name : a}</option>;
-          })}
+          {assigneeList.map(m => (
+            <option key={m.id} value={m.name}>{m.name}</option>
+          ))}
         </select>
         <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
           <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar completadas

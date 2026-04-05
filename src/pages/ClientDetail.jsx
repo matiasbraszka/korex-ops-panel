@@ -227,10 +227,14 @@ export default function ClientDetail({ client: c }) {
   const renderRoadmap = () => {
     const filteredTasks = getFilteredTasks();
 
-    // Build unique assignees for filter (supports comma-separated)
-    const assignees = new Set();
-    clientTasks.forEach(t => { if (t.assignee) t.assignee.split(',').map(s => s.trim()).filter(Boolean).forEach(a => assignees.add(a)); });
-    const assigneeList = [...assignees].sort();
+    // Build assignee filter from TEAM members who have at least one task in this client
+    const assigneeList = TEAM.filter(m => {
+      return clientTasks.some(t => {
+        if (!t.assignee) return false;
+        const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        return parts.includes(m.name.toLowerCase()) || parts.includes(m.id);
+      });
+    });
 
     // Resolve phase for each task (tasks without phase inherit from stepIdx/PROCESS_STEPS)
     const resolvePhase = (t) => {
@@ -299,8 +303,20 @@ export default function ClientDetail({ client: c }) {
             style={{ display: 'grid', gridTemplateColumns: '16px 20px 1fr 90px 80px 70px 30px', alignItems: 'center', gap: '4px', padding: '7px 12px' }}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           >
-            {/* Col 1: Status dot */}
-            <span className="text-sm text-center select-none" style={{ color: statusColor }}>{statusIcon}</span>
+            {/* Col 1: Status dot — clickable */}
+            <div
+              ref={el => statusRef.current = el}
+              className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 select-none"
+              style={{ background: statusColor + '15', color: statusColor, border: `1.5px solid ${statusColor}` }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
+              title={TASK_STATUS[t.status]?.label || 'Estado'}
+            >{statusIcon}</div>
+            <Dropdown
+              open={openDropdown === 'rd-status-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={statusRef}
+              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+            />
 
             {/* Col 2: Tree connector */}
             <span className="text-gray-300 text-[11px] text-center select-none">{isLast ? '\u2514' : '\u251C'}</span>
@@ -368,7 +384,6 @@ export default function ClientDetail({ client: c }) {
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
                     )}
                   </div>
-                  {assigneeMembers.length === 1 && <span className="text-[10px] text-gray-500" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assigneeMembers[0].name.split(' ')[0]}</span>}
                   <Dropdown
                     open={openDropdown === 'rd-assignee-' + t.id}
                     onClose={() => setOpenDropdown(null)}
@@ -461,21 +476,6 @@ export default function ClientDetail({ client: c }) {
                 onClose={() => setOpenDropdown(null)}
                 anchorRef={movePhaseRef}
                 items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
-              />
-
-              {/* Status */}
-              <div
-                ref={el => statusRef.current = el}
-                className="cursor-pointer opacity-0 group-hover:opacity-100"
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
-              >
-                <span className="text-[10px] py-[2px] px-0.5 rounded hover:bg-gray-200 text-gray-400">{TASK_STATUS[t.status]?.icon || '\u25CB'}</span>
-              </div>
-              <Dropdown
-                open={openDropdown === 'rd-status-' + t.id}
-                onClose={() => setOpenDropdown(null)}
-                anchorRef={statusRef}
-                items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
               />
 
               {/* Dependencies */}
@@ -583,10 +583,9 @@ export default function ClientDetail({ client: c }) {
             onChange={(e) => setAssigneeFilter(e.target.value)}
           >
             <option value="all">Todos</option>
-            {assigneeList.map(a => {
-              const m = TEAM.find(t => t.name.toLowerCase() === a.toLowerCase() || t.id === a);
-              return <option key={a} value={a}>{m ? m.name : a}</option>;
-            })}
+            {assigneeList.map(m => (
+              <option key={m.id} value={m.name}>{m.name}</option>
+            ))}
           </select>
           <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-400 cursor-pointer select-none">
             <input type="checkbox" checked={hideCompleted} onChange={(e) => setHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
