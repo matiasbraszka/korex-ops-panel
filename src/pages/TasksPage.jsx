@@ -312,131 +312,139 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Mobile card */}
-        <div className={`md:hidden py-2.5 px-3 text-xs group ${blocked ? 'opacity-60' : ''}`} onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>
-          <div className="flex items-start gap-2">
-            <div
-              ref={el => statusRef.current = el}
-              className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
-              style={{ background: ts.bg, color: ts.color, border: `1.5px solid ${ts.color}` }}
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown('status-' + t.id); }}
-            >{ts.icon}</div>
-            <Dropdown
-              open={openDropdown === 'status-' + t.id}
-              onClose={() => setOpenDropdown(null)}
-              anchorRef={statusRef}
-              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-1">
-                {blocked && <span className="shrink-0 text-[11px]">{'\uD83D\uDD12'}</span>}
-                {editingTaskId === t.id ? (
-                  <input
-                    className="border border-blue rounded-[3px] py-[2px] px-1.5 text-[13px] font-sans outline-none flex-1 bg-white w-full"
-                    value={editTitleVal}
-                    onChange={(e) => setEditTitleVal(e.target.value)}
-                    onBlur={() => saveEditTitle(t.id)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTaskId(null); }}
-                    onClick={(e) => e.stopPropagation()}
-                    autoFocus
-                  />
-                ) : (
-                  <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
-                )}
-                {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {phaseInfo && (
-                  <span
-                    ref={el => stepRef.current = el}
-                    className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer"
-                    style={{ background: phaseInfo.color + '18', color: phaseInfo.color }}
-                    onClick={(e) => { e.stopPropagation(); setOpenDropdown('step-' + t.id); }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />
-                    {phaseInfo.label}
-                  </span>
-                )}
+        {/* Mobile card — uses separate refs (mob-*) so they don't overwrite desktop refs */}
+        {(() => {
+          const mobStatusRef = getRef('mob-status-' + t.id);
+          const mobStepRef = getRef('mob-step-' + t.id);
+          const mobPrioRef = getRef('mob-prio-' + t.id);
+          const mobAssigneeRef = getRef('mob-assignee-' + t.id);
+          return (
+            <div className={`md:hidden py-2.5 px-3 text-xs group ${blocked ? 'opacity-60' : ''}`} onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>
+              <div className="flex items-start gap-2">
+                <div
+                  ref={el => mobStatusRef.current = el}
+                  className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
+                  style={{ background: ts.bg, color: ts.color, border: `1.5px solid ${ts.color}` }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-status-' + t.id); }}
+                >{ts.icon}</div>
                 <Dropdown
-                  open={openDropdown === 'step-' + t.id}
+                  open={openDropdown === 'mob-status-' + t.id}
                   onClose={() => setOpenDropdown(null)}
-                  anchorRef={stepRef}
-                  items={stepDropdownItems}
-                  minWidth={220}
-                  maxHeight={300}
+                  anchorRef={mobStatusRef}
+                  items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
                 />
-                <span
-                  ref={el => prioRef.current = el}
-                  className="text-[10px] font-semibold cursor-pointer"
-                  style={{ color: tp.color }}
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('prio-' + t.id); }}
-                >{tp.flag} {tp.label}</span>
-                <Dropdown
-                  open={openDropdown === 'prio-' + t.id}
-                  onClose={() => setOpenDropdown(null)}
-                  anchorRef={prioRef}
-                  items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
-                />
-                {(() => {
-                  const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
-                  const elapsed = getElapsedDays(t, clientTasks);
-                  if (elapsed <= 0) return null;
-                  const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
-                  const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
-                  const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
-                  return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est ? `/${est}d` : ''}</span>;
-                })()}
-                {(() => {
-                  const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
-                  const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
-                  if (assigneeMembers.length === 0) return null;
-                  return (
-                    <div
-                      ref={el => assigneeRef.current = el}
-                      className="flex items-center cursor-pointer"
-                      onClick={(e) => { e.stopPropagation(); setOpenDropdown('assignee-' + t.id); }}
-                    >
-                      {assigneeMembers.slice(0, 2).map((am, ai) => (
-                        <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }}>{am.initials}</span>
-                      ))}
-                    </div>
-                  );
-                })()}
-                {(() => {
-                  const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
-                  const toggleAssignee = (memberName) => {
-                    const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
-                    const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
-                    const updated = exists ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase()) : [...current, memberName];
-                    updateTask(t.id, { assignee: updated.join(', ') });
-                  };
-                  return (
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {blocked && <span className="shrink-0 text-[11px]">{'\uD83D\uDD12'}</span>}
+                    {editingTaskId === t.id ? (
+                      <input
+                        className="border border-blue rounded-[3px] py-[2px] px-1.5 text-[13px] font-sans outline-none flex-1 bg-white w-full"
+                        value={editTitleVal}
+                        onChange={(e) => setEditTitleVal(e.target.value)}
+                        onBlur={() => saveEditTitle(t.id)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTaskId(null); }}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+                    )}
+                    {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {phaseInfo && (
+                      <span
+                        ref={el => mobStepRef.current = el}
+                        className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer"
+                        style={{ background: phaseInfo.color + '18', color: phaseInfo.color }}
+                        onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-step-' + t.id); }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />
+                        {phaseInfo.label}
+                      </span>
+                    )}
                     <Dropdown
-                      open={openDropdown === 'assignee-' + t.id}
+                      open={openDropdown === 'mob-step-' + t.id}
                       onClose={() => setOpenDropdown(null)}
-                      anchorRef={assigneeRef}
-                      keepOpen
-                      items={[
-                        { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
-                        ...TEAM.map(m => {
-                          const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
-                          return {
-                            node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
-                            onClick: () => toggleAssignee(m.name),
-                          };
-                        })
-                      ]}
+                      anchorRef={mobStepRef}
+                      items={stepDropdownItems}
+                      minWidth={220}
+                      maxHeight={300}
                     />
-                  );
-                })()}
+                    <span
+                      ref={el => mobPrioRef.current = el}
+                      className="text-[10px] font-semibold cursor-pointer"
+                      style={{ color: tp.color }}
+                      onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-prio-' + t.id); }}
+                    >{tp.flag} {tp.label}</span>
+                    <Dropdown
+                      open={openDropdown === 'mob-prio-' + t.id}
+                      onClose={() => setOpenDropdown(null)}
+                      anchorRef={mobPrioRef}
+                      items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+                    />
+                    {(() => {
+                      const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
+                      const elapsed = getElapsedDays(t, clientTasks);
+                      if (elapsed <= 0) return null;
+                      const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
+                      const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
+                      const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
+                      return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est ? `/${est}d` : ''}</span>;
+                    })()}
+                    {(() => {
+                      const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
+                      if (assigneeMembers.length === 0) return null;
+                      return (
+                        <div
+                          ref={el => mobAssigneeRef.current = el}
+                          className="flex items-center cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-assignee-' + t.id); }}
+                        >
+                          {assigneeMembers.slice(0, 2).map((am, ai) => (
+                            <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }}>{am.initials}</span>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const toggleAssignee = (memberName) => {
+                        const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                        const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
+                        const updated = exists ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase()) : [...current, memberName];
+                        updateTask(t.id, { assignee: updated.join(', ') });
+                      };
+                      return (
+                        <Dropdown
+                          open={openDropdown === 'mob-assignee-' + t.id}
+                          onClose={() => setOpenDropdown(null)}
+                          anchorRef={mobAssigneeRef}
+                          keepOpen
+                          items={[
+                            { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                            ...TEAM.map(m => {
+                              const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
+                              return {
+                                node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                                onClick: () => toggleAssignee(m.name),
+                              };
+                            })
+                          ]}
+                        />
+                      );
+                    })()}
+                  </div>
+                  {blocked && blockingNames.length > 0 && (
+                    <div className="text-[10px] text-red-500 mt-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+                  )}
+                </div>
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 shrink-0" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
               </div>
-              {blocked && blockingNames.length > 0 && (
-                <div className="text-[10px] text-red-500 mt-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
-              )}
             </div>
-            <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 shrink-0" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Expandable description — shared */}
         {isExpanded && (
