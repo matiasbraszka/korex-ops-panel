@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 180, maxHeight = 260 }) {
+export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 180, maxHeight = 260, keepOpen = false }) {
   const menuRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
@@ -63,7 +63,7 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
           <div
             key={i}
             className="py-2 px-3 text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap hover:bg-blue-bg hover:text-blue"
-            onClick={() => { item.onClick?.(); onClose(); }}
+            onClick={() => { item.onClick?.(); if (!keepOpen) onClose(); }}
             style={item.style}
           >
             {item.icon && <span style={{ color: item.iconColor }}>{item.icon}</span>}

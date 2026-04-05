@@ -21,15 +21,18 @@ export default function DashboardPage() {
 
   tasks.forEach(t => {
     if (t.status === 'done') return;
-    const member = teamMembers.find(m =>
-      t.assignee?.toLowerCase() === m.name.toLowerCase() || t.assignee === m.id
-    );
-    if (!member) return;
+    const names = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
     const client = activeClients.find(c => c.id === t.clientId);
     if (!client) return;
-    matrix[member.id][client.id] = (matrix[member.id][client.id] || 0) + 1;
-    memberTotals[member.id] = (memberTotals[member.id] || 0) + 1;
-    clientTotals[client.id] = (clientTotals[client.id] || 0) + 1;
+    let counted = false;
+    names.forEach(name => {
+      const member = teamMembers.find(m => name.toLowerCase() === m.name.toLowerCase() || name === m.id);
+      if (!member) return;
+      matrix[member.id][client.id] = (matrix[member.id][client.id] || 0) + 1;
+      memberTotals[member.id] = (memberTotals[member.id] || 0) + 1;
+      counted = true;
+    });
+    if (counted) clientTotals[client.id] = (clientTotals[client.id] || 0) + 1;
   });
 
   const grandTotal = Object.values(memberTotals).reduce((s, v) => s + v, 0);
@@ -37,10 +40,11 @@ export default function DashboardPage() {
   // Find oldest non-done task per team member (bottleneck)
   const memberBottlenecks = {};
   teamMembers.forEach(m => {
-    const myTasks = tasks.filter(t =>
-      t.status !== 'done' &&
-      (t.assignee?.toLowerCase() === m.name.toLowerCase() || t.assignee === m.id)
-    );
+    const myTasks = tasks.filter(t => {
+      if (t.status === 'done' || !t.assignee) return false;
+      const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return parts.includes(m.name.toLowerCase()) || parts.includes(m.id);
+    });
     if (myTasks.length === 0) { memberBottlenecks[m.id] = null; return; }
     let oldest = myTasks[0];
     myTasks.forEach(t => {
@@ -54,7 +58,11 @@ export default function DashboardPage() {
 
   // ── B. Team velocity ──
   const teamVelocity = teamMembers.map(m => {
-    const myTasks = tasks.filter(t => t.assignee?.toLowerCase() === m.name.toLowerCase() || t.assignee === m.id);
+    const myTasks = tasks.filter(t => {
+      if (!t.assignee) return false;
+      const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return parts.includes(m.name.toLowerCase()) || parts.includes(m.id);
+    });
     const pending = myTasks.filter(t => t.status !== 'done' && t.status !== 'in-progress').length;
     const inProgress = myTasks.filter(t => t.status === 'in-progress').length;
     const completedThisMonth = myTasks.filter(t => t.status === 'done' && t.completedDate && t.completedDate >= monthStart).length;
@@ -205,36 +213,61 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* C. Cuellos de botella */}
-      <div className="bg-white border rounded-xl p-5" style={{ borderColor: 'rgba(239,68,68,0.25)' }}>
-        <div className="text-sm font-bold mb-1 flex items-center gap-2 text-red-500">{'\u26A1'} Cuellos de botella</div>
-        <div className="text-[11px] text-gray-400 mb-3">Tareas que estan frenando el progreso de la entrega de servicio</div>
-        {bottlenecks.length === 0 ? (
-          <div className="text-center text-gray-400 text-xs py-5">Sin cuellos de botella detectados</div>
-        ) : (
-          <div className="max-h-[350px] overflow-y-auto">
-            {bottlenecks.slice(0, 20).map((item, idx) => (
-              <div key={idx} className="flex items-start gap-2 py-2 border-b border-gray-100 last:border-b-0 text-xs">
-                <span className="text-red-500 text-sm mt-0.5">{item.blockingCount > 0 ? '\uD83D\uDD12' : '\u26A0\uFE0F'}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-gray-800">{item.client?.name || '?'}</span>
-                    <span className="text-gray-600 truncate">{item.task?.title}</span>
-                  </div>
-                  {item.blockingCount > 0 && (
-                    <div className="text-[10px] text-red-500 mt-0.5">Bloquea {item.blockingCount} tarea{item.blockingCount > 1 ? 's' : ''}: {item.blockedTasks.join(', ')}</div>
-                  )}
-                  {item.isOverdue && (
-                    <div className="text-[10px] text-orange-500 mt-0.5">Retraso de +{item.days}d sobre el estimado</div>
-                  )}
-                  {item.task?.assignee && <div className="text-[10px] text-gray-400 mt-0.5">Asignada a: {item.task.assignee}</div>}
-                </div>
-                {item.days > 0 && <span className="text-[10px] font-bold text-red-500 shrink-0 mt-0.5">+{item.days}d</span>}
+      {/* C. Cuellos de botella — split into blocking vs overdue */}
+      {(() => {
+        const blockingItems = bottlenecks.filter(b => b.blockingCount > 0);
+        const overdueItems = bottlenecks.filter(b => b.blockingCount === 0 && b.isOverdue);
+
+        const renderBottleneckItem = (item, idx) => (
+          <div key={idx} className="flex items-start gap-2 py-2 border-b border-gray-100 last:border-b-0 text-xs">
+            <span className="text-sm mt-0.5">{item.blockingCount > 0 ? '\uD83D\uDD12' : '\u23F0'}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-gray-800">{item.client?.name || '?'}</span>
+                <span className="text-gray-600 truncate">{item.task?.title}</span>
               </div>
-            ))}
+              {item.blockingCount > 0 && (
+                <div className="text-[10px] text-red-500 mt-0.5">Bloquea {item.blockingCount} tarea{item.blockingCount > 1 ? 's' : ''}: {item.blockedTasks.join(', ')}</div>
+              )}
+              {item.isOverdue && (
+                <div className="text-[10px] text-orange-500 mt-0.5">Retraso de +{item.days}d sobre el estimado</div>
+              )}
+              {item.task?.assignee && <div className="text-[10px] text-gray-400 mt-0.5">Asignada a: {item.task.assignee}</div>}
+            </div>
+            {item.days > 0 && <span className="text-[10px] font-bold shrink-0 mt-0.5" style={{ color: item.blockingCount > 0 ? '#EF4444' : '#F97316' }}>+{item.days}d</span>}
           </div>
-        )}
-      </div>
+        );
+
+        return (
+          <div className="space-y-4">
+            {/* Blocking tasks */}
+            <div className="bg-white border rounded-xl p-5 overflow-hidden" style={{ borderColor: 'rgba(239,68,68,0.25)', borderLeftWidth: '4px', borderLeftColor: '#EF4444' }}>
+              <div className="text-sm font-bold mb-1 flex items-center gap-2 text-red-500">{'\uD83D\uDD12'} Cuellos de botella</div>
+              <div className="text-[11px] text-gray-400 mb-3">Tareas que estan bloqueando a otras tareas dependientes</div>
+              {blockingItems.length === 0 ? (
+                <div className="text-center text-gray-400 text-xs py-4">Sin tareas bloqueantes</div>
+              ) : (
+                <div className="max-h-[250px] overflow-y-auto">
+                  {blockingItems.slice(0, 15).map((item, idx) => renderBottleneckItem(item, idx))}
+                </div>
+              )}
+            </div>
+
+            {/* Overdue tasks */}
+            <div className="bg-white border rounded-xl p-5 overflow-hidden" style={{ borderColor: 'rgba(249,115,22,0.25)', borderLeftWidth: '4px', borderLeftColor: '#F97316' }}>
+              <div className="text-sm font-bold mb-1 flex items-center gap-2 text-orange-500">{'\u23F0'} Retrasos</div>
+              <div className="text-[11px] text-gray-400 mb-3">Tareas que superaron su tiempo estimado pero no bloquean a otras</div>
+              {overdueItems.length === 0 ? (
+                <div className="text-center text-gray-400 text-xs py-4">Sin tareas retrasadas</div>
+              ) : (
+                <div className="max-h-[250px] overflow-y-auto">
+                  {overdueItems.slice(0, 15).map((item, idx) => renderBottleneckItem(item, idx))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

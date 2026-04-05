@@ -43,7 +43,7 @@ export default function TasksPage() {
   ];
 
   const assignees = new Set();
-  tasks.forEach(t => { if (t.assignee) assignees.add(t.assignee); });
+  tasks.forEach(t => { if (t.assignee) t.assignee.split(',').map(s => s.trim()).filter(Boolean).forEach(a => assignees.add(a)); });
   const assigneeList = [...assignees].sort();
 
   let filteredTasks = [...tasks];
@@ -57,9 +57,17 @@ export default function TasksPage() {
     const myNames = [currentUser.name.toLowerCase(), currentUser.name.split(' ')[0].toLowerCase()];
     const myTeam = TEAM.find(m => m.id === currentUser.id);
     if (myTeam) myNames.push(myTeam.name.toLowerCase());
-    filteredTasks = filteredTasks.filter(t => t.assignee && myNames.includes(t.assignee.toLowerCase()));
+    filteredTasks = filteredTasks.filter(t => {
+      if (!t.assignee) return false;
+      const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return parts.some(p => myNames.includes(p));
+    });
   } else if (taskAssignee !== 'all') {
-    filteredTasks = filteredTasks.filter(t => t.assignee && t.assignee.toLowerCase() === taskAssignee.toLowerCase());
+    filteredTasks = filteredTasks.filter(t => {
+      if (!t.assignee) return false;
+      const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return parts.includes(taskAssignee.toLowerCase());
+    });
   }
 
   const grouped = {};
@@ -101,7 +109,6 @@ export default function TasksPage() {
   const renderTaskRow = (t) => {
     const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
     const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
-    const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
     const stepName = getStepName(t, clients);
     const hasDesc = !!((t.description && t.description.trim()) || (t.notes && t.notes.trim()));
     const isExpanded = expandedTasks[t.id];
@@ -212,26 +219,56 @@ export default function TasksPage() {
           />
 
           {/* Assignee */}
-          <div
-            ref={el => assigneeRef.current = el}
-            className="cursor-pointer relative"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'assignee-' + t.id ? null : 'assignee-' + t.id); }}
-          >
-            <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-surface2">
-              {assignee ? (
-                <>
-                  <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ background: assignee.color + '18', color: assignee.color }}>{assignee.initials}</span>
-                  <span>{assignee.name}</span>
-                </>
-              ) : <span className="text-text3">+ Asignar</span>}
-            </div>
-          </div>
-          <Dropdown
-            open={openDropdown === 'assignee-' + t.id}
-            onClose={() => setOpenDropdown(null)}
-            anchorRef={assigneeRef}
-            items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
-          />
+          {(() => {
+            const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+            const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
+            const toggleAssignee = (memberName) => {
+              const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+              const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
+              const updated = exists ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase()) : [...current, memberName];
+              updateTask(t.id, { assignee: updated.join(', ') });
+            };
+            return (
+              <>
+                <div
+                  ref={el => assigneeRef.current = el}
+                  className="cursor-pointer relative"
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'assignee-' + t.id ? null : 'assignee-' + t.id); }}
+                >
+                  <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-surface2">
+                    {assigneeMembers.length > 0 ? (
+                      <div className="flex items-center">
+                        {assigneeMembers.slice(0, 2).map((am, ai) => (
+                          <span key={am.id} className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-6px' : '0', zIndex: 2 - ai }} title={am.name}>{am.initials}</span>
+                        ))}
+                        {assigneeMembers.length > 2 && (
+                          <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border border-white" style={{ marginLeft: '-6px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
+                        )}
+                        {assigneeMembers.length === 1 && <span className="ml-1">{assigneeMembers[0].name}</span>}
+                        {assigneeMembers.length > 1 && <span className="ml-1 text-text3">{assigneeMembers.length} personas</span>}
+                      </div>
+                    ) : <span className="text-text3">+ Asignar</span>}
+                  </div>
+                </div>
+                <Dropdown
+                  open={openDropdown === 'assignee-' + t.id}
+                  onClose={() => setOpenDropdown(null)}
+                  anchorRef={assigneeRef}
+                  keepOpen
+                  items={[
+                    { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                    ...TEAM.map(m => {
+                      const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
+                      return {
+                        node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                        onClick: () => toggleAssignee(m.name),
+                      };
+                    })
+                  ]}
+                />
+              </>
+            );
+          })()}
 
           {/* Priority */}
           <div
@@ -276,6 +313,19 @@ export default function TasksPage() {
                   <button className="text-text3 hover:text-red bg-transparent border-none cursor-pointer text-[10px] font-sans" onClick={() => updateTask(t.id, { dueDate: null })}>{'\u2715'}</button>
                 )}
                 {isOverdue && <span className="text-red text-[10px] font-semibold">Vencida</span>}
+              </div>
+              <div className="inline-flex items-center gap-1 text-[11px]">
+                <span className="text-text3">{'\u23F1'} Tiempo estimado:</span>
+                <input
+                  type="number"
+                  className="border border-border rounded py-[2px] px-1.5 text-[11px] font-sans outline-none bg-white focus:border-blue w-[60px]"
+                  value={t.estimatedDays || ''}
+                  step="0.5"
+                  min="0.1"
+                  placeholder="dias"
+                  onChange={(e) => { const v = parseFloat(e.target.value); updateTask(t.id, { estimatedDays: !isNaN(v) && v > 0 ? v : null }); }}
+                />
+                <span className="text-text3">dias</span>
               </div>
             </div>
           </div>

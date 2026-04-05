@@ -26,6 +26,8 @@ export default function ClientDetail({ client: c }) {
   const [addPhaseModal, setAddPhaseModal] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
   const [newPhaseColor, setNewPhaseColor] = useState('#5B7CF5');
+  const [editingEstDays, setEditingEstDays] = useState(null);
+  const [estDaysValue, setEstDaysValue] = useState('');
 
   const dropdownRefs = useRef({});
 
@@ -200,12 +202,16 @@ export default function ClientDetail({ client: c }) {
   const getFilteredTasks = () => {
     let allTasks = [...clientTasks];
 
-    // Filter by assignee
+    // Filter by assignee (supports comma-separated multi-assignee)
     if (assigneeFilter !== 'all') {
-      const memberName = assigneeFilter;
+      const memberName = assigneeFilter.toLowerCase();
       allTasks = allTasks.filter(t => {
-        const a = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
-        return a && (a.name.toLowerCase() === memberName.toLowerCase() || a.id === memberName);
+        if (!t.assignee) return false;
+        const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        return parts.some(p => {
+          const a = TEAM.find(m => m.name.toLowerCase() === p || m.id === p);
+          return a && (a.name.toLowerCase() === memberName || a.id === memberName);
+        });
       });
     }
 
@@ -221,9 +227,9 @@ export default function ClientDetail({ client: c }) {
   const renderRoadmap = () => {
     const filteredTasks = getFilteredTasks();
 
-    // Build unique assignees for filter
+    // Build unique assignees for filter (supports comma-separated)
     const assignees = new Set();
-    clientTasks.forEach(t => { if (t.assignee) assignees.add(t.assignee); });
+    clientTasks.forEach(t => { if (t.assignee) t.assignee.split(',').map(s => s.trim()).filter(Boolean).forEach(a => assignees.add(a)); });
     const assigneeList = [...assignees].sort();
 
     // Resolve phase for each task (tasks without phase inherit from stepIdx/PROCESS_STEPS)
@@ -259,7 +265,6 @@ export default function ClientDetail({ client: c }) {
     const renderTaskRow = (t, isLast) => {
       const blocked = isTaskBlocked(t);
       const blockingNames = blocked ? getBlockingNames(t) : [];
-      const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
       const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
       const hasDesc = !!(t.description && t.description.trim());
       const elapsed = getElapsedDays(t, clientTasks);
@@ -322,7 +327,7 @@ export default function ClientDetail({ client: c }) {
                 </span>
               )}
               {t.isClientTask && (
-                <span className="text-[9px] font-bold bg-orange-100 text-orange-600 py-[1px] px-1.5 rounded uppercase tracking-wide" style={{ flexShrink: 0 }}>CLIENTE</span>
+                <span className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" style={{ flexShrink: 0 }} title="Tarea del cliente">C</span>
               )}
               {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ flexShrink: 0 }} title="Tiene descripcion" />}
               {t.dueDate && (
@@ -333,43 +338,94 @@ export default function ClientDetail({ client: c }) {
             </div>
 
             {/* Col 4: Assignee (90px fixed) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
-              <div
-                ref={el => assigneeRef.current = el}
-                className="cursor-pointer"
-                style={{ flexShrink: 0 }}
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
-              >
-                {assignee ? (
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: assignee.color + '22', color: assignee.color }} title={assignee.name}>{assignee.initials}</span>
-                ) : (
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
-                )}
-              </div>
-              {assignee && <span className="text-[10px] text-gray-500" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assignee.name.split(' ')[0]}</span>}
-              <Dropdown
-                open={openDropdown === 'rd-assignee-' + t.id}
-                onClose={() => setOpenDropdown(null)}
-                anchorRef={assigneeRef}
-                items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
-              />
-            </div>
+            {(() => {
+              const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+              const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
+              const toggleAssignee = (memberName) => {
+                const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
+                const updated = exists ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase()) : [...current, memberName];
+                updateTask(t.id, { assignee: updated.join(', ') });
+              };
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
+                  <div
+                    ref={el => assigneeRef.current = el}
+                    className="cursor-pointer"
+                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                    onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
+                  >
+                    {assigneeMembers.length > 0 ? (
+                      <div className="flex items-center" style={{ direction: 'ltr' }}>
+                        {assigneeMembers.slice(0, 2).map((am, ai) => (
+                          <span key={am.id} className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-white" style={{ background: am.color + '22', color: am.color, marginLeft: ai > 0 ? '-8px' : '0', zIndex: 2 - ai }} title={am.name}>{am.initials}</span>
+                        ))}
+                        {assigneeMembers.length > 2 && (
+                          <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border-2 border-white" style={{ marginLeft: '-8px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
+                    )}
+                  </div>
+                  {assigneeMembers.length === 1 && <span className="text-[10px] text-gray-500" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assigneeMembers[0].name.split(' ')[0]}</span>}
+                  <Dropdown
+                    open={openDropdown === 'rd-assignee-' + t.id}
+                    onClose={() => setOpenDropdown(null)}
+                    anchorRef={assigneeRef}
+                    keepOpen
+                    items={[
+                      { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                      ...TEAM.map(m => {
+                        const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
+                        return {
+                          node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                          onClick: () => toggleAssignee(m.name),
+                        };
+                      })
+                    ]}
+                  />
+                </div>
+              );
+            })()}
 
             {/* Col 5: Time display (80px fixed) */}
-            <div style={{ textAlign: 'right', minWidth: 0 }}>
-              {est ? (
-                <span className="text-[10px]">
-                  {elapsed > 0 ? (
-                    <span className="font-semibold" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E' }}>
-                      {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {est}d</span>
+            <div style={{ textAlign: 'right', minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+              {editingEstDays === t.id ? (
+                <input
+                  type="number"
+                  className="w-[50px] border border-blue-400 rounded py-[2px] px-1 text-[10px] font-sans outline-none text-right"
+                  value={estDaysValue}
+                  onChange={(e) => setEstDaysValue(e.target.value)}
+                  onBlur={() => { const v = parseFloat(estDaysValue); if (!isNaN(v) && v > 0) updateTask(t.id, { estimatedDays: v }); setEditingEstDays(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingEstDays(null); }}
+                  autoFocus
+                  step="0.5"
+                  min="0.1"
+                />
+              ) : (
+                <span
+                  className="cursor-pointer rounded px-1 py-[1px] hover:bg-gray-100"
+                  onClick={() => { setEditingEstDays(t.id); setEstDaysValue(est || ''); }}
+                  title="Click para editar estimado"
+                >
+                  {est ? (
+                    <span className="text-[10px]">
+                      {elapsed > 0 ? (
+                        <span className="font-semibold" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E' }}>
+                          {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {est}d</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">{est}d est.</span>
+                      )}
                     </span>
+                  ) : elapsed > 0 ? (
+                    <span className="text-[10px] text-blue-500 font-semibold">{'\u23F1'} {elapsed}d</span>
                   ) : (
-                    <span className="text-gray-400">{est}d est.</span>
+                    <span className="text-[10px] text-gray-300 opacity-0 group-hover:opacity-100">+ est.</span>
                   )}
                 </span>
-              ) : elapsed > 0 ? (
-                <span className="text-[10px] text-blue-500 font-semibold">{'\u23F1'} {elapsed}d</span>
-              ) : null}
+              )}
             </div>
 
             {/* Col 6: Priority flag (70px fixed) */}
@@ -637,7 +693,7 @@ export default function ClientDetail({ client: c }) {
                     <div key={i} className="flex items-center gap-2 py-[6px] px-3 hover:bg-gray-50">
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.color }} />
                       <span className={`text-[13px] flex-1 ${isCompleted ? 'text-gray-400' : 'text-gray-800'}`}>{isCustom ? s.name : getStepNameForClient(c, i)}</span>
-                      {s.client && <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wide">CLIENTE</span>}
+                      {s.client && <span className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" title="Tarea del cliente">C</span>}
                       {d !== null && <span className="text-[10px] text-gray-400">{d}d</span>}
                       {cs.responsible && <span className="text-[10px] text-gray-400">{cs.responsible}</span>}
                     </div>
