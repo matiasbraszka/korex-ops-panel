@@ -307,7 +307,7 @@ export default function ClientDetail({ client: c }) {
               ref={el => statusRef.current = el}
               className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 select-none"
               style={{ background: statusColor + '15', color: statusColor, border: `1.5px solid ${statusColor}` }}
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-status-' + t.id); }}
               title={TASK_STATUS[t.status]?.label || 'Estado'}
             >{statusIcon}</div>
             <Dropdown
@@ -368,7 +368,7 @@ export default function ClientDetail({ client: c }) {
                     ref={el => assigneeRef.current = el}
                     className="cursor-pointer"
                     style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}
-                    onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
+                    onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-assignee-' + t.id); }}
                   >
                     {assigneeMembers.length > 0 ? (
                       <div className="flex items-center" style={{ direction: 'ltr' }}>
@@ -447,7 +447,7 @@ export default function ClientDetail({ client: c }) {
               <div
                 ref={el => prioRef.current = el}
                 className="cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
+                onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-prio-' + t.id); }}
               >
                 <span className="inline-flex items-center gap-[2px] text-[10px] font-semibold py-[2px] px-1.5 rounded hover:bg-gray-100" style={{ color: tp.color, whiteSpace: 'nowrap' }}>{tp.flag} {tp.label}</span>
               </div>
@@ -465,7 +465,7 @@ export default function ClientDetail({ client: c }) {
               <div
                 ref={el => movePhaseRef.current = el}
                 className="cursor-pointer opacity-0 group-hover:opacity-100"
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-movephase-' + t.id ? null : 'rd-movephase-' + t.id); }}
+                onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-movephase-' + t.id); }}
                 title="Mover a otra fase"
               >
                 <span className="text-[10px] py-[2px] px-0.5 rounded hover:bg-gray-200 text-gray-400">{'\u2194'}</span>
@@ -501,7 +501,7 @@ export default function ClientDetail({ client: c }) {
               ref={el => statusRef.current = el}
               className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
               style={{ background: statusColor + '15', color: statusColor, border: `1.5px solid ${statusColor}` }}
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-status-' + t.id); }}
             >{statusIcon}</div>
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-medium text-gray-800 leading-tight break-words">
@@ -555,7 +555,7 @@ export default function ClientDetail({ client: c }) {
                 <div
                   ref={el => getDropdownRef('rd-status2-' + t.id).current = el}
                   className="cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status2-' + t.id ? null : 'rd-status2-' + t.id); }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-status2-' + t.id); }}
                 >
                   <span className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 inline-flex items-center gap-1">
                     <span style={{ color: TASK_STATUS[t.status]?.color }}>{TASK_STATUS[t.status]?.icon}</span> {TASK_STATUS[t.status]?.label || 'Estado'}
@@ -572,7 +572,7 @@ export default function ClientDetail({ client: c }) {
                 <div
                   ref={el => getDropdownRef('rd-prio2-' + t.id).current = el}
                   className="cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio2-' + t.id ? null : 'rd-prio2-' + t.id); }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-prio2-' + t.id); }}
                 >
                   <span className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 inline-flex items-center gap-1">
                     <span style={{ color: tp.color }}>{tp.flag}</span> {tp.label}

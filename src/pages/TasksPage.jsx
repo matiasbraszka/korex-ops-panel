@@ -159,7 +159,7 @@ export default function TasksPage() {
             ref={el => statusRef.current = el}
             className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0"
             style={{ background: ts.bg, color: ts.color, border: `1.5px solid ${ts.color}` }}
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'status-' + t.id ? null : 'status-' + t.id); }}
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown('status-' + t.id); }}
             title={ts.label}
           >{ts.icon}</div>
           <Dropdown
@@ -217,7 +217,7 @@ export default function TasksPage() {
           <div
             ref={el => stepRef.current = el}
             className="cursor-pointer relative"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'step-' + t.id ? null : 'step-' + t.id); }}
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown('step-' + t.id); }}
           >
             <div className={`text-[10px] py-[3px] px-2 rounded whitespace-nowrap overflow-hidden text-ellipsis max-w-[130px] transition-colors hover:bg-surface2 ${phaseInfo || stepName ? 'text-text2' : 'text-text3 italic'}`}>
               {phaseInfo ? (
@@ -256,7 +256,7 @@ export default function TasksPage() {
                 <div
                   ref={el => assigneeRef.current = el}
                   className="cursor-pointer relative"
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'assignee-' + t.id ? null : 'assignee-' + t.id); }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('assignee-' + t.id); }}
                 >
                   <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-surface2">
                     {assigneeMembers.length > 0 ? (
@@ -295,7 +295,7 @@ export default function TasksPage() {
           <div
             ref={el => prioRef.current = el}
             className="cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'prio-' + t.id ? null : 'prio-' + t.id); }}
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown('prio-' + t.id); }}
           >
             <div className="flex items-center gap-[2px] py-[2px] px-1.5 rounded text-[11px] font-semibold hover:bg-surface2" style={{ color: tp.color }}>{tp.flag} {tp.label}</div>
           </div>
@@ -319,7 +319,7 @@ export default function TasksPage() {
               ref={el => statusRef.current = el}
               className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
               style={{ background: ts.bg, color: ts.color, border: `1.5px solid ${ts.color}` }}
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'status-' + t.id ? null : 'status-' + t.id); }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown('status-' + t.id); }}
             >{ts.icon}</div>
             <Dropdown
               open={openDropdown === 'status-' + t.id}
@@ -351,7 +351,7 @@ export default function TasksPage() {
                     ref={el => stepRef.current = el}
                     className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer"
                     style={{ background: phaseInfo.color + '18', color: phaseInfo.color }}
-                    onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'step-' + t.id ? null : 'step-' + t.id); }}
+                    onClick={(e) => { e.stopPropagation(); setOpenDropdown('step-' + t.id); }}
                   >
                     <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />
                     {phaseInfo.label}
@@ -369,7 +369,7 @@ export default function TasksPage() {
                   ref={el => prioRef.current = el}
                   className="text-[10px] font-semibold cursor-pointer"
                   style={{ color: tp.color }}
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'prio-' + t.id ? null : 'prio-' + t.id); }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('prio-' + t.id); }}
                 >{tp.flag} {tp.label}</span>
                 <Dropdown
                   open={openDropdown === 'prio-' + t.id}
@@ -394,7 +394,7 @@ export default function TasksPage() {
                     <div
                       ref={el => assigneeRef.current = el}
                       className="flex items-center cursor-pointer"
-                      onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'assignee-' + t.id ? null : 'assignee-' + t.id); }}
+                      onClick={(e) => { e.stopPropagation(); setOpenDropdown('assignee-' + t.id); }}
                     >
                       {assigneeMembers.slice(0, 2).map((am, ai) => (
                         <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }}>{am.initials}</span>
