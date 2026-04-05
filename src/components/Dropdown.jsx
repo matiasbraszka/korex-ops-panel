@@ -8,18 +8,10 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
   const updatePosition = useCallback(() => {
     if (!anchorRef?.current || !open) return;
     const rect = anchorRef.current.getBoundingClientRect();
-    const menuHeight = maxHeight;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= menuHeight ? rect.bottom + 2 : rect.top - menuHeight - 2;
-    // On mobile, center horizontally if not enough space
-    const isMobile = window.innerWidth < 768;
-    let left;
-    if (isMobile) {
-      left = Math.max(8, Math.min(rect.left, window.innerWidth - minWidth - 8));
-    } else {
-      left = Math.min(rect.left, window.innerWidth - minWidth - 8);
-    }
-    setPos({ top: Math.max(4, top), left: Math.max(4, left) });
+    const top = spaceBelow >= maxHeight ? rect.bottom + 4 : rect.top - maxHeight - 4;
+    const left = Math.min(rect.left, window.innerWidth - minWidth - 12);
+    setPos({ top: Math.max(8, top), left: Math.max(8, left) });
   }, [anchorRef, open, maxHeight, minWidth]);
 
   useEffect(() => {
@@ -34,19 +26,30 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
     };
   }, [open, updatePosition]);
 
+  // Outside-click handler with delay to prevent the opening click from closing it
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target) && anchorRef?.current && !anchorRef.current.contains(e.target)) {
-        onClose();
-      }
-    };
-    // Listen to both mouse and touch events for mobile support
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
+
+    let handler = null;
+    const timerId = setTimeout(() => {
+      handler = (e) => {
+        if (
+          menuRef.current && !menuRef.current.contains(e.target) &&
+          anchorRef?.current && !anchorRef.current.contains(e.target)
+        ) {
+          onClose();
+        }
+      };
+      document.addEventListener('mousedown', handler);
+      document.addEventListener('touchstart', handler);
+    }, 50);
+
     return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('touchstart', handler);
+      clearTimeout(timerId);
+      if (handler) {
+        document.removeEventListener('mousedown', handler);
+        document.removeEventListener('touchstart', handler);
+      }
     };
   }, [open, onClose, anchorRef]);
 
@@ -55,7 +58,7 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
   return createPortal(
     <div
       ref={menuRef}
-      className="bg-white border border-border rounded-md py-1 overflow-y-auto"
+      className="bg-white border border-border rounded-lg py-1 overflow-y-auto"
       style={{
         position: 'fixed',
         top: pos.top,
@@ -64,10 +67,11 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
         minWidth,
         maxHeight,
         maxWidth: 'calc(100vw - 16px)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
       }}
       onClick={(e) => e.stopPropagation()}
-      onTouchEnd={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
     >
       {items.map((item, i) => {
         if (item.divider) {
@@ -80,8 +84,8 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
         return (
           <div
             key={i}
-            className="py-2.5 px-3 text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap hover:bg-blue-bg hover:text-blue active:bg-blue-bg"
-            onClick={() => { item.onClick?.(); if (!keepOpen) onClose(); }}
+            className="py-2.5 px-3.5 text-[13px] cursor-pointer flex items-center gap-2.5 whitespace-nowrap hover:bg-blue-bg hover:text-blue active:bg-blue-bg transition-colors"
+            onClick={(e) => { e.stopPropagation(); item.onClick?.(); if (!keepOpen) onClose(); }}
             style={item.style}
           >
             {item.icon && <span style={{ color: item.iconColor }}>{item.icon}</span>}
