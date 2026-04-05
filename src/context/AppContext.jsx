@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
 import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -80,7 +80,10 @@ export function AppProvider({ children }) {
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
         phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
         template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
-        due_date: t.dueDate || null
+        due_date: t.dueDate || null,
+        accumulated_days: t.accumulatedDays || 0,
+        timer_started_at: t.timerStartedAt || null,
+        enabled_date: t.enabledDate || null
       })
     });
   }, []);
@@ -116,7 +119,10 @@ export function AppProvider({ children }) {
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
         phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
         template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
-        due_date: t.dueDate || null
+        due_date: t.dueDate || null,
+        accumulated_days: t.accumulatedDays || 0,
+        timer_started_at: t.timerStartedAt || null,
+        enabled_date: t.enabledDate || null
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -160,7 +166,9 @@ export function AppProvider({ children }) {
     setClients(injected);
     // Create default roadmap tasks for the new client
     const defaultTasks = createDefaultTasks(c.id);
-    const newTasks = [...tasksRef.current, ...defaultTasks];
+    let newTasks = [...tasksRef.current, ...defaultTasks];
+    const result = recalculateTimers(c.id, newTasks);
+    newTasks = result.tasks;
     setTasks(newTasks);
     save(injected, newTasks);
     if (dbReady.current) {
@@ -183,12 +191,40 @@ export function AppProvider({ children }) {
   // ── CRUD: Tasks ──
   const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
-    const newTasks = [...tasksRef.current, t];
+    let newTasks = [...tasksRef.current, t];
+    const result = recalculateTimers(clientId, newTasks);
+    newTasks = result.tasks;
     setTasks(newTasks);
     save(clientsRef.current, newTasks);
     if (dbReady.current) dbSaveTask(t);
     return t;
-  }, [save, dbSaveTask]);
+  }, [save, dbSaveTask, recalculateTimers]);
+
+  // ── Timer recalculation ──
+  const recalculateTimers = useCallback((clientId, taskList) => {
+    const clientTasks = taskList.filter(t => t.clientId === clientId);
+    let changed = false;
+    const updated = taskList.map(t => {
+      if (t.clientId !== clientId) return t;
+      const shouldRun = isTimerRunning(t, clientTasks);
+      const isRunning = !!t.timerStartedAt;
+
+      if (shouldRun && !isRunning) {
+        changed = true;
+        const u = { ...t, timerStartedAt: today(), enabledDate: t.enabledDate || today() };
+        if (dbReady.current) dbSaveTask(u);
+        return u;
+      } else if (!shouldRun && isRunning) {
+        changed = true;
+        const elapsed = daysBetween(t.timerStartedAt, today()) || 0;
+        const u = { ...t, accumulatedDays: (t.accumulatedDays || 0) + elapsed, timerStartedAt: null };
+        if (dbReady.current) dbSaveTask(u);
+        return u;
+      }
+      return t;
+    });
+    return { tasks: updated, changed };
+  }, [dbSaveTask]);
 
   const updateTask = useCallback((id, updates) => {
     setTasks(prev => {
@@ -206,21 +242,37 @@ export function AppProvider({ children }) {
         }
         return merged;
       });
-      save(clientsRef.current, newTasks);
-      const updated = newTasks.find(t => t.id === id);
+
+      // Recalculate timers unless flagged to skip
+      let finalTasks = newTasks;
+      if (!updates._skipTimerRecalc) {
+        const task = newTasks.find(t => t.id === id);
+        if (task) {
+          const result = recalculateTimers(task.clientId, newTasks);
+          finalTasks = result.tasks;
+        }
+      }
+
+      save(clientsRef.current, finalTasks);
+      const updated = finalTasks.find(t => t.id === id);
       if (updated && dbReady.current) dbSaveTask(updated);
-      return newTasks;
+      return finalTasks;
     });
-  }, [save, dbSaveTask]);
+  }, [save, dbSaveTask, recalculateTimers]);
 
   const deleteTask = useCallback((id) => {
     setTasks(prev => {
-      const newTasks = prev.filter(t => t.id !== id);
+      const deleted = prev.find(t => t.id === id);
+      let newTasks = prev.filter(t => t.id !== id);
+      if (deleted) {
+        const result = recalculateTimers(deleted.clientId, newTasks);
+        newTasks = result.tasks;
+      }
       save(clientsRef.current, newTasks);
       dbDeleteTask(id);
       return newTasks;
     });
-  }, [save, dbDeleteTask]);
+  }, [save, dbDeleteTask, recalculateTimers]);
 
   // ── Auth ──
   const doLogin = useCallback((username, password) => {
@@ -274,7 +326,10 @@ export function AppProvider({ children }) {
           startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
           phase: t.phase || null, dependsOn: t.depends_on || null, isRoadmapTask: t.is_roadmap_task || false,
           templateId: t.template_id || null, estimatedDays: t.estimated_days || null, isClientTask: t.is_client_task || false,
-          dueDate: t.due_date || null
+          dueDate: t.due_date || null,
+          accumulatedDays: t.accumulated_days || 0,
+          timerStartedAt: t.timer_started_at || null,
+          enabledDate: t.enabled_date || null
         }));
 
         const injected = injectMetaMetrics(mappedClients);
@@ -362,6 +417,37 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  // ── Migrate old clients to roadmap tasks ──
+  const migrateAllClients = useCallback(() => {
+    const currentClients = clientsRef.current;
+    const currentTasks = tasksRef.current;
+    let newTasks = [...currentTasks];
+    let migrated = false;
+
+    currentClients.forEach(c => {
+      // Only migrate if has steps and NO roadmap tasks
+      if (c.steps && c.steps.length > 0 && !hasRoadmapTasks(c.id, newTasks)) {
+        const roadmapTasks = migrateClientToRoadmap(c, newTasks);
+        newTasks = [...newTasks, ...roadmapTasks];
+        // Recalculate timers for this client
+        const result = recalculateTimers(c.id, newTasks);
+        newTasks = result.tasks;
+        migrated = true;
+        console.log('\u2713 Migrated client:', c.name, '— created', roadmapTasks.length, 'roadmap tasks');
+      }
+    });
+
+    if (migrated) {
+      setTasks(newTasks);
+      save(currentClients, newTasks);
+      if (dbReady.current) {
+        // Save only the new roadmap tasks to Supabase
+        const roadmapOnly = newTasks.filter(t => t.isRoadmapTask && !currentTasks.find(ct => ct.id === t.id));
+        roadmapOnly.forEach(t => dbSaveTask(t));
+      }
+    }
+  }, [save, dbSaveTask, recalculateTimers]);
+
   // ── Init on mount ──
   useEffect(() => {
     // 1. Load from localStorage first (instant)
@@ -397,6 +483,8 @@ export function AppProvider({ children }) {
       } else if (loaded) {
         setSyncStatus('ok');
       }
+      // Run migration for clients with steps but no roadmap tasks
+      migrateAllClients();
     });
 
     // 3. Poll for external changes every 30s
@@ -438,6 +526,7 @@ export function AppProvider({ children }) {
     doLogin,
     doLogout,
     injectMetaMetrics,
+    recalculateTimers,
   };
 
   return (

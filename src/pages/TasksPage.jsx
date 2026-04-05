@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, effectiveTime, today, fmtDate, getAllPhases, getRoadmapTasks } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getRoadmapTasks, getElapsedDays } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 
@@ -157,15 +157,17 @@ export default function TasksPage() {
               {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
               <span className="cursor-text py-[2px] px-1 rounded-[3px] whitespace-nowrap overflow-hidden text-ellipsis flex-1 hover:bg-surface2" onDoubleClick={(e) => startEditTitle(t.id, e.target)}>{t.title}</span>
               {(() => {
-                const client = clients.find(x => x.id === t.clientId);
-                const etime = effectiveTime(t, client);
-                if (etime === null) return null;
-                const isDone = t.status === 'done';
-                const stepDays = t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null;
-                const isOver = stepDays && etime > stepDays;
-                const color = isDone ? (isOver ? '#F97316' : '#22C55E') : (isOver ? '#F97316' : '#5B7CF5');
-                const bg = isDone ? (isOver ? '#FFF7ED' : '#ECFDF5') : (isOver ? '#FFF7ED' : '#EEF2FF');
-                return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>{etime}d</span>;
+                const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
+                const elapsed = getElapsedDays(t, clientTasks);
+                if (elapsed <= 0) return null;
+                const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
+                const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
+                const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
+                return (
+                  <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>
+                    {'\u23F1'} {elapsed}d{est ? ` / ${est}d` : ''}
+                  </span>
+                );
               })()}
               {t.dueDate && (
                 <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium shrink-0 ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>

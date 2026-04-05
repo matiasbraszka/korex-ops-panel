@@ -269,6 +269,9 @@ export function createDefaultTasks(clientId) {
     completedDate: null,
     blockedSince: null,
     dueDate: null,
+    accumulatedDays: 0,
+    timerStartedAt: null,
+    enabledDate: null,
   }));
 }
 
@@ -287,4 +290,95 @@ export function effectiveTime(task, client) {
   const end = task.completedDate || today();
   const total = daysBetween(task.startedDate, end);
   return total;
+}
+
+/**
+ * Check if a task's timer should be running.
+ */
+export function isTimerRunning(task, allClientTasks) {
+  if (task.status === 'done' || task.status === 'blocked') return false;
+  if (task.dependsOn && task.dependsOn.length > 0) {
+    const hasUnmet = task.dependsOn.some(depId => {
+      const dep = allClientTasks.find(t => t.id === depId || t.templateId === depId);
+      return dep && dep.status !== 'done';
+    });
+    if (hasUnmet) return false;
+  }
+  return true;
+}
+
+/**
+ * Get total elapsed days for a task (accumulated + current running period).
+ */
+export function getElapsedDays(task, allClientTasks) {
+  let total = task.accumulatedDays || 0;
+  if (task.timerStartedAt && isTimerRunning(task, allClientTasks)) {
+    const extra = daysBetween(task.timerStartedAt, today());
+    if (extra > 0) total += extra;
+  }
+  return Math.round(total * 10) / 10;
+}
+
+/**
+ * Migration: convert old client steps to new roadmap tasks.
+ */
+export function migrateClientToRoadmap(client, existingTasks) {
+  const DEFAULT_TASKS = DEFAULT_TASKS_TEMPLATE;
+  const oldSteps = client.steps || [];
+
+  return DEFAULT_TASKS.map((tpl, idx) => {
+    const oldStep = idx < oldSteps.length ? oldSteps[idx] : null;
+
+    let status = 'backlog';
+    let startedDate = null;
+    let completedDate = null;
+
+    // cargar-saldo is index 16, new task with no old step mapping
+    if (tpl.id === 'cargar-saldo') {
+      status = 'backlog';
+    } else if (oldStep) {
+      if (oldStep.status === 'completed') {
+        status = 'done';
+        completedDate = today();
+      } else if (oldStep.status === 'in-progress') {
+        status = 'in-progress';
+        startedDate = client.startDate || today();
+      } else if (oldStep.status === 'waiting-client') {
+        status = 'backlog';
+      } else if (oldStep.status === 'blocked') {
+        status = 'blocked';
+      } else {
+        status = 'backlog';
+      }
+    }
+
+    const assignee = oldStep?.responsible || '';
+    const notes = oldStep?.notes || '';
+
+    return {
+      id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_mig_' + tpl.id,
+      title: tpl.name,
+      clientId: client.id,
+      phase: tpl.phase,
+      status,
+      assignee,
+      priority: 'normal',
+      stepIdx: null,
+      dependsOn: [...tpl.dependsOn],
+      isRoadmapTask: true,
+      templateId: tpl.id,
+      estimatedDays: tpl.days,
+      isClientTask: tpl.client,
+      notes,
+      description: '',
+      createdDate: today(),
+      startedDate,
+      completedDate,
+      blockedSince: null,
+      dueDate: null,
+      accumulatedDays: 0,
+      timerStartedAt: null,
+      enabledDate: null,
+    };
+  });
 }

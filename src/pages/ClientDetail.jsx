@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, effectiveTime } from '../utils/helpers';
+import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, getElapsedDays } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
@@ -262,7 +262,7 @@ export default function ClientDetail({ client: c }) {
       const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
       const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
       const hasDesc = !!(t.description && t.description.trim());
-      const etime = effectiveTime(t, c);
+      const elapsed = getElapsedDays(t, clientTasks);
       const est = t.estimatedDays || null;
       const isExpanded = expandedTasks[t.id];
 
@@ -347,16 +347,18 @@ export default function ClientDetail({ client: c }) {
 
             {/* Time info */}
             {est && (
-              <span className="text-[10px] text-gray-400 shrink-0 w-[80px] text-right">
-                {etime !== null ? (
-                  <><span className="font-semibold" style={{ color: etime > est ? '#F97316' : '#5B7CF5' }}>{etime}d</span><span className="text-gray-300">/{est}d</span></>
+              <span className="text-[10px] shrink-0 w-[90px] text-right">
+                {elapsed > 0 ? (
+                  <span className="font-semibold" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E' }}>
+                    {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {est}d</span>
+                  </span>
                 ) : (
-                  <>{est}d est.</>
+                  <span className="text-gray-400">{est}d est.</span>
                 )}
               </span>
             )}
-            {!est && etime !== null && (
-              <span className="text-[10px] text-blue-500 shrink-0 w-[80px] text-right font-semibold">{etime}d</span>
+            {!est && elapsed > 0 && (
+              <span className="text-[10px] text-blue-500 shrink-0 w-[90px] text-right font-semibold">{'\u23F1'} {elapsed}d</span>
             )}
 
             {/* Priority dropdown (FIX 1) */}
