@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 180, maxHeight = 260, keepOpen = false }) {
   const menuRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [ready, setReady] = useState(false);
 
   const updatePosition = useCallback(() => {
     if (!anchorRef?.current || !open) return;
@@ -14,9 +15,20 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
     setPos({ top: Math.max(8, top), left: Math.max(8, left) });
   }, [anchorRef, open, maxHeight, minWidth]);
 
+  // When dropdown opens, delay "ready" so the opening click doesn't hit the backdrop
+  useEffect(() => {
+    if (open) {
+      setReady(false);
+      updatePosition();
+      const id = requestAnimationFrame(() => setReady(true));
+      return () => cancelAnimationFrame(id);
+    } else {
+      setReady(false);
+    }
+  }, [open, updatePosition]);
+
   useEffect(() => {
     if (!open) return;
-    updatePosition();
     const onScroll = () => updatePosition();
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', updatePosition);
@@ -28,13 +40,20 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
 
   if (!open) return null;
 
+  const handleBackdropClick = (e) => {
+    if (!ready) return; // ignore clicks from the same frame that opened us
+    e.stopPropagation();
+    e.preventDefault();
+    onClose();
+  };
+
   return createPortal(
     <>
-      {/* Invisible backdrop — click to close */}
+      {/* Invisible backdrop — click anywhere outside to close */}
       <div
         style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        onMouseDown={(e) => e.stopPropagation()}
+        onClick={handleBackdropClick}
+        onMouseDown={handleBackdropClick}
       />
       {/* Menu */}
       <div
@@ -66,6 +85,7 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
               key={i}
               className="py-2.5 px-3.5 text-[13px] cursor-pointer flex items-center gap-2.5 whitespace-nowrap hover:bg-blue-bg hover:text-blue active:bg-blue-bg transition-colors"
               onClick={(e) => { e.stopPropagation(); item.onClick?.(); if (!keepOpen) onClose(); }}
+              onMouseDown={(e) => e.stopPropagation()}
               style={item.style}
             >
               {item.icon && <span style={{ color: item.iconColor }}>{item.icon}</span>}
