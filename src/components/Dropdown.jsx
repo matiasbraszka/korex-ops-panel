@@ -10,24 +10,17 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
     if (!anchorRef?.current || !open) return;
     const rect = anchorRef.current.getBoundingClientRect();
 
-    // Use actual menu height if available, otherwise estimate from items
-    const menuEl = menuRef.current;
-    const actualHeight = menuEl ? menuEl.scrollHeight : Math.min(items.length * 40, maxHeight);
-    const menuHeight = Math.min(actualHeight, maxHeight);
-
-    // Always prefer below the anchor
-    const spaceBelow = window.innerHeight - rect.bottom - 8;
-    const spaceAbove = rect.top - 8;
-
+    // Always place below the anchor. Only go above if less than 100px below.
+    const spaceBelow = window.innerHeight - rect.bottom;
     let top;
-    if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
-      // Place below
-      top = rect.bottom + 4;
+    if (spaceBelow < 100) {
+      // Not enough space below — place above
+      const menuEl = menuRef.current;
+      const menuHeight = menuEl ? Math.min(menuEl.scrollHeight, maxHeight) : 200;
+      top = Math.max(8, rect.top - menuHeight - 4);
     } else {
-      // Place above only if significantly more space
-      top = rect.top - menuHeight - 4;
+      top = rect.bottom + 4;
     }
-    top = Math.max(8, top);
 
     // Horizontal: align left edge to anchor, keep within viewport
     let left = rect.left;
