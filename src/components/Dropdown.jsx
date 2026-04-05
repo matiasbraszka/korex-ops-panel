@@ -9,19 +9,39 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
   const updatePosition = useCallback(() => {
     if (!anchorRef?.current || !open) return;
     const rect = anchorRef.current.getBoundingClientRect();
+
+    // Vertical: prefer below, fall back to above
     const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= maxHeight ? rect.bottom + 4 : rect.top - maxHeight - 4;
-    const left = Math.min(rect.left, window.innerWidth - minWidth - 12);
-    setPos({ top: Math.max(8, top), left: Math.max(8, left) });
+    let top;
+    if (spaceBelow >= maxHeight) {
+      top = rect.bottom + 4;
+    } else {
+      top = Math.max(8, rect.top - maxHeight - 4);
+    }
+
+    // Horizontal: align to anchor left, but keep within viewport
+    let left = rect.left;
+    // If menu would overflow right edge, align to right edge of anchor
+    if (left + minWidth > window.innerWidth - 12) {
+      left = rect.right - minWidth;
+    }
+    // Ensure not off-screen left
+    left = Math.max(8, left);
+
+    setPos({ top, left });
   }, [anchorRef, open, maxHeight, minWidth]);
 
-  // When dropdown opens, delay "ready" so the opening click doesn't hit the backdrop
   useEffect(() => {
     if (open) {
       setReady(false);
+      // Double rAF: first to ensure DOM is painted, second to enable backdrop
       updatePosition();
-      const id = requestAnimationFrame(() => setReady(true));
-      return () => cancelAnimationFrame(id);
+      const id1 = requestAnimationFrame(() => {
+        updatePosition(); // recalc after DOM paint
+        const id2 = requestAnimationFrame(() => setReady(true));
+        return () => cancelAnimationFrame(id2);
+      });
+      return () => cancelAnimationFrame(id1);
     } else {
       setReady(false);
     }
@@ -40,8 +60,8 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
 
   if (!open) return null;
 
-  const handleBackdropClick = (e) => {
-    if (!ready) return; // ignore clicks from the same frame that opened us
+  const handleBackdropClose = (e) => {
+    if (!ready) return;
     e.stopPropagation();
     e.preventDefault();
     onClose();
@@ -49,13 +69,11 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
 
   return createPortal(
     <>
-      {/* Invisible backdrop — click anywhere outside to close */}
       <div
         style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
-        onClick={handleBackdropClick}
-        onMouseDown={handleBackdropClick}
+        onClick={handleBackdropClose}
+        onMouseDown={handleBackdropClose}
       />
-      {/* Menu */}
       <div
         ref={menuRef}
         className="bg-white border border-border rounded-lg py-1 overflow-y-auto"
