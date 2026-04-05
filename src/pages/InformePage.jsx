@@ -97,18 +97,26 @@ export default function InformePage() {
     report += `---\n*Generado automaticamente desde el panel de operaciones.*`;
 
     const newBriefing = { id: 'latest', date: d, text: report, source: 'panel-manual' };
-    const ok = await sbFetch('briefings', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-      body: JSON.stringify(newBriefing)
-    });
-    if (ok) {
-      setBriefing(newBriefing);
-      setReportStatus('success');
-      setTimeout(() => setReportStatus(null), 4000);
-    } else {
+    try {
+      const ok = await sbFetch('briefings', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+        body: JSON.stringify(newBriefing)
+      });
+      if (ok) {
+        console.log('[InformePage] Informe guardado en Supabase correctamente', { date: d });
+        setBriefing(newBriefing);
+        setReportStatus('success');
+        setTimeout(() => setReportStatus(null), 4000);
+      } else {
+        console.error('[InformePage] Error al guardar informe: sbFetch retorno falsy');
+        setReportStatus('error');
+        setTimeout(() => setReportStatus(null), 6000);
+      }
+    } catch (err) {
+      console.error('[InformePage] Excepcion al guardar informe:', err);
       setReportStatus('error');
-      setTimeout(() => setReportStatus(null), 4000);
+      setTimeout(() => setReportStatus(null), 6000);
     }
   };
 
@@ -220,8 +228,8 @@ export default function InformePage() {
       {/* Generate button */}
       <div className="mb-4 flex gap-2.5 items-center">
         <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 disabled:opacity-50" onClick={generateOpsReport} disabled={reportStatus === 'generating'}>{reportStatus === 'generating' ? 'Generando...' : 'Generar informe ahora'}</button>
-        {reportStatus === 'success' && <span className="text-[11px] text-green font-semibold">Informe generado y guardado en Supabase</span>}
-        {reportStatus === 'error' && <span className="text-[11px] text-red font-semibold">Error al guardar el informe. Intenta de nuevo.</span>}
+        {reportStatus === 'success' && <span className="text-[11px] text-green font-semibold py-1 px-2.5 bg-green-50 rounded-md">{'\u2713'} Informe generado y guardado en Supabase correctamente</span>}
+        {reportStatus === 'error' && <span className="text-[11px] text-red font-semibold py-1 px-2.5 bg-red-50 rounded-md">{'\u2715'} Error al guardar el informe. Revisa la consola y reintenta.</span>}
         {!reportStatus && <span className="text-[11px] text-text3">Crea un informe con el estado actual de todos los clientes y publicidad</span>}
       </div>
 

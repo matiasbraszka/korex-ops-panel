@@ -58,9 +58,10 @@ export default function TasksPage() {
 
   const inlineTaskKeydown = (e, clientId) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
-      const stepSelect = document.getElementById('inline-task-step');
-      const stepIdx = stepSelect && stepSelect.value !== '' ? parseInt(stepSelect.value) : null;
-      createTask(e.target.value.trim(), clientId, '', 'normal', 'backlog', '', stepIdx);
+      const phaseSelect = document.getElementById('inline-task-phase');
+      const phase = phaseSelect && phaseSelect.value !== '' ? phaseSelect.value : null;
+      const t = createTask(e.target.value.trim(), clientId, '', 'normal', 'backlog', '', null);
+      if (phase && t) updateTask(t.id, { phase });
       e.target.value = '';
       setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50);
     }
@@ -95,25 +96,23 @@ export default function TasksPage() {
     const prioRef = getRef('prio-' + t.id);
 
     const client = clients.find(x => x.id === t.clientId);
-    const customSteps = client?.customSteps || [];
 
     // Phase display for roadmap tasks
     const phaseInfo = t.phase ? PHASES[t.phase] : null;
 
     const stepDropdownItems = [
       { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null, phase: null }) },
+      { divider: true, label: 'Fases', color: '#9CA3AF' },
     ];
-    let lastPhase = '';
-    PROCESS_STEPS.forEach((s, i) => {
-      if (s.phase !== lastPhase) {
-        lastPhase = s.phase;
-        stepDropdownItems.push({ divider: true, label: PHASES[s.phase]?.label || s.phase, color: PHASES[s.phase]?.color });
-      }
-      stepDropdownItems.push({ label: s.name, onClick: () => updateTask(t.id, { stepIdx: i, phase: s.phase }), style: { paddingLeft: 16, fontSize: 11 } });
+    Object.entries(PHASES).forEach(([key, ph]) => {
+      stepDropdownItems.push({ label: ph.label, onClick: () => updateTask(t.id, { phase: key, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: ph.color });
     });
-    customSteps.forEach((cs, ci) => {
-      stepDropdownItems.push({ label: cs.name, onClick: () => updateTask(t.id, { stepIdx: PROCESS_STEPS.length + ci }), style: { paddingLeft: 16, fontSize: 11, color: 'var(--color-blue)' } });
-    });
+    const customPhases = client?.customPhases || [];
+    if (customPhases.length > 0) {
+      customPhases.forEach(cp => {
+        stepDropdownItems.push({ label: cp.label, onClick: () => updateTask(t.id, { phase: cp.id, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: cp.color });
+      });
+    }
 
     return (
       <div key={t.id} className="border-b border-border last:border-b-0">
@@ -243,18 +242,29 @@ export default function TasksPage() {
   return (
     <div>
       {/* Filters */}
-      <div className="flex gap-1.5 items-center mb-4 flex-wrap">
-        {filterDefs.map(f => (
-          <button key={f.key} className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskFilter === f.key ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue hover:text-text'}`} onClick={() => setTaskFilter(f.key)}>{f.label}</button>
-        ))}
-        <span className="w-px h-5 bg-border mx-1" />
-        <button className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskAssignee === 'all' ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue'}`} onClick={() => setTaskAssignee('all')}>{'\uD83D\uDC65'} Todos</button>
-        <button className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskAssignee === 'mine' ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue'}`} onClick={() => setTaskAssignee('mine')}>{'\uD83D\uDC64'} Mis tareas</button>
-        {assigneeList.map(a => {
-          const m = TEAM.find(t => t.name.toLowerCase() === a.toLowerCase() || t.id === a);
-          return <button key={a} className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans ${taskAssignee === a ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue'}`} onClick={() => setTaskAssignee(a)}>{m ? m.name : a}</button>;
-        })}
-        <label className="ml-auto flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
+      <div className="flex gap-2.5 items-center mb-4">
+        <select
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue"
+          value={taskFilter}
+          onChange={(e) => setTaskFilter(e.target.value)}
+        >
+          {filterDefs.map(f => (
+            <option key={f.key} value={f.key}>{f.key === 'all' ? 'Estado: Todas' : f.label}</option>
+          ))}
+        </select>
+        <select
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue"
+          value={taskAssignee}
+          onChange={(e) => setTaskAssignee(e.target.value)}
+        >
+          <option value="all">Encargado: Todos</option>
+          <option value="mine">Mis tareas</option>
+          {assigneeList.map(a => {
+            const m = TEAM.find(t => t.name.toLowerCase() === a.toLowerCase() || t.id === a);
+            return <option key={a} value={a}>{m ? m.name : a}</option>;
+          })}
+        </select>
+        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
           <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
         </label>
       </div>
@@ -299,10 +309,10 @@ export default function TasksPage() {
                     <div className="text-text3 text-[10px]">+</div>
                     <div className="flex flex-col gap-1 flex-1">
                       <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Escribe el nombre de la tarea y presiona Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, g.client.id)} />
-                      <select id="inline-task-step" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
+                      <select id="inline-task-phase" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
                         <option value="">Sin vincular a fase</option>
-                        {PROCESS_STEPS.map((s, i) => <option key={i} value={i}>{s.name}</option>)}
-                        {(g.client.customSteps || []).map((cs, ci) => <option key={'c' + ci} value={PROCESS_STEPS.length + ci}>{cs.name} (personalizado)</option>)}
+                        {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        {(g.client.customPhases || []).map(cp => <option key={cp.id} value={cp.id}>{cp.label}</option>)}
                       </select>
                     </div>
                     <div />

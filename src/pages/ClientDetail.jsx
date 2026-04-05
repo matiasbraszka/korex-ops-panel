@@ -21,6 +21,10 @@ export default function ClientDetail({ client: c }) {
   const [editingStartDate, setEditingStartDate] = useState(false);
   const [editingTitle, setEditingTitle] = useState(null);
   const [editTitleValue, setEditTitleValue] = useState('');
+  const [depsModal, setDepsModal] = useState(null);
+  const [addPhaseModal, setAddPhaseModal] = useState(false);
+  const [newPhaseName, setNewPhaseName] = useState('');
+  const [newPhaseColor, setNewPhaseColor] = useState('#5B7CF5');
 
   const dropdownRefs = useRef({});
 
@@ -111,12 +115,12 @@ export default function ClientDetail({ client: c }) {
     setEditingStartDate(false);
   };
 
-  // Check if a roadmap task is blocked by dependencies
+  // Check if a roadmap task is blocked by dependencies (uses task IDs)
   const isTaskBlocked = (task) => {
     if (!task.dependsOn || task.dependsOn.length === 0) return false;
     if (task.status === 'done') return false;
     return task.dependsOn.some(depId => {
-      const depTask = roadmapTasks.find(t => t.templateId === depId);
+      const depTask = clientTasks.find(t => t.id === depId);
       return depTask && depTask.status !== 'done';
     });
   };
@@ -125,7 +129,7 @@ export default function ClientDetail({ client: c }) {
     if (!task.dependsOn || task.dependsOn.length === 0) return [];
     return task.dependsOn
       .map(depId => {
-        const depTask = roadmapTasks.find(t => t.templateId === depId);
+        const depTask = clientTasks.find(t => t.id === depId);
         return depTask && depTask.status !== 'done' ? depTask.title : null;
       })
       .filter(Boolean);
@@ -212,7 +216,6 @@ export default function ClientDetail({ client: c }) {
 
       const statusRef = getDropdownRef('rd-status-' + t.id);
       const assigneeRef = getDropdownRef('rd-assignee-' + t.id);
-      const prioRef = getDropdownRef('rd-prio-' + t.id);
 
       // Status icon
       let statusIcon, statusColor;
@@ -322,6 +325,13 @@ export default function ClientDetail({ client: c }) {
               items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
             />
 
+            {/* Dependencies icon */}
+            <button
+              className="text-[10px] py-[2px] px-1 rounded hover:bg-blue-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 shrink-0"
+              onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
+              title="Dependencias"
+            >{'\uD83D\uDD17'}</button>
+
             {/* Delete (on hover) */}
             <button
               className="text-[10px] py-[2px] px-1 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500 shrink-0"
@@ -367,19 +377,19 @@ export default function ClientDetail({ client: c }) {
 
                 {/* Priority dropdown */}
                 <div
-                  ref={el => prioRef.current = el}
+                  ref={el => getDropdownRef('rd-prio2-' + t.id).current = el}
                   className="cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio2-' + t.id ? null : 'rd-prio2-' + t.id); }}
                 >
                   <span className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 inline-flex items-center gap-1">
                     <span style={{ color: tp.color }}>{tp.flag}</span> {tp.label}
                   </span>
                 </div>
                 <Dropdown
-                  open={openDropdown === 'rd-prio-' + t.id}
+                  open={openDropdown === 'rd-prio2-' + t.id}
                   onClose={() => setOpenDropdown(null)}
-                  anchorRef={prioRef}
-                  items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+                  anchorRef={getDropdownRef('rd-prio2-' + t.id)}
+                  items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => { updateTask(t.id, { priority: k }); setOpenDropdown(null); } }))}
                 />
 
                 {/* Delete */}
@@ -464,6 +474,12 @@ export default function ClientDetail({ client: c }) {
               </div>
             );
           })}
+
+          {/* Add custom phase button */}
+          <button
+            className="w-full text-left text-[12px] text-gray-400 py-2.5 px-3 bg-transparent border border-dashed border-gray-200 rounded-lg cursor-pointer font-sans hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50/30 mt-1"
+            onClick={() => { setNewPhaseName(''); setNewPhaseColor('#5B7CF5'); setAddPhaseModal(true); }}
+          >+ Agregar fase</button>
         </div>
       </div>
     );
@@ -700,8 +716,19 @@ export default function ClientDetail({ client: c }) {
                   const typeLabel = f.type === 'complaint' ? 'Queja' : f.type === 'problem' ? 'Problema' : f.type === 'suggestion' ? 'Sugerencia' : 'Pedido';
                   const typeBg = f.type === 'complaint' ? 'var(--color-red-bg)' : f.type === 'problem' ? 'var(--color-orange-bg)' : 'var(--color-blue-bg)';
                   return (
-                    <div key={fi} className="py-2.5 px-4 border-b border-border last:border-b-0">
-                      <div className="text-xs leading-relaxed mb-1">{f.text}</div>
+                    <div key={fi} className="py-2.5 px-4 border-b border-border last:border-b-0 group/fb">
+                      <div className="flex items-start gap-1">
+                        <div className="text-xs leading-relaxed mb-1 flex-1">{f.text}</div>
+                        <button
+                          className="text-[10px] text-gray-300 bg-transparent border-none cursor-pointer py-[2px] px-1 rounded hover:text-red-500 hover:bg-red-50 shrink-0 opacity-0 group-hover/fb:opacity-100 transition-opacity"
+                          onClick={() => {
+                            const newFbs = [...(c.clientFeedbacks || [])];
+                            newFbs.splice(fi, 1);
+                            updateClient(c.id, { clientFeedbacks: newFbs });
+                          }}
+                          title="Eliminar feedback"
+                        >{'\u2715'}</button>
+                      </div>
                       <div className="flex items-center gap-2 text-[10px] text-text3 flex-wrap">
                         <span className="bg-surface2 py-[1px] px-1.5 rounded-[3px] font-semibold">{f.source || 'otro'}</span>
                         <span>{f.sourceDetail || ''}</span>
@@ -824,6 +851,90 @@ export default function ClientDetail({ client: c }) {
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Tipo</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={cfbForm.type} onChange={e => setCfbForm(f => ({ ...f, type: e.target.value }))}><option value="request">Pedido</option><option value="complaint">Queja</option><option value="suggestion">Sugerencia</option><option value="problem">Problema</option></select></div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Detalle de la fuente</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="Ej: Lo comento en la llamada del 01/04" value={cfbForm.sourceDetail} onChange={e => setCfbForm(f => ({ ...f, sourceDetail: e.target.value }))} /></div>
+      </Modal>
+
+      {/* Add Phase Modal */}
+      <Modal
+        open={addPhaseModal}
+        onClose={() => setAddPhaseModal(false)}
+        title="Agregar fase personalizada"
+        maxWidth={400}
+        footer={<>
+          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setAddPhaseModal(false)}>Cancelar</button>
+          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={() => {
+            if (!newPhaseName.trim()) return;
+            const phaseId = 'custom-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+            const newCustomPhases = [...(c.customPhases || []), { id: phaseId, label: newPhaseName.trim(), color: newPhaseColor }];
+            updateClient(c.id, { customPhases: newCustomPhases });
+            setAddPhaseModal(false);
+            setNewPhaseName('');
+            setNewPhaseColor('#5B7CF5');
+          }}>Guardar</button>
+        </>}
+      >
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre de la fase</label>
+          <input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="Ej: Seguimiento mensual" value={newPhaseName} onChange={e => setNewPhaseName(e.target.value)} autoFocus />
+        </div>
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">Color</label>
+          <div className="flex gap-2 flex-wrap">
+            {['#5B7CF5', '#22C55E', '#EAB308', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899', '#14B8A6', '#6366F1'].map(color => (
+              <button
+                key={color}
+                className={`w-8 h-8 rounded-full border-2 cursor-pointer ${newPhaseColor === color ? 'border-gray-800 scale-110' : 'border-transparent'}`}
+                style={{ background: color }}
+                onClick={() => setNewPhaseColor(color)}
+              />
+            ))}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Dependencies Modal */}
+      <Modal
+        open={!!depsModal}
+        onClose={() => setDepsModal(null)}
+        title="Configurar dependencias"
+        maxWidth={450}
+        footer={<button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={() => setDepsModal(null)}>Cerrar</button>}
+      >
+        {depsModal && (() => {
+          const currentTask = clientTasks.find(t => t.id === depsModal);
+          if (!currentTask) return <div className="text-xs text-text3">Tarea no encontrada</div>;
+          const otherTasks = clientTasks.filter(t => t.id !== depsModal);
+          const currentDeps = currentTask.dependsOn || [];
+          return (
+            <div>
+              <div className="text-xs text-text2 mb-3">Selecciona las tareas que deben completarse antes de <strong>{currentTask.title}</strong>:</div>
+              {otherTasks.length === 0 ? (
+                <div className="text-xs text-text3 py-4 text-center">No hay otras tareas en este cliente</div>
+              ) : (
+                <div className="max-h-[300px] overflow-y-auto space-y-1">
+                  {otherTasks.map(t => {
+                    const isChecked = currentDeps.includes(t.id);
+                    const isDone = t.status === 'done';
+                    return (
+                      <label key={t.id} className={`flex items-center gap-2.5 py-2 px-3 rounded-md cursor-pointer text-xs hover:bg-gray-50 ${isDone ? 'opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            const newDeps = isChecked ? currentDeps.filter(d => d !== t.id) : [...currentDeps, t.id];
+                            updateTask(depsModal, { dependsOn: newDeps });
+                          }}
+                          className="cursor-pointer"
+                        />
+                        <span className={`flex-1 ${isDone ? 'line-through text-text3' : 'text-text'}`}>{t.title}</span>
+                        {isDone && <span className="text-[9px] text-green-500 font-semibold">COMPLETADA</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
