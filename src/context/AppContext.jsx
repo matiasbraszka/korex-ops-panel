@@ -188,6 +188,29 @@ export function AppProvider({ children }) {
     });
   }, [save, dbSaveClient]);
 
+  // ── Timer recalculation (must be before CRUD) ──
+  const recalculateTimers = useCallback((clientId, taskList) => {
+    const clientTasks = taskList.filter(t => t.clientId === clientId);
+    const updated = taskList.map(t => {
+      if (t.clientId !== clientId) return t;
+      const shouldRun = isTimerRunning(t, clientTasks);
+      const isRunning = !!t.timerStartedAt;
+
+      if (shouldRun && !isRunning) {
+        const u = { ...t, timerStartedAt: today(), enabledDate: t.enabledDate || today() };
+        if (dbReady.current) dbSaveTask(u);
+        return u;
+      } else if (!shouldRun && isRunning) {
+        const elapsed = daysBetween(t.timerStartedAt, today()) || 0;
+        const u = { ...t, accumulatedDays: (t.accumulatedDays || 0) + elapsed, timerStartedAt: null };
+        if (dbReady.current) dbSaveTask(u);
+        return u;
+      }
+      return t;
+    });
+    return { tasks: updated };
+  }, [dbSaveTask]);
+
   // ── CRUD: Tasks ──
   const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
@@ -199,32 +222,6 @@ export function AppProvider({ children }) {
     if (dbReady.current) dbSaveTask(t);
     return t;
   }, [save, dbSaveTask, recalculateTimers]);
-
-  // ── Timer recalculation ──
-  const recalculateTimers = useCallback((clientId, taskList) => {
-    const clientTasks = taskList.filter(t => t.clientId === clientId);
-    let changed = false;
-    const updated = taskList.map(t => {
-      if (t.clientId !== clientId) return t;
-      const shouldRun = isTimerRunning(t, clientTasks);
-      const isRunning = !!t.timerStartedAt;
-
-      if (shouldRun && !isRunning) {
-        changed = true;
-        const u = { ...t, timerStartedAt: today(), enabledDate: t.enabledDate || today() };
-        if (dbReady.current) dbSaveTask(u);
-        return u;
-      } else if (!shouldRun && isRunning) {
-        changed = true;
-        const elapsed = daysBetween(t.timerStartedAt, today()) || 0;
-        const u = { ...t, accumulatedDays: (t.accumulatedDays || 0) + elapsed, timerStartedAt: null };
-        if (dbReady.current) dbSaveTask(u);
-        return u;
-      }
-      return t;
-    });
-    return { tasks: updated, changed };
-  }, [dbSaveTask]);
 
   const updateTask = useCallback((id, updates) => {
     setTasks(prev => {
