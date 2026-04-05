@@ -26,7 +26,8 @@ export default function ClientDetail({ client: c }) {
 
   const clientTasks = tasks.filter(t => t.clientId === c.id);
   const roadmapTasks = getRoadmapTasks(c.id, tasks);
-  const useNewSystem = roadmapTasks.length > 0;
+  // Use new system if client has ANY tasks (not just roadmap-flagged ones)
+  const useNewSystem = clientTasks.length > 0;
 
   const pct = progress(c, tasks);
   const days = daysAgo(c.startDate);
@@ -169,25 +170,24 @@ export default function ClientDetail({ client: c }) {
     clientTasks.forEach(t => { if (t.assignee) assignees.add(t.assignee); });
     const assigneeList = [...assignees].sort();
 
+    // Resolve phase for each task (tasks without phase inherit from stepIdx/PROCESS_STEPS)
+    const resolvePhase = (t) => {
+      if (t.phase) return t.phase;
+      if (t.stepIdx != null && PROCESS_STEPS[t.stepIdx]) return PROCESS_STEPS[t.stepIdx].phase;
+      return '_unphased';
+    };
+
     // Group tasks by phase
-    const phaseKeys = Object.keys(allPh);
-    // Also collect tasks with null/unknown phase
+    const phaseKeys = [...Object.keys(allPh), '_unphased'];
     const phaseGroups = phaseKeys.map(phaseKey => {
-      const phInfo = allPh[phaseKey];
-      const phaseTasks = filteredTasks.filter(t => t.phase === phaseKey);
-      // For collapse default: check ALL tasks (not filtered) in this phase
-      const allPhaseTasks = clientTasks.filter(t => t.phase === phaseKey);
+      const phInfo = phaseKey === '_unphased' ? { label: 'Sin fase', color: '#9CA3AF' } : (allPh[phaseKey] || { label: phaseKey, color: '#9CA3AF' });
+      const phaseTasks = filteredTasks.filter(t => resolvePhase(t) === phaseKey);
+      const allPhaseTasks = clientTasks.filter(t => resolvePhase(t) === phaseKey);
       const totalCount = allPhaseTasks.length;
       const doneCount = allPhaseTasks.filter(t => t.status === 'done').length;
       const allDone = totalCount > 0 && doneCount === totalCount;
       return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone };
     }).filter(g => g.totalCount > 0);
-
-    // Add unphased tasks if any
-    const unphasedTasks = filteredTasks.filter(t => !t.phase || !allPh[t.phase]);
-    if (unphasedTasks.length > 0) {
-      phaseGroups.push({ phaseKey: '_unphased', phInfo: { label: 'Sin fase', color: '#9CA3AF' }, phaseTasks: unphasedTasks, totalCount: unphasedTasks.length, doneCount: unphasedTasks.filter(t => t.status === 'done').length, allDone: false });
-    }
 
     // Initialize collapsed state for all-done phases (only on first render logic)
     const isCollapsed = (phaseKey, allDone) => {
