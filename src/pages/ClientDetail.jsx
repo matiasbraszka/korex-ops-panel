@@ -203,15 +203,6 @@ export default function ClientDetail({ client: c }) {
       setCollapsedPhases(prev => ({ ...prev, [phaseKey]: !isCollapsed(phaseKey, phaseGroups.find(g => g.phaseKey === phaseKey)?.allDone) }));
     };
 
-    // Priority cycle order
-    const prioOrder = ['urgent', 'high', 'normal', 'low'];
-    const prioColors = { urgent: '#EF4444', high: '#F97316', normal: '#5B7CF5', low: '#9CA3AF' };
-    const cyclePriority = (t) => {
-      const idx = prioOrder.indexOf(t.priority);
-      const next = prioOrder[(idx + 1) % prioOrder.length];
-      updateTask(t.id, { priority: next });
-    };
-
     // Render a single task row
     const renderTaskRow = (t, isLast) => {
       const blocked = isTaskBlocked(t);
@@ -228,7 +219,8 @@ export default function ClientDetail({ client: c }) {
 
       const statusRef = getDropdownRef('rd-status-' + t.id);
       const assigneeRef = getDropdownRef('rd-assignee-' + t.id);
-      const phaseChangeRef = getDropdownRef('rd-phase-' + t.id);
+      const prioRef = getDropdownRef('rd-prio-' + t.id);
+      const movePhaseRef = getDropdownRef('rd-movephase-' + t.id);
 
       // Status icon
       let statusIcon, statusColor;
@@ -315,27 +307,34 @@ export default function ClientDetail({ client: c }) {
               <span className="text-[10px] text-blue-500 shrink-0 w-[80px] text-right font-semibold">{etime}d</span>
             )}
 
-            {/* Priority cycle dot (FIX 1) */}
-            <span
-              className="w-[14px] h-[14px] rounded-full shrink-0 cursor-pointer border border-white hover:scale-125 transition-transform"
-              style={{ background: prioColors[t.priority] || '#5B7CF5' }}
-              title={`Prioridad: ${tp.label} (click para cambiar)`}
-              onClick={(e) => { e.stopPropagation(); cyclePriority(t); }}
-            />
-
-            {/* Phase change dot (FIX 3) */}
+            {/* Priority dropdown (FIX 1) */}
             <div
-              ref={el => phaseChangeRef.current = el}
+              ref={el => prioRef.current = el}
               className="cursor-pointer shrink-0"
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-phase-' + t.id ? null : 'rd-phase-' + t.id); }}
-              title="Cambiar fase"
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
             >
-              <span className="w-[14px] h-[14px] rounded-sm shrink-0 inline-block border border-gray-200 hover:scale-125 transition-transform" style={{ background: (allPh[resolvePhase(t)] || { color: '#9CA3AF' }).color }} />
+              <span className="inline-flex items-center gap-[2px] text-[10px] font-semibold py-[2px] px-1.5 rounded hover:bg-gray-100" style={{ color: tp.color }}>{tp.flag} {tp.label}</span>
             </div>
             <Dropdown
-              open={openDropdown === 'rd-phase-' + t.id}
+              open={openDropdown === 'rd-prio-' + t.id}
               onClose={() => setOpenDropdown(null)}
-              anchorRef={phaseChangeRef}
+              anchorRef={prioRef}
+              items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+            />
+
+            {/* Move to phase dropdown (FIX 2) */}
+            <div
+              ref={el => movePhaseRef.current = el}
+              className="cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-movephase-' + t.id ? null : 'rd-movephase-' + t.id); }}
+              title="Mover a otra fase"
+            >
+              <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-200 text-gray-400">{'\u2194'}</span>
+            </div>
+            <Dropdown
+              open={openDropdown === 'rd-movephase-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={movePhaseRef}
               items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
             />
 

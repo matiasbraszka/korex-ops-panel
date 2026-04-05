@@ -32,29 +32,6 @@ export default function DashboardPage() {
     phaseAvgs[phase] = { avg, expected, count };
   });
 
-  // Average completion time per roadmap task (or step for old clients)
-  const stepAvgs = PROCESS_STEPS.map((ps, idx) => {
-    let totalDays = 0, count = 0;
-    clients.forEach(c => {
-      // Try roadmap tasks first
-      const rt = tasks.find(t => t.clientId === c.id && t.isRoadmapTask && t.templateId === ps.id);
-      if (rt && rt.status === 'done' && rt.startedDate && rt.completedDate) {
-        const d = daysBetween(rt.startedDate, rt.completedDate);
-        if (d !== null && d >= 0) { totalDays += d; count++; }
-      } else {
-        // Fallback to steps
-        const cs = c.steps[idx];
-        if (cs && cs.status === 'completed' && cs.startDate && cs.endDate) {
-          const d = daysBetween(cs.startDate, cs.endDate);
-          if (d !== null && d >= 0) { totalDays += d; count++; }
-        }
-      }
-    });
-    const avg = count > 0 ? Math.round((totalDays / count) * 10) / 10 : null;
-    const delta = avg !== null ? Math.round((avg - ps.days) * 10) / 10 : null;
-    return { name: ps.name, est: ps.days, avg, delta, count };
-  });
-
   // Team velocity
   const now = today();
   const monthStart = now.substring(0, 7) + '-01';
@@ -225,35 +202,6 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Average completion time per step */}
-        <div className="bg-white border border-border rounded-[14px] py-5 px-6" style={{ gridColumn: '1 / -1' }}>
-          <div className="text-sm font-bold mb-3.5">Tiempo promedio por tarea del roadmap</div>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[11px]">
-              <thead>
-                <tr className="bg-surface2">
-                  <th className="py-1.5 px-2 text-left border border-border">Seccion</th>
-                  <th className="py-1.5 px-2 text-center border border-border">Est. (dias)</th>
-                  <th className="py-1.5 px-2 text-center border border-border">Prom. real</th>
-                  <th className="py-1.5 px-2 text-center border border-border">Delta</th>
-                  <th className="py-1.5 px-2 text-center border border-border">Muestra</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stepAvgs.map((sa, idx) => (
-                  <tr key={idx}>
-                    <td className="py-[5px] px-2 border border-border font-semibold">{sa.name}</td>
-                    <td className="py-[5px] px-2 text-center border border-border text-text2">{sa.est}d</td>
-                    <td className="py-[5px] px-2 text-center border border-border" style={{ color: sa.avg !== null && sa.avg > sa.est ? 'var(--color-red)' : 'var(--color-green)', fontWeight: sa.avg !== null ? 600 : 400 }}>{sa.avg !== null ? sa.avg + 'd' : '-'}</td>
-                    <td className="py-[5px] px-2 text-center border border-border" style={{ color: sa.delta !== null ? (sa.delta > 0 ? 'var(--color-red)' : 'var(--color-green)') : 'var(--color-text3)', fontWeight: sa.delta !== null ? 600 : 400 }}>{sa.delta !== null ? (sa.delta > 0 ? '+' : '') + sa.delta + 'd' : '-'}</td>
-                    <td className="py-[5px] px-2 text-center border border-border text-text3">{sa.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
 
         {/* Phase timing per client table */}

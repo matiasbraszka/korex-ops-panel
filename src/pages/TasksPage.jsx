@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, effectiveTime, today, fmtDate, getAllPhases } from '../utils/helpers';
+import { getStepName, effectiveTime, today, fmtDate, getAllPhases, getRoadmapTasks } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 
@@ -259,11 +259,26 @@ export default function TasksPage() {
         {isExpanded && (
           <div className="py-1.5 px-4 pb-3 text-xs text-text2 leading-relaxed bg-blue-bg2 border-t border-dashed border-border" style={{ paddingLeft: 44 }}>
             <textarea
-              className="w-full border border-border rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[60px] outline-none bg-white focus:border-blue"
+              className="w-full border border-border rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[60px] outline-none bg-white focus:border-blue mb-2"
               placeholder="Escribe una descripcion para esta tarea..."
               defaultValue={t.description || ''}
               onBlur={(e) => updateTask(t.id, { description: e.target.value })}
             />
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="inline-flex items-center gap-1 text-[11px]">
+                <span className="text-text3">{'\uD83D\uDCC5'} Fecha limite:</span>
+                <input
+                  type="date"
+                  className="border border-border rounded py-[2px] px-1.5 text-[11px] font-sans outline-none bg-white focus:border-blue w-[120px]"
+                  value={t.dueDate || ''}
+                  onChange={(e) => updateTask(t.id, { dueDate: e.target.value || null })}
+                />
+                {t.dueDate && (
+                  <button className="text-text3 hover:text-red bg-transparent border-none cursor-pointer text-[10px] font-sans" onClick={() => updateTask(t.id, { dueDate: null })}>{'\u2715'}</button>
+                )}
+                {isOverdue && <span className="text-red text-[10px] font-semibold">Vencida</span>}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -370,6 +385,75 @@ export default function TasksPage() {
           {remaining.length > 5 && <span className="text-[11px] text-text3 ml-1">+{remaining.length - 5} mas</span>}
         </div>
       )}
+
+      {/* Dependencies Modal (FIX 3) */}
+      <Modal
+        open={!!depsModal}
+        onClose={() => setDepsModal(null)}
+        title="Configurar dependencias"
+        footer={<button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={() => setDepsModal(null)}>Cerrar</button>}
+      >
+        {depsModal && (() => {
+          const currentTask = tasks.find(t => t.id === depsModal);
+          if (!currentTask) return <div className="text-xs text-text3">Tarea no encontrada</div>;
+          const clientForDeps = clients.find(cl => cl.id === currentTask.clientId);
+          const clientTasks = tasks.filter(t => t.clientId === currentTask.clientId);
+          const otherTasks = clientTasks.filter(t => t.id !== depsModal);
+          const currentDeps = currentTask.dependsOn || [];
+          const allPh = clientForDeps ? getAllPhases(clientForDeps) : {};
+
+          const resolvePhaseForDep = (t) => {
+            if (t.phase) return t.phase;
+            if (t.stepIdx != null && PROCESS_STEPS[t.stepIdx]) return PROCESS_STEPS[t.stepIdx].phase;
+            return '_unphased';
+          };
+          const depPhaseKeys = [...Object.keys(allPh), '_unphased'];
+          const depPhaseGroups = depPhaseKeys.map(pk => {
+            const phInfo = pk === '_unphased' ? { label: 'Sin fase', color: '#9CA3AF' } : (allPh[pk] || { label: pk, color: '#9CA3AF' });
+            const tasksInPhase = otherTasks.filter(t => resolvePhaseForDep(t) === pk);
+            return { pk, phInfo, tasksInPhase };
+          }).filter(g => g.tasksInPhase.length > 0);
+
+          return (
+            <div>
+              <div className="text-xs text-text2 mb-3">Selecciona las tareas que deben completarse antes de <strong>{currentTask.title}</strong>:</div>
+              {otherTasks.length === 0 ? (
+                <div className="text-xs text-text3 py-4 text-center">No hay otras tareas en este cliente</div>
+              ) : (
+                <div className="max-h-[350px] overflow-y-auto">
+                  {depPhaseGroups.map(({ pk, phInfo, tasksInPhase }) => (
+                    <div key={pk} className="mb-2">
+                      <div className="flex items-center gap-1.5 py-1.5 px-1 sticky top-0 bg-white z-[1]">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: phInfo.color }} />
+                        <span className="text-[11px] font-bold" style={{ color: phInfo.color }}>{phInfo.label}</span>
+                      </div>
+                      {tasksInPhase.map(t => {
+                        const isChecked = currentDeps.includes(t.id);
+                        const isDone = t.status === 'done';
+                        return (
+                          <label key={t.id} className={`flex items-center gap-2.5 py-1.5 px-3 pl-6 rounded-md cursor-pointer text-xs hover:bg-surface2 ${isDone ? 'opacity-50' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                const newDeps = isChecked ? currentDeps.filter(d => d !== t.id) : [...currentDeps, t.id];
+                                updateTask(depsModal, { dependsOn: newDeps });
+                              }}
+                              className="cursor-pointer"
+                            />
+                            <span className={`flex-1 ${isDone ? 'line-through text-text3' : 'text-text'}`}>{t.title}</span>
+                            {isDone && <span className="text-[9px] text-green font-semibold">COMPLETADA</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }
