@@ -8,8 +8,11 @@ export default function DashboardPage() {
   const now = today();
   const monthStart = now.substring(0, 7) + '-01';
 
+  // Filter out Empresa (Korex) from dashboard
+  const isKorexClient = (c) => /empresa|korex/i.test(c.name);
+
   // ── A. Team x Client matrix ──
-  const activeClients = clients.filter(c => c.status !== 'completed');
+  const activeClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c));
   const teamMembers = TEAM;
 
   // Build matrix: member -> client -> active task count
@@ -78,9 +81,11 @@ export default function DashboardPage() {
   });
 
   // ── C. Bottlenecks (tasks blocking other tasks) ──
+  const korexClientIds = new Set(clients.filter(c => isKorexClient(c)).map(c => c.id));
   const bottlenecks = [];
   tasks.forEach(t => {
     if (t.status === 'done') return;
+    if (korexClientIds.has(t.clientId)) return;
     const blocking = tasks.filter(other =>
       other.clientId === t.clientId &&
       other.dependsOn &&
@@ -96,6 +101,7 @@ export default function DashboardPage() {
   // Also add overdue tasks
   tasks.forEach(t => {
     if (t.status !== 'in-progress' || !t.startedDate) return;
+    if (korexClientIds.has(t.clientId)) return;
     const d = daysAgo(t.startedDate);
     const est = t.estimatedDays || 7;
     if (d > est && !bottlenecks.find(b => b.task?.id === t.id)) {

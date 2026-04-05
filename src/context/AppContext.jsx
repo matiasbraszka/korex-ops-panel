@@ -225,7 +225,7 @@ export function AppProvider({ children }) {
 
   const updateTask = useCallback((id, updates) => {
     setTasks(prev => {
-      const newTasks = prev.map(t => {
+      const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
         const merged = { ...t, ...updates };
         // Auto-set timing dates on status changes
@@ -241,11 +241,11 @@ export function AppProvider({ children }) {
       });
 
       // Recalculate timers unless flagged to skip
-      let finalTasks = newTasks;
+      let finalTasks = mappedTasks;
       if (!updates._skipTimerRecalc) {
-        const task = newTasks.find(t => t.id === id);
+        const task = mappedTasks.find(t => t.id === id);
         if (task) {
-          const result = recalculateTimers(task.clientId, newTasks);
+          const result = recalculateTimers(task.clientId, mappedTasks);
           finalTasks = result.tasks;
         }
       }

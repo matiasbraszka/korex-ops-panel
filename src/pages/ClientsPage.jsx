@@ -15,6 +15,10 @@ export default function ClientsPage() {
   const pendingProposals = taskProposals.filter(p => p.approval === 'pending').length;
   const stored = briefing;
 
+  // Filter out Empresa (Korex) from the client list
+  const isKorexClient = (c) => /empresa|korex/i.test(c.name);
+  const visibleClients = clients.filter(c => !isKorexClient(c));
+
   let preview = 'Sin informe disponible. El agente de operaciones enviara el proximo informe automaticamente.';
   if (stored && stored.text) {
     const lines = stored.text.replace(/<[^>]+>/g, '').split('\n').filter(l => l.trim() && !l.startsWith('#'));
@@ -22,16 +26,16 @@ export default function ClientsPage() {
     if (lines.join(' ').length > 200) preview += '...';
   }
 
-  const t = clients.length;
-  const b = clients.filter(c => (c.priority || 4) <= 2).length;
-  const l = clients.filter(c => {
+  const t = visibleClients.length;
+  const b = visibleClients.filter(c => (c.priority || 4) <= 2).length;
+  const l = visibleClients.filter(c => {
     // New system: check if lanzamiento roadmap task is done
     const launchTask = tasks.find(tk => tk.clientId === c.id && tk.isRoadmapTask && tk.templateId === 'lanzamiento');
     if (launchTask) return launchTask.status === 'done';
     // Fallback to steps
     return c.steps[17] && c.steps[17].status === 'completed';
   }).length;
-  const n = clients.filter(c => (c.priority || 4) === 5).length;
+  const n = visibleClients.filter(c => (c.priority || 4) === 5).length;
 
   const filterDefs = [
     { key: 'all', label: 'Todos' },
@@ -41,7 +45,7 @@ export default function ClientsPage() {
     { key: 'new', label: 'Nuevos' },
   ];
 
-  let cls = [...clients].sort((a, bb) => (a.priority || 4) - (bb.priority || 4));
+  let cls = [...visibleClients].sort((a, bb) => (a.priority || 4) - (bb.priority || 4));
   if (filter === 'critical') cls = cls.filter(c => (c.priority || 4) <= 2);
   if (filter === 'in-progress') cls = cls.filter(c => {
     const ct = tasks.filter(tk => tk.clientId === c.id);

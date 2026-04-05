@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, today, fmtDate, getAllPhases, getRoadmapTasks, getElapsedDays } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getElapsedDays } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 
@@ -34,6 +34,12 @@ export default function TasksPage() {
     return dropdownRefs.current[key];
   };
 
+  // Identify Korex client
+  const isKorexClient = (c) => /empresa|korex/i.test(c.name);
+  const korexClient = clients.find(c => isKorexClient(c));
+  const korexClientId = korexClient?.id;
+  const regularClients = clients.filter(c => !isKorexClient(c));
+
   const filterDefs = [
     { key: 'all', label: 'Todas' },
     { key: 'urgent', label: 'Urgentes' },
@@ -42,8 +48,9 @@ export default function TasksPage() {
     { key: 'done', label: 'Completadas' },
   ];
 
+  // Exclude Korex tasks from assignee filter counts
   const assignees = new Set();
-  tasks.forEach(t => { if (t.assignee) t.assignee.split(',').map(s => s.trim()).filter(Boolean).forEach(a => assignees.add(a)); });
+  tasks.filter(t => t.clientId !== korexClientId).forEach(t => { if (t.assignee) t.assignee.split(',').map(s => s.trim()).filter(Boolean).forEach(a => assignees.add(a)); });
   const assigneeList = [...assignees].sort();
 
   let filteredTasks = [...tasks];
@@ -71,8 +78,8 @@ export default function TasksPage() {
   }
 
   const grouped = {};
-  clients.forEach(c => { grouped[c.id] = { client: c, tasks: [] }; });
-  filteredTasks.forEach(t => { if (grouped[t.clientId]) grouped[t.clientId].tasks.push(t); });
+  regularClients.forEach(c => { grouped[c.id] = { client: c, tasks: [] }; });
+  filteredTasks.filter(t => t.clientId !== korexClientId).forEach(t => { if (grouped[t.clientId]) grouped[t.clientId].tasks.push(t); });
 
   const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
   const groups = Object.values(grouped).filter(g => g.tasks.length > 0 || addingTaskTo === g.client.id);
@@ -335,7 +342,12 @@ export default function TasksPage() {
   };
 
   const clientsInGroups = new Set(groups.map(g => g.client.id));
-  const remaining = clients.filter(c => !clientsInGroups.has(c.id));
+  const remaining = regularClients.filter(c => !clientsInGroups.has(c.id));
+
+  // Korex tasks (always shown at bottom)
+  const korexTasks = korexClient ? filteredTasks.filter(t => t.clientId === korexClientId) : [];
+  const korexTaskCount = korexTasks.filter(t => t.status !== 'done').length;
+  const korexCollapsed = collapsedGroups['_korex'];
 
   return (
     <div>
@@ -432,6 +444,52 @@ export default function TasksPage() {
             <span key={c.id} className="inline-block py-1.5 px-3.5 rounded-[20px] border border-border bg-white text-text2 text-xs cursor-pointer m-0.5 hover:border-blue hover:text-text" onClick={() => { setAddingTaskTo(c.id); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>{c.name}</span>
           ))}
           {remaining.length > 5 && <span className="text-[11px] text-text3 ml-1">+{remaining.length - 5} mas</span>}
+        </div>
+      )}
+
+      {/* Empresa Korex section — always at bottom */}
+      {korexClient && (
+        <div className="mt-6 mb-1.5 bg-white border border-border rounded-[10px] overflow-visible">
+          <div
+            className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold cursor-pointer select-none border-b border-border rounded-t-[10px]"
+            style={{ background: '#E8EDF4' }}
+            onClick={() => setCollapsedGroups(prev => ({ ...prev, '_korex': !prev['_korex'] }))}
+          >
+            <span className={`text-xs text-text3 transition-transform duration-200 ${korexCollapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
+            <span>{'\uD83D\uDCCB'} Tareas internas — Korex</span>
+            <span className="bg-surface3 text-text2 text-[11px] font-semibold py-[1px] px-2 rounded-[10px]">{korexTaskCount}</span>
+          </div>
+          {!korexCollapsed && (
+            <div>
+              {korexTasks.length > 0 ? (
+                [...korexTasks].sort((a, b) => {
+                  if (a.status === 'done' && b.status !== 'done') return 1;
+                  if (b.status === 'done' && a.status !== 'done') return -1;
+                  return (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2);
+                }).map(t => renderTaskRow(t))
+              ) : (
+                <div className="text-center text-text3 text-xs py-4">Sin tareas internas</div>
+              )}
+
+              {/* Inline new task for Korex */}
+              {addingTaskTo === korexClientId && (
+                <div className="grid gap-2 py-1.5 px-4 items-center border-t border-border bg-blue-bg2" style={{ gridTemplateColumns: '28px 1fr 120px 80px 36px' }}>
+                  <div className="text-text3 text-[10px]">+</div>
+                  <div className="flex flex-col gap-1 flex-1">
+                    <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Escribe el nombre de la tarea y presiona Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, korexClientId)} />
+                    <select id="inline-task-phase" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
+                      <option value="">Sin vincular a fase</option>
+                      {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div />
+                  <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" style={{ opacity: 1 }} onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button></div>
+                </div>
+              )}
+
+              <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(korexClientId); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>+ Agregar tarea</div>
+            </div>
+          )}
         </div>
       )}
 

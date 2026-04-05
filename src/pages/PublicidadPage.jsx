@@ -5,11 +5,12 @@ import KpiRow from '../components/KpiRow';
 export default function PublicidadPage() {
   const { clients, setView, setSelectedId } = useApp();
 
-  const clientsWithAds = clients.filter(c => c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna'));
+  const isKorexClient = (c) => /empresa|korex/i.test(c.name);
+  const clientsWithAds = clients.filter(c => !isKorexClient(c) && c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna'));
   const activeClients = clientsWithAds.filter(c => c.metaMetrics && c.metaMetrics.adsActive);
   const totalSpend7d = activeClients.reduce((s, c) => s + (c.metaMetrics?.totalSpend7d || 0), 0);
   const totalLeads7d = activeClients.reduce((s, c) => s + (c.metaMetrics?.totalConversions7d || 0), 0);
-  const noAds = clients.filter(c => !c.metaAds || c.metaAds.length === 0 || c.metaAds.every(a => a.status === 'interna'));
+  const noAds = clients.filter(c => !isKorexClient(c) && (!c.metaAds || c.metaAds.length === 0 || c.metaAds.every(a => a.status === 'interna')));
 
   const openClient = (id) => { setSelectedId(id); setView('clients'); };
 

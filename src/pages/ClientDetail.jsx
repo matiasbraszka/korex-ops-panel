@@ -877,7 +877,7 @@ export default function ClientDetail({ client: c }) {
           <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
               <span>{'\uD83D\uDCAC'} Feedback del cliente</span>
-              <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setCfbForm({ text: '', source: 'whatsapp', type: 'request', sourceDetail: '' }); setClientFbModal(true); }}>+ Nuevo</button>
+              <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setCfbForm({ source: 'cliente', callUrl: '', priority: 'normal', currentItem: '', items: [] }); setClientFbModal(true); }}>+ Nuevo</button>
             </div>
             <div className="py-3 px-4">
               {!(c.clientFeedbacks || []).length ? (
