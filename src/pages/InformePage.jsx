@@ -143,7 +143,8 @@ export default function InformePage() {
     const p = taskProposals.find(x => x.id === id);
     if (!p) return;
     if (p.type === 'create') {
-      createTask(p.title, p.client_id, p.assignee || '', p.priority || 'normal', p.status || 'backlog', p.notes || '', p.step_idx);
+      const t = createTask(p.title, p.client_id, p.assignee || '', p.priority || 'normal', p.status || 'backlog', p.notes || '', p.step_idx);
+      if (t && p.phase) updateTask(t.id, { phase: p.phase });
     } else if (p.type === 'complete') {
       const t = tasks.find(x => x.id === p.task_id);
       if (t) updateTask(t.id, { status: 'done' });
