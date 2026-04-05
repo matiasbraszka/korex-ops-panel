@@ -83,6 +83,9 @@ export const STATUS = {
   'completed':      { label: 'Completado',   color: '#22C55E', pill: 'pill-green',  icon: '\u2713' },
 };
 
+// Fallback data: used in AppContext.jsx injectMetaMetrics() ONLY when Supabase
+// doesn't have metaAds/metaMetrics for a client. Once Supabase has the data,
+// this map is not used for that client.
 export const CLIENT_ADS_DATA = {
   'Sergio Canovas': {
     metaAds: [

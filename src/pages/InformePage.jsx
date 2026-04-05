@@ -7,12 +7,14 @@ import { sbFetch } from '../utils/supabase';
 export default function InformePage() {
   const { clients, tasks, briefing, setBriefing, reportFeedbacks, setReportFeedbacks, taskProposals, setTaskProposals, currentUser, createTask, updateTask } = useApp();
   const [feedbackText, setFeedbackText] = useState('');
+  const [reportStatus, setReportStatus] = useState(null); // 'generating' | 'success' | 'error'
 
   const pending = taskProposals.filter(p => p.approval === 'pending');
   const processed = taskProposals.filter(p => p.approval !== 'pending');
   const stored = briefing;
 
   const generateOpsReport = async () => {
+    setReportStatus('generating');
     const d = today();
     let report = `# Informe de Operaciones \u2014 ${new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}\n\n`;
 
@@ -100,7 +102,14 @@ export default function InformePage() {
       headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
       body: JSON.stringify(newBriefing)
     });
-    if (ok) setBriefing(newBriefing);
+    if (ok) {
+      setBriefing(newBriefing);
+      setReportStatus('success');
+      setTimeout(() => setReportStatus(null), 4000);
+    } else {
+      setReportStatus('error');
+      setTimeout(() => setReportStatus(null), 4000);
+    }
   };
 
   const submitReportFeedback = async () => {
@@ -210,8 +219,10 @@ export default function InformePage() {
 
       {/* Generate button */}
       <div className="mb-4 flex gap-2.5 items-center">
-        <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5" onClick={generateOpsReport}>Generar informe ahora</button>
-        <span className="text-[11px] text-text3">Crea un informe con el estado actual de todos los clientes y publicidad</span>
+        <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 disabled:opacity-50" onClick={generateOpsReport} disabled={reportStatus === 'generating'}>{reportStatus === 'generating' ? 'Generando...' : 'Generar informe ahora'}</button>
+        {reportStatus === 'success' && <span className="text-[11px] text-green font-semibold">Informe generado y guardado en Supabase</span>}
+        {reportStatus === 'error' && <span className="text-[11px] text-red font-semibold">Error al guardar el informe. Intenta de nuevo.</span>}
+        {!reportStatus && <span className="text-[11px] text-text3">Crea un informe con el estado actual de todos los clientes y publicidad</span>}
       </div>
 
       {/* Full report */}

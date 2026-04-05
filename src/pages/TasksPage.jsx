@@ -87,7 +87,7 @@ export default function TasksPage() {
     const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
     const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
     const stepName = getStepName(t, clients);
-    const hasDesc = !!(t.description || t.notes);
+    const hasDesc = !!((t.description && t.description.trim()) || (t.notes && t.notes.trim()));
     const isExpanded = expandedTasks[t.id];
     const statusRef = getRef('status-' + t.id);
     const stepRef = getRef('step-' + t.id);
@@ -157,9 +157,17 @@ export default function TasksPage() {
             className="cursor-pointer relative"
             onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'step-' + t.id ? null : 'step-' + t.id); }}
           >
-            <div className={`text-[10px] py-[3px] px-2 rounded whitespace-nowrap overflow-hidden text-ellipsis max-w-[130px] transition-colors hover:bg-surface2 ${stepName || phaseInfo ? 'text-text2' : 'text-text3 italic'}`}>
-              {phaseInfo && !stepName && <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />{phaseInfo.label}</span>}
-              {stepName || (!phaseInfo ? '+ Objetivo' : '')}
+            <div className={`text-[10px] py-[3px] px-2 rounded whitespace-nowrap overflow-hidden text-ellipsis max-w-[130px] transition-colors hover:bg-surface2 ${phaseInfo || stepName ? 'text-text2' : 'text-text3 italic'}`}>
+              {phaseInfo ? (
+                <span className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold" style={{ background: phaseInfo.color + '18', color: phaseInfo.color }}>
+                  <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />
+                  {phaseInfo.label}
+                </span>
+              ) : stepName ? (
+                stepName
+              ) : (
+                '+ Fase'
+              )}
             </div>
           </div>
           <Dropdown

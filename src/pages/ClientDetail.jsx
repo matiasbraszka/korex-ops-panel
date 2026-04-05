@@ -1,24 +1,34 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
-import { initials, progress, getBottleneck, getPhaseTimings, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, effectiveTime } from '../utils/helpers';
+import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, effectiveTime } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
 
+// Kanban column definitions (subset of TASK_STATUS for columns)
+const KANBAN_COLUMNS = [
+  { key: 'backlog', label: 'BACKLOG', color: '#9CA3AF', bg: '#F3F4F6' },
+  { key: 'in-progress', label: 'EN PROGRESO', color: '#5B7CF5', bg: '#EEF2FF' },
+  { key: 'en-revision', label: 'EN REVISION', color: '#EAB308', bg: '#FEFCE8' },
+  { key: 'done', label: 'COMPLETADA', color: '#22C55E', bg: '#ECFDF5' },
+  { key: 'blocked', label: 'BLOQUEADA', color: '#EF4444', bg: '#FEF2F2' },
+];
+
 export default function ClientDetail({ client: c }) {
   const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, currentUser } = useApp();
-  const [phase, setPhase] = useState('all');
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [kanbanAssigneeFilter, setKanbanAssigneeFilter] = useState('all');
+  const [kanbanHideCompleted, setKanbanHideCompleted] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState(false);
   const [clientFbModal, setClientFbModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
   const [openTranscription, setOpenTranscription] = useState({});
-  const [addingTaskToPhase, setAddingTaskToPhase] = useState(null);
+  const [addingToColumn, setAddingToColumn] = useState(null);
   const [editingStartDate, setEditingStartDate] = useState(false);
-  const [expandedCompleted, setExpandedCompleted] = useState({});
+  const [editingTitle, setEditingTitle] = useState(null);
+  const [editTitleValue, setEditTitleValue] = useState('');
 
   const dropdownRefs = useRef({});
 
@@ -128,215 +138,282 @@ export default function ClientDetail({ client: c }) {
       .filter(Boolean);
   };
 
-  // Add task to a specific phase
-  const handlePhaseTaskAdd = (phaseKey, title) => {
+  // Add task to a specific kanban column
+  const handleColumnTaskAdd = (statusKey, title) => {
     if (title.trim()) {
-      const t = createTask(title.trim(), c.id, '', 'normal', 'backlog', '', null);
-      updateTask(t.id, { phase: phaseKey });
+      const t = createTask(title.trim(), c.id, '', 'normal', statusKey, '', null);
+      updateTask(t.id, { isRoadmapTask: true, phase: null });
     }
-    setAddingTaskToPhase(null);
+    setAddingToColumn(null);
   };
 
-  const renderTaskTimeBadge = (t) => {
-    const etime = effectiveTime(t, c);
-    const est = t.estimatedDays || null;
-    if (t.status === 'done' && etime !== null) {
-      const isOver = est && etime > est;
-      const color = isOver ? '#F97316' : '#22C55E';
-      const bg = isOver ? '#FFF7ED' : '#ECFDF5';
-      return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold ml-1" style={{ color, background: bg }}>{etime}d</span>;
+  // Get all tasks for kanban (roadmap + other client tasks)
+  const getKanbanTasks = () => {
+    let allTasks = [...clientTasks];
+
+    // Filter by assignee
+    if (kanbanAssigneeFilter !== 'all') {
+      const memberName = kanbanAssigneeFilter;
+      allTasks = allTasks.filter(t => {
+        const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
+        return assignee && (assignee.name.toLowerCase() === memberName.toLowerCase() || assignee.id === memberName);
+      });
     }
-    if (t.status === 'in-progress' && etime !== null) {
-      const isOver = est && etime > est;
-      const color = isOver ? '#F97316' : '#5B7CF5';
-      const bg = isOver ? '#FFF7ED' : '#EEF2FF';
-      return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold ml-1" style={{ color, background: bg }}>{etime}d{est ? ` / ${est}d est.` : ''}</span>;
+
+    // Hide completed
+    if (kanbanHideCompleted) {
+      allTasks = allTasks.filter(t => t.status !== 'done');
     }
-    if (est && t.status === 'backlog') {
-      return <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold ml-1 text-text3 bg-surface2">{est}d est.</span>;
-    }
-    return null;
+
+    return allTasks;
   };
 
-  // Render a roadmap task row (new system)
-  const renderRoadmapTaskRow = (t) => {
+  // Render a kanban card
+  const renderKanbanCard = (t) => {
     const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
     const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
-    const isDone = t.status === 'done';
-    const isInProgress = t.status === 'in-progress';
     const blocked = isTaskBlocked(t);
     const blockingNames = blocked ? getBlockingNames(t) : [];
     const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
+    const phaseInfo = t.phase ? (allPh[t.phase] || PHASES[t.phase]) : null;
+    const hasDesc = !!(t.description && t.description.trim());
+    const etime = effectiveTime(t, c);
+    const est = t.estimatedDays || null;
+    const isExpanded = expandedTasks[t.id];
 
-    const statusRef = getDropdownRef('rd-status-' + t.id);
-    const assigneeRef = getDropdownRef('rd-assignee-' + t.id);
-    const prioRef = getDropdownRef('rd-prio-' + t.id);
-
-    // Completed: collapsed single line by default
-    const isExpanded = expandedCompleted['task_' + t.id];
-    if (isDone && !isExpanded && hideCompleted) return null;
-    if (isDone && !isExpanded) {
-      return (
-        <div key={t.id} className="flex items-center gap-2 py-[6px] px-3 cursor-pointer hover:bg-surface2 group" onClick={() => setExpandedCompleted(prev => ({ ...prev, ['task_' + t.id]: true }))}>
-          <span className="text-[#22C55E] text-xs shrink-0">{'\u2713'}</span>
-          <span className="text-[13px] text-text3 flex-1 min-w-0 truncate">{t.title}</span>
-          {assignee && <span className="text-[10px] text-text3">{assignee.name}</span>}
-          {renderTaskTimeBadge(t)}
-        </div>
-      );
-    }
+    const statusRef = getDropdownRef('kb-status-' + t.id);
+    const assigneeRef = getDropdownRef('kb-assignee-' + t.id);
+    const prioRef = getDropdownRef('kb-prio-' + t.id);
 
     return (
-      <div key={t.id} className={`py-2 px-3 ${isInProgress ? 'bg-blue-bg2' : ''} ${blocked ? 'opacity-50' : ''}`}>
-        {isDone && isExpanded && (
-          <button className="text-[9px] text-text3 bg-transparent border-none cursor-pointer mb-1 hover:text-text font-sans" onClick={() => setExpandedCompleted(prev => ({ ...prev, ['task_' + t.id]: false }))}>Colapsar</button>
+      <div
+        key={t.id}
+        className={`bg-white rounded-lg shadow-sm border border-gray-100 p-3 mb-2 group transition-shadow hover:shadow-md ${blocked ? 'border-l-[3px] border-l-red-400' : ''}`}
+      >
+        {/* Top: Phase tag */}
+        {phaseInfo && (
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: phaseInfo.color }} />
+            <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: phaseInfo.color }}>{phaseInfo.label}</span>
+          </div>
         )}
-        <div className="flex items-center gap-2 group">
-          {/* Status dot */}
-          <div
-            ref={el => statusRef.current = el}
-            className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] cursor-pointer shrink-0"
-            style={{ background: blocked ? '#FEF2F2' : ts.bg, color: blocked ? '#EF4444' : ts.color, border: `1.5px solid ${blocked ? '#EF4444' : ts.color}` }}
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
-            title={blocked ? 'Bloqueada' : ts.label}
-          >{blocked ? '\uD83D\uDD12' : ts.icon}</div>
-          <Dropdown
-            open={openDropdown === 'rd-status-' + t.id}
-            onClose={() => setOpenDropdown(null)}
-            anchorRef={statusRef}
-            items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+
+        {/* Title */}
+        {editingTitle === t.id ? (
+          <input
+            className="w-full border border-blue-400 rounded py-1 px-1.5 text-[13px] font-sans outline-none mb-1"
+            value={editTitleValue}
+            onChange={(e) => setEditTitleValue(e.target.value)}
+            onBlur={() => { updateTask(t.id, { title: editTitleValue.trim() || t.title }); setEditingTitle(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTitle(null); }}
+            autoFocus
           />
-
-          {/* Title */}
-          <span className={`text-[13px] font-medium flex-1 min-w-0 cursor-text py-[1px] px-1 rounded-[3px] hover:bg-surface2 ${isDone ? 'text-text3' : ''}`} onDoubleClick={(e) => {
-            const input = document.createElement('input');
-            input.className = 'border border-blue rounded-[3px] py-[2px] px-1.5 text-[13px] font-sans outline-none w-full';
-            input.value = t.title;
-            let saved = false;
-            const doSave = () => { if (saved) return; saved = true; updateTask(t.id, { title: input.value.trim() || t.title }); };
-            input.onblur = doSave;
-            input.onkeydown = (ev) => { if (ev.key === 'Enter') input.blur(); if (ev.key === 'Escape') { input.value = t.title; input.blur(); } };
-            e.target.replaceWith(input);
-            input.focus(); input.select();
-          }}>
+        ) : (
+          <div
+            className="text-[13px] font-medium text-gray-800 mb-1.5 cursor-text leading-tight"
+            onDoubleClick={() => { setEditingTitle(t.id); setEditTitleValue(t.title); }}
+          >
             {t.title}
-            {t.isClientTask && <span className="text-[9px] font-bold text-orange ml-1.5 uppercase tracking-[0.5px]">CLIENTE</span>}
-          </span>
+          </div>
+        )}
 
+        {/* Client task badge */}
+        {t.isClientTask && (
+          <span className="inline-block text-[9px] font-bold bg-orange-100 text-orange-600 py-[1px] px-1.5 rounded mb-1.5 uppercase tracking-wide">CLIENTE</span>
+        )}
+
+        {/* Blocked warning */}
+        {blocked && blockingNames.length > 0 && (
+          <div className="text-[10px] text-red-500 mb-1.5 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+        )}
+
+        {/* Middle row: assignee + priority + time */}
+        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
           {/* Assignee */}
           <div
             ref={el => assigneeRef.current = el}
-            className="cursor-pointer relative shrink-0"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
+            className="cursor-pointer shrink-0"
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'kb-assignee-' + t.id ? null : 'kb-assignee-' + t.id); }}
           >
-            <div className="flex items-center gap-[3px] py-[1px] px-1 rounded-[3px] text-[10px] text-text2 hover:bg-surface2">
-              {assignee ? (
-                <>
-                  <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0" style={{ background: assignee.color + '18', color: assignee.color }}>{assignee.initials}</span>
-                  {assignee.name}
-                </>
-              ) : <span className="text-text3 opacity-0 group-hover:opacity-100">+ Asignar</span>}
-            </div>
+            {assignee ? (
+              <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ background: assignee.color + '22', color: assignee.color }} title={assignee.name}>{assignee.initials}</span>
+            ) : (
+              <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 shrink-0 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
+            )}
           </div>
           <Dropdown
-            open={openDropdown === 'rd-assignee-' + t.id}
+            open={openDropdown === 'kb-assignee-' + t.id}
             onClose={() => setOpenDropdown(null)}
             anchorRef={assigneeRef}
             items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
           />
 
-          {/* Time badge */}
-          {renderTaskTimeBadge(t)}
-
-          {/* Priority (only show if urgent/high) */}
+          {/* Priority flag */}
           {(t.priority === 'urgent' || t.priority === 'high') && (
-            <div
-              ref={el => prioRef.current = el}
-              className="cursor-pointer shrink-0"
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
-            >
-              <div className="flex items-center gap-[2px] py-[1px] px-1 rounded-[3px] text-[10px] font-semibold hover:bg-surface2" style={{ color: tp.color }}>{tp.flag}</div>
-            </div>
-          )}
-          {(t.priority === 'urgent' || t.priority === 'high') && (
-            <Dropdown
-              open={openDropdown === 'rd-prio-' + t.id}
-              onClose={() => setOpenDropdown(null)}
-              anchorRef={prioRef}
-              items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
-            />
+            <span className="text-[10px] font-semibold" style={{ color: tp.color }}>{tp.flag}</span>
           )}
 
-          {/* Delete */}
-          <button className="bg-transparent border-none text-text3 cursor-pointer text-[10px] opacity-0 group-hover:opacity-100 transition-opacity p-[2px] hover:text-red shrink-0" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\u2715'}</button>
+          {/* Time info */}
+          {est && (
+            <span className="text-[10px] text-gray-400 ml-auto">
+              Est: {est}d
+              {etime !== null && <span className="ml-1 font-semibold" style={{ color: etime > est ? '#F97316' : '#5B7CF5' }}>Real: {etime}d</span>}
+            </span>
+          )}
+          {!est && etime !== null && (
+            <span className="text-[10px] text-blue-500 ml-auto font-semibold">{etime}d</span>
+          )}
+
+          {/* Description indicator */}
+          {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Tiene descripcion" />}
         </div>
 
-        {/* Blocked warning */}
-        {blocked && blockingNames.length > 0 && (
-          <div className="text-[11px] text-red ml-6 mt-0.5">Bloqueada por: {blockingNames.join(', ')}</div>
-        )}
-
         {/* Expandable description */}
-        {expandedTasks[t.id] && (
-          <div className="mt-1 ml-6">
+        {isExpanded && (
+          <div className="mt-1.5 mb-1.5">
             <textarea
-              className="w-full border border-border rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[60px] outline-none bg-white focus:border-blue"
+              className="w-full border border-gray-200 rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[50px] outline-none bg-white focus:border-blue-400"
               placeholder="Descripcion de la tarea..."
               defaultValue={t.description || ''}
               onBlur={(e) => updateTask(t.id, { description: e.target.value })}
             />
           </div>
         )}
-        {(t.description || t.notes) && (
-          <button className="bg-transparent border-none text-text3 cursor-pointer text-[10px] ml-6 mt-0.5 hover:text-blue font-sans" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{expandedTasks[t.id] ? '\u25B2 Ocultar' : '\u25BC Detalle'}</button>
-        )}
+
+        {/* Bottom action buttons */}
+        <div className="flex items-center gap-1 pt-1.5 border-t border-gray-50">
+          {/* Status change */}
+          <div
+            ref={el => statusRef.current = el}
+            className="cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'kb-status-' + t.id ? null : 'kb-status-' + t.id); }}
+          >
+            <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-100 text-gray-500">{ts.icon} Mover</span>
+          </div>
+          <Dropdown
+            open={openDropdown === 'kb-status-' + t.id}
+            onClose={() => setOpenDropdown(null)}
+            anchorRef={statusRef}
+            items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+          />
+
+          {/* Priority */}
+          <div
+            ref={el => prioRef.current = el}
+            className="cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'kb-prio-' + t.id ? null : 'kb-prio-' + t.id); }}
+          >
+            <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-100 text-gray-500">{tp.flag}</span>
+          </div>
+          <Dropdown
+            open={openDropdown === 'kb-prio-' + t.id}
+            onClose={() => setOpenDropdown(null)}
+            anchorRef={prioRef}
+            items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+          />
+
+          {/* Expand/collapse description */}
+          <button
+            className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-100 text-gray-500 bg-transparent border-none cursor-pointer font-sans"
+            onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
+          >{isExpanded ? 'Ocultar' : 'Editar'}</button>
+
+          {/* Delete */}
+          <button
+            className="text-[10px] py-[2px] px-1.5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans ml-auto opacity-0 group-hover:opacity-100 hover:text-red-500"
+            onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
+          >Eliminar</button>
+        </div>
       </div>
     );
   };
 
-  // Build phase groups for the new task-based roadmap
-  const buildPhaseGroups = () => {
-    const phaseOrder = Object.keys(PHASES);
-    // Also include custom phases
-    const customPhaseKeys = (c.customPhases || []).map(cp => cp.id);
-    const allPhaseKeys = [...phaseOrder, ...customPhaseKeys];
+  // ===== KANBAN BOARD =====
+  const renderKanban = () => {
+    const kanbanTasks = getKanbanTasks();
 
-    return allPhaseKeys.map(phaseKey => {
-      const phInfo = allPh[phaseKey] || { label: phaseKey, color: '#5B7CF5' };
-      // Get roadmap tasks for this phase
-      let phaseTasks = roadmapTasks.filter(t => t.phase === phaseKey);
-      // Also include non-roadmap tasks that have this phase
-      const manualTasks = clientTasks.filter(t => !t.isRoadmapTask && t.phase === phaseKey);
-      const allPhaseTasks = [...phaseTasks, ...manualTasks];
+    // Build unique assignees for filter
+    const assignees = new Set();
+    clientTasks.forEach(t => { if (t.assignee) assignees.add(t.assignee); });
+    const assigneeList = [...assignees].sort();
 
-      if (allPhaseTasks.length === 0 && phase !== 'all' && phase !== phaseKey) return null;
-      if (phase !== 'all' && phase !== phaseKey) return null;
+    return (
+      <div>
+        {/* Kanban filters */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[11px] text-gray-500 font-semibold">Encargado:</span>
+          <select
+            className="text-[11px] py-1 px-2 border border-gray-200 rounded-md bg-white text-gray-700 font-sans outline-none cursor-pointer"
+            value={kanbanAssigneeFilter}
+            onChange={(e) => setKanbanAssigneeFilter(e.target.value)}
+          >
+            <option value="all">Todos</option>
+            {assigneeList.map(a => {
+              const m = TEAM.find(t => t.name.toLowerCase() === a.toLowerCase() || t.id === a);
+              return <option key={a} value={a}>{m ? m.name : a}</option>;
+            })}
+          </select>
+          <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" checked={kanbanHideCompleted} onChange={(e) => setKanbanHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
+          </label>
+        </div>
 
-      const doneTasks = allPhaseTasks.filter(t => t.status === 'done').length;
+        {/* Kanban columns */}
+        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+          {KANBAN_COLUMNS.map(col => {
+            if (kanbanHideCompleted && col.key === 'done') return null;
+            const colTasks = kanbanTasks.filter(t => t.status === col.key);
+            // Sort: urgent > high > normal > low
+            const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
+            colTasks.sort((a, b) => (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2));
 
-      return {
-        phaseKey,
-        phInfo,
-        tasks: allPhaseTasks,
-        doneCount: doneTasks,
-        totalCount: allPhaseTasks.length,
-      };
-    }).filter(Boolean);
+            return (
+              <div key={col.key} className="flex-shrink-0 w-[260px]">
+                {/* Column header */}
+                <div className="flex items-center gap-2 mb-2 py-2 px-3 rounded-lg" style={{ background: col.bg }}>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: col.color }} />
+                  <span className="text-[11px] font-bold tracking-wide" style={{ color: col.color }}>{col.label}</span>
+                  <span className="text-[10px] font-semibold bg-white rounded-full w-5 h-5 flex items-center justify-center ml-auto" style={{ color: col.color }}>{colTasks.length}</span>
+                  <button
+                    className="text-[14px] font-bold bg-transparent border-none cursor-pointer w-5 h-5 flex items-center justify-center rounded hover:bg-white/60"
+                    style={{ color: col.color }}
+                    onClick={() => setAddingToColumn(col.key)}
+                    title="Agregar tarea"
+                  >+</button>
+                </div>
+
+                {/* Cards */}
+                <div className="space-y-0">
+                  {colTasks.map(t => renderKanbanCard(t))}
+                </div>
+
+                {/* Add task inline */}
+                {addingToColumn === col.key && (
+                  <div className="mt-1">
+                    <input
+                      className="w-full border border-blue-300 rounded-lg py-2 px-2.5 text-[12px] font-sans outline-none bg-white shadow-sm"
+                      placeholder="Nombre de la tarea..."
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleColumnTaskAdd(col.key, e.target.value); if (e.key === 'Escape') setAddingToColumn(null); }}
+                      onBlur={(e) => { if (e.target.value.trim()) handleColumnTaskAdd(col.key, e.target.value); else setAddingToColumn(null); }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
-  const phaseGroups = useNewSystem ? buildPhaseGroups() : null;
-
   // ===== FALLBACK: Old step-based roadmap =====
-  // (keeping for backward compat with existing clients that don't have roadmap tasks)
   const renderOldRoadmap = () => {
-    let timelineItems = PROCESS_STEPS.map((s, i) => ({ s, i, cs: c.steps[i], isCustom: false })).filter(x => phase === 'all' || x.s.phase === phase);
+    let timelineItems = PROCESS_STEPS.map((s, i) => ({ s, i, cs: c.steps[i], isCustom: false }));
     const customs = c.customSteps || [];
     customs.forEach((cs, ci) => {
-      if (phase === 'all' || phase === cs.phase) {
-        timelineItems.push({ s: { id: 'custom_' + ci, name: cs.name, phase: cs.phase || 'auditoria', days: cs.days || 7, client: false, dependsOn: [] }, i: PROCESS_STEPS.length + ci, cs, isCustom: true, customIdx: ci });
-      }
+      timelineItems.push({ s: { id: 'custom_' + ci, name: cs.name, phase: cs.phase || 'auditoria', days: cs.days || 7, client: false, dependsOn: [] }, i: PROCESS_STEPS.length + ci, cs, isCustom: true, customIdx: ci });
     });
-    if (hideCompleted) timelineItems = timelineItems.filter(x => x.cs.status !== 'completed');
 
     const oldPhaseGroups = [];
     let currentPhaseKey = '';
@@ -349,48 +426,44 @@ export default function ClientDetail({ client: c }) {
       }
     });
 
-    return oldPhaseGroups.map(pg => {
-      const phInfo = allPh[pg.phase] || { label: pg.phase, color: '#5B7CF5' };
-      const standardSteps = PROCESS_STEPS.filter(x => x.phase === pg.phase);
-      const dn = standardSteps.filter(x => { const idx = PROCESS_STEPS.indexOf(x); return c.steps[idx]?.status === 'completed'; }).length;
-      const customInPhase = (c.customSteps || []).filter(x => x.phase === pg.phase);
-      const customDone = customInPhase.filter(x => x.status === 'completed').length;
-
-      return (
-        <div key={pg.phase} className="mb-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="inline-flex items-center gap-1.5 py-[4px] px-2.5 rounded-full text-[11px] font-bold text-white" style={{ background: phInfo.color }}>
-              {phInfo.label}
-              <span className="text-[9px] font-normal opacity-80">{dn + customDone}/{standardSteps.length + customInPhase.length}</span>
-            </span>
-          </div>
-          <div className="rounded-lg overflow-hidden" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
-            {pg.items.map(({ s, i, cs, isCustom }) => {
-              const cfg = STATUS[cs.status] || STATUS.pending;
-              const isCompleted = cs.status === 'completed';
-              let d = null;
-              if (cs.startDate && cs.endDate) d = daysBetween(cs.startDate, cs.endDate);
-              else if (cs.startDate && cs.status !== 'pending') d = daysAgo(cs.startDate);
-
-              return (
-                <div key={i} className="flex items-center gap-2 py-[6px] px-3 hover:bg-surface2">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.color }} />
-                  <span className={`text-[13px] flex-1 ${isCompleted ? 'text-text3' : 'text-text'}`}>{isCustom ? s.name : getStepNameForClient(c, i)}</span>
-                  {s.client && <span className="text-[9px] font-bold text-orange uppercase tracking-[0.5px]">CLIENTE</span>}
-                  {d !== null && <span className="text-[10px] text-text3">{d}d</span>}
-                  {cs.responsible && <span className="text-[10px] text-text3">{cs.responsible}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    });
+    return (
+      <div className="mb-4">
+        <div className="text-[11px] text-gray-400 mb-2 italic">Vista simplificada (cliente sin roadmap de tareas)</div>
+        {oldPhaseGroups.map(pg => {
+          const phInfo = allPh[pg.phase] || { label: pg.phase, color: '#5B7CF5' };
+          return (
+            <div key={pg.phase} className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1.5 py-[4px] px-2.5 rounded-full text-[11px] font-bold text-white" style={{ background: phInfo.color }}>{phInfo.label}</span>
+              </div>
+              <div className="rounded-lg overflow-hidden" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
+                {pg.items.map(({ s, i, cs, isCustom }) => {
+                  const cfg = STATUS[cs.status] || STATUS.pending;
+                  const isCompleted = cs.status === 'completed';
+                  let d = null;
+                  if (cs.startDate && cs.endDate) d = daysBetween(cs.startDate, cs.endDate);
+                  else if (cs.startDate && cs.status !== 'pending') d = daysAgo(cs.startDate);
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-[6px] px-3 hover:bg-gray-50">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.color }} />
+                      <span className={`text-[13px] flex-1 ${isCompleted ? 'text-gray-400' : 'text-gray-800'}`}>{isCustom ? s.name : getStepNameForClient(c, i)}</span>
+                      {s.client && <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wide">CLIENTE</span>}
+                      {d !== null && <span className="text-[10px] text-gray-400">{d}d</span>}
+                      {cs.responsible && <span className="text-[10px] text-gray-400">{cs.responsible}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const sentEmoji = { positive: '\uD83D\uDE0A', neutral: '\uD83D\uDE10', negative: '\uD83D\uDE1F' };
 
-  // Brain points
+  // Merge brain points into history
   const brainPoints = [];
   (c.feedback || []).forEach(f => {
     if (f.keypoints) f.keypoints.split('\n').filter(k => k.trim()).forEach(k => brainPoints.push({ text: k.trim(), source: 'Llamada ' + fmtDate(f.date), type: 'call' }));
@@ -455,86 +528,12 @@ export default function ClientDetail({ client: c }) {
         )}
       </div>
 
-      {/* Phase bar */}
-      {(() => {
-        const phaseEntries = Object.entries(allPh);
-        const totalSteps = useNewSystem ? roadmapTasks.length : (PROCESS_STEPS.length + (c.customSteps || []).length);
-        return (
-          <div className="mb-3.5">
-            <div className="flex rounded-lg overflow-hidden h-[30px] cursor-pointer mb-2">
-              {phaseEntries.map(([k, v]) => {
-                const stepsInPhase = useNewSystem
-                  ? roadmapTasks.filter(t => t.phase === k).length
-                  : (PROCESS_STEPS.filter(s => s.phase === k).length + (c.customSteps || []).filter(cs => cs.phase === k).length);
-                const widthPct = totalSteps > 0 ? (stepsInPhase / totalSteps * 100) : 0;
-                if (widthPct === 0) return null;
-                const isActive = phase === k;
-                return (
-                  <div key={k} className="flex items-center justify-center text-[10px] font-semibold text-white whitespace-nowrap overflow-hidden transition-all" style={{ width: widthPct + '%', background: v.color, opacity: isActive || phase === 'all' ? 1 : 0.4 }} onClick={() => setPhase(prev => prev === k ? 'all' : k)} title={v.label}>
-                    {widthPct > 8 && v.label}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-2">
-              <button className={`py-[5px] px-2.5 rounded-full cursor-pointer text-[10px] font-medium whitespace-nowrap border font-sans ${phase === 'all' ? 'bg-blue text-white border-blue' : 'bg-transparent text-text3 border-border hover:text-text hover:bg-surface2'}`} onClick={() => setPhase('all')}>Todos</button>
-              <label className="ml-auto flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
-                <input type="checkbox" checked={hideCompleted} onChange={(e) => setHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completados
-              </label>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Main grid */}
       <div className="grid gap-4 max-md:grid-cols-1" style={{ gridTemplateColumns: '1fr 320px' }}>
-        {/* Left: Timeline/Roadmap */}
+        {/* Left: Kanban Roadmap */}
         <div>
-          {useNewSystem ? (
-            /* NEW SYSTEM: Tasks grouped by phase */
-            <>
-              {phaseGroups.map(pg => {
-                const phaseTimings = getPhaseTimings(c, tasks);
-                const pt = phaseTimings[pg.phaseKey];
-
-                return (
-                  <div key={pg.phaseKey} className="mb-4">
-                    {/* Phase header pill */}
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="inline-flex items-center gap-1.5 py-[4px] px-2.5 rounded-full text-[11px] font-bold text-white" style={{ background: pg.phInfo.color }}>
-                        {pg.phInfo.label}
-                        <span className="text-[9px] font-normal opacity-80">{pg.doneCount}/{pg.totalCount}</span>
-                      </span>
-                      {pt?.actualDays != null && <span className="text-[10px] text-text3">{pt.actualDays}d</span>}
-                    </div>
-
-                    {/* Task list */}
-                    <div className="rounded-lg overflow-hidden" style={{ borderLeft: `3px solid ${pg.phInfo.color}` }}>
-                      {pg.tasks.map(t => renderRoadmapTaskRow(t))}
-                    </div>
-
-                    {/* Add task button */}
-                    {addingTaskToPhase === pg.phaseKey ? (
-                      <div className="ml-[3px] mt-1">
-                        <input
-                          className="border border-blue rounded-[3px] py-[4px] px-2 text-[12px] font-sans outline-none w-[280px]"
-                          placeholder="Nombre de la tarea..."
-                          autoFocus
-                          onKeyDown={(e) => { if (e.key === 'Enter') handlePhaseTaskAdd(pg.phaseKey, e.target.value); if (e.key === 'Escape') setAddingTaskToPhase(null); }}
-                          onBlur={(e) => { if (e.target.value.trim()) handlePhaseTaskAdd(pg.phaseKey, e.target.value); else setAddingTaskToPhase(null); }}
-                        />
-                      </div>
-                    ) : (
-                      <button className="inline-flex items-center gap-1 text-[10px] text-text3 cursor-pointer mt-0.5 ml-[3px] py-[1px] px-1 rounded bg-transparent border-none font-sans hover:text-blue hover:bg-blue-bg" onClick={() => setAddingTaskToPhase(pg.phaseKey)}>+ Tarea</button>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          ) : (
-            /* OLD SYSTEM: Step-based roadmap (backward compat) */
-            renderOldRoadmap()
-          )}
+          <div className="text-sm font-bold mb-3">Roadmap</div>
+          {useNewSystem ? renderKanban() : renderOldRoadmap()}
         </div>
 
         {/* Right: Side panels */}
@@ -669,28 +668,25 @@ export default function ClientDetail({ client: c }) {
             </div>
           </div>
 
-          {/* Brain */}
+          {/* Historial del cliente (merged with brain points) */}
           <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold">Cerebro del cliente</div>
+            <div className="py-3 px-4 border-b border-border text-[13px] font-bold">Historial del cliente</div>
             <div className="py-3 px-4">
-              {!brainPoints.length ? (
-                <div className="text-center text-text3 text-xs py-3.5">El cerebro se nutre de llamadas, feedback y datos del roadmap.</div>
-              ) : (
-                brainPoints.map((bp, i) => (
-                  <div key={i} className="flex gap-2 py-[5px] border-b border-border text-xs leading-relaxed">
-                    <span className="shrink-0">{typeIcons[bp.type] || '\u2022'}</span>
-                    <div><div>{bp.text}</div><div className="text-[9px] text-text3 mt-[1px]">{bp.source}</div></div>
-                  </div>
-                ))
+              {/* Brain points section */}
+              {brainPoints.length > 0 && (
+                <div className="mb-3 pb-3 border-b border-border">
+                  <div className="text-[10px] font-semibold text-text3 uppercase tracking-wide mb-1.5">Puntos clave</div>
+                  {brainPoints.map((bp, i) => (
+                    <div key={'bp-' + i} className="flex gap-2 py-[4px] text-xs leading-relaxed">
+                      <span className="shrink-0">{typeIcons[bp.type] || '\u2022'}</span>
+                      <div><div>{bp.text}</div><div className="text-[9px] text-text3 mt-[1px]">{bp.source}</div></div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </div>
-          </div>
 
-          {/* History */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold">Historial</div>
-            <div className="py-3 px-4">
-              {!c.history.length ? (
+              {/* History entries */}
+              {!c.history.length && !brainPoints.length ? (
                 <div className="text-center text-text3 text-xs py-3.5">Sin historial</div>
               ) : (
                 [...c.history].reverse().map((h, i) => (
