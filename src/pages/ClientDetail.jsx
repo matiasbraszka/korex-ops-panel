@@ -1,31 +1,23 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
+import { PROCESS_STEPS, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
 import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, effectiveTime } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
 
-// Kanban column definitions (subset of TASK_STATUS for columns)
-const KANBAN_COLUMNS = [
-  { key: 'backlog', label: 'BACKLOG', color: '#9CA3AF', bg: '#F3F4F6' },
-  { key: 'in-progress', label: 'EN PROGRESO', color: '#5B7CF5', bg: '#EEF2FF' },
-  { key: 'en-revision', label: 'EN REVISION', color: '#EAB308', bg: '#FEFCE8' },
-  { key: 'done', label: 'COMPLETADA', color: '#22C55E', bg: '#ECFDF5' },
-  { key: 'blocked', label: 'BLOQUEADA', color: '#EF4444', bg: '#FEF2F2' },
-];
-
 export default function ClientDetail({ client: c }) {
   const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, currentUser } = useApp();
-  const [kanbanAssigneeFilter, setKanbanAssigneeFilter] = useState('all');
-  const [kanbanHideCompleted, setKanbanHideCompleted] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState('all');
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState(false);
   const [clientFbModal, setClientFbModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
   const [openTranscription, setOpenTranscription] = useState({});
-  const [addingToColumn, setAddingToColumn] = useState(null);
+  const [addingToPhase, setAddingToPhase] = useState(null);
+  const [collapsedPhases, setCollapsedPhases] = useState({});
   const [editingStartDate, setEditingStartDate] = useState(false);
   const [editingTitle, setEditingTitle] = useState(null);
   const [editTitleValue, setEditTitleValue] = useState('');
@@ -138,214 +130,279 @@ export default function ClientDetail({ client: c }) {
       .filter(Boolean);
   };
 
-  // Add task to a specific kanban column
-  const handleColumnTaskAdd = (statusKey, title) => {
+  // Add task to a specific phase
+  const handlePhaseTaskAdd = (phaseKey, title) => {
     if (title.trim()) {
-      const t = createTask(title.trim(), c.id, '', 'normal', statusKey, '', null);
-      updateTask(t.id, { isRoadmapTask: true, phase: null });
+      const t = createTask(title.trim(), c.id, '', 'normal', 'backlog', '', null);
+      updateTask(t.id, { isRoadmapTask: true, phase: phaseKey });
     }
-    setAddingToColumn(null);
+    setAddingToPhase(null);
   };
 
-  // Get all tasks for kanban (roadmap + other client tasks)
-  const getKanbanTasks = () => {
+  // Get filtered tasks for roadmap list
+  const getFilteredTasks = () => {
     let allTasks = [...clientTasks];
 
     // Filter by assignee
-    if (kanbanAssigneeFilter !== 'all') {
-      const memberName = kanbanAssigneeFilter;
+    if (assigneeFilter !== 'all') {
+      const memberName = assigneeFilter;
       allTasks = allTasks.filter(t => {
-        const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
-        return assignee && (assignee.name.toLowerCase() === memberName.toLowerCase() || assignee.id === memberName);
+        const a = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
+        return a && (a.name.toLowerCase() === memberName.toLowerCase() || a.id === memberName);
       });
     }
 
     // Hide completed
-    if (kanbanHideCompleted) {
+    if (hideCompleted) {
       allTasks = allTasks.filter(t => t.status !== 'done');
     }
 
     return allTasks;
   };
 
-  // Render a kanban card
-  const renderKanbanCard = (t) => {
-    const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
-    const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
-    const blocked = isTaskBlocked(t);
-    const blockingNames = blocked ? getBlockingNames(t) : [];
-    const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
-    const phaseInfo = t.phase ? (allPh[t.phase] || PHASES[t.phase]) : null;
-    const hasDesc = !!(t.description && t.description.trim());
-    const etime = effectiveTime(t, c);
-    const est = t.estimatedDays || null;
-    const isExpanded = expandedTasks[t.id];
-
-    const statusRef = getDropdownRef('kb-status-' + t.id);
-    const assigneeRef = getDropdownRef('kb-assignee-' + t.id);
-    const prioRef = getDropdownRef('kb-prio-' + t.id);
-
-    return (
-      <div
-        key={t.id}
-        className={`bg-white rounded-lg shadow-sm border border-gray-100 p-3 mb-2 group transition-shadow hover:shadow-md ${blocked ? 'border-l-[3px] border-l-red-400' : ''}`}
-      >
-        {/* Top: Phase tag */}
-        {phaseInfo && (
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: phaseInfo.color }} />
-            <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: phaseInfo.color }}>{phaseInfo.label}</span>
-          </div>
-        )}
-
-        {/* Title */}
-        {editingTitle === t.id ? (
-          <input
-            className="w-full border border-blue-400 rounded py-1 px-1.5 text-[13px] font-sans outline-none mb-1"
-            value={editTitleValue}
-            onChange={(e) => setEditTitleValue(e.target.value)}
-            onBlur={() => { updateTask(t.id, { title: editTitleValue.trim() || t.title }); setEditingTitle(null); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTitle(null); }}
-            autoFocus
-          />
-        ) : (
-          <div
-            className="text-[13px] font-medium text-gray-800 mb-1.5 cursor-text leading-tight"
-            onDoubleClick={() => { setEditingTitle(t.id); setEditTitleValue(t.title); }}
-          >
-            {t.title}
-          </div>
-        )}
-
-        {/* Client task badge */}
-        {t.isClientTask && (
-          <span className="inline-block text-[9px] font-bold bg-orange-100 text-orange-600 py-[1px] px-1.5 rounded mb-1.5 uppercase tracking-wide">CLIENTE</span>
-        )}
-
-        {/* Blocked warning */}
-        {blocked && blockingNames.length > 0 && (
-          <div className="text-[10px] text-red-500 mb-1.5 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
-        )}
-
-        {/* Middle row: assignee + priority + time */}
-        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-          {/* Assignee */}
-          <div
-            ref={el => assigneeRef.current = el}
-            className="cursor-pointer shrink-0"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'kb-assignee-' + t.id ? null : 'kb-assignee-' + t.id); }}
-          >
-            {assignee ? (
-              <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ background: assignee.color + '22', color: assignee.color }} title={assignee.name}>{assignee.initials}</span>
-            ) : (
-              <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 shrink-0 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
-            )}
-          </div>
-          <Dropdown
-            open={openDropdown === 'kb-assignee-' + t.id}
-            onClose={() => setOpenDropdown(null)}
-            anchorRef={assigneeRef}
-            items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
-          />
-
-          {/* Priority flag */}
-          {(t.priority === 'urgent' || t.priority === 'high') && (
-            <span className="text-[10px] font-semibold" style={{ color: tp.color }}>{tp.flag}</span>
-          )}
-
-          {/* Time info */}
-          {est && (
-            <span className="text-[10px] text-gray-400 ml-auto">
-              Est: {est}d
-              {etime !== null && <span className="ml-1 font-semibold" style={{ color: etime > est ? '#F97316' : '#5B7CF5' }}>Real: {etime}d</span>}
-            </span>
-          )}
-          {!est && etime !== null && (
-            <span className="text-[10px] text-blue-500 ml-auto font-semibold">{etime}d</span>
-          )}
-
-          {/* Description indicator */}
-          {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Tiene descripcion" />}
-        </div>
-
-        {/* Expandable description */}
-        {isExpanded && (
-          <div className="mt-1.5 mb-1.5">
-            <textarea
-              className="w-full border border-gray-200 rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[50px] outline-none bg-white focus:border-blue-400"
-              placeholder="Descripcion de la tarea..."
-              defaultValue={t.description || ''}
-              onBlur={(e) => updateTask(t.id, { description: e.target.value })}
-            />
-          </div>
-        )}
-
-        {/* Bottom action buttons */}
-        <div className="flex items-center gap-1 pt-1.5 border-t border-gray-50">
-          {/* Status change */}
-          <div
-            ref={el => statusRef.current = el}
-            className="cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'kb-status-' + t.id ? null : 'kb-status-' + t.id); }}
-          >
-            <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-100 text-gray-500">{ts.icon} Mover</span>
-          </div>
-          <Dropdown
-            open={openDropdown === 'kb-status-' + t.id}
-            onClose={() => setOpenDropdown(null)}
-            anchorRef={statusRef}
-            items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
-          />
-
-          {/* Priority */}
-          <div
-            ref={el => prioRef.current = el}
-            className="cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'kb-prio-' + t.id ? null : 'kb-prio-' + t.id); }}
-          >
-            <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-100 text-gray-500">{tp.flag}</span>
-          </div>
-          <Dropdown
-            open={openDropdown === 'kb-prio-' + t.id}
-            onClose={() => setOpenDropdown(null)}
-            anchorRef={prioRef}
-            items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
-          />
-
-          {/* Expand/collapse description */}
-          <button
-            className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-100 text-gray-500 bg-transparent border-none cursor-pointer font-sans"
-            onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
-          >{isExpanded ? 'Ocultar' : 'Editar'}</button>
-
-          {/* Delete */}
-          <button
-            className="text-[10px] py-[2px] px-1.5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans ml-auto opacity-0 group-hover:opacity-100 hover:text-red-500"
-            onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
-          >Eliminar</button>
-        </div>
-      </div>
-    );
-  };
-
-  // ===== KANBAN BOARD =====
-  const renderKanban = () => {
-    const kanbanTasks = getKanbanTasks();
+  // ===== VERTICAL LIST ROADMAP =====
+  const renderRoadmap = () => {
+    const filteredTasks = getFilteredTasks();
 
     // Build unique assignees for filter
     const assignees = new Set();
     clientTasks.forEach(t => { if (t.assignee) assignees.add(t.assignee); });
     const assigneeList = [...assignees].sort();
 
+    // Group tasks by phase
+    const phaseKeys = Object.keys(allPh);
+    // Also collect tasks with null/unknown phase
+    const phaseGroups = phaseKeys.map(phaseKey => {
+      const phInfo = allPh[phaseKey];
+      const phaseTasks = filteredTasks.filter(t => t.phase === phaseKey);
+      // For collapse default: check ALL tasks (not filtered) in this phase
+      const allPhaseTasks = clientTasks.filter(t => t.phase === phaseKey);
+      const totalCount = allPhaseTasks.length;
+      const doneCount = allPhaseTasks.filter(t => t.status === 'done').length;
+      const allDone = totalCount > 0 && doneCount === totalCount;
+      return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone };
+    }).filter(g => g.totalCount > 0);
+
+    // Add unphased tasks if any
+    const unphasedTasks = filteredTasks.filter(t => !t.phase || !allPh[t.phase]);
+    if (unphasedTasks.length > 0) {
+      phaseGroups.push({ phaseKey: '_unphased', phInfo: { label: 'Sin fase', color: '#9CA3AF' }, phaseTasks: unphasedTasks, totalCount: unphasedTasks.length, doneCount: unphasedTasks.filter(t => t.status === 'done').length, allDone: false });
+    }
+
+    // Initialize collapsed state for all-done phases (only on first render logic)
+    const isCollapsed = (phaseKey, allDone) => {
+      if (collapsedPhases[phaseKey] !== undefined) return collapsedPhases[phaseKey];
+      return allDone;
+    };
+
+    const togglePhase = (phaseKey) => {
+      setCollapsedPhases(prev => ({ ...prev, [phaseKey]: !isCollapsed(phaseKey, phaseGroups.find(g => g.phaseKey === phaseKey)?.allDone) }));
+    };
+
+    // Render a single task row
+    const renderTaskRow = (t, isLast) => {
+      const blocked = isTaskBlocked(t);
+      const blockingNames = blocked ? getBlockingNames(t) : [];
+      const assignee = TEAM.find(m => m.name.toLowerCase() === t.assignee?.toLowerCase() || m.id === t.assignee);
+      const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
+      const hasDesc = !!(t.description && t.description.trim());
+      const etime = effectiveTime(t, c);
+      const est = t.estimatedDays || null;
+      const isExpanded = expandedTasks[t.id];
+
+      const statusRef = getDropdownRef('rd-status-' + t.id);
+      const assigneeRef = getDropdownRef('rd-assignee-' + t.id);
+      const prioRef = getDropdownRef('rd-prio-' + t.id);
+
+      // Status icon
+      let statusIcon, statusColor;
+      if (t.status === 'done') { statusIcon = '\u2713'; statusColor = '#22C55E'; }
+      else if (blocked) { statusIcon = '\uD83D\uDD12'; statusColor = '#9CA3AF'; }
+      else if (t.status === 'in-progress') { statusIcon = '\u25CF'; statusColor = '#5B7CF5'; }
+      else if (t.status === 'en-revision') { statusIcon = '\u25C8'; statusColor = '#EAB308'; }
+      else { statusIcon = '\u25CB'; statusColor = '#9CA3AF'; }
+
+      // Row background
+      let rowBg = '';
+      if (t.status === 'in-progress') rowBg = 'bg-blue-50/40';
+
+      return (
+        <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''}`}>
+          {/* Main row */}
+          <div
+            className={`flex items-center gap-2 py-[7px] px-3 hover:bg-gray-50 cursor-pointer ${rowBg}`}
+            onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
+          >
+            {/* Tree connector */}
+            <span className="text-gray-300 text-[11px] w-3 text-center shrink-0 select-none">{isLast ? '\u2514' : '\u251C'}</span>
+
+            {/* Status icon */}
+            <span className="text-sm shrink-0 w-5 text-center select-none" style={{ color: statusColor }}>{statusIcon}</span>
+
+            {/* Title (editable on double-click) */}
+            <div className="flex-1 min-w-0">
+              {editingTitle === t.id ? (
+                <input
+                  className="w-full border border-blue-400 rounded py-0.5 px-1.5 text-[13px] font-sans outline-none"
+                  value={editTitleValue}
+                  onChange={(e) => setEditTitleValue(e.target.value)}
+                  onBlur={() => { updateTask(t.id, { title: editTitleValue.trim() || t.title }); setEditingTitle(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTitle(null); }}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  className={`text-[13px] leading-tight truncate block ${t.status === 'done' ? 'text-text3' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
+                  onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(t.id); setEditTitleValue(t.title); }}
+                >
+                  {t.title}
+                </span>
+              )}
+            </div>
+
+            {/* CLIENTE badge */}
+            {t.isClientTask && (
+              <span className="text-[9px] font-bold bg-orange-100 text-orange-600 py-[1px] px-1.5 rounded uppercase tracking-wide shrink-0">CLIENTE</span>
+            )}
+
+            {/* Assignee */}
+            <div
+              ref={el => assigneeRef.current = el}
+              className="cursor-pointer shrink-0"
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
+            >
+              {assignee ? (
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ background: assignee.color + '22', color: assignee.color }} title={assignee.name}>{assignee.initials}</span>
+              ) : (
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 shrink-0 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
+              )}
+            </div>
+            <Dropdown
+              open={openDropdown === 'rd-assignee-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={assigneeRef}
+              items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
+            />
+
+            {/* Time info */}
+            {est && (
+              <span className="text-[10px] text-gray-400 shrink-0 w-[80px] text-right">
+                {etime !== null ? (
+                  <><span className="font-semibold" style={{ color: etime > est ? '#F97316' : '#5B7CF5' }}>{etime}d</span><span className="text-gray-300">/{est}d</span></>
+                ) : (
+                  <>{est}d est.</>
+                )}
+              </span>
+            )}
+            {!est && etime !== null && (
+              <span className="text-[10px] text-blue-500 shrink-0 w-[80px] text-right font-semibold">{etime}d</span>
+            )}
+
+            {/* Priority flag */}
+            {(t.priority === 'urgent' || t.priority === 'high') && (
+              <span className="text-[10px] font-semibold shrink-0" style={{ color: tp.color }}>{tp.flag}</span>
+            )}
+
+            {/* Description indicator */}
+            {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Tiene descripcion" />}
+
+            {/* Status dropdown trigger (on hover) */}
+            <div
+              ref={el => statusRef.current = el}
+              className="cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
+            >
+              <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-200 text-gray-400">{TASK_STATUS[t.status]?.icon || '\u25CB'}</span>
+            </div>
+            <Dropdown
+              open={openDropdown === 'rd-status-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={statusRef}
+              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+            />
+
+            {/* Delete (on hover) */}
+            <button
+              className="text-[10px] py-[2px] px-1 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500 shrink-0"
+              onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
+            >x</button>
+          </div>
+
+          {/* Blocked warning */}
+          {blocked && blockingNames.length > 0 && (
+            <div className="text-[10px] text-red-500 pl-[52px] pb-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+          )}
+
+          {/* Expanded detail area */}
+          {isExpanded && (
+            <div className="pl-[52px] pr-3 pb-2.5 pt-1 bg-gray-50/50">
+              {/* Description */}
+              <textarea
+                className="w-full border border-gray-200 rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[50px] outline-none bg-white focus:border-blue-400 mb-2"
+                placeholder="Descripcion de la tarea..."
+                defaultValue={t.description || ''}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => updateTask(t.id, { description: e.target.value })}
+              />
+
+              {/* Inline controls row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Status dropdown */}
+                <div
+                  ref={el => getDropdownRef('rd-status2-' + t.id).current = el}
+                  className="cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status2-' + t.id ? null : 'rd-status2-' + t.id); }}
+                >
+                  <span className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 inline-flex items-center gap-1">
+                    <span style={{ color: TASK_STATUS[t.status]?.color }}>{TASK_STATUS[t.status]?.icon}</span> {TASK_STATUS[t.status]?.label || 'Estado'}
+                  </span>
+                </div>
+                <Dropdown
+                  open={openDropdown === 'rd-status2-' + t.id}
+                  onClose={() => setOpenDropdown(null)}
+                  anchorRef={getDropdownRef('rd-status2-' + t.id)}
+                  items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+                />
+
+                {/* Priority dropdown */}
+                <div
+                  ref={el => prioRef.current = el}
+                  className="cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
+                >
+                  <span className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 inline-flex items-center gap-1">
+                    <span style={{ color: tp.color }}>{tp.flag}</span> {tp.label}
+                  </span>
+                </div>
+                <Dropdown
+                  open={openDropdown === 'rd-prio-' + t.id}
+                  onClose={() => setOpenDropdown(null)}
+                  anchorRef={prioRef}
+                  items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+                />
+
+                {/* Delete */}
+                <button
+                  className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-red-400 hover:bg-red-50 hover:text-red-500 cursor-pointer font-sans ml-auto border-none"
+                  onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
+                >Eliminar</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div>
-        {/* Kanban filters */}
+        {/* Filters */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-[11px] text-gray-500 font-semibold">Encargado:</span>
           <select
             className="text-[11px] py-1 px-2 border border-gray-200 rounded-md bg-white text-gray-700 font-sans outline-none cursor-pointer"
-            value={kanbanAssigneeFilter}
-            onChange={(e) => setKanbanAssigneeFilter(e.target.value)}
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value)}
           >
             <option value="all">Todos</option>
             {assigneeList.map(a => {
@@ -354,49 +411,54 @@ export default function ClientDetail({ client: c }) {
             })}
           </select>
           <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-400 cursor-pointer select-none">
-            <input type="checkbox" checked={kanbanHideCompleted} onChange={(e) => setKanbanHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
+            <input type="checkbox" checked={hideCompleted} onChange={(e) => setHideCompleted(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
           </label>
         </div>
 
-        {/* Kanban columns */}
-        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-          {KANBAN_COLUMNS.map(col => {
-            if (kanbanHideCompleted && col.key === 'done') return null;
-            const colTasks = kanbanTasks.filter(t => t.status === col.key);
-            // Sort: urgent > high > normal > low
+        {/* Phase sections */}
+        <div className="space-y-2">
+          {phaseGroups.map(({ phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone }) => {
+            const collapsed = isCollapsed(phaseKey, allDone);
+            // Sort tasks: urgent > high > normal > low
             const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
-            colTasks.sort((a, b) => (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2));
+            const sortedTasks = [...phaseTasks].sort((a, b) => (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2));
 
             return (
-              <div key={col.key} className="flex-shrink-0 w-[260px]">
-                {/* Column header */}
-                <div className="flex items-center gap-2 mb-2 py-2 px-3 rounded-lg" style={{ background: col.bg }}>
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: col.color }} />
-                  <span className="text-[11px] font-bold tracking-wide" style={{ color: col.color }}>{col.label}</span>
-                  <span className="text-[10px] font-semibold bg-white rounded-full w-5 h-5 flex items-center justify-center ml-auto" style={{ color: col.color }}>{colTasks.length}</span>
-                  <button
-                    className="text-[14px] font-bold bg-transparent border-none cursor-pointer w-5 h-5 flex items-center justify-center rounded hover:bg-white/60"
-                    style={{ color: col.color }}
-                    onClick={() => setAddingToColumn(col.key)}
-                    title="Agregar tarea"
-                  >+</button>
+              <div key={phaseKey} className="rounded-lg overflow-hidden bg-white border border-gray-100" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
+                {/* Phase header */}
+                <div
+                  className="flex items-center gap-2 py-2.5 px-3 cursor-pointer select-none hover:bg-gray-50"
+                  onClick={() => togglePhase(phaseKey)}
+                >
+                  <span className="text-[11px] text-gray-400 shrink-0">{collapsed ? '\u25B6' : '\u25BC'}</span>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: phInfo.color }} />
+                  <span className="text-[13px] font-bold" style={{ color: phInfo.color }}>{phInfo.label}</span>
+                  <span className="text-[11px] font-semibold text-gray-400">({doneCount}/{totalCount})</span>
+                  {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
                 </div>
 
-                {/* Cards */}
-                <div className="space-y-0">
-                  {colTasks.map(t => renderKanbanCard(t))}
-                </div>
+                {/* Task rows */}
+                {!collapsed && (
+                  <div className="border-t border-gray-50">
+                    {sortedTasks.map((t, idx) => renderTaskRow(t, idx === sortedTasks.length - 1))}
 
-                {/* Add task inline */}
-                {addingToColumn === col.key && (
-                  <div className="mt-1">
-                    <input
-                      className="w-full border border-blue-300 rounded-lg py-2 px-2.5 text-[12px] font-sans outline-none bg-white shadow-sm"
-                      placeholder="Nombre de la tarea..."
-                      autoFocus
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleColumnTaskAdd(col.key, e.target.value); if (e.key === 'Escape') setAddingToColumn(null); }}
-                      onBlur={(e) => { if (e.target.value.trim()) handleColumnTaskAdd(col.key, e.target.value); else setAddingToColumn(null); }}
-                    />
+                    {/* Add task inline */}
+                    {addingToPhase === phaseKey ? (
+                      <div className="py-1.5 px-3 pl-[52px]">
+                        <input
+                          className="w-full border border-blue-300 rounded py-1.5 px-2.5 text-[12px] font-sans outline-none bg-white"
+                          placeholder="Nombre de la tarea..."
+                          autoFocus
+                          onKeyDown={(e) => { if (e.key === 'Enter') handlePhaseTaskAdd(phaseKey, e.target.value); if (e.key === 'Escape') setAddingToPhase(null); }}
+                          onBlur={(e) => { if (e.target.value.trim()) handlePhaseTaskAdd(phaseKey, e.target.value); else setAddingToPhase(null); }}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        className="w-full text-left text-[11px] text-gray-400 py-1.5 px-3 pl-[52px] bg-transparent border-none cursor-pointer font-sans hover:text-blue-500 hover:bg-gray-50"
+                        onClick={() => setAddingToPhase(phaseKey)}
+                      >+ Agregar tarea</button>
+                    )}
                   </div>
                 )}
               </div>
@@ -533,7 +595,7 @@ export default function ClientDetail({ client: c }) {
         {/* Left: Kanban Roadmap */}
         <div>
           <div className="text-sm font-bold mb-3">Roadmap</div>
-          {useNewSystem ? renderKanban() : renderOldRoadmap()}
+          {useNewSystem ? renderRoadmap() : renderOldRoadmap()}
         </div>
 
         {/* Right: Side panels */}
