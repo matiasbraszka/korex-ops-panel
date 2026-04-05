@@ -593,7 +593,7 @@ export default function ClientDetail({ client: c }) {
 
   // ===== FALLBACK: Old step-based roadmap =====
   const renderOldRoadmap = () => {
-    let timelineItems = PROCESS_STEPS.map((s, i) => ({ s, i, cs: c.steps[i], isCustom: false }));
+    let timelineItems = PROCESS_STEPS.map((s, i) => ({ s, i, cs: c.steps[i] || { status: 'pending', startDate: '', endDate: '', responsible: '', notes: '' }, isCustom: false }));
     const customs = c.customSteps || [];
     customs.forEach((cs, ci) => {
       timelineItems.push({ s: { id: 'custom_' + ci, name: cs.name, phase: cs.phase || 'auditoria', days: cs.days || 7, client: false, dependsOn: [] }, i: PROCESS_STEPS.length + ci, cs, isCustom: true, customIdx: ci });
@@ -854,7 +854,7 @@ export default function ClientDetail({ client: c }) {
                       <div className="flex gap-1.5 mt-1.5">
                         <button className="bg-surface2 text-text2 border border-border rounded py-[3px] px-2 cursor-pointer font-sans text-[10px] hover:bg-surface3" onClick={() => addFbComment(fi)}>{'\uD83D\uDCAC'} Comentar</button>
                         {!f.convertedTaskId ? (
-                          <button className="bg-blue-bg text-blue border rounded py-[3px] px-2 cursor-pointer font-sans text-[10px] font-semibold hover:bg-blue hover:text-white" style={{ borderColor: 'rgba(91,124,245,0.2)' }} onClick={() => convertFbToTask(fi)}>{'\u2192'} Crear tarea</button>
+                          <button className="bg-blue-bg text-blue border rounded py-[3px] px-2 cursor-pointer font-sans text-[10px] font-semibold hover:bg-blue hover:text-white" style={{ borderColor: 'rgba(91,124,245,0.2)' }} onClick={() => convertFbItemToTask(fi, 0)}>{'\u2192'} Crear tarea</button>
                         ) : (
                           <span className="text-[10px] text-green">{'\u2713'} Tarea creada</span>
                         )}
