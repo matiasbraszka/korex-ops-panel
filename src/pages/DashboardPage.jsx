@@ -127,17 +127,17 @@ export default function DashboardPage() {
       {/* A. Team x Client table */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-3">Equipo x Cliente</div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[11px]">
+        <div className="overflow-x-auto -mx-3 px-3 max-md:-mx-3 max-md:px-0">
+          <table className="w-full border-collapse text-[11px] max-md:text-[10px]">
             <thead>
               <tr className="bg-gray-50">
-                <th className="py-2 px-2 text-left border border-gray-200 font-semibold text-gray-600 sticky left-0 bg-gray-50 z-10">Miembro</th>
+                <th className="py-2 px-2 text-left border border-gray-200 font-semibold text-gray-600 sticky left-0 bg-gray-50 z-10 max-md:px-1.5 max-md:py-1.5">Miembro</th>
                 {activeClients.map(c => (
-                  <th key={c.id} className="py-2 px-2 text-center border border-gray-200 font-semibold text-gray-600 whitespace-nowrap max-w-[90px] truncate" title={c.name}>
+                  <th key={c.id} className="py-2 px-2 text-center border border-gray-200 font-semibold text-gray-600 whitespace-nowrap max-w-[90px] truncate max-md:px-1 max-md:py-1.5 max-md:text-[9px]" title={c.name}>
                     {c.name.split(' ')[0]}
                   </th>
                 ))}
-                <th className="py-2 px-2 text-center border border-gray-200 font-bold text-gray-800 bg-gray-100">Total</th>
+                <th className="py-2 px-2 text-center border border-gray-200 font-bold text-gray-800 bg-gray-100 max-md:px-1.5">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -182,17 +182,23 @@ export default function DashboardPage() {
             const bn = memberBottlenecks[m.id];
             if (!bn) return null;
             return (
-              <div key={m.id} className="text-[11px] text-gray-600 grid max-md:!flex max-md:flex-col max-md:gap-0.5 max-md:py-1.5 max-md:border-b max-md:border-gray-100" style={{ gridTemplateColumns: '18px 80px 10px 1fr', alignItems: 'center', gap: '6px' }}>
-                <span className="inline-flex items-center gap-1.5">
+              <div key={m.id}>
+                <div className="text-[11px] text-gray-600 hidden md:grid grid-cols-[18px_80px_10px_1fr] items-center gap-1.5">
                   <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
-                  <span className="font-semibold text-gray-800 md:hidden">{m.name}</span>
-                </span>
-                <span className="font-semibold text-gray-800 max-md:hidden" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                <span className="text-gray-400 text-center max-md:hidden">|</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
-                  <span className="text-gray-500 max-md:hidden" style={{ flexShrink: 0 }}>Principal cuello de botella:</span>
-                  <span className="text-red-500 font-medium max-md:text-[10px]" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bn}</span>
-                </span>
+                  <span className="font-semibold text-gray-800 truncate">{m.name}</span>
+                  <span className="text-gray-400 text-center">|</span>
+                  <span className="flex items-center gap-1 min-w-0">
+                    <span className="text-gray-500 shrink-0">Cuello de botella:</span>
+                    <span className="text-red-500 font-medium truncate">{bn}</span>
+                  </span>
+                </div>
+                <div className="md:hidden flex items-center gap-2 py-1.5 border-b border-gray-100 text-[11px] text-gray-600">
+                  <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold text-gray-800">{m.name}</span>
+                    <div className="text-red-500 font-medium text-[10px] truncate">{bn}</div>
+                  </div>
+                </div>
               </div>
             );
           })}

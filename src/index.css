@@ -46,6 +46,13 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Force bottom nav visibility on mobile — Tailwind hidden+max-md:flex can have specificity issues */
+@media (max-width: 767px) {
+  .mobile-bottom-nav {
+    display: flex !important;
+  }
+}
+
 /* Report tables responsive */
 @media (max-width: 767px) {
   .report-table {

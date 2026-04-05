@@ -135,8 +135,7 @@ export default function ClientsPage() {
           <div key={c.id}>
             {prioLabel}
             <div
-              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-[10px] mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
-              style={{ gridTemplateColumns: '36px 1.5fr 110px 60px 120px 90px 28px' }}
+              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-[10px] mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_1.5fr_110px_60px_120px_90px_28px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
               onClick={() => setSelectedId(c.id)}
             >
               <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-[11px] max-md:w-[30px] max-md:h-[30px] max-md:text-[10px]" style={{ background: c.color + '15', color: c.color }}>

@@ -320,6 +320,7 @@ export default function TasksPage() {
               <div className="flex items-center gap-1.5 mb-1">
                 {blocked && <span className="shrink-0 text-[11px]">{'\uD83D\uDD12'}</span>}
                 <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+                {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {phaseInfo && (

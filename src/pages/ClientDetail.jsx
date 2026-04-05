@@ -299,8 +299,7 @@ export default function ClientDetail({ client: c }) {
         <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''}`}>
           {/* Main row - CSS Grid for consistent alignment */}
           <div
-            className={`hover:bg-gray-50 cursor-pointer ${rowBg} max-md:!grid-cols-none max-md:!flex max-md:items-start max-md:gap-2 max-md:py-2.5 max-md:px-3`}
-            style={{ display: 'grid', gridTemplateColumns: '16px 20px 1fr 90px 80px 70px 30px', alignItems: 'center', gap: '4px', padding: '7px 12px' }}
+            className={`hover:bg-gray-50 cursor-pointer ${rowBg} hidden md:grid grid-cols-[16px_20px_1fr_90px_80px_70px_30px] items-center gap-1 py-[7px] px-3`}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           >
             {/* Col 1: Status dot — clickable */}
@@ -493,14 +492,54 @@ export default function ClientDetail({ client: c }) {
             </div>
           </div>
 
+          {/* Mobile task row */}
+          <div
+            className={`md:hidden hover:bg-gray-50 cursor-pointer ${rowBg} flex items-start gap-2 py-2.5 px-3`}
+            onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
+          >
+            <div
+              ref={el => statusRef.current = el}
+              className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
+              style={{ background: statusColor + '15', color: statusColor, border: `1.5px solid ${statusColor}` }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
+            >{statusIcon}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium text-gray-800 leading-tight break-words">
+                {t.title}
+                {t.isClientTask && <span className="ml-1 w-[14px] h-[14px] rounded-full inline-flex items-center justify-center text-[7px] font-bold text-white bg-orange-400 align-middle">C</span>}
+                {hasDesc && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-blue-400 inline-block align-middle" />}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                <span className="text-[10px] font-semibold" style={{ color: tp.color }}>{tp.flag} {tp.label}</span>
+                {est && elapsed > 0 && (
+                  <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E', background: elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5' }}>
+                    {'\u23F1'} {elapsed}d/{est}d
+                  </span>
+                )}
+                {(() => {
+                  const aNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                  const aMembers = aNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
+                  if (aMembers.length === 0) return null;
+                  return (
+                    <div className="flex items-center">
+                      {aMembers.slice(0, 2).map((am, ai) => (
+                        <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0' }}>{am.initials}</span>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+
           {/* Blocked warning - spans full row below */}
           {blocked && blockingNames.length > 0 && (
-            <div className="text-[10px] text-red-500 pl-[52px] pb-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+            <div className="text-[10px] text-red-500 pl-[52px] pb-1 leading-tight max-md:pl-8">Bloqueada por: {blockingNames.join(', ')}</div>
           )}
 
           {/* Expanded detail area */}
           {isExpanded && (
-            <div className="pl-[52px] pr-3 pb-2.5 pt-1 bg-gray-50/50">
+            <div className="pl-[52px] pr-3 pb-2.5 pt-1 bg-gray-50/50 max-md:pl-3 max-md:pr-3">
               {/* Description */}
               <textarea
                 className="w-full border border-gray-200 rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[50px] outline-none bg-white focus:border-blue-400 mb-2"
@@ -777,7 +816,7 @@ export default function ClientDetail({ client: c }) {
       </div>
 
       {/* Main grid */}
-      <div className="grid gap-4 max-md:!grid-cols-1" style={{ gridTemplateColumns: '1fr 320px' }}>
+      <div className="grid gap-4 grid-cols-[1fr_320px] max-md:grid-cols-1">
         {/* Left: Kanban Roadmap */}
         <div>
           <div className="text-sm font-bold mb-3">Roadmap</div>

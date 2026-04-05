@@ -178,7 +178,7 @@ function MainLayout() {
       </div>
 
       {/* Bottom nav — mobile only */}
-      <div className="hidden max-md:flex fixed bottom-0 left-0 right-0 bg-white border-t border-border z-30 justify-around items-center px-1 py-1 safe-bottom">
+      <div className="hidden max-md:flex mobile-bottom-nav fixed bottom-0 left-0 right-0 bg-white border-t border-border z-50 justify-around items-center px-1 py-1 safe-bottom">
         {navItems.map(item => (
           <button
             key={item.id}
@@ -248,12 +248,12 @@ function MainLayout() {
           <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={handleCreateClient}>Crear</button>
         </>}
       >
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Juan" value={ncForm.firstName} onChange={e => setNcForm(f => ({ ...f, firstName: e.target.value }))} autoFocus /></div>
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Apellido <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Garcia" value={ncForm.lastName} onChange={e => setNcForm(f => ({ ...f, lastName: e.target.value }))} /></div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Empresa <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Garcia Store" value={ncForm.company} onChange={e => setNcForm(f => ({ ...f, company: e.target.value }))} /></div>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Telefono</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="+34 612 345 678" value={ncForm.phone} onChange={e => setNcForm(f => ({ ...f, phone: e.target.value }))} /></div>
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Canal de Slack</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="nombre-del-canal" value={ncForm.slackChannel} onChange={e => setNcForm(f => ({ ...f, slackChannel: e.target.value }))} /></div>
         </div>

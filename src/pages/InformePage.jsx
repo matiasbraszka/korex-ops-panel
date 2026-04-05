@@ -186,7 +186,7 @@ export default function InformePage() {
   return (
     <div>
       {/* Two-column layout: Report left, Suggestions right — stacks on mobile */}
-      <div className="grid gap-5 max-md:!grid-cols-1 max-md:gap-3" style={{ gridTemplateColumns: pending.length > 0 ? '1fr 280px' : '1fr' }}>
+      <div className={`grid gap-5 max-md:grid-cols-1 max-md:gap-3 ${pending.length > 0 ? 'grid-cols-[1fr_280px]' : 'grid-cols-1'}`}>
 
         {/* Left column: Report */}
         <div>
