@@ -420,13 +420,13 @@ export default function TasksPage() {
           <div className="py-1.5 px-4 pl-[44px] pb-3 text-xs text-text2 leading-relaxed bg-blue-bg2 border-t border-dashed border-border max-md:px-3 max-md:pl-3">
             <textarea
               className="w-full border border-border rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[60px] outline-none bg-white focus:border-blue mb-2"
-              placeholder="Escribe una descripcion para esta tarea..."
+              placeholder="Escribe una descripción para esta tarea..."
               defaultValue={t.description || ''}
               onBlur={(e) => updateTask(t.id, { description: e.target.value })}
             />
             <div className="flex items-center gap-3 flex-wrap">
               <div className="inline-flex items-center gap-1 text-[11px]">
-                <span className="text-text3">{'\uD83D\uDCC5'} Fecha limite:</span>
+                <span className="text-text3">{'\uD83D\uDCC5'} Fecha límite:</span>
                 <input
                   type="date"
                   className="border border-border rounded py-[2px] px-1.5 text-[11px] font-sans outline-none bg-white focus:border-blue w-[120px]"
@@ -446,10 +446,10 @@ export default function TasksPage() {
                   value={t.estimatedDays || ''}
                   step="0.5"
                   min="0.1"
-                  placeholder="dias"
+                  placeholder="días"
                   onChange={(e) => { const v = parseFloat(e.target.value); updateTask(t.id, { estimatedDays: !isNaN(v) && v > 0 ? v : null }); }}
                 />
-                <span className="text-text3">dias</span>
+                <span className="text-text3">días</span>
               </div>
               <div className="md:hidden flex gap-1.5 w-full mt-1">
                 <button className="py-1 px-2 rounded text-[10px] bg-blue-bg text-blue border-none cursor-pointer font-sans" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}>{'\uD83D\uDD17'} Dependencias</button>

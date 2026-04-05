@@ -216,7 +216,7 @@ export default function DashboardPage() {
                 <th className="py-2 px-3 text-center border border-gray-200 font-semibold text-gray-600">Pendientes</th>
                 <th className="py-2 px-3 text-center border border-gray-200 font-semibold text-gray-600">En progreso</th>
                 <th className="py-2 px-3 text-center border border-gray-200 font-semibold text-gray-600">Completadas (mes)</th>
-                <th className="py-2 px-3 text-center border border-gray-200 font-semibold text-gray-600">Prom. dias/tarea</th>
+                <th className="py-2 px-3 text-center border border-gray-200 font-semibold text-gray-600">Prom. días/tarea</th>
               </tr>
             </thead>
             <tbody>

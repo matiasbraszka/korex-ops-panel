@@ -19,7 +19,7 @@ export default function ClientsPage() {
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
   const visibleClients = clients.filter(c => !isKorexClient(c));
 
-  let preview = 'Sin informe disponible. El agente de operaciones enviara el proximo informe automaticamente.';
+  let preview = 'Sin informe disponible. El agente de operaciones enviará el próximo informe automáticamente.';
   if (stored && stored.text) {
     const lines = stored.text.replace(/<[^>]+>/g, '').split('\n').filter(l => l.trim() && !l.startsWith('#'));
     preview = lines.slice(0, 2).join(' ').substring(0, 200);
@@ -39,7 +39,7 @@ export default function ClientsPage() {
 
   const filterDefs = [
     { key: 'all', label: 'Todos' },
-    { key: 'critical', label: 'Criticos' },
+    { key: 'critical', label: 'Críticos' },
     { key: 'in-progress', label: 'En progreso' },
     { key: 'waiting', label: 'Esp. cliente' },
     { key: 'new', label: 'Nuevos' },
@@ -71,7 +71,7 @@ export default function ClientsPage() {
       >
         <div className="flex items-center gap-2 mb-2">
           <span className="bg-blue text-white text-[9px] font-bold py-0.5 px-2 rounded-[10px] tracking-[0.5px]">INFORME DIARIO</span>
-          <span className="text-xs font-semibold text-text">Ultimo informe de operaciones</span>
+          <span className="text-xs font-semibold text-text">Último informe de operaciones</span>
           {pendingProposals > 0 && (
             <span className="bg-orange text-white text-[9px] font-bold py-0.5 px-2 rounded-[10px]">{pendingProposals} propuestas</span>
           )}
@@ -83,7 +83,7 @@ export default function ClientsPage() {
 
       <KpiRow items={[
         { label: 'Clientes activos', value: t, color: 'var(--color-blue)' },
-        { label: 'Criticos / Urgentes', value: b, color: 'var(--color-red)' },
+        { label: 'Críticos / Urgentes', value: b, color: 'var(--color-red)' },
         { label: 'Ads lanzados', value: l, color: 'var(--color-green)' },
         { label: 'Nuevos', value: n, color: 'var(--color-purple)' },
       ]} />
@@ -169,7 +169,7 @@ export default function ClientsPage() {
               <div className="text-[11px] text-text2 max-md:hidden">{cur ? PHASES[cur.phase]?.label : 'Lanzado'}</div>
               <div className="text-center max-md:hidden">
                 <strong className="text-[15px]">{days}</strong>
-                <div className="text-[9px] text-text3">dias</div>
+                <div className="text-[9px] text-text3">días</div>
               </div>
               <div className="max-md:hidden">
                 <div className="flex items-center gap-2">

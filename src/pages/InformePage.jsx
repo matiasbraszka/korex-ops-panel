@@ -6,6 +6,7 @@ import { sbFetch } from '../utils/supabase';
 export default function InformePage() {
   const { clients, briefing, reportFeedbacks, setReportFeedbacks, taskProposals, setTaskProposals, currentUser, createTask, updateTask, tasks } = useApp();
   const [feedbackText, setFeedbackText] = useState('');
+  const [reportExpanded, setReportExpanded] = useState(true);
 
   const pending = taskProposals.filter(p => p.approval === 'pending');
   const stored = briefing;
@@ -192,19 +193,26 @@ export default function InformePage() {
         <div>
           {stored && stored.text ? (
             <div className="bg-white border border-gray-200 rounded-xl py-6 px-7 max-md:py-4 max-md:px-4 max-md:rounded-lg">
-              <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-gray-100">
+              <div
+                className="flex items-center gap-2.5 pb-3.5 border-b border-gray-100 cursor-pointer select-none"
+                onClick={() => setReportExpanded(prev => !prev)}
+              >
+                <span className={`text-gray-400 text-xs transition-transform duration-200 ${reportExpanded ? '' : '-rotate-90'}`}>{'\u25BC'}</span>
                 <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase">Informe diario</span>
                 <span className="text-sm text-gray-500 font-medium">{formatDate()}</span>
+                {!reportExpanded && <span className="text-[11px] text-gray-400 italic">Click para expandir</span>}
                 <span className="text-[11px] text-gray-400 ml-auto">{stored.source || 'ops-agent'}</span>
               </div>
-              <div dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+              {reportExpanded && (
+                <div className="mt-4" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+              )}
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl py-6 px-7">
               <div className="text-center py-16 text-gray-400">
                 <div className="text-4xl mb-3">{'\uD83D\uDCCB'}</div>
                 <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
-                <div className="text-xs">El agente enviara el proximo informe automaticamente cada dia.</div>
+                <div className="text-xs">El agente enviará el próximo informe automáticamente cada día.</div>
               </div>
             </div>
           )}
@@ -250,7 +258,7 @@ export default function InformePage() {
       {/* Feedback section — below the report */}
       <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5 max-md:py-4 max-md:px-4 max-md:mt-3 max-md:rounded-lg">
         <div className="text-sm font-semibold mb-1 text-gray-800">Feedback sobre el informe</div>
-        <div className="text-[11px] text-gray-400 mb-3">Deja correcciones o contexto adicional. La IA lo usara para mejorar los proximos informes.</div>
+        <div className="text-[11px] text-gray-400 mb-3">Deja correcciones o contexto adicional. La IA lo usará para mejorar los próximos informes.</div>
         <div className="flex gap-2">
           <textarea
             className="flex-1 border border-gray-200 rounded-lg py-2.5 px-3.5 text-xs font-sans resize-y min-h-[60px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"

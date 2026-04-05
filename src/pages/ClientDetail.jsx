@@ -344,7 +344,7 @@ export default function ClientDetail({ client: c }) {
               {t.isClientTask && (
                 <span className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" style={{ flexShrink: 0 }} title="Tarea del cliente">C</span>
               )}
-              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ flexShrink: 0 }} title="Tiene descripcion" />}
+              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ flexShrink: 0 }} title="Tiene descripción" />}
               {t.dueDate && (
                 <span className={`text-[9px] font-medium max-md:hidden ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} style={{ flexShrink: 0, whiteSpace: 'nowrap' }} title={`Vence: ${t.dueDate}`}>
                   {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
@@ -543,7 +543,7 @@ export default function ClientDetail({ client: c }) {
               {/* Description */}
               <textarea
                 className="w-full border border-gray-200 rounded-md py-2 px-2.5 text-xs font-sans resize-y min-h-[50px] outline-none bg-white focus:border-blue-400 mb-2"
-                placeholder="Descripcion de la tarea..."
+                placeholder="Descripción de la tarea..."
                 defaultValue={t.description || ''}
                 onClick={(e) => e.stopPropagation()}
                 onBlur={(e) => updateTask(t.id, { description: e.target.value })}
@@ -792,7 +792,7 @@ export default function ClientDetail({ client: c }) {
                 ) : (
                   <span className="cursor-pointer py-[1px] px-1 rounded-[3px] hover:bg-surface2" onClick={() => setEditingStartDate(true)}>{fmtDate(c.startDate)}</span>
                 )}{' '}
-                {'\u00B7'} Dia {days}
+                {'\u00B7'} Día {days}
               </span>
               <span className="text-xs text-text2 flex items-center gap-1 max-md:hidden">{'\uD83D\uDC64'} {c.pm || '\u2014'}</span>
               {ct > 0 && <span className="text-xs text-blue flex items-center gap-1 max-md:text-[11px]">{'\uD83D\uDDD2'} {ct} tareas</span>}

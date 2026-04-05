@@ -1,24 +1,24 @@
 export const DEFAULT_TASKS_TEMPLATE = [
   { id: 'registro',      name: 'Registro en finanzas',             phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Zil' },
-  { id: 'investigacion', name: 'Investigacion Pre-onboarding',     phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Jose Martin' },
+  { id: 'investigacion', name: 'Investigación Pre-onboarding',     phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Jose Martin' },
   { id: 'carpetas',      name: 'Armado de carpetas Drive',         phase: 'pre-onboarding',  days: 1,   client: false, dependsOn: [],                                        assignee: 'Zil' },
   { id: 'onboarding',    name: 'Onboarding + Config Meta',         phase: 'onboarding',      days: 2,   client: true,  dependsOn: [],                                        assignee: 'Matias' },
   { id: 'estrategia',    name: 'Estrategia, Avatar, Puntos clave', phase: 'primera-entrega', days: 2,   client: false, dependsOn: ['onboarding'],                             assignee: 'Jose Martin' },
   { id: 'guiones-ads',   name: 'Guiones de anuncios',              phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['estrategia'],                             assignee: 'Jose Martin' },
   { id: 'guion-vsl',     name: 'Guion VSL',                        phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['estrategia'],                             assignee: 'Jose Martin' },
   { id: 'landing-texto', name: 'Pre-landing, landing, formulario', phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['estrategia'],                             assignee: 'Jose Martin' },
-  { id: 'revision',      name: 'REVISION DEL CLIENTE',             phase: 'primera-entrega', days: 7,   client: true,  dependsOn: ['guiones-ads', 'guion-vsl', 'landing-texto'], assignee: '' },
+  { id: 'revision',      name: 'REVISIÓN DEL CLIENTE',             phase: 'primera-entrega', days: 7,   client: true,  dependsOn: ['guiones-ads', 'guion-vsl', 'landing-texto'], assignee: '' },
   { id: 'correcciones',  name: 'Correcciones',                     phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['revision'],                               assignee: 'Jose Martin' },
-  { id: 'grabacion',     name: 'GRABACION DEL CLIENTE',            phase: 'primera-entrega', days: 7,   client: true,  dependsOn: ['correcciones'],                           assignee: '' },
-  { id: 'edicion',       name: 'Edicion anuncios y VSL',           phase: 'primera-entrega', days: 4,   client: false, dependsOn: ['grabacion'],                              assignee: 'Matias' },
-  { id: 'diseno',        name: 'Diseno de la landing',             phase: 'primera-entrega', days: 3,   client: false, dependsOn: ['landing-texto', 'revision'],              assignee: 'Jose Zerillos' },
-  { id: 'revision-dis',  name: 'REVISION DISENO',                  phase: 'primera-entrega', days: 3,   client: true,  dependsOn: ['diseno'],                                 assignee: '' },
-  { id: 'codigo',        name: 'Pasar a codigo el funnel',         phase: 'primera-entrega', days: 4,   client: false, dependsOn: ['revision-dis'],                           assignee: 'Marcos' },
-  { id: 'vincular',      name: 'Vincular cuenta y metricas',       phase: 'primera-entrega', days: 3,   client: false, dependsOn: [],                                        assignee: 'David' },
+  { id: 'grabacion',     name: 'GRABACIÓN DEL CLIENTE',            phase: 'primera-entrega', days: 7,   client: true,  dependsOn: ['correcciones'],                           assignee: '' },
+  { id: 'edicion',       name: 'Edición anuncios y VSL',           phase: 'primera-entrega', days: 4,   client: false, dependsOn: ['grabacion'],                              assignee: 'Matias' },
+  { id: 'diseno',        name: 'Diseño de la landing',             phase: 'primera-entrega', days: 3,   client: false, dependsOn: ['landing-texto', 'revision'],              assignee: 'Jose Zerillos' },
+  { id: 'revision-dis',  name: 'REVISIÓN DISEÑO',                  phase: 'primera-entrega', days: 3,   client: true,  dependsOn: ['diseno'],                                 assignee: '' },
+  { id: 'codigo',        name: 'Pasar a código el funnel',         phase: 'primera-entrega', days: 4,   client: false, dependsOn: ['revision-dis'],                           assignee: 'Marcos' },
+  { id: 'vincular',      name: 'Vincular cuenta y métricas',       phase: 'primera-entrega', days: 3,   client: false, dependsOn: [],                                        assignee: 'David' },
   { id: 'cargar-saldo',  name: 'Cargar saldo al networker',        phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['vincular'],                               assignee: 'Zil' },
-  { id: 'reunion',       name: 'REUNION DE PRESENTACION',          phase: 'primera-entrega', days: 1,   client: true,  dependsOn: ['codigo', 'cargar-saldo'],                 assignee: 'Matias' },
+  { id: 'reunion',       name: 'REUNIÓN DE PRESENTACIÓN',          phase: 'primera-entrega', days: 1,   client: true,  dependsOn: ['codigo', 'cargar-saldo'],                 assignee: 'Matias' },
   { id: 'lanzamiento',   name: 'Lanzamiento de Ads',               phase: 'lanzamiento',     days: 1,   client: false, dependsOn: ['reunion'],                                assignee: 'David' },
-  { id: 'auditoria',     name: 'Auditoria y mejora continua',      phase: 'auditoria',       days: 30,  client: false, dependsOn: ['lanzamiento'],                            assignee: 'David' },
+  { id: 'auditoria',     name: 'Auditoría y mejora continua',      phase: 'auditoria',       days: 30,  client: false, dependsOn: ['lanzamiento'],                            assignee: 'David' },
 ];
 
 // Backward compatibility alias
@@ -29,13 +29,13 @@ export const PHASES = {
   'onboarding':      { label: 'Onboarding',       color: '#5B7CF5' },
   'primera-entrega': { label: 'Primera Entrega',  color: '#EAB308' },
   'lanzamiento':     { label: 'Lanzamiento',      color: '#22C55E' },
-  'auditoria':       { label: 'Auditoria',        color: '#06B6D4' },
+  'auditoria':       { label: 'Auditoría',        color: '#06B6D4' },
 };
 
 export const PRIO_CLIENT = {
-  1: { label: 'CRITICO',     color: '#EF4444' },
+  1: { label: 'CRÍTICO',     color: '#EF4444' },
   2: { label: 'URGENTE',     color: '#F97316' },
-  3: { label: 'ATENCION',    color: '#EAB308' },
+  3: { label: 'ATENCIÓN',    color: '#EAB308' },
   4: { label: 'EN PROGRESO', color: '#5B7CF5' },
   5: { label: 'NUEVO',       color: '#8B5CF6' },
 };
@@ -50,7 +50,7 @@ export const TASK_PRIO = {
 export const TASK_STATUS = {
   backlog:       { label: 'BACKLOG',      color: '#9CA3AF', bg: '#F3F4F6',  icon: '\u25CB' },
   'in-progress': { label: 'EN PROGRESO',  color: '#5B7CF5', bg: '#EEF2FF',  icon: '\u25C9' },
-  'en-revision': { label: 'EN REVISION',  color: '#EAB308', bg: '#FEFCE8',  icon: '\u25C8' },
+  'en-revision': { label: 'EN REVISIÓN',  color: '#EAB308', bg: '#FEFCE8',  icon: '\u25C8' },
   done:          { label: 'COMPLETADA',   color: '#22C55E', bg: '#ECFDF5',  icon: '\u2713' },
   blocked:       { label: 'BLOQUEADA',    color: '#EF4444', bg: '#FEF2F2',  icon: '\u2715' },
   retrasadas:    { label: 'RETRASADA',    color: '#EF4444', bg: '#FEF2F2',  icon: '\u2298' },
@@ -62,10 +62,10 @@ export const TEAM = [
   { id: 'josem',     name: 'Jose Martin',          role: 'CMO',              color: '#EAB308', initials: 'JM' },
   { id: 'david',     name: 'David',                role: 'Trafficker',       color: '#F97316', initials: 'DV' },
   { id: 'marcos',    name: 'Marcos',               role: 'CTO',             color: '#22C55E', initials: 'MC' },
-  { id: 'zil',       name: 'Zil',                  role: 'Coordinacion',    color: '#8B5CF6', initials: 'ZL' },
+  { id: 'zil',       name: 'Zil',                  role: 'Coordinación',    color: '#8B5CF6', initials: 'ZL' },
   { id: 'matias',    name: 'Matias',               role: 'COO',             color: '#5B7CF5', initials: 'MB' },
   { id: 'cris',      name: 'Cristian',             role: 'CEO',             color: '#06B6D4', initials: 'CF' },
-  { id: 'zerillos',  name: 'Jose Zerillos',        role: 'Diseno landings', color: '#EC4899', initials: 'JZ' },
+  { id: 'zerillos',  name: 'Jose Zerillos',        role: 'Diseño landings', color: '#EC4899', initials: 'JZ' },
   { id: 'jordi',     name: 'Jordi',                role: 'Project Manager', color: '#14B8A6', initials: 'JD' },
   { id: 'christian', name: 'Christian Uscanga',     role: 'Programador',     color: '#A855F7', initials: 'CU' },
 ];
@@ -76,7 +76,7 @@ export const USERS = {
   josem:    { pass: 'korex2026', name: 'Jose Martin',        role: 'CMO',          initials: 'JM', color: '#EAB308' },
   david:    { pass: 'korex2026', name: 'David',              role: 'Trafficker',   initials: 'DV', color: '#F97316' },
   marcos:   { pass: 'korex2026', name: 'Marcos',             role: 'CTO',          initials: 'MC', color: '#22C55E' },
-  zil:      { pass: 'korex2026', name: 'Zil',               role: 'Coordinacion', initials: 'ZL', color: '#8B5CF6' },
+  zil:      { pass: 'korex2026', name: 'Zil',               role: 'Coordinación', initials: 'ZL', color: '#8B5CF6' },
 };
 
 export const STATUS = {
@@ -130,7 +130,7 @@ export const CLIENT_ADS_DATA = {
     metaAds: [
       { id: 'act_1164206578568839', name: 'Racha crypto', currency: 'EUR', spent: '\u20AC1,175', status: 'activa' }
     ],
-    metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'EUR', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Sin gasto en 7 dias — revisar estado de campanas' }
+    metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'EUR', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Sin gasto en 7 días — revisar estado de campañas' }
   },
   'Pablo Valladolid': {
     metaAds: [
@@ -142,13 +142,13 @@ export const CLIENT_ADS_DATA = {
     metaAds: [
       { id: 'act_1570641757365906', name: 'Janeyling - Korex', currency: 'USD', spent: '$0', status: 'activa' }
     ],
-    metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'USD', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Pre-lanzamiento — cuenta sin campanas activas' }
+    metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'USD', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Pre-lanzamiento — cuenta sin campañas activas' }
   },
   'Kate Baltodano': {
     metaAds: [
       { id: 'act_1409141003912013', name: 'Kate - FARMASI', currency: 'USD', spent: '$199', status: 'activa' }
     ],
-    metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'USD', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Sin gasto en 7 dias — esperando grabacion del cliente' }
+    metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'USD', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Sin gasto en 7 días — esperando grabación del cliente' }
   },
   'Gabi Espino': {
     metaAds: [

@@ -31,10 +31,10 @@ function LoginPage() {
           <div className="text-[52px] font-black tracking-[-3px] leading-none text-text">
             m<span className="text-blue">k</span>
           </div>
-          <p className="text-[10px] text-text3 tracking-[4px] uppercase mt-1.5">Metodo Korex</p>
+          <p className="text-[10px] text-text3 tracking-[4px] uppercase mt-1.5">Método Korex</p>
         </div>
         <form onSubmit={handleSubmit}>
-          <label className="block text-[13px] font-semibold text-text mb-2">Correo electronico</label>
+          <label className="block text-[13px] font-semibold text-text mb-2">Correo electrónico</label>
           <input
             type="text"
             name="user"
@@ -42,7 +42,7 @@ function LoginPage() {
             placeholder="usuario@email.com"
             autoFocus
           />
-          <label className="block text-[13px] font-semibold text-text mb-2">Contrasena</label>
+          <label className="block text-[13px] font-semibold text-text mb-2">Contraseña</label>
           <input
             type="password"
             name="pass"
@@ -53,19 +53,19 @@ function LoginPage() {
             type="submit"
             className="w-full py-3.5 bg-blue text-white border-none rounded-[10px] text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark"
           >
-            Iniciar sesion
+            Iniciar sesión
           </button>
           <div className="login-error text-red text-xs text-center mt-3.5 hidden">
-            Usuario o contrasena incorrectos
+            Usuario o contraseña incorrectos
           </div>
         </form>
         <div className="text-center mt-6">
           <a href="#" className="text-blue text-[13px] no-underline">
-            {'\u00BF'}Olvidaste tu contrasena?
+            {'\u00BF'}Olvidaste tu contraseña?
           </a>
         </div>
         <div className="text-center mt-10 text-xs text-text3">
-          Politica de Privacidad &middot; Terminos y Condiciones
+          Política de Privacidad &middot; Términos y Condiciones
         </div>
       </div>
     </div>
@@ -97,9 +97,9 @@ function MainLayout() {
   const titles = {
     dashboard: ['Dashboard', 'KPIs de entrega de servicio'],
     clients: ['Clientes', 'Vista general de todos los proyectos'],
-    publicidad: ['Publicidad', 'Metricas de Meta Ads por cliente'],
-    tasks: ['Tareas', 'Gestion de tareas por cliente'],
-    informe: ['Informe Diario', briefing?.date ? 'Ultimo: ' + briefing.date : 'Sin informe aun'],
+    publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
+    tasks: ['Tareas', 'Gestión de tareas por cliente'],
+    informe: ['Informe Diario', briefing?.date ? 'Último: ' + briefing.date : 'Sin informe aún'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
   };
 
@@ -134,7 +134,7 @@ function MainLayout() {
           <div className="text-[22px] font-black text-text tracking-[-1px]">
             m<span className="text-blue">k</span>
           </div>
-          <div className="text-[9px] tracking-[3px] uppercase text-text3">METODO KOREX</div>
+          <div className="text-[9px] tracking-[3px] uppercase text-text3">MÉTODO KOREX</div>
         </div>
         <nav className="p-3 flex-1">
           <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Menu</div>
@@ -170,7 +170,7 @@ function MainLayout() {
           <button
             onClick={doLogout}
             className="ml-auto bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red"
-            title="Cerrar sesion"
+            title="Cerrar sesión"
           >
             {'\u2192'}
           </button>
@@ -199,7 +199,7 @@ function MainLayout() {
         <button
           onClick={doLogout}
           className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
-          title="Cerrar sesion"
+          title="Cerrar sesión"
         >
           <span className="text-[18px] leading-none">{'\u2192'}</span>
           <span className="text-[9px] font-medium leading-none">Salir</span>
@@ -254,7 +254,7 @@ function MainLayout() {
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Empresa <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Garcia Store" value={ncForm.company} onChange={e => setNcForm(f => ({ ...f, company: e.target.value }))} /></div>
         <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Telefono</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="+34 612 345 678" value={ncForm.phone} onChange={e => setNcForm(f => ({ ...f, phone: e.target.value }))} /></div>
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Teléfono</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="+34 612 345 678" value={ncForm.phone} onChange={e => setNcForm(f => ({ ...f, phone: e.target.value }))} /></div>
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Canal de Slack</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="nombre-del-canal" value={ncForm.slackChannel} onChange={e => setNcForm(f => ({ ...f, slackChannel: e.target.value }))} /></div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="URL de la foto (opcional)" value={ncForm.avatarUrl} onChange={e => setNcForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>

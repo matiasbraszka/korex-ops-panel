@@ -21,7 +21,7 @@ export default function PublicidadPage() {
       <KpiRow items={[
         { label: 'Cuentas con Ads', value: clientsWithAds.length, color: 'var(--color-blue)' },
         { label: 'Publicidad activa', value: activeClients.length, color: 'var(--color-green)' },
-        { label: 'Inversion 7d', value: '$' + totalSpend7d.toFixed(0), color: 'var(--color-purple)' },
+        { label: 'Inversión 7d', value: '$' + totalSpend7d.toFixed(0), color: 'var(--color-purple)' },
         { label: 'Leads 7d', value: totalLeads7d, color: 'var(--color-orange)' },
       ]} />
 
@@ -42,7 +42,7 @@ export default function PublicidadPage() {
                   </div>
                   {m.conversionEvent && <div className="mb-2"><span className="text-[9px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">Evento: {m.conversionEvent}</span></div>}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inversion 7d</div></div>
+                    <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inversión 7d</div></div>
                     <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight text-blue">{m.totalConversions7d || 0}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">Leads 7d</div></div>
                     <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight" style={{ color: m.avgCpl7d > 15 ? 'var(--color-red)' : 'var(--color-green)' }}>{cs}{m.avgCpl7d?.toFixed(2) || '\u2014'}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">CPL prom.</div></div>
                   </div>
@@ -62,12 +62,12 @@ export default function PublicidadPage() {
       {/* Report table */}
       <div className="bg-white border border-border rounded-[10px] p-[18px] mb-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-1">Informe de publicidad</div>
-        <div className="text-[11px] text-text3 mb-3">Metricas de los ultimos 7 dias. Solo campanas con eventos de conversion de nuestro funnel.</div>
+        <div className="text-[11px] text-text3 mb-3">Métricas de los últimos 7 días. Solo campañas con eventos de conversión de nuestro funnel.</div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr>
-                {['Cliente', 'Estado', 'Evento principal', 'Inversion 7d', 'Leads 7d', 'CPL prom.', 'Inv. ayer', 'Leads ayer'].map(h => (
+                {['Cliente', 'Estado', 'Evento principal', 'Inversión 7d', 'Leads 7d', 'CPL prom.', 'Inv. Ayer', 'Leads ayer'].map(h => (
                   <th key={h} className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">{h}</th>
                 ))}
               </tr>
