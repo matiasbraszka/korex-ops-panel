@@ -68,11 +68,8 @@ export default function TasksPage() {
 
   const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
   const groups = Object.values(grouped).filter(g => g.tasks.length > 0 || addingTaskTo === g.client.id);
-  groups.sort((a, b) => {
-    const am = a.tasks.length ? Math.min(...a.tasks.map(t => prioSort[t.priority] || 2)) : 9;
-    const bm = b.tasks.length ? Math.min(...b.tasks.map(t => prioSort[t.priority] || 2)) : 9;
-    return am - bm;
-  });
+  // Sort client groups by CLIENT priority (critico=1 first), NOT by task priority
+  groups.sort((a, b) => (a.client.priority || 4) - (b.client.priority || 4));
 
   const inlineTaskKeydown = (e, clientId) => {
     if (e.key === 'Enter' && e.target.value.trim()) {

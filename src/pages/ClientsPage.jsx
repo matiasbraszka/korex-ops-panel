@@ -44,13 +44,13 @@ export default function ClientsPage() {
   let cls = [...clients].sort((a, bb) => (a.priority || 4) - (bb.priority || 4));
   if (filter === 'critical') cls = cls.filter(c => (c.priority || 4) <= 2);
   if (filter === 'in-progress') cls = cls.filter(c => {
-    const rt = tasks.filter(tk => tk.clientId === c.id && tk.isRoadmapTask);
-    if (rt.length > 0) return rt.some(tk => tk.status === 'in-progress');
+    const ct = tasks.filter(tk => tk.clientId === c.id);
+    if (ct.length > 0) return ct.some(tk => tk.status === 'in-progress');
     return c.steps.some(s => s.status === 'in-progress');
   });
   if (filter === 'waiting') cls = cls.filter(c => {
-    const rt = tasks.filter(tk => tk.clientId === c.id && tk.isRoadmapTask);
-    if (rt.length > 0) return rt.some(tk => tk.isClientTask && tk.status !== 'done');
+    const ct = tasks.filter(tk => tk.clientId === c.id);
+    if (ct.length > 0) return ct.some(tk => tk.isClientTask && tk.status !== 'done' && tk.status !== 'backlog');
     return c.steps.some(s => s.status === 'waiting-client');
   });
   if (filter === 'new') cls = cls.filter(c => (c.priority || 4) === 5);

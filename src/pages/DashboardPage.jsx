@@ -184,24 +184,63 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Overdue alerts */}
-        <div className="bg-white border border-border rounded-[14px] py-5 px-6">
-          <div className="text-sm font-bold mb-3.5 flex items-center gap-2">Alertas de retraso <span className="text-[11px] font-normal text-text3">({allOverdue.length})</span></div>
-          {allOverdue.length === 0 ? (
-            <div className="text-center text-text3 text-xs py-5">Sin retrasos detectados</div>
-          ) : (
-            <div className="max-h-[250px] overflow-y-auto">
-              {allOverdue.slice(0, 15).map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 py-[6px] border-b border-border last:border-b-0 text-xs">
-                  <span className="text-[10px]">{item.type === 'step' ? '\u26A0\uFE0F' : '\uD83D\uDDD2'}</span>
-                  <span className="font-semibold text-text min-w-[80px]">{item.clientName}</span>
-                  <span className="text-text2 flex-1 truncate">{item.stepName}</span>
-                  <span className="font-semibold text-orange shrink-0">{item.days}d / {item.est}d</span>
-                  <span className="text-[9px] font-bold text-red shrink-0">+{item.days - item.est}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Cuellos de botella - tareas que frenan el progreso */}
+        <div className="bg-white border border-red rounded-[14px] py-5 px-6 border-opacity-20" style={{ borderColor: 'rgba(239,68,68,0.25)' }}>
+          <div className="text-sm font-bold mb-1 flex items-center gap-2 text-red">{'\u26A1'} Cuellos de botella</div>
+          <div className="text-[11px] text-text3 mb-3">Tareas que estan frenando el progreso de la entrega de servicio</div>
+          {(() => {
+            // Find tasks that are blocking other tasks (bottlenecks)
+            const bottlenecks = [];
+            tasks.forEach(t => {
+              if (t.status === 'done') return;
+              // How many tasks does this one block?
+              const blocking = tasks.filter(other =>
+                other.clientId === t.clientId &&
+                other.dependsOn &&
+                other.dependsOn.includes(t.id) &&
+                other.status !== 'done'
+              );
+              if (blocking.length > 0) {
+                const client = clients.find(x => x.id === t.clientId);
+                const d = t.startedDate ? daysAgo(t.startedDate) : (t.dueDate && t.dueDate < today() ? daysAgo(t.dueDate) : 0);
+                bottlenecks.push({ task: t, client, blockingCount: blocking.length, days: d, blockedTasks: blocking.map(b => b.title) });
+              }
+            });
+            // Also add overdue tasks (in-progress for too long)
+            allOverdue.forEach(item => {
+              if (!bottlenecks.find(b => b.task?.title === item.stepName)) {
+                bottlenecks.push({ task: null, client: clients.find(x => x.name === item.clientName), blockingCount: 0, days: item.days - item.est, stepName: item.stepName, isOverdue: true });
+              }
+            });
+            // Sort by impact (blocking count) then by days
+            bottlenecks.sort((a, b) => (b.blockingCount - a.blockingCount) || (b.days - a.days));
+
+            if (bottlenecks.length === 0) return <div className="text-center text-text3 text-xs py-5">Sin cuellos de botella detectados</div>;
+
+            return (
+              <div className="max-h-[300px] overflow-y-auto">
+                {bottlenecks.slice(0, 15).map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-2 py-2 border-b border-border last:border-b-0 text-xs">
+                    <span className="text-red text-sm mt-0.5">{item.blockingCount > 0 ? '\uD83D\uDD12' : '\u26A0\uFE0F'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-text">{item.client?.name || '?'}</span>
+                        <span className="text-text2 truncate">{item.task?.title || item.stepName}</span>
+                      </div>
+                      {item.blockingCount > 0 && (
+                        <div className="text-[10px] text-red mt-0.5">Bloquea {item.blockingCount} tarea{item.blockingCount > 1 ? 's' : ''}: {item.blockedTasks.join(', ')}</div>
+                      )}
+                      {item.isOverdue && (
+                        <div className="text-[10px] text-orange mt-0.5">Retraso de +{item.days}d sobre el estimado</div>
+                      )}
+                      {item.task?.assignee && <div className="text-[10px] text-text3 mt-0.5">Asignada a: {item.task.assignee}</div>}
+                    </div>
+                    {item.days > 0 && <span className="text-[10px] font-bold text-red shrink-0 mt-0.5">+{item.days}d</span>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Phase timing per client table */}
