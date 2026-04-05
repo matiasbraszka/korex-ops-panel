@@ -40,14 +40,18 @@ export function hasRoadmapTasks(clientId, tasks) {
  * Progress: % of completed roadmap tasks (or steps for backward compat).
  */
 export function progress(c, tasks) {
-  if (tasks && hasRoadmapTasks(c.id, tasks)) {
-    const rt = getRoadmapTasks(c.id, tasks);
-    if (rt.length === 0) return 0;
-    return Math.round(rt.filter(t => t.status === 'done').length / rt.length * 100);
+  // Use ALL client tasks if any exist
+  if (tasks) {
+    const clientTasks = tasks.filter(t => t.clientId === c.id);
+    if (clientTasks.length > 0) {
+      return Math.round(clientTasks.filter(t => t.status === 'done').length / clientTasks.length * 100);
+    }
   }
   // Fallback to steps
   if (!c.steps || c.steps.length === 0) return 0;
-  return Math.round(c.steps.filter(s => s.status === 'completed').length / c.steps.length * 100);
+  const validSteps = c.steps.filter(s => s && s.status);
+  if (validSteps.length === 0) return 0;
+  return Math.round(validSteps.filter(s => s.status === 'completed').length / validSteps.length * 100);
 }
 
 /**

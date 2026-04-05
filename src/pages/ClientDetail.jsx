@@ -13,6 +13,7 @@ export default function ClientDetail({ client: c }) {
   const [editModal, setEditModal] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState(false);
   const [clientFbModal, setClientFbModal] = useState(false);
+  const [fbSourceFilter, setFbSourceFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
   const [openTranscription, setOpenTranscription] = useState({});
@@ -77,37 +78,88 @@ export default function ClientDetail({ client: c }) {
     setFbForm({ date: today(), sentiment: 'neutral', text: '', fathomLink: '', keypoints: '', transcription: '' });
   };
 
-  // Client feedback modal
-  const [cfbForm, setCfbForm] = useState({ text: '', source: 'whatsapp', type: 'request', sourceDetail: '' });
+  // Client feedback modal (new model)
+  const SOURCE_COLORS = { cliente: '#5B7CF5', usuario: '#8B5CF6', mentor: '#22C55E', equipo: '#F97316' };
+  const SOURCE_LABELS = { cliente: 'Cliente', usuario: 'Usuario', mentor: 'Mentor', equipo: 'Equipo' };
+  const PRIO_OPTIONS = [
+    { value: 'urgent', label: 'Urgente', color: '#EF4444' },
+    { value: 'high', label: 'Alta', color: '#F97316' },
+    { value: 'normal', label: 'Normal', color: '#6B7280' },
+    { value: 'low', label: 'Baja', color: '#9CA3AF' },
+  ];
+  const [cfbForm, setCfbForm] = useState({ source: 'cliente', callUrl: '', priority: 'normal', currentItem: '', items: [] });
   const saveClientFeedback = () => {
-    if (!cfbForm.text.trim()) return;
-    const newFbs = [...(c.clientFeedbacks || []), { text: cfbForm.text.trim(), source: cfbForm.source, type: cfbForm.type, sourceDetail: cfbForm.sourceDetail, date: today(), comments: [], convertedTaskId: null }];
-    const newHistory = [...c.history, { text: 'Feedback: ' + cfbForm.text.substring(0, 50), date: today(), color: '#F97316' }];
+    const allItems = [...cfbForm.items];
+    if (cfbForm.currentItem.trim()) allItems.push(cfbForm.currentItem.trim());
+    if (!allItems.length) return;
+    const newFb = {
+      id: 'fb_' + Date.now(),
+      clientId: c.id,
+      source: cfbForm.source,
+      callUrl: cfbForm.callUrl.trim(),
+      date: today(),
+      priority: cfbForm.priority,
+      items: allItems.map(text => ({ text, convertedTaskId: null })),
+      comments: [],
+    };
+    const newFbs = [...(c.clientFeedbacks || []), newFb];
+    const newHistory = [...c.history, { text: 'Feedback (' + SOURCE_LABELS[cfbForm.source] + '): ' + allItems[0].substring(0, 50), date: today(), color: SOURCE_COLORS[cfbForm.source] }];
     updateClient(c.id, { clientFeedbacks: newFbs, history: newHistory });
     setClientFbModal(false);
-    setCfbForm({ text: '', source: 'whatsapp', type: 'request', sourceDetail: '' });
+    setCfbForm({ source: 'cliente', callUrl: '', priority: 'normal', currentItem: '', items: [] });
+  };
+
+  // Normalize old feedback format to new format for display
+  const normalizeFeedback = (f, idx) => {
+    if (f.items) return f; // already new format
+    return {
+      id: f.id || 'fb_legacy_' + idx,
+      clientId: c.id,
+      source: f.source === 'whatsapp' || f.source === 'call' || f.source === 'slack' || f.source === 'email' ? 'cliente' : (f.source || 'cliente'),
+      callUrl: f.fathomLink || '',
+      date: f.date || today(),
+      priority: 'normal',
+      items: [{ text: f.text, convertedTaskId: f.convertedTaskId || null }],
+      comments: f.comments || [],
+    };
   };
 
   const addFbComment = (fbIdx) => {
     const text = prompt('Tu comentario sobre este feedback:');
     if (!text?.trim()) return;
-    const newFbs = [...(c.clientFeedbacks || [])];
-    const fb = { ...newFbs[fbIdx] };
-    fb.comments = [...(fb.comments || []), { user: currentUser?.name || 'Usuario', text: text.trim(), date: today() }];
-    newFbs[fbIdx] = fb;
+    const newFbs = (c.clientFeedbacks || []).map((f, i) => i === fbIdx ? { ...normalizeFeedback(f, i), comments: [...(f.comments || []), { user: currentUser?.name || 'Usuario', text: text.trim(), date: today() }] } : f);
     updateClient(c.id, { clientFeedbacks: newFbs });
   };
 
-  const convertFbToTask = (fbIdx) => {
-    const fb = c.clientFeedbacks[fbIdx];
-    let desc = fb.text;
-    if (fb.comments?.length) desc += '\n\nComentarios del equipo:\n' + fb.comments.map(cm => cm.user + ': ' + cm.text).join('\n');
-    const t = createTask(fb.text.substring(0, 80), c.id, '', 'normal', 'backlog', '', null);
-    updateTask(t.id, { description: desc });
+  const convertFbItemToTask = (fbIdx, itemIdx) => {
+    const rawFb = c.clientFeedbacks[fbIdx];
+    const fb = normalizeFeedback(rawFb, fbIdx);
+    const item = fb.items[itemIdx];
+    if (!item || item.convertedTaskId) return;
+    const t = createTask(item.text.substring(0, 80), c.id, '', 'normal', 'backlog', '', null);
+    updateTask(t.id, { description: item.text });
     const newFbs = [...(c.clientFeedbacks || [])];
-    newFbs[fbIdx] = { ...newFbs[fbIdx], convertedTaskId: t.id };
-    const newHistory = [...c.history, { text: 'Feedback convertido a tarea: ' + fb.text.substring(0, 40), date: today(), color: '#5B7CF5' }];
+    const normalized = normalizeFeedback(newFbs[fbIdx], fbIdx);
+    const newItems = [...normalized.items];
+    newItems[itemIdx] = { ...newItems[itemIdx], convertedTaskId: t.id };
+    newFbs[fbIdx] = { ...normalized, items: newItems };
+    const newHistory = [...c.history, { text: 'Feedback convertido a tarea: ' + item.text.substring(0, 40), date: today(), color: '#5B7CF5' }];
     updateClient(c.id, { clientFeedbacks: newFbs, history: newHistory });
+  };
+
+  const deleteFbItem = (fbIdx, itemIdx) => {
+    const rawFb = c.clientFeedbacks[fbIdx];
+    const fb = normalizeFeedback(rawFb, fbIdx);
+    const newItems = fb.items.filter((_, i) => i !== itemIdx);
+    if (newItems.length === 0) {
+      // Remove entire feedback if no items left
+      const newFbs = (c.clientFeedbacks || []).filter((_, i) => i !== fbIdx);
+      updateClient(c.id, { clientFeedbacks: newFbs });
+    } else {
+      const newFbs = [...(c.clientFeedbacks || [])];
+      newFbs[fbIdx] = { ...fb, items: newItems };
+      updateClient(c.id, { clientFeedbacks: newFbs });
+    }
   };
 
   const handleInlineStartDate = (val) => {
@@ -598,8 +650,11 @@ export default function ClientDetail({ client: c }) {
   (c.feedback || []).forEach(f => {
     if (f.keypoints) f.keypoints.split('\n').filter(k => k.trim()).forEach(k => brainPoints.push({ text: k.trim(), source: 'Llamada ' + fmtDate(f.date), type: 'call' }));
   });
-  (c.clientFeedbacks || []).forEach(f => {
-    brainPoints.push({ text: f.text, source: (f.source || 'otro') + ' ' + fmtDate(f.date || ''), type: f.type || 'request' });
+  (c.clientFeedbacks || []).forEach((f, fi) => {
+    const nf = normalizeFeedback(f, fi);
+    nf.items.forEach(item => {
+      brainPoints.push({ text: item.text, source: (SOURCE_LABELS[nf.source] || nf.source) + ' ' + fmtDate(nf.date || ''), type: 'request' });
+    });
   });
   if (bn) brainPoints.push({ text: bn, source: 'Auto-detectado', type: 'bottleneck' });
   if (c.notes) brainPoints.push({ text: c.notes, source: 'Notas generales', type: 'note' });
