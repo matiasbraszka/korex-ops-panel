@@ -483,8 +483,8 @@ export function AppProvider({ children }) {
       } else if (loaded) {
         setSyncStatus('ok');
       }
-      // Run migration for clients with steps but no roadmap tasks
-      migrateAllClients();
+      // Migration disabled — run manually if needed
+      // migrateAllClients();
     });
 
     // 3. Poll for external changes every 30s
