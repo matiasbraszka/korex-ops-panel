@@ -10,38 +10,45 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
     if (!anchorRef?.current || !open) return;
     const rect = anchorRef.current.getBoundingClientRect();
 
-    // Vertical: prefer below, fall back to above
-    const spaceBelow = window.innerHeight - rect.bottom;
+    // Use actual menu height if available, otherwise estimate from items
+    const menuEl = menuRef.current;
+    const actualHeight = menuEl ? menuEl.scrollHeight : Math.min(items.length * 40, maxHeight);
+    const menuHeight = Math.min(actualHeight, maxHeight);
+
+    // Always prefer below the anchor
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+
     let top;
-    if (spaceBelow >= maxHeight) {
+    if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
+      // Place below
       top = rect.bottom + 4;
     } else {
-      top = Math.max(8, rect.top - maxHeight - 4);
+      // Place above only if significantly more space
+      top = rect.top - menuHeight - 4;
     }
+    top = Math.max(8, top);
 
-    // Horizontal: align to anchor left, but keep within viewport
+    // Horizontal: align left edge to anchor, keep within viewport
     let left = rect.left;
-    // If menu would overflow right edge, align to right edge of anchor
     if (left + minWidth > window.innerWidth - 12) {
       left = rect.right - minWidth;
     }
-    // Ensure not off-screen left
     left = Math.max(8, left);
 
     setPos({ top, left });
-  }, [anchorRef, open, maxHeight, minWidth]);
+  }, [anchorRef, open, maxHeight, minWidth, items.length]);
 
   useEffect(() => {
     if (open) {
       setReady(false);
-      // Double rAF: first to ensure DOM is painted, second to enable backdrop
+      // Initial position, then refine after paint
       updatePosition();
-      const id1 = requestAnimationFrame(() => {
-        updatePosition(); // recalc after DOM paint
-        const id2 = requestAnimationFrame(() => setReady(true));
-        return () => cancelAnimationFrame(id2);
+      const id = requestAnimationFrame(() => {
+        updatePosition();
+        requestAnimationFrame(() => setReady(true));
       });
-      return () => cancelAnimationFrame(id1);
+      return () => cancelAnimationFrame(id);
     } else {
       setReady(false);
     }
@@ -101,7 +108,7 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
           return (
             <div
               key={i}
-              className="py-2.5 px-3.5 text-[13px] cursor-pointer flex items-center gap-2.5 whitespace-nowrap hover:bg-blue-bg hover:text-blue active:bg-blue-bg transition-colors"
+              className="py-2 px-3 text-[13px] cursor-pointer flex items-center gap-2 whitespace-nowrap hover:bg-blue-bg hover:text-blue active:bg-blue-bg transition-colors"
               onClick={(e) => { e.stopPropagation(); item.onClick?.(); if (!keepOpen) onClose(); }}
               onMouseDown={(e) => e.stopPropagation()}
               style={item.style}
