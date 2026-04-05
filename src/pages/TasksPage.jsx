@@ -391,10 +391,12 @@ export default function TasksPage() {
       )}
 
       {groups.map(g => {
-        g.tasks.sort((a, b) => {
+        const sortedTasks = [...g.tasks].sort((a, b) => {
           if (a.status === 'done' && b.status !== 'done') return 1;
           if (b.status === 'done' && a.status !== 'done') return -1;
-          return (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2);
+          const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
+          const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
+          return pa - pb;
         });
         const collapsed = collapsedGroups[g.client.id];
         const taskCount = g.tasks.filter(t => t.status !== 'done').length;
@@ -411,7 +413,7 @@ export default function TasksPage() {
             </div>
             {!collapsed && (
               <div>
-                {g.tasks.map(t => renderTaskRow(t))}
+                {sortedTasks.map(t => renderTaskRow(t))}
 
                 {/* Inline new task */}
                 {addingTaskTo === g.client.id && (
