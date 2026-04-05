@@ -1,143 +1,14 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { TASK_STATUS } from '../utils/constants';
-import { getBottleneck, progress, fmtDate, today } from '../utils/helpers';
+import { fmtDate, today } from '../utils/helpers';
 import { sbFetch } from '../utils/supabase';
 
 export default function InformePage() {
-  const { clients, tasks, briefing, setBriefing, reportFeedbacks, setReportFeedbacks, taskProposals, setTaskProposals, currentUser, createTask, updateTask } = useApp();
+  const { clients, briefing, reportFeedbacks, setReportFeedbacks, taskProposals, setTaskProposals, currentUser, createTask, updateTask, tasks } = useApp();
   const [feedbackText, setFeedbackText] = useState('');
-  const [reportStatus, setReportStatus] = useState(null); // 'generating' | 'success' | 'error'
 
   const pending = taskProposals.filter(p => p.approval === 'pending');
-  const processed = taskProposals.filter(p => p.approval !== 'pending');
   const stored = briefing;
-
-  const generateOpsReport = async () => {
-    setReportStatus('generating');
-    const d = today();
-    let report = `# Informe de Operaciones \u2014 ${new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}\n\n`;
-
-    const totalClients = clients.length;
-    const blocked = clients.filter(c => {
-      const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
-      if (rt.length > 0) return rt.some(t => t.status === 'blocked');
-      return c.steps.some(s => s.status === 'blocked');
-    }).length;
-    const waiting = clients.filter(c => {
-      const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
-      if (rt.length > 0) return rt.some(t => t.isClientTask && t.status !== 'done');
-      return c.steps.some(s => s.status === 'waiting-client');
-    }).length;
-    const launched = clients.filter(c => {
-      const lt = tasks.find(t => t.clientId === c.id && t.isRoadmapTask && t.templateId === 'lanzamiento');
-      if (lt) return lt.status === 'done';
-      return c.steps[17] && c.steps[17].status === 'completed';
-    }).length;
-    const urgentTasks = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
-    const blockedTasks = tasks.filter(t => t.status === 'blocked' || t.status === 'retrasadas').length;
-
-    report += `## Resumen general\n`;
-    report += `- **${totalClients}** clientes activos, **${launched}** con ads lanzados\n`;
-    report += `- **${blocked}** clientes bloqueados, **${waiting}** esperando cliente\n`;
-    report += `- **${urgentTasks}** tareas urgentes, **${blockedTasks}** tareas bloqueadas/retrasadas\n\n`;
-
-    const critical = clients.filter(c => (c.priority || 4) <= 2);
-    if (critical.length) {
-      report += `## Clientes criticos y urgentes\n`;
-      critical.forEach(c => {
-        const bn = getBottleneck(c, tasks);
-        const pct = progress(c, tasks);
-        report += `- **${c.name}** (${c.company}) \u2014 ${pct}% \u2014 ${bn || 'Sin bloqueo'}\n`;
-      });
-      report += '\n';
-    }
-
-    const blockedClients = clients.filter(c => {
-      const rt = tasks.filter(t => t.clientId === c.id && t.isRoadmapTask);
-      if (rt.length > 0) return rt.some(t => t.status === 'blocked');
-      return c.steps.some(s => s.status === 'blocked');
-    });
-    if (blockedClients.length) {
-      report += `## Clientes bloqueados\n`;
-      blockedClients.forEach(c => {
-        const bn = getBottleneck(c, tasks);
-        report += `- **${c.name}**: ${bn}\n`;
-      });
-      report += '\n';
-    }
-
-    const adsActive = clients.filter(c => c.metaMetrics && c.metaMetrics.adsActive);
-    if (adsActive.length) {
-      report += `## Publicidad activa\n`;
-      report += `| Cliente | Inversion 7d | Leads 7d | CPL | Ayer |\n`;
-      report += `|---------|-------------|----------|-----|------|\n`;
-      adsActive.forEach(c => {
-        const m = c.metaMetrics;
-        const cs = m.currency === 'EUR' ? '\u20AC' : m.currency === 'MXN' ? 'MX$' : '$';
-        report += `| ${c.name} | ${cs}${m.totalSpend7d?.toFixed(2)} | ${m.totalConversions7d} | ${cs}${m.avgCpl7d?.toFixed(2)} | ${cs}${m.spendYesterday?.toFixed(2)} / ${m.conversionsYesterday} leads |\n`;
-      });
-      report += '\n';
-    }
-
-    const recentTasks = tasks.filter(t => t.status !== 'done').sort((a, b) => {
-      const ps = { urgent: 0, high: 1, normal: 2, low: 3 };
-      return (ps[a.priority] || 2) - (ps[b.priority] || 2);
-    }).slice(0, 15);
-    if (recentTasks.length) {
-      report += `## Tareas pendientes (top 15)\n`;
-      recentTasks.forEach(t => {
-        const c = clients.find(x => x.id === t.clientId);
-        const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
-        report += `- [${ts.label}] **${c ? c.name : '?'}**: ${t.title}${t.assignee ? ' (' + t.assignee + ')' : ''}\n`;
-      });
-      report += '\n';
-    }
-
-    report += `---\n*Generado automaticamente desde el panel de operaciones.*`;
-
-    const newBriefing = { id: 'latest', date: d, text: report, source: 'panel-manual' };
-    try {
-      const ok = await sbFetch('briefings', {
-        method: 'POST',
-        headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-        body: JSON.stringify(newBriefing)
-      });
-      if (ok) {
-        console.log('[InformePage] Informe guardado en Supabase correctamente', { date: d });
-        setBriefing(newBriefing);
-        setReportStatus('success');
-        setTimeout(() => setReportStatus(null), 4000);
-      } else {
-        console.error('[InformePage] Error al guardar informe: sbFetch retorno falsy');
-        setReportStatus('error');
-        setTimeout(() => setReportStatus(null), 6000);
-      }
-    } catch (err) {
-      console.error('[InformePage] Excepcion al guardar informe:', err);
-      setReportStatus('error');
-      setTimeout(() => setReportStatus(null), 6000);
-    }
-  };
-
-  const submitReportFeedback = async () => {
-    if (!feedbackText.trim()) return;
-    const fb = {
-      id: 'fb_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
-      briefing_date: briefing?.date || today(),
-      feedback: feedbackText.trim(),
-      created_by: currentUser?.name || 'Usuario'
-    };
-    const ok = await sbFetch('report_feedback', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-      body: JSON.stringify(fb)
-    });
-    if (ok) {
-      setReportFeedbacks(prev => [...prev, fb]);
-      setFeedbackText('');
-    }
-  };
 
   const approveProposal = async (id) => {
     const p = taskProposals.find(x => x.id === id);
@@ -168,85 +39,170 @@ export default function InformePage() {
     await sbFetch('task_proposals?id=eq.' + id, { method: 'PATCH', body: JSON.stringify({ approval: 'rejected' }) });
   };
 
-  const renderMarkdown = (text) => {
-    let html = text;
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/^- (.+)$/gm, '\u2022 $1');
-    html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--color-border);margin:12px 0;">');
-    html = html.replace(/\|(.+)\|/g, (match) => {
-      const cells = match.split('|').filter(c => c.trim());
-      if (cells.every(c => c.trim().match(/^-+$/))) return '';
-      return '<tr>' + cells.map(c => '<td>' + c.trim() + '</td>').join('') + '</tr>';
+  const submitReportFeedback = async () => {
+    if (!feedbackText.trim()) return;
+    const fb = {
+      id: 'fb_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+      briefing_date: briefing?.date || today(),
+      feedback: feedbackText.trim(),
+      created_by: currentUser?.name || 'Usuario'
+    };
+    const ok = await sbFetch('report_feedback', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+      body: JSON.stringify(fb)
     });
+    if (ok) {
+      setReportFeedbacks(prev => [...prev, fb]);
+      setFeedbackText('');
+    }
+  };
+
+  // Robust markdown renderer
+  const renderMarkdown = (text) => {
+    if (!text) return '';
+    const lines = text.split('\n');
+    let html = '';
+    let inTable = false;
+    let tableHeaderDone = false;
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Table row detection
+      const isTableRow = /^\|(.+)\|$/.test(line.trim());
+      const isSeparator = /^\|[\s\-:|]+\|$/.test(line.trim());
+
+      if (isTableRow && !isSeparator) {
+        if (!inTable) {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += '<table class="report-table"><thead>';
+          inTable = true;
+          tableHeaderDone = false;
+        }
+        const cells = line.split('|').filter(c => c !== '');
+        const cellTag = !tableHeaderDone ? 'th' : 'td';
+        if (tableHeaderDone && !html.includes('<tbody>')) html += '<tbody>';
+        html += '<tr>' + cells.map(c => `<${cellTag}>${formatInline(c.trim())}</${cellTag}>`).join('') + '</tr>';
+        continue;
+      }
+
+      if (isSeparator && inTable) {
+        tableHeaderDone = true;
+        html += '</thead>';
+        continue;
+      }
+
+      if (inTable && !isTableRow && !isSeparator) {
+        html += '</tbody></table>';
+        inTable = false;
+        tableHeaderDone = false;
+      }
+
+      // Horizontal rule
+      if (/^---+$/.test(line.trim())) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += '<hr class="my-3 border-t border-gray-200">';
+        continue;
+      }
+
+      // Headers
+      if (/^### (.+)$/.test(line)) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += '<h3 class="text-[13px] font-bold mt-4 mb-1.5 text-gray-800">' + formatInline(line.replace(/^### /, '')) + '</h3>';
+        continue;
+      }
+      if (/^## (.+)$/.test(line)) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += '<h2 class="text-[15px] font-bold mt-5 mb-2 text-blue-600">' + formatInline(line.replace(/^## /, '')) + '</h2>';
+        continue;
+      }
+      if (/^# (.+)$/.test(line)) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += '<h1 class="text-lg font-bold mt-5 mb-2 text-gray-900">' + formatInline(line.replace(/^# /, '')) + '</h1>';
+        continue;
+      }
+
+      // Bullet points (- or *)
+      if (/^\s*[-*] (.+)$/.test(line)) {
+        const match = line.match(/^\s*[-*] (.+)$/);
+        if (!inList) { html += '<ul class="list-disc pl-5 my-1 space-y-0.5">'; inList = true; }
+        html += '<li class="text-[13px] leading-relaxed text-gray-700">' + formatInline(match[1]) + '</li>';
+        continue;
+      }
+
+      // Numbered lists
+      if (/^\s*\d+\.\s+(.+)$/.test(line)) {
+        const match = line.match(/^\s*\d+\.\s+(.+)$/);
+        if (inList) { html += '</ul>'; inList = false; }
+        html += '<div class="text-[13px] leading-relaxed text-gray-700 pl-2 my-0.5">' + formatInline(line) + '</div>';
+        continue;
+      }
+
+      // Close list if we get a non-list line
+      if (inList) { html += '</ul>'; inList = false; }
+
+      // Empty line
+      if (line.trim() === '') {
+        html += '<div class="h-2"></div>';
+        continue;
+      }
+
+      // Regular paragraph
+      html += '<p class="text-[13px] leading-relaxed text-gray-700 my-0.5">' + formatInline(line) + '</p>';
+    }
+
+    if (inList) html += '</ul>';
+    if (inTable) html += '</tbody></table>';
+
     return html;
   };
 
-  const renderProposals = (proposals, isPending) => (
-    <div className="bg-white border border-border rounded-[14px] py-5 px-6 mb-5">
-      <div className="text-sm font-semibold mb-1">{isPending ? '\u26A1 Propuestas de cambios en tareas' : 'Propuestas procesadas'}</div>
-      <div className="text-[11px] text-text3 mb-3.5">{isPending ? 'El agente de operaciones propone estos cambios. Aprueba o rechaza cada uno.' : 'Historial de propuestas ya procesadas.'}</div>
-      {proposals.map(p => {
-        const client = clients.find(c => c.id === p.client_id);
-        const clientName = client ? client.name : (p.client_id || '\u2014');
-        const typeLabel = p.type === 'create' ? 'CREAR TAREA' : p.type === 'complete' ? 'COMPLETAR TAREA' : 'ACTUALIZAR TAREA';
-        const typeBorder = p.type === 'create' ? 'var(--color-green)' : p.type === 'complete' ? 'var(--color-purple)' : 'var(--color-blue)';
-        const typeColor = p.type === 'create' ? 'var(--color-green)' : p.type === 'complete' ? 'var(--color-purple)' : 'var(--color-blue)';
-        const statusClass = p.approval === 'approved' ? 'opacity-50 bg-green-bg' : p.approval === 'rejected' ? 'opacity-40 bg-surface2 line-through' : '';
+  // Inline formatting: bold, italic, emoji-safe
+  const formatInline = (text) => {
+    if (!text) return '';
+    let s = text;
+    // Escape HTML but preserve our generated tags
+    s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Bold: **text** or *text* (Slack style bold)
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Slack bold: *text* (only when surrounded by spaces or start/end)
+    s = s.replace(/(^|\s)\*([^*\n]+?)\*(\s|$|[.,;:!?])/g, '$1<strong>$2</strong>$3');
+    // Italic: _text_
+    s = s.replace(/(^|\s)_([^_\n]+?)_(\s|$|[.,;:!?])/g, '$1<em>$2</em>$3');
+    // Inline code: `text`
+    s = s.replace(/`([^`]+?)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-xs text-gray-800 font-mono">$1</code>');
+    return s;
+  };
 
-        return (
-          <div key={p.id} className={`border border-border rounded-[10px] py-3 px-4 mb-2 transition-all ${statusClass}`} style={{ borderLeftWidth: 3, borderLeftColor: typeBorder }}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.5px] mb-1" style={{ color: typeColor }}>{typeLabel}</div>
-            <div className="text-[13px] font-semibold mb-0.5">{p.title || '\u2014'}</div>
-            <div className="text-[11px] text-text2 mb-0.5">
-              Cliente: <strong>{clientName}</strong>
-              {p.assignee && <> {'\u00B7'} Asignar a: <strong>{p.assignee}</strong></>}
-              {p.priority && <> {'\u00B7'} Prioridad: {p.priority}</>}
-              {p.status && p.type === 'update' && <> {'\u00B7'} Estado: {p.status}</>}
-            </div>
-            {p.reason && <div className="text-[11px] text-text3 italic mb-2">&ldquo;{p.reason}&rdquo;</div>}
-            {isPending ? (
-              <div className="flex gap-1.5">
-                <button className="py-[5px] px-3.5 rounded-md border-none text-[11px] font-medium cursor-pointer font-sans bg-green text-white hover:opacity-90" onClick={() => approveProposal(p.id)}>Aprobar</button>
-                <button className="py-[5px] px-3.5 rounded-md text-[11px] font-medium cursor-pointer font-sans bg-transparent text-red border hover:bg-red-bg" style={{ borderColor: 'rgba(239,68,68,0.27)' }} onClick={() => rejectProposal(p.id)}>Rechazar</button>
-              </div>
-            ) : (
-              <div className="text-[10px] text-text3">{p.approval === 'approved' ? '\u2713 Aprobada' : '\u2715 Rechazada'}</div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+  const formatDate = () => {
+    if (!stored?.date) return '';
+    try {
+      return new Date(stored.date + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+    } catch { return stored.date; }
+  };
 
   return (
     <div>
-      {/* Generate button */}
-      <div className="mb-4 flex gap-2.5 items-center">
-        <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 disabled:opacity-50" onClick={generateOpsReport} disabled={reportStatus === 'generating'}>{reportStatus === 'generating' ? 'Generando...' : 'Generar informe ahora'}</button>
-        {reportStatus === 'success' && <span className="text-[11px] text-green font-semibold py-1 px-2.5 bg-green-50 rounded-md">{'\u2713'} Informe generado y guardado</span>}
-        {reportStatus === 'error' && <span className="text-[11px] text-red font-semibold py-1 px-2.5 bg-red-50 rounded-md">{'\u2715'} Error al guardar</span>}
-      </div>
+      {/* Two-column layout: Report left, Suggestions right */}
+      <div className="grid gap-5" style={{ gridTemplateColumns: pending.length > 0 ? '1fr 280px' : '1fr' }}>
 
-      {/* Two-column layout: Report left, Proposals right */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: pending.length > 0 ? '1fr 320px' : '1fr' }}>
-        {/* Left: Full report */}
+        {/* Left column: Report */}
         <div>
           {stored && stored.text ? (
-            <div className="bg-white border border-border rounded-[14px] py-7 px-8 mb-5">
-              <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-border">
-                <span className="bg-blue text-white text-[10px] font-bold py-[3px] px-2.5 rounded-[10px] tracking-[0.5px]">INFORME DIARIO</span>
-                <span className="text-xs text-text3">{stored.date || '\u2014'}</span>
-                <span className="text-[11px] text-text3 ml-auto">{stored.source || 'ops-agent'}</span>
+            <div className="bg-white border border-gray-200 rounded-xl py-6 px-7">
+              <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-gray-100">
+                <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase">Informe diario</span>
+                <span className="text-sm text-gray-500 font-medium">{formatDate()}</span>
+                <span className="text-[11px] text-gray-400 ml-auto">{stored.source || 'ops-agent'}</span>
               </div>
-              <div className="text-[13px] leading-[1.8] text-text whitespace-pre-wrap [&_h1]:text-lg [&_h1]:font-bold [&_h1]:my-4 [&_h1]:mb-2 [&_h2]:text-[15px] [&_h2]:font-bold [&_h2]:text-blue [&_h2]:my-4 [&_h2]:mb-2 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:my-4 [&_h3]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_table]:text-xs [&_th]:bg-surface2 [&_th]:font-semibold [&_th]:text-left [&_th]:py-1.5 [&_th]:px-2.5 [&_th]:border [&_th]:border-border [&_td]:py-1.5 [&_td]:px-2.5 [&_td]:border [&_td]:border-border" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+              <div dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
             </div>
           ) : (
-            <div className="bg-white border border-border rounded-[14px] py-7 px-8 mb-5">
-              <div className="text-center py-[60px] text-text3">
-                <div className="text-[40px] mb-3">{'\uD83D\uDCCB'}</div>
+            <div className="bg-white border border-gray-200 rounded-xl py-6 px-7">
+              <div className="text-center py-16 text-gray-400">
+                <div className="text-4xl mb-3">{'\uD83D\uDCCB'}</div>
                 <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
                 <div className="text-xs">El agente enviara el proximo informe automaticamente cada dia.</div>
               </div>
@@ -254,25 +210,34 @@ export default function InformePage() {
           )}
         </div>
 
-        {/* Right: Proposals (only if there are pending ones) */}
+        {/* Right column: Suggestions (only if pending) */}
         {pending.length > 0 && (
-          <div className="sticky top-[76px] self-start">
-            <div className="text-xs font-bold text-text2 mb-2 flex items-center gap-1.5">{'\u26A1'} Sugerencias ({pending.length})</div>
-            <div className="max-h-[calc(100vh-120px)] overflow-y-auto space-y-2">
+          <div className="sticky top-[76px] self-start max-h-[calc(100vh-100px)] overflow-y-auto">
+            <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+              {'\u26A1'} Sugerencias ({pending.length})
+            </div>
+            <div className="space-y-1.5">
               {pending.map(p => {
                 const client = clients.find(c => c.id === p.client_id);
                 const clientName = client ? client.name : '\u2014';
                 const typeLabel = p.type === 'create' ? 'CREAR' : p.type === 'complete' ? 'COMPLETAR' : 'ACTUALIZAR';
-                const typeColor = p.type === 'create' ? '#22C55E' : p.type === 'complete' ? '#8B5CF6' : '#5B7CF5';
+                const typeColor = p.type === 'create' ? '#22C55E' : p.type === 'complete' ? '#8B5CF6' : '#3B82F6';
+                const typeBg = p.type === 'create' ? '#F0FDF4' : p.type === 'complete' ? '#FAF5FF' : '#EFF6FF';
+                const phaseLabel = p.phase ? p.phase.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null;
+
                 return (
-                  <div key={p.id} className="bg-white border border-border rounded-lg p-3" style={{ borderLeftWidth: 3, borderLeftColor: typeColor }}>
-                    <div className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: typeColor }}>{typeLabel}</div>
-                    <div className="text-[12px] font-semibold mb-1 leading-tight">{p.title || '\u2014'}</div>
-                    <div className="text-[10px] text-text3 mb-1">{clientName}{p.assignee ? ' \u2192 ' + p.assignee : ''}</div>
-                    {p.reason && <div className="text-[10px] text-text3 italic mb-2 leading-snug">{p.reason}</div>}
-                    <div className="flex gap-1.5">
-                      <button className="py-1 px-2.5 rounded text-[10px] font-medium cursor-pointer font-sans bg-green text-white border-none hover:opacity-90" onClick={() => approveProposal(p.id)}>{'\u2713'} Aprobar</button>
-                      <button className="py-1 px-2.5 rounded text-[10px] font-medium cursor-pointer font-sans bg-transparent text-text3 border border-border hover:text-red hover:border-red" onClick={() => rejectProposal(p.id)}>{'\u2715'}</button>
+                  <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-2.5 py-2" style={{ borderLeftWidth: 3, borderLeftColor: typeColor }}>
+                    <div className="text-[9px] font-bold uppercase tracking-wider leading-none mb-0.5" style={{ color: typeColor }}>{typeLabel}</div>
+                    <div className="text-[12px] font-semibold leading-tight mb-1 text-gray-800">{p.title || '\u2014'}</div>
+                    <div className="flex items-center gap-1 flex-wrap mb-1">
+                      <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-[1px] rounded">{clientName}</span>
+                      {p.assignee && <span className="text-[9px] text-gray-400">{'\u2192'} {p.assignee}</span>}
+                      {phaseLabel && <span className="text-[9px] px-1.5 py-[1px] rounded" style={{ background: typeBg, color: typeColor }}>{phaseLabel}</span>}
+                    </div>
+                    {p.reason && <div className="text-[10px] italic text-gray-400 leading-snug mb-1.5 line-clamp-2">{p.reason}</div>}
+                    <div className="flex gap-1">
+                      <button className="py-0.5 px-2 rounded text-[10px] font-semibold cursor-pointer font-sans bg-green-500 text-white border-none hover:bg-green-600" onClick={() => approveProposal(p.id)}>{'\u2713'}</button>
+                      <button className="py-0.5 px-2 rounded text-[10px] font-semibold cursor-pointer font-sans bg-transparent text-gray-400 border border-gray-200 hover:text-red-500 hover:border-red-300" onClick={() => rejectProposal(p.id)}>{'\u2715'}</button>
                     </div>
                   </div>
                 );
@@ -282,33 +247,33 @@ export default function InformePage() {
         )}
       </div>
 
-      {/* Feedback section */}
-      <div className="bg-white border border-border rounded-[14px] py-5 px-6 mb-5">
-        <div className="text-sm font-semibold mb-1">Feedback sobre el informe</div>
-        <div className="text-[11px] text-text3 mb-3">Deja correcciones o contexto adicional. La IA lo usara para mejorar los proximos informes.</div>
+      {/* Feedback section — below the report */}
+      <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5">
+        <div className="text-sm font-semibold mb-1 text-gray-800">Feedback sobre el informe</div>
+        <div className="text-[11px] text-gray-400 mb-3">Deja correcciones o contexto adicional. La IA lo usara para mejorar los proximos informes.</div>
         <div className="flex gap-2">
           <textarea
-            className="flex-1 border border-border rounded-[10px] py-2.5 px-3.5 text-xs font-sans resize-y min-h-[60px] outline-none focus:border-blue"
+            className="flex-1 border border-gray-200 rounded-lg py-2.5 px-3.5 text-xs font-sans resize-y min-h-[60px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
             placeholder="Ej: 'Matias ya reviso lo de Sergio, esta listo' o 'La tarea de Victor ya se resolvio ayer'"
             value={feedbackText}
             onChange={(e) => setFeedbackText(e.target.value)}
           />
-          <button className="self-end py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-dark" onClick={submitReportFeedback}>Enviar</button>
+          <button className="self-end py-2 px-4 rounded-lg border-none bg-blue-600 text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-700" onClick={submitReportFeedback}>Enviar</button>
         </div>
         {reportFeedbacks.length > 0 && (
           <div className="mt-3.5">
             {[...reportFeedbacks].reverse().slice(0, 10).map((f, i) => (
-              <div key={i} className="flex gap-2.5 py-2 border-t border-border/40 text-xs">
-                <div><div className="font-semibold text-text text-[11px]">{f.created_by || 'Usuario'}</div><div className="text-text3 text-[11px] whitespace-nowrap">{fmtDate(f.created_at?.substring(0, 10) || f.briefing_date)}</div></div>
-                <div className="text-text2 leading-relaxed">{f.feedback}</div>
+              <div key={i} className="flex gap-2.5 py-2 border-t border-gray-100 text-xs">
+                <div>
+                  <div className="font-semibold text-gray-700 text-[11px]">{f.created_by || 'Usuario'}</div>
+                  <div className="text-gray-400 text-[11px] whitespace-nowrap">{fmtDate(f.created_at?.substring(0, 10) || f.briefing_date)}</div>
+                </div>
+                <div className="text-gray-600 leading-relaxed">{f.feedback}</div>
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {/* Processed proposals */}
-      {processed.length > 0 && renderProposals(processed, false)}
     </div>
   );
 }

@@ -946,18 +946,64 @@ export default function ClientDetail({ client: c }) {
       <Modal
         open={clientFbModal}
         onClose={() => setClientFbModal(false)}
-        title="Nuevo feedback del cliente"
+        title={'Feedback — ' + c.name}
         footer={<>
           <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setClientFbModal(false)}>Cancelar</button>
           <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={saveClientFeedback}>Guardar</button>
         </>}
       >
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Feedback</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" placeholder="Ej: El cliente pidio que la landing tenga mas testimonios" value={cfbForm.text} onChange={e => setCfbForm(f => ({ ...f, text: e.target.value }))} /></div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Fuente</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={cfbForm.source} onChange={e => setCfbForm(f => ({ ...f, source: e.target.value }))}><option value="whatsapp">WhatsApp</option><option value="call">Llamada</option><option value="slack">Slack</option><option value="email">Email</option><option value="other">Otro</option></select></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Tipo</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={cfbForm.type} onChange={e => setCfbForm(f => ({ ...f, type: e.target.value }))}><option value="request">Pedido</option><option value="complaint">Queja</option><option value="suggestion">Sugerencia</option><option value="problem">Problema</option></select></div>
+        {/* Source pills */}
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-1.5">Fuente</label>
+          <div className="flex gap-1.5">
+            {Object.entries(SOURCE_COLORS).map(([key, color]) => (
+              <button key={key} className={`py-1.5 px-3 rounded-full text-xs font-medium cursor-pointer font-sans border ${cfbForm.source === key ? 'text-white border-transparent' : 'bg-white border-border text-text2'}`}
+                style={cfbForm.source === key ? { background: color } : {}}
+                onClick={() => setCfbForm(f => ({ ...f, source: key }))}
+              >{SOURCE_LABELS[key]}</button>
+            ))}
+          </div>
         </div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Detalle de la fuente</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="Ej: Lo comento en la llamada del 01/04" value={cfbForm.sourceDetail} onChange={e => setCfbForm(f => ({ ...f, sourceDetail: e.target.value }))} /></div>
+
+        {/* Call URL */}
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-1">URL de la llamada (opcional)</label>
+          <input type="text" className="w-full bg-bg border border-border rounded-md py-2 px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="https://fathom.video/..." value={cfbForm.callUrl} onChange={e => setCfbForm(f => ({ ...f, callUrl: e.target.value }))} />
+        </div>
+
+        {/* Priority */}
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-1">Prioridad</label>
+          <select className="w-full bg-bg border border-border rounded-md py-2 px-3 text-text text-[13px] font-sans outline-none" value={cfbForm.priority} onChange={e => setCfbForm(f => ({ ...f, priority: e.target.value }))}>
+            {PRIO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+
+        {/* Feedback items */}
+        <div className="mb-2">
+          <label className="block text-xs font-semibold text-text2 mb-1">Feedback</label>
+          <textarea
+            className="w-full bg-bg border border-border rounded-md py-2 px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[70px] leading-relaxed"
+            placeholder="Escribe el feedback..."
+            value={cfbForm.currentItem}
+            onChange={e => setCfbForm(f => ({ ...f, currentItem: e.target.value }))}
+          />
+          {cfbForm.items.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {cfbForm.items.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 bg-surface2 rounded-md py-1.5 px-2.5 text-xs text-text">
+                  <span className="flex-1">{item}</span>
+                  <button className="bg-transparent border-none text-text3 cursor-pointer hover:text-red text-sm" onClick={() => setCfbForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>&#x2715;</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button className="mt-1.5 text-[11px] text-blue bg-transparent border-none cursor-pointer font-sans hover:underline" onClick={() => {
+            if (cfbForm.currentItem.trim()) {
+              setCfbForm(f => ({ ...f, items: [...f.items, f.currentItem.trim()], currentItem: '' }));
+            }
+          }}>+ Agregar otro item</button>
+        </div>
       </Modal>
 
       {/* Add Phase Modal */}
