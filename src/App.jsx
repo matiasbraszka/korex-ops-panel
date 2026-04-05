@@ -233,7 +233,7 @@ function MainLayout() {
         </div>
 
         {/* Content area */}
-        <div className="p-6 px-7 max-md:p-3 max-md:px-3">
+        <div className="p-6 px-7 max-md:p-3 max-md:px-3 overflow-x-hidden">
           {pages[view] || <div className="text-text3 text-center py-20">Vista no encontrada</div>}
         </div>
       </div>

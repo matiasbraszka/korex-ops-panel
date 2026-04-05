@@ -123,11 +123,11 @@ export default function DashboardPage() {
   bottlenecks.sort((a, b) => (b.blockingCount - a.blockingCount) || (b.days - a.days));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 overflow-x-hidden">
       {/* A. Team x Client table */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-3">Equipo x Cliente</div>
-        <div className="overflow-x-auto -mx-3 px-3 max-md:-mx-3 max-md:px-0">
+        <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[11px] max-md:text-[10px]">
             <thead>
               <tr className="bg-gray-50">

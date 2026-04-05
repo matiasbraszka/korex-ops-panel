@@ -186,74 +186,68 @@ export default function InformePage() {
 
   return (
     <div>
-      {/* Two-column layout: Report left, Suggestions right — stacks on mobile */}
-      <div className={`grid gap-5 max-md:grid-cols-1 max-md:gap-3 ${pending.length > 0 ? 'grid-cols-[1fr_280px]' : 'grid-cols-1'}`}>
+      {/* Suggestions carousel — horizontal scroll on top */}
+      {pending.length > 0 && (
+        <div className="mb-4">
+          <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+            {'\u26A1'} Sugerencias del agente ({pending.length})
+          </div>
+          <div className="flex gap-2.5 overflow-x-auto pb-2" style={{ scrollSnapType: 'x mandatory' }}>
+            {pending.map(p => {
+              const client = clients.find(c => c.id === p.client_id);
+              const clientName = client ? client.name : '\u2014';
+              const typeLabel = p.type === 'create' ? 'CREAR' : p.type === 'complete' ? 'COMPLETAR' : 'ACTUALIZAR';
+              const typeColor = p.type === 'create' ? '#22C55E' : p.type === 'complete' ? '#8B5CF6' : '#3B82F6';
+              const typeBg = p.type === 'create' ? '#F0FDF4' : p.type === 'complete' ? '#FAF5FF' : '#EFF6FF';
+              const phaseLabel = p.phase ? p.phase.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null;
 
-        {/* Left column: Report */}
-        <div>
-          {stored && stored.text ? (
-            <div className="bg-white border border-gray-200 rounded-xl py-6 px-7 max-md:py-4 max-md:px-4 max-md:rounded-lg">
-              <div
-                className="flex items-center gap-2.5 pb-3.5 border-b border-gray-100 cursor-pointer select-none"
-                onClick={() => setReportExpanded(prev => !prev)}
-              >
-                <span className={`text-gray-400 text-xs transition-transform duration-200 ${reportExpanded ? '' : '-rotate-90'}`}>{'\u25BC'}</span>
-                <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase">Informe diario</span>
-                <span className="text-sm text-gray-500 font-medium">{formatDate()}</span>
-                {!reportExpanded && <span className="text-[11px] text-gray-400 italic">Click para expandir</span>}
-                <span className="text-[11px] text-gray-400 ml-auto">{stored.source || 'ops-agent'}</span>
-              </div>
-              {reportExpanded && (
-                <div className="mt-4" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
-              )}
-            </div>
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-xl py-6 px-7">
-              <div className="text-center py-16 text-gray-400">
-                <div className="text-4xl mb-3">{'\uD83D\uDCCB'}</div>
-                <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
-                <div className="text-xs">El agente enviará el próximo informe automáticamente cada día.</div>
-              </div>
-            </div>
+              return (
+                <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 shrink-0 w-[260px] max-md:w-[240px]" style={{ borderLeftWidth: 3, borderLeftColor: typeColor, scrollSnapAlign: 'start' }}>
+                  <div className="text-[9px] font-bold uppercase tracking-wider leading-none mb-0.5" style={{ color: typeColor }}>{typeLabel}</div>
+                  <div className="text-[12px] font-semibold leading-tight mb-1 text-gray-800 line-clamp-2">{p.title || '\u2014'}</div>
+                  <div className="flex items-center gap-1 flex-wrap mb-1">
+                    <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-[1px] rounded">{clientName}</span>
+                    {p.assignee && <span className="text-[9px] text-gray-400">{'\u2192'} {p.assignee}</span>}
+                    {phaseLabel && <span className="text-[9px] px-1.5 py-[1px] rounded" style={{ background: typeBg, color: typeColor }}>{phaseLabel}</span>}
+                  </div>
+                  {p.reason && <div className="text-[10px] italic text-gray-400 leading-snug mb-1.5 line-clamp-2">{p.reason}</div>}
+                  <div className="flex gap-1">
+                    <button className="py-1 px-2.5 rounded text-[10px] font-semibold cursor-pointer font-sans bg-green-500 text-white border-none hover:bg-green-600" onClick={() => approveProposal(p.id)}>{'\u2713'} Aprobar</button>
+                    <button className="py-1 px-2.5 rounded text-[10px] font-semibold cursor-pointer font-sans bg-transparent text-gray-400 border border-gray-200 hover:text-red-500 hover:border-red-300" onClick={() => rejectProposal(p.id)}>{'\u2715'}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Report — collapsible */}
+      {stored && stored.text ? (
+        <div className="bg-white border border-gray-200 rounded-xl py-6 px-7 max-md:py-4 max-md:px-4 max-md:rounded-lg">
+          <div
+            className="flex items-center gap-2.5 pb-3.5 border-b border-gray-100 cursor-pointer select-none"
+            onClick={() => setReportExpanded(prev => !prev)}
+          >
+            <span className={`text-gray-400 text-xs transition-transform duration-200 ${reportExpanded ? '' : '-rotate-90'}`}>{'\u25BC'}</span>
+            <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase">Informe diario</span>
+            <span className="text-sm text-gray-500 font-medium max-md:text-[12px]">{formatDate()}</span>
+            {!reportExpanded && <span className="text-[11px] text-gray-400 italic max-md:hidden">Click para expandir</span>}
+            <span className="text-[11px] text-gray-400 ml-auto">{stored.source || 'ops-agent'}</span>
+          </div>
+          {reportExpanded && (
+            <div className="mt-4" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
           )}
         </div>
-
-        {/* Right column: Suggestions (only if pending) */}
-        {pending.length > 0 && (
-          <div className="sticky top-[76px] self-start max-h-[calc(100vh-100px)] overflow-y-auto max-md:static max-md:max-h-none">
-            <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
-              {'\u26A1'} Sugerencias ({pending.length})
-            </div>
-            <div className="space-y-1.5">
-              {pending.map(p => {
-                const client = clients.find(c => c.id === p.client_id);
-                const clientName = client ? client.name : '\u2014';
-                const typeLabel = p.type === 'create' ? 'CREAR' : p.type === 'complete' ? 'COMPLETAR' : 'ACTUALIZAR';
-                const typeColor = p.type === 'create' ? '#22C55E' : p.type === 'complete' ? '#8B5CF6' : '#3B82F6';
-                const typeBg = p.type === 'create' ? '#F0FDF4' : p.type === 'complete' ? '#FAF5FF' : '#EFF6FF';
-                const phaseLabel = p.phase ? p.phase.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null;
-
-                return (
-                  <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-2.5 py-2" style={{ borderLeftWidth: 3, borderLeftColor: typeColor }}>
-                    <div className="text-[9px] font-bold uppercase tracking-wider leading-none mb-0.5" style={{ color: typeColor }}>{typeLabel}</div>
-                    <div className="text-[12px] font-semibold leading-tight mb-1 text-gray-800">{p.title || '\u2014'}</div>
-                    <div className="flex items-center gap-1 flex-wrap mb-1">
-                      <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-[1px] rounded">{clientName}</span>
-                      {p.assignee && <span className="text-[9px] text-gray-400">{'\u2192'} {p.assignee}</span>}
-                      {phaseLabel && <span className="text-[9px] px-1.5 py-[1px] rounded" style={{ background: typeBg, color: typeColor }}>{phaseLabel}</span>}
-                    </div>
-                    {p.reason && <div className="text-[10px] italic text-gray-400 leading-snug mb-1.5 line-clamp-2">{p.reason}</div>}
-                    <div className="flex gap-1">
-                      <button className="py-0.5 px-2 rounded text-[10px] font-semibold cursor-pointer font-sans bg-green-500 text-white border-none hover:bg-green-600" onClick={() => approveProposal(p.id)}>{'\u2713'}</button>
-                      <button className="py-0.5 px-2 rounded text-[10px] font-semibold cursor-pointer font-sans bg-transparent text-gray-400 border border-gray-200 hover:text-red-500 hover:border-red-300" onClick={() => rejectProposal(p.id)}>{'\u2715'}</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl py-6 px-7 max-md:py-4 max-md:px-4">
+          <div className="text-center py-16 text-gray-400">
+            <div className="text-4xl mb-3">{'\uD83D\uDCCB'}</div>
+            <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
+            <div className="text-xs">El agente enviará el próximo informe automáticamente cada día.</div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Feedback section — below the report */}
       <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5 max-md:py-4 max-md:px-4 max-md:mt-3 max-md:rounded-lg">

@@ -11,7 +11,14 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
     const menuHeight = maxHeight;
     const spaceBelow = window.innerHeight - rect.bottom;
     const top = spaceBelow >= menuHeight ? rect.bottom + 2 : rect.top - menuHeight - 2;
-    const left = Math.min(rect.left, window.innerWidth - minWidth - 8);
+    // On mobile, center horizontally if not enough space
+    const isMobile = window.innerWidth < 768;
+    let left;
+    if (isMobile) {
+      left = Math.max(8, Math.min(rect.left, window.innerWidth - minWidth - 8));
+    } else {
+      left = Math.min(rect.left, window.innerWidth - minWidth - 8);
+    }
     setPos({ top: Math.max(4, top), left: Math.max(4, left) });
   }, [anchorRef, open, maxHeight, minWidth]);
 
@@ -20,7 +27,11 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
     updatePosition();
     const onScroll = () => updatePosition();
     window.addEventListener('scroll', onScroll, true);
-    return () => window.removeEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', updatePosition);
+    };
   }, [open, updatePosition]);
 
   useEffect(() => {
@@ -30,8 +41,13 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
         onClose();
       }
     };
+    // Listen to both mouse and touch events for mobile support
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, [open, onClose, anchorRef]);
 
   if (!open) return null;
@@ -47,9 +63,11 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
         zIndex: 9999,
         minWidth,
         maxHeight,
+        maxWidth: 'calc(100vw - 16px)',
         boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
       }}
       onClick={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
     >
       {items.map((item, i) => {
         if (item.divider) {
@@ -62,7 +80,7 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
         return (
           <div
             key={i}
-            className="py-2 px-3 text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap hover:bg-blue-bg hover:text-blue"
+            className="py-2.5 px-3 text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap hover:bg-blue-bg hover:text-blue active:bg-blue-bg"
             onClick={() => { item.onClick?.(); if (!keepOpen) onClose(); }}
             style={item.style}
           >

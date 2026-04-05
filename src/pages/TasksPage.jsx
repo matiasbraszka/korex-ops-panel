@@ -11,6 +11,8 @@ export default function TasksPage() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
   const [depsModal, setDepsModal] = useState(null);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editTitleVal, setEditTitleVal] = useState('');
   const dropdownRefs = useRef({});
 
   // Dependency checking (FIX 5)
@@ -102,19 +104,16 @@ export default function TasksPage() {
     if (e.key === 'Escape') setAddingTaskTo(null);
   };
 
-  const startEditTitle = (taskId, el) => {
+  const startEditTitle = (taskId) => {
     const t = tasks.find(x => x.id === taskId);
     if (!t) return;
-    const input = document.createElement('input');
-    input.className = 'border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none w-full bg-white';
-    input.value = t.title;
-    let saved = false;
-    const doSave = () => { if (saved) return; saved = true; updateTask(taskId, { title: input.value.trim() || t.title }); };
-    input.onblur = doSave;
-    input.onkeydown = (ev) => { if (ev.key === 'Enter') input.blur(); if (ev.key === 'Escape') { input.value = t.title; input.blur(); } };
-    el.replaceWith(input);
-    input.focus();
-    input.select();
+    setEditingTaskId(taskId);
+    setEditTitleVal(t.title);
+  };
+
+  const saveEditTitle = (taskId) => {
+    if (editTitleVal.trim()) updateTask(taskId, { title: editTitleVal.trim() });
+    setEditingTaskId(null);
   };
 
   const renderTaskRow = (t) => {
@@ -154,7 +153,7 @@ export default function TasksPage() {
     return (
       <div key={t.id} className="border-b border-border last:border-b-0">
         {/* Desktop row */}
-        <div className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '28px 1fr 130px 120px 80px 36px' }}>
+        <div className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '28px 1fr 110px 50px 70px 30px' }}>
           {/* Status icon */}
           <div
             ref={el => statusRef.current = el}
@@ -174,7 +173,19 @@ export default function TasksPage() {
           <div className="min-w-0 flex flex-col gap-0.5">
             <div className="flex items-center gap-1.5">
               {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
-              <span className="cursor-text py-[2px] px-1 rounded-[3px] whitespace-nowrap overflow-hidden text-ellipsis flex-1 hover:bg-surface2" onDoubleClick={(e) => startEditTitle(t.id, e.target)}>{t.title}</span>
+              {editingTaskId === t.id ? (
+                <input
+                  className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 bg-white"
+                  value={editTitleVal}
+                  onChange={(e) => setEditTitleVal(e.target.value)}
+                  onBlur={() => saveEditTitle(t.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTaskId(null); }}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              ) : (
+                <span className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 hover:bg-surface2 leading-tight" onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}>{t.title}</span>
+              )}
               {(() => {
                 const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
                 const elapsed = getElapsedDays(t, clientTasks);
@@ -319,7 +330,19 @@ export default function TasksPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1">
                 {blocked && <span className="shrink-0 text-[11px]">{'\uD83D\uDD12'}</span>}
-                <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+                {editingTaskId === t.id ? (
+                  <input
+                    className="border border-blue rounded-[3px] py-[2px] px-1.5 text-[13px] font-sans outline-none flex-1 bg-white w-full"
+                    value={editTitleVal}
+                    onChange={(e) => setEditTitleVal(e.target.value)}
+                    onBlur={() => saveEditTitle(t.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTaskId(null); }}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+                )}
                 {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">

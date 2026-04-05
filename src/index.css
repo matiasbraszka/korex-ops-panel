@@ -28,6 +28,11 @@
   --color-text3: #9CA3AF;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   font-family: 'Inter', -apple-system, sans-serif;
   background: var(--color-bg);
