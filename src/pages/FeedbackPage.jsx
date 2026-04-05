@@ -10,6 +10,7 @@ const SOURCE_CONFIG = {
   usuario: { label: 'Usuario', color: '#8B5CF6', bg: '#F5F3FF' },
   mentor: { label: 'Mentor', color: '#22C55E', bg: '#ECFDF5' },
   equipo: { label: 'Equipo', color: '#F97316', bg: '#FFF7ED' },
+  agente: { label: 'Agente IA', color: '#06B6D4', bg: '#ECFEFF' },
 };
 
 export default function FeedbackPage() {
@@ -125,7 +126,7 @@ export default function FeedbackPage() {
 
       {/* Filters + Add button */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {['all', 'cliente', 'usuario', 'mentor', 'equipo'].map(key => {
+        {['all', 'cliente', 'usuario', 'mentor', 'equipo', 'agente'].map(key => {
           const cfg = key === 'all' ? { label: 'Todos', color: '#6B7280', bg: '#F0F2F5' } : SOURCE_CONFIG[key];
           return (
             <button key={key} className={`py-1.5 px-3 rounded-full text-xs font-medium cursor-pointer font-sans border ${sourceFilter === key ? 'text-white border-transparent' : 'bg-white border-border text-text2 hover:border-blue'}`}
