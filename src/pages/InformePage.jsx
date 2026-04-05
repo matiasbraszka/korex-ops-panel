@@ -222,37 +222,65 @@ export default function InformePage() {
   );
 
   return (
-    <div style={{ maxWidth: 900 }}>
-      {/* Pending proposals */}
-      {pending.length > 0 && renderProposals(pending, true)}
-
+    <div>
       {/* Generate button */}
       <div className="mb-4 flex gap-2.5 items-center">
         <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 disabled:opacity-50" onClick={generateOpsReport} disabled={reportStatus === 'generating'}>{reportStatus === 'generating' ? 'Generando...' : 'Generar informe ahora'}</button>
-        {reportStatus === 'success' && <span className="text-[11px] text-green font-semibold py-1 px-2.5 bg-green-50 rounded-md">{'\u2713'} Informe generado y guardado en Supabase correctamente</span>}
-        {reportStatus === 'error' && <span className="text-[11px] text-red font-semibold py-1 px-2.5 bg-red-50 rounded-md">{'\u2715'} Error al guardar el informe. Revisa la consola y reintenta.</span>}
-        {!reportStatus && <span className="text-[11px] text-text3">Crea un informe con el estado actual de todos los clientes y publicidad</span>}
+        {reportStatus === 'success' && <span className="text-[11px] text-green font-semibold py-1 px-2.5 bg-green-50 rounded-md">{'\u2713'} Informe generado y guardado</span>}
+        {reportStatus === 'error' && <span className="text-[11px] text-red font-semibold py-1 px-2.5 bg-red-50 rounded-md">{'\u2715'} Error al guardar</span>}
       </div>
 
-      {/* Full report */}
-      {stored && stored.text ? (
-        <div className="bg-white border border-border rounded-[14px] py-7 px-8 mb-5">
-          <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-border">
-            <span className="bg-blue text-white text-[10px] font-bold py-[3px] px-2.5 rounded-[10px] tracking-[0.5px]">INFORME DIARIO</span>
-            <span className="text-xs text-text3">{stored.date || '\u2014'}</span>
-            <span className="text-[11px] text-text3 ml-auto">Fuente: {stored.source || 'ops-agent'}</span>
-          </div>
-          <div className="text-[13px] leading-[1.8] text-text whitespace-pre-wrap [&_h1]:text-lg [&_h1]:font-bold [&_h1]:my-4 [&_h1]:mb-2 [&_h2]:text-[15px] [&_h2]:font-bold [&_h2]:text-blue [&_h2]:my-4 [&_h2]:mb-2 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:my-4 [&_h3]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_table]:text-xs [&_th]:bg-surface2 [&_th]:font-semibold [&_th]:text-left [&_th]:py-1.5 [&_th]:px-2.5 [&_th]:border [&_th]:border-border [&_td]:py-1.5 [&_td]:px-2.5 [&_td]:border [&_td]:border-border" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+      {/* Two-column layout: Report left, Proposals right */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: pending.length > 0 ? '1fr 320px' : '1fr' }}>
+        {/* Left: Full report */}
+        <div>
+          {stored && stored.text ? (
+            <div className="bg-white border border-border rounded-[14px] py-7 px-8 mb-5">
+              <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-border">
+                <span className="bg-blue text-white text-[10px] font-bold py-[3px] px-2.5 rounded-[10px] tracking-[0.5px]">INFORME DIARIO</span>
+                <span className="text-xs text-text3">{stored.date || '\u2014'}</span>
+                <span className="text-[11px] text-text3 ml-auto">{stored.source || 'ops-agent'}</span>
+              </div>
+              <div className="text-[13px] leading-[1.8] text-text whitespace-pre-wrap [&_h1]:text-lg [&_h1]:font-bold [&_h1]:my-4 [&_h1]:mb-2 [&_h2]:text-[15px] [&_h2]:font-bold [&_h2]:text-blue [&_h2]:my-4 [&_h2]:mb-2 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:my-4 [&_h3]:mb-2 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2.5 [&_table]:text-xs [&_th]:bg-surface2 [&_th]:font-semibold [&_th]:text-left [&_th]:py-1.5 [&_th]:px-2.5 [&_th]:border [&_th]:border-border [&_td]:py-1.5 [&_td]:px-2.5 [&_td]:border [&_td]:border-border" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+            </div>
+          ) : (
+            <div className="bg-white border border-border rounded-[14px] py-7 px-8 mb-5">
+              <div className="text-center py-[60px] text-text3">
+                <div className="text-[40px] mb-3">{'\uD83D\uDCCB'}</div>
+                <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
+                <div className="text-xs">El agente enviara el proximo informe automaticamente cada dia.</div>
+              </div>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="bg-white border border-border rounded-[14px] py-7 px-8 mb-5">
-          <div className="text-center py-[60px] text-text3">
-            <div className="text-[40px] mb-3">{'\uD83D\uDCCB'}</div>
-            <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
-            <div className="text-xs">El agente de operaciones enviara el proximo informe automaticamente cada dia.</div>
+
+        {/* Right: Proposals (only if there are pending ones) */}
+        {pending.length > 0 && (
+          <div className="sticky top-[76px] self-start">
+            <div className="text-xs font-bold text-text2 mb-2 flex items-center gap-1.5">{'\u26A1'} Sugerencias ({pending.length})</div>
+            <div className="max-h-[calc(100vh-120px)] overflow-y-auto space-y-2">
+              {pending.map(p => {
+                const client = clients.find(c => c.id === p.client_id);
+                const clientName = client ? client.name : '\u2014';
+                const typeLabel = p.type === 'create' ? 'CREAR' : p.type === 'complete' ? 'COMPLETAR' : 'ACTUALIZAR';
+                const typeColor = p.type === 'create' ? '#22C55E' : p.type === 'complete' ? '#8B5CF6' : '#5B7CF5';
+                return (
+                  <div key={p.id} className="bg-white border border-border rounded-lg p-3" style={{ borderLeftWidth: 3, borderLeftColor: typeColor }}>
+                    <div className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: typeColor }}>{typeLabel}</div>
+                    <div className="text-[12px] font-semibold mb-1 leading-tight">{p.title || '\u2014'}</div>
+                    <div className="text-[10px] text-text3 mb-1">{clientName}{p.assignee ? ' \u2192 ' + p.assignee : ''}</div>
+                    {p.reason && <div className="text-[10px] text-text3 italic mb-2 leading-snug">{p.reason}</div>}
+                    <div className="flex gap-1.5">
+                      <button className="py-1 px-2.5 rounded text-[10px] font-medium cursor-pointer font-sans bg-green text-white border-none hover:opacity-90" onClick={() => approveProposal(p.id)}>{'\u2713'} Aprobar</button>
+                      <button className="py-1 px-2.5 rounded text-[10px] font-medium cursor-pointer font-sans bg-transparent text-text3 border border-border hover:text-red hover:border-red" onClick={() => rejectProposal(p.id)}>{'\u2715'}</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Feedback section */}
       <div className="bg-white border border-border rounded-[14px] py-5 px-6 mb-5">
