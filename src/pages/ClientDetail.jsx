@@ -288,19 +288,20 @@ export default function ClientDetail({ client: c }) {
 
       return (
         <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''}`}>
-          {/* Main row */}
+          {/* Main row - CSS Grid for consistent alignment */}
           <div
-            className={`flex items-center gap-2 py-[7px] px-3 hover:bg-gray-50 cursor-pointer ${rowBg}`}
+            className={`hover:bg-gray-50 cursor-pointer ${rowBg}`}
+            style={{ display: 'grid', gridTemplateColumns: '16px 20px 1fr 90px 80px 70px 30px', alignItems: 'center', gap: '4px', padding: '7px 12px' }}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           >
-            {/* Tree connector */}
-            <span className="text-gray-300 text-[11px] w-3 text-center shrink-0 select-none">{isLast ? '\u2514' : '\u251C'}</span>
+            {/* Col 1: Status dot */}
+            <span className="text-sm text-center select-none" style={{ color: statusColor }}>{statusIcon}</span>
 
-            {/* Status icon */}
-            <span className="text-sm shrink-0 w-5 text-center select-none" style={{ color: statusColor }}>{statusIcon}</span>
+            {/* Col 2: Tree connector */}
+            <span className="text-gray-300 text-[11px] text-center select-none">{isLast ? '\u2514' : '\u251C'}</span>
 
-            {/* Title (editable on double-click) */}
-            <div className="flex-1 min-w-0">
+            {/* Col 3: Task name (flexible) */}
+            <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
               {editingTitle === t.id ? (
                 <input
                   className="w-full border border-blue-400 rounded py-0.5 px-1.5 text-[13px] font-sans outline-none"
@@ -313,125 +314,130 @@ export default function ClientDetail({ client: c }) {
                 />
               ) : (
                 <span
-                  className={`text-[13px] leading-tight truncate block ${t.status === 'done' ? 'text-text3' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
+                  className={`text-[13px] leading-tight ${t.status === 'done' ? 'text-text3' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                   onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(t.id); setEditTitleValue(t.title); }}
                 >
                   {t.title}
                 </span>
               )}
-            </div>
-
-            {/* CLIENTE badge */}
-            {t.isClientTask && (
-              <span className="text-[9px] font-bold bg-orange-100 text-orange-600 py-[1px] px-1.5 rounded uppercase tracking-wide shrink-0">CLIENTE</span>
-            )}
-
-            {/* Assignee */}
-            <div
-              ref={el => assigneeRef.current = el}
-              className="cursor-pointer shrink-0"
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
-            >
-              {assignee ? (
-                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ background: assignee.color + '22', color: assignee.color }} title={assignee.name}>{assignee.initials}</span>
-              ) : (
-                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 shrink-0 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
+              {t.isClientTask && (
+                <span className="text-[9px] font-bold bg-orange-100 text-orange-600 py-[1px] px-1.5 rounded uppercase tracking-wide" style={{ flexShrink: 0 }}>CLIENTE</span>
+              )}
+              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ flexShrink: 0 }} title="Tiene descripcion" />}
+              {t.dueDate && (
+                <span className={`text-[9px] font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} style={{ flexShrink: 0, whiteSpace: 'nowrap' }} title={`Vence: ${t.dueDate}`}>
+                  {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+                </span>
               )}
             </div>
-            <Dropdown
-              open={openDropdown === 'rd-assignee-' + t.id}
-              onClose={() => setOpenDropdown(null)}
-              anchorRef={assigneeRef}
-              items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
-            />
 
-            {/* Time info */}
-            {est && (
-              <span className="text-[10px] shrink-0 w-[90px] text-right">
-                {elapsed > 0 ? (
-                  <span className="font-semibold" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E' }}>
-                    {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {est}d</span>
-                  </span>
+            {/* Col 4: Assignee (90px fixed) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
+              <div
+                ref={el => assigneeRef.current = el}
+                className="cursor-pointer"
+                style={{ flexShrink: 0 }}
+                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-assignee-' + t.id ? null : 'rd-assignee-' + t.id); }}
+              >
+                {assignee ? (
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: assignee.color + '22', color: assignee.color }} title={assignee.name}>{assignee.initials}</span>
                 ) : (
-                  <span className="text-gray-400">{est}d est.</span>
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100" title="Asignar">+</span>
                 )}
-              </span>
-            )}
-            {!est && elapsed > 0 && (
-              <span className="text-[10px] text-blue-500 shrink-0 w-[90px] text-right font-semibold">{'\u23F1'} {elapsed}d</span>
-            )}
-
-            {/* Priority dropdown (FIX 1) */}
-            <div
-              ref={el => prioRef.current = el}
-              className="cursor-pointer shrink-0"
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
-            >
-              <span className="inline-flex items-center gap-[2px] text-[10px] font-semibold py-[2px] px-1.5 rounded hover:bg-gray-100" style={{ color: tp.color }}>{tp.flag} {tp.label}</span>
+              </div>
+              {assignee && <span className="text-[10px] text-gray-500" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assignee.name.split(' ')[0]}</span>}
+              <Dropdown
+                open={openDropdown === 'rd-assignee-' + t.id}
+                onClose={() => setOpenDropdown(null)}
+                anchorRef={assigneeRef}
+                items={[{ label: 'Sin asignar', onClick: () => updateTask(t.id, { assignee: '' }) }, ...TEAM.map(m => ({ node: <><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>{m.name}</>, onClick: () => updateTask(t.id, { assignee: m.name }) }))]}
+              />
             </div>
-            <Dropdown
-              open={openDropdown === 'rd-prio-' + t.id}
-              onClose={() => setOpenDropdown(null)}
-              anchorRef={prioRef}
-              items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
-            />
 
-            {/* Move to phase dropdown (FIX 2) */}
-            <div
-              ref={el => movePhaseRef.current = el}
-              className="cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-movephase-' + t.id ? null : 'rd-movephase-' + t.id); }}
-              title="Mover a otra fase"
-            >
-              <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-200 text-gray-400">{'\u2194'}</span>
+            {/* Col 5: Time display (80px fixed) */}
+            <div style={{ textAlign: 'right', minWidth: 0 }}>
+              {est ? (
+                <span className="text-[10px]">
+                  {elapsed > 0 ? (
+                    <span className="font-semibold" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E' }}>
+                      {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {est}d</span>
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">{est}d est.</span>
+                  )}
+                </span>
+              ) : elapsed > 0 ? (
+                <span className="text-[10px] text-blue-500 font-semibold">{'\u23F1'} {elapsed}d</span>
+              ) : null}
             </div>
-            <Dropdown
-              open={openDropdown === 'rd-movephase-' + t.id}
-              onClose={() => setOpenDropdown(null)}
-              anchorRef={movePhaseRef}
-              items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
-            />
 
-            {/* Due date (FIX 6) */}
-            {t.dueDate && (
-              <span className={`text-[9px] shrink-0 font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} title={`Vence: ${t.dueDate}`}>
-                {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
-              </span>
-            )}
-
-            {/* Description indicator */}
-            {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Tiene descripcion" />}
-
-            {/* Status dropdown trigger (on hover) */}
-            <div
-              ref={el => statusRef.current = el}
-              className="cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
-            >
-              <span className="text-[10px] py-[2px] px-1.5 rounded hover:bg-gray-200 text-gray-400">{TASK_STATUS[t.status]?.icon || '\u25CB'}</span>
+            {/* Col 6: Priority flag (70px fixed) */}
+            <div style={{ minWidth: 0 }}>
+              <div
+                ref={el => prioRef.current = el}
+                className="cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-prio-' + t.id ? null : 'rd-prio-' + t.id); }}
+              >
+                <span className="inline-flex items-center gap-[2px] text-[10px] font-semibold py-[2px] px-1.5 rounded hover:bg-gray-100" style={{ color: tp.color, whiteSpace: 'nowrap' }}>{tp.flag} {tp.label}</span>
+              </div>
+              <Dropdown
+                open={openDropdown === 'rd-prio-' + t.id}
+                onClose={() => setOpenDropdown(null)}
+                anchorRef={prioRef}
+                items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
+              />
             </div>
-            <Dropdown
-              open={openDropdown === 'rd-status-' + t.id}
-              onClose={() => setOpenDropdown(null)}
-              anchorRef={statusRef}
-              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
-            />
 
-            {/* Dependencies icon */}
-            <button
-              className="text-[10px] py-[2px] px-1 rounded hover:bg-blue-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 shrink-0"
-              onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
-              title="Dependencias"
-            >{'\uD83D\uDD17'}</button>
+            {/* Col 7: Actions (30px fixed) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1px', minWidth: 0 }}>
+              {/* Move phase */}
+              <div
+                ref={el => movePhaseRef.current = el}
+                className="cursor-pointer opacity-0 group-hover:opacity-100"
+                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-movephase-' + t.id ? null : 'rd-movephase-' + t.id); }}
+                title="Mover a otra fase"
+              >
+                <span className="text-[10px] py-[2px] px-0.5 rounded hover:bg-gray-200 text-gray-400">{'\u2194'}</span>
+              </div>
+              <Dropdown
+                open={openDropdown === 'rd-movephase-' + t.id}
+                onClose={() => setOpenDropdown(null)}
+                anchorRef={movePhaseRef}
+                items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
+              />
 
-            {/* Delete (on hover) */}
-            <button
-              className="text-[10px] py-[2px] px-1 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500 shrink-0"
-              onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
-            >x</button>
+              {/* Status */}
+              <div
+                ref={el => statusRef.current = el}
+                className="cursor-pointer opacity-0 group-hover:opacity-100"
+                onClick={(e) => { e.stopPropagation(); setOpenDropdown(prev => prev === 'rd-status-' + t.id ? null : 'rd-status-' + t.id); }}
+              >
+                <span className="text-[10px] py-[2px] px-0.5 rounded hover:bg-gray-200 text-gray-400">{TASK_STATUS[t.status]?.icon || '\u25CB'}</span>
+              </div>
+              <Dropdown
+                open={openDropdown === 'rd-status-' + t.id}
+                onClose={() => setOpenDropdown(null)}
+                anchorRef={statusRef}
+                items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+              />
+
+              {/* Dependencies */}
+              <button
+                className="text-[10px] py-[2px] px-0.5 rounded hover:bg-blue-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500"
+                onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
+                title="Dependencias"
+              >{'\uD83D\uDD17'}</button>
+
+              {/* Delete */}
+              <button
+                className="text-[10px] py-[2px] px-0.5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500"
+                onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
+              >x</button>
+            </div>
           </div>
 
-          {/* Blocked warning */}
+          {/* Blocked warning - spans full row below */}
           {blocked && blockingNames.length > 0 && (
             <div className="text-[10px] text-red-500 pl-[52px] pb-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
           )}

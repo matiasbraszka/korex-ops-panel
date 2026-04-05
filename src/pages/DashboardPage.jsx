@@ -157,12 +157,14 @@ export default function DashboardPage() {
             const bn = memberBottlenecks[m.id];
             if (!bn) return null;
             return (
-              <div key={m.id} className="flex items-center gap-2 text-[11px] text-gray-600">
-                <span className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
-                <span className="font-semibold text-gray-800">{m.name}</span>
-                <span className="text-gray-400">|</span>
-                <span className="text-gray-500">Principal cuello de botella:</span>
-                <span className="text-red-500 font-medium truncate">{bn}</span>
+              <div key={m.id} className="text-[11px] text-gray-600" style={{ display: 'grid', gridTemplateColumns: '18px 80px 10px 1fr', alignItems: 'center', gap: '6px' }}>
+                <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                <span className="font-semibold text-gray-800" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                <span className="text-gray-400 text-center">|</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+                  <span className="text-gray-500" style={{ flexShrink: 0 }}>Principal cuello de botella:</span>
+                  <span className="text-red-500 font-medium" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bn}</span>
+                </span>
               </div>
             );
           })}

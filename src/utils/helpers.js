@@ -254,7 +254,7 @@ export function createDefaultTasks(clientId) {
     clientId,
     phase: tpl.phase,
     status: 'backlog',
-    assignee: '',
+    assignee: tpl.assignee || '',
     priority: 'normal',
     stepIdx: null,
     dependsOn: [...tpl.dependsOn],
