@@ -1,7 +1,7 @@
 export const DEFAULT_TASKS_TEMPLATE = [
-  { id: 'registro',      name: 'Registro en finanzas',             phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Zil' },
+  { id: 'registro',      name: 'Registro en finanzas',             phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Zil Oliveros' },
   { id: 'investigacion', name: 'Investigación Pre-onboarding',     phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Jose Martin' },
-  { id: 'carpetas',      name: 'Armado de carpetas Drive',         phase: 'pre-onboarding',  days: 1,   client: false, dependsOn: [],                                        assignee: 'Zil' },
+  { id: 'carpetas',      name: 'Armado de carpetas Drive',         phase: 'pre-onboarding',  days: 1,   client: false, dependsOn: [],                                        assignee: 'Zil Oliveros' },
   { id: 'onboarding',    name: 'Onboarding + Config Meta',         phase: 'onboarding',      days: 2,   client: true,  dependsOn: [],                                        assignee: 'Matias' },
   { id: 'estrategia',    name: 'Estrategia, Avatar, Puntos clave', phase: 'primera-entrega', days: 2,   client: false, dependsOn: ['onboarding'],                             assignee: 'Jose Martin' },
   { id: 'guiones-ads',   name: 'Guiones de anuncios',              phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['estrategia'],                             assignee: 'Jose Martin' },
@@ -11,14 +11,14 @@ export const DEFAULT_TASKS_TEMPLATE = [
   { id: 'correcciones',  name: 'Correcciones',                     phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['revision'],                               assignee: 'Jose Martin' },
   { id: 'grabacion',     name: 'GRABACIÓN DEL CLIENTE',            phase: 'primera-entrega', days: 7,   client: true,  dependsOn: ['correcciones'],                           assignee: '' },
   { id: 'edicion',       name: 'Edición anuncios y VSL',           phase: 'primera-entrega', days: 4,   client: false, dependsOn: ['grabacion'],                              assignee: 'Matias' },
-  { id: 'diseno',        name: 'Diseño de la landing',             phase: 'primera-entrega', days: 3,   client: false, dependsOn: ['landing-texto', 'revision'],              assignee: 'Jose Zerillos' },
+  { id: 'diseno',        name: 'Diseño de la landing',             phase: 'primera-entrega', days: 3,   client: false, dependsOn: ['landing-texto', 'revision'],              assignee: 'Jose Zerillo' },
   { id: 'revision-dis',  name: 'REVISIÓN DISEÑO',                  phase: 'primera-entrega', days: 3,   client: true,  dependsOn: ['diseno'],                                 assignee: '' },
   { id: 'codigo',        name: 'Pasar a código el funnel',         phase: 'primera-entrega', days: 4,   client: false, dependsOn: ['revision-dis'],                           assignee: 'Marcos' },
-  { id: 'vincular',      name: 'Vincular cuenta y métricas',       phase: 'primera-entrega', days: 3,   client: false, dependsOn: [],                                        assignee: 'David' },
-  { id: 'cargar-saldo',  name: 'Cargar saldo al networker',        phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['vincular'],                               assignee: 'Zil' },
+  { id: 'vincular',      name: 'Vincular cuenta y métricas',       phase: 'primera-entrega', days: 3,   client: false, dependsOn: [],                                        assignee: 'David Castañeda' },
+  { id: 'cargar-saldo',  name: 'Cargar saldo al networker',        phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['vincular'],                               assignee: 'Zil Oliveros' },
   { id: 'reunion',       name: 'REUNIÓN DE PRESENTACIÓN',          phase: 'primera-entrega', days: 1,   client: true,  dependsOn: ['codigo', 'cargar-saldo'],                 assignee: 'Matias' },
-  { id: 'lanzamiento',   name: 'Lanzamiento de Ads',               phase: 'lanzamiento',     days: 1,   client: false, dependsOn: ['reunion'],                                assignee: 'David' },
-  { id: 'auditoria',     name: 'Auditoría y mejora continua',      phase: 'auditoria',       days: 30,  client: false, dependsOn: ['lanzamiento'],                            assignee: 'David' },
+  { id: 'lanzamiento',   name: 'Lanzamiento de Ads',               phase: 'lanzamiento',     days: 1,   client: false, dependsOn: ['reunion'],                                assignee: 'David Castañeda' },
+  { id: 'auditoria',     name: 'Auditoría y mejora continua',      phase: 'auditoria',       days: 30,  client: false, dependsOn: ['lanzamiento'],                            assignee: 'David Castañeda' },
 ];
 
 // Backward compatibility alias
@@ -60,23 +60,23 @@ export const TASK_STATUS_ORDER = ['backlog', 'in-progress', 'en-revision', 'done
 
 export const TEAM = [
   { id: 'josem',     name: 'Jose Martin',          role: 'CMO',              color: '#EAB308', initials: 'JM', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
-  { id: 'david',     name: 'David',                role: 'Trafficker',       color: '#F97316', initials: 'DV', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3df7842793384dc77b7.png' },
+  { id: 'david',     name: 'David Castañeda',      role: 'Trafficker',       color: '#F97316', initials: 'DC', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3df7842793384dc77b7.png' },
   { id: 'marcos',    name: 'Marcos',               role: 'CTO',             color: '#22C55E', initials: 'MC', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
-  { id: 'zil',       name: 'Zil',                  role: 'Coordinación',    color: '#8B5CF6', initials: 'ZL' },
+  { id: 'zil',       name: 'Zil Oliveros',         role: 'Coordinación',    color: '#8B5CF6', initials: 'ZO', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38ef24cde4bbc2afcd13e.png' },
   { id: 'matias',    name: 'Matias',               role: 'COO',             color: '#5B7CF5', initials: 'MB', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/684cd8d92809a925e80880c2.png' },
   { id: 'cris',      name: 'Cristian',             role: 'CEO',             color: '#06B6D4', initials: 'CF', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3e0afed7575d4e87884.png' },
-  { id: 'zerillos',  name: 'Jose Zerillos',        role: 'Diseño landings', color: '#EC4899', initials: 'JZ', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc4.png' },
+  { id: 'zerillos',  name: 'Jose Zerillo',         role: 'Diseño landings', color: '#EC4899', initials: 'JZ', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc4.png' },
   { id: 'jordi',     name: 'Jordi',                role: 'Project Manager', color: '#14B8A6', initials: 'JD' },
   { id: 'christian', name: 'Christian Uscanga',     role: 'Programador',     color: '#A855F7', initials: 'CU', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc3.png' },
 ];
 
 export const USERS = {
-  matias:   { pass: 'korex2026', name: 'Matias Braszka',     role: 'COO',          initials: 'MB', color: '#5B7CF5' },
-  cristian: { pass: 'korex2026', name: 'Cristian Fernandez', role: 'CEO',          initials: 'CF', color: '#06B6D4' },
-  josem:    { pass: 'korex2026', name: 'Jose Martin',        role: 'CMO',          initials: 'JM', color: '#EAB308' },
-  david:    { pass: 'korex2026', name: 'David',              role: 'Trafficker',   initials: 'DV', color: '#F97316' },
-  marcos:   { pass: 'korex2026', name: 'Marcos',             role: 'CTO',          initials: 'MC', color: '#22C55E' },
-  zil:      { pass: 'korex2026', name: 'Zil',               role: 'Coordinación', initials: 'ZL', color: '#8B5CF6' },
+  matias:   { pass: 'korex2026', name: 'Matias Braszka',       role: 'COO',          initials: 'MB', color: '#5B7CF5', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/684cd8d92809a925e80880c2.png' },
+  cristian: { pass: 'korex2026', name: 'Cristian Fernandez',   role: 'CEO',          initials: 'CF', color: '#06B6D4', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3e0afed7575d4e87884.png' },
+  josem:    { pass: 'korex2026', name: 'Jose Martin',          role: 'CMO',          initials: 'JM', color: '#EAB308', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
+  david:    { pass: 'korex2026', name: 'David Castañeda',      role: 'Trafficker',   initials: 'DC', color: '#F97316', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3df7842793384dc77b7.png' },
+  marcos:   { pass: 'korex2026', name: 'Marcos',               role: 'CTO',          initials: 'MC', color: '#22C55E', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
+  zil:      { pass: 'korex2026', name: 'Zil Oliveros',         role: 'Coordinación', initials: 'ZO', color: '#8B5CF6', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38ef24cde4bbc2afcd13e.png' },
 };
 
 export const STATUS = {

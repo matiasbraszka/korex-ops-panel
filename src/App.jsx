@@ -28,10 +28,7 @@ function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-white">
       <div className="w-full max-w-[380px] px-8">
         <div className="text-center mb-10">
-          <div className="text-[52px] font-black tracking-[-3px] leading-none text-text">
-            m<span className="text-blue">k</span>
-          </div>
-          <p className="text-[10px] text-text3 tracking-[4px] uppercase mt-1.5">Método Korex</p>
+          <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d8184c045c2748d55e8.png" alt="Método Korex" className="h-[48px] w-auto mx-auto" />
         </div>
         <form onSubmit={handleSubmit}>
           <label className="block text-[13px] font-semibold text-text mb-2">Correo electrónico</label>
@@ -131,10 +128,7 @@ function MainLayout() {
       {/* Sidebar — hidden on mobile */}
       <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
         <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
-          <div className="text-[22px] font-black text-text tracking-[-1px]">
-            m<span className="text-blue">k</span>
-          </div>
-          <div className="text-[9px] tracking-[3px] uppercase text-text3">MÉTODO KOREX</div>
+          <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto" />
         </div>
         <nav className="p-3 flex-1">
           <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Menu</div>
@@ -157,12 +151,13 @@ function MainLayout() {
           ))}
         </nav>
         <div className="p-3.5 px-4 border-t border-border flex items-center gap-2.5">
-          <div
-            className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-            style={{ background: currentUser?.color + '18', color: currentUser?.color }}
-          >
-            {currentUser?.initials}
-          </div>
+          {currentUser?.avatar ? (
+            <img src={currentUser.avatar} alt={currentUser.name} className="w-[34px] h-[34px] rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-xs shrink-0" style={{ background: currentUser?.color + '18', color: currentUser?.color }}>
+              {currentUser?.initials}
+            </div>
+          )}
           <div>
             <div className="text-[13px] font-semibold">{currentUser?.name}</div>
             <div className="text-[11px] text-text3">{currentUser?.role}</div>
@@ -211,7 +206,7 @@ function MainLayout() {
         {/* Topbar */}
         <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10 max-md:px-4 max-md:h-[52px]">
           <div className="flex items-center gap-2.5 max-md:gap-2 min-w-0">
-            <div className="hidden max-md:block text-[18px] font-black text-text tracking-[-1px] shrink-0">m<span className="text-blue">k</span></div>
+            <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="MK" className="hidden max-md:block h-[22px] w-auto shrink-0" />
             <div className="min-w-0">
               <div className="text-[17px] font-bold max-md:text-[15px] truncate">{title}</div>
               <div className="text-xs text-text3 max-md:text-[10px] truncate max-md:hidden">{subtitle}</div>
