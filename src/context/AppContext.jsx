@@ -20,6 +20,7 @@ export function AppProvider({ children }) {
   const [filter, setFilter] = useState('all');
   const [taskFilter, setTaskFilter] = useState('all');
   const [taskAssignee, setTaskAssignee] = useState('all');
+  const [taskClientFilter, setTaskClientFilter] = useState('all');
   const [currentUser, setCurrentUser] = useState(null);
   const [briefing, setBriefing] = useState(null);
   const [reportFeedbacks, setReportFeedbacks] = useState([]);
@@ -501,6 +502,7 @@ export function AppProvider({ children }) {
     filter, setFilter,
     taskFilter, setTaskFilter,
     taskAssignee, setTaskAssignee,
+    taskClientFilter, setTaskClientFilter,
     currentUser, setCurrentUser,
     briefing, setBriefing,
     reportFeedbacks, setReportFeedbacks,

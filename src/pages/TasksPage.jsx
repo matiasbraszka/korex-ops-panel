@@ -7,7 +7,7 @@ import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage() {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -85,6 +85,11 @@ export default function TasksPage() {
       const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       return parts.includes(taskAssignee.toLowerCase());
     });
+  }
+
+  // Client filter
+  if (taskClientFilter !== 'all') {
+    filteredTasks = filteredTasks.filter(t => t.clientId === taskClientFilter);
   }
 
   const grouped = {};
@@ -505,9 +510,9 @@ export default function TasksPage() {
   return (
     <div>
       {/* Filters */}
-      <div className="flex gap-2.5 items-center mb-4 max-md:flex-wrap max-md:gap-1.5">
+      <div className="bg-white border border-border rounded-[10px] p-3 mb-4 flex items-center gap-3 flex-wrap max-md:gap-2 max-md:p-2.5">
         <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue max-md:flex-1 max-md:min-w-0"
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
           value={taskFilter}
           onChange={(e) => setTaskFilter(e.target.value)}
         >
@@ -516,7 +521,17 @@ export default function TasksPage() {
           ))}
         </select>
         <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-white text-text font-sans outline-none cursor-pointer focus:border-blue max-md:flex-1 max-md:min-w-0"
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
+          value={taskClientFilter}
+          onChange={(e) => setTaskClientFilter(e.target.value)}
+        >
+          <option value="all">Cliente: Todos</option>
+          {regularClients.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
           value={taskAssignee}
           onChange={(e) => setTaskAssignee(e.target.value)}
         >
@@ -526,12 +541,14 @@ export default function TasksPage() {
             <option key={m.id} value={m.name}>{m.name}</option>
           ))}
         </select>
-        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
-          <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
-        </label>
-        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
-          <input type="checkbox" checked={hideBlockedTasks} onChange={(e) => setHideBlockedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar bloqueadas
-        </label>
+        <div className="flex items-center gap-3 ml-auto max-md:ml-0 max-md:w-full max-md:justify-between">
+          <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
+            <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer accent-blue" /> Ocultar completadas
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
+            <input type="checkbox" checked={hideBlockedTasks} onChange={(e) => setHideBlockedTasks(e.target.checked)} className="cursor-pointer accent-blue" /> Ocultar bloqueadas
+          </label>
+        </div>
       </div>
 
       {!groups.length && !addingTaskTo && (
