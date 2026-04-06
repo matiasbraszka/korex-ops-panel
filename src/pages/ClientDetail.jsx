@@ -648,14 +648,13 @@ export default function ClientDetail({ client: c }) {
         <div className="space-y-2">
           {phaseGroups.map(({ phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone }) => {
             const collapsed = isCollapsed(phaseKey, allDone);
-            // Sort: in-progress/revision first, then ready backlog, then blocked, then done
-            // Within each group, sort by priority (urgent > high > normal > low)
+            // Sort: active (backlog+in-progress+revision) → blocked → done
+            // Active group sorted by priority
             const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
             const getGroup = (t) => {
-              if (t.status === 'done') return 3;
-              if (isTaskBlocked(t)) return 2;
-              if (t.status === 'in-progress' || t.status === 'en-revision') return 0;
-              return 1; // backlog ready
+              if (t.status === 'done') return 2;
+              if (isTaskBlocked(t)) return 1;
+              return 0; // backlog, in-progress, en-revision = all active
             };
             const sortedTasks = [...phaseTasks].sort((a, b) => {
               const ga = getGroup(a), gb = getGroup(b);

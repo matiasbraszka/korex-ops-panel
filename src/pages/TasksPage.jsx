@@ -546,12 +546,12 @@ export default function TasksPage() {
       )}
 
       {groups.map(g => {
-        // Sort: in-progress/revision → backlog ready → blocked → done
+        // Sort: active (backlog+in-progress+revision) → blocked → done
+        // Active group sorted by priority
         const getGroup = (t) => {
-          if (t.status === 'done') return 3;
-          if (isTaskBlocked(t)) return 2;
-          if (t.status === 'in-progress' || t.status === 'en-revision') return 0;
-          return 1;
+          if (t.status === 'done') return 2;
+          if (isTaskBlocked(t)) return 1;
+          return 0; // backlog, in-progress, en-revision = all active
         };
         const sortedTasks = [...g.tasks].sort((a, b) => {
           const ga = getGroup(a), gb = getGroup(b);
@@ -626,7 +626,7 @@ export default function TasksPage() {
             <div>
               {korexTasks.length > 0 ? (
                 [...korexTasks].sort((a, b) => {
-                  const getG = (t) => { if (t.status === 'done') return 3; if (isTaskBlocked(t)) return 2; if (t.status === 'in-progress' || t.status === 'en-revision') return 0; return 1; };
+                  const getG = (t) => { if (t.status === 'done') return 2; if (isTaskBlocked(t)) return 1; return 0; };
                   const ga = getG(a), gb = getG(b);
                   if (ga !== gb) return ga - gb;
                   return (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2);
