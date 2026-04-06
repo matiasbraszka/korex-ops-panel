@@ -649,7 +649,7 @@ export default function ClientDetail({ client: c }) {
             const collapsed = isCollapsed(phaseKey, allDone);
             // Sort tasks: urgent > high > normal > low
             const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
-            const sortedTasks = [...phaseTasks].sort((a, b) => (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2));
+            const sortedTasks = [...phaseTasks].sort((a, b) => (prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2) - (prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2));
 
             return (
               <div key={phaseKey} className="rounded-lg overflow-hidden bg-white border border-gray-100" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
