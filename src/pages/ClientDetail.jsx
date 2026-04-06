@@ -654,7 +654,7 @@ export default function ClientDetail({ client: c }) {
               <div key={phaseKey} className="rounded-lg overflow-hidden bg-white border border-gray-100" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
                 {/* Phase header */}
                 <div
-                  className="flex items-center gap-2 py-2.5 px-3 cursor-pointer select-none hover:bg-gray-50"
+                  className="flex items-center gap-2 py-2.5 px-3 cursor-pointer select-none hover:bg-gray-50 group/phase"
                   onClick={() => togglePhase(phaseKey)}
                 >
                   <span className="text-[11px] text-gray-400 shrink-0">{collapsed ? '\u25B6' : '\u25BC'}</span>
@@ -662,6 +662,24 @@ export default function ClientDetail({ client: c }) {
                   <span className="text-[13px] font-bold" style={{ color: phInfo.color }}>{phInfo.label}</span>
                   <span className="text-[11px] font-semibold text-gray-400">({doneCount}/{totalCount})</span>
                   {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
+                  {/* Delete phase — custom phases only */}
+                  {(c.customPhases || []).some(cp => cp.id === phaseKey) && (
+                    <button
+                      className="ml-auto text-[10px] text-gray-400 bg-transparent border-none cursor-pointer font-sans py-0.5 px-1.5 rounded hover:text-red-500 hover:bg-red-50 opacity-0 group-hover/phase:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const tasksInPhase = clientTasks.filter(t => t.phase === phaseKey);
+                        const msg = tasksInPhase.length > 0
+                          ? `¿Eliminar la fase "${phInfo.label}" y sus ${tasksInPhase.length} tarea${tasksInPhase.length > 1 ? 's' : ''}? Esta acción no se puede deshacer.`
+                          : `¿Eliminar la fase "${phInfo.label}"?`;
+                        if (!confirm(msg)) return;
+                        tasksInPhase.forEach(t => deleteTask(t.id));
+                        const newCustomPhases = (c.customPhases || []).filter(cp => cp.id !== phaseKey);
+                        updateClient(c.id, { customPhases: newCustomPhases });
+                      }}
+                      title="Eliminar fase"
+                    >{'\uD83D\uDDD1'} Eliminar</button>
+                  )}
                 </div>
 
                 {/* Task rows */}
