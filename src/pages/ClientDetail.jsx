@@ -648,9 +648,22 @@ export default function ClientDetail({ client: c }) {
         <div className="space-y-2">
           {phaseGroups.map(({ phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone }) => {
             const collapsed = isCollapsed(phaseKey, allDone);
-            // Sort tasks: urgent > high > normal > low
+            // Sort: in-progress/revision first, then ready backlog, then blocked, then done
+            // Within each group, sort by priority (urgent > high > normal > low)
             const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
-            const sortedTasks = [...phaseTasks].sort((a, b) => (prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2) - (prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2));
+            const getGroup = (t) => {
+              if (t.status === 'done') return 3;
+              if (isTaskBlocked(t)) return 2;
+              if (t.status === 'in-progress' || t.status === 'en-revision') return 0;
+              return 1; // backlog ready
+            };
+            const sortedTasks = [...phaseTasks].sort((a, b) => {
+              const ga = getGroup(a), gb = getGroup(b);
+              if (ga !== gb) return ga - gb;
+              const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
+              const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
+              return pa - pb;
+            });
 
             return (
               <div key={phaseKey} className="rounded-lg overflow-hidden bg-white border border-gray-100" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
