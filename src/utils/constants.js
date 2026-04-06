@@ -77,6 +77,9 @@ export const USERS = {
   david:    { pass: 'korex2026', name: 'David Castañeda',      role: 'Trafficker',   initials: 'DC', color: '#F97316', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3df7842793384dc77b7.png' },
   marcos:   { pass: 'korex2026', name: 'Marcos del Rey',        role: 'CTO',          initials: 'MR', color: '#22C55E', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2e3d829c73b26a9deb.png' },
   zil:      { pass: 'korex2026', name: 'Zil Oliveros',         role: 'Coordinación', initials: 'ZO', color: '#8B5CF6', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38ef24cde4bbc2afcd13e.png' },
+  zerillos: { pass: 'korex2026', name: 'Jose Zerillo',         role: 'Diseño',       initials: 'JZ', color: '#EC4899', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc4.png' },
+  jordi:    { pass: 'korex2026', name: 'Jordi Miró Nolla',     role: 'Project Manager', initials: 'JM', color: '#14B8A6' },
+  christian:{ pass: 'korex2026', name: 'Christian Uscanga',     role: 'Programador',  initials: 'CU', color: '#A855F7', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc3.png' },
 };
 
 export const STATUS = {
