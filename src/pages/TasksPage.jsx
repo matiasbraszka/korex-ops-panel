@@ -629,28 +629,31 @@ export default function TasksPage() {
                   const getG = (t) => { if (t.status === 'done') return 2; if (isTaskBlocked(t)) return 1; return 0; };
                   const ga = getG(a), gb = getG(b);
                   if (ga !== gb) return ga - gb;
-                  return (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2);
+                  const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
+                  const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
+                  return pa - pb;
                 }).map(t => renderTaskRow(t))
               ) : (
                 <div className="text-center text-text3 text-xs py-4">Sin tareas internas</div>
               )}
 
-              {/* Inline new task for Korex */}
+              {/* Inline new task for Korex — no phases */}
               {addingTaskTo === korexClientId && (
-                <div className="flex gap-2 py-2 px-4 items-center border-t border-border bg-blue-bg2 max-md:px-3 max-md:flex-wrap">
+                <div className="flex gap-2 py-2 px-4 items-center border-t border-border bg-blue-bg2 max-md:px-3">
                   <div className="text-text3 text-[10px] max-md:hidden">+</div>
-                  <div className="flex flex-col gap-1 flex-1 min-w-0">
-                    <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Nombre de la tarea + Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, korexClientId)} />
-                    <select id="inline-task-phase" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
-                      <option value="">Sin vincular a fase</option>
-                      {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
-                  <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" style={{ opacity: 1 }} onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button></div>
+                  <input id="korex-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text flex-1 min-w-0" placeholder="Nombre de la tarea + Enter..." autoFocus onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      createTask(e.target.value.trim(), korexClientId, '', 'normal', 'backlog', '', null);
+                      e.target.value = '';
+                      setTimeout(() => { const i = document.getElementById('korex-task-input'); if (i) i.focus(); }, 50);
+                    }
+                    if (e.key === 'Escape') setAddingTaskTo(null);
+                  }} />
+                  <button className="bg-transparent border-none text-text3 cursor-pointer text-sm shrink-0" onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button>
                 </div>
               )}
 
-              <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(korexClientId); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>+ Agregar tarea</div>
+              <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(korexClientId); setTimeout(() => { const i = document.getElementById('korex-task-input'); if (i) i.focus(); }, 50); }}>+ Agregar tarea</div>
             </div>
           )}
         </div>
