@@ -7,7 +7,7 @@ import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage() {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, hideCompletedTasks, setHideCompletedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -66,6 +66,7 @@ export default function TasksPage() {
   if (taskFilter === 'blocked') filteredTasks = filteredTasks.filter(t => t.status === 'blocked' || t.status === 'retrasadas');
   if (taskFilter === 'done') filteredTasks = filteredTasks.filter(t => t.status === 'done');
   if (hideCompletedTasks && taskFilter !== 'done') filteredTasks = filteredTasks.filter(t => t.status !== 'done');
+  if (hideBlockedTasks && taskFilter !== 'blocked') filteredTasks = filteredTasks.filter(t => !isTaskBlocked(t));
 
   if (taskAssignee === 'mine' && currentUser) {
     const myNames = [currentUser.name.toLowerCase(), currentUser.name.split(' ')[0].toLowerCase()];
@@ -525,8 +526,11 @@ export default function TasksPage() {
             <option key={m.id} value={m.name}>{m.name}</option>
           ))}
         </select>
-        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none max-md:w-full">
+        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
           <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar completadas
+        </label>
+        <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none">
+          <input type="checkbox" checked={hideBlockedTasks} onChange={(e) => setHideBlockedTasks(e.target.checked)} className="cursor-pointer" /> Ocultar bloqueadas
         </label>
       </div>
 
@@ -542,9 +546,16 @@ export default function TasksPage() {
       )}
 
       {groups.map(g => {
+        // Sort: in-progress/revision → backlog ready → blocked → done
+        const getGroup = (t) => {
+          if (t.status === 'done') return 3;
+          if (isTaskBlocked(t)) return 2;
+          if (t.status === 'in-progress' || t.status === 'en-revision') return 0;
+          return 1;
+        };
         const sortedTasks = [...g.tasks].sort((a, b) => {
-          if (a.status === 'done' && b.status !== 'done') return 1;
-          if (b.status === 'done' && a.status !== 'done') return -1;
+          const ga = getGroup(a), gb = getGroup(b);
+          if (ga !== gb) return ga - gb;
           const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
           const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
           return pa - pb;
@@ -615,8 +626,9 @@ export default function TasksPage() {
             <div>
               {korexTasks.length > 0 ? (
                 [...korexTasks].sort((a, b) => {
-                  if (a.status === 'done' && b.status !== 'done') return 1;
-                  if (b.status === 'done' && a.status !== 'done') return -1;
+                  const getG = (t) => { if (t.status === 'done') return 3; if (isTaskBlocked(t)) return 2; if (t.status === 'in-progress' || t.status === 'en-revision') return 0; return 1; };
+                  const ga = getG(a), gb = getG(b);
+                  if (ga !== gb) return ga - gb;
                   return (prioSort[a.priority] || 2) - (prioSort[b.priority] || 2);
                 }).map(t => renderTaskRow(t))
               ) : (

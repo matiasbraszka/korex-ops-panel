@@ -26,6 +26,7 @@ export function AppProvider({ children }) {
   const [taskProposals, setTaskProposals] = useState([]);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [hideCompletedTasks, setHideCompletedTasks] = useState(false);
+  const [hideBlockedTasks, setHideBlockedTasks] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [syncStatus, setSyncStatus] = useState('ok');
 
@@ -506,6 +507,7 @@ export function AppProvider({ children }) {
     taskProposals, setTaskProposals,
     hideCompleted, setHideCompleted,
     hideCompletedTasks, setHideCompletedTasks,
+    hideBlockedTasks, setHideBlockedTasks,
     collapsedGroups, setCollapsedGroups,
     syncStatus, setSyncStatus,
 
