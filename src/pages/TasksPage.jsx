@@ -14,6 +14,8 @@ export default function TasksPage() {
   const [depsModal, setDepsModal] = useState(null);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editTitleVal, setEditTitleVal] = useState('');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const newTaskInputRef = useRef(null);
   const dropdownRefs = useRef({});
 
   // Dependency checking (FIX 5)
@@ -94,16 +96,14 @@ export default function TasksPage() {
   // Sort client groups by CLIENT priority (critico=1 first), NOT by task priority
   groups.sort((a, b) => (a.client.priority || 4) - (b.client.priority || 4));
 
-  const inlineTaskKeydown = (e, clientId) => {
-    if (e.key === 'Enter' && e.target.value.trim()) {
-      const phaseSelect = document.getElementById('inline-task-phase');
-      const phase = phaseSelect && phaseSelect.value !== '' ? phaseSelect.value : null;
-      const t = createTask(e.target.value.trim(), clientId, '', 'normal', 'backlog', '', null);
-      if (phase && t) updateTask(t.id, { phase });
-      e.target.value = '';
-      setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50);
-    }
-    if (e.key === 'Escape') setAddingTaskTo(null);
+  const [inlinePhase, setInlinePhase] = useState('');
+
+  const handleAddTask = (clientId) => {
+    if (!newTaskTitle.trim()) return;
+    const t = createTask(newTaskTitle.trim(), clientId, '', 'normal', 'backlog', '', null);
+    if (inlinePhase && t) updateTask(t.id, { phase: inlinePhase });
+    setNewTaskTitle('');
+    setTimeout(() => { if (newTaskInputRef.current) newTaskInputRef.current.focus(); }, 30);
   };
 
   const startEditTitle = (taskId) => {
@@ -582,18 +582,29 @@ export default function TasksPage() {
                   <div className="flex gap-2 py-2 px-4 items-center border-t border-border bg-blue-bg2 max-md:px-3 max-md:flex-wrap">
                     <div className="text-text3 text-[10px] max-md:hidden">+</div>
                     <div className="flex flex-col gap-1 flex-1 min-w-0">
-                      <input id="inline-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full" placeholder="Nombre de la tarea + Enter..." autoFocus onKeyDown={(e) => inlineTaskKeydown(e, g.client.id)} />
-                      <select id="inline-task-phase" className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans">
+                      <input
+                        ref={newTaskInputRef}
+                        className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full"
+                        placeholder="Nombre de la tarea + Enter..."
+                        autoFocus
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAddTask(g.client.id);
+                          if (e.key === 'Escape') { setAddingTaskTo(null); setNewTaskTitle(''); }
+                        }}
+                      />
+                      <select className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans" value={inlinePhase} onChange={(e) => setInlinePhase(e.target.value)}>
                         <option value="">Sin vincular a fase</option>
                         {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         {(g.client.customPhases || []).map(cp => <option key={cp.id} value={cp.id}>{cp.label}</option>)}
                       </select>
                     </div>
-                    <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" style={{ opacity: 1 }} onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button></div>
+                    <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" onClick={() => { setAddingTaskTo(null); setNewTaskTitle(''); }}>{'\u2715'}</button></div>
                   </div>
                 )}
 
-                <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(g.client.id); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>+ Agregar tarea</div>
+                <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(g.client.id); setNewTaskTitle(''); setTimeout(() => { if (newTaskInputRef.current) newTaskInputRef.current.focus(); }, 50); }}>+ Agregar tarea</div>
               </div>
             )}
           </div>
