@@ -5,74 +5,59 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
   const menuRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const [ready, setReady] = useState(false);
+  const [measured, setMeasured] = useState(false);
 
-  const updatePosition = useCallback(() => {
-    if (!anchorRef?.current || !open) return;
+  const calcPos = useCallback(() => {
+    if (!anchorRef?.current) return null;
     const rect = anchorRef.current.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return null; // hidden element
 
-    // Always place below the anchor. Only go above if less than 100px below.
     const spaceBelow = window.innerHeight - rect.bottom;
-    let top;
-    if (spaceBelow < 100) {
-      // Not enough space below — place above
-      const menuEl = menuRef.current;
-      const menuHeight = menuEl ? Math.min(menuEl.scrollHeight, maxHeight) : 200;
-      top = Math.max(8, rect.top - menuHeight - 4);
-    } else {
-      top = rect.bottom + 4;
-    }
+    const top = spaceBelow < 100
+      ? Math.max(8, rect.top - (menuRef.current?.scrollHeight || 200) - 4)
+      : rect.bottom + 4;
 
-    // Horizontal: align left edge to anchor, keep within viewport
     let left = rect.left;
-    if (left + minWidth > window.innerWidth - 12) {
-      left = rect.right - minWidth;
-    }
-    left = Math.max(8, left);
+    if (left + minWidth > window.innerWidth - 12) left = rect.right - minWidth;
+    if (left < 8) left = 8;
 
-    setPos({ top, left });
-  }, [anchorRef, open, maxHeight, minWidth, items.length]);
+    return { top, left };
+  }, [anchorRef, minWidth]);
 
   useEffect(() => {
-    if (open) {
-      setReady(false);
-      // Initial position, then refine after paint
-      updatePosition();
-      const id = requestAnimationFrame(() => {
-        updatePosition();
-        requestAnimationFrame(() => setReady(true));
-      });
-      return () => cancelAnimationFrame(id);
-    } else {
-      setReady(false);
-    }
-  }, [open, updatePosition]);
+    if (!open) { setReady(false); setMeasured(false); return; }
+
+    // Frame 1: render off-screen to measure
+    setPos({ top: -9999, left: -9999 });
+    setMeasured(false);
+    setReady(false);
+
+    const id = requestAnimationFrame(() => {
+      // Frame 2: now menu is in DOM, calc real position
+      const p = calcPos();
+      if (p) setPos(p);
+      setMeasured(true);
+      requestAnimationFrame(() => setReady(true));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open, calcPos]);
 
   useEffect(() => {
-    if (!open) return;
-    const onScroll = () => updatePosition();
+    if (!open || !measured) return;
+    const onScroll = () => { const p = calcPos(); if (p) setPos(p); };
     window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', updatePosition);
-    return () => {
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [open, updatePosition]);
+    window.addEventListener('resize', onScroll);
+    return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', onScroll); };
+  }, [open, measured, calcPos]);
 
   if (!open) return null;
-
-  const handleBackdropClose = (e) => {
-    if (!ready) return;
-    e.stopPropagation();
-    e.preventDefault();
-    onClose();
-  };
 
   return createPortal(
     <>
       <div
         style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
-        onClick={handleBackdropClose}
-        onMouseDown={handleBackdropClose}
+        onClick={(e) => { if (ready) { e.stopPropagation(); onClose(); } }}
+        onMouseDown={(e) => { if (ready) { e.stopPropagation(); onClose(); } }}
       />
       <div
         ref={menuRef}
@@ -86,6 +71,7 @@ export default function Dropdown({ open, onClose, items, anchorRef, minWidth = 1
           maxHeight,
           maxWidth: 'calc(100vw - 16px)',
           boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
+          opacity: measured ? 1 : 0,
         }}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
