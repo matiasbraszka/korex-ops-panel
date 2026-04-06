@@ -28,6 +28,7 @@ export default function ClientDetail({ client: c }) {
   const [newPhaseColor, setNewPhaseColor] = useState('#5B7CF5');
   const [editingEstDays, setEditingEstDays] = useState(null);
   const [estDaysValue, setEstDaysValue] = useState('');
+  const [deletePhaseConfirm, setDeletePhaseConfirm] = useState(null);
 
   const dropdownRefs = useRef({});
 
@@ -669,13 +670,7 @@ export default function ClientDetail({ client: c }) {
                       onClick={(e) => {
                         e.stopPropagation();
                         const tasksInPhase = clientTasks.filter(t => t.phase === phaseKey);
-                        const msg = tasksInPhase.length > 0
-                          ? `¿Eliminar la fase "${phInfo.label}" y sus ${tasksInPhase.length} tarea${tasksInPhase.length > 1 ? 's' : ''}? Esta acción no se puede deshacer.`
-                          : `¿Eliminar la fase "${phInfo.label}"?`;
-                        if (!confirm(msg)) return;
-                        tasksInPhase.forEach(t => deleteTask(t.id));
-                        const newCustomPhases = (c.customPhases || []).filter(cp => cp.id !== phaseKey);
-                        updateClient(c.id, { customPhases: newCustomPhases });
+                        setDeletePhaseConfirm({ phaseKey, label: phInfo.label, color: phInfo.color, taskCount: tasksInPhase.length });
                       }}
                       title="Eliminar fase"
                     >{'\uD83D\uDDD1'} Eliminar</button>
@@ -1135,6 +1130,51 @@ export default function ClientDetail({ client: c }) {
             }
           }}>+ Agregar otro item</button>
         </div>
+      </Modal>
+
+      {/* Delete Phase Confirmation */}
+      <Modal
+        open={!!deletePhaseConfirm}
+        onClose={() => setDeletePhaseConfirm(null)}
+        title=""
+        maxWidth={420}
+        footer={null}
+      >
+        {deletePhaseConfirm && (
+          <div className="text-center py-2">
+            <div className="text-4xl mb-3">{'\u26A0\uFE0F'}</div>
+            <div className="text-[17px] font-bold text-gray-800 mb-2">Eliminar fase</div>
+            <div className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full text-sm font-bold mb-4" style={{ background: deletePhaseConfirm.color + '18', color: deletePhaseConfirm.color }}>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: deletePhaseConfirm.color }} />
+              {deletePhaseConfirm.label}
+            </div>
+            {deletePhaseConfirm.taskCount > 0 ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg py-3 px-4 mb-5 text-left">
+                <div className="text-[13px] font-semibold text-red-600 mb-1">{'\u26A0'} Se eliminarán {deletePhaseConfirm.taskCount} tarea{deletePhaseConfirm.taskCount > 1 ? 's' : ''}</div>
+                <div className="text-[12px] text-red-500">Todas las tareas dentro de esta fase serán eliminadas permanentemente. Esta acción no se puede deshacer.</div>
+              </div>
+            ) : (
+              <div className="text-[13px] text-gray-500 mb-5">Esta fase no tiene tareas. Se eliminará solo la fase.</div>
+            )}
+            <div className="flex flex-col gap-2">
+              <button
+                className="w-full py-3 px-4 rounded-lg border-none bg-blue text-white text-[14px] font-bold cursor-pointer font-sans hover:bg-blue-dark transition-colors"
+                onClick={() => setDeletePhaseConfirm(null)}
+              >No borrar, mantener la fase</button>
+              <button
+                className="w-full py-2 px-4 rounded-lg border border-gray-200 bg-white text-gray-400 text-[12px] font-medium cursor-pointer font-sans hover:text-red-500 hover:border-red-300 hover:bg-red-50 transition-colors"
+                onClick={() => {
+                  const pk = deletePhaseConfirm.phaseKey;
+                  const tasksInPhase = clientTasks.filter(t => t.phase === pk);
+                  tasksInPhase.forEach(t => deleteTask(t.id));
+                  const newCustomPhases = (c.customPhases || []).filter(cp => cp.id !== pk);
+                  updateClient(c.id, { customPhases: newCustomPhases });
+                  setDeletePhaseConfirm(null);
+                }}
+              >{deletePhaseConfirm.taskCount > 0 ? `Sí, eliminar fase y sus ${deletePhaseConfirm.taskCount} tareas` : 'Sí, eliminar fase'}</button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Add Phase Modal */}
