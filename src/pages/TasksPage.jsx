@@ -4,6 +4,7 @@ import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/co
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
+import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage() {
   const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, hideCompletedTasks, setHideCompletedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
@@ -262,10 +263,10 @@ export default function TasksPage() {
                     {assigneeMembers.length > 0 ? (
                       <div className="flex items-center">
                         {assigneeMembers.slice(0, 2).map((am, ai) => (
-                          <span key={am.id} className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-6px' : '0', zIndex: 2 - ai }} title={am.name}>{am.initials}</span>
+                          <TeamAvatar key={am.id} member={am} size={20} className="border-2 border-white" style={{ marginLeft: ai > 0 ? '-6px' : '0', zIndex: 2 - ai }} />
                         ))}
                         {assigneeMembers.length > 2 && (
-                          <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border border-white" style={{ marginLeft: '-6px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
+                          <span className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border-2 border-white" style={{ marginLeft: '-6px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
                         )}
                       </div>
                     ) : <span className="text-text3">+ Asignar</span>}
@@ -281,7 +282,7 @@ export default function TasksPage() {
                     ...TEAM.map(m => {
                       const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                       return {
-                        node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                        node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><TeamAvatar member={m} size={20} /><span>{m.name}</span></div>,
                         onClick: () => toggleAssignee(m.name),
                       };
                     })
@@ -403,7 +404,7 @@ export default function TasksPage() {
                           onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-assignee-' + t.id); }}
                         >
                           {assigneeMembers.slice(0, 2).map((am, ai) => (
-                            <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }}>{am.initials}</span>
+                            <TeamAvatar key={am.id} member={am} size={18} className="border border-white" style={{ marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }} />
                           ))}
                         </div>
                       );
@@ -427,7 +428,7 @@ export default function TasksPage() {
                             ...TEAM.map(m => {
                               const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                               return {
-                                node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                                node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><TeamAvatar member={m} size={20} /><span>{m.name}</span></div>,
                                 onClick: () => toggleAssignee(m.name),
                               };
                             })

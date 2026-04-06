@@ -5,6 +5,7 @@ import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, 
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
+import TeamAvatar from '../components/TeamAvatar';
 
 export default function ClientDetail({ client: c }) {
   const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, currentUser } = useApp();
@@ -374,7 +375,7 @@ export default function ClientDetail({ client: c }) {
                     {assigneeMembers.length > 0 ? (
                       <div className="flex items-center" style={{ direction: 'ltr' }}>
                         {assigneeMembers.slice(0, 2).map((am, ai) => (
-                          <span key={am.id} className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-white" style={{ background: am.color + '22', color: am.color, marginLeft: ai > 0 ? '-8px' : '0', zIndex: 2 - ai }} title={am.name}>{am.initials}</span>
+                          <TeamAvatar key={am.id} member={am} size={24} className="border-2 border-white" style={{ marginLeft: ai > 0 ? '-8px' : '0', zIndex: 2 - ai }} />
                         ))}
                         {assigneeMembers.length > 2 && (
                           <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border-2 border-white" style={{ marginLeft: '-8px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
@@ -394,7 +395,7 @@ export default function ClientDetail({ client: c }) {
                       ...TEAM.map(m => {
                         const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                         return {
-                          node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span><span>{m.name}</span></div>,
+                          node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><TeamAvatar member={m} size={20} /><span>{m.name}</span></div>,
                           onClick: () => toggleAssignee(m.name),
                         };
                       })
@@ -533,7 +534,7 @@ export default function ClientDetail({ client: c }) {
                   return (
                     <div className="flex items-center">
                       {aMembers.slice(0, 2).map((am, ai) => (
-                        <span key={am.id} className="w-[16px] h-[16px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 border border-white" style={{ background: am.color + '18', color: am.color, marginLeft: ai > 0 ? '-4px' : '0' }}>{am.initials}</span>
+                        <TeamAvatar key={am.id} member={am} size={18} className="border border-white" style={{ marginLeft: ai > 0 ? '-4px' : '0' }} />
                       ))}
                     </div>
                   );

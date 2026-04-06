@@ -1,6 +1,7 @@
 import { useApp } from '../context/AppContext';
 import { TEAM } from '../utils/constants';
 import { daysBetween, daysAgo, today } from '../utils/helpers';
+import TeamAvatar from '../components/TeamAvatar';
 
 export default function DashboardPage() {
   const { clients, tasks } = useApp();
@@ -145,7 +146,7 @@ export default function DashboardPage() {
                 <tr key={m.id} className="hover:bg-blue-50/30">
                   <td className="py-1.5 px-2 border border-gray-200 font-semibold sticky left-0 bg-white z-10">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                      <TeamAvatar member={m} size={20} />
                       {m.name}
                     </span>
                   </td>
@@ -184,7 +185,7 @@ export default function DashboardPage() {
             return (
               <div key={m.id}>
                 <div className="text-[11px] text-gray-600 hidden md:grid grid-cols-[18px_80px_10px_1fr] items-center gap-1.5">
-                  <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                  <TeamAvatar member={m} size={18} />
                   <span className="font-semibold text-gray-800 truncate">{m.name}</span>
                   <span className="text-gray-400 text-center">|</span>
                   <span className="flex items-center gap-1 min-w-0">
@@ -193,7 +194,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="md:hidden flex items-center gap-2 py-1.5 border-b border-gray-100 text-[11px] text-gray-600">
-                  <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[7px] font-bold shrink-0" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                  <TeamAvatar member={m} size={18} />
                   <div className="min-w-0 flex-1">
                     <span className="font-semibold text-gray-800">{m.name}</span>
                     <div className="text-red-500 font-medium text-[10px] truncate">{bn}</div>
@@ -224,7 +225,7 @@ export default function DashboardPage() {
                 <tr key={m.id} className="hover:bg-blue-50/30">
                   <td className="py-2 px-3 border border-gray-200 font-semibold">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-bold" style={{ background: m.color + '18', color: m.color }}>{m.initials}</span>
+                      <TeamAvatar member={m} size={20} />
                       {m.name}
                     </span>
                   </td>

@@ -59,15 +59,15 @@ export const TASK_STATUS = {
 export const TASK_STATUS_ORDER = ['backlog', 'in-progress', 'en-revision', 'done', 'blocked', 'retrasadas'];
 
 export const TEAM = [
-  { id: 'josem',     name: 'Jose Martin',          role: 'CMO',              color: '#EAB308', initials: 'JM' },
-  { id: 'david',     name: 'David',                role: 'Trafficker',       color: '#F97316', initials: 'DV' },
-  { id: 'marcos',    name: 'Marcos',               role: 'CTO',             color: '#22C55E', initials: 'MC' },
+  { id: 'josem',     name: 'Jose Martin',          role: 'CMO',              color: '#EAB308', initials: 'JM', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
+  { id: 'david',     name: 'David',                role: 'Trafficker',       color: '#F97316', initials: 'DV', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3df7842793384dc77b7.png' },
+  { id: 'marcos',    name: 'Marcos',               role: 'CTO',             color: '#22C55E', initials: 'MC', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
   { id: 'zil',       name: 'Zil',                  role: 'Coordinación',    color: '#8B5CF6', initials: 'ZL' },
-  { id: 'matias',    name: 'Matias',               role: 'COO',             color: '#5B7CF5', initials: 'MB' },
-  { id: 'cris',      name: 'Cristian',             role: 'CEO',             color: '#06B6D4', initials: 'CF' },
-  { id: 'zerillos',  name: 'Jose Zerillos',        role: 'Diseño landings', color: '#EC4899', initials: 'JZ' },
+  { id: 'matias',    name: 'Matias',               role: 'COO',             color: '#5B7CF5', initials: 'MB', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/684cd8d92809a925e80880c2.png' },
+  { id: 'cris',      name: 'Cristian',             role: 'CEO',             color: '#06B6D4', initials: 'CF', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3e0afed7575d4e87884.png' },
+  { id: 'zerillos',  name: 'Jose Zerillos',        role: 'Diseño landings', color: '#EC4899', initials: 'JZ', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc4.png' },
   { id: 'jordi',     name: 'Jordi',                role: 'Project Manager', color: '#14B8A6', initials: 'JD' },
-  { id: 'christian', name: 'Christian Uscanga',     role: 'Programador',     color: '#A855F7', initials: 'CU' },
+  { id: 'christian', name: 'Christian Uscanga',     role: 'Programador',     color: '#A855F7', initials: 'CU', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc3.png' },
 ];
 
 export const USERS = {
