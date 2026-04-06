@@ -253,7 +253,7 @@ export default function ClientDetail({ client: c }) {
       const doneCount = allPhaseTasks.filter(t => t.status === 'done').length;
       const allDone = totalCount > 0 && doneCount === totalCount;
       return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone };
-    }).filter(g => g.totalCount > 0);
+    }).filter(g => g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey)));
 
     // Initialize collapsed state for all-done phases (only on first render logic)
     const isCollapsed = (phaseKey, allDone) => {
@@ -492,17 +492,26 @@ export default function ClientDetail({ client: c }) {
             </div>
           </div>
 
-          {/* Mobile task row */}
+          {/* Mobile task row — uses separate ref to avoid overwriting desktop ref */}
+          {(() => {
+            const mobStatusRef = getDropdownRef('mob-rd-status-' + t.id);
+            return (
           <div
             className={`md:hidden hover:bg-gray-50 cursor-pointer ${rowBg} flex items-start gap-2 py-2.5 px-3`}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           >
             <div
-              ref={el => statusRef.current = el}
+              ref={el => mobStatusRef.current = el}
               className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-[1px]"
               style={{ background: statusColor + '15', color: statusColor, border: `1.5px solid ${statusColor}` }}
-              onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-status-' + t.id); }}
+              onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-rd-status-' + t.id); }}
             >{statusIcon}</div>
+            <Dropdown
+              open={openDropdown === 'mob-rd-status-' + t.id}
+              onClose={() => setOpenDropdown(null)}
+              anchorRef={mobStatusRef}
+              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+            />
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-medium text-gray-800 leading-tight break-words">
                 {t.title}
@@ -531,6 +540,8 @@ export default function ClientDetail({ client: c }) {
               </div>
             </div>
           </div>
+            );
+          })()}
 
           {/* Blocked warning - spans full row below */}
           {blocked && blockingNames.length > 0 && (
