@@ -283,11 +283,13 @@ export default function TasksPage() {
                   onClose={() => setOpenDropdown(null)}
                   anchorRef={assigneeRef}
                   keepOpen
+                  searchable
                   items={[
                     { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
                     ...TEAM.map(m => {
                       const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                       return {
+                        label: m.name,
                         node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><TeamAvatar member={m} size={20} /><span>{m.name}</span></div>,
                         onClick: () => toggleAssignee(m.name),
                       };
@@ -429,11 +431,13 @@ export default function TasksPage() {
                           onClose={() => setOpenDropdown(null)}
                           anchorRef={mobAssigneeRef}
                           keepOpen
+                          searchable
                           items={[
                             { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
                             ...TEAM.map(m => {
                               const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                               return {
+                                label: m.name,
                                 node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><TeamAvatar member={m} size={20} /><span>{m.name}</span></div>,
                                 onClick: () => toggleAssignee(m.name),
                               };

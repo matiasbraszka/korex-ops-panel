@@ -29,6 +29,8 @@ export default function ClientDetail({ client: c }) {
   const [newPhaseColor, setNewPhaseColor] = useState('#5B7CF5');
   const [editingEstDays, setEditingEstDays] = useState(null);
   const [estDaysValue, setEstDaysValue] = useState('');
+  const [editingPhase, setEditingPhase] = useState(null);
+  const [editPhaseValue, setEditPhaseValue] = useState('');
   const [deletePhaseConfirm, setDeletePhaseConfirm] = useState(null);
 
   const dropdownRefs = useRef({});
@@ -390,11 +392,13 @@ export default function ClientDetail({ client: c }) {
                     onClose={() => setOpenDropdown(null)}
                     anchorRef={assigneeRef}
                     keepOpen
+                    searchable
                     items={[
                       { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
                       ...TEAM.map(m => {
                         const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                         return {
+                          label: m.name,
                           node: <div className="flex items-center gap-2 w-full"><input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" /><TeamAvatar member={m} size={20} /><span>{m.name}</span></div>,
                           onClick: () => toggleAssignee(m.name),
                         };
@@ -673,7 +677,36 @@ export default function ClientDetail({ client: c }) {
                 >
                   <span className="text-[11px] text-gray-400 shrink-0">{collapsed ? '\u25B6' : '\u25BC'}</span>
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: phInfo.color }} />
-                  <span className="text-[13px] font-bold" style={{ color: phInfo.color }}>{phInfo.label}</span>
+                  {editingPhase === phaseKey ? (
+                    <input
+                      className="text-[13px] font-bold border border-blue rounded-md py-0.5 px-2 outline-none bg-white font-sans"
+                      style={{ color: phInfo.color, width: Math.max(120, editPhaseValue.length * 9) }}
+                      value={editPhaseValue}
+                      onChange={(e) => setEditPhaseValue(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={() => {
+                        if (editPhaseValue.trim()) {
+                          const isCustom = (c.customPhases || []).some(cp => cp.id === phaseKey);
+                          if (isCustom) {
+                            const newCustomPhases = (c.customPhases || []).map(cp => cp.id === phaseKey ? { ...cp, label: editPhaseValue.trim() } : cp);
+                            updateClient(c.id, { customPhases: newCustomPhases });
+                          } else {
+                            const overrides = { ...(c.phaseNameOverrides || {}), [phaseKey]: editPhaseValue.trim() };
+                            updateClient(c.id, { phaseNameOverrides: overrides });
+                          }
+                        }
+                        setEditingPhase(null);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingPhase(null); }}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      className="text-[13px] font-bold cursor-text hover:bg-gray-100 py-0.5 px-1 rounded"
+                      style={{ color: phInfo.color }}
+                      onDoubleClick={(e) => { e.stopPropagation(); setEditingPhase(phaseKey); setEditPhaseValue(phInfo.label); }}
+                    >{phInfo.label}</span>
+                  )}
                   <span className="text-[11px] font-semibold text-gray-400">({doneCount}/{totalCount})</span>
                   {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
                   {/* Delete phase — custom phases only */}
