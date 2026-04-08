@@ -188,11 +188,11 @@ export default function InformePage() {
     <div>
       {/* Suggestions carousel — horizontal scroll on top */}
       {pending.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-4 -mx-7 px-7 max-md:-mx-3 max-md:px-3">
           <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
             {'\u26A1'} Sugerencias del agente ({pending.length})
           </div>
-          <div className="flex gap-2.5 overflow-x-auto pb-2" style={{ scrollSnapType: 'x mandatory' }}>
+          <div className="flex gap-2.5 overflow-x-auto pb-3 -mb-1" style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
             {pending.map(p => {
               const client = clients.find(c => c.id === p.client_id);
               const clientName = client ? client.name : '\u2014';
@@ -218,6 +218,7 @@ export default function InformePage() {
                 </div>
               );
             })}
+            <div className="shrink-0 w-1" />
           </div>
         </div>
       )}
