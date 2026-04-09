@@ -7,7 +7,7 @@ import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage() {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, moveTask } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -17,6 +17,12 @@ export default function TasksPage() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const newTaskInputRef = useRef(null);
   const dropdownRefs = useRef({});
+
+  // Drag & drop state
+  const [dragTaskId, setDragTaskId] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
+  const [dragOverHalf, setDragOverHalf] = useState(null); // 'top' | 'bottom'
+  const dragGroupRef = useRef(null); // status group of dragged task
 
   // Dependency checking (FIX 5)
   const isTaskBlocked = (task) => {
@@ -120,6 +126,61 @@ export default function TasksPage() {
     setEditingTaskId(null);
   };
 
+  // Drag helpers
+  const getStatusGroup = (task) => {
+    if (task.status === 'done') return 2;
+    if (isTaskBlocked(task)) return 1;
+    return 0;
+  };
+  const handleDragStart = (e, task, group) => {
+    setDragTaskId(task.id);
+    dragGroupRef.current = getStatusGroup(task);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', task.id);
+    // Collapse to small ghost
+    const el = e.currentTarget;
+    el.classList.add('drag-dragging');
+    setTimeout(() => el.classList.add('drag-ghost'), 0);
+  };
+  const handleDragEnd = (e) => {
+    e.currentTarget.classList.remove('drag-dragging', 'drag-ghost');
+    setDragTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverHalf(null);
+    dragGroupRef.current = null;
+  };
+  const handleDragOver = (e, task, sortedGroup) => {
+    e.preventDefault();
+    // Only allow drop in same status group
+    if (dragGroupRef.current !== getStatusGroup(task)) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const half = (e.clientY - rect.top) < rect.height / 2 ? 'top' : 'bottom';
+    setDragOverTaskId(task.id);
+    setDragOverHalf(half);
+  };
+  const handleDrop = (e, task, sortedGroup) => {
+    e.preventDefault();
+    const fromId = dragTaskId;
+    if (!fromId || fromId === task.id) return;
+    if (dragGroupRef.current !== getStatusGroup(task)) return;
+    const targetIdx = sortedGroup.findIndex(t => t.id === task.id);
+    const fromIdx = sortedGroup.findIndex(t => t.id === fromId);
+    if (targetIdx < 0 || fromIdx < 0) return;
+    let insertIdx = dragOverHalf === 'top' ? targetIdx : targetIdx + 1;
+    if (fromIdx < insertIdx) insertIdx--;
+    const reordered = [...sortedGroup];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(insertIdx, 0, moved);
+    reorderTask(reordered);
+    setDragTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverHalf(null);
+  };
+
   const renderTaskRow = (t, { sortedGroup }) => {
     const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
     const stepName = getStepName(t, clients);
@@ -131,6 +192,8 @@ export default function TasksPage() {
 
     const blocked = isTaskBlocked(t);
     const blockingNames = blocked ? getBlockingNames(t) : [];
+    const isDragOver = dragOverTaskId === t.id && dragTaskId !== t.id;
+    const isDragging = dragTaskId === t.id;
     const isOverdue = t.dueDate && t.status !== 'done' && !blocked && t.dueDate < today();
 
     const client = clients.find(x => x.id === t.clientId);
@@ -153,14 +216,25 @@ export default function TasksPage() {
     }
 
     return (
-      <div key={t.id} className="border-b border-border last:border-b-0">
+      <div key={t.id} className={`border-b border-border last:border-b-0 ${isDragging ? 'drag-ghost' : ''}`}>
+        {/* Drop indicator */}
+        {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
-        <div className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '20px 28px 1fr 110px 50px 30px' }}>
-          {/* Reorder arrows */}
-          <div className="flex flex-col items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button className="bg-transparent border-none text-text3 cursor-pointer text-[10px] leading-none p-0 hover:text-blue disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'up', sortedGroup); }} disabled={sortedGroup.indexOf(t) === 0}>{'\u25B2'}</button>
-            <button className="bg-transparent border-none text-text3 cursor-pointer text-[10px] leading-none p-0 hover:text-blue disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'down', sortedGroup); }} disabled={sortedGroup.indexOf(t) === sortedGroup.length - 1}>{'\u25BC'}</button>
-          </div>
+        <div
+          className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`}
+          style={{ gridTemplateColumns: '20px 28px 1fr 110px 50px 30px' }}
+          onDragOver={(e) => handleDragOver(e, t, sortedGroup)}
+          onDrop={(e) => handleDrop(e, t, sortedGroup)}
+          onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
+        >
+          {/* Drag handle */}
+          <div
+            className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-text3 text-[14px] select-none"
+            draggable
+            onDragStart={(e) => handleDragStart(e, t, sortedGroup)}
+            onDragEnd={handleDragEnd}
+            title="Arrastrar para reordenar"
+          >{'\u2630'}</div>
 
           {/* Status icon */}
           <div
@@ -472,6 +546,8 @@ export default function TasksPage() {
             </div>
           </div>
         )}
+        {/* Drop indicator bottom */}
+        {isDragOver && dragOverHalf === 'bottom' && <div className="drag-indicator" />}
       </div>
     );
   };

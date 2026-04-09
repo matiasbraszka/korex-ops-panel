@@ -58,6 +58,32 @@ body {
   }
 }
 
+/* Drag & drop task reordering */
+.drag-ghost {
+  opacity: 0.3;
+  background: var(--color-blue-bg2) !important;
+}
+.drag-indicator {
+  height: 2px;
+  background: var(--color-blue);
+  border-radius: 1px;
+  margin: 0 12px;
+  position: relative;
+  z-index: 10;
+  pointer-events: none;
+  box-shadow: 0 0 4px rgba(91, 124, 245, 0.4);
+}
+.drag-indicator::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-blue);
+}
+
 /* Report tables responsive */
 @media (max-width: 767px) {
   .report-table {

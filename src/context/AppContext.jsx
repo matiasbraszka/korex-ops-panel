@@ -278,28 +278,23 @@ export function AppProvider({ children }) {
     });
   }, [save, dbDeleteTask, recalculateTimers]);
 
-  // ── Reorder tasks ──
-  const moveTask = useCallback((taskId, direction, sortedGroup) => {
-    // sortedGroup is the array of tasks in the same status group, already sorted by position
-    const idx = sortedGroup.findIndex(t => t.id === taskId);
-    if (idx < 0) return;
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= sortedGroup.length) return;
-    const a = sortedGroup[idx];
-    const b = sortedGroup[swapIdx];
-    // Swap positions
-    const posA = a.position ?? 0;
-    const posB = b.position ?? 0;
+  // ── Reorder tasks (drag & drop) ──
+  // reorderedGroup: the full group array in its new order
+  const reorderTask = useCallback((reorderedGroup) => {
+    if (!reorderedGroup || reorderedGroup.length === 0) return;
     setTasks(prev => {
-      const newTasks = prev.map(t => {
-        if (t.id === a.id) return { ...t, position: posB };
-        if (t.id === b.id) return { ...t, position: posA };
-        return t;
+      const newTasks = [...prev];
+      reorderedGroup.forEach((t, i) => {
+        const idx = newTasks.findIndex(x => x.id === t.id);
+        if (idx >= 0) newTasks[idx] = { ...newTasks[idx], position: i };
       });
       save(clientsRef.current, newTasks);
-      const updA = newTasks.find(t => t.id === a.id);
-      const updB = newTasks.find(t => t.id === b.id);
-      if (dbReady.current) { dbSaveTask(updA); dbSaveTask(updB); }
+      if (dbReady.current) {
+        reorderedGroup.forEach((t, i) => {
+          const updated = newTasks.find(x => x.id === t.id);
+          if (updated) dbSaveTask(updated);
+        });
+      }
       return newTasks;
     });
   }, [save, dbSaveTask]);
@@ -563,7 +558,7 @@ export function AppProvider({ children }) {
     createTask,
     updateTask,
     deleteTask,
-    moveTask,
+    reorderTask,
     doLogin,
     doLogout,
     injectMetaMetrics,

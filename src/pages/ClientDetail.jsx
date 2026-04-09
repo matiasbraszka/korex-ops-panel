@@ -8,7 +8,7 @@ import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, moveTask, currentUser } = useApp();
+  const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser } = useApp();
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [editModal, setEditModal] = useState(false);
@@ -228,6 +228,57 @@ export default function ClientDetail({ client: c }) {
   };
 
   // ===== VERTICAL LIST ROADMAP =====
+  // Drag & drop state for roadmap
+  const [rdDragId, setRdDragId] = useState(null);
+  const [rdDragOverId, setRdDragOverId] = useState(null);
+  const [rdDragOverHalf, setRdDragOverHalf] = useState(null);
+  const rdDragGroupRef = useRef(null);
+
+  const rdGetGroup = (task) => {
+    if (task.status === 'done') return 2;
+    if (isTaskBlocked(task)) return 1;
+    return 0;
+  };
+  const rdHandleDragStart = (e, task) => {
+    setRdDragId(task.id);
+    rdDragGroupRef.current = rdGetGroup(task);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', task.id);
+    setTimeout(() => e.currentTarget.classList.add('drag-ghost'), 0);
+  };
+  const rdHandleDragEnd = (e) => {
+    e.currentTarget.classList.remove('drag-ghost');
+    setRdDragId(null);
+    setRdDragOverId(null);
+    setRdDragOverHalf(null);
+    rdDragGroupRef.current = null;
+  };
+  const rdHandleDragOver = (e, task) => {
+    e.preventDefault();
+    if (rdDragGroupRef.current !== rdGetGroup(task)) { e.dataTransfer.dropEffect = 'none'; return; }
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    setRdDragOverId(task.id);
+    setRdDragOverHalf((e.clientY - rect.top) < rect.height / 2 ? 'top' : 'bottom');
+  };
+  const rdHandleDrop = (e, task, sortedTasks) => {
+    e.preventDefault();
+    if (!rdDragId || rdDragId === task.id) return;
+    if (rdDragGroupRef.current !== rdGetGroup(task)) return;
+    const fromIdx = sortedTasks.findIndex(t => t.id === rdDragId);
+    const targetIdx = sortedTasks.findIndex(t => t.id === task.id);
+    if (fromIdx < 0 || targetIdx < 0) return;
+    let insertIdx = rdDragOverHalf === 'top' ? targetIdx : targetIdx + 1;
+    if (fromIdx < insertIdx) insertIdx--;
+    const reordered = [...sortedTasks];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(insertIdx, 0, moved);
+    reorderTask(reordered);
+    setRdDragId(null);
+    setRdDragOverId(null);
+    setRdDragOverHalf(null);
+  };
+
   const renderRoadmap = () => {
     const filteredTasks = getFilteredTasks();
 
@@ -297,18 +348,29 @@ export default function ClientDetail({ client: c }) {
       let rowBg = '';
       if (t.status === 'in-progress') rowBg = 'bg-blue-50/40';
 
+      const rdIsDragOver = rdDragOverId === t.id && rdDragId !== t.id;
+      const rdIsDragging = rdDragId === t.id;
+
       return (
-        <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''}`}>
+        <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''} ${rdIsDragging ? 'drag-ghost' : ''}`}>
+          {/* Drop indicator top */}
+          {rdIsDragOver && rdDragOverHalf === 'top' && <div className="drag-indicator" />}
           {/* Main row - CSS Grid for consistent alignment */}
           <div
             className={`hover:bg-gray-50 cursor-pointer ${rowBg} hidden md:grid grid-cols-[20px_16px_20px_1fr_90px_80px_30px] items-center gap-1 py-[7px] px-3`}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
+            onDragOver={(e) => rdHandleDragOver(e, t)}
+            onDrop={(e) => rdHandleDrop(e, t, sortedGroup)}
+            onDragLeave={() => { if (rdDragOverId === t.id) setRdDragOverId(null); }}
           >
-            {/* Col 0: Reorder arrows */}
-            <div className="flex flex-col items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button className="bg-transparent border-none text-gray-300 cursor-pointer text-[10px] leading-none p-0 hover:text-blue-500 disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'up', sortedGroup); }} disabled={!sortedGroup || sortedGroup.indexOf(t) === 0}>{'\u25B2'}</button>
-              <button className="bg-transparent border-none text-gray-300 cursor-pointer text-[10px] leading-none p-0 hover:text-blue-500 disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'down', sortedGroup); }} disabled={!sortedGroup || sortedGroup.indexOf(t) === sortedGroup.length - 1}>{'\u25BC'}</button>
-            </div>
+            {/* Col 0: Drag handle */}
+            <div
+              className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-gray-300 text-[14px] select-none"
+              draggable
+              onDragStart={(e) => rdHandleDragStart(e, t)}
+              onDragEnd={rdHandleDragEnd}
+              title="Arrastrar para reordenar"
+            >{'\u2630'}</div>
 
             {/* Col 1: Status dot — clickable */}
             <div
@@ -593,6 +655,8 @@ export default function ClientDetail({ client: c }) {
               </div>
             </div>
           )}
+          {/* Drop indicator bottom */}
+          {rdIsDragOver && rdDragOverHalf === 'bottom' && <div className="drag-indicator" />}
         </div>
       );
     };
