@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { TEAM, PHASES } from '../utils/constants';
 import { daysBetween, daysAgo, today, fmtDate, getAllPhases } from '../utils/helpers';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function DashboardPage() {
-  const { clients, tasks } = useApp();
+  const { clients, tasks, updateClient } = useApp();
+  const [assigningDeadline, setAssigningDeadline] = useState(null);
 
   const now = today();
   const monthStart = now.substring(0, 7) + '-01';
@@ -125,17 +127,30 @@ export default function DashboardPage() {
 
   // ── D. Phase timeline data ──
   const ganttEntries = [];
-  clients.filter(c => !isKorexClient(c) && c.phaseDeadlines).forEach(c => {
+  const unscheduledPhases = [];
+  clients.filter(c => !isKorexClient(c)).forEach(c => {
     const allPh = getAllPhases(c);
-    Object.entries(c.phaseDeadlines || {}).forEach(([phaseKey, deadline]) => {
-      if (!deadline) return;
+    const deadlines = c.phaseDeadlines || {};
+    // Phases with tasks
+    const clientPhaseKeys = new Set();
+    tasks.filter(t => t.clientId === c.id && t.phase).forEach(t => clientPhaseKeys.add(t.phase));
+    // Also include phases from PHASES and customPhases
+    Object.keys(allPh).forEach(k => clientPhaseKeys.add(k));
+
+    clientPhaseKeys.forEach(phaseKey => {
       const phInfo = allPh[phaseKey] || PHASES[phaseKey];
       if (!phInfo) return;
       const phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
+      if (phaseTasks.length === 0 && !deadlines[phaseKey]) return; // skip empty phases without deadline
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
-      const isOverdue = deadline < now && !done;
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
-      ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress });
+      const deadline = deadlines[phaseKey];
+      if (deadline) {
+        const isOverdue = deadline < now && !done;
+        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress });
+      } else if (!done) {
+        unscheduledPhases.push({ client: c, phaseKey, phInfo, progress });
+      }
     });
   });
   ganttEntries.sort((a, b) => a.deadline.localeCompare(b.deadline));
@@ -147,110 +162,152 @@ export default function DashboardPage() {
     ganttByClient[e.client.id].phases.push(e);
   });
 
-  // Timeline calc
-  const ganttMinDate = ganttEntries.length > 0 ? ganttEntries.reduce((min, e) => e.deadline < min ? e.deadline : min, now) : now;
-  const ganttMaxDate = ganttEntries.length > 0 ? ganttEntries.reduce((max, e) => e.deadline > max ? e.deadline : max, now) : now;
-  const ganttStart = new Date(ganttMinDate < now ? ganttMinDate : now);
-  ganttStart.setDate(ganttStart.getDate() - 3);
-  const ganttEnd = new Date(ganttMaxDate);
-  ganttEnd.setDate(ganttEnd.getDate() + 10);
-  const ganttTotalDays = Math.max(21, Math.ceil((ganttEnd - ganttStart) / 86400000));
-  const ganttTodayPct = Math.ceil((new Date(now) - ganttStart) / 86400000) / ganttTotalDays * 100;
-
-  // Week columns
-  const ganttWeeks = [];
-  const gw = new Date(ganttStart);
-  gw.setDate(gw.getDate() - gw.getDay() + 1);
-  while (gw <= ganttEnd) {
-    const pct = Math.ceil((gw - ganttStart) / 86400000) / ganttTotalDays * 100;
-    if (pct >= 0 && pct <= 100) {
-      const weekNum = `S${Math.ceil(gw.getDate() / 7)}`;
-      const monthLabel = gw.toLocaleDateString('es-AR', { month: 'short' });
-      ganttWeeks.push({ pct, weekNum, monthLabel, isMonthStart: gw.getDate() <= 7 });
-    }
-    gw.setDate(gw.getDate() + 7);
+  // Timeline: show 21 days from today (or from earliest deadline)
+  const ganttStartDate = new Date(now);
+  ganttStartDate.setDate(ganttStartDate.getDate() - 3);
+  const displayDays = 28;
+  const dayColumns = [];
+  for (let d = 0; d < displayDays; d++) {
+    const date = new Date(ganttStartDate);
+    date.setDate(date.getDate() + d);
+    const iso = date.toISOString().split('T')[0];
+    const dayNum = date.getDate();
+    const weekDay = date.getDay(); // 0=Sun
+    const monthLabel = dayNum === 1 || d === 0 ? date.toLocaleDateString('es-AR', { month: 'short' }) : null;
+    dayColumns.push({ iso, dayNum, weekDay, monthLabel, isToday: iso === now, isWeekend: weekDay === 0 || weekDay === 6 });
   }
+  const dayWidth = 32; // px per day
+  const labelWidth = 150;
+
+  const handleAssignDeadline = (clientId, phaseKey, dateVal) => {
+    const c = clients.find(x => x.id === clientId);
+    if (!c) return;
+    const deadlines = { ...(c.phaseDeadlines || {}), [phaseKey]: dateVal };
+    updateClient(clientId, { phaseDeadlines: deadlines });
+    setAssigningDeadline(null);
+  };
 
   return (
     <div className="space-y-5 overflow-x-hidden">
       {/* Timeline Gantt */}
-      {ganttEntries.length > 0 && (
+      {(ganttEntries.length > 0 || unscheduledPhases.length > 0) && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
           <div className="text-sm font-bold mb-4">Timeline de fases</div>
 
-          {/* Desktop Gantt */}
-          <div className="hidden md:block overflow-x-auto">
-            <div style={{ minWidth: 700 }}>
-              {/* Week header row */}
-              <div className="flex border-b border-gray-100 relative" style={{ marginLeft: 140, height: 32 }}>
-                {ganttWeeks.map((w, i) => (
-                  <div key={i} className="absolute text-center border-l border-gray-100" style={{ left: `${w.pct}%`, width: `${100 / ganttTotalDays * 7}%`, top: 0, bottom: 0 }}>
-                    {w.isMonthStart && <div className="text-[10px] font-semibold text-gray-600 capitalize">{w.monthLabel}</div>}
-                    <div className="text-[9px] text-gray-400">{w.weekNum}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Client rows */}
-              {Object.values(ganttByClient).map(({ client: cl, phases }) => (
-                <div key={cl.id} className="border-b border-gray-50 last:border-b-0">
-                  {phases.map((ph, pi) => (
-                    <div key={ph.phaseKey} className="flex items-center" style={{ height: 36 }}>
-                      {/* Label column */}
-                      <div className="w-[140px] shrink-0 pr-3">
-                        {pi === 0 && <div className="text-[11px] font-bold text-gray-800 truncate">{cl.name}</div>}
-                        <div className="text-[10px] text-gray-400 truncate">{ph.phInfo.label}</div>
-                      </div>
-                      {/* Bar area */}
-                      <div className="flex-1 relative h-full flex items-center">
-                        {/* Grid lines */}
-                        {ganttWeeks.map((w, i) => (
-                          <div key={i} className="absolute top-0 bottom-0 border-l border-gray-50" style={{ left: `${w.pct}%` }} />
-                        ))}
-                        {/* Today line */}
-                        <div className="absolute top-0 bottom-0 border-l-2 border-blue-400 z-10" style={{ left: `${ganttTodayPct}%` }} />
-                        {/* Bar */}
-                        {(() => {
-                          const deadlinePct = Math.ceil((new Date(ph.deadline) - ganttStart) / 86400000) / ganttTotalDays * 100;
-                          const barStart = Math.min(ganttTodayPct, deadlinePct);
-                          const barEnd = Math.max(ganttTodayPct, deadlinePct);
-                          const barWidth = Math.max(2, barEnd - barStart);
-                          const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
-                          return (
-                            <div className="absolute flex items-center" style={{ left: `${barStart}%`, width: `${barWidth}%`, height: 20 }}>
-                              <div className="w-full h-full rounded-md relative overflow-hidden" style={{ background: color + '20' }}>
-                                <div className="h-full rounded-md" style={{ width: `${ph.progress}%`, background: color + '70' }} />
-                              </div>
-                              <span className="ml-1.5 text-[9px] font-semibold whitespace-nowrap shrink-0" style={{ color }}>{ph.done ? '\u2713' : fmtDate(ph.deadline)}</span>
-                            </div>
-                          );
-                        })()}
-                      </div>
+          {/* Desktop Gantt — day columns */}
+          {ganttEntries.length > 0 && (
+            <div className="hidden md:block overflow-x-auto">
+              <div style={{ minWidth: labelWidth + dayColumns.length * dayWidth }}>
+                {/* Day header */}
+                <div className="flex" style={{ marginLeft: labelWidth }}>
+                  {dayColumns.map((d, i) => (
+                    <div key={i} className={`text-center shrink-0 border-b ${d.isToday ? 'border-b-2 border-blue-500' : 'border-gray-100'} ${d.isWeekend ? 'bg-gray-50/50' : ''}`} style={{ width: dayWidth }}>
+                      {d.monthLabel && <div className="text-[9px] font-semibold text-gray-600 capitalize -mt-3 mb-0.5">{d.monthLabel}</div>}
+                      <div className={`text-[10px] leading-none pb-1 ${d.isToday ? 'font-bold text-blue-600' : d.isWeekend ? 'text-gray-300' : 'text-gray-400'}`}>{d.dayNum}</div>
                     </div>
                   ))}
                 </div>
-              ))}
+
+                {/* Client rows */}
+                {Object.values(ganttByClient).map(({ client: cl, phases }) => (
+                  <div key={cl.id} className="border-b border-gray-100 last:border-b-0">
+                    {phases.map((ph, pi) => {
+                      const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
+                      // Find bar start (today) and end (deadline) in day indices
+                      const todayIdx = dayColumns.findIndex(d => d.iso === now);
+                      const deadlineIdx = dayColumns.findIndex(d => d.iso === ph.deadline);
+                      const startIdx = Math.max(0, Math.min(todayIdx >= 0 ? todayIdx : 0, deadlineIdx >= 0 ? deadlineIdx : 0));
+                      const endIdx = Math.max(todayIdx >= 0 ? todayIdx : dayColumns.length - 1, deadlineIdx >= 0 ? deadlineIdx : dayColumns.length - 1);
+                      const barLeft = startIdx * dayWidth;
+                      const barW = Math.max(dayWidth, (endIdx - startIdx + 1) * dayWidth);
+
+                      return (
+                        <div key={ph.phaseKey} className="flex items-center" style={{ height: 32 }}>
+                          <div className="shrink-0 pr-2 overflow-hidden" style={{ width: labelWidth }}>
+                            {pi === 0 && <div className="text-[11px] font-bold text-gray-800 truncate leading-tight">{cl.name}</div>}
+                            <div className="text-[9px] truncate leading-tight" style={{ color }}>{ph.phInfo.label}</div>
+                          </div>
+                          <div className="relative flex items-center" style={{ width: dayColumns.length * dayWidth, height: '100%' }}>
+                            {/* Day grid lines */}
+                            {dayColumns.map((d, i) => (
+                              <div key={i} className={`absolute top-0 bottom-0 ${d.isWeekend ? 'bg-gray-50/50' : ''} ${d.isToday ? 'bg-blue-50/40' : ''}`} style={{ left: i * dayWidth, width: dayWidth, borderLeft: '1px solid #f3f4f6' }} />
+                            ))}
+                            {/* Bar */}
+                            <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 18, top: 7 }}>
+                              <div className="w-full h-full rounded relative overflow-hidden" style={{ background: color + '25' }}>
+                                <div className="h-full rounded" style={{ width: `${ph.progress}%`, background: color, opacity: 0.6 }} />
+                                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold" style={{ color: ph.progress > 40 ? '#fff' : color }}>{ph.progress}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Mobile: compact list */}
-          <div className="md:hidden space-y-1">
-            {ganttEntries.map((e, i) => (
-              <div key={i} className={`flex items-center gap-2 py-2 px-2.5 rounded-lg text-[11px] ${e.isOverdue ? 'bg-red-50' : e.done ? 'bg-green-50' : 'bg-gray-50'}`}>
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} />
-                <div className="min-w-0 flex-1">
-                  <span className="font-semibold text-gray-700">{e.client.name}</span>
-                  <span className="text-gray-400 ml-1">{e.phInfo.label}</span>
+          {ganttEntries.length > 0 && (
+            <div className="md:hidden space-y-1">
+              {ganttEntries.map((e, i) => (
+                <div key={i} className={`flex items-center gap-2 py-2 px-2.5 rounded-lg text-[11px] ${e.isOverdue ? 'bg-red-50' : e.done ? 'bg-green-50' : 'bg-gray-50'}`}>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold text-gray-700">{e.client.name}</span>
+                    <span className="text-gray-400 ml-1">{e.phInfo.label}</span>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${e.progress}%`, background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} /></div>
+                    <span className={`font-medium text-[10px] ${e.isOverdue ? 'text-red-500' : e.done ? 'text-green-500' : 'text-gray-500'}`}>
+                      {e.done ? '\u2713' : fmtDate(e.deadline)}
+                    </span>
+                  </div>
                 </div>
-                <div className="shrink-0 flex items-center gap-1.5">
-                  <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${e.progress}%`, background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} /></div>
-                  <span className={`font-medium text-[10px] ${e.isOverdue ? 'text-red-500' : e.done ? 'text-green-500' : 'text-gray-500'}`}>
-                    {e.done ? '\u2713' : fmtDate(e.deadline)}
-                  </span>
-                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Unscheduled phases — assign deadline from here */}
+          {unscheduledPhases.length > 0 && (
+            <div className={ganttEntries.length > 0 ? 'mt-4 pt-3 border-t border-gray-100' : ''}>
+              <div className="text-[11px] font-semibold text-gray-500 mb-2">Sin fecha asignada ({unscheduledPhases.length})</div>
+              <div className="flex flex-wrap gap-1.5">
+                {unscheduledPhases.map((u, i) => {
+                  const key = u.client.id + '_' + u.phaseKey;
+                  if (assigningDeadline === key) {
+                    return (
+                      <div key={i} className="inline-flex items-center gap-1 py-1 px-2 rounded-md bg-blue-50 border border-blue-200 text-[10px]">
+                        <span className="font-semibold text-gray-700">{u.client.name}</span>
+                        <span style={{ color: u.phInfo.color }}>{u.phInfo.label}</span>
+                        <input
+                          type="date"
+                          className="border border-blue-300 rounded py-[1px] px-1 text-[10px] outline-none bg-white w-[110px]"
+                          autoFocus
+                          onChange={(e) => { if (e.target.value) handleAssignDeadline(u.client.id, u.phaseKey, e.target.value); }}
+                          onBlur={() => setAssigningDeadline(null)}
+                        />
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={i}
+                      className="inline-flex items-center gap-1 py-1 px-2 rounded-md bg-gray-50 border border-gray-200 text-[10px] cursor-pointer hover:bg-blue-50 hover:border-blue-200 font-sans"
+                      onClick={() => setAssigningDeadline(key)}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: u.phInfo.color }} />
+                      <span className="font-semibold text-gray-600">{u.client.name}</span>
+                      <span className="text-gray-400">{u.phInfo.label}</span>
+                      <span className="text-gray-300 ml-0.5">{'\uD83D\uDCC5'}</span>
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
