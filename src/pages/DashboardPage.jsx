@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const [expandedPhases, setExpandedPhases] = useState({});
   const [assigningTaskDate, setAssigningTaskDate] = useState(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
+  const [editingPhaseDeadline, setEditingPhaseDeadline] = useState(null);
 
   const now = today();
   const monthStart = now.substring(0, 7) + '-01';
@@ -260,11 +261,31 @@ export default function DashboardPage() {
                           <div className={`flex items-start py-1 ${hasTasks ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
                             <div className="shrink-0 pr-2 flex items-start gap-1 pt-0.5" style={{ width: labelWidth }}>
                               {hasTasks && <span className={`text-[8px] text-gray-400 transition-transform mt-0.5 ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
-                              <div className="text-[10px] leading-snug flex items-start gap-1" style={{ color }}>
+                              <div className="text-[10px] leading-snug flex items-start gap-1 flex-1 min-w-0" style={{ color }}>
                                 <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
                                 <span>{ph.phInfo.label}</span>
                                 <span className="text-gray-400 text-[9px] shrink-0">({ph.progress}%)</span>
                               </div>
+                              {/* Editable deadline date */}
+                              {editingPhaseDeadline === expandKey ? (
+                                <input
+                                  type="date"
+                                  className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[105px] shrink-0"
+                                  defaultValue={ph.deadline}
+                                  autoFocus
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => { if (e.target.value) { handleAssignDeadline(cl.id, ph.phaseKey, e.target.value); setEditingPhaseDeadline(null); } }}
+                                  onBlur={() => setEditingPhaseDeadline(null)}
+                                />
+                              ) : (
+                                <button
+                                  className={`text-[9px] shrink-0 font-sans hover:underline ${ph.isOverdue ? 'text-red-500' : 'text-gray-400'}`}
+                                  onClick={(e) => { e.stopPropagation(); setEditingPhaseDeadline(expandKey); }}
+                                  title="Cambiar fecha"
+                                >
+                                  {fmtDate(ph.deadline)}
+                                </button>
+                              )}
                             </div>
                             <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 28 }}>
                               {/* Week grid lines */}
@@ -280,9 +301,14 @@ export default function DashboardPage() {
                                   <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold" style={{ color }}>{ph.progress}%</span>
                                 </div>
                               </div>
-                              {/* Deadline diamond marker */}
-                              <div className="absolute z-[3]" style={{ left: dateToPx(ph.deadline) - 4, top: 11 }}>
-                                <div className="w-2 h-2 rotate-45" style={{ background: color, border: `1px solid ${color}` }} />
+                              {/* Deadline diamond marker — click to edit */}
+                              <div
+                                className="absolute z-[3] cursor-pointer group"
+                                style={{ left: dateToPx(ph.deadline) - 6, top: 7, padding: 2 }}
+                                onClick={(e) => { e.stopPropagation(); setEditingPhaseDeadline(expandKey); }}
+                                title={`Deadline: ${ph.deadline}`}
+                              >
+                                <div className="w-2.5 h-2.5 rotate-45 group-hover:scale-150 transition-transform" style={{ background: color, border: `1px solid ${color}` }} />
                               </div>
                             </div>
                           </div>
