@@ -330,18 +330,26 @@ export default function DashboardPage() {
                                     {task.status === 'done' ? '\u2713' : task.status === 'blocked' ? '\u2715' : '\u25CB'}
                                   </span>
                                   <span className={`text-[9px] leading-snug ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
-                                  {!taskHasDate && !isAssigning && (
-                                    <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 ml-auto font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
-                                  )}
-                                  {isAssigning && (
+                                  {isAssigning ? (
                                     <input
                                       type="date"
-                                      className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[95px] ml-auto shrink-0"
+                                      className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[105px] ml-auto shrink-0"
+                                      defaultValue={task.dueDate || ''}
                                       autoFocus
                                       onClick={(e) => e.stopPropagation()}
                                       onChange={(e) => { if (e.target.value) handleAssignTaskDate(task.id, e.target.value); }}
                                       onBlur={() => setAssigningTaskDate(null)}
                                     />
+                                  ) : taskHasDate ? (
+                                    <button
+                                      className="text-[9px] shrink-0 ml-auto font-sans text-gray-400 hover:text-blue-500 hover:underline"
+                                      onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                      title="Cambiar fecha"
+                                    >
+                                      {fmtDate(task.dueDate)}
+                                    </button>
+                                  ) : (
+                                    <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 ml-auto font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
                                   )}
                                 </div>
                                 <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 22 }}>
@@ -351,11 +359,11 @@ export default function DashboardPage() {
                                   <div className="absolute top-0 bottom-0 z-[2]" style={{ left: dateToPx(now), width: 1, background: '#5B7CF5', opacity: 0.3 }} />
                                   {taskHasDate && (
                                     <>
-                                      <div className="absolute z-[1]" style={{ left: taskBarStart, width: taskBarW, height: 10, top: 6 }}>
+                                      <div className="absolute z-[1] cursor-pointer" style={{ left: taskBarStart, width: taskBarW, height: 10, top: 6 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>
                                         <div className="w-full h-full rounded-sm" style={{ background: taskColor, opacity: 0.35 }} />
                                       </div>
-                                      <div className="absolute z-[3]" style={{ left: dateToPx(task.dueDate) - 3, top: 8 }}>
-                                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: taskColor }} />
+                                      <div className="absolute z-[3] cursor-pointer group" style={{ left: dateToPx(task.dueDate) - 5, top: 5, padding: 2 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }} title={task.dueDate}>
+                                        <div className="w-2 h-2 rounded-full group-hover:scale-150 transition-transform" style={{ background: taskColor }} />
                                       </div>
                                     </>
                                   )}
