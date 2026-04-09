@@ -78,7 +78,7 @@ export default function InformePage() {
       if (isTableRow && !isSeparator) {
         if (!inTable) {
           if (inList) { html += '</ul>'; inList = false; }
-          html += '<table class="report-table"><thead>';
+          html += '<div class="overflow-x-auto -mx-1"><table class="report-table"><thead>';
           inTable = true;
           tableHeaderDone = false;
         }
@@ -96,7 +96,7 @@ export default function InformePage() {
       }
 
       if (inTable && !isTableRow && !isSeparator) {
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         inTable = false;
         tableHeaderDone = false;
       }
@@ -155,7 +155,7 @@ export default function InformePage() {
     }
 
     if (inList) html += '</ul>';
-    if (inTable) html += '</tbody></table>';
+    if (inTable) html += '</tbody></table></div>';
 
     return html;
   };
@@ -237,7 +237,7 @@ export default function InformePage() {
             <span className="text-[11px] text-gray-400 ml-auto">{stored.source || 'ops-agent'}</span>
           </div>
           {reportExpanded && (
-            <div className="mt-4" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+            <div className="mt-4 overflow-x-auto break-words" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
           )}
         </div>
       ) : (
