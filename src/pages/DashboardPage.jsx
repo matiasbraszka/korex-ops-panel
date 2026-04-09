@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const [assigningDeadline, setAssigningDeadline] = useState(null);
   const [expandedPhases, setExpandedPhases] = useState({});
   const [assigningTaskDate, setAssigningTaskDate] = useState(null);
+  const [showAddPhase, setShowAddPhase] = useState(false);
 
   const now = today();
   const monthStart = now.substring(0, 7) + '-01';
@@ -184,7 +185,7 @@ export default function DashboardPage() {
     weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday });
   }
   const weekWidth = 100; // px per week
-  const labelWidth = 170;
+  const labelWidth = 240;
   const totalTimelineStart = weekColumns[0].startIso;
   const totalTimelineEnd = weekColumns[weekColumns.length - 1].endIso;
   const totalDays = Math.round((new Date(totalTimelineEnd) - new Date(totalTimelineStart)) / 864e5);
@@ -239,8 +240,8 @@ export default function DashboardPage() {
                   <div key={cl.id} className="border-b border-gray-100 last:border-b-0">
                     {/* Client name row */}
                     <div className="flex items-center" style={{ height: 24 }}>
-                      <div className="shrink-0 pr-2 overflow-hidden" style={{ width: labelWidth }}>
-                        <div className="text-[11px] font-bold text-gray-800 truncate leading-tight">{cl.name}</div>
+                      <div className="shrink-0 pr-2" style={{ width: labelWidth }}>
+                        <div className="text-[11px] font-bold text-gray-800 leading-tight">{cl.name}</div>
                       </div>
                     </div>
                     {phases.map((ph) => {
@@ -257,9 +258,9 @@ export default function DashboardPage() {
                         <div key={ph.phaseKey}>
                           {/* Phase row */}
                           <div className={`flex items-center ${hasTasks ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} style={{ height: 30 }} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
-                            <div className="shrink-0 pr-2 overflow-hidden flex items-center gap-1" style={{ width: labelWidth }}>
+                            <div className="shrink-0 pr-2 flex items-center gap-1" style={{ width: labelWidth }}>
                               {hasTasks && <span className={`text-[8px] text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
-                              <div className="text-[10px] truncate leading-tight flex items-center gap-1" style={{ color }}>
+                              <div className="text-[10px] leading-tight flex items-center gap-1" style={{ color }}>
                                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
                                 {ph.phInfo.label}
                                 <span className="text-gray-400 text-[9px]">({ph.progress}%)</span>
@@ -298,11 +299,11 @@ export default function DashboardPage() {
 
                             return (
                               <div key={task.id} className="flex items-center" style={{ height: 26 }}>
-                                <div className="shrink-0 pr-2 overflow-hidden flex items-center gap-1 pl-5" style={{ width: labelWidth }}>
-                                  <span className="text-[9px]" style={{ color: taskColor }}>
+                                <div className="shrink-0 pr-2 flex items-center gap-1 pl-5" style={{ width: labelWidth }}>
+                                  <span className="text-[9px] shrink-0" style={{ color: taskColor }}>
                                     {task.status === 'done' ? '\u2713' : task.status === 'blocked' ? '\u2715' : '\u25CB'}
                                   </span>
-                                  <span className={`text-[9px] truncate ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
+                                  <span className={`text-[9px] ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
                                   {!taskHasDate && !isAssigning && (
                                     <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 ml-auto font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
                                   )}
@@ -366,71 +367,86 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Unscheduled phases — assign deadline from here */}
+          {/* Add phase button — opens selector to pick from unscheduled */}
           {unscheduledPhases.length > 0 && (
             <div className={ganttEntries.length > 0 ? 'mt-4 pt-3 border-t border-gray-100' : ''}>
-              <div className="text-[11px] font-semibold text-gray-500 mb-2">Sin fecha asignada ({unscheduledPhases.length})</div>
-              <div className="space-y-1">
-                {unscheduledPhases.map((u, i) => {
-                  const key = u.client.id + '_' + u.phaseKey;
-                  const isExpanded = expandedPhases['unsched_' + key];
-                  const hasTasks = u.phaseTasks && u.phaseTasks.length > 0;
-                  return (
-                    <div key={i}>
-                      <div className="inline-flex items-center gap-1 py-1 px-2 rounded-md bg-gray-50 border border-gray-200 text-[10px] w-full">
-                        {hasTasks && (
-                          <button className={`text-[8px] text-gray-400 transition-transform font-sans ${isExpanded ? 'rotate-90' : ''}`} onClick={() => setExpandedPhases(prev => ({ ...prev, ['unsched_' + key]: !prev['unsched_' + key] }))}>
-                            {'\u25B6'}
-                          </button>
-                        )}
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: u.phInfo.color }} />
-                        <span className="font-semibold text-gray-600">{u.client.name}</span>
-                        <span className="text-gray-400">{u.phInfo.label}</span>
-                        <span className="text-gray-300 text-[9px]">({u.progress}%)</span>
-                        {assigningDeadline === key ? (
-                          <input
-                            type="date"
-                            className="border border-blue-300 rounded py-[1px] px-1 text-[10px] outline-none bg-white w-[110px] ml-auto"
-                            autoFocus
-                            onChange={(e) => { if (e.target.value) handleAssignDeadline(u.client.id, u.phaseKey, e.target.value); }}
-                            onBlur={() => setAssigningDeadline(null)}
-                          />
-                        ) : (
-                          <button className="text-[9px] text-blue-400 hover:text-blue-600 ml-auto font-sans" onClick={() => setAssigningDeadline(key)}>{'\uD83D\uDCC5'} Asignar</button>
-                        )}
-                      </div>
-                      {/* Expanded tasks for unscheduled phase */}
-                      {isExpanded && hasTasks && (
-                        <div className="ml-6 mt-0.5 space-y-0.5">
-                          {u.phaseTasks.map(task => {
-                            const taskColor = task.status === 'done' ? '#22C55E' : task.status === 'blocked' ? '#EF4444' : '#94A3B8';
-                            const isAssigning = assigningTaskDate === task.id;
-                            return (
-                              <div key={task.id} className="flex items-center gap-1.5 py-0.5 px-2 text-[9px]">
-                                <span style={{ color: taskColor }}>{task.status === 'done' ? '\u2713' : task.status === 'blocked' ? '\u2715' : '\u25CB'}</span>
-                                <span className={`truncate ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
-                                {task.dueDate ? (
-                                  <span className="text-gray-400 ml-auto shrink-0">{fmtDate(task.dueDate)}</span>
-                                ) : isAssigning ? (
-                                  <input
-                                    type="date"
-                                    className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[95px] ml-auto shrink-0"
-                                    autoFocus
-                                    onChange={(e) => { if (e.target.value) handleAssignTaskDate(task.id, e.target.value); }}
-                                    onBlur={() => setAssigningTaskDate(null)}
-                                  />
-                                ) : (
-                                  <button className="text-[8px] text-blue-400 hover:text-blue-600 ml-auto shrink-0 font-sans" onClick={() => setAssigningTaskDate(task.id)}>{'\uD83D\uDCC5'}</button>
-                                )}
-                              </div>
-                            );
-                          })}
+              {!showAddPhase ? (
+                <button
+                  className="flex items-center gap-1.5 text-[11px] text-blue-500 hover:text-blue-700 font-semibold font-sans cursor-pointer"
+                  onClick={() => setShowAddPhase(true)}
+                >
+                  <span className="w-5 h-5 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 text-sm leading-none">+</span>
+                  Agregar fase al timeline
+                </button>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[11px] font-semibold text-gray-500">Seleccionar fase para agendar</div>
+                    <button className="text-[10px] text-gray-400 hover:text-gray-600 font-sans" onClick={() => { setShowAddPhase(false); setAssigningDeadline(null); }}>{'\u2715'} Cerrar</button>
+                  </div>
+                  <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+                    {unscheduledPhases.map((u, i) => {
+                      const key = u.client.id + '_' + u.phaseKey;
+                      const isExpanded = expandedPhases['unsched_' + key];
+                      const hasTasks = u.phaseTasks && u.phaseTasks.length > 0;
+                      return (
+                        <div key={i}>
+                          <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-md hover:bg-gray-50 text-[10px]">
+                            {hasTasks && (
+                              <button className={`text-[8px] text-gray-400 transition-transform font-sans ${isExpanded ? 'rotate-90' : ''}`} onClick={() => setExpandedPhases(prev => ({ ...prev, ['unsched_' + key]: !prev['unsched_' + key] }))}>
+                                {'\u25B6'}
+                              </button>
+                            )}
+                            {!hasTasks && <span className="w-2" />}
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: u.phInfo.color }} />
+                            <span className="font-semibold text-gray-700">{u.client.name}</span>
+                            <span style={{ color: u.phInfo.color }}>{u.phInfo.label}</span>
+                            <span className="text-gray-300 text-[9px]">({u.progress}%)</span>
+                            {assigningDeadline === key ? (
+                              <input
+                                type="date"
+                                className="border border-blue-300 rounded py-[1px] px-1 text-[10px] outline-none bg-white w-[110px] ml-auto"
+                                autoFocus
+                                onChange={(e) => { if (e.target.value) { handleAssignDeadline(u.client.id, u.phaseKey, e.target.value); setShowAddPhase(false); } }}
+                                onBlur={() => setAssigningDeadline(null)}
+                              />
+                            ) : (
+                              <button className="text-[9px] text-blue-400 hover:text-blue-600 ml-auto font-sans" onClick={() => setAssigningDeadline(key)}>{'\uD83D\uDCC5'}</button>
+                            )}
+                          </div>
+                          {isExpanded && hasTasks && (
+                            <div className="ml-8 space-y-0.5">
+                              {u.phaseTasks.map(task => {
+                                const taskColor = task.status === 'done' ? '#22C55E' : task.status === 'blocked' ? '#EF4444' : '#94A3B8';
+                                const isAssigning = assigningTaskDate === task.id;
+                                return (
+                                  <div key={task.id} className="flex items-center gap-1.5 py-0.5 px-2 text-[9px]">
+                                    <span style={{ color: taskColor }}>{task.status === 'done' ? '\u2713' : task.status === 'blocked' ? '\u2715' : '\u25CB'}</span>
+                                    <span className={task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}>{task.title}</span>
+                                    {task.dueDate ? (
+                                      <span className="text-gray-400 ml-auto shrink-0">{fmtDate(task.dueDate)}</span>
+                                    ) : isAssigning ? (
+                                      <input
+                                        type="date"
+                                        className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[95px] ml-auto shrink-0"
+                                        autoFocus
+                                        onChange={(e) => { if (e.target.value) handleAssignTaskDate(task.id, e.target.value); }}
+                                        onBlur={() => setAssigningTaskDate(null)}
+                                      />
+                                    ) : (
+                                      <button className="text-[8px] text-blue-400 hover:text-blue-600 ml-auto shrink-0 font-sans" onClick={() => setAssigningTaskDate(task.id)}>{'\uD83D\uDCC5'}</button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
