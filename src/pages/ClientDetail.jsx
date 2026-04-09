@@ -241,9 +241,12 @@ export default function ClientDetail({ client: c }) {
     if (isTaskBlocked(task)) return 1;
     return 0;
   };
+  const rdCanDrag = (task) => rdGetGroup(task) === 0; // solo activas se arrastran
+
   const rdHandleDragStart = (e, task) => {
+    if (!rdCanDrag(task)) { e.preventDefault(); return; }
     setRdDragId(task.id);
-    rdDragGroupRef.current = rdGetGroup(task);
+    rdDragGroupRef.current = 0; // siempre activa
     rdDragPhaseRef.current = task.phase || null;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', task.id);
@@ -258,38 +261,51 @@ export default function ClientDetail({ client: c }) {
     rdDragGroupRef.current = null;
     rdDragPhaseRef.current = null;
   };
-  // Drag over a task row — allow within same status group (same or different phase)
+  const rdClearDrag = () => {
+    setRdDragId(null);
+    setRdDragOverId(null);
+    setRdDragOverHalf(null);
+    setRdDragOverPhase(null);
+  };
+  // Drag over a task row — active tasks can drop on any row (same or different phase)
   const rdHandleDragOver = (e, task) => {
     e.preventDefault();
-    // Only active tasks (group 0) can be moved between phases
-    const taskGroup = rdGetGroup(task);
-    if (rdDragGroupRef.current !== taskGroup) { e.dataTransfer.dropEffect = 'none'; return; }
+    if (rdDragGroupRef.current !== 0) { e.dataTransfer.dropEffect = 'none'; return; }
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
     setRdDragOverId(task.id);
     setRdDragOverHalf((e.clientY - rect.top) < rect.height / 2 ? 'top' : 'bottom');
     setRdDragOverPhase(null);
   };
-  // Drop on a task row
+  // Drop on a task row — inserts before blocked/completed
   const rdHandleDrop = (e, task, sortedTasks) => {
     e.preventDefault();
     if (!rdDragId || rdDragId === task.id) return;
-    if (rdDragGroupRef.current !== rdGetGroup(task)) return;
     const draggedTask = clientTasks.find(t => t.id === rdDragId);
     if (!draggedTask) return;
-    // If dropping in a different phase, change phase first
-    if (task.phase !== draggedTask.phase) {
-      updateTask(rdDragId, { phase: task.phase, isRoadmapTask: true });
+    const targetPhase = task.phase;
+    // Change phase if needed
+    if (targetPhase !== draggedTask.phase) {
+      updateTask(rdDragId, { phase: targetPhase, isRoadmapTask: true });
     }
-    // Reorder within the target phase's sorted tasks
+    // Figure out insert position — always within active group (before blocked/done)
+    const targetGroup = rdGetGroup(task);
     const fromIdx = sortedTasks.findIndex(t => t.id === rdDragId);
     const targetIdx = sortedTasks.findIndex(t => t.id === task.id);
-    if (targetIdx < 0) return;
-    let insertIdx = rdDragOverHalf === 'top' ? targetIdx : targetIdx + 1;
-    // If task comes from another phase, just insert at target position
+    if (targetIdx < 0) { rdClearDrag(); return; }
+    let insertIdx;
+    if (targetGroup === 0) {
+      // Dropping on active task: respect half position
+      insertIdx = rdDragOverHalf === 'top' ? targetIdx : targetIdx + 1;
+    } else {
+      // Dropping on blocked/done: insert before all non-active (top of blocked/done group)
+      insertIdx = sortedTasks.findIndex(t => rdGetGroup(t) !== 0);
+      if (insertIdx < 0) insertIdx = sortedTasks.length;
+    }
     if (fromIdx < 0) {
+      // Coming from another phase
       const withDragged = [...sortedTasks];
-      withDragged.splice(insertIdx, 0, { ...draggedTask, phase: task.phase });
+      withDragged.splice(insertIdx, 0, { ...draggedTask, phase: targetPhase });
       reorderTask(withDragged);
     } else {
       if (fromIdx < insertIdx) insertIdx--;
@@ -298,24 +314,16 @@ export default function ClientDetail({ client: c }) {
       reordered.splice(insertIdx, 0, moved);
       reorderTask(reordered);
     }
-    setRdDragId(null);
-    setRdDragOverId(null);
-    setRdDragOverHalf(null);
-    setRdDragOverPhase(null);
+    rdClearDrag();
   };
-  // Drop on a phase header (move to that phase, append at end)
+  // Drop on a phase header (move to that phase, append at end of active group)
   const rdHandleDropOnPhase = (e, phaseKey) => {
     e.preventDefault();
-    if (!rdDragId) return;
-    // Only active tasks can move between phases
-    if (rdDragGroupRef.current !== 0) return;
+    if (!rdDragId || rdDragGroupRef.current !== 0) return;
     const draggedTask = clientTasks.find(t => t.id === rdDragId);
-    if (!draggedTask || draggedTask.phase === phaseKey) return;
+    if (!draggedTask || draggedTask.phase === phaseKey) { rdClearDrag(); return; }
     updateTask(rdDragId, { phase: phaseKey, isRoadmapTask: true });
-    setRdDragId(null);
-    setRdDragOverId(null);
-    setRdDragOverHalf(null);
-    setRdDragOverPhase(null);
+    rdClearDrag();
   };
   const rdHandleDragOverPhase = (e, phaseKey) => {
     e.preventDefault();
@@ -409,14 +417,16 @@ export default function ClientDetail({ client: c }) {
             onDrop={(e) => rdHandleDrop(e, t, sortedGroup)}
             onDragLeave={() => { if (rdDragOverId === t.id) setRdDragOverId(null); }}
           >
-            {/* Col 0: Drag handle */}
-            <div
-              className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-gray-300 text-[14px] select-none"
-              draggable
-              onDragStart={(e) => rdHandleDragStart(e, t)}
-              onDragEnd={rdHandleDragEnd}
-              title="Arrastrar para reordenar"
-            >{'\u2630'}</div>
+            {/* Col 0: Drag handle — solo tareas activas */}
+            {rdCanDrag(t) ? (
+              <div
+                className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-gray-300 text-[14px] select-none"
+                draggable
+                onDragStart={(e) => rdHandleDragStart(e, t)}
+                onDragEnd={rdHandleDragEnd}
+                title="Arrastrar para reordenar"
+              >{'\u2630'}</div>
+            ) : <div />}
 
             {/* Col 1: Status dot — clickable */}
             <div

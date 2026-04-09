@@ -227,14 +227,16 @@ export default function TasksPage() {
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
           onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
         >
-          {/* Drag handle */}
-          <div
-            className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-text3 text-[14px] select-none"
-            draggable
-            onDragStart={(e) => handleDragStart(e, t, sortedGroup)}
-            onDragEnd={handleDragEnd}
-            title="Arrastrar para reordenar"
-          >{'\u2630'}</div>
+          {/* Drag handle — solo tareas activas */}
+          {getStatusGroup(t) === 0 ? (
+            <div
+              className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-text3 text-[14px] select-none"
+              draggable
+              onDragStart={(e) => handleDragStart(e, t, sortedGroup)}
+              onDragEnd={handleDragEnd}
+              title="Arrastrar para reordenar"
+            >{'\u2630'}</div>
+          ) : <div />}
 
           {/* Status icon */}
           <div
