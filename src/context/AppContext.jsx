@@ -85,7 +85,8 @@ export function AppProvider({ children }) {
         due_date: t.dueDate || null,
         accumulated_days: t.accumulatedDays || 0,
         timer_started_at: t.timerStartedAt || null,
-        enabled_date: t.enabledDate || null
+        enabled_date: t.enabledDate || null,
+        position: t.position ?? 0
       })
     });
   }, []);
@@ -124,7 +125,8 @@ export function AppProvider({ children }) {
         due_date: t.dueDate || null,
         accumulated_days: t.accumulatedDays || 0,
         timer_started_at: t.timerStartedAt || null,
-        enabled_date: t.enabledDate || null
+        enabled_date: t.enabledDate || null,
+        position: t.position ?? 0
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -216,6 +218,9 @@ export function AppProvider({ children }) {
   // ── CRUD: Tasks ──
   const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
+    // Assign position: max of sibling tasks + 1
+    const siblings = tasksRef.current.filter(x => x.clientId === clientId);
+    t.position = siblings.length > 0 ? Math.max(...siblings.map(x => x.position ?? 0)) + 1 : 0;
     let newTasks = [...tasksRef.current, t];
     const result = recalculateTimers(clientId, newTasks);
     newTasks = result.tasks;
@@ -273,6 +278,32 @@ export function AppProvider({ children }) {
     });
   }, [save, dbDeleteTask, recalculateTimers]);
 
+  // ── Reorder tasks ──
+  const moveTask = useCallback((taskId, direction, sortedGroup) => {
+    // sortedGroup is the array of tasks in the same status group, already sorted by position
+    const idx = sortedGroup.findIndex(t => t.id === taskId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sortedGroup.length) return;
+    const a = sortedGroup[idx];
+    const b = sortedGroup[swapIdx];
+    // Swap positions
+    const posA = a.position ?? 0;
+    const posB = b.position ?? 0;
+    setTasks(prev => {
+      const newTasks = prev.map(t => {
+        if (t.id === a.id) return { ...t, position: posB };
+        if (t.id === b.id) return { ...t, position: posA };
+        return t;
+      });
+      save(clientsRef.current, newTasks);
+      const updA = newTasks.find(t => t.id === a.id);
+      const updB = newTasks.find(t => t.id === b.id);
+      if (dbReady.current) { dbSaveTask(updA); dbSaveTask(updB); }
+      return newTasks;
+    });
+  }, [save, dbSaveTask]);
+
   // ── Auth ──
   const doLogin = useCallback((username, password) => {
     const u = username.trim().toLowerCase().replace(/@.*$/, '');
@@ -289,6 +320,13 @@ export function AppProvider({ children }) {
     localStorage.removeItem('korex_user');
     setCurrentUser(null);
   }, []);
+
+  // ── Normalize client priority (migrate old 5-level to new 4-level) ──
+  const normalizePriority = (p) => {
+    if (p === 5) return 4; // NUEVO → NUEVOS
+    if (p >= 1 && p <= 4) return p;
+    return 4; // default to NUEVOS
+  };
 
   // ── Load from Supabase ──
   const loadFromSupabase = useCallback(async () => {
@@ -309,7 +347,7 @@ export function AppProvider({ children }) {
         const mappedClients = sbClients.map(c => ({
           id: c.id, name: c.name, company: c.company, service: c.service,
           startDate: c.start_date, pm: c.pm, color: c.color, status: c.status,
-          priority: c.priority, bottleneck: c.bottleneck, notes: c.notes,
+          priority: normalizePriority(c.priority), bottleneck: c.bottleneck, notes: c.notes,
           steps: c.steps || [], feedback: c.feedback || [], history: c.history || [],
           phone: c.phone || '', avatarUrl: c.avatar_url || '',
           slackChannel: c.slack_channel || '', slackChannelId: c.slack_channel_id || '',
@@ -328,7 +366,8 @@ export function AppProvider({ children }) {
           dueDate: t.due_date || null,
           accumulatedDays: t.accumulated_days || 0,
           timerStartedAt: t.timer_started_at || null,
-          enabledDate: t.enabled_date || null
+          enabledDate: t.enabled_date || null,
+          position: t.position ?? 0
         }));
 
         const injected = injectMetaMetrics(mappedClients);
@@ -456,7 +495,7 @@ export function AppProvider({ children }) {
     if (raw) {
       try {
         const p = JSON.parse(raw);
-        localClients = p.clients || [];
+        localClients = (p.clients || []).map(c => ({ ...c, priority: normalizePriority(c.priority) }));
         localTasks = p.tasks || [];
       } catch (e) { /* ignore parse errors */ }
     }
@@ -524,6 +563,7 @@ export function AppProvider({ children }) {
     createTask,
     updateTask,
     deleteTask,
+    moveTask,
     doLogin,
     doLogout,
     injectMetaMetrics,

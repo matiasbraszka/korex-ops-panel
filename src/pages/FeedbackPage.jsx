@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { TASK_PRIO } from '../utils/constants';
 import { initials, fmtDate, today } from '../utils/helpers';
+
+const FB_PRIO = {
+  urgent: { label: 'Urgente', color: '#EF4444', flag: '\u{1F6A9}' },
+  high:   { label: 'Alta',    color: '#F97316', flag: '\u{1F3F3}' },
+  normal: { label: 'Normal',  color: '#5B7CF5', flag: '\u{1F3F3}' },
+  low:    { label: 'Baja',    color: '#9CA3AF', flag: '\u{1F3F3}' },
+};
 import KpiRow from '../components/KpiRow';
 import Modal from '../components/Modal';
 
@@ -113,7 +119,7 @@ export default function FeedbackPage() {
     setNewFb({ clientId: '', source: 'cliente', callUrl: '', priority: 'normal', items: [''] });
   };
 
-  const prioCfg = (p) => TASK_PRIO[p] || TASK_PRIO.normal;
+  const prioCfg = (p) => FB_PRIO[p] || FB_PRIO.normal;
 
   return (
     <div>

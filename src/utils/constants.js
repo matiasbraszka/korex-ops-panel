@@ -33,18 +33,10 @@ export const PHASES = {
 };
 
 export const PRIO_CLIENT = {
-  1: { label: 'CRÍTICO',     color: '#EF4444' },
-  2: { label: 'URGENTE',     color: '#F97316' },
-  3: { label: 'ATENCIÓN',    color: '#EAB308' },
-  4: { label: 'EN PROGRESO', color: '#5B7CF5' },
-  5: { label: 'NUEVO',       color: '#8B5CF6' },
-};
-
-export const TASK_PRIO = {
-  urgent: { label: 'Urgente', color: '#EF4444', flag: '\u{1F6A9}', sort: 0 },
-  high:   { label: 'Alta',    color: '#F97316', flag: '\u{1F3F3}', sort: 1 },
-  normal: { label: 'Normal',  color: '#5B7CF5', flag: '\u{1F3F3}', sort: 2 },
-  low:    { label: 'Baja',    color: '#9CA3AF', flag: '\u{1F3F3}', sort: 3 },
+  1: { label: 'SUPER PRIORITARIO', color: '#EF4444' },
+  2: { label: 'IMPORTANTES',       color: '#F97316' },
+  3: { label: 'POCO IMPORTANTES',  color: '#9CA3AF' },
+  4: { label: 'NUEVOS',            color: '#8B5CF6' },
 };
 
 export const TASK_STATUS = {

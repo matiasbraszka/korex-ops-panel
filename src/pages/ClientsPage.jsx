@@ -27,7 +27,7 @@ export default function ClientsPage() {
   }
 
   const t = visibleClients.length;
-  const b = visibleClients.filter(c => (c.priority || 4) <= 2).length;
+  const b = visibleClients.filter(c => (c.priority || 4) === 1).length;
   const l = visibleClients.filter(c => {
     // New system: check if lanzamiento roadmap task is done
     const launchTask = tasks.find(tk => tk.clientId === c.id && tk.isRoadmapTask && tk.templateId === 'lanzamiento');
@@ -35,29 +35,19 @@ export default function ClientsPage() {
     // Fallback to steps
     return c.steps[17] && c.steps[17].status === 'completed';
   }).length;
-  const n = visibleClients.filter(c => (c.priority || 4) === 5).length;
+  const n = visibleClients.filter(c => (c.priority || 4) === 4).length;
 
   const filterDefs = [
     { key: 'all', label: 'Todos' },
-    { key: 'critical', label: 'Críticos' },
-    { key: 'in-progress', label: 'En progreso' },
-    { key: 'waiting', label: 'Esp. cliente' },
+    { key: 'super', label: 'Super prioritario' },
+    { key: 'important', label: 'Importantes' },
     { key: 'new', label: 'Nuevos' },
   ];
 
   let cls = [...visibleClients].sort((a, bb) => (a.priority || 4) - (bb.priority || 4));
-  if (filter === 'critical') cls = cls.filter(c => (c.priority || 4) <= 2);
-  if (filter === 'in-progress') cls = cls.filter(c => {
-    const ct = tasks.filter(tk => tk.clientId === c.id);
-    if (ct.length > 0) return ct.some(tk => tk.status === 'in-progress');
-    return c.steps.some(s => s.status === 'in-progress');
-  });
-  if (filter === 'waiting') cls = cls.filter(c => {
-    const ct = tasks.filter(tk => tk.clientId === c.id);
-    if (ct.length > 0) return ct.some(tk => tk.isClientTask && tk.status !== 'done' && tk.status !== 'backlog');
-    return c.steps.some(s => s.status === 'waiting-client');
-  });
-  if (filter === 'new') cls = cls.filter(c => (c.priority || 4) === 5);
+  if (filter === 'super') cls = cls.filter(c => (c.priority || 4) === 1);
+  if (filter === 'important') cls = cls.filter(c => (c.priority || 4) === 2);
+  if (filter === 'new') cls = cls.filter(c => (c.priority || 4) === 4);
 
   let lastPrio = null;
 

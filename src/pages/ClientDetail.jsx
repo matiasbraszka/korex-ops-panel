@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
+import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS, TEAM } from '../utils/constants';
 import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, getElapsedDays } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
@@ -8,7 +8,7 @@ import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, currentUser } = useApp();
+  const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, moveTask, currentUser } = useApp();
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [editModal, setEditModal] = useState(false);
@@ -270,10 +270,9 @@ export default function ClientDetail({ client: c }) {
     };
 
     // Render a single task row
-    const renderTaskRow = (t, isLast) => {
+    const renderTaskRow = (t, isLast, sortedGroup) => {
       const blocked = isTaskBlocked(t);
       const blockingNames = blocked ? getBlockingNames(t) : [];
-      const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
       const hasDesc = !!(t.description && t.description.trim());
       const elapsed = getElapsedDays(t, clientTasks);
       const est = t.estimatedDays || null;
@@ -284,7 +283,6 @@ export default function ClientDetail({ client: c }) {
 
       const statusRef = getDropdownRef('rd-status-' + t.id);
       const assigneeRef = getDropdownRef('rd-assignee-' + t.id);
-      const prioRef = getDropdownRef('rd-prio-' + t.id);
       const movePhaseRef = getDropdownRef('rd-movephase-' + t.id);
 
       // Status icon
@@ -303,9 +301,15 @@ export default function ClientDetail({ client: c }) {
         <div key={t.id} className={`group ${blocked ? 'opacity-50' : ''}`}>
           {/* Main row - CSS Grid for consistent alignment */}
           <div
-            className={`hover:bg-gray-50 cursor-pointer ${rowBg} hidden md:grid grid-cols-[16px_20px_1fr_90px_80px_70px_30px] items-center gap-1 py-[7px] px-3`}
+            className={`hover:bg-gray-50 cursor-pointer ${rowBg} hidden md:grid grid-cols-[20px_16px_20px_1fr_90px_80px_30px] items-center gap-1 py-[7px] px-3`}
             onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           >
+            {/* Col 0: Reorder arrows */}
+            <div className="flex flex-col items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button className="bg-transparent border-none text-gray-300 cursor-pointer text-[10px] leading-none p-0 hover:text-blue-500 disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'up', sortedGroup); }} disabled={!sortedGroup || sortedGroup.indexOf(t) === 0}>{'\u25B2'}</button>
+              <button className="bg-transparent border-none text-gray-300 cursor-pointer text-[10px] leading-none p-0 hover:text-blue-500 disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'down', sortedGroup); }} disabled={!sortedGroup || sortedGroup.indexOf(t) === sortedGroup.length - 1}>{'\u25BC'}</button>
+            </div>
+
             {/* Col 1: Status dot — clickable */}
             <div
               ref={el => statusRef.current = el}
@@ -448,24 +452,7 @@ export default function ClientDetail({ client: c }) {
               )}
             </div>
 
-            {/* Col 6: Priority flag (70px fixed) — hidden on mobile */}
-            <div className="max-md:hidden" style={{ minWidth: 0 }}>
-              <div
-                ref={el => prioRef.current = el}
-                className="cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-prio-' + t.id); }}
-              >
-                <span className="inline-flex items-center gap-[2px] text-[10px] font-semibold py-[2px] px-1.5 rounded hover:bg-gray-100" style={{ color: tp.color, whiteSpace: 'nowrap' }}>{tp.flag} {tp.label}</span>
-              </div>
-              <Dropdown
-                open={openDropdown === 'rd-prio-' + t.id}
-                onClose={() => setOpenDropdown(null)}
-                anchorRef={prioRef}
-                items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
-              />
-            </div>
-
-            {/* Col 7: Actions (30px fixed) — hidden on mobile */}
+            {/* Col 6: Actions (30px fixed) — hidden on mobile */}
             <div className="max-md:hidden" style={{ display: 'flex', alignItems: 'center', gap: '1px', minWidth: 0 }}>
               {/* Move phase */}
               <div
@@ -525,7 +512,6 @@ export default function ClientDetail({ client: c }) {
                 {hasDesc && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-blue-400 inline-block align-middle" />}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                <span className="text-[10px] font-semibold" style={{ color: tp.color }}>{tp.flag} {tp.label}</span>
                 {est && elapsed > 0 && (
                   <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color: elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E', background: elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5' }}>
                     {'\u23F1'} {elapsed}d/{est}d
@@ -585,23 +571,6 @@ export default function ClientDetail({ client: c }) {
                   items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
                 />
 
-                {/* Priority dropdown */}
-                <div
-                  ref={el => getDropdownRef('rd-prio2-' + t.id).current = el}
-                  className="cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-prio2-' + t.id); }}
-                >
-                  <span className="text-[10px] py-[3px] px-2 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 inline-flex items-center gap-1">
-                    <span style={{ color: tp.color }}>{tp.flag}</span> {tp.label}
-                  </span>
-                </div>
-                <Dropdown
-                  open={openDropdown === 'rd-prio2-' + t.id}
-                  onClose={() => setOpenDropdown(null)}
-                  anchorRef={getDropdownRef('rd-prio2-' + t.id)}
-                  items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => { updateTask(t.id, { priority: k }); setOpenDropdown(null); } }))}
-                />
-
                 {/* Due date input (FIX 6) */}
                 <div className="inline-flex items-center gap-1 text-[10px]" onClick={(e) => e.stopPropagation()}>
                   <span className="text-gray-400">{'\uD83D\uDCC5'}</span>
@@ -653,8 +622,7 @@ export default function ClientDetail({ client: c }) {
           {phaseGroups.map(({ phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone }) => {
             const collapsed = isCollapsed(phaseKey, allDone);
             // Sort: active (backlog+in-progress+revision) → blocked → done
-            // Active group sorted by priority
-            const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
+            // Within each group, sort by manual position
             const getGroup = (t) => {
               if (t.status === 'done') return 2;
               if (isTaskBlocked(t)) return 1;
@@ -663,9 +631,7 @@ export default function ClientDetail({ client: c }) {
             const sortedTasks = [...phaseTasks].sort((a, b) => {
               const ga = getGroup(a), gb = getGroup(b);
               if (ga !== gb) return ga - gb;
-              const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
-              const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
-              return pa - pb;
+              return (a.position ?? 0) - (b.position ?? 0);
             });
 
             return (
@@ -726,7 +692,7 @@ export default function ClientDetail({ client: c }) {
                 {/* Task rows */}
                 {!collapsed && (
                   <div className="border-t border-gray-50">
-                    {sortedTasks.map((t, idx) => renderTaskRow(t, idx === sortedTasks.length - 1))}
+                    {sortedTasks.map((t, idx) => renderTaskRow(t, idx === sortedTasks.length - 1, sortedTasks))}
 
                     {/* Add task inline */}
                     {addingToPhase === phaseKey ? (
@@ -849,7 +815,18 @@ export default function ClientDetail({ client: c }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <div className="text-xl font-extrabold tracking-tight max-md:text-[17px]">{c.name}</div>
-              <span className="inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold" style={{ background: pcfg.color + '12', color: pcfg.color }}>{pcfg.label}</span>
+              <span
+                ref={el => getDropdownRef('client-prio').current = el}
+                className="inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold cursor-pointer hover:opacity-80"
+                style={{ background: pcfg.color + '12', color: pcfg.color }}
+                onClick={() => setOpenDropdown('client-prio')}
+              >{pcfg.label}</span>
+              <Dropdown
+                open={openDropdown === 'client-prio'}
+                onClose={() => setOpenDropdown(null)}
+                anchorRef={getDropdownRef('client-prio')}
+                items={Object.entries(PRIO_CLIENT).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '\u25CF', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
+              />
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>
             <div className="text-[13px] text-text2 mt-0.5 max-md:text-[12px]">{c.company}</div>

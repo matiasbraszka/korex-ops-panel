@@ -1,13 +1,13 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { PROCESS_STEPS, PHASES, TASK_PRIO, TASK_STATUS, TEAM } from '../utils/constants';
+import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage() {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, moveTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -47,7 +47,6 @@ export default function TasksPage() {
 
   const filterDefs = [
     { key: 'all', label: 'Todas' },
-    { key: 'urgent', label: 'Urgentes' },
     { key: 'in-progress', label: 'En progreso' },
     { key: 'blocked', label: 'Bloqueadas' },
     { key: 'done', label: 'Completadas' },
@@ -63,7 +62,6 @@ export default function TasksPage() {
   });
 
   let filteredTasks = [...tasks];
-  if (taskFilter === 'urgent') filteredTasks = filteredTasks.filter(t => t.priority === 'urgent');
   if (taskFilter === 'in-progress') filteredTasks = filteredTasks.filter(t => t.status === 'in-progress');
   if (taskFilter === 'blocked') filteredTasks = filteredTasks.filter(t => t.status === 'blocked' || t.status === 'retrasadas');
   if (taskFilter === 'done') filteredTasks = filteredTasks.filter(t => t.status === 'done');
@@ -96,7 +94,6 @@ export default function TasksPage() {
   regularClients.forEach(c => { grouped[c.id] = { client: c, tasks: [] }; });
   filteredTasks.filter(t => t.clientId !== korexClientId).forEach(t => { if (grouped[t.clientId]) grouped[t.clientId].tasks.push(t); });
 
-  const prioSort = { urgent: 0, high: 1, normal: 2, low: 3 };
   const groups = Object.values(grouped).filter(g => g.tasks.length > 0 || addingTaskTo === g.client.id);
   // Sort client groups by CLIENT priority (critico=1 first), NOT by task priority
   groups.sort((a, b) => (a.client.priority || 4) - (b.client.priority || 4));
@@ -123,16 +120,14 @@ export default function TasksPage() {
     setEditingTaskId(null);
   };
 
-  const renderTaskRow = (t) => {
+  const renderTaskRow = (t, { sortedGroup }) => {
     const ts = TASK_STATUS[t.status] || TASK_STATUS.backlog;
-    const tp = TASK_PRIO[t.priority] || TASK_PRIO.normal;
     const stepName = getStepName(t, clients);
     const hasDesc = !!((t.description && t.description.trim()) || (t.notes && t.notes.trim()));
     const isExpanded = expandedTasks[t.id];
     const statusRef = getRef('status-' + t.id);
     const stepRef = getRef('step-' + t.id);
     const assigneeRef = getRef('assignee-' + t.id);
-    const prioRef = getRef('prio-' + t.id);
 
     const blocked = isTaskBlocked(t);
     const blockingNames = blocked ? getBlockingNames(t) : [];
@@ -160,7 +155,13 @@ export default function TasksPage() {
     return (
       <div key={t.id} className="border-b border-border last:border-b-0">
         {/* Desktop row */}
-        <div className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '28px 1fr 110px 50px 70px 30px' }}>
+        <div className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`} style={{ gridTemplateColumns: '20px 28px 1fr 110px 50px 30px' }}>
+          {/* Reorder arrows */}
+          <div className="flex flex-col items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button className="bg-transparent border-none text-text3 cursor-pointer text-[10px] leading-none p-0 hover:text-blue disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'up', sortedGroup); }} disabled={sortedGroup.indexOf(t) === 0}>{'\u25B2'}</button>
+            <button className="bg-transparent border-none text-text3 cursor-pointer text-[10px] leading-none p-0 hover:text-blue disabled:opacity-20 disabled:cursor-default" onClick={(e) => { e.stopPropagation(); moveTask(t.id, 'down', sortedGroup); }} disabled={sortedGroup.indexOf(t) === sortedGroup.length - 1}>{'\u25BC'}</button>
+          </div>
+
           {/* Status icon */}
           <div
             ref={el => statusRef.current = el}
@@ -300,21 +301,6 @@ export default function TasksPage() {
             );
           })()}
 
-          {/* Priority */}
-          <div
-            ref={el => prioRef.current = el}
-            className="cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setOpenDropdown('prio-' + t.id); }}
-          >
-            <div className="flex items-center gap-[2px] py-[2px] px-1.5 rounded text-[11px] font-semibold hover:bg-surface2" style={{ color: tp.color }}>{tp.flag} {tp.label}</div>
-          </div>
-          <Dropdown
-            open={openDropdown === 'prio-' + t.id}
-            onClose={() => setOpenDropdown(null)}
-            anchorRef={prioRef}
-            items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
-          />
-
           {/* Delete */}
           <div className="flex items-center justify-center">
             <button className="bg-transparent border-none text-text3 cursor-pointer text-sm py-[2px] rounded opacity-0 group-hover:opacity-100 transition-opacity hover:text-red" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
@@ -325,7 +311,6 @@ export default function TasksPage() {
         {(() => {
           const mobStatusRef = getRef('mob-status-' + t.id);
           const mobStepRef = getRef('mob-step-' + t.id);
-          const mobPrioRef = getRef('mob-prio-' + t.id);
           const mobAssigneeRef = getRef('mob-assignee-' + t.id);
           return (
             <div className={`md:hidden py-2.5 px-3 text-xs group ${blocked ? 'opacity-60' : ''}`} onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>
@@ -379,18 +364,6 @@ export default function TasksPage() {
                       items={stepDropdownItems}
                       minWidth={220}
                       maxHeight={300}
-                    />
-                    <span
-                      ref={el => mobPrioRef.current = el}
-                      className="text-[10px] font-semibold cursor-pointer"
-                      style={{ color: tp.color }}
-                      onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-prio-' + t.id); }}
-                    >{tp.flag} {tp.label}</span>
-                    <Dropdown
-                      open={openDropdown === 'mob-prio-' + t.id}
-                      onClose={() => setOpenDropdown(null)}
-                      anchorRef={mobPrioRef}
-                      items={Object.entries(TASK_PRIO).map(([k, v]) => ({ label: v.label, icon: v.flag, iconColor: v.color, onClick: () => updateTask(t.id, { priority: k }) }))}
                     />
                     {(() => {
                       const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
@@ -568,7 +541,7 @@ export default function TasksPage() {
 
       {groups.map(g => {
         // Sort: active (backlog+in-progress+revision) → blocked → done
-        // Active group sorted by priority
+        // Within each group, sort by manual position
         const getGroup = (t) => {
           if (t.status === 'done') return 2;
           if (isTaskBlocked(t)) return 1;
@@ -577,9 +550,7 @@ export default function TasksPage() {
         const sortedTasks = [...g.tasks].sort((a, b) => {
           const ga = getGroup(a), gb = getGroup(b);
           if (ga !== gb) return ga - gb;
-          const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
-          const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
-          return pa - pb;
+          return (a.position ?? 0) - (b.position ?? 0);
         });
         const collapsed = collapsedGroups[g.client.id];
         const taskCount = g.tasks.filter(t => t.status !== 'done').length;
@@ -596,7 +567,7 @@ export default function TasksPage() {
             </div>
             {!collapsed && (
               <div>
-                {sortedTasks.map(t => renderTaskRow(t))}
+                {sortedTasks.map(t => renderTaskRow(t, { sortedGroup: sortedTasks }))}
 
                 {/* Inline new task */}
                 {addingTaskTo === g.client.id && (
@@ -657,14 +628,15 @@ export default function TasksPage() {
           {!korexCollapsed && (
             <div>
               {korexTasks.length > 0 ? (
-                [...korexTasks].sort((a, b) => {
+                (() => {
                   const getG = (t) => { if (t.status === 'done') return 2; if (isTaskBlocked(t)) return 1; return 0; };
-                  const ga = getG(a), gb = getG(b);
-                  if (ga !== gb) return ga - gb;
-                  const pa = prioSort[a.priority] !== undefined ? prioSort[a.priority] : 2;
-                  const pb = prioSort[b.priority] !== undefined ? prioSort[b.priority] : 2;
-                  return pa - pb;
-                }).map(t => renderTaskRow(t))
+                  const sorted = [...korexTasks].sort((a, b) => {
+                    const ga = getG(a), gb = getG(b);
+                    if (ga !== gb) return ga - gb;
+                    return (a.position ?? 0) - (b.position ?? 0);
+                  });
+                  return sorted.map(t => renderTaskRow(t, { sortedGroup: sorted }));
+                })()
               ) : (
                 <div className="text-center text-text3 text-xs py-4">Sin tareas internas</div>
               )}
