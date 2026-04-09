@@ -248,7 +248,7 @@ export default function TasksPage() {
             open={openDropdown === 'status-' + t.id}
             onClose={() => setOpenDropdown(null)}
             anchorRef={statusRef}
-            items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+            items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
           {/* Title */}
@@ -399,7 +399,7 @@ export default function TasksPage() {
                   open={openDropdown === 'mob-status-' + t.id}
                   onClose={() => setOpenDropdown(null)}
                   anchorRef={mobStatusRef}
-                  items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+                  items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">

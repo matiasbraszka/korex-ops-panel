@@ -232,7 +232,9 @@ export default function ClientDetail({ client: c }) {
   const [rdDragId, setRdDragId] = useState(null);
   const [rdDragOverId, setRdDragOverId] = useState(null);
   const [rdDragOverHalf, setRdDragOverHalf] = useState(null);
-  const rdDragGroupRef = useRef(null);
+  const [rdDragOverPhase, setRdDragOverPhase] = useState(null);
+  const rdDragGroupRef = useRef(null); // 0=active, 1=blocked, 2=done
+  const rdDragPhaseRef = useRef(null); // phase key of dragged task
 
   const rdGetGroup = (task) => {
     if (task.status === 'done') return 2;
@@ -242,6 +244,7 @@ export default function ClientDetail({ client: c }) {
   const rdHandleDragStart = (e, task) => {
     setRdDragId(task.id);
     rdDragGroupRef.current = rdGetGroup(task);
+    rdDragPhaseRef.current = task.phase || null;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', task.id);
     setTimeout(() => e.currentTarget.classList.add('drag-ghost'), 0);
@@ -251,32 +254,75 @@ export default function ClientDetail({ client: c }) {
     setRdDragId(null);
     setRdDragOverId(null);
     setRdDragOverHalf(null);
+    setRdDragOverPhase(null);
     rdDragGroupRef.current = null;
+    rdDragPhaseRef.current = null;
   };
+  // Drag over a task row — allow within same status group (same or different phase)
   const rdHandleDragOver = (e, task) => {
     e.preventDefault();
-    if (rdDragGroupRef.current !== rdGetGroup(task)) { e.dataTransfer.dropEffect = 'none'; return; }
+    // Only active tasks (group 0) can be moved between phases
+    const taskGroup = rdGetGroup(task);
+    if (rdDragGroupRef.current !== taskGroup) { e.dataTransfer.dropEffect = 'none'; return; }
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
     setRdDragOverId(task.id);
     setRdDragOverHalf((e.clientY - rect.top) < rect.height / 2 ? 'top' : 'bottom');
+    setRdDragOverPhase(null);
   };
+  // Drop on a task row
   const rdHandleDrop = (e, task, sortedTasks) => {
     e.preventDefault();
     if (!rdDragId || rdDragId === task.id) return;
     if (rdDragGroupRef.current !== rdGetGroup(task)) return;
+    const draggedTask = clientTasks.find(t => t.id === rdDragId);
+    if (!draggedTask) return;
+    // If dropping in a different phase, change phase first
+    if (task.phase !== draggedTask.phase) {
+      updateTask(rdDragId, { phase: task.phase, isRoadmapTask: true });
+    }
+    // Reorder within the target phase's sorted tasks
     const fromIdx = sortedTasks.findIndex(t => t.id === rdDragId);
     const targetIdx = sortedTasks.findIndex(t => t.id === task.id);
-    if (fromIdx < 0 || targetIdx < 0) return;
+    if (targetIdx < 0) return;
     let insertIdx = rdDragOverHalf === 'top' ? targetIdx : targetIdx + 1;
-    if (fromIdx < insertIdx) insertIdx--;
-    const reordered = [...sortedTasks];
-    const [moved] = reordered.splice(fromIdx, 1);
-    reordered.splice(insertIdx, 0, moved);
-    reorderTask(reordered);
+    // If task comes from another phase, just insert at target position
+    if (fromIdx < 0) {
+      const withDragged = [...sortedTasks];
+      withDragged.splice(insertIdx, 0, { ...draggedTask, phase: task.phase });
+      reorderTask(withDragged);
+    } else {
+      if (fromIdx < insertIdx) insertIdx--;
+      const reordered = [...sortedTasks];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(insertIdx, 0, moved);
+      reorderTask(reordered);
+    }
     setRdDragId(null);
     setRdDragOverId(null);
     setRdDragOverHalf(null);
+    setRdDragOverPhase(null);
+  };
+  // Drop on a phase header (move to that phase, append at end)
+  const rdHandleDropOnPhase = (e, phaseKey) => {
+    e.preventDefault();
+    if (!rdDragId) return;
+    // Only active tasks can move between phases
+    if (rdDragGroupRef.current !== 0) return;
+    const draggedTask = clientTasks.find(t => t.id === rdDragId);
+    if (!draggedTask || draggedTask.phase === phaseKey) return;
+    updateTask(rdDragId, { phase: phaseKey, isRoadmapTask: true });
+    setRdDragId(null);
+    setRdDragOverId(null);
+    setRdDragOverHalf(null);
+    setRdDragOverPhase(null);
+  };
+  const rdHandleDragOverPhase = (e, phaseKey) => {
+    e.preventDefault();
+    if (rdDragGroupRef.current !== 0) { e.dataTransfer.dropEffect = 'none'; return; }
+    e.dataTransfer.dropEffect = 'move';
+    setRdDragOverPhase(phaseKey);
+    setRdDragOverId(null);
   };
 
   const renderRoadmap = () => {
@@ -384,7 +430,7 @@ export default function ClientDetail({ client: c }) {
               open={openDropdown === 'rd-status-' + t.id}
               onClose={() => setOpenDropdown(null)}
               anchorRef={statusRef}
-              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+              items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
             />
 
             {/* Col 2: Tree connector — hidden on mobile */}
@@ -565,7 +611,7 @@ export default function ClientDetail({ client: c }) {
               open={openDropdown === 'mob-rd-status-' + t.id}
               onClose={() => setOpenDropdown(null)}
               anchorRef={mobStatusRef}
-              items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+              items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
             />
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-medium text-gray-800 leading-tight break-words">
@@ -630,7 +676,7 @@ export default function ClientDetail({ client: c }) {
                   open={openDropdown === 'rd-status2-' + t.id}
                   onClose={() => setOpenDropdown(null)}
                   anchorRef={getDropdownRef('rd-status2-' + t.id)}
-                  items={Object.entries(TASK_STATUS).map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
+                  items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
                 />
 
                 {/* Due date input (FIX 6) */}
@@ -699,11 +745,14 @@ export default function ClientDetail({ client: c }) {
             });
 
             return (
-              <div key={phaseKey} className="rounded-lg overflow-hidden bg-white border border-gray-100" style={{ borderLeft: `3px solid ${phInfo.color}` }}>
-                {/* Phase header */}
+              <div key={phaseKey} className={`rounded-lg overflow-hidden bg-white border ${rdDragOverPhase === phaseKey ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-100'}`} style={{ borderLeft: `3px solid ${phInfo.color}` }}>
+                {/* Phase header — also a drop target */}
                 <div
-                  className="flex items-center gap-2 py-2.5 px-3 cursor-pointer select-none hover:bg-gray-50 group/phase"
+                  className={`flex items-center gap-2 py-2.5 px-3 cursor-pointer select-none hover:bg-gray-50 group/phase transition-colors ${rdDragOverPhase === phaseKey ? 'bg-blue-50' : ''}`}
                   onClick={() => togglePhase(phaseKey)}
+                  onDragOver={(e) => rdHandleDragOverPhase(e, phaseKey)}
+                  onDrop={(e) => rdHandleDropOnPhase(e, phaseKey)}
+                  onDragLeave={() => { if (rdDragOverPhase === phaseKey) setRdDragOverPhase(null); }}
                 >
                   <span className="text-[11px] text-gray-400 shrink-0">{collapsed ? '\u25B6' : '\u25BC'}</span>
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: phInfo.color }} />
