@@ -66,6 +66,7 @@ export function AppProvider({ children }) {
         meta_ads: c.metaAds || [], custom_steps: c.customSteps || [],
         custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
         step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
+        phase_deadlines: c.phaseDeadlines || {},
         meta_metrics: c.metaMetrics || null
       })
     });
@@ -109,6 +110,7 @@ export function AppProvider({ children }) {
         meta_ads: c.metaAds || [], custom_steps: c.customSteps || [],
         custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
         step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
+        phase_deadlines: c.phaseDeadlines || {},
         meta_metrics: c.metaMetrics || null
       }));
       for (let i = 0; i < clientRows.length; i += 10) {
@@ -349,6 +351,7 @@ export function AppProvider({ children }) {
           metaAds: c.meta_ads || [], customSteps: c.custom_steps || [],
           customPhases: c.custom_phases || [], clientFeedbacks: c.client_feedbacks || [],
           stepNameOverrides: c.step_name_overrides || {}, phaseNameOverrides: c.phase_name_overrides || {},
+          phaseDeadlines: c.phase_deadlines || {},
           metaMetrics: c.meta_metrics || null
         }));
         const mappedTasks = (sbTasks || []).map(t => ({

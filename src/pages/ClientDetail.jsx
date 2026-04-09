@@ -32,6 +32,7 @@ export default function ClientDetail({ client: c }) {
   const [editingPhase, setEditingPhase] = useState(null);
   const [editPhaseValue, setEditPhaseValue] = useState('');
   const [deletePhaseConfirm, setDeletePhaseConfirm] = useState(null);
+  const [editingDeadline, setEditingDeadline] = useState(null);
 
   const dropdownRefs = useRef({});
 
@@ -798,6 +799,46 @@ export default function ClientDetail({ client: c }) {
                   )}
                   <span className="text-[11px] font-semibold text-gray-400">({doneCount}/{totalCount})</span>
                   {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
+                  {/* Phase deadline */}
+                  {(() => {
+                    const deadline = (c.phaseDeadlines || {})[phaseKey];
+                    const isOverdue = deadline && !allDone && deadline < today();
+                    if (editingDeadline === phaseKey) {
+                      return (
+                        <input
+                          type="date"
+                          className="border border-blue-400 rounded py-[2px] px-1.5 text-[10px] font-sans outline-none bg-white ml-1"
+                          defaultValue={deadline || ''}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => {
+                            const val = e.target.value || null;
+                            const deadlines = { ...(c.phaseDeadlines || {}), [phaseKey]: val };
+                            if (!val) delete deadlines[phaseKey];
+                            updateClient(c.id, { phaseDeadlines: deadlines });
+                            setEditingDeadline(null);
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingDeadline(null); }}
+                        />
+                      );
+                    }
+                    if (deadline) {
+                      return (
+                        <span
+                          className={`text-[10px] font-medium ml-1 px-1.5 py-[1px] rounded cursor-pointer hover:bg-gray-100 ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400'}`}
+                          onClick={(e) => { e.stopPropagation(); setEditingDeadline(phaseKey); }}
+                          title="Click para cambiar deadline"
+                        >{'\uD83D\uDCC5'} {fmtDate(deadline)}</span>
+                      );
+                    }
+                    return (
+                      <span
+                        className="text-[10px] text-gray-300 ml-1 px-1 py-[1px] rounded cursor-pointer hover:text-gray-500 hover:bg-gray-100 opacity-0 group-hover/phase:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); setEditingDeadline(phaseKey); }}
+                        title="Agregar deadline"
+                      >{'\uD83D\uDCC5'}</span>
+                    );
+                  })()}
                   {/* Delete phase — custom phases only */}
                   {(c.customPhases || []).some(cp => cp.id === phaseKey) && (
                     <button
