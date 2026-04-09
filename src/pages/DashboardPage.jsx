@@ -210,6 +210,31 @@ export default function DashboardPage() {
     setAssigningTaskDate(null);
   };
 
+  // Helper: resolve assignee string to TEAM members (unique)
+  const resolveMembers = (assigneeStr) => {
+    if (!assigneeStr) return [];
+    const names = assigneeStr.split(',').map(s => s.trim()).filter(Boolean);
+    const members = [];
+    const seen = new Set();
+    names.forEach(name => {
+      const m = TEAM.find(t => t.name.toLowerCase() === name.toLowerCase() || t.id === name.toLowerCase());
+      if (m && !seen.has(m.id)) { seen.add(m.id); members.push(m); }
+    });
+    return members;
+  };
+
+  // Helper: get unique members from all tasks in a phase
+  const getPhaseMembers = (phaseTasks) => {
+    const seen = new Set();
+    const members = [];
+    (phaseTasks || []).forEach(t => {
+      resolveMembers(t.assignee).forEach(m => {
+        if (!seen.has(m.id)) { seen.add(m.id); members.push(m); }
+      });
+    });
+    return members;
+  };
+
   const togglePhaseExpand = (clientId, phaseKey) => {
     const key = clientId + '_' + phaseKey;
     setExpandedPhases(prev => ({ ...prev, [key]: !prev[key] }));
@@ -254,6 +279,7 @@ export default function DashboardPage() {
                       const expandKey = cl.id + '_' + ph.phaseKey;
                       const isExpanded = expandedPhases[expandKey];
                       const hasTasks = ph.phaseTasks && ph.phaseTasks.length > 0;
+                      const phaseMembers = getPhaseMembers(ph.phaseTasks);
 
                       return (
                         <div key={ph.phaseKey}>
@@ -295,10 +321,19 @@ export default function DashboardPage() {
                               {/* Today marker */}
                               <div className="absolute top-0 bottom-0 z-[2]" style={{ left: dateToPx(now), width: 1.5, background: '#5B7CF5', opacity: 0.5 }} />
                               {/* Phase bar */}
-                              <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 16, top: 7 }}>
+                              <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 18, top: 5 }}>
                                 <div className="w-full h-full rounded-sm relative overflow-hidden" style={{ background: color + '20' }}>
                                   <div className="h-full rounded-sm" style={{ width: `${ph.progress}%`, background: color, opacity: 0.5 }} />
-                                  <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold" style={{ color }}>{ph.progress}%</span>
+                                  <span className="absolute inset-0 flex items-center px-1 gap-0.5">
+                                    {/* Phase member avatars */}
+                                    <span className="flex -space-x-1 shrink-0">
+                                      {phaseMembers.slice(0, 4).map(m => (
+                                        <TeamAvatar key={m.id} member={m} size={14} className="ring-1 ring-white" />
+                                      ))}
+                                      {phaseMembers.length > 4 && <span className="text-[7px] font-bold ml-0.5" style={{ color }}>+{phaseMembers.length - 4}</span>}
+                                    </span>
+                                    <span className="text-[8px] font-bold ml-auto" style={{ color }}>{ph.progress}%</span>
+                                  </span>
                                 </div>
                               </div>
                               {/* Deadline diamond marker — click to edit */}
@@ -316,6 +351,7 @@ export default function DashboardPage() {
                           {/* Expanded tasks */}
                           {isExpanded && ph.phaseTasks.map(task => {
                             const taskColor = task.status === 'done' ? '#22C55E' : task.status === 'blocked' ? '#EF4444' : '#94A3B8';
+                            const taskMembers = resolveMembers(task.assignee);
                             const taskHasDate = !!task.dueDate;
                             const taskBarLeft = taskHasDate ? dateToPx(task.startedDate || now) : 0;
                             const taskBarEnd = taskHasDate ? dateToPx(task.dueDate) : 0;
@@ -359,13 +395,28 @@ export default function DashboardPage() {
                                   <div className="absolute top-0 bottom-0 z-[2]" style={{ left: dateToPx(now), width: 1, background: '#5B7CF5', opacity: 0.3 }} />
                                   {taskHasDate && (
                                     <>
-                                      <div className="absolute z-[1] cursor-pointer" style={{ left: taskBarStart, width: taskBarW, height: 10, top: 6 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>
-                                        <div className="w-full h-full rounded-sm" style={{ background: taskColor, opacity: 0.35 }} />
+                                      <div className="absolute z-[1] cursor-pointer flex items-center px-0.5 gap-0.5" style={{ left: taskBarStart, width: taskBarW, height: 14, top: 4 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>
+                                        <div className="absolute inset-0 rounded-sm" style={{ background: taskColor, opacity: 0.25 }} />
+                                        <span className="flex -space-x-1 shrink-0 relative z-[1]">
+                                          {taskMembers.slice(0, 3).map(m => (
+                                            <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white" />
+                                          ))}
+                                        </span>
                                       </div>
                                       <div className="absolute z-[3] cursor-pointer group" style={{ left: dateToPx(task.dueDate) - 5, top: 5, padding: 2 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }} title={task.dueDate}>
                                         <div className="w-2 h-2 rounded-full group-hover:scale-150 transition-transform" style={{ background: taskColor }} />
                                       </div>
                                     </>
+                                  )}
+                                  {/* Show avatars even without date */}
+                                  {!taskHasDate && taskMembers.length > 0 && (
+                                    <div className="absolute z-[1] flex items-center" style={{ left: dateToPx(now) + 4, top: 5 }}>
+                                      <span className="flex -space-x-1">
+                                        {taskMembers.slice(0, 3).map(m => (
+                                          <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white opacity-40" />
+                                        ))}
+                                      </span>
+                                    </div>
                                   )}
                                 </div>
                               </div>
