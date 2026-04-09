@@ -239,7 +239,7 @@ export default function InformePage() {
 
       {/* Report — collapsible */}
       {stored && stored.text ? (
-        <div className="bg-white border border-gray-200 rounded-xl py-5 px-5 max-md:py-3 max-md:px-3 max-md:rounded-lg overflow-hidden max-w-full">
+        <div className="bg-white border border-gray-200 rounded-xl py-5 px-5 max-md:py-3 max-md:px-3 max-md:rounded-lg overflow-hidden w-full box-border">
           <div
             className="flex items-center gap-2 pb-3 border-b border-gray-100 cursor-pointer select-none flex-wrap min-w-0"
             onClick={() => setReportExpanded(prev => !prev)}
@@ -251,7 +251,7 @@ export default function InformePage() {
             <span className="text-[11px] text-gray-400 ml-auto max-md:ml-0 shrink-0">{stored.source || 'ops-agent'}</span>
           </div>
           {reportExpanded && (
-            <div className="mt-4 report-content min-w-0 max-w-full overflow-x-auto" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+            <div className="mt-4 report-content min-w-0 w-full overflow-hidden" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
           )}
         </div>
       ) : (

@@ -94,12 +94,20 @@ body {
   word-wrap: break-word;
   word-break: break-word;
   min-width: 0;
+  overflow: hidden;
 }
-.report-content h1, .report-content h2, .report-content h3,
-.report-content p, .report-content li, .report-content div:not(.overflow-x-auto) {
-  overflow-wrap: break-word;
-  word-break: break-word;
+.report-content * {
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
   min-width: 0;
+  max-width: 100%;
+}
+.report-content ul, .report-content ol {
+  overflow: hidden;
+}
+.report-content li {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Report tables */
