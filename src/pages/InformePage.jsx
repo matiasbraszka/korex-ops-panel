@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { fmtDate, today } from '../utils/helpers';
 import { sbFetch } from '../utils/supabase';
@@ -7,6 +7,7 @@ export default function InformePage() {
   const { clients, briefing, reportFeedbacks, setReportFeedbacks, taskProposals, setTaskProposals, currentUser, createTask, updateTask, tasks } = useApp();
   const [feedbackText, setFeedbackText] = useState('');
   const [reportExpanded, setReportExpanded] = useState(true);
+  const carouselRef = useRef(null);
 
   const pending = taskProposals.filter(p => p.approval === 'pending');
   const stored = briefing;
@@ -111,25 +112,25 @@ export default function InformePage() {
       // Headers
       if (/^### (.+)$/.test(line)) {
         if (inList) { html += '</ul>'; inList = false; }
-        html += '<h3 class="text-[13px] font-bold mt-4 mb-1.5 text-gray-800">' + formatInline(line.replace(/^### /, '')) + '</h3>';
+        html += '<h3 class="text-[13px] max-md:text-[11px] font-bold mt-4 mb-1.5 text-gray-800">' + formatInline(line.replace(/^### /, '')) + '</h3>';
         continue;
       }
       if (/^## (.+)$/.test(line)) {
         if (inList) { html += '</ul>'; inList = false; }
-        html += '<h2 class="text-[15px] font-bold mt-5 mb-2 text-blue-600">' + formatInline(line.replace(/^## /, '')) + '</h2>';
+        html += '<h2 class="text-[15px] max-md:text-[13px] font-bold mt-5 mb-2 text-blue-600">' + formatInline(line.replace(/^## /, '')) + '</h2>';
         continue;
       }
       if (/^# (.+)$/.test(line)) {
         if (inList) { html += '</ul>'; inList = false; }
-        html += '<h1 class="text-lg font-bold mt-5 mb-2 text-gray-900">' + formatInline(line.replace(/^# /, '')) + '</h1>';
+        html += '<h1 class="text-lg max-md:text-[14px] font-bold mt-5 mb-2 text-gray-900">' + formatInline(line.replace(/^# /, '')) + '</h1>';
         continue;
       }
 
       // Bullet points (- or *)
       if (/^\s*[-*] (.+)$/.test(line)) {
         const match = line.match(/^\s*[-*] (.+)$/);
-        if (!inList) { html += '<ul class="list-disc pl-5 my-1 space-y-0.5">'; inList = true; }
-        html += '<li class="text-[13px] leading-relaxed text-gray-700">' + formatInline(match[1]) + '</li>';
+        if (!inList) { html += '<ul class="list-disc pl-5 max-md:pl-3 my-1 space-y-0.5">'; inList = true; }
+        html += '<li class="text-[13px] max-md:text-[11px] leading-relaxed text-gray-700">' + formatInline(match[1]) + '</li>';
         continue;
       }
 
@@ -137,7 +138,7 @@ export default function InformePage() {
       if (/^\s*\d+\.\s+(.+)$/.test(line)) {
         const match = line.match(/^\s*\d+\.\s+(.+)$/);
         if (inList) { html += '</ul>'; inList = false; }
-        html += '<div class="text-[13px] leading-relaxed text-gray-700 pl-2 my-0.5">' + formatInline(line) + '</div>';
+        html += '<div class="text-[13px] max-md:text-[11px] leading-relaxed text-gray-700 pl-2 my-0.5">' + formatInline(line) + '</div>';
         continue;
       }
 
@@ -151,7 +152,7 @@ export default function InformePage() {
       }
 
       // Regular paragraph
-      html += '<p class="text-[13px] leading-relaxed text-gray-700 my-0.5">' + formatInline(line) + '</p>';
+      html += '<p class="text-[13px] max-md:text-[11px] leading-relaxed text-gray-700 my-0.5">' + formatInline(line) + '</p>';
     }
 
     if (inList) html += '</ul>';
@@ -186,14 +187,25 @@ export default function InformePage() {
 
   return (
     <div className="min-w-0 overflow-x-hidden">
-      {/* Suggestions carousel */}
+      {/* Suggestions carousel with arrows */}
       {pending.length > 0 && (
         <div className="mb-4">
           <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
             {'\u26A1'} Sugerencias del agente ({pending.length})
           </div>
-          <div className="overflow-x-auto pb-2" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div className="flex gap-2.5" style={{ minWidth: 'min-content' }}>
+          <div className="relative">
+            {/* Left arrow */}
+            <button
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-400 hover:text-gray-700 hover:shadow cursor-pointer text-sm max-md:w-6 max-md:h-6 max-md:text-xs max-md:-left-1"
+              onClick={() => { if (carouselRef.current) carouselRef.current.scrollBy({ left: -240, behavior: 'smooth' }); }}
+            >{'\u2039'}</button>
+            {/* Right arrow */}
+            <button
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-400 hover:text-gray-700 hover:shadow cursor-pointer text-sm max-md:w-6 max-md:h-6 max-md:text-xs max-md:-right-1"
+              onClick={() => { if (carouselRef.current) carouselRef.current.scrollBy({ left: 240, behavior: 'smooth' }); }}
+            >{'\u203A'}</button>
+            <div ref={carouselRef} className="overflow-x-auto pb-2 px-4 max-md:px-3 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+              <div className="flex gap-2.5" style={{ minWidth: 'min-content' }}>
               {pending.map(p => {
                 const client = clients.find(c => c.id === p.client_id);
                 const clientName = client ? client.name : '\u2014';
@@ -220,6 +232,7 @@ export default function InformePage() {
                 );
               })}
             </div>
+          </div>
           </div>
         </div>
       )}

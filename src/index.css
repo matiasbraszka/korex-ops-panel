@@ -84,6 +84,10 @@ body {
   background: var(--color-blue);
 }
 
+/* Hide scrollbar for carousel */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* Report markdown content */
 .report-content {
   overflow-wrap: break-word;
