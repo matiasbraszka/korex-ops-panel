@@ -257,16 +257,16 @@ export default function DashboardPage() {
                       return (
                         <div key={ph.phaseKey}>
                           {/* Phase row */}
-                          <div className={`flex items-center ${hasTasks ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} style={{ height: 30 }} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
-                            <div className="shrink-0 pr-2 flex items-center gap-1" style={{ width: labelWidth }}>
-                              {hasTasks && <span className={`text-[8px] text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
-                              <div className="text-[10px] leading-tight flex items-center gap-1" style={{ color }}>
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                                {ph.phInfo.label}
-                                <span className="text-gray-400 text-[9px]">({ph.progress}%)</span>
+                          <div className={`flex items-start py-1 ${hasTasks ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
+                            <div className="shrink-0 pr-2 flex items-start gap-1 pt-0.5" style={{ width: labelWidth }}>
+                              {hasTasks && <span className={`text-[8px] text-gray-400 transition-transform mt-0.5 ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
+                              <div className="text-[10px] leading-snug flex items-start gap-1" style={{ color }}>
+                                <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
+                                <span>{ph.phInfo.label}</span>
+                                <span className="text-gray-400 text-[9px] shrink-0">({ph.progress}%)</span>
                               </div>
                             </div>
-                            <div className="relative flex items-center" style={{ width: weekColumns.length * weekWidth, height: '100%' }}>
+                            <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 28 }}>
                               {/* Week grid lines */}
                               {weekColumns.map((w, i) => (
                                 <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-blue-50/30' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f0f0f0' }} />
@@ -298,12 +298,12 @@ export default function DashboardPage() {
                             const isAssigning = assigningTaskDate === task.id;
 
                             return (
-                              <div key={task.id} className="flex items-center" style={{ height: 26 }}>
-                                <div className="shrink-0 pr-2 flex items-center gap-1 pl-5" style={{ width: labelWidth }}>
-                                  <span className="text-[9px] shrink-0" style={{ color: taskColor }}>
+                              <div key={task.id} className="flex items-start py-1 border-b border-gray-50 last:border-b-0">
+                                <div className="shrink-0 pr-2 flex items-start gap-1 pl-5" style={{ width: labelWidth }}>
+                                  <span className="text-[9px] shrink-0 mt-0.5" style={{ color: taskColor }}>
                                     {task.status === 'done' ? '\u2713' : task.status === 'blocked' ? '\u2715' : '\u25CB'}
                                   </span>
-                                  <span className={`text-[9px] ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
+                                  <span className={`text-[9px] leading-snug ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
                                   {!taskHasDate && !isAssigning && (
                                     <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 ml-auto font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
                                   )}
@@ -318,17 +318,17 @@ export default function DashboardPage() {
                                     />
                                   )}
                                 </div>
-                                <div className="relative flex items-center" style={{ width: weekColumns.length * weekWidth, height: '100%' }}>
+                                <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 22 }}>
                                   {weekColumns.map((w, i) => (
                                     <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-blue-50/20' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f8f8f8' }} />
                                   ))}
                                   <div className="absolute top-0 bottom-0 z-[2]" style={{ left: dateToPx(now), width: 1, background: '#5B7CF5', opacity: 0.3 }} />
                                   {taskHasDate && (
                                     <>
-                                      <div className="absolute z-[1]" style={{ left: taskBarStart, width: taskBarW, height: 10, top: 8 }}>
+                                      <div className="absolute z-[1]" style={{ left: taskBarStart, width: taskBarW, height: 10, top: 6 }}>
                                         <div className="w-full h-full rounded-sm" style={{ background: taskColor, opacity: 0.35 }} />
                                       </div>
-                                      <div className="absolute z-[3]" style={{ left: dateToPx(task.dueDate) - 3, top: 10 }}>
+                                      <div className="absolute z-[3]" style={{ left: dateToPx(task.dueDate) - 3, top: 8 }}>
                                         <div className="w-1.5 h-1.5 rounded-full" style={{ background: taskColor }} />
                                       </div>
                                     </>
