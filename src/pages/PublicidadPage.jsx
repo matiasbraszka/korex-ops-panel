@@ -85,9 +85,14 @@ export default function PublicidadPage() {
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr>
-                {['Cliente', 'Estado', 'Evento principal', 'Inversión 7d', 'Leads 7d', 'CPL prom.', 'Inv. Ayer', 'Leads ayer'].map(h => (
-                  <th key={h} className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">{h}</th>
-                ))}
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">Cliente</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">Estado</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold max-md:hidden">Evento</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">Inv. 7d</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">Leads</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold">CPL</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold max-md:hidden">Inv. Ayer</th>
+                <th className="text-left py-2 px-2.5 bg-surface2 border border-border text-[10px] uppercase tracking-[0.5px] text-text3 font-semibold max-md:hidden">Leads ayer</th>
               </tr>
             </thead>
             <tbody>
@@ -106,14 +111,14 @@ export default function PublicidadPage() {
                         {isActive ? '\u25CF Activa' : '\u23F8 Pausada'}
                       </span>
                     </td>
-                    <td className="py-2 px-2.5 border border-border">
+                    <td className="py-2 px-2.5 border border-border max-md:hidden">
                       {m.conversionEvent ? <span className="text-[9px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">{m.conversionEvent}</span> : <span className="text-[10px] text-text3">{'\u2014'}</span>}
                     </td>
                     <td className="py-2 px-2.5 border border-border font-semibold">{m.totalSpend7d ? fmtUSD(m.totalSpend7d, curr) : '\u2014'}</td>
                     <td className="py-2 px-2.5 border border-border font-semibold text-blue">{m.totalConversions7d || '\u2014'}</td>
                     <td className="py-2 px-2.5 border border-border font-semibold" style={{ color: m.avgCpl7d && toUSD(m.avgCpl7d, curr) > 15 ? 'var(--color-red)' : 'var(--color-green)' }}>{m.avgCpl7d ? fmtUSD(m.avgCpl7d, curr) : '\u2014'}</td>
-                    <td className="py-2 px-2.5 border border-border">{m.spendYesterday ? fmtUSD(m.spendYesterday, curr) : '\u2014'}</td>
-                    <td className="py-2 px-2.5 border border-border text-blue font-semibold">{m.conversionsYesterday || '\u2014'}</td>
+                    <td className="py-2 px-2.5 border border-border max-md:hidden">{m.spendYesterday ? fmtUSD(m.spendYesterday, curr) : '\u2014'}</td>
+                    <td className="py-2 px-2.5 border border-border text-blue font-semibold max-md:hidden">{m.conversionsYesterday || '\u2014'}</td>
                   </tr>
                 );
               })}
@@ -121,7 +126,8 @@ export default function PublicidadPage() {
                 <tr key={c.id} className="cursor-pointer hover:bg-blue-bg2" style={{ opacity: 0.5 }} onClick={() => openClient(c.id)}>
                   <td className="py-2 px-2.5 border border-border">{c.name} <span className="text-[10px] text-text3">{c.company}</span></td>
                   <td className="py-2 px-2.5 border border-border"><span className="inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold bg-surface2 text-text3">Sin cuenta</span></td>
-                  <td colSpan={6} className="py-2 px-2.5 border border-border text-[10px] text-text3">No tiene cuenta de Meta Ads configurada</td>
+                  <td colSpan={3} className="py-2 px-2.5 border border-border text-[10px] text-text3 max-md:hidden">No tiene cuenta de Meta Ads configurada</td>
+                  <td colSpan={3} className="py-2 px-2.5 border border-border text-[10px] text-text3 hidden max-md:table-cell">Sin cuenta</td>
                 </tr>
               ))}
             </tbody>

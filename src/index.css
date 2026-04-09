@@ -84,6 +84,18 @@ body {
   background: var(--color-blue);
 }
 
+/* Report markdown content */
+.report-content {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+.report-content h1, .report-content h2, .report-content h3,
+.report-content p, .report-content li, .report-content div {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 /* Report tables */
 .report-table {
   width: 100%;

@@ -237,7 +237,7 @@ export default function InformePage() {
             <span className="text-[11px] text-gray-400 ml-auto">{stored.source || 'ops-agent'}</span>
           </div>
           {reportExpanded && (
-            <div className="mt-4 overflow-x-auto break-words" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+            <div className="mt-4 overflow-x-auto report-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
           )}
         </div>
       ) : (
