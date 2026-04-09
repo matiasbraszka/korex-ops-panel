@@ -84,12 +84,34 @@ body {
   background: var(--color-blue);
 }
 
-/* Report tables responsive */
+/* Report tables */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 8px 0;
+}
+.report-table th, .report-table td {
+  padding: 6px 10px;
+  border: 1px solid #E5E7EB;
+  text-align: left;
+}
+.report-table th {
+  background: #F9FAFB;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+.report-table td {
+  color: #4B5563;
+}
+.report-table tr:hover td {
+  background: #F9FAFB;
+}
+
 @media (max-width: 767px) {
   .report-table {
     font-size: 10px;
-    display: block;
-    overflow-x: auto;
   }
   .report-table th, .report-table td {
     padding: 4px 6px;
