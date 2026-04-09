@@ -186,10 +186,10 @@ export default function InformePage() {
   };
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <div className="min-w-0 overflow-x-hidden max-w-full">
       {/* Suggestions carousel with arrows */}
       {pending.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-4 max-w-full overflow-hidden">
           <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
             {'\u26A1'} Sugerencias del agente ({pending.length})
           </div>
@@ -239,23 +239,23 @@ export default function InformePage() {
 
       {/* Report — collapsible */}
       {stored && stored.text ? (
-        <div className="bg-white border border-gray-200 rounded-xl py-5 px-5 max-md:py-3 max-md:px-3 max-md:rounded-lg overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl py-5 px-5 max-md:py-3 max-md:px-3 max-md:rounded-lg overflow-hidden max-w-full">
           <div
-            className="flex items-center gap-2 pb-3 border-b border-gray-100 cursor-pointer select-none flex-wrap"
+            className="flex items-center gap-2 pb-3 border-b border-gray-100 cursor-pointer select-none flex-wrap min-w-0"
             onClick={() => setReportExpanded(prev => !prev)}
           >
-            <span className={`text-gray-400 text-xs transition-transform duration-200 ${reportExpanded ? '' : '-rotate-90'}`}>{'\u25BC'}</span>
-            <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase">Informe diario</span>
-            <span className="text-sm text-gray-500 font-medium max-md:text-[12px]">{formatDate()}</span>
-            {!reportExpanded && <span className="text-[11px] text-gray-400 italic max-md:hidden">Click para expandir</span>}
-            <span className="text-[11px] text-gray-400 ml-auto max-md:ml-0">{stored.source || 'ops-agent'}</span>
+            <span className={`text-gray-400 text-xs transition-transform duration-200 shrink-0 ${reportExpanded ? '' : '-rotate-90'}`}>{'\u25BC'}</span>
+            <span className="bg-blue-600 text-white text-[10px] font-bold py-[3px] px-2.5 rounded-full tracking-wide uppercase shrink-0">Informe diario</span>
+            <span className="text-sm text-gray-500 font-medium max-md:text-[11px] shrink-0">{formatDate()}</span>
+            {!reportExpanded && <span className="text-[11px] text-gray-400 italic max-md:hidden shrink-0">Click para expandir</span>}
+            <span className="text-[11px] text-gray-400 ml-auto max-md:ml-0 shrink-0">{stored.source || 'ops-agent'}</span>
           </div>
           {reportExpanded && (
-            <div className="mt-4 report-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
+            <div className="mt-4 report-content min-w-0 max-w-full overflow-x-auto" dangerouslySetInnerHTML={{ __html: renderMarkdown(stored.text) }} />
           )}
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl py-6 px-5 max-md:py-4 max-md:px-3">
+        <div className="bg-white border border-gray-200 rounded-xl py-6 px-5 max-md:py-4 max-md:px-3 max-w-full">
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-3">{'\uD83D\uDCCB'}</div>
             <div className="text-sm font-semibold mb-1.5">Sin informe disponible</div>
@@ -265,27 +265,27 @@ export default function InformePage() {
       )}
 
       {/* Feedback section — below the report */}
-      <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5 max-md:py-4 max-md:px-4 max-md:mt-3 max-md:rounded-lg">
+      <div className="bg-white border border-gray-200 rounded-xl py-5 px-6 mt-5 max-md:py-4 max-md:px-3 max-md:mt-3 max-md:rounded-lg max-w-full overflow-hidden">
         <div className="text-sm font-semibold mb-1 text-gray-800">Feedback sobre el informe</div>
         <div className="text-[11px] text-gray-400 mb-3">Deja correcciones o contexto adicional. La IA lo usará para mejorar los próximos informes.</div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 max-md:flex-col">
           <textarea
-            className="flex-1 border border-gray-200 rounded-lg py-2.5 px-3.5 text-xs font-sans resize-y min-h-[60px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+            className="flex-1 border border-gray-200 rounded-lg py-2.5 px-3.5 text-xs font-sans resize-y min-h-[60px] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 min-w-0"
             placeholder="Ej: 'Matias ya reviso lo de Sergio, esta listo' o 'La tarea de Victor ya se resolvio ayer'"
             value={feedbackText}
             onChange={(e) => setFeedbackText(e.target.value)}
           />
-          <button className="self-end py-2 px-4 rounded-lg border-none bg-blue-600 text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-700" onClick={submitReportFeedback}>Enviar</button>
+          <button className="self-end py-2 px-4 rounded-lg border-none bg-blue-600 text-white text-[13px] font-medium cursor-pointer font-sans hover:bg-blue-700 shrink-0 max-md:self-stretch" onClick={submitReportFeedback}>Enviar</button>
         </div>
         {reportFeedbacks.length > 0 && (
           <div className="mt-3.5">
             {[...reportFeedbacks].reverse().slice(0, 10).map((f, i) => (
-              <div key={i} className="flex gap-2.5 py-2 border-t border-gray-100 text-xs">
-                <div>
+              <div key={i} className="flex gap-2.5 py-2 border-t border-gray-100 text-xs min-w-0">
+                <div className="shrink-0">
                   <div className="font-semibold text-gray-700 text-[11px]">{f.created_by || 'Usuario'}</div>
                   <div className="text-gray-400 text-[11px] whitespace-nowrap">{fmtDate(f.created_at?.substring(0, 10) || f.briefing_date)}</div>
                 </div>
-                <div className="text-gray-600 leading-relaxed">{f.feedback}</div>
+                <div className="text-gray-600 leading-relaxed min-w-0 break-words">{f.feedback}</div>
               </div>
             ))}
           </div>

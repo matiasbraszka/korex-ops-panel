@@ -93,11 +93,13 @@ body {
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
+  min-width: 0;
 }
 .report-content h1, .report-content h2, .report-content h3,
-.report-content p, .report-content li, .report-content div {
+.report-content p, .report-content li, .report-content div:not(.overflow-x-auto) {
   overflow-wrap: break-word;
   word-break: break-word;
+  min-width: 0;
 }
 
 /* Report tables */
@@ -129,8 +131,13 @@ body {
   .report-table {
     font-size: 10px;
   }
-  .report-table th, .report-table td {
+  .report-table th {
     padding: 4px 6px;
     white-space: nowrap;
+  }
+  .report-table td {
+    padding: 4px 6px;
+    white-space: normal;
+    word-break: break-word;
   }
 }
