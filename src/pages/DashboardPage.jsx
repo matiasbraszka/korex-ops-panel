@@ -123,8 +123,137 @@ export default function DashboardPage() {
   });
   bottlenecks.sort((a, b) => (b.blockingCount - a.blockingCount) || (b.days - a.days));
 
+  // ── D. Phase timeline data ──
+  const ganttEntries = [];
+  clients.filter(c => !isKorexClient(c) && c.phaseDeadlines).forEach(c => {
+    const allPh = getAllPhases(c);
+    Object.entries(c.phaseDeadlines || {}).forEach(([phaseKey, deadline]) => {
+      if (!deadline) return;
+      const phInfo = allPh[phaseKey] || PHASES[phaseKey];
+      if (!phInfo) return;
+      const phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
+      const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
+      const isOverdue = deadline < now && !done;
+      const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
+      ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress });
+    });
+  });
+  ganttEntries.sort((a, b) => a.deadline.localeCompare(b.deadline));
+
+  // Group by client for Gantt
+  const ganttByClient = {};
+  ganttEntries.forEach(e => {
+    if (!ganttByClient[e.client.id]) ganttByClient[e.client.id] = { client: e.client, phases: [] };
+    ganttByClient[e.client.id].phases.push(e);
+  });
+
+  // Timeline calc
+  const ganttMinDate = ganttEntries.length > 0 ? ganttEntries.reduce((min, e) => e.deadline < min ? e.deadline : min, now) : now;
+  const ganttMaxDate = ganttEntries.length > 0 ? ganttEntries.reduce((max, e) => e.deadline > max ? e.deadline : max, now) : now;
+  const ganttStart = new Date(ganttMinDate < now ? ganttMinDate : now);
+  ganttStart.setDate(ganttStart.getDate() - 3);
+  const ganttEnd = new Date(ganttMaxDate);
+  ganttEnd.setDate(ganttEnd.getDate() + 10);
+  const ganttTotalDays = Math.max(21, Math.ceil((ganttEnd - ganttStart) / 86400000));
+  const ganttTodayPct = Math.ceil((new Date(now) - ganttStart) / 86400000) / ganttTotalDays * 100;
+
+  // Week columns
+  const ganttWeeks = [];
+  const gw = new Date(ganttStart);
+  gw.setDate(gw.getDate() - gw.getDay() + 1);
+  while (gw <= ganttEnd) {
+    const pct = Math.ceil((gw - ganttStart) / 86400000) / ganttTotalDays * 100;
+    if (pct >= 0 && pct <= 100) {
+      const weekNum = `S${Math.ceil(gw.getDate() / 7)}`;
+      const monthLabel = gw.toLocaleDateString('es-AR', { month: 'short' });
+      ganttWeeks.push({ pct, weekNum, monthLabel, isMonthStart: gw.getDate() <= 7 });
+    }
+    gw.setDate(gw.getDate() + 7);
+  }
+
   return (
     <div className="space-y-5 overflow-x-hidden">
+      {/* Timeline Gantt */}
+      {ganttEntries.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
+          <div className="text-sm font-bold mb-4">Timeline de fases</div>
+
+          {/* Desktop Gantt */}
+          <div className="hidden md:block overflow-x-auto">
+            <div style={{ minWidth: 700 }}>
+              {/* Week header row */}
+              <div className="flex border-b border-gray-100 relative" style={{ marginLeft: 140, height: 32 }}>
+                {ganttWeeks.map((w, i) => (
+                  <div key={i} className="absolute text-center border-l border-gray-100" style={{ left: `${w.pct}%`, width: `${100 / ganttTotalDays * 7}%`, top: 0, bottom: 0 }}>
+                    {w.isMonthStart && <div className="text-[10px] font-semibold text-gray-600 capitalize">{w.monthLabel}</div>}
+                    <div className="text-[9px] text-gray-400">{w.weekNum}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Client rows */}
+              {Object.values(ganttByClient).map(({ client: cl, phases }) => (
+                <div key={cl.id} className="border-b border-gray-50 last:border-b-0">
+                  {phases.map((ph, pi) => (
+                    <div key={ph.phaseKey} className="flex items-center" style={{ height: 36 }}>
+                      {/* Label column */}
+                      <div className="w-[140px] shrink-0 pr-3">
+                        {pi === 0 && <div className="text-[11px] font-bold text-gray-800 truncate">{cl.name}</div>}
+                        <div className="text-[10px] text-gray-400 truncate">{ph.phInfo.label}</div>
+                      </div>
+                      {/* Bar area */}
+                      <div className="flex-1 relative h-full flex items-center">
+                        {/* Grid lines */}
+                        {ganttWeeks.map((w, i) => (
+                          <div key={i} className="absolute top-0 bottom-0 border-l border-gray-50" style={{ left: `${w.pct}%` }} />
+                        ))}
+                        {/* Today line */}
+                        <div className="absolute top-0 bottom-0 border-l-2 border-blue-400 z-10" style={{ left: `${ganttTodayPct}%` }} />
+                        {/* Bar */}
+                        {(() => {
+                          const deadlinePct = Math.ceil((new Date(ph.deadline) - ganttStart) / 86400000) / ganttTotalDays * 100;
+                          const barStart = Math.min(ganttTodayPct, deadlinePct);
+                          const barEnd = Math.max(ganttTodayPct, deadlinePct);
+                          const barWidth = Math.max(2, barEnd - barStart);
+                          const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
+                          return (
+                            <div className="absolute flex items-center" style={{ left: `${barStart}%`, width: `${barWidth}%`, height: 20 }}>
+                              <div className="w-full h-full rounded-md relative overflow-hidden" style={{ background: color + '20' }}>
+                                <div className="h-full rounded-md" style={{ width: `${ph.progress}%`, background: color + '70' }} />
+                              </div>
+                              <span className="ml-1.5 text-[9px] font-semibold whitespace-nowrap shrink-0" style={{ color }}>{ph.done ? '\u2713' : fmtDate(ph.deadline)}</span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile: compact list */}
+          <div className="md:hidden space-y-1">
+            {ganttEntries.map((e, i) => (
+              <div key={i} className={`flex items-center gap-2 py-2 px-2.5 rounded-lg text-[11px] ${e.isOverdue ? 'bg-red-50' : e.done ? 'bg-green-50' : 'bg-gray-50'}`}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} />
+                <div className="min-w-0 flex-1">
+                  <span className="font-semibold text-gray-700">{e.client.name}</span>
+                  <span className="text-gray-400 ml-1">{e.phInfo.label}</span>
+                </div>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${e.progress}%`, background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} /></div>
+                  <span className={`font-medium text-[10px] ${e.isOverdue ? 'text-red-500' : e.done ? 'text-green-500' : 'text-gray-500'}`}>
+                    {e.done ? '\u2713' : fmtDate(e.deadline)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* A. Team x Client table */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-3">Equipo x Cliente</div>
@@ -177,33 +306,6 @@ export default function DashboardPage() {
           </table>
         </div>
 
-        {/* Bottleneck per team member */}
-        <div className="mt-4 space-y-1">
-          {teamMembers.map(m => {
-            const bn = memberBottlenecks[m.id];
-            if (!bn) return null;
-            return (
-              <div key={m.id}>
-                <div className="text-[11px] text-gray-600 hidden md:grid grid-cols-[18px_80px_10px_1fr] items-center gap-1.5">
-                  <TeamAvatar member={m} size={18} />
-                  <span className="font-semibold text-gray-800 truncate">{m.name}</span>
-                  <span className="text-gray-400 text-center">|</span>
-                  <span className="flex items-center gap-1 min-w-0">
-                    <span className="text-gray-500 shrink-0">Cuello de botella:</span>
-                    <span className="text-red-500 font-medium truncate">{bn}</span>
-                  </span>
-                </div>
-                <div className="md:hidden flex items-center gap-2 py-1.5 border-b border-gray-100 text-[11px] text-gray-600">
-                  <TeamAvatar member={m} size={18} />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-semibold text-gray-800">{m.name}</span>
-                    <div className="text-red-500 font-medium text-[10px] truncate">{bn}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* B. Team velocity table */}
@@ -296,118 +398,6 @@ export default function DashboardPage() {
         );
       })()}
 
-      {/* D. Phase deadlines calendar */}
-      {(() => {
-        const now = today();
-        // Collect all phases with deadlines across all clients
-        const entries = [];
-        clients.filter(c => !isKorexClient(c) && c.phaseDeadlines).forEach(c => {
-          const allPh = getAllPhases(c);
-          Object.entries(c.phaseDeadlines || {}).forEach(([phaseKey, deadline]) => {
-            if (!deadline) return;
-            const phInfo = allPh[phaseKey] || PHASES[phaseKey];
-            if (!phInfo) return;
-            const phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
-            const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
-            const isOverdue = deadline < now && !done;
-            entries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, tasksDone: phaseTasks.filter(t => t.status === 'done').length, tasksTotal: phaseTasks.length });
-          });
-        });
-        entries.sort((a, b) => a.deadline.localeCompare(b.deadline));
-
-        if (entries.length === 0) return null;
-
-        // Calculate timeline range
-        const minDate = entries.reduce((min, e) => e.deadline < min ? e.deadline : min, now);
-        const maxDate = entries.reduce((max, e) => e.deadline > max ? e.deadline : max, now);
-        const startDate = new Date(minDate < now ? minDate : now);
-        startDate.setDate(startDate.getDate() - 2);
-        const endDate = new Date(maxDate);
-        endDate.setDate(endDate.getDate() + 7);
-        const totalDays = Math.max(14, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)));
-        const todayOffset = Math.ceil((new Date(now) - startDate) / (1000 * 60 * 60 * 24));
-
-        // Generate week markers
-        const weeks = [];
-        const ws = new Date(startDate);
-        ws.setDate(ws.getDate() - ws.getDay() + 1); // Monday
-        while (ws <= endDate) {
-          const offset = Math.ceil((ws - startDate) / (1000 * 60 * 60 * 24));
-          if (offset >= 0) weeks.push({ date: new Date(ws), offset, label: ws.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) });
-          ws.setDate(ws.getDate() + 7);
-        }
-
-        // Group entries by client
-        const byClient = {};
-        entries.forEach(e => {
-          if (!byClient[e.client.id]) byClient[e.client.id] = { client: e.client, phases: [] };
-          byClient[e.client.id].phases.push(e);
-        });
-
-        return (
-          <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
-            <div className="text-sm font-bold mb-3">{'\uD83D\uDCC5'} Calendario de fases</div>
-
-            {/* Desktop: Gantt chart */}
-            <div className="hidden md:block overflow-x-auto">
-              <div style={{ minWidth: Math.max(600, totalDays * 20) + 160 }}>
-                {/* Week headers */}
-                <div className="flex border-b border-gray-200 mb-1" style={{ paddingLeft: 160 }}>
-                  {weeks.map((w, i) => (
-                    <div key={i} className="text-[10px] text-gray-400 font-medium" style={{ position: 'absolute', left: 160 + w.offset * 20 }}>{w.label}</div>
-                  ))}
-                </div>
-                <div style={{ position: 'relative', paddingTop: 20 }}>
-                  {/* Today line */}
-                  <div className="absolute top-0 bottom-0 border-l-2 border-blue-400 z-10 opacity-50" style={{ left: 160 + todayOffset * 20 }}>
-                    <span className="absolute -top-0.5 -left-2.5 text-[8px] bg-blue-500 text-white px-1 rounded">Hoy</span>
-                  </div>
-
-                  {/* Client rows */}
-                  {Object.values(byClient).map(({ client: cl, phases }) => (
-                    <div key={cl.id} className="flex items-center mb-2 relative" style={{ height: phases.length * 22 + 4 }}>
-                      <div className="w-[150px] shrink-0 pr-2 truncate text-[11px] font-semibold text-gray-700">{cl.name}</div>
-                      <div className="flex-1 relative" style={{ height: '100%' }}>
-                        {phases.map((ph, pi) => {
-                          const deadlineOffset = Math.ceil((new Date(ph.deadline) - startDate) / (1000 * 60 * 60 * 24));
-                          const barStart = Math.max(0, todayOffset);
-                          const barEnd = deadlineOffset;
-                          const barLeft = Math.min(barStart, barEnd) * 20;
-                          const barWidth = Math.max(20, Math.abs(barEnd - barStart) * 20);
-                          const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
-                          return (
-                            <div key={ph.phaseKey} className="absolute flex items-center gap-1" style={{ top: pi * 22, left: barLeft, height: 20 }}>
-                              <div className="rounded-full h-3 flex items-center" style={{ width: barWidth, background: color + '25', border: `1.5px solid ${color}` }}>
-                                <div className="h-full rounded-full" style={{ width: `${ph.tasksTotal > 0 ? (ph.tasksDone / ph.tasksTotal * 100) : 0}%`, background: color + '60' }} />
-                              </div>
-                              <span className="text-[9px] font-medium whitespace-nowrap" style={{ color }}>{ph.phInfo.label}</span>
-                              {ph.done && <span className="text-[9px] text-green-500">{'\u2713'}</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile: compact list */}
-            <div className="md:hidden space-y-1.5">
-              {entries.map((e, i) => (
-                <div key={i} className={`flex items-center gap-2 py-1.5 px-2 rounded-md text-[11px] ${e.isOverdue ? 'bg-red-50' : e.done ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.done ? '#22C55E' : e.isOverdue ? '#EF4444' : e.phInfo.color }} />
-                  <span className="font-semibold text-gray-700 truncate">{e.client.name}</span>
-                  <span className="text-gray-400 truncate">{e.phInfo.label}</span>
-                  <span className={`ml-auto shrink-0 font-medium ${e.isOverdue ? 'text-red-500' : e.done ? 'text-green-500' : 'text-gray-500'}`}>
-                    {e.done ? '\u2713' : fmtDate(e.deadline)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
