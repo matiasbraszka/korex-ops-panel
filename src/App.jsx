@@ -202,7 +202,7 @@ function MainLayout() {
       </div>
 
       {/* Main area */}
-      <div className="ml-[240px] flex-1 min-h-screen max-md:ml-0 max-md:pb-16">
+      <div className="main-content ml-[240px] min-h-screen max-md:ml-0 max-md:pb-16 overflow-x-hidden">
         {/* Topbar */}
         <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10 max-md:px-4 max-md:h-[52px]">
           <div className="flex items-center gap-2.5 max-md:gap-2 min-w-0">
@@ -228,7 +228,7 @@ function MainLayout() {
         </div>
 
         {/* Content area */}
-        <div className="p-6 px-7 max-md:p-3 max-md:px-3 min-w-0">
+        <div className="p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden">
           {pages[view] || <div className="text-text3 text-center py-20">Vista no encontrada</div>}
         </div>
       </div>
