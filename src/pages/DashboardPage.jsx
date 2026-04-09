@@ -147,11 +147,11 @@ export default function DashboardPage() {
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
       const deadline = deadlines[phaseKey];
-      if (deadline) {
-        const isOverdue = deadline < now && !done;
-        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseTasks });
+      if (deadline && !done) {
+        const isOverdue = deadline < now;
+        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
       } else if (!done) {
-        unscheduledPhases.push({ client: c, phaseKey, phInfo, progress, phaseTasks });
+        unscheduledPhases.push({ client: c, phaseKey, phInfo, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
       }
     });
   });
