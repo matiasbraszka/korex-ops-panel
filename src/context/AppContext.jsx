@@ -384,7 +384,7 @@ export function AppProvider({ children }) {
           links: c.links || [],
           metaMetrics: c.meta_metrics || null
         }));
-        const mappedTasks = (sbTasks || []).map(t => ({
+        const rawMappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
           priority: t.priority, status: t.status, notes: t.notes,
           description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
@@ -398,11 +398,38 @@ export function AppProvider({ children }) {
           position: t.position ?? 0
         }));
 
+        // Backfill: recomputar startedDate en los datos cargados.
+        // Las tareas habilitadas sin startedDate quedan en hoy; las no habilitadas quedan sin fecha.
+        const mappedTasks = recomputeStartedDates(rawMappedTasks);
+
         const injected = injectMetaMetrics(mappedClients);
         setClients(injected);
         setTasks(mappedTasks);
         localStorage.setItem('korex_v6', JSON.stringify({ clients: injected, tasks: mappedTasks }));
         dbReady.current = true;
+
+        // Persistir en Supabase las tareas que cambiaron por el backfill
+        mappedTasks.forEach((t, i) => {
+          if (t !== rawMappedTasks[i]) {
+            sbFetch('tasks', {
+              method: 'POST',
+              headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+              body: JSON.stringify({
+                id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
+                priority: t.priority, status: t.status, notes: t.notes,
+                description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
+                started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
+                phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
+                template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+                due_date: t.dueDate || null,
+                accumulated_days: t.accumulatedDays || 0,
+                timer_started_at: t.timerStartedAt || null,
+                enabled_date: t.enabledDate || null,
+                position: t.position ?? 0
+              })
+            });
+          }
+        });
         console.log('\u2713 Loaded from Supabase:', injected.length, 'clients,', mappedTasks.length, 'tasks');
         return true;
       }

@@ -12,6 +12,8 @@ export default function RoadmapView() {
     tasks,
     updateTask,
     updateClient,
+    createTask,
+    deleteTask,
     setView,
     setSelectedId,
     taskClientFilter,
@@ -35,6 +37,9 @@ export default function RoadmapView() {
   // Inline editing state
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [editingTaskDue, setEditingTaskDue] = useState(null);
+  const [editingPhaseName, setEditingPhaseName] = useState(null); // key: clientId_phaseKey
+  const [editingTaskTitle, setEditingTaskTitle] = useState(null); // taskId
+  const [addingTaskIn, setAddingTaskIn] = useState(null); // key: clientId_phaseKey
 
   const now = today();
 
@@ -150,6 +155,46 @@ export default function RoadmapView() {
     setView('clients');
   };
 
+  // Renombrar fase: guarda un override por-cliente (no cambia la constante global)
+  const handlePhaseRename = (clientId, phaseKey, newLabel) => {
+    const c = clients.find(x => x.id === clientId);
+    if (!c) return;
+    const overrides = { ...(c.phaseNameOverrides || {}) };
+    const trimmed = (newLabel || '').trim();
+    if (trimmed) {
+      overrides[phaseKey] = trimmed;
+    } else {
+      delete overrides[phaseKey];
+    }
+    updateClient(clientId, { phaseNameOverrides: overrides });
+    setEditingPhaseName(null);
+  };
+
+  // Crear tarea nueva en una fase espec\u00edfica
+  const handleCreateTaskInPhase = (clientId, phaseKey, title) => {
+    const trimmed = (title || '').trim();
+    if (!trimmed) {
+      setAddingTaskIn(null);
+      return;
+    }
+    const t = createTask(trimmed, clientId, '', 'normal', 'backlog', '', null);
+    // Asignar a la fase + marcar como roadmap task
+    if (t) updateTask(t.id, { phase: phaseKey, isRoadmapTask: true });
+    setAddingTaskIn(null);
+  };
+
+  const handleDeleteTask = (taskId) => {
+    if (confirm('Eliminar esta tarea?')) {
+      deleteTask(taskId);
+    }
+  };
+
+  const handleTaskTitleRename = (taskId, newTitle) => {
+    const trimmed = (newTitle || '').trim();
+    if (trimmed) updateTask(taskId, { title: trimmed });
+    setEditingTaskTitle(null);
+  };
+
   return (
     <div className="space-y-3">
       {filteredClients.length === 0 ? (
@@ -185,7 +230,7 @@ export default function RoadmapView() {
           const deadline = deadlines[phaseKey];
           const isOverdue = deadline && deadline < now && !allDone;
           return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, deadline, isOverdue };
-        }).filter(g => g.phaseTasks.length > 0);
+        }).filter(g => g.totalCount > 0 || g.deadline);
 
         const isCompleted = progress === 100;
 
@@ -268,14 +313,37 @@ export default function RoadmapView() {
                       ? `Sin tareas de ${taskAssignee} en este cliente`
                       : 'Sin tareas asignadas'}
                   </div>
-                ) : phaseGroups.map(g => (
-                  <div key={g.phaseKey} className="border-b border-gray-100 last:border-b-0">
+                ) : phaseGroups.map(g => {
+                  const phaseEditKey = `${c.id}_${g.phaseKey}`;
+                  const isRenaming = editingPhaseName === phaseEditKey;
+                  return (
+                  <div key={g.phaseKey} className="border-b border-gray-100 last:border-b-0 group/phase">
                     {/* Phase header */}
                     <div className="flex items-center gap-2 px-4 py-2 bg-white">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: g.phInfo.color }} />
-                      <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: g.phInfo.color }}>
-                        {g.phInfo.label}
-                      </span>
+                      {isRenaming ? (
+                        <input
+                          type="text"
+                          className="text-[11px] font-bold uppercase tracking-wide bg-white border border-blue-300 rounded px-1.5 py-0.5 outline-none flex-1 max-w-[280px]"
+                          style={{ color: g.phInfo.color }}
+                          defaultValue={g.phInfo.label}
+                          autoFocus
+                          onBlur={(e) => handlePhaseRename(c.id, g.phaseKey, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.target.blur();
+                            if (e.key === 'Escape') setEditingPhaseName(null);
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="text-[11px] font-bold uppercase tracking-wide cursor-pointer hover:underline"
+                          style={{ color: g.phInfo.color }}
+                          onClick={() => setEditingPhaseName(phaseEditKey)}
+                          title="Click para renombrar"
+                        >
+                          {g.phInfo.label}
+                        </span>
+                      )}
                       <span className="text-[10px] text-gray-400">
                         {g.doneCount}/{g.totalCount}
                       </span>
@@ -338,7 +406,7 @@ export default function RoadmapView() {
                         return (
                           <div
                             key={t.id}
-                            className={`flex items-center gap-2 px-4 py-2 hover:bg-white ${t.status === 'done' ? 'opacity-60' : ''} ${isBlocked ? 'bg-red-50/40' : ''}`}
+                            className={`flex items-center gap-2 px-4 py-2 hover:bg-white group ${t.status === 'done' ? 'opacity-60' : ''} ${isBlocked ? 'bg-red-50/40' : ''}`}
                             title={depBlocked ? 'Bloqueada por dependencias' : literalBlocked ? 'Bloqueada' : ''}
                           >
                             {/* Status icon (click to cycle) */}
@@ -355,15 +423,31 @@ export default function RoadmapView() {
                               {iconChar}
                             </button>
 
-                            {/* Title */}
-                            <span
-                              className={`text-[12px] flex-1 min-w-0 ${
-                                t.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600' : 'text-gray-700'
-                              }`}
-                            >
-                              {t.title}
-                              {depBlocked && <span className="ml-1.5 text-[9px] text-red-500 font-semibold uppercase">bloqueada</span>}
-                            </span>
+                            {/* Title (click to rename) */}
+                            {editingTaskTitle === t.id ? (
+                              <input
+                                type="text"
+                                className="text-[12px] flex-1 min-w-0 bg-white border border-blue-300 rounded px-1.5 py-0.5 outline-none"
+                                defaultValue={t.title}
+                                autoFocus
+                                onBlur={(e) => handleTaskTitleRename(t.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.target.blur();
+                                  if (e.key === 'Escape') setEditingTaskTitle(null);
+                                }}
+                              />
+                            ) : (
+                              <span
+                                className={`text-[12px] flex-1 min-w-0 cursor-pointer hover:underline ${
+                                  t.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600' : 'text-gray-700'
+                                }`}
+                                onClick={() => setEditingTaskTitle(t.id)}
+                                title="Click para renombrar"
+                              >
+                                {t.title}
+                                {depBlocked && <span className="ml-1.5 text-[9px] text-red-500 font-semibold uppercase">bloqueada</span>}
+                              </span>
+                            )}
 
                             {/* Badge d\u00edas */}
                             {isBlocked ? (
@@ -421,12 +505,47 @@ export default function RoadmapView() {
                                 </button>
                               )}
                             </div>
+
+                            {/* Delete button */}
+                            <button
+                              className="shrink-0 text-[11px] text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity font-sans w-5 text-center"
+                              onClick={() => handleDeleteTask(t.id)}
+                              title="Eliminar tarea"
+                            >
+                              {'\uD83D\uDDD1'}
+                            </button>
                           </div>
                         );
                       })}
+
+                      {/* Add task button / inline input */}
+                      {addingTaskIn === phaseEditKey ? (
+                        <div className="flex items-center gap-2 px-4 py-2 bg-blue-50/30">
+                          <span className="w-5 h-5 shrink-0" />
+                          <input
+                            type="text"
+                            className="text-[12px] flex-1 bg-white border border-blue-300 rounded px-2 py-1 outline-none"
+                            placeholder="T\u00edtulo de la nueva tarea..."
+                            autoFocus
+                            onBlur={(e) => handleCreateTaskInPhase(c.id, g.phaseKey, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.target.blur();
+                              if (e.key === 'Escape') setAddingTaskIn(null);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          className="w-full text-left text-[11px] text-gray-400 hover:text-blue-500 hover:bg-blue-50/30 px-4 py-1.5 font-sans transition-colors"
+                          onClick={() => setAddingTaskIn(phaseEditKey)}
+                        >
+                          + Agregar tarea
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

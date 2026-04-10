@@ -89,9 +89,12 @@ export default function TimelineView({ onGoToTaskList }) {
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
       const deadline = deadlines[phaseKey];
+      // Earliest startedDate of any task in the phase (para que la barra arranque ah\u00ed, no en hoy)
+      const startedDates = phaseTasks.map(t => t.startedDate).filter(Boolean);
+      const phaseStart = startedDates.length > 0 ? startedDates.sort()[0] : null;
       if (deadline && !done) {
         const isOverdue = deadline < now;
-        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
+        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseStart, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
       } else if (!done) {
         unscheduledPhases.push({ client: c, phaseKey, phInfo, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
       }
@@ -124,7 +127,15 @@ export default function TimelineView({ onGoToTaskList }) {
     const endNum = weekEnd.getDate();
     const monthLabel = weekStart.toLocaleDateString('es-AR', { month: 'short' });
     const hasToday = now >= startIso && now <= endIso;
-    weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday });
+    // D\u00edas individuales de la semana (para mostrar el n\u00famero debajo del rango)
+    const days = [];
+    for (let d = 0; d < 7; d++) {
+      const dayDate = new Date(weekStart);
+      dayDate.setDate(dayDate.getDate() + d);
+      const iso = dayDate.toISOString().split('T')[0];
+      days.push({ iso, num: dayDate.getDate(), isToday: iso === now });
+    }
+    weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday, days });
   }
   const weekWidth = 100;
   const labelWidth = 240;
@@ -207,9 +218,19 @@ export default function TimelineView({ onGoToTaskList }) {
                 {/* Week header */}
                 <div className="flex relative" style={{ marginLeft: labelWidth }}>
                   {weekColumns.map((w, i) => (
-                    <div key={i} className={`text-center shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-red-500 bg-red-50/40' : 'border-gray-200'}`} style={{ width: weekWidth }}>
-                      <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
-                      <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum}–{w.endNum}</div>
+                    <div key={i} className={`shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-red-500 bg-red-50/40' : 'border-gray-200'}`} style={{ width: weekWidth }}>
+                      <div className="text-center">
+                        <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
+                        <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum}\u2013{w.endNum}</div>
+                      </div>
+                      {/* D\u00edas individuales */}
+                      <div className="flex mt-0.5">
+                        {w.days.map((d, di) => (
+                          <div key={di} className={`flex-1 text-[7px] text-center leading-none ${d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}`}>
+                            {d.num}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                   {/* HOY label arriba de la l\u00ednea vertical */}
@@ -225,7 +246,7 @@ export default function TimelineView({ onGoToTaskList }) {
                   className="absolute pointer-events-none"
                   style={{
                     left: labelWidth + dateToPx(now) - 1,
-                    top: 22,
+                    top: 36,
                     bottom: 0,
                     width: 2,
                     background: '#EF4444',
@@ -244,7 +265,10 @@ export default function TimelineView({ onGoToTaskList }) {
                     </div>
                     {phases.map((ph) => {
                       const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
-                      const barStartPx = dateToPx(now < ph.deadline ? now : ph.deadline);
+                      // La barra arranca en el startedDate m\u00e1s temprano de sus tareas. Si no hay ninguno,
+                      // usa el deadline como extremo (barra m\u00ednima). Si no hay deadline, usa hoy.
+                      const effectiveStart = ph.phaseStart || (ph.deadline < now ? ph.deadline : now);
+                      const barStartPx = dateToPx(effectiveStart);
                       const barEndPx = dateToPx(ph.deadline);
                       const barLeft = Math.min(barStartPx, barEndPx);
                       const barW = Math.max(weekWidth * 0.3, Math.abs(barEndPx - barStartPx));
