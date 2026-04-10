@@ -279,11 +279,10 @@ export default function TasksPage({ embedded = false }) {
             items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
-          {/* Title (with wrapping title + separate badge row below) */}
-          <div className="min-w-0 flex flex-col gap-1">
-            {/* Title line: icon bloqueada + titulo */}
-            <div className="flex items-start gap-1.5 min-w-0">
-              {blocked && <span className="shrink-0 mt-[2px]" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
+          {/* Title row: all inline, title truncates when there's no space */}
+          <div className="min-w-0 flex flex-col gap-0.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
               {editingTaskId === t.id ? (
                 <input
                   className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
@@ -296,15 +295,14 @@ export default function TasksPage({ embedded = false }) {
                 />
               ) : (
                 <span
-                  className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 min-w-0 hover:bg-surface2 leading-tight break-words"
+                  className="cursor-text py-[2px] px-1 rounded-[3px] min-w-0 truncate hover:bg-surface2 leading-tight"
+                  style={{ flex: '0 1 auto' }}
+                  title={t.title}
                   onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
                 >
                   {t.title}
                 </span>
               )}
-            </div>
-            {/* Badges row: tiempo + fecha + hasDesc + botones */}
-            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {(() => {
                 const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
                 const elapsed = getElapsedDays(t, clientTasks);
@@ -323,9 +321,11 @@ export default function TasksPage({ embedded = false }) {
                   {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
                 </span>
               )}
-              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" title="Tiene descripci\u00f3n" />}
-              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100 shrink-0" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
-              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg shrink-0" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" title="Tiene descripci\u00f3n" />}
+              <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+              </div>
             </div>
             {blocked && blockingNames.length > 0 && (
               <div className="text-[10px] text-red-500 pl-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
@@ -725,8 +725,7 @@ export default function TasksPage({ embedded = false }) {
                       />
                       <select className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans" value={inlinePhase} onChange={(e) => setInlinePhase(e.target.value)}>
                         <option value="">Sin vincular a fase</option>
-                        {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        {(g.client.customPhases || []).map(cp => <option key={cp.id} value={cp.id}>{cp.label}</option>)}
+                        {Object.entries(getAllPhases(g.client)).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                       </select>
                     </div>
                     <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" onClick={() => { setAddingTaskTo(null); setNewTaskTitle(''); }}>{'\u2715'}</button></div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { TEAM, PHASES } from '../../utils/constants';
+import { TEAM } from '../../utils/constants';
 import { today, fmtDate, getAllPhases, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
@@ -75,7 +75,7 @@ export default function TimelineView({ onGoToTaskList }) {
     Object.keys(allPh).forEach(k => clientPhaseKeys.add(k));
 
     clientPhaseKeys.forEach(phaseKey => {
-      const phInfo = allPh[phaseKey] || PHASES[phaseKey];
+      const phInfo = allPh[phaseKey];
       if (!phInfo) return;
       // Start with all tasks in this phase
       let phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
@@ -412,6 +412,10 @@ export default function TimelineView({ onGoToTaskList }) {
                                       ) : estimatedD !== null && elapsedD !== null ? (
                                         <span className={`text-[8px] px-1 rounded font-sans ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`} title={`Transcurridos ${elapsedD}d de ${estimatedD}d estimados`}>
                                           {elapsedD}/{estimatedD}d
+                                        </span>
+                                      ) : elapsedD !== null && elapsedD > 0 ? (
+                                        <span className="text-[8px] px-1 rounded font-sans bg-blue-50 text-blue-600" title={`Lleva ${elapsedD}d activa`}>
+                                          {elapsedD}d
                                         </span>
                                       ) : null}
                                       {hasDue ? (

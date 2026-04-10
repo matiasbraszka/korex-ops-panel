@@ -1,7 +1,15 @@
 import { PROCESS_STEPS, DEFAULT_TASKS_TEMPLATE, PHASES } from './constants';
 
 export function today() {
-  return new Date().toISOString().substr(0, 10);
+  // Fecha local en formato YYYY-MM-DD (no UTC). toISOString devuelve UTC
+  // y para zonas horarias este del meridiano a partir de las 22h locales
+  // ya esta en el dia siguiente UTC. Esto causaba que el panel mostrara
+  // "9 de abril" cuando el usuario en Espana ya estaba en el dia 10.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export function initials(n) {
