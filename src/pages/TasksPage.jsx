@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, today, fmtDate, getAllPhases, getElapsedDays } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
@@ -579,17 +579,25 @@ export default function TasksPage({ embedded = false }) {
                 {isOverdue && <span className="text-red text-[10px] font-semibold">Vencida</span>}
               </div>
               <div className="inline-flex items-center gap-1 text-[11px]">
-                <span className="text-text3">{'\u23F1'} Tiempo estimado:</span>
-                <input
-                  type="number"
-                  className="border border-border rounded py-[2px] px-1.5 text-[11px] font-sans outline-none bg-white focus:border-blue w-[60px]"
-                  value={t.estimatedDays || ''}
-                  step="0.5"
-                  min="0.1"
-                  placeholder="días"
-                  onChange={(e) => { const v = parseFloat(e.target.value); updateTask(t.id, { estimatedDays: !isNaN(v) && v > 0 ? v : null }); }}
-                />
-                <span className="text-text3">días</span>
+                <span className="text-text3">{'\u23F1'} Estimado:</span>
+                <span className="text-text2 font-semibold">
+                  {(() => {
+                    if (t.status === 'blocked' || blocked) return 'se calcula al desbloquear';
+                    const est = getEstimatedDays(t);
+                    if (est === null) return t.dueDate ? '\u2014' : 'pon\u00e9 una fecha de entrega';
+                    return est + ' d\u00edas';
+                  })()}
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-1 text-[11px]">
+                <span className="text-text3">{'\uD83D\uDEA9'} Inicio:</span>
+                <span className="text-text2 font-semibold">
+                  {t.status === 'blocked' || blocked
+                    ? 'bloqueada — sin fecha'
+                    : t.startedDate
+                      ? 'habilitada ' + fmtDate(t.startedDate)
+                      : '\u2014'}
+                </span>
               </div>
               <div className="md:hidden flex gap-1.5 w-full mt-1">
                 <button className="py-1 px-2 rounded text-[10px] bg-blue-bg text-blue border-none cursor-pointer font-sans" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}>{'\uD83D\uDD17'} Dependencias</button>

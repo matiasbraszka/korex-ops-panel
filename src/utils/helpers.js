@@ -320,6 +320,66 @@ export function getElapsedDays(task, allClientTasks) {
 }
 
 /**
+ * Una tarea está "habilitada" si no está bloqueada y todas sus dependencias
+ * están en done. `done` tambien cuenta como habilitada (trabajo ya realizado).
+ * dependsOn puede contener task.id o templateId.
+ */
+export function isTaskEnabled(task, allClientTasks) {
+  if (task.status === 'blocked') return false;
+  if (task.dependsOn && task.dependsOn.length > 0) {
+    const hasUnmet = task.dependsOn.some(depId => {
+      const dep = allClientTasks.find(t => t.id === depId || t.templateId === depId);
+      return dep && dep.status !== 'done';
+    });
+    if (hasUnmet) return false;
+  }
+  return true;
+}
+
+/**
+ * Aplica la regla del plan de fechas:
+ * - done → no toca startedDate (congelado)
+ * - habilitada y sin startedDate → startedDate = hoy
+ * - no habilitada y con startedDate → limpiar (null)
+ *
+ * Devuelve un array nuevo con las tareas actualizadas (solo las que cambiaron
+ * tienen objeto nuevo; el resto se mantiene por referencia).
+ */
+export function recomputeStartedDates(tasks) {
+  const byClient = {};
+  tasks.forEach(t => {
+    if (!byClient[t.clientId]) byClient[t.clientId] = [];
+    byClient[t.clientId].push(t);
+  });
+  const nowIso = today();
+  return tasks.map(t => {
+    if (t.status === 'done') return t;
+    const clientTasks = byClient[t.clientId] || [];
+    const enabled = isTaskEnabled(t, clientTasks);
+    if (enabled && !t.startedDate) return { ...t, startedDate: nowIso };
+    if (!enabled && t.startedDate) return { ...t, startedDate: null };
+    return t;
+  });
+}
+
+/**
+ * Días estimados derivados: dueDate - startedDate en días.
+ * Si falta alguno, usa el campo legacy estimatedDays como fallback.
+ * Para una tarea sin startedDate pero con dueDate, usa hoy como referencia.
+ * Devuelve null si no se puede calcular.
+ */
+export function getEstimatedDays(task) {
+  if (!task) return null;
+  if (task.dueDate) {
+    const ref = task.startedDate || today();
+    const d = daysBetween(ref, task.dueDate);
+    if (d !== null && d >= 0) return d;
+  }
+  if (typeof task.estimatedDays === 'number' && task.estimatedDays > 0) return task.estimatedDays;
+  return null;
+}
+
+/**
  * Migration: convert old client steps to new roadmap tasks.
  */
 export function migrateClientToRoadmap(client, existingTasks) {

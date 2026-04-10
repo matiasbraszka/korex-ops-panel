@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PRIO_CLIENT, TEAM, TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, fmtDate, today } from '../../utils/helpers';
+import { getAllPhases, fmtDate, today, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 const EXPANDED_KEY = 'tareas_roadmap_expanded';
@@ -317,10 +317,19 @@ export default function RoadmapView() {
                           .map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name))
                           .filter(Boolean);
                         const taskStatus = TASK_STATUS[t.status];
-                        const isOverdue = t.dueDate && t.status !== 'done' && t.dueDate < now;
+                        const isOverdueByDue = t.dueDate && t.status !== 'done' && t.dueDate < now;
                         const depBlocked = isTaskBlockedByDeps(t);
                         const literalBlocked = t.status === 'blocked';
                         const isBlocked = literalBlocked || depBlocked;
+                        const isDone = t.status === 'done';
+
+                        // Badges de d\u00edas estimado / transcurrido
+                        const hasStart = !!t.startedDate;
+                        const estimatedD = getEstimatedDays(t);
+                        const elapsedD = hasStart && !isDone ? Math.max(0, daysBetween(t.startedDate, now) || 0) : null;
+                        const isOverdueByTime = estimatedD !== null && elapsedD !== null && elapsedD > estimatedD;
+                        const blockedSinceD = isBlocked && t.blockedSince ? daysAgo(t.blockedSince) : null;
+                        const doneInDays = isDone && hasStart && t.completedDate ? (daysBetween(t.startedDate, t.completedDate) ?? 0) : null;
 
                         // Visual: blocked tasks get red accent
                         const iconColor = isBlocked ? '#EF4444' : (taskStatus?.color || '#9CA3AF');
@@ -356,6 +365,21 @@ export default function RoadmapView() {
                               {depBlocked && <span className="ml-1.5 text-[9px] text-red-500 font-semibold uppercase">bloqueada</span>}
                             </span>
 
+                            {/* Badge d\u00edas */}
+                            {isBlocked ? (
+                              <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold font-sans" title={blockedSinceD !== null ? 'Bloqueada hace ' + blockedSinceD + ' d\u00edas' : 'Bloqueada'}>
+                                {'\uD83D\uDD12'} {blockedSinceD !== null ? `${blockedSinceD}d` : 'bloqueada'}
+                              </span>
+                            ) : doneInDays !== null ? (
+                              <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold font-sans" title="D\u00edas que tom\u00f3">
+                                hecho en {doneInDays}d
+                              </span>
+                            ) : estimatedD !== null && elapsedD !== null ? (
+                              <span className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded font-semibold font-sans ${isOverdueByTime ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`} title={`${elapsedD}d transcurridos de ${estimatedD}d estimados`}>
+                                {elapsedD}/{estimatedD}d
+                              </span>
+                            ) : null}
+
                             {/* Assignees */}
                             {members.length > 0 && (
                               <div className="flex -space-x-1 shrink-0">
@@ -383,7 +407,7 @@ export default function RoadmapView() {
                                 />
                               ) : t.dueDate ? (
                                 <button
-                                  className={`text-[10px] font-semibold hover:underline font-sans ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}
+                                  className={`text-[10px] font-semibold hover:underline font-sans ${isOverdueByDue ? 'text-red-500' : 'text-gray-400'}`}
                                   onClick={() => setEditingTaskDue(t.id)}
                                 >
                                   {fmtDate(t.dueDate)}

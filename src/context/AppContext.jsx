@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
 import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -179,14 +179,18 @@ export function AppProvider({ children }) {
     let newTasks = [...tasksRef.current, ...defaultTasks];
     const result = recalculateTimers(c.id, newTasks);
     newTasks = result.tasks;
+    // Aplicar regla de startedDate a las tareas nuevas (las sin deps arrancan hoy)
+    newTasks = recomputeStartedDates(newTasks);
     setTasks(newTasks);
     save(injected, newTasks);
     if (dbReady.current) {
       dbSaveClient(c);
-      defaultTasks.forEach(t => dbSaveTask(t));
+      // Guardar las tareas ya con startedDate calculada
+      const ids = new Set(defaultTasks.map(t => t.id));
+      newTasks.filter(t => ids.has(t.id)).forEach(t => dbSaveTask(t));
     }
     return c;
-  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics]);
+  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics, recalculateTimers]);
 
   const updateClient = useCallback((id, updates) => {
     setClients(prev => {
@@ -230,10 +234,17 @@ export function AppProvider({ children }) {
     let newTasks = [...tasksRef.current, t];
     const result = recalculateTimers(clientId, newTasks);
     newTasks = result.tasks;
+    // Aplicar regla de startedDate: si la tarea queda habilitada, se setea hoy
+    const beforeRecompute = newTasks;
+    newTasks = recomputeStartedDates(newTasks);
+    if (dbReady.current) {
+      newTasks.forEach((x, i) => { if (x !== beforeRecompute[i]) dbSaveTask(x); });
+    }
     setTasks(newTasks);
     save(clientsRef.current, newTasks);
-    if (dbReady.current) dbSaveTask(t);
-    return t;
+    const saved = newTasks.find(x => x.id === t.id) || t;
+    if (dbReady.current) dbSaveTask(saved);
+    return saved;
   }, [save, dbSaveTask, recalculateTimers]);
 
   const updateTask = useCallback((id, updates) => {
@@ -241,14 +252,9 @@ export function AppProvider({ children }) {
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
         const merged = { ...t, ...updates };
-        // Auto-set timing dates on status changes
-        if (updates.status && updates.status !== t.status) {
-          if (updates.status === 'in-progress' && !merged.startedDate) {
-            merged.startedDate = today();
-          }
-          if (updates.status === 'done') {
-            merged.completedDate = today();
-          }
+        // completedDate automático al pasar a done. startedDate lo gestiona recomputeStartedDates.
+        if (updates.status && updates.status !== t.status && updates.status === 'done') {
+          merged.completedDate = today();
         }
         return merged;
       });
@@ -261,6 +267,16 @@ export function AppProvider({ children }) {
           const result = recalculateTimers(task.clientId, mappedTasks);
           finalTasks = result.tasks;
         }
+      }
+
+      // Recomputar startedDate según reglas del sistema (enabled/blocked/deps)
+      const beforeRecompute = finalTasks;
+      finalTasks = recomputeStartedDates(finalTasks);
+      // Persistir cualquier tarea que haya cambiado por el recompute
+      if (dbReady.current) {
+        finalTasks.forEach((t, i) => {
+          if (t !== beforeRecompute[i]) dbSaveTask(t);
+        });
       }
 
       save(clientsRef.current, finalTasks);
@@ -278,11 +294,17 @@ export function AppProvider({ children }) {
         const result = recalculateTimers(deleted.clientId, newTasks);
         newTasks = result.tasks;
       }
+      // Recomputar startedDate: borrar una tarea puede desbloquear dependientes
+      const beforeRecompute = newTasks;
+      newTasks = recomputeStartedDates(newTasks);
+      if (dbReady.current) {
+        newTasks.forEach((t, i) => { if (t !== beforeRecompute[i]) dbSaveTask(t); });
+      }
       save(clientsRef.current, newTasks);
       dbDeleteTask(id);
       return newTasks;
     });
-  }, [save, dbDeleteTask, recalculateTimers]);
+  }, [save, dbSaveTask, dbDeleteTask, recalculateTimers]);
 
   // ── Reorder tasks (drag & drop) ──
   // reorderedGroup: the full group array in its new order
