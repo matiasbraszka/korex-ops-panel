@@ -221,7 +221,7 @@ export default function TimelineView({ onGoToTaskList }) {
                     <div key={i} className={`shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-red-500 bg-red-50/40' : 'border-gray-200'}`} style={{ width: weekWidth }}>
                       <div className="text-center">
                         <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
-                        <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum}\u2013{w.endNum}</div>
+                        <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum + '\u2013' + w.endNum}</div>
                       </div>
                       {/* D\u00edas individuales */}
                       <div className="flex mt-0.5">

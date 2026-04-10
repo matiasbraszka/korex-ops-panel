@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
 import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -398,9 +398,23 @@ export function AppProvider({ children }) {
           position: t.position ?? 0
         }));
 
-        // Backfill: recomputar startedDate en los datos cargados.
-        // Las tareas habilitadas sin startedDate quedan en hoy; las no habilitadas quedan sin fecha.
-        const mappedTasks = recomputeStartedDates(rawMappedTasks);
+        // Backfill: normalizar startedDate usando createdDate como aproximaci\u00f3n.
+        // Las tareas habilitadas obtienen startedDate = createdDate (mejor aprox que today()
+        // porque reflejan cuando la tarea existi\u00f3 por primera vez, no cuando cargamos la p\u00e1gina).
+        // Las no habilitadas quedan sin fecha. Las done no se tocan.
+        // Tambi\u00e9n corrige tareas cuyo startedDate es posterior al createdDate (backfill previo incorrecto).
+        const mappedTasks = rawMappedTasks.map(t => {
+          if (t.status === 'done') return t;
+          const enabled = isTaskEnabled(t, rawMappedTasks);
+          if (!enabled) {
+            return t.startedDate ? { ...t, startedDate: null } : t;
+          }
+          const candidate = t.createdDate || today();
+          if (!t.startedDate || t.startedDate > candidate) {
+            return { ...t, startedDate: candidate };
+          }
+          return t;
+        });
 
         const injected = injectMetaMetrics(mappedClients);
         setClients(injected);

@@ -585,18 +585,9 @@ export default function TasksPage({ embedded = false }) {
                     if (t.status === 'blocked' || blocked) return 'se calcula al desbloquear';
                     const est = getEstimatedDays(t);
                     if (est === null) return t.dueDate ? '\u2014' : 'pon\u00e9 una fecha de entrega';
+                    if (t.startedDate) return `${est} d\u00edas (habilitada ${fmtDate(t.startedDate)})`;
                     return est + ' d\u00edas';
                   })()}
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-1 text-[11px]">
-                <span className="text-text3">{'\uD83D\uDEA9'} Inicio:</span>
-                <span className="text-text2 font-semibold">
-                  {t.status === 'blocked' || blocked
-                    ? 'bloqueada — sin fecha'
-                    : t.startedDate
-                      ? 'habilitada ' + fmtDate(t.startedDate)
-                      : '\u2014'}
                 </span>
               </div>
               <div className="md:hidden flex gap-1.5 w-full mt-1">
