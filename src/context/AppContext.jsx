@@ -190,7 +190,8 @@ export function AppProvider({ children }) {
       newTasks.filter(t => ids.has(t.id)).forEach(t => dbSaveTask(t));
     }
     return c;
-  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics, recalculateTimers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics]);
 
   const updateClient = useCallback((id, updates) => {
     setClients(prev => {
