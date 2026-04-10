@@ -43,28 +43,38 @@ export default function ClientsPage() {
     if (lines.join(' ').length > 200) preview += '...';
   }
 
-  const t = visibleClients.length;
-  const b = visibleClients.filter(c => (c.priority || 4) === 1).length;
-  const l = visibleClients.filter(c => {
+  // Exclude descartados (6) from default active count / KPIs
+  const activeForKpis = visibleClients.filter(c => (c.priority || 5) !== 6);
+  const t = activeForKpis.length;
+  const b = activeForKpis.filter(c => (c.priority || 5) === 1).length;
+  const l = activeForKpis.filter(c => {
     // New system: check if lanzamiento roadmap task is done
     const launchTask = tasks.find(tk => tk.clientId === c.id && tk.isRoadmapTask && tk.templateId === 'lanzamiento');
     if (launchTask) return launchTask.status === 'done';
     // Fallback to steps
     return c.steps[17] && c.steps[17].status === 'completed';
   }).length;
-  const n = visibleClients.filter(c => (c.priority || 4) === 4).length;
+  const n = activeForKpis.filter(c => (c.priority || 5) === 5).length;
 
   const filterDefs = [
-    { key: 'all', label: 'Todos' },
-    { key: 'super', label: 'Super prioritario' },
-    { key: 'important', label: 'Importantes' },
-    { key: 'new', label: 'Nuevos' },
+    { key: 'all',         label: 'Todos' },
+    { key: 'super',       label: 'Super prioritarios' },
+    { key: 'important',   label: 'Importantes' },
+    { key: 'normal',      label: 'Normal' },
+    { key: 'poco',        label: 'Poco importantes' },
+    { key: 'new',         label: 'Nuevos' },
+    { key: 'descartados', label: 'Descartados' },
   ];
 
-  let cls = [...visibleClients].sort((a, bb) => (a.priority || 4) - (bb.priority || 4));
-  if (filter === 'super') cls = cls.filter(c => (c.priority || 4) === 1);
-  if (filter === 'important') cls = cls.filter(c => (c.priority || 4) === 2);
-  if (filter === 'new') cls = cls.filter(c => (c.priority || 4) === 4);
+  // By default (filter === 'all'), hide descartados from the list
+  let cls = [...visibleClients].sort((a, bb) => (a.priority || 5) - (bb.priority || 5));
+  if (filter === 'all')         cls = cls.filter(c => (c.priority || 5) !== 6);
+  if (filter === 'super')       cls = cls.filter(c => (c.priority || 5) === 1);
+  if (filter === 'important')   cls = cls.filter(c => (c.priority || 5) === 2);
+  if (filter === 'normal')      cls = cls.filter(c => (c.priority || 5) === 3);
+  if (filter === 'poco')        cls = cls.filter(c => (c.priority || 5) === 4);
+  if (filter === 'new')         cls = cls.filter(c => (c.priority || 5) === 5);
+  if (filter === 'descartados') cls = cls.filter(c => (c.priority || 5) === 6);
 
   let lastPrio = null;
 
@@ -141,7 +151,7 @@ export default function ClientsPage() {
         <div className="text-center text-text3 text-xs py-[60px]">Sin resultados</div>
       )}
       {cls.map(c => {
-        const p = c.priority || 4;
+        const p = c.priority || 5;
         const pcfg = PRIO_CLIENT[p];
         const cur = currentTask(c, tasks);
         const pct = progress(c, tasks);

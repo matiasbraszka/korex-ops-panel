@@ -322,11 +322,11 @@ export function AppProvider({ children }) {
     setCurrentUser(null);
   }, []);
 
-  // ── Normalize client priority (migrate old 5-level to new 4-level) ──
+  // ── Normalize client priority (new 6-level scale) ──
+  // 1: SUPER PRIORITARIO, 2: IMPORTANTES, 3: NORMAL, 4: POCO IMPORTANTES, 5: NUEVOS, 6: DESCARTADOS
   const normalizePriority = (p) => {
-    if (p === 5) return 4; // NUEVO → NUEVOS
-    if (p >= 1 && p <= 4) return p;
-    return 4; // default to NUEVOS
+    if (p >= 1 && p <= 6) return p;
+    return 5; // default to NUEVOS
   };
 
   // ── Load from Supabase ──

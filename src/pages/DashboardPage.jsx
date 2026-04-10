@@ -18,8 +18,8 @@ export default function DashboardPage() {
   // Filter out Empresa (Korex) from dashboard
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
 
-  // Active (non-completed, non-Korex) clients
-  const activeClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c));
+  // Active (non-completed, non-Korex, non-descartados) clients
+  const activeClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c) && (c.priority || 5) !== 6);
   const teamMembers = TEAM;
   const korexClientIds = new Set(clients.filter(c => isKorexClient(c)).map(c => c.id));
 

@@ -35,8 +35,10 @@ export const PHASES = {
 export const PRIO_CLIENT = {
   1: { label: 'SUPER PRIORITARIO', color: '#EF4444' },
   2: { label: 'IMPORTANTES',       color: '#F97316' },
-  3: { label: 'POCO IMPORTANTES',  color: '#9CA3AF' },
-  4: { label: 'NUEVOS',            color: '#8B5CF6' },
+  3: { label: 'NORMAL',            color: '#22C55E' },
+  4: { label: 'POCO IMPORTANTES',  color: '#9CA3AF' },
+  5: { label: 'NUEVOS',            color: '#8B5CF6' },
+  6: { label: 'DESCARTADOS',       color: '#6B7280' },
 };
 
 export const TASK_STATUS = {

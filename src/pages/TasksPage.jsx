@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays } from '../utils/helpers';
@@ -23,6 +23,25 @@ export default function TasksPage({ embedded = false }) {
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [dragOverHalf, setDragOverHalf] = useState(null); // 'top' | 'bottom'
   const dragGroupRef = useRef(null); // status group of dragged task
+
+  // Highlight task (when coming from Timeline click)
+  const [highlightTaskId, setHighlightTaskId] = useState(null);
+  useEffect(() => {
+    try {
+      const hid = localStorage.getItem('tareas_highlight_task');
+      if (hid) {
+        setHighlightTaskId(hid);
+        localStorage.removeItem('tareas_highlight_task');
+        // Scroll to task after mount
+        setTimeout(() => {
+          const el = document.getElementById('task-row-' + hid);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 200);
+        // Clear highlight after 3 seconds
+        setTimeout(() => setHighlightTaskId(null), 3000);
+      }
+    } catch {}
+  }, []);
 
   // Dependency checking (FIX 5)
   const isTaskBlocked = (task) => {
@@ -49,7 +68,12 @@ export default function TasksPage({ embedded = false }) {
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
   const korexClient = clients.find(c => isKorexClient(c));
   const korexClientId = korexClient?.id;
-  const regularClients = clients.filter(c => !isKorexClient(c));
+  // Hide descartados unless explicitly filtered by priority
+  const regularClients = clients.filter(c => {
+    if (isKorexClient(c)) return false;
+    if (taskPriority !== 'all') return true; // let priority filter handle it
+    return (c.priority || 5) !== 6;
+  });
 
   const filterDefs = [
     { key: 'all', label: 'Todas' },
@@ -98,7 +122,7 @@ export default function TasksPage({ embedded = false }) {
 
   // Priority filter: only tasks belonging to clients of that priority
   if (taskPriority !== 'all') {
-    const allowedClientIds = new Set(regularClients.filter(c => String(c.priority || 4) === taskPriority).map(c => c.id));
+    const allowedClientIds = new Set(regularClients.filter(c => String(c.priority || 5) === taskPriority).map(c => c.id));
     filteredTasks = filteredTasks.filter(t => allowedClientIds.has(t.clientId));
   }
 
@@ -108,7 +132,7 @@ export default function TasksPage({ embedded = false }) {
 
   const groups = Object.values(grouped).filter(g => g.tasks.length > 0 || addingTaskTo === g.client.id);
   // Sort client groups by CLIENT priority (critico=1 first), NOT by task priority
-  groups.sort((a, b) => (a.client.priority || 4) - (b.client.priority || 4));
+  groups.sort((a, b) => (a.client.priority || 5) - (b.client.priority || 5));
 
   const [inlinePhase, setInlinePhase] = useState('');
 
@@ -221,8 +245,9 @@ export default function TasksPage({ embedded = false }) {
       });
     }
 
+    const isHighlighted = highlightTaskId === t.id;
     return (
-      <div key={t.id} className={`border-b border-border last:border-b-0 ${isDragging ? 'drag-ghost' : ''}`}>
+      <div id={'task-row-' + t.id} key={t.id} className={`border-b border-border last:border-b-0 ${isDragging ? 'drag-ghost' : ''} ${isHighlighted ? 'highlight-pulse' : ''}`}>
         {/* Drop indicator */}
         {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
@@ -428,7 +453,7 @@ export default function TasksPage({ embedded = false }) {
                     {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {phaseInfo && (
+                    {phaseInfo ? (
                       <span
                         ref={el => mobStepRef.current = el}
                         className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer"
@@ -437,6 +462,14 @@ export default function TasksPage({ embedded = false }) {
                       >
                         <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: phaseInfo.color }} />
                         {phaseInfo.label}
+                      </span>
+                    ) : (
+                      <span
+                        ref={el => mobStepRef.current = el}
+                        className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer bg-gray-100 text-gray-500 hover:bg-blue-50 hover:text-blue-600"
+                        onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-step-' + t.id); }}
+                      >
+                        + Fase
                       </span>
                     )}
                     <Dropdown
@@ -459,7 +492,17 @@ export default function TasksPage({ embedded = false }) {
                     {(() => {
                       const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
                       const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
-                      if (assigneeMembers.length === 0) return null;
+                      if (assigneeMembers.length === 0) {
+                        return (
+                          <span
+                            ref={el => mobAssigneeRef.current = el}
+                            className="inline-flex items-center gap-1 py-[1px] px-1.5 rounded-full text-[9px] font-semibold cursor-pointer bg-gray-100 text-gray-500 hover:bg-blue-50 hover:text-blue-600"
+                            onClick={(e) => { e.stopPropagation(); setOpenDropdown('mob-assignee-' + t.id); }}
+                          >
+                            + Asignar
+                          </span>
+                        );
+                      }
                       return (
                         <div
                           ref={el => mobAssigneeRef.current = el}

@@ -57,7 +57,7 @@ export default function ClientDetail({ client: c }) {
 
   const pct = progress(c, tasks);
   const days = daysAgo(c.startDate);
-  const p = c.priority || 4;
+  const p = c.priority || 5;
   const pcfg = PRIO_CLIENT[p];
   const pill = clientPill(c, tasks);
   const bn = getBottleneck(c, tasks);

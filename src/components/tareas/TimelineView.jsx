@@ -4,7 +4,7 @@ import { TEAM, PHASES } from '../../utils/constants';
 import { today, fmtDate, getAllPhases } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
-export default function TimelineView() {
+export default function TimelineView({ onGoToTaskList }) {
   const {
     clients,
     tasks,
@@ -52,11 +52,15 @@ export default function TimelineView() {
     return false;
   };
 
-  // Apply client + priority filters
+  // Apply client + priority filters (hide descartados unless explicitly filtered)
   const filteredClients = clients.filter(c => {
     if (isKorexClient(c)) return false;
     if (taskClientFilter !== 'all' && c.id !== taskClientFilter) return false;
-    if (taskPriority !== 'all' && String(c.priority || 4) !== taskPriority) return false;
+    if (taskPriority !== 'all') {
+      if (String(c.priority || 5) !== taskPriority) return false;
+    } else {
+      if ((c.priority || 5) === 6) return false;
+    }
     return true;
   });
 
@@ -159,13 +163,19 @@ export default function TimelineView() {
   const handleAssignDeadline = (clientId, phaseKey, dateVal) => {
     const c = clients.find(x => x.id === clientId);
     if (!c) return;
-    const deadlines = { ...(c.phaseDeadlines || {}), [phaseKey]: dateVal };
+    const deadlines = { ...(c.phaseDeadlines || {}) };
+    if (dateVal) {
+      deadlines[phaseKey] = dateVal;
+    } else {
+      delete deadlines[phaseKey];
+    }
     updateClient(clientId, { phaseDeadlines: deadlines });
     setAssigningDeadline(null);
+    setEditingPhaseDeadline(null);
   };
 
   const handleAssignTaskDate = (taskId, dateVal) => {
-    updateTask(taskId, { dueDate: dateVal });
+    updateTask(taskId, { dueDate: dateVal || null });
     setAssigningTaskDate(null);
   };
 
@@ -233,15 +243,23 @@ export default function TimelineView() {
                                 <span className="text-gray-400 text-[9px] shrink-0">({ph.progress}%)</span>
                               </div>
                               {editingPhaseDeadline === expandKey ? (
-                                <input
-                                  type="date"
-                                  className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[105px] shrink-0"
-                                  defaultValue={ph.deadline}
-                                  autoFocus
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => { if (e.target.value) { handleAssignDeadline(cl.id, ph.phaseKey, e.target.value); setEditingPhaseDeadline(null); } }}
-                                  onBlur={() => setEditingPhaseDeadline(null)}
-                                />
+                                <span className="inline-flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="date"
+                                    className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[105px]"
+                                    defaultValue={ph.deadline}
+                                    autoFocus
+                                    onChange={(e) => { if (e.target.value) handleAssignDeadline(cl.id, ph.phaseKey, e.target.value); }}
+                                    onBlur={() => setEditingPhaseDeadline(null)}
+                                  />
+                                  <button
+                                    className="text-[10px] text-gray-400 hover:text-red-500 bg-white border border-gray-200 rounded px-1 font-sans cursor-pointer"
+                                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleAssignDeadline(cl.id, ph.phaseKey, null); }}
+                                    title="Quitar fecha"
+                                  >
+                                    {'\u2715'}
+                                  </button>
+                                </span>
                               ) : (
                                 <button
                                   className={`text-[9px] shrink-0 font-sans hover:underline ${ph.isOverdue ? 'text-red-500' : 'text-gray-400'}`}
@@ -295,22 +313,37 @@ export default function TimelineView() {
                             const isAssigning = assigningTaskDate === task.id;
 
                             return (
-                              <div key={task.id} className={`flex items-start py-1 border-b border-gray-50 last:border-b-0 ${isBlocked ? 'bg-red-50/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : ''}>
+                              <div key={task.id} className={`flex items-start py-1 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/40 ${isBlocked ? 'bg-red-50/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : 'Click en el texto para abrir en Lista'}>
                                 <div className="shrink-0 pr-2 flex items-start gap-1 pl-5" style={{ width: labelWidth }}>
                                   <span className="text-[9px] shrink-0 mt-0.5" style={{ color: taskColor }}>
                                     {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u25CB'}
                                   </span>
-                                  <span className={`text-[9px] leading-snug ${task.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{task.title}</span>
+                                  <span
+                                    className={`text-[9px] leading-snug cursor-pointer hover:underline ${task.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600 font-semibold' : 'text-gray-600'}`}
+                                    onClick={(e) => { e.stopPropagation(); onGoToTaskList && onGoToTaskList(cl.id, task.id); }}
+                                  >
+                                    {task.title}
+                                  </span>
                                   {isAssigning ? (
-                                    <input
-                                      type="date"
-                                      className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[105px] ml-auto shrink-0"
-                                      defaultValue={task.dueDate || ''}
-                                      autoFocus
-                                      onClick={(e) => e.stopPropagation()}
-                                      onChange={(e) => { if (e.target.value) handleAssignTaskDate(task.id, e.target.value); }}
-                                      onBlur={() => setAssigningTaskDate(null)}
-                                    />
+                                    <span className="inline-flex items-center gap-0.5 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        type="date"
+                                        className="border border-blue-300 rounded text-[9px] px-0.5 outline-none bg-white w-[105px]"
+                                        defaultValue={task.dueDate || ''}
+                                        autoFocus
+                                        onChange={(e) => { if (e.target.value) handleAssignTaskDate(task.id, e.target.value); }}
+                                        onBlur={() => setAssigningTaskDate(null)}
+                                      />
+                                      {taskHasDate && (
+                                        <button
+                                          className="text-[10px] text-gray-400 hover:text-red-500 bg-white border border-gray-200 rounded px-1 font-sans cursor-pointer"
+                                          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleAssignTaskDate(task.id, null); }}
+                                          title="Quitar fecha"
+                                        >
+                                          {'\u2715'}
+                                        </button>
+                                      )}
+                                    </span>
                                   ) : taskHasDate ? (
                                     <button
                                       className="text-[9px] shrink-0 ml-auto font-sans text-gray-400 hover:text-blue-500 hover:underline"

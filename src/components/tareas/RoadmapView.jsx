@@ -68,7 +68,7 @@ export default function RoadmapView() {
     return false;
   };
 
-  // Active clients (not completed, not Korex)
+  // Active clients (not completed, not Korex, not descartados by default)
   let filteredClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c));
 
   // Apply client filter
@@ -76,9 +76,11 @@ export default function RoadmapView() {
     filteredClients = filteredClients.filter(c => c.id === taskClientFilter);
   }
 
-  // Apply priority filter
+  // Apply priority filter (if no explicit priority filter, hide descartados)
   if (taskPriority !== 'all') {
-    filteredClients = filteredClients.filter(c => String(c.priority || 4) === taskPriority);
+    filteredClients = filteredClients.filter(c => String(c.priority || 5) === taskPriority);
+  } else {
+    filteredClients = filteredClients.filter(c => (c.priority || 5) !== 6);
   }
 
   // Apply assignee filter: only keep clients that have at least one task matching
@@ -97,8 +99,8 @@ export default function RoadmapView() {
 
   // Sort: by priority, then by progress
   filteredClients = [...filteredClients].sort((a, b) => {
-    const pa = a.priority || 4;
-    const pb = b.priority || 4;
+    const pa = a.priority || 5;
+    const pb = b.priority || 5;
     if (pa !== pb) return pa - pb;
     return clientProgress(a) - clientProgress(b);
   });
@@ -157,7 +159,7 @@ export default function RoadmapView() {
       ) : filteredClients.map(c => {
         const isExpanded = isForceExpanded || !!expanded[c.id];
         const progress = clientProgress(c);
-        const prio = PRIO_CLIENT[c.priority || 4];
+        const prio = PRIO_CLIENT[c.priority || 5];
         const clientTasks = tasks.filter(t => t.clientId === c.id);
         const allPh = getAllPhases(c);
         const deadlines = c.phaseDeadlines || {};
