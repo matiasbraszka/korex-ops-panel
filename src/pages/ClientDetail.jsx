@@ -8,7 +8,10 @@ import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, updateClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser } = useApp();
+  const [linkModal, setLinkModal] = useState(false);
+  const [linkForm, setLinkForm] = useState({ label: '', url: '', icon: '\uD83D\uDD17' });
+  const [editingLinkIdx, setEditingLinkIdx] = useState(null);
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [editModal, setEditModal] = useState(false);
@@ -1028,10 +1031,85 @@ export default function ClientDetail({ client: c }) {
 
       {/* Main grid */}
       <div className="grid gap-4 grid-cols-[1fr_320px] max-md:grid-cols-1">
-        {/* Left: Kanban Roadmap */}
-        <div>
-          <div className="text-sm font-bold mb-3">Roadmap</div>
-          {useNewSystem ? renderRoadmap() : renderOldRoadmap()}
+        {/* Left column: Roadmap access + Links */}
+        <div className="space-y-4">
+          {/* Ver roadmap — CTA big button */}
+          <button
+            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-5 flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md font-sans cursor-pointer border-none"
+            onClick={() => {
+              setTaskClientFilter(c.id);
+              setView('tasks');
+            }}
+          >
+            <div className="text-left">
+              <div className="text-[11px] uppercase tracking-wider opacity-80 font-semibold">Roadmap, Timeline y Tareas</div>
+              <div className="text-[16px] font-bold mt-0.5">Ver roadmap completo</div>
+              <div className="text-[11px] opacity-80 mt-0.5">{pct}% completado &middot; {doneRoadmap}/{totalRoadmap} tareas</div>
+            </div>
+            <span className="text-2xl">{'\u2192'}</span>
+          </button>
+
+          {/* Links del cliente — Drive, docs, etc */}
+          <div className="bg-white border border-border rounded-[10px] overflow-hidden">
+            <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
+              <span>{'\uD83D\uDD17'} Links y recursos</span>
+              <button
+                className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans"
+                onClick={() => { setLinkForm({ label: '', url: '', icon: '\uD83D\uDD17' }); setEditingLinkIdx(null); setLinkModal(true); }}
+              >
+                + Nuevo
+              </button>
+            </div>
+            <div className="py-3 px-4">
+              {!(c.links || []).length ? (
+                <div className="text-center text-text3 text-xs py-6">
+                  Sin links registrados
+                  <div className="text-[10px] text-text3 mt-1">Agregá carpetas de Drive, docs, funnels, etc.</div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {(c.links || []).map((link, li) => (
+                    <div
+                      key={li}
+                      className="group/link flex items-center gap-2.5 py-2 px-2.5 rounded-md hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-colors"
+                    >
+                      <span className="text-base shrink-0">{link.icon || '\uD83D\uDD17'}</span>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 min-w-0 text-[13px] text-gray-800 hover:text-blue-600 no-underline font-sans font-medium truncate"
+                      >
+                        {link.label || link.url}
+                      </a>
+                      <button
+                        className="text-[10px] text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
+                        onClick={() => {
+                          setLinkForm({ label: link.label || '', url: link.url || '', icon: link.icon || '\uD83D\uDD17' });
+                          setEditingLinkIdx(li);
+                          setLinkModal(true);
+                        }}
+                        title="Editar"
+                      >
+                        {'\u270F\uFE0F'}
+                      </button>
+                      <button
+                        className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
+                        onClick={() => {
+                          const newLinks = [...(c.links || [])];
+                          newLinks.splice(li, 1);
+                          updateClient(c.id, { links: newLinks });
+                        }}
+                        title="Eliminar"
+                      >
+                        {'\u2715'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right: Side panels */}
@@ -1468,6 +1546,78 @@ export default function ClientDetail({ client: c }) {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* Link Modal (add / edit) */}
+      <Modal
+        open={linkModal}
+        onClose={() => setLinkModal(false)}
+        title={editingLinkIdx !== null ? 'Editar link' : 'Nuevo link'}
+        maxWidth={420}
+        footer={<>
+          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setLinkModal(false)}>Cancelar</button>
+          <button
+            className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark disabled:opacity-50"
+            disabled={!linkForm.url.trim()}
+            onClick={() => {
+              const url = linkForm.url.trim();
+              if (!url) return;
+              const newLink = {
+                label: linkForm.label.trim() || url,
+                url: url.startsWith('http') ? url : 'https://' + url,
+                icon: linkForm.icon || '\uD83D\uDD17',
+              };
+              const newLinks = [...(c.links || [])];
+              if (editingLinkIdx !== null) {
+                newLinks[editingLinkIdx] = newLink;
+              } else {
+                newLinks.push(newLink);
+              }
+              updateClient(c.id, { links: newLinks });
+              setLinkModal(false);
+              setLinkForm({ label: '', url: '', icon: '\uD83D\uDD17' });
+              setEditingLinkIdx(null);
+            }}
+          >
+            Guardar
+          </button>
+        </>}
+      >
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">Icono</label>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {['\uD83D\uDD17', '\uD83D\uDCC1', '\uD83D\uDCC4', '\uD83C\uDFAC', '\uD83D\uDCCA', '\uD83C\uDFA8', '\u2699\uFE0F', '\uD83D\uDCBB', '\uD83D\uDCF1', '\u26A1'].map(emoji => (
+              <button
+                key={emoji}
+                className={`w-9 h-9 rounded-md border text-base cursor-pointer font-sans transition-all ${linkForm.icon === emoji ? 'border-blue bg-blue-bg' : 'border-border bg-white hover:bg-surface2'}`}
+                onClick={() => setLinkForm({ ...linkForm, icon: emoji })}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre</label>
+          <input
+            type="text"
+            className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue"
+            placeholder="Ej: Carpeta Drive principal"
+            value={linkForm.label}
+            onChange={(e) => setLinkForm({ ...linkForm, label: e.target.value })}
+          />
+        </div>
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">URL</label>
+          <input
+            type="url"
+            className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue"
+            placeholder="https://drive.google.com/..."
+            value={linkForm.url}
+            onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value })}
+            autoFocus
+          />
+        </div>
       </Modal>
     </div>
   );

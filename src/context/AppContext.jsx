@@ -21,6 +21,7 @@ export function AppProvider({ children }) {
   const [taskFilter, setTaskFilter] = useState('all');
   const [taskAssignee, setTaskAssignee] = useState('all');
   const [taskClientFilter, setTaskClientFilter] = useState('all');
+  const [taskPriority, setTaskPriority] = useState('all');
   const [currentUser, setCurrentUser] = useState(null);
   const [briefing, setBriefing] = useState(null);
   const [reportFeedbacks, setReportFeedbacks] = useState([]);
@@ -67,6 +68,7 @@ export function AppProvider({ children }) {
         custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
         step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
         phase_deadlines: c.phaseDeadlines || {},
+        links: c.links || [],
         meta_metrics: c.metaMetrics || null
       })
     });
@@ -111,6 +113,7 @@ export function AppProvider({ children }) {
         custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
         step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
         phase_deadlines: c.phaseDeadlines || {},
+        links: c.links || [],
         meta_metrics: c.metaMetrics || null
       }));
       for (let i = 0; i < clientRows.length; i += 10) {
@@ -352,6 +355,7 @@ export function AppProvider({ children }) {
           customPhases: c.custom_phases || [], clientFeedbacks: c.client_feedbacks || [],
           stepNameOverrides: c.step_name_overrides || {}, phaseNameOverrides: c.phase_name_overrides || {},
           phaseDeadlines: c.phase_deadlines || {},
+          links: c.links || [],
           metaMetrics: c.meta_metrics || null
         }));
         const mappedTasks = (sbTasks || []).map(t => ({
@@ -540,6 +544,7 @@ export function AppProvider({ children }) {
     taskFilter, setTaskFilter,
     taskAssignee, setTaskAssignee,
     taskClientFilter, setTaskClientFilter,
+    taskPriority, setTaskPriority,
     currentUser, setCurrentUser,
     briefing, setBriefing,
     reportFeedbacks, setReportFeedbacks,

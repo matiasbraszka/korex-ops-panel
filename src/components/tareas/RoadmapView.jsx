@@ -1,18 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { PHASES, PRIO_CLIENT, TEAM, TASK_STATUS } from '../../utils/constants';
+import { PRIO_CLIENT, TEAM, TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, fmtDate, today } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 const EXPANDED_KEY = 'tareas_roadmap_expanded';
 
 export default function RoadmapView() {
-  const { clients, tasks, updateTask, updateClient, setView, setSelectedId } = useApp();
-
-  // Filters
-  const [filterClient, setFilterClient] = useState('all');
-  const [filterPriority, setFilterPriority] = useState('all');
-  const [filterPM, setFilterPM] = useState('all');
+  const {
+    clients,
+    tasks,
+    updateTask,
+    updateClient,
+    setView,
+    setSelectedId,
+    taskClientFilter,
+    taskPriority,
+    taskAssignee,
+    hideCompletedTasks,
+    hideBlockedTasks,
+  } = useApp();
 
   // Expanded state persisted
   const [expanded, setExpanded] = useState(() => {
@@ -26,28 +33,46 @@ export default function RoadmapView() {
   }, [expanded]);
 
   // Inline editing state
-  const [editingDeadline, setEditingDeadline] = useState(null); // `${clientId}_${phaseKey}`
-  const [editingTaskDue, setEditingTaskDue] = useState(null); // taskId
+  const [editingDeadline, setEditingDeadline] = useState(null);
+  const [editingTaskDue, setEditingTaskDue] = useState(null);
 
   const now = today();
 
-  // Filter Korex internal client
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
 
-  // Active clients (not completed, not Korex)
-  const activeClients = clients
-    .filter(c => c.status !== 'completed' && !isKorexClient(c));
+  // Helper: check if a task matches the assignee filter
+  const taskMatchesAssignee = (t, assigneeFilter) => {
+    if (assigneeFilter === 'all') return true;
+    if (!t.assignee) return false;
+    const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    return parts.includes(assigneeFilter.toLowerCase());
+  };
 
-  // Apply filters
-  let filteredClients = activeClients;
-  if (filterClient !== 'all') {
-    filteredClients = filteredClients.filter(c => c.id === filterClient);
+  // Helper: check if a task should be hidden by completion/blocked toggles
+  const isTaskHidden = (t) => {
+    if (hideCompletedTasks && t.status === 'done') return true;
+    if (hideBlockedTasks && t.status === 'blocked') return true;
+    return false;
+  };
+
+  // Active clients (not completed, not Korex)
+  let filteredClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c));
+
+  // Apply client filter
+  if (taskClientFilter !== 'all') {
+    filteredClients = filteredClients.filter(c => c.id === taskClientFilter);
   }
-  if (filterPriority !== 'all') {
-    filteredClients = filteredClients.filter(c => String(c.priority) === filterPriority);
+
+  // Apply priority filter
+  if (taskPriority !== 'all') {
+    filteredClients = filteredClients.filter(c => String(c.priority || 4) === taskPriority);
   }
-  if (filterPM !== 'all') {
-    filteredClients = filteredClients.filter(c => (c.pm || '').toLowerCase() === filterPM.toLowerCase());
+
+  // Apply assignee filter: only keep clients that have at least one task matching
+  if (taskAssignee !== 'all') {
+    filteredClients = filteredClients.filter(c =>
+      tasks.some(t => t.clientId === c.id && taskMatchesAssignee(t, taskAssignee))
+    );
   }
 
   // Compute progress per client
@@ -57,7 +82,7 @@ export default function RoadmapView() {
     return Math.round(cTasks.filter(t => t.status === 'done').length / cTasks.length * 100);
   };
 
-  // Sort: by priority asc, then by progress asc (less progress first)
+  // Sort: by priority, then by progress
   filteredClients = [...filteredClients].sort((a, b) => {
     const pa = a.priority || 4;
     const pb = b.priority || 4;
@@ -67,7 +92,8 @@ export default function RoadmapView() {
 
   // Auto-expand first Super Prioritario on first load if nothing expanded
   useEffect(() => {
-    if (Object.keys(expanded).length === 0 && activeClients.length > 0) {
+    if (Object.keys(expanded).length === 0) {
+      const activeClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c));
       const first = activeClients.find(c => c.priority === 1) || activeClients[0];
       if (first) setExpanded({ [first.id]: true });
     }
@@ -75,7 +101,7 @@ export default function RoadmapView() {
   }, []);
 
   // When filtering to a single client, force expand
-  const isForceExpanded = filterClient !== 'all';
+  const isForceExpanded = taskClientFilter !== 'all';
 
   const toggleExpand = (clientId) => {
     setExpanded(prev => ({ ...prev, [clientId]: !prev[clientId] }));
@@ -109,46 +135,8 @@ export default function RoadmapView() {
     setView('clients');
   };
 
-  // PM options from clients
-  const pmOptions = [...new Set(activeClients.map(c => c.pm).filter(Boolean))];
-
   return (
     <div className="space-y-3">
-      {/* Filters bar */}
-      <div className="flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-lg p-2 sticky top-0 z-10">
-        <span className="text-[11px] font-semibold text-gray-500 px-1">Filtrar:</span>
-        <select
-          value={filterClient}
-          onChange={(e) => setFilterClient(e.target.value)}
-          className="text-[12px] py-1 px-2 rounded-md border border-gray-200 bg-white font-sans outline-none hover:border-gray-300 cursor-pointer"
-        >
-          <option value="all">Todos los clientes</option>
-          {activeClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select
-          value={filterPriority}
-          onChange={(e) => setFilterPriority(e.target.value)}
-          className="text-[12px] py-1 px-2 rounded-md border border-gray-200 bg-white font-sans outline-none hover:border-gray-300 cursor-pointer"
-        >
-          <option value="all">Todas las prioridades</option>
-          {Object.entries(PRIO_CLIENT).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <select
-          value={filterPM}
-          onChange={(e) => setFilterPM(e.target.value)}
-          className="text-[12px] py-1 px-2 rounded-md border border-gray-200 bg-white font-sans outline-none hover:border-gray-300 cursor-pointer"
-        >
-          <option value="all">Todos los PM</option>
-          {pmOptions.map(pm => <option key={pm} value={pm}>{pm}</option>)}
-        </select>
-        <div className="ml-auto text-[11px] text-gray-400">
-          {filteredClients.length} cliente{filteredClients.length !== 1 ? 's' : ''}
-        </div>
-      </div>
-
-      {/* Client cards */}
       {filteredClients.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-400 text-sm">
           No hay clientes que coincidan con los filtros
@@ -161,19 +149,28 @@ export default function RoadmapView() {
         const allPh = getAllPhases(c);
         const deadlines = c.phaseDeadlines || {};
 
-        // Group tasks by phase
+        // Group tasks by phase, with cascading assignee filter + hide toggles
         const resolvePhase = (t) => t.phase || '_unphased';
         const phaseKeys = [...Object.keys(allPh)];
         const phaseGroups = phaseKeys.map(phaseKey => {
           const phInfo = allPh[phaseKey] || { label: phaseKey, color: '#9CA3AF' };
-          const phaseTasks = clientTasks.filter(t => resolvePhase(t) === phaseKey);
-          const totalCount = phaseTasks.length;
-          const doneCount = phaseTasks.filter(t => t.status === 'done').length;
+          // Start with all tasks in this phase for the client
+          let phaseTasks = clientTasks.filter(t => resolvePhase(t) === phaseKey);
+          // Apply assignee cascade filter
+          if (taskAssignee !== 'all') {
+            phaseTasks = phaseTasks.filter(t => taskMatchesAssignee(t, taskAssignee));
+          }
+          // Apply hide toggles
+          phaseTasks = phaseTasks.filter(t => !isTaskHidden(t));
+          // Compute counts from ALL tasks in the phase (unfiltered) for the progress display
+          const allPhaseTasks = clientTasks.filter(t => resolvePhase(t) === phaseKey);
+          const totalCount = allPhaseTasks.length;
+          const doneCount = allPhaseTasks.filter(t => t.status === 'done').length;
           const allDone = totalCount > 0 && doneCount === totalCount;
           const deadline = deadlines[phaseKey];
           const isOverdue = deadline && deadline < now && !allDone;
           return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, deadline, isOverdue };
-        }).filter(g => g.totalCount > 0);
+        }).filter(g => g.phaseTasks.length > 0);
 
         const isCompleted = progress === 100;
 
@@ -239,7 +236,7 @@ export default function RoadmapView() {
 
               {/* Open in detail button */}
               <button
-                className="text-[10px] text-gray-400 hover:text-blue-500 px-2 py-1 rounded hover:bg-blue-50 font-sans shrink-0"
+                className="text-[11px] text-gray-400 hover:text-blue-500 px-2 py-1 rounded hover:bg-blue-50 font-sans shrink-0"
                 onClick={(e) => { e.stopPropagation(); openInClientDetail(c.id); }}
                 title="Abrir perfil del cliente"
               >
@@ -251,7 +248,11 @@ export default function RoadmapView() {
             {isExpanded && (
               <div className="border-t border-gray-100 bg-gray-50/30">
                 {phaseGroups.length === 0 ? (
-                  <div className="text-center text-gray-400 text-[11px] py-6">Sin tareas asignadas</div>
+                  <div className="text-center text-gray-400 text-[11px] py-6">
+                    {taskAssignee !== 'all'
+                      ? `Sin tareas de ${taskAssignee} en este cliente`
+                      : 'Sin tareas asignadas'}
+                  </div>
                 ) : phaseGroups.map(g => (
                   <div key={g.phaseKey} className="border-b border-gray-100 last:border-b-0">
                     {/* Phase header */}
@@ -365,7 +366,7 @@ export default function RoadmapView() {
                                 </button>
                               ) : (
                                 <button
-                                  className="text-[10px] text-blue-300 hover:text-blue-500 font-sans opacity-0 group-hover:opacity-100"
+                                  className="text-[10px] text-blue-300 hover:text-blue-500 font-sans"
                                   onClick={() => setEditingTaskDue(t.id)}
                                 >
                                   {'\uD83D\uDCC5'}

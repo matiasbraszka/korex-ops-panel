@@ -6,8 +6,8 @@ import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
-export default function TasksPage() {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask } = useApp();
+export default function TasksPage({ embedded = false }) {
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -94,6 +94,12 @@ export default function TasksPage() {
   // Client filter
   if (taskClientFilter !== 'all') {
     filteredTasks = filteredTasks.filter(t => t.clientId === taskClientFilter);
+  }
+
+  // Priority filter: only tasks belonging to clients of that priority
+  if (taskPriority !== 'all') {
+    const allowedClientIds = new Set(regularClients.filter(c => String(c.priority || 4) === taskPriority).map(c => c.id));
+    filteredTasks = filteredTasks.filter(t => allowedClientIds.has(t.clientId));
   }
 
   const grouped = {};
@@ -564,47 +570,49 @@ export default function TasksPage() {
 
   return (
     <div>
-      {/* Filters */}
-      <div className="bg-white border border-border rounded-[10px] p-3 mb-4 flex items-center gap-3 flex-wrap max-md:gap-2 max-md:p-2.5">
-        <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
-          value={taskFilter}
-          onChange={(e) => setTaskFilter(e.target.value)}
-        >
-          {filterDefs.map(f => (
-            <option key={f.key} value={f.key}>{f.key === 'all' ? 'Estado: Todas' : f.label}</option>
-          ))}
-        </select>
-        <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
-          value={taskClientFilter}
-          onChange={(e) => setTaskClientFilter(e.target.value)}
-        >
-          <option value="all">Cliente: Todos</option>
-          {regularClients.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select
-          className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
-          value={taskAssignee}
-          onChange={(e) => setTaskAssignee(e.target.value)}
-        >
-          <option value="all">Encargado: Todos</option>
-          <option value="mine">Mis tareas</option>
-          {assigneeList.map(m => (
-            <option key={m.id} value={m.name}>{m.name}</option>
-          ))}
-        </select>
-        <div className="flex items-center gap-3 ml-auto max-md:ml-0 max-md:w-full max-md:justify-between">
-          <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
-            <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer accent-blue" /> Ocultar completadas
-          </label>
-          <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
-            <input type="checkbox" checked={hideBlockedTasks} onChange={(e) => setHideBlockedTasks(e.target.checked)} className="cursor-pointer accent-blue" /> Ocultar bloqueadas
-          </label>
+      {/* Filters — hidden when embedded inside TareasPage (it has its own unified FiltersBar) */}
+      {!embedded && (
+        <div className="bg-white border border-border rounded-[10px] p-3 mb-4 flex items-center gap-3 flex-wrap max-md:gap-2 max-md:p-2.5">
+          <select
+            className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
+            value={taskFilter}
+            onChange={(e) => setTaskFilter(e.target.value)}
+          >
+            {filterDefs.map(f => (
+              <option key={f.key} value={f.key}>{f.key === 'all' ? 'Estado: Todas' : f.label}</option>
+            ))}
+          </select>
+          <select
+            className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
+            value={taskClientFilter}
+            onChange={(e) => setTaskClientFilter(e.target.value)}
+          >
+            <option value="all">Cliente: Todos</option>
+            {regularClients.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <select
+            className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
+            value={taskAssignee}
+            onChange={(e) => setTaskAssignee(e.target.value)}
+          >
+            <option value="all">Encargado: Todos</option>
+            <option value="mine">Mis tareas</option>
+            {assigneeList.map(m => (
+              <option key={m.id} value={m.name}>{m.name}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-3 ml-auto max-md:ml-0 max-md:w-full max-md:justify-between">
+            <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
+              <input type="checkbox" checked={hideCompletedTasks} onChange={(e) => setHideCompletedTasks(e.target.checked)} className="cursor-pointer accent-blue" /> Ocultar completadas
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-text3 cursor-pointer select-none whitespace-nowrap">
+              <input type="checkbox" checked={hideBlockedTasks} onChange={(e) => setHideBlockedTasks(e.target.checked)} className="cursor-pointer accent-blue" /> Ocultar bloqueadas
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
       {!groups.length && !addingTaskTo && (
         <>

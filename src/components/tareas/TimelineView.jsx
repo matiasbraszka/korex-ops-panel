@@ -5,7 +5,17 @@ import { today, fmtDate, getAllPhases } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 export default function TimelineView() {
-  const { clients, tasks, updateClient, updateTask } = useApp();
+  const {
+    clients,
+    tasks,
+    updateClient,
+    updateTask,
+    taskClientFilter,
+    taskPriority,
+    taskAssignee,
+    hideCompletedTasks,
+    hideBlockedTasks,
+  } = useApp();
 
   const [assigningDeadline, setAssigningDeadline] = useState(null);
   const [expandedPhases, setExpandedPhases] = useState({});
@@ -17,10 +27,32 @@ export default function TimelineView() {
 
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
 
+  // Helper: check if a task matches the assignee filter
+  const taskMatchesAssignee = (t, assigneeFilter) => {
+    if (assigneeFilter === 'all') return true;
+    if (!t.assignee) return false;
+    const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    return parts.includes(assigneeFilter.toLowerCase());
+  };
+
+  const isTaskHidden = (t) => {
+    if (hideCompletedTasks && t.status === 'done') return true;
+    if (hideBlockedTasks && t.status === 'blocked') return true;
+    return false;
+  };
+
+  // Apply client + priority filters
+  const filteredClients = clients.filter(c => {
+    if (isKorexClient(c)) return false;
+    if (taskClientFilter !== 'all' && c.id !== taskClientFilter) return false;
+    if (taskPriority !== 'all' && String(c.priority || 4) !== taskPriority) return false;
+    return true;
+  });
+
   // Phase timeline data
   const ganttEntries = [];
   const unscheduledPhases = [];
-  clients.filter(c => !isKorexClient(c)).forEach(c => {
+  filteredClients.forEach(c => {
     const allPh = getAllPhases(c);
     const deadlines = c.phaseDeadlines || {};
     const clientPhaseKeys = new Set();
@@ -30,7 +62,14 @@ export default function TimelineView() {
     clientPhaseKeys.forEach(phaseKey => {
       const phInfo = allPh[phaseKey] || PHASES[phaseKey];
       if (!phInfo) return;
-      const phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
+      // Start with all tasks in this phase
+      let phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
+      // Apply assignee cascade filter
+      if (taskAssignee !== 'all') {
+        phaseTasks = phaseTasks.filter(t => taskMatchesAssignee(t, taskAssignee));
+      }
+      // Apply hide toggles
+      phaseTasks = phaseTasks.filter(t => !isTaskHidden(t));
       if (phaseTasks.length === 0 && !deadlines[phaseKey]) return;
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;

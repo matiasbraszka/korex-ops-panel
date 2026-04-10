@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ViewToggle from '../components/tareas/ViewToggle';
+import FiltersBar from '../components/tareas/FiltersBar';
 import RoadmapView from '../components/tareas/RoadmapView';
 import TimelineView from '../components/tareas/TimelineView';
 import TasksPage from './TasksPage';
@@ -21,16 +22,17 @@ export default function TareasPage() {
   }, [view]);
 
   return (
-    <div className="space-y-4">
-      {/* Top bar with view toggle */}
-      <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-stretch">
-        <ViewToggle value={view} onChange={setView} />
-      </div>
+    <div className="space-y-3">
+      {/* View toggle */}
+      <ViewToggle value={view} onChange={setView} />
+
+      {/* Unified filters bar — applies to all three views */}
+      <FiltersBar />
 
       {/* Active view */}
       {view === 'roadmap' && <RoadmapView />}
       {view === 'timeline' && <TimelineView />}
-      {view === 'lista' && <TasksPage />}
+      {view === 'lista' && <TasksPage embedded />}
     </div>
   );
 }
