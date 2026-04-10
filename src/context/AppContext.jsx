@@ -26,6 +26,7 @@ export function AppProvider({ children }) {
   const [briefing, setBriefing] = useState(null);
   const [reportFeedbacks, setReportFeedbacks] = useState([]);
   const [taskProposals, setTaskProposals] = useState([]);
+  const [dashboardAlerts, setDashboardAlerts] = useState([]);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [hideCompletedTasks, setHideCompletedTasks] = useState(false);
   const [hideBlockedTasks, setHideBlockedTasks] = useState(false);
@@ -331,17 +332,19 @@ export function AppProvider({ children }) {
   // ── Load from Supabase ──
   const loadFromSupabase = useCallback(async () => {
     try {
-      const [sbClients, sbTasks, briefings, feedbacks, proposals] = await Promise.all([
+      const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts] = await Promise.all([
         sbFetch('clients?select=*&order=priority.asc', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('tasks?select=*&order=created_at.asc', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('briefings?id=eq.latest&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('report_feedback?select=*&order=created_at.desc&limit=20', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('task_proposals?select=*&order=created_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch('dashboard_alerts?select=*&dismissed=eq.false&order=days_old.desc', { headers: { 'Prefer': 'return=representation' } }),
       ]);
 
       if (briefings && briefings.length) setBriefing(briefings[0]);
       if (feedbacks && feedbacks.length) setReportFeedbacks(feedbacks);
       if (proposals && proposals.length) setTaskProposals(proposals);
+      if (alerts) setDashboardAlerts(alerts);
 
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
@@ -549,6 +552,16 @@ export function AppProvider({ children }) {
     briefing, setBriefing,
     reportFeedbacks, setReportFeedbacks,
     taskProposals, setTaskProposals,
+    dashboardAlerts, setDashboardAlerts,
+    dismissAlert: async (alertId) => {
+      setDashboardAlerts(prev => prev.filter(a => a.id !== alertId));
+      try {
+        await sbFetch('dashboard_alerts?id=eq.' + alertId, {
+          method: 'PATCH',
+          body: JSON.stringify({ dismissed: true, updated_at: new Date().toISOString() })
+        });
+      } catch (e) { console.error('Failed to dismiss alert', e); }
+    },
     hideCompleted, setHideCompleted,
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,

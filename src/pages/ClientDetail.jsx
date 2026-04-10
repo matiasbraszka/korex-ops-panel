@@ -1061,7 +1061,10 @@ export default function ClientDetail({ client: c }) {
         {/* Links del cliente — Drive, docs, etc. Agrupados por categoría */}
         <div className="bg-white border border-border rounded-[10px] overflow-hidden">
           <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-            <span>{'\uD83D\uDD17'} Links y recursos</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EEF2FF', color: '#5B7CF5' }}>{'\uD83D\uDD17'}</span>
+              Links y recursos
+            </span>
             <button
               className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans"
               onClick={() => { setLinkForm({ label: '', url: '', category: 'folder' }); setEditingLinkIdx(null); setLinkModal(true); }}
@@ -1153,7 +1156,10 @@ export default function ClientDetail({ client: c }) {
             return (
               <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
                 <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-                  <span>Publicidad</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#FFF7ED', color: '#F97316' }}>{'\uD83D\uDCE3'}</span>
+                    Publicidad
+                  </span>
                   <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold ml-auto ${isActive ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{isActive ? '\u25CF Activa' : '\u25CB Inactiva'}</span>
                 </div>
                 <div className="py-3 px-4">
@@ -1195,7 +1201,10 @@ export default function ClientDetail({ client: c }) {
           {/* Calls */}
           <div className="bg-white border border-border rounded-[10px] overflow-hidden">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-              <span>Llamadas</span>
+              <span className="inline-flex items-center gap-2">
+                <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#ECFDF5', color: '#22C55E' }}>{'\uD83D\uDCDE'}</span>
+                Llamadas
+              </span>
               <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setFbForm({ date: today(), sentiment: 'neutral', text: '', fathomLink: '', keypoints: '', transcription: '' }); setFeedbackModal(true); }}>+ Nueva</button>
             </div>
             <div className="py-3 px-4">
@@ -1237,7 +1246,10 @@ export default function ClientDetail({ client: c }) {
           {/* Client Feedback */}
           <div className="bg-white border border-border rounded-[10px] overflow-hidden">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-              <span>{'\uD83D\uDCAC'} Feedback del cliente</span>
+              <span className="inline-flex items-center gap-2">
+                <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#F5F3FF', color: '#8B5CF6' }}>{'\uD83D\uDCAC'}</span>
+                Feedback del cliente
+              </span>
               <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setCfbForm({ source: 'cliente', callUrl: '', priority: 'normal', currentItem: '', items: [] }); setClientFbModal(true); }}>+ Nuevo</button>
             </div>
             <div className="py-3 px-4">
@@ -1294,7 +1306,12 @@ export default function ClientDetail({ client: c }) {
 
       {/* Historial del cliente (merged with brain points) — full width at bottom */}
       <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-4">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold">Historial del cliente</div>
+            <div className="py-3 px-4 border-b border-border text-[13px] font-bold">
+              <span className="inline-flex items-center gap-2">
+                <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#F3F4F6', color: '#6B7280' }}>{'\uD83D\uDCDC'}</span>
+                Historial del cliente
+              </span>
+            </div>
             <div className="py-3 px-4">
               {/* Brain points section */}
               {brainPoints.length > 0 && (
