@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, today, fmtDate, getAllPhases, getElapsedDays } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
@@ -228,22 +228,17 @@ export default function TasksPage({ embedded = false }) {
 
     const client = clients.find(x => x.id === t.clientId);
 
-    // Phase display for roadmap tasks
-    const phaseInfo = t.phase ? PHASES[t.phase] : null;
+    // Phase display — usa overrides del cliente para que los renames del Roadmap se reflejen
+    const clientAllPhases = client ? getAllPhases(client) : PHASES;
+    const phaseInfo = t.phase ? clientAllPhases[t.phase] : null;
 
     const stepDropdownItems = [
       { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null, phase: null }) },
       { divider: true, label: 'Fases', color: '#9CA3AF' },
     ];
-    Object.entries(PHASES).forEach(([key, ph]) => {
+    Object.entries(clientAllPhases).forEach(([key, ph]) => {
       stepDropdownItems.push({ label: ph.label, onClick: () => updateTask(t.id, { phase: key, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: ph.color });
     });
-    const customPhases = client?.customPhases || [];
-    if (customPhases.length > 0) {
-      customPhases.forEach(cp => {
-        stepDropdownItems.push({ label: cp.label, onClick: () => updateTask(t.id, { phase: cp.id, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: cp.color });
-      });
-    }
 
     const isHighlighted = highlightTaskId === t.id;
     return (
@@ -252,7 +247,7 @@ export default function TasksPage({ embedded = false }) {
         {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
         <div
-          className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`}
+          className={`hidden md:grid gap-2 py-2 px-4 items-start text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`}
           style={{ gridTemplateColumns: '20px 28px 1fr 110px 50px 30px' }}
           onDragOver={(e) => handleDragOver(e, t, sortedGroup)}
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
@@ -284,13 +279,13 @@ export default function TasksPage({ embedded = false }) {
             items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
-          {/* Title */}
+          {/* Title row: titulo wrappea + badges agrupados a la derecha */}
           <div className="min-w-0 flex flex-col gap-0.5">
-            <div className="flex items-center gap-1.5">
-              {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
+            <div className="flex items-start gap-1.5 min-w-0">
+              {blocked && <span className="shrink-0 mt-[1px]" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
               {editingTaskId === t.id ? (
                 <input
-                  className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 bg-white"
+                  className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
                   value={editTitleVal}
                   onChange={(e) => setEditTitleVal(e.target.value)}
                   onBlur={() => saveEditTitle(t.id)}
@@ -299,29 +294,37 @@ export default function TasksPage({ embedded = false }) {
                   autoFocus
                 />
               ) : (
-                <span className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 hover:bg-surface2 leading-tight" onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}>{t.title}</span>
-              )}
-              {(() => {
-                const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
-                const elapsed = getElapsedDays(t, clientTasks);
-                if (elapsed <= 0) return null;
-                const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
-                const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
-                const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
-                return (
-                  <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>
-                    {'\u23F1'} {elapsed}d{est ? ` / ${est}d` : ''}
-                  </span>
-                );
-              })()}
-              {t.dueDate && (
-                <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium shrink-0 ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>
-                  {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+                <span
+                  className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 min-w-0 break-words hover:bg-surface2 leading-tight"
+                  onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
+                >
+                  {t.title}
                 </span>
               )}
-              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" />}
-              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
-              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+              {/* Badges: cada uno con shrink-0, agrupados en su propio contenedor */}
+              <div className="flex items-center gap-1.5 shrink-0 mt-[1px]">
+                {(() => {
+                  const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
+                  const elapsed = getElapsedDays(t, clientTasks);
+                  if (elapsed <= 0) return null;
+                  const est = getEstimatedDays(t);
+                  const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
+                  const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
+                  return (
+                    <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold" style={{ color, background: bg }}>
+                      {'\u23F1'} {elapsed}d{est !== null ? ` / ${est}d` : ''}
+                    </span>
+                  );
+                })()}
+                {t.dueDate && (
+                  <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>
+                    {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+                  </span>
+                )}
+                {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue" title="Tiene descripci\u00f3n" />}
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+              </div>
             </div>
             {blocked && blockingNames.length > 0 && (
               <div className="text-[10px] text-red-500 pl-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
@@ -448,7 +451,13 @@ export default function TasksPage({ embedded = false }) {
                         autoFocus
                       />
                     ) : (
-                      <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+                      <span
+                        className="text-[13px] font-medium text-text leading-tight break-words cursor-text flex-1"
+                        onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
+                        title="Tocar para editar"
+                      >
+                        {t.title}
+                      </span>
                     )}
                     {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
                   </div>
@@ -484,10 +493,10 @@ export default function TasksPage({ embedded = false }) {
                       const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
                       const elapsed = getElapsedDays(t, clientTasks);
                       if (elapsed <= 0) return null;
-                      const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
+                      const est = getEstimatedDays(t);
                       const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
                       const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
-                      return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est ? `/${est}d` : ''}</span>;
+                      return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est !== null ? `/${est}d` : ''}</span>;
                     })()}
                     {(() => {
                       const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -549,7 +558,16 @@ export default function TasksPage({ embedded = false }) {
                     <div className="text-[10px] text-red-500 mt-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
                   )}
                 </div>
-                <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 shrink-0" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <button
+                    className="bg-transparent border-none text-text3 cursor-pointer text-[10px] p-1"
+                    onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] })); }}
+                    title={isExpanded ? 'Colapsar' : 'Expandir'}
+                  >
+                    {isExpanded ? '\u25B2' : '\u25BC'}
+                  </button>
+                  <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
+                </div>
               </div>
             </div>
           );
@@ -579,17 +597,21 @@ export default function TasksPage({ embedded = false }) {
                 {isOverdue && <span className="text-red text-[10px] font-semibold">Vencida</span>}
               </div>
               <div className="inline-flex items-center gap-1 text-[11px]">
-                <span className="text-text3">{'\u23F1'} Tiempo estimado:</span>
-                <input
-                  type="number"
-                  className="border border-border rounded py-[2px] px-1.5 text-[11px] font-sans outline-none bg-white focus:border-blue w-[60px]"
-                  value={t.estimatedDays || ''}
-                  step="0.5"
-                  min="0.1"
-                  placeholder="días"
-                  onChange={(e) => { const v = parseFloat(e.target.value); updateTask(t.id, { estimatedDays: !isNaN(v) && v > 0 ? v : null }); }}
-                />
-                <span className="text-text3">días</span>
+                <span className="text-text3">{'\u23F1'}</span>
+                <span className="text-text2 font-semibold">
+                  {(() => {
+                    if (t.status === 'blocked' || blocked) return 'bloqueada \u2014 sin fecha de inicio';
+                    const est = getEstimatedDays(t);
+                    const clientTs = tasks.filter(ct => ct.clientId === t.clientId);
+                    const elapsed = getElapsedDays(t, clientTs);
+                    if (est === null) {
+                      // Sin dueDate: solo mostrar tiempo activa
+                      if (t.startedDate) return `lleva ${elapsed}d activa \u00b7 sin fecha de entrega`;
+                      return 'sin fecha de entrega';
+                    }
+                    return `${elapsed}d / ${est}d estimados${t.startedDate ? ' (habilitada ' + fmtDate(t.startedDate) + ')' : ''}`;
+                  })()}
+                </span>
               </div>
               <div className="md:hidden flex gap-1.5 w-full mt-1">
                 <button className="py-1 px-2 rounded text-[10px] bg-blue-bg text-blue border-none cursor-pointer font-sans" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}>{'\uD83D\uDD17'} Dependencias</button>
@@ -717,8 +739,7 @@ export default function TasksPage({ embedded = false }) {
                       />
                       <select className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans" value={inlinePhase} onChange={(e) => setInlinePhase(e.target.value)}>
                         <option value="">Sin vincular a fase</option>
-                        {Object.entries(PHASES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        {(g.client.customPhases || []).map(cp => <option key={cp.id} value={cp.id}>{cp.label}</option>)}
+                        {Object.entries(getAllPhases(g.client)).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                       </select>
                     </div>
                     <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" onClick={() => { setAddingTaskTo(null); setNewTaskTitle(''); }}>{'\u2715'}</button></div>

@@ -1,7 +1,15 @@
 import { PROCESS_STEPS, DEFAULT_TASKS_TEMPLATE, PHASES } from './constants';
 
 export function today() {
-  return new Date().toISOString().substr(0, 10);
+  // Fecha local en formato YYYY-MM-DD (no UTC). toISOString devuelve UTC
+  // y para zonas horarias este del meridiano a partir de las 22h locales
+  // ya esta en el dia siguiente UTC. Esto causaba que el panel mostrara
+  // "9 de abril" cuando el usuario en Espana ya estaba en el dia 10.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export function initials(n) {
@@ -317,6 +325,61 @@ export function getElapsedDays(task, allClientTasks) {
     if (extra > 0) total += extra;
   }
   return Math.round(total * 10) / 10;
+}
+
+/**
+ * Una tarea está "habilitada" si no está bloqueada y todas sus dependencias
+ * están en done. `done` tambien cuenta como habilitada (trabajo ya realizado).
+ * dependsOn puede contener task.id o templateId.
+ */
+export function isTaskEnabled(task, allClientTasks) {
+  if (task.status === 'blocked') return false;
+  if (task.dependsOn && task.dependsOn.length > 0) {
+    const hasUnmet = task.dependsOn.some(depId => {
+      const dep = allClientTasks.find(t => t.id === depId || t.templateId === depId);
+      return dep && dep.status !== 'done';
+    });
+    if (hasUnmet) return false;
+  }
+  return true;
+}
+
+/**
+ * Aplica la regla del plan de fechas:
+ * - done → no toca startedDate (congelado)
+ * - habilitada y sin startedDate → startedDate = hoy
+ * - no habilitada y con startedDate → limpiar (null)
+ *
+ * Devuelve un array nuevo con las tareas actualizadas (solo las que cambiaron
+ * tienen objeto nuevo; el resto se mantiene por referencia).
+ */
+export function recomputeStartedDates(tasks) {
+  const byClient = {};
+  tasks.forEach(t => {
+    if (!byClient[t.clientId]) byClient[t.clientId] = [];
+    byClient[t.clientId].push(t);
+  });
+  const nowIso = today();
+  return tasks.map(t => {
+    if (t.status === 'done') return t;
+    const clientTasks = byClient[t.clientId] || [];
+    const enabled = isTaskEnabled(t, clientTasks);
+    if (enabled && !t.startedDate) return { ...t, startedDate: nowIso };
+    if (!enabled && t.startedDate) return { ...t, startedDate: null };
+    return t;
+  });
+}
+
+/**
+ * Días estimados = dueDate - startedDate. Solo se calcula si hay dueDate.
+ * El campo legacy `estimatedDays` del template ya NO se usa como fuente.
+ */
+export function getEstimatedDays(task) {
+  if (!task || !task.dueDate) return null;
+  const ref = task.startedDate || today();
+  const d = daysBetween(ref, task.dueDate);
+  if (d !== null && d >= 0) return d;
+  return null;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { TEAM, PHASES } from '../../utils/constants';
-import { today, fmtDate, getAllPhases } from '../../utils/helpers';
+import { TEAM } from '../../utils/constants';
+import { today, fmtDate, getAllPhases, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 export default function TimelineView({ onGoToTaskList }) {
@@ -75,7 +75,7 @@ export default function TimelineView({ onGoToTaskList }) {
     Object.keys(allPh).forEach(k => clientPhaseKeys.add(k));
 
     clientPhaseKeys.forEach(phaseKey => {
-      const phInfo = allPh[phaseKey] || PHASES[phaseKey];
+      const phInfo = allPh[phaseKey];
       if (!phInfo) return;
       // Start with all tasks in this phase
       let phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
@@ -89,9 +89,12 @@ export default function TimelineView({ onGoToTaskList }) {
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
       const deadline = deadlines[phaseKey];
+      // Earliest startedDate of any task in the phase (para que la barra arranque ah\u00ed, no en hoy)
+      const startedDates = phaseTasks.map(t => t.startedDate).filter(Boolean);
+      const phaseStart = startedDates.length > 0 ? startedDates.sort()[0] : null;
       if (deadline && !done) {
         const isOverdue = deadline < now;
-        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
+        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseStart, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
       } else if (!done) {
         unscheduledPhases.push({ client: c, phaseKey, phInfo, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
       }
@@ -124,7 +127,15 @@ export default function TimelineView({ onGoToTaskList }) {
     const endNum = weekEnd.getDate();
     const monthLabel = weekStart.toLocaleDateString('es-AR', { month: 'short' });
     const hasToday = now >= startIso && now <= endIso;
-    weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday });
+    // D\u00edas individuales de la semana (para mostrar el n\u00famero debajo del rango)
+    const days = [];
+    for (let d = 0; d < 7; d++) {
+      const dayDate = new Date(weekStart);
+      dayDate.setDate(dayDate.getDate() + d);
+      const iso = dayDate.toISOString().split('T')[0];
+      days.push({ iso, num: dayDate.getDate(), isToday: iso === now });
+    }
+    weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday, days });
   }
   const weekWidth = 100;
   const labelWidth = 240;
@@ -132,10 +143,16 @@ export default function TimelineView({ onGoToTaskList }) {
   const totalTimelineEnd = weekColumns[weekColumns.length - 1].endIso;
   const totalDays = Math.round((new Date(totalTimelineEnd) - new Date(totalTimelineStart)) / 864e5);
 
+  // Cada dia = 1/7 del ancho de semana. Usar esta formula uniforme para que las
+  // posiciones de las barras y la linea HOY caigan exactamente en las celdas
+  // de los dias mostrados en el header.
+  const dayPx = weekWidth / 7;
   const dateToPx = (dateStr) => {
     const d = Math.round((new Date(dateStr) - new Date(totalTimelineStart)) / 864e5);
-    return Math.max(0, Math.min(d / totalDays * weekColumns.length * weekWidth, weekColumns.length * weekWidth));
+    return Math.max(0, Math.min(d * dayPx, weekColumns.length * weekWidth));
   };
+  // Posicion del centro de la celda de HOY (para la linea vertical)
+  const todayCenterPx = dateToPx(now) + dayPx / 2;
 
   const resolveMembers = (assigneeStr) => {
     if (!assigneeStr) return [];
@@ -203,16 +220,45 @@ export default function TimelineView({ onGoToTaskList }) {
               className="timeline-scroll overflow-x-auto -mx-5 max-md:-mx-3 px-5 max-md:px-3"
               style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
             >
-              <div style={{ minWidth: labelWidth + weekColumns.length * weekWidth }}>
+              <div style={{ minWidth: labelWidth + weekColumns.length * weekWidth, position: 'relative' }}>
                 {/* Week header */}
                 <div className="flex" style={{ marginLeft: labelWidth }}>
                   {weekColumns.map((w, i) => (
-                    <div key={i} className={`text-center shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-blue-500' : 'border-gray-200'}`} style={{ width: weekWidth }}>
-                      <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
-                      <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-blue-600' : 'text-gray-400'}`}>{w.startNum}–{w.endNum}</div>
+                    <div key={i} className={`shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-red-500 bg-red-50/40' : 'border-gray-200'}`} style={{ width: weekWidth }}>
+                      <div className="text-center">
+                        <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
+                        <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum + '\u2013' + w.endNum}</div>
+                      </div>
+                      {/* D\u00edas individuales con HOY anclado a la celda del dia actual */}
+                      <div className="flex mt-1 relative">
+                        {w.days.map((d, di) => (
+                          <div key={di} className="flex-1 text-[7px] text-center leading-none relative">
+                            {d.isToday && (
+                              <span className="absolute left-1/2 -translate-x-1/2 -top-[10px] text-[7px] font-bold text-white bg-red-500 rounded px-1 leading-[10px] shadow-sm whitespace-nowrap z-10">
+                                HOY
+                              </span>
+                            )}
+                            <span className={d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}>{d.num}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
+                {/* L\u00ednea vertical "HOY" centrada en la celda del dia actual */}
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: labelWidth + todayCenterPx - 1,
+                    top: 36,
+                    bottom: 0,
+                    width: 2,
+                    background: '#EF4444',
+                    opacity: 0.75,
+                    zIndex: 5,
+                  }}
+                />
+
 
                 {Object.values(ganttByClient).map(({ client: cl, phases }) => (
                   <div key={cl.id} className="border-b border-gray-100 last:border-b-0">
@@ -223,7 +269,10 @@ export default function TimelineView({ onGoToTaskList }) {
                     </div>
                     {phases.map((ph) => {
                       const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
-                      const barStartPx = dateToPx(now < ph.deadline ? now : ph.deadline);
+                      // La barra arranca en el startedDate m\u00e1s temprano de sus tareas. Si no hay ninguno,
+                      // usa el deadline como extremo (barra m\u00ednima). Si no hay deadline, usa hoy.
+                      const effectiveStart = ph.phaseStart || (ph.deadline < now ? ph.deadline : now);
+                      const barStartPx = dateToPx(effectiveStart);
                       const barEndPx = dateToPx(ph.deadline);
                       const barLeft = Math.min(barStartPx, barEndPx);
                       const barW = Math.max(weekWidth * 0.3, Math.abs(barEndPx - barStartPx));
@@ -271,9 +320,8 @@ export default function TimelineView({ onGoToTaskList }) {
                             </div>
                             <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 28 }}>
                               {weekColumns.map((w, i) => (
-                                <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-blue-50/30' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f0f0f0' }} />
+                                <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-red-50/30' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f0f0f0' }} />
                               ))}
-                              <div className="absolute top-0 bottom-0 z-[2]" style={{ left: dateToPx(now), width: 1.5, background: '#5B7CF5', opacity: 0.5 }} />
                               <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 18, top: 5 }}>
                                 <div className="w-full h-full rounded-sm relative overflow-hidden" style={{ background: color + '20' }}>
                                   <div className="h-full rounded-sm" style={{ width: `${ph.progress}%`, background: color, opacity: 0.5 }} />
@@ -303,13 +351,23 @@ export default function TimelineView({ onGoToTaskList }) {
                             const depBlocked = isTaskBlockedByDeps(task);
                             const literalBlocked = task.status === 'blocked';
                             const isBlocked = literalBlocked || depBlocked;
-                            const taskColor = task.status === 'done' ? '#22C55E' : isBlocked ? '#EF4444' : '#94A3B8';
+                            const isDone = task.status === 'done';
+                            const taskColor = isDone ? '#22C55E' : isBlocked ? '#EF4444' : '#5B7CF5';
                             const taskMembers = resolveMembers(task.assignee);
-                            const taskHasDate = !!task.dueDate;
-                            const taskBarLeft = taskHasDate ? dateToPx(task.startedDate || now) : 0;
-                            const taskBarEnd = taskHasDate ? dateToPx(task.dueDate) : 0;
-                            const taskBarW = taskHasDate ? Math.max(weekWidth * 0.15, Math.abs(taskBarEnd - Math.min(taskBarLeft, taskBarEnd))) : 0;
-                            const taskBarStart = taskHasDate ? Math.min(taskBarLeft, taskBarEnd) : 0;
+                            const hasStart = !!task.startedDate;
+                            const hasDue = !!task.dueDate;
+                            const hasConflict = hasStart && hasDue && task.startedDate > task.dueDate;
+                            // La fecha fin de la barra es completedDate para done, sino dueDate
+                            const barEndDate = isDone ? (task.completedDate || task.dueDate) : task.dueDate;
+                            const canShowBar = hasStart && !!barEndDate && !isBlocked && !hasConflict;
+                            const barLeftPx = canShowBar ? dateToPx(task.startedDate) : 0;
+                            const barRightPx = canShowBar ? dateToPx(barEndDate) : 0;
+                            const barW = canShowBar ? Math.max(weekWidth * 0.15, barRightPx - barLeftPx) : 0;
+                            // Badges: estimado y transcurrido
+                            const estimatedD = getEstimatedDays(task);
+                            const elapsedD = hasStart && !isDone ? Math.max(0, daysBetween(task.startedDate, now) || 0) : null;
+                            const isOverdue = estimatedD !== null && elapsedD !== null && elapsedD > estimatedD;
+                            const blockedSinceD = isBlocked && task.blockedSince ? daysAgo(task.blockedSince) : null;
                             const isAssigning = assigningTaskDate === task.id;
 
                             return (
@@ -334,7 +392,7 @@ export default function TimelineView({ onGoToTaskList }) {
                                         onChange={(e) => { if (e.target.value) handleAssignTaskDate(task.id, e.target.value); }}
                                         onBlur={() => setAssigningTaskDate(null)}
                                       />
-                                      {taskHasDate && (
+                                      {hasDue && (
                                         <button
                                           className="text-[10px] text-gray-400 hover:text-red-500 bg-white border border-gray-200 rounded px-1 font-sans cursor-pointer"
                                           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleAssignTaskDate(task.id, null); }}
@@ -344,42 +402,92 @@ export default function TimelineView({ onGoToTaskList }) {
                                         </button>
                                       )}
                                     </span>
-                                  ) : taskHasDate ? (
-                                    <button
-                                      className="text-[9px] shrink-0 ml-auto font-sans text-gray-400 hover:text-blue-500 hover:underline"
-                                      onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
-                                    >
-                                      {fmtDate(task.dueDate)}
-                                    </button>
                                   ) : (
-                                    <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 ml-auto font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
+                                    <span className="inline-flex items-center gap-1 ml-auto shrink-0">
+                                      {/* Badge de d\u00edas transcurridos / estimados */}
+                                      {isBlocked ? (
+                                        <span className="text-[8px] px-1 rounded bg-red-100 text-red-700 font-sans" title={blockedSinceD !== null ? 'Bloqueada hace ' + blockedSinceD + ' d\u00edas' : 'Bloqueada'}>
+                                          {'\uD83D\uDD12'}{blockedSinceD !== null ? ` ${blockedSinceD}d` : ''}
+                                        </span>
+                                      ) : isDone && hasStart && task.completedDate ? (
+                                        <span className="text-[8px] px-1 rounded bg-green-100 text-green-700 font-sans" title="D\u00edas que tom\u00f3">
+                                          {(daysBetween(task.startedDate, task.completedDate) ?? 0)}d
+                                        </span>
+                                      ) : estimatedD !== null && elapsedD !== null ? (
+                                        <span className={`text-[8px] px-1 rounded font-sans ${isOverdue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`} title={`Transcurridos ${elapsedD}d de ${estimatedD}d estimados`}>
+                                          {elapsedD}/{estimatedD}d
+                                        </span>
+                                      ) : elapsedD !== null && elapsedD > 0 ? (
+                                        <span className="text-[8px] px-1 rounded font-sans bg-blue-50 text-blue-600" title={`Lleva ${elapsedD}d activa`}>
+                                          {elapsedD}d
+                                        </span>
+                                      ) : null}
+                                      {hasDue ? (
+                                        <button
+                                          className="text-[9px] shrink-0 font-sans text-gray-400 hover:text-blue-500 hover:underline"
+                                          onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                        >
+                                          {fmtDate(task.dueDate)}
+                                        </button>
+                                      ) : (
+                                        <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
+                                      )}
+                                    </span>
                                   )}
                                 </div>
                                 <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 22 }}>
                                   {weekColumns.map((w, i) => (
-                                    <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-blue-50/20' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f8f8f8' }} />
+                                    <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-red-50/20' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f8f8f8' }} />
                                   ))}
-                                  <div className="absolute top-0 bottom-0 z-[2]" style={{ left: dateToPx(now), width: 1, background: '#5B7CF5', opacity: 0.3 }} />
-                                  {taskHasDate && (
-                                    <>
-                                      <div className="absolute z-[1] cursor-pointer flex items-center px-0.5 gap-0.5" style={{ left: taskBarStart, width: taskBarW, height: 14, top: 4 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>
-                                        <div className="absolute inset-0 rounded-sm" style={{ background: taskColor, opacity: 0.25 }} />
-                                        <span className="flex -space-x-1 shrink-0 relative z-[1]">
-                                          {taskMembers.slice(0, 3).map(m => (
-                                            <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white" />
-                                          ))}
-                                        </span>
-                                      </div>
-                                      <div className="absolute z-[3] cursor-pointer group" style={{ left: dateToPx(task.dueDate) - 5, top: 5, padding: 2 }} onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }} title={task.dueDate}>
-                                        <div className="w-2 h-2 rounded-full group-hover:scale-150 transition-transform" style={{ background: taskColor }} />
-                                      </div>
-                                    </>
+                                  {/* Caso normal: barra de inicio a entrega */}
+                                  {canShowBar && (
+                                    <div
+                                      className={`absolute z-[1] cursor-pointer flex items-center px-0.5 gap-0.5 ${isDone ? '' : isOverdue ? 'ring-1 ring-red-300' : ''}`}
+                                      style={{ left: barLeftPx, width: barW, height: 14, top: 4 }}
+                                      onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                      title={`Habilitada ${fmtDate(task.startedDate)} \u2192 ${isDone ? 'Hecha ' + fmtDate(barEndDate) : 'Entrega ' + fmtDate(task.dueDate)}${estimatedD !== null ? ' \u00b7 ' + estimatedD + 'd estimados' : ''}`}
+                                    >
+                                      <div className="absolute inset-0 rounded-sm" style={{ background: taskColor, opacity: 0.25 }} />
+                                      <span className="flex -space-x-1 shrink-0 relative z-[1]">
+                                        {taskMembers.slice(0, 3).map(m => (
+                                          <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white" />
+                                        ))}
+                                      </span>
+                                    </div>
                                   )}
-                                  {!taskHasDate && taskMembers.length > 0 && (
-                                    <div className="absolute z-[1] flex items-center" style={{ left: dateToPx(now) + 4, top: 5 }}>
+                                  {/* Diamante de fecha de entrega (siempre si hasDue y no done) */}
+                                  {hasDue && !isDone && (
+                                    <div
+                                      className="absolute z-[3] cursor-pointer group"
+                                      style={{ left: dateToPx(task.dueDate) - 5, top: 5, padding: 2 }}
+                                      onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                      title={`Entrega: ${fmtDate(task.dueDate)}`}
+                                    >
+                                      <div className="w-2.5 h-2.5 rounded-full group-hover:scale-150 transition-transform" style={{ background: taskColor, border: isBlocked ? '1px solid #fff' : 'none' }} />
+                                    </div>
+                                  )}
+                                  {/* Bloqueada: cadena entre inicio y diamante si tiene ambos */}
+                                  {isBlocked && hasDue && hasStart && (
+                                    <div className="absolute z-[1] pointer-events-none" style={{ left: Math.min(dateToPx(task.startedDate), dateToPx(task.dueDate)), width: Math.abs(dateToPx(task.dueDate) - dateToPx(task.startedDate)), height: 14, top: 4, border: '1px dashed #EF4444', borderRadius: 2, opacity: 0.6 }} />
+                                  )}
+                                  {/* Conflicto: entrega antes que inicio */}
+                                  {hasConflict && (
+                                    <div
+                                      className="absolute z-[2] cursor-pointer flex items-center justify-center"
+                                      style={{ left: dateToPx(task.dueDate), width: Math.max(weekWidth * 0.15, dateToPx(task.startedDate) - dateToPx(task.dueDate)), height: 14, top: 4, border: '1px dashed #EF4444', borderRadius: 2, background: 'rgba(239,68,68,0.08)' }}
+                                      onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                      title="Fecha de entrega vencida al habilitar la tarea. Actualiz\u00e1 la fecha."
+                                    >
+                                      <span className="text-[9px] text-red-600 font-bold">{'\u26A0'}</span>
+                                    </div>
+                                  )}
+                                  {/* Sin due date pero con start: icono de reloj en la posici\u00f3n de inicio */}
+                                  {hasStart && !hasDue && !isBlocked && (
+                                    <div className="absolute z-[1] flex items-center gap-1" style={{ left: dateToPx(task.startedDate) + 2, top: 5 }}>
+                                      <span className="text-[10px] text-gray-400">{'\u23F1'}</span>
                                       <span className="flex -space-x-1">
                                         {taskMembers.slice(0, 3).map(m => (
-                                          <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white opacity-40" />
+                                          <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white opacity-70" />
                                         ))}
                                       </span>
                                     </div>

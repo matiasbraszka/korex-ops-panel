@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
 import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -179,13 +179,18 @@ export function AppProvider({ children }) {
     let newTasks = [...tasksRef.current, ...defaultTasks];
     const result = recalculateTimers(c.id, newTasks);
     newTasks = result.tasks;
+    // Aplicar regla de startedDate a las tareas nuevas (las sin deps arrancan hoy)
+    newTasks = recomputeStartedDates(newTasks);
     setTasks(newTasks);
     save(injected, newTasks);
     if (dbReady.current) {
       dbSaveClient(c);
-      defaultTasks.forEach(t => dbSaveTask(t));
+      // Guardar las tareas ya con startedDate calculada
+      const ids = new Set(defaultTasks.map(t => t.id));
+      newTasks.filter(t => ids.has(t.id)).forEach(t => dbSaveTask(t));
     }
     return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics]);
 
   const updateClient = useCallback((id, updates) => {
@@ -230,10 +235,17 @@ export function AppProvider({ children }) {
     let newTasks = [...tasksRef.current, t];
     const result = recalculateTimers(clientId, newTasks);
     newTasks = result.tasks;
+    // Aplicar regla de startedDate: si la tarea queda habilitada, se setea hoy
+    const beforeRecompute = newTasks;
+    newTasks = recomputeStartedDates(newTasks);
+    if (dbReady.current) {
+      newTasks.forEach((x, i) => { if (x !== beforeRecompute[i]) dbSaveTask(x); });
+    }
     setTasks(newTasks);
     save(clientsRef.current, newTasks);
-    if (dbReady.current) dbSaveTask(t);
-    return t;
+    const saved = newTasks.find(x => x.id === t.id) || t;
+    if (dbReady.current) dbSaveTask(saved);
+    return saved;
   }, [save, dbSaveTask, recalculateTimers]);
 
   const updateTask = useCallback((id, updates) => {
@@ -241,14 +253,9 @@ export function AppProvider({ children }) {
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
         const merged = { ...t, ...updates };
-        // Auto-set timing dates on status changes
-        if (updates.status && updates.status !== t.status) {
-          if (updates.status === 'in-progress' && !merged.startedDate) {
-            merged.startedDate = today();
-          }
-          if (updates.status === 'done') {
-            merged.completedDate = today();
-          }
+        // completedDate automático al pasar a done. startedDate lo gestiona recomputeStartedDates.
+        if (updates.status && updates.status !== t.status && updates.status === 'done') {
+          merged.completedDate = today();
         }
         return merged;
       });
@@ -261,6 +268,16 @@ export function AppProvider({ children }) {
           const result = recalculateTimers(task.clientId, mappedTasks);
           finalTasks = result.tasks;
         }
+      }
+
+      // Recomputar startedDate según reglas del sistema (enabled/blocked/deps)
+      const beforeRecompute = finalTasks;
+      finalTasks = recomputeStartedDates(finalTasks);
+      // Persistir cualquier tarea que haya cambiado por el recompute
+      if (dbReady.current) {
+        finalTasks.forEach((t, i) => {
+          if (t !== beforeRecompute[i]) dbSaveTask(t);
+        });
       }
 
       save(clientsRef.current, finalTasks);
@@ -278,11 +295,17 @@ export function AppProvider({ children }) {
         const result = recalculateTimers(deleted.clientId, newTasks);
         newTasks = result.tasks;
       }
+      // Recomputar startedDate: borrar una tarea puede desbloquear dependientes
+      const beforeRecompute = newTasks;
+      newTasks = recomputeStartedDates(newTasks);
+      if (dbReady.current) {
+        newTasks.forEach((t, i) => { if (t !== beforeRecompute[i]) dbSaveTask(t); });
+      }
       save(clientsRef.current, newTasks);
       dbDeleteTask(id);
       return newTasks;
     });
-  }, [save, dbDeleteTask, recalculateTimers]);
+  }, [save, dbSaveTask, dbDeleteTask, recalculateTimers]);
 
   // ── Reorder tasks (drag & drop) ──
   // reorderedGroup: the full group array in its new order
@@ -361,7 +384,7 @@ export function AppProvider({ children }) {
           links: c.links || [],
           metaMetrics: c.meta_metrics || null
         }));
-        const mappedTasks = (sbTasks || []).map(t => ({
+        const rawMappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
           priority: t.priority, status: t.status, notes: t.notes,
           description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
@@ -375,11 +398,52 @@ export function AppProvider({ children }) {
           position: t.position ?? 0
         }));
 
+        // Backfill: normalizar startedDate usando createdDate como aproximaci\u00f3n.
+        // Las tareas habilitadas obtienen startedDate = createdDate (mejor aprox que today()
+        // porque reflejan cuando la tarea existi\u00f3 por primera vez, no cuando cargamos la p\u00e1gina).
+        // Las no habilitadas quedan sin fecha. Las done no se tocan.
+        // Tambi\u00e9n corrige tareas cuyo startedDate es posterior al createdDate (backfill previo incorrecto).
+        const mappedTasks = rawMappedTasks.map(t => {
+          if (t.status === 'done') return t;
+          const enabled = isTaskEnabled(t, rawMappedTasks);
+          if (!enabled) {
+            return t.startedDate ? { ...t, startedDate: null } : t;
+          }
+          const candidate = t.createdDate || today();
+          if (!t.startedDate || t.startedDate > candidate) {
+            return { ...t, startedDate: candidate };
+          }
+          return t;
+        });
+
         const injected = injectMetaMetrics(mappedClients);
         setClients(injected);
         setTasks(mappedTasks);
         localStorage.setItem('korex_v6', JSON.stringify({ clients: injected, tasks: mappedTasks }));
         dbReady.current = true;
+
+        // Persistir en Supabase las tareas que cambiaron por el backfill
+        mappedTasks.forEach((t, i) => {
+          if (t !== rawMappedTasks[i]) {
+            sbFetch('tasks', {
+              method: 'POST',
+              headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+              body: JSON.stringify({
+                id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
+                priority: t.priority, status: t.status, notes: t.notes,
+                description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
+                started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
+                phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
+                template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+                due_date: t.dueDate || null,
+                accumulated_days: t.accumulatedDays || 0,
+                timer_started_at: t.timerStartedAt || null,
+                enabled_date: t.enabledDate || null,
+                position: t.position ?? 0
+              })
+            });
+          }
+        });
         console.log('\u2713 Loaded from Supabase:', injected.length, 'clients,', mappedTasks.length, 'tasks');
         return true;
       }
