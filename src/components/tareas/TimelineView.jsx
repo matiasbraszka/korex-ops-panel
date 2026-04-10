@@ -35,9 +35,20 @@ export default function TimelineView() {
     return parts.includes(assigneeFilter.toLowerCase());
   };
 
+  // Dependency-blocked detection
+  const isTaskBlockedByDeps = (t) => {
+    if (!t.dependsOn || t.dependsOn.length === 0) return false;
+    if (t.status === 'done') return false;
+    return t.dependsOn.some(depId => {
+      const dep = tasks.find(x => x.id === depId);
+      return dep && dep.status !== 'done';
+    });
+  };
+  const isTaskBlockedAny = (t) => t.status === 'blocked' || isTaskBlockedByDeps(t);
+
   const isTaskHidden = (t) => {
     if (hideCompletedTasks && t.status === 'done') return true;
-    if (hideBlockedTasks && t.status === 'blocked') return true;
+    if (hideBlockedTasks && isTaskBlockedAny(t)) return true;
     return false;
   };
 
@@ -263,7 +274,10 @@ export default function TimelineView() {
                           </div>
 
                           {isExpanded && ph.phaseTasks.map(task => {
-                            const taskColor = task.status === 'done' ? '#22C55E' : task.status === 'blocked' ? '#EF4444' : '#94A3B8';
+                            const depBlocked = isTaskBlockedByDeps(task);
+                            const literalBlocked = task.status === 'blocked';
+                            const isBlocked = literalBlocked || depBlocked;
+                            const taskColor = task.status === 'done' ? '#22C55E' : isBlocked ? '#EF4444' : '#94A3B8';
                             const taskMembers = resolveMembers(task.assignee);
                             const taskHasDate = !!task.dueDate;
                             const taskBarLeft = taskHasDate ? dateToPx(task.startedDate || now) : 0;
@@ -273,12 +287,12 @@ export default function TimelineView() {
                             const isAssigning = assigningTaskDate === task.id;
 
                             return (
-                              <div key={task.id} className="flex items-start py-1 border-b border-gray-50 last:border-b-0">
+                              <div key={task.id} className={`flex items-start py-1 border-b border-gray-50 last:border-b-0 ${isBlocked ? 'bg-red-50/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : ''}>
                                 <div className="shrink-0 pr-2 flex items-start gap-1 pl-5" style={{ width: labelWidth }}>
                                   <span className="text-[9px] shrink-0 mt-0.5" style={{ color: taskColor }}>
-                                    {task.status === 'done' ? '\u2713' : task.status === 'blocked' ? '\u2715' : '\u25CB'}
+                                    {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u25CB'}
                                   </span>
-                                  <span className={`text-[9px] leading-snug ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-600'}`}>{task.title}</span>
+                                  <span className={`text-[9px] leading-snug ${task.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{task.title}</span>
                                   {isAssigning ? (
                                     <input
                                       type="date"

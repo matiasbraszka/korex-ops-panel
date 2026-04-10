@@ -1029,93 +1029,88 @@ export default function ClientDetail({ client: c }) {
         )}
       </div>
 
-      {/* Main grid */}
-      <div className="grid gap-4 grid-cols-[1fr_320px] max-md:grid-cols-1">
-        {/* Left column: Roadmap access + Links */}
-        <div className="space-y-4">
-          {/* Ver roadmap — CTA big button */}
-          <button
-            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-5 flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md font-sans cursor-pointer border-none"
-            onClick={() => {
-              setTaskClientFilter(c.id);
-              setView('tasks');
-            }}
-          >
-            <div className="text-left">
-              <div className="text-[11px] uppercase tracking-wider opacity-80 font-semibold">Roadmap, Timeline y Tareas</div>
-              <div className="text-[16px] font-bold mt-0.5">Ver roadmap completo</div>
-              <div className="text-[11px] opacity-80 mt-0.5">{pct}% completado &middot; {doneRoadmap}/{totalRoadmap} tareas</div>
-            </div>
-            <span className="text-2xl">{'\u2192'}</span>
-          </button>
+      {/* Ver roadmap — CTA full width */}
+      <button
+        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-5 mb-4 flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md font-sans cursor-pointer border-none max-md:p-4"
+        onClick={() => {
+          setTaskClientFilter(c.id);
+          setView('tasks');
+        }}
+      >
+        <div className="text-left">
+          <div className="text-[11px] uppercase tracking-wider opacity-80 font-semibold">Roadmap, Timeline y Tareas</div>
+          <div className="text-[16px] font-bold mt-0.5">Ver roadmap completo</div>
+          <div className="text-[11px] opacity-80 mt-0.5">{pct}% completado &middot; {doneRoadmap}/{totalRoadmap} tareas</div>
+        </div>
+        <span className="text-2xl">{'\u2192'}</span>
+      </button>
 
-          {/* Links del cliente — Drive, docs, etc */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-              <span>{'\uD83D\uDD17'} Links y recursos</span>
-              <button
-                className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans"
-                onClick={() => { setLinkForm({ label: '', url: '', icon: '\uD83D\uDD17' }); setEditingLinkIdx(null); setLinkModal(true); }}
-              >
-                + Nuevo
-              </button>
-            </div>
-            <div className="py-3 px-4">
-              {!(c.links || []).length ? (
-                <div className="text-center text-text3 text-xs py-6">
-                  Sin links registrados
-                  <div className="text-[10px] text-text3 mt-1">Agregá carpetas de Drive, docs, funnels, etc.</div>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {(c.links || []).map((link, li) => (
-                    <div
-                      key={li}
-                      className="group/link flex items-center gap-2.5 py-2 px-2.5 rounded-md hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-colors"
+      {/* Row 1: Links + Publicidad (2-col, balanced) */}
+      <div className="grid gap-4 md:grid-cols-2 mb-4">
+        {/* Links del cliente — Drive, docs, etc */}
+        <div className="bg-white border border-border rounded-[10px] overflow-hidden">
+          <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
+            <span>{'\uD83D\uDD17'} Links y recursos</span>
+            <button
+              className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans"
+              onClick={() => { setLinkForm({ label: '', url: '', icon: '\uD83D\uDD17' }); setEditingLinkIdx(null); setLinkModal(true); }}
+            >
+              + Nuevo
+            </button>
+          </div>
+          <div className="py-3 px-4">
+            {!(c.links || []).length ? (
+              <div className="text-center text-text3 text-xs py-6">
+                Sin links registrados
+                <div className="text-[10px] text-text3 mt-1">Agregá carpetas de Drive, docs, funnels, etc.</div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {(c.links || []).map((link, li) => (
+                  <div
+                    key={li}
+                    className="group/link flex items-center gap-2.5 py-2 px-2.5 rounded-md hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-colors"
+                  >
+                    <span className="text-base shrink-0">{link.icon || '\uD83D\uDD17'}</span>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 min-w-0 text-[13px] text-gray-800 hover:text-blue-600 no-underline font-sans font-medium truncate"
                     >
-                      <span className="text-base shrink-0">{link.icon || '\uD83D\uDD17'}</span>
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 min-w-0 text-[13px] text-gray-800 hover:text-blue-600 no-underline font-sans font-medium truncate"
-                      >
-                        {link.label || link.url}
-                      </a>
-                      <button
-                        className="text-[10px] text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
-                        onClick={() => {
-                          setLinkForm({ label: link.label || '', url: link.url || '', icon: link.icon || '\uD83D\uDD17' });
-                          setEditingLinkIdx(li);
-                          setLinkModal(true);
-                        }}
-                        title="Editar"
-                      >
-                        {'\u270F\uFE0F'}
-                      </button>
-                      <button
-                        className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
-                        onClick={() => {
-                          const newLinks = [...(c.links || [])];
-                          newLinks.splice(li, 1);
-                          updateClient(c.id, { links: newLinks });
-                        }}
-                        title="Eliminar"
-                      >
-                        {'\u2715'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                      {link.label || link.url}
+                    </a>
+                    <button
+                      className="text-[10px] text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
+                      onClick={() => {
+                        setLinkForm({ label: link.label || '', url: link.url || '', icon: link.icon || '\uD83D\uDD17' });
+                        setEditingLinkIdx(li);
+                        setLinkModal(true);
+                      }}
+                      title="Editar"
+                    >
+                      {'\u270F\uFE0F'}
+                    </button>
+                    <button
+                      className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
+                      onClick={() => {
+                        const newLinks = [...(c.links || [])];
+                        newLinks.splice(li, 1);
+                        updateClient(c.id, { links: newLinks });
+                      }}
+                      title="Eliminar"
+                    >
+                      {'\u2715'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right: Side panels */}
-        <div>
-          {/* Meta Ads */}
-          {c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna') && (() => {
+        {/* Publicidad (Meta Ads) */}
+        {c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna') && (() => {
             const m = c.metaMetrics || {};
             const isActive = m.adsActive;
             const curr = m.currency || 'USD';
@@ -1157,9 +1152,13 @@ export default function ClientDetail({ client: c }) {
               </div>
             );
           })()}
+      </div>
+      {/* End Row 1 */}
 
+      {/* Row 2: Llamadas + Client Feedback */}
+      <div className="grid gap-4 md:grid-cols-2 mb-4">
           {/* Calls */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
+          <div className="bg-white border border-border rounded-[10px] overflow-hidden">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
               <span>Llamadas</span>
               <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setFbForm({ date: today(), sentiment: 'neutral', text: '', fathomLink: '', keypoints: '', transcription: '' }); setFeedbackModal(true); }}>+ Nueva</button>
@@ -1201,7 +1200,7 @@ export default function ClientDetail({ client: c }) {
           </div>
 
           {/* Client Feedback */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
+          <div className="bg-white border border-border rounded-[10px] overflow-hidden">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
               <span>{'\uD83D\uDCAC'} Feedback del cliente</span>
               <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setCfbForm({ source: 'cliente', callUrl: '', priority: 'normal', currentItem: '', items: [] }); setClientFbModal(true); }}>+ Nuevo</button>
@@ -1255,8 +1254,11 @@ export default function ClientDetail({ client: c }) {
             </div>
           </div>
 
-          {/* Historial del cliente (merged with brain points) */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
+      </div>
+      {/* End Row 2 */}
+
+      {/* Historial del cliente (merged with brain points) — full width at bottom */}
+      <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-4">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold">Historial del cliente</div>
             <div className="py-3 px-4">
               {/* Brain points section */}
@@ -1284,9 +1286,8 @@ export default function ClientDetail({ client: c }) {
                 ))
               )}
             </div>
-          </div>
-        </div>
       </div>
+      {/* End Historial */}
 
       {/* Edit Client Modal */}
       <Modal

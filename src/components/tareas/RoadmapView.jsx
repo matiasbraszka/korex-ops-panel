@@ -48,10 +48,23 @@ export default function RoadmapView() {
     return parts.includes(assigneeFilter.toLowerCase());
   };
 
+  // Dependency-blocked detection: a task is blocked if any of its dependencies isn't done
+  const isTaskBlockedByDeps = (t) => {
+    if (!t.dependsOn || t.dependsOn.length === 0) return false;
+    if (t.status === 'done') return false;
+    return t.dependsOn.some(depId => {
+      const dep = tasks.find(x => x.id === depId);
+      return dep && dep.status !== 'done';
+    });
+  };
+
+  // Combined: either literal 'blocked' status OR blocked by deps
+  const isTaskBlockedAny = (t) => t.status === 'blocked' || isTaskBlockedByDeps(t);
+
   // Helper: check if a task should be hidden by completion/blocked toggles
   const isTaskHidden = (t) => {
     if (hideCompletedTasks && t.status === 'done') return true;
-    if (hideBlockedTasks && t.status === 'blocked') return true;
+    if (hideBlockedTasks && isTaskBlockedAny(t)) return true;
     return false;
   };
 
@@ -303,33 +316,42 @@ export default function RoadmapView() {
                           .filter(Boolean);
                         const taskStatus = TASK_STATUS[t.status];
                         const isOverdue = t.dueDate && t.status !== 'done' && t.dueDate < now;
+                        const depBlocked = isTaskBlockedByDeps(t);
+                        const literalBlocked = t.status === 'blocked';
+                        const isBlocked = literalBlocked || depBlocked;
+
+                        // Visual: blocked tasks get red accent
+                        const iconColor = isBlocked ? '#EF4444' : (taskStatus?.color || '#9CA3AF');
+                        const iconChar = isBlocked ? '\uD83D\uDD12' : (taskStatus?.icon || '\u25CB');
 
                         return (
                           <div
                             key={t.id}
-                            className={`flex items-center gap-2 px-4 py-2 hover:bg-white ${t.status === 'done' ? 'opacity-60' : ''}`}
+                            className={`flex items-center gap-2 px-4 py-2 hover:bg-white ${t.status === 'done' ? 'opacity-60' : ''} ${isBlocked ? 'bg-red-50/40' : ''}`}
+                            title={depBlocked ? 'Bloqueada por dependencias' : literalBlocked ? 'Bloqueada' : ''}
                           >
                             {/* Status icon (click to cycle) */}
                             <button
                               className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 cursor-pointer"
                               style={{
-                                background: (taskStatus?.color || '#9CA3AF') + '15',
-                                color: taskStatus?.color || '#9CA3AF',
-                                border: `1.5px solid ${taskStatus?.color || '#9CA3AF'}`,
+                                background: iconColor + '15',
+                                color: iconColor,
+                                border: `1.5px solid ${iconColor}`,
                               }}
                               title={taskStatus?.label}
                               onClick={() => cycleTaskStatus(t)}
                             >
-                              {taskStatus?.icon || '\u25CB'}
+                              {iconChar}
                             </button>
 
                             {/* Title */}
                             <span
                               className={`text-[12px] flex-1 min-w-0 ${
-                                t.status === 'done' ? 'line-through text-gray-400' : 'text-gray-700'
+                                t.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600' : 'text-gray-700'
                               }`}
                             >
                               {t.title}
+                              {depBlocked && <span className="ml-1.5 text-[9px] text-red-500 font-semibold uppercase">bloqueada</span>}
                             </span>
 
                             {/* Assignees */}
