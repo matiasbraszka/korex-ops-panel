@@ -728,7 +728,7 @@ export default function TasksPage({ embedded = false }) {
                       <input
                         ref={newTaskInputRef}
                         className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text w-full"
-                        placeholder="Nombre de la tarea + Enter..."
+                        placeholder="Nombre de la tarea..."
                         autoFocus
                         value={newTaskTitle}
                         onChange={(e) => setNewTaskTitle(e.target.value)}
@@ -742,7 +742,16 @@ export default function TasksPage({ embedded = false }) {
                         {Object.entries(getAllPhases(g.client)).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                       </select>
                     </div>
-                    <div><button className="bg-transparent border-none text-text3 cursor-pointer text-sm" onClick={() => { setAddingTaskTo(null); setNewTaskTitle(''); }}>{'\u2715'}</button></div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        className="py-1 px-3 bg-blue text-white text-[11px] font-semibold rounded border-none cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed font-sans"
+                        disabled={!newTaskTitle.trim()}
+                        onClick={() => handleAddTask(g.client.id)}
+                      >
+                        Agregar
+                      </button>
+                      <button className="bg-transparent border-none text-text3 cursor-pointer text-sm px-1" onClick={() => { setAddingTaskTo(null); setNewTaskTitle(''); setInlinePhase(''); }} title="Cancelar">{'\u2715'}</button>
+                    </div>
                   </div>
                 )}
 
@@ -795,15 +804,36 @@ export default function TasksPage({ embedded = false }) {
               {addingTaskTo === korexClientId && (
                 <div className="flex gap-2 py-2 px-4 items-center border-t border-border bg-blue-bg2 max-md:px-3">
                   <div className="text-text3 text-[10px] max-md:hidden">+</div>
-                  <input id="korex-task-input" className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text flex-1 min-w-0" placeholder="Nombre de la tarea + Enter..." autoFocus onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.target.value.trim()) {
-                      createTask(e.target.value.trim(), korexClientId, '', 'normal', 'backlog', '', null);
-                      e.target.value = '';
-                      setTimeout(() => { const i = document.getElementById('korex-task-input'); if (i) i.focus(); }, 50);
-                    }
-                    if (e.key === 'Escape') setAddingTaskTo(null);
-                  }} />
-                  <button className="bg-transparent border-none text-text3 cursor-pointer text-sm shrink-0" onClick={() => setAddingTaskTo(null)}>{'\u2715'}</button>
+                  <input
+                    id="korex-task-input"
+                    className="border-none bg-transparent text-xs font-sans outline-none py-1 text-text flex-1 min-w-0"
+                    placeholder="Nombre de la tarea..."
+                    autoFocus
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newTaskTitle.trim()) {
+                        createTask(newTaskTitle.trim(), korexClientId, '', 'normal', 'backlog', '', null);
+                        setNewTaskTitle('');
+                        setTimeout(() => { const i = document.getElementById('korex-task-input'); if (i) i.focus(); }, 50);
+                      }
+                      if (e.key === 'Escape') { setAddingTaskTo(null); setNewTaskTitle(''); }
+                    }}
+                  />
+                  <button
+                    className="py-1 px-3 bg-blue text-white text-[11px] font-semibold rounded border-none cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed font-sans shrink-0"
+                    disabled={!newTaskTitle.trim()}
+                    onClick={() => {
+                      if (newTaskTitle.trim()) {
+                        createTask(newTaskTitle.trim(), korexClientId, '', 'normal', 'backlog', '', null);
+                        setNewTaskTitle('');
+                        setTimeout(() => { const i = document.getElementById('korex-task-input'); if (i) i.focus(); }, 50);
+                      }
+                    }}
+                  >
+                    Agregar
+                  </button>
+                  <button className="bg-transparent border-none text-text3 cursor-pointer text-sm shrink-0" onClick={() => { setAddingTaskTo(null); setNewTaskTitle(''); }}>{'\u2715'}</button>
                 </div>
               )}
 
