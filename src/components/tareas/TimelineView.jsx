@@ -229,16 +229,11 @@ export default function TimelineView({ onGoToTaskList }) {
                         <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
                         <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum + '\u2013' + w.endNum}</div>
                       </div>
-                      {/* D\u00edas individuales con HOY anclado a la celda del dia actual */}
-                      <div className="flex mt-1 relative">
+                      {/* D\u00edas individuales: el dia de hoy se distingue solo por color */}
+                      <div className="flex mt-0.5">
                         {w.days.map((d, di) => (
-                          <div key={di} className="flex-1 text-[7px] text-center leading-none relative">
-                            {d.isToday && (
-                              <span className="absolute left-1/2 -translate-x-1/2 -top-[10px] text-[7px] font-bold text-white bg-red-500 rounded px-1 leading-[10px] shadow-sm whitespace-nowrap z-10">
-                                HOY
-                              </span>
-                            )}
-                            <span className={d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}>{d.num}</span>
+                          <div key={di} className={`flex-1 text-[7px] text-center leading-none ${d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}`}>
+                            {d.num}
                           </div>
                         ))}
                       </div>
@@ -250,7 +245,7 @@ export default function TimelineView({ onGoToTaskList }) {
                   className="absolute pointer-events-none"
                   style={{
                     left: labelWidth + todayCenterPx - 1,
-                    top: 36,
+                    top: 32,
                     bottom: 0,
                     width: 2,
                     background: '#EF4444',
