@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
-import TasksPage from './pages/TasksPage';
+import TareasPage from './pages/TareasPage';
 import PublicidadPage from './pages/PublicidadPage';
 import InformePage from './pages/InformePage';
 import DashboardPage from './pages/DashboardPage';
@@ -75,12 +75,10 @@ function MainLayout() {
   const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
 
   const navItems = [
-    { id: 'dashboard',   label: 'Dashboard',   icon: '\u25A6' },
-    { id: 'clients',     label: 'Clientes',    icon: '\u2637' },
-    { id: 'publicidad',  label: 'Publicidad',  icon: '\u2739' },
-    { id: 'tasks',       label: 'Tareas',      icon: '\u2611' },
-    { id: 'informe',     label: 'Informe',     icon: '\u2709' },
-    { id: 'feedback',    label: 'Feedback',     icon: '\uD83D\uDCAC' },
+    { id: 'dashboard', label: 'Dashboard', icon: '\u25A6' },
+    { id: 'clients',   label: 'Clientes',  icon: '\u2637' },
+    { id: 'tasks',     label: 'Tareas',    icon: '\u2611' },
+    { id: 'informe',   label: 'Informe',   icon: '\u2709' },
   ];
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
@@ -92,10 +90,10 @@ function MainLayout() {
   };
 
   const titles = {
-    dashboard: ['Dashboard', 'KPIs de entrega de servicio'],
-    clients: ['Clientes', 'Vista general de todos los proyectos'],
+    dashboard: ['Dashboard', 'Panel ejecutivo de operaciones'],
+    clients: ['Clientes', 'Perfiles, ads, feedback y recursos'],
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
-    tasks: ['Tareas', 'Gestión de tareas por cliente'],
+    tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
     informe: ['Informe Diario', briefing?.date ? 'Último: ' + briefing.date : 'Sin informe aún'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
   };
@@ -118,7 +116,7 @@ function MainLayout() {
     dashboard: <DashboardPage />,
     clients: <ClientsPage />,
     publicidad: <PublicidadPage />,
-    tasks: <TasksPage />,
+    tasks: <TareasPage />,
     informe: <InformePage />,
     feedback: <FeedbackPage />,
   };

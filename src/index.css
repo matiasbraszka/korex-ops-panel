@@ -101,6 +101,28 @@ body {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Timeline horizontal scroll — always visible thin scrollbar */
+.timeline-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #C0C7D4 transparent;
+}
+.timeline-scroll::-webkit-scrollbar {
+  height: 10px;
+  -webkit-appearance: none;
+}
+.timeline-scroll::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 5px;
+}
+.timeline-scroll::-webkit-scrollbar-thumb {
+  background: #C0C7D4;
+  border-radius: 5px;
+  border: 2px solid #F3F4F6;
+}
+.timeline-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
 /* Report markdown content */
 .report-content {
   overflow-wrap: break-word;
