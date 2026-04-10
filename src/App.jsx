@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
-import TasksPage from './pages/TasksPage';
+import TareasPage from './pages/TareasPage';
 import PublicidadPage from './pages/PublicidadPage';
 import InformePage from './pages/InformePage';
 import DashboardPage from './pages/DashboardPage';
@@ -95,7 +95,7 @@ function MainLayout() {
     dashboard: ['Dashboard', 'KPIs de entrega de servicio'],
     clients: ['Clientes', 'Vista general de todos los proyectos'],
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
-    tasks: ['Tareas', 'Gestión de tareas por cliente'],
+    tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
     informe: ['Informe Diario', briefing?.date ? 'Último: ' + briefing.date : 'Sin informe aún'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
   };
@@ -118,7 +118,7 @@ function MainLayout() {
     dashboard: <DashboardPage />,
     clients: <ClientsPage />,
     publicidad: <PublicidadPage />,
-    tasks: <TasksPage />,
+    tasks: <TareasPage />,
     informe: <InformePage />,
     feedback: <FeedbackPage />,
   };
