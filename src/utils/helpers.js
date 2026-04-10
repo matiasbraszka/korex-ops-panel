@@ -363,19 +363,14 @@ export function recomputeStartedDates(tasks) {
 }
 
 /**
- * Días estimados derivados: dueDate - startedDate en días.
- * Si falta alguno, usa el campo legacy estimatedDays como fallback.
- * Para una tarea sin startedDate pero con dueDate, usa hoy como referencia.
- * Devuelve null si no se puede calcular.
+ * Días estimados = dueDate - startedDate. Solo se calcula si hay dueDate.
+ * El campo legacy `estimatedDays` del template ya NO se usa como fuente.
  */
 export function getEstimatedDays(task) {
-  if (!task) return null;
-  if (task.dueDate) {
-    const ref = task.startedDate || today();
-    const d = daysBetween(ref, task.dueDate);
-    if (d !== null && d >= 0) return d;
-  }
-  if (typeof task.estimatedDays === 'number' && task.estimatedDays > 0) return task.estimatedDays;
+  if (!task || !task.dueDate) return null;
+  const ref = task.startedDate || today();
+  const d = daysBetween(ref, task.dueDate);
+  if (d !== null && d >= 0) return d;
   return null;
 }
 

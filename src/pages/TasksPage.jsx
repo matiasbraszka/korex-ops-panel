@@ -228,22 +228,17 @@ export default function TasksPage({ embedded = false }) {
 
     const client = clients.find(x => x.id === t.clientId);
 
-    // Phase display for roadmap tasks
-    const phaseInfo = t.phase ? PHASES[t.phase] : null;
+    // Phase display — usa overrides del cliente para que los renames del Roadmap se reflejen
+    const clientAllPhases = client ? getAllPhases(client) : PHASES;
+    const phaseInfo = t.phase ? clientAllPhases[t.phase] : null;
 
     const stepDropdownItems = [
       { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null, phase: null }) },
       { divider: true, label: 'Fases', color: '#9CA3AF' },
     ];
-    Object.entries(PHASES).forEach(([key, ph]) => {
+    Object.entries(clientAllPhases).forEach(([key, ph]) => {
       stepDropdownItems.push({ label: ph.label, onClick: () => updateTask(t.id, { phase: key, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: ph.color });
     });
-    const customPhases = client?.customPhases || [];
-    if (customPhases.length > 0) {
-      customPhases.forEach(cp => {
-        stepDropdownItems.push({ label: cp.label, onClick: () => updateTask(t.id, { phase: cp.id, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: cp.color });
-      });
-    }
 
     const isHighlighted = highlightTaskId === t.id;
     return (
@@ -284,13 +279,14 @@ export default function TasksPage({ embedded = false }) {
             items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
-          {/* Title */}
-          <div className="min-w-0 flex flex-col gap-0.5">
-            <div className="flex items-center gap-1.5">
-              {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
+          {/* Title (with wrapping title + separate badge row below) */}
+          <div className="min-w-0 flex flex-col gap-1">
+            {/* Title line: icon bloqueada + titulo */}
+            <div className="flex items-start gap-1.5 min-w-0">
+              {blocked && <span className="shrink-0 mt-[2px]" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
               {editingTaskId === t.id ? (
                 <input
-                  className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 bg-white"
+                  className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
                   value={editTitleVal}
                   onChange={(e) => setEditTitleVal(e.target.value)}
                   onBlur={() => saveEditTitle(t.id)}
@@ -299,18 +295,26 @@ export default function TasksPage({ embedded = false }) {
                   autoFocus
                 />
               ) : (
-                <span className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 hover:bg-surface2 leading-tight" onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}>{t.title}</span>
+                <span
+                  className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 min-w-0 hover:bg-surface2 leading-tight break-words"
+                  onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
+                >
+                  {t.title}
+                </span>
               )}
+            </div>
+            {/* Badges row: tiempo + fecha + hasDesc + botones */}
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {(() => {
                 const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
                 const elapsed = getElapsedDays(t, clientTasks);
                 if (elapsed <= 0) return null;
-                const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
+                const est = getEstimatedDays(t); // solo si hay dueDate
                 const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
                 const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
                 return (
                   <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>
-                    {'\u23F1'} {elapsed}d{est ? ` / ${est}d` : ''}
+                    {'\u23F1'} {elapsed}d{est !== null ? ` / ${est}d` : ''}
                   </span>
                 );
               })()}
@@ -319,9 +323,9 @@ export default function TasksPage({ embedded = false }) {
                   {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
                 </span>
               )}
-              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" />}
-              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
-              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" title="Tiene descripci\u00f3n" />}
+              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100 shrink-0" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
+              <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg shrink-0" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
             </div>
             {blocked && blockingNames.length > 0 && (
               <div className="text-[10px] text-red-500 pl-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
@@ -484,10 +488,10 @@ export default function TasksPage({ embedded = false }) {
                       const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
                       const elapsed = getElapsedDays(t, clientTasks);
                       if (elapsed <= 0) return null;
-                      const est = t.estimatedDays || (t.stepIdx !== null && t.stepIdx < PROCESS_STEPS.length ? PROCESS_STEPS[t.stepIdx].days : null);
+                      const est = getEstimatedDays(t);
                       const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
                       const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
-                      return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est ? `/${est}d` : ''}</span>;
+                      return <span className="text-[9px] font-semibold py-[1px] px-1.5 rounded" style={{ color, background: bg }}>{'\u23F1'} {elapsed}d{est !== null ? `/${est}d` : ''}</span>;
                     })()}
                     {(() => {
                       const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -579,14 +583,19 @@ export default function TasksPage({ embedded = false }) {
                 {isOverdue && <span className="text-red text-[10px] font-semibold">Vencida</span>}
               </div>
               <div className="inline-flex items-center gap-1 text-[11px]">
-                <span className="text-text3">{'\u23F1'} Estimado:</span>
+                <span className="text-text3">{'\u23F1'}</span>
                 <span className="text-text2 font-semibold">
                   {(() => {
-                    if (t.status === 'blocked' || blocked) return 'se calcula al desbloquear';
+                    if (t.status === 'blocked' || blocked) return 'bloqueada \u2014 sin fecha de inicio';
                     const est = getEstimatedDays(t);
-                    if (est === null) return t.dueDate ? '\u2014' : 'pon\u00e9 una fecha de entrega';
-                    if (t.startedDate) return `${est} d\u00edas (habilitada ${fmtDate(t.startedDate)})`;
-                    return est + ' d\u00edas';
+                    const clientTs = tasks.filter(ct => ct.clientId === t.clientId);
+                    const elapsed = getElapsedDays(t, clientTs);
+                    if (est === null) {
+                      // Sin dueDate: solo mostrar tiempo activa
+                      if (t.startedDate) return `lleva ${elapsed}d activa \u00b7 sin fecha de entrega`;
+                      return 'sin fecha de entrega';
+                    }
+                    return `${elapsed}d / ${est}d estimados${t.startedDate ? ' (habilitada ' + fmtDate(t.startedDate) + ')' : ''}`;
                   })()}
                 </span>
               </div>
