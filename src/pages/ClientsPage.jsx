@@ -183,9 +183,17 @@ export default function ClientsPage() {
               className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-[10px] mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_1.5fr_110px_60px_120px_90px_28px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
               onClick={() => setSelectedId(c.id)}
             >
-              <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-[11px] max-md:w-[30px] max-md:h-[30px] max-md:text-[10px]" style={{ background: c.color + '15', color: c.color }}>
-                {initials(c.name)}
-              </div>
+              {c.avatarUrl ? (
+                <img
+                  src={c.avatarUrl}
+                  alt={c.name}
+                  className="w-[34px] h-[34px] rounded-full object-cover max-md:w-[30px] max-md:h-[30px]"
+                />
+              ) : (
+                <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-[11px] max-md:w-[30px] max-md:h-[30px] max-md:text-[10px]" style={{ background: c.color + '15', color: c.color }}>
+                  {initials(c.name)}
+                </div>
+              )}
               <div className="min-w-0">
                 <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
                   <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span> {adsBadge}

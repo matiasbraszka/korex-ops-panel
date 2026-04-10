@@ -989,7 +989,11 @@ export default function ClientDetail({ client: c }) {
       {/* Hero */}
       <div className="bg-white border border-border rounded-[14px] p-6 mb-5 max-md:p-4 max-md:rounded-[10px] max-md:mb-3">
         <div className="flex items-start gap-4 max-md:gap-3">
-          <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center font-extrabold text-xl shrink-0 max-md:w-[40px] max-md:h-[40px] max-md:text-base" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
+          {c.avatarUrl ? (
+            <img src={c.avatarUrl} alt={c.name} className="w-[52px] h-[52px] rounded-full object-cover shrink-0 max-md:w-[40px] max-md:h-[40px]" />
+          ) : (
+            <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center font-extrabold text-xl shrink-0 max-md:w-[40px] max-md:h-[40px] max-md:text-base" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <div className="text-xl font-extrabold tracking-tight max-md:text-[17px]">{c.name}</div>
