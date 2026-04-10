@@ -155,7 +155,11 @@ export default function FeedbackPage() {
           <div key={i} className="bg-white border border-border rounded-[10px] p-4 mb-2.5 group max-md:p-3">
             {/* Header */}
             <div className="flex items-center gap-2 mb-2.5 max-md:flex-wrap max-md:gap-1.5">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold cursor-pointer shrink-0" style={{ background: c.color + '15', color: c.color }} onClick={() => openClient(c.id)}>{initials(c.name)}</div>
+              {c.avatarUrl ? (
+                <img src={c.avatarUrl} alt={c.name} className="w-7 h-7 rounded-full object-cover cursor-pointer shrink-0" onClick={() => openClient(c.id)} />
+              ) : (
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold cursor-pointer shrink-0" style={{ background: c.color + '15', color: c.color }} onClick={() => openClient(c.id)}>{initials(c.name)}</div>
+              )}
               <div className="font-semibold text-[13px] cursor-pointer hover:text-blue" onClick={() => openClient(c.id)}>{c.name}</div>
               <span className="py-[2px] px-2 rounded-full text-[10px] font-bold" style={{ background: srcCfg.bg, color: srcCfg.color }}>{srcCfg.label}</span>
               {(f.priority === 'urgent' || f.priority === 'high') && <span className="text-[10px] font-semibold" style={{ color: prio.color }}>{prio.flag} {prio.label}</span>}

@@ -54,7 +54,11 @@ export default function PublicidadPage() {
               return (
                 <div key={c.id} className="bg-white border border-border rounded-[10px] py-4 px-[18px] cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:py-3 max-md:px-3" onClick={() => openClient(c.id)}>
                   <div className="flex items-center gap-2.5 mb-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px]" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
+                    {c.avatarUrl ? (
+                      <img src={c.avatarUrl} alt={c.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
+                    )}
                     <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate">{c.name}</div><div className="text-[11px] text-text3 truncate">{c.company}</div></div>
                     <span className="inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold bg-green-bg text-[#16A34A] shrink-0">{'\u25CF'} Activa</span>
                   </div>
