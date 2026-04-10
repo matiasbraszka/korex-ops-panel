@@ -175,16 +175,21 @@ export default function TimelineView() {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg overflow-x-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 max-md:p-3 max-md:rounded-lg">
       {ganttEntries.length === 0 && unscheduledPhases.length === 0 ? (
         <div className="text-center text-gray-400 text-sm py-8">
           No hay fases con deadlines asignadas. Asignales fecha desde la vista Roadmap.
         </div>
       ) : (
         <>
-          {/* Desktop Gantt — week columns */}
+          {/* Hint for mobile horizontal scroll */}
+          <div className="md:hidden text-[10px] text-gray-400 mb-2 flex items-center gap-1">
+            {'\u2190'} Desliz\u00e1 para ver m\u00e1s {'\u2192'}
+          </div>
+
+          {/* Gantt — week columns, scrollable on all viewports */}
           {ganttEntries.length > 0 && (
-            <div className="hidden md:block overflow-x-auto">
+            <div className="overflow-x-auto -mx-5 max-md:-mx-3 px-5 max-md:px-3">
               <div style={{ minWidth: labelWidth + weekColumns.length * weekWidth }}>
                 {/* Week header */}
                 <div className="flex" style={{ marginLeft: labelWidth }}>
@@ -353,27 +358,6 @@ export default function TimelineView() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Mobile: compact list */}
-          {ganttEntries.length > 0 && (
-            <div className="md:hidden space-y-1">
-              {ganttEntries.map((e, i) => (
-                <div key={i} className={`flex items-center gap-2 py-2 px-2.5 rounded-lg text-[11px] ${e.isOverdue ? 'bg-red-50' : 'bg-gray-50'}`}>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.isOverdue ? '#EF4444' : e.phInfo.color }} />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-semibold text-gray-700">{e.client.name}</span>
-                    <span className="text-gray-400 ml-1">{e.phInfo.label}</span>
-                  </div>
-                  <div className="shrink-0 flex items-center gap-1.5">
-                    <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${e.progress}%`, background: e.isOverdue ? '#EF4444' : e.phInfo.color }} /></div>
-                    <span className={`font-medium text-[10px] ${e.isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
-                      {fmtDate(e.deadline)}
-                    </span>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
 
