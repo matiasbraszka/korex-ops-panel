@@ -184,12 +184,15 @@ export default function TimelineView() {
         <>
           {/* Hint for mobile horizontal scroll */}
           <div className="md:hidden text-[10px] text-gray-400 mb-2 flex items-center gap-1">
-            {'\u2190'} Desliz\u00e1 para ver m\u00e1s {'\u2192'}
+            {'\u2190'} Desliz\u00e1 horizontalmente para ver m\u00e1s semanas {'\u2192'}
           </div>
 
           {/* Gantt — week columns, scrollable on all viewports */}
           {ganttEntries.length > 0 && (
-            <div className="overflow-x-auto -mx-5 max-md:-mx-3 px-5 max-md:px-3">
+            <div
+              className="timeline-scroll overflow-x-auto -mx-5 max-md:-mx-3 px-5 max-md:px-3"
+              style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
+            >
               <div style={{ minWidth: labelWidth + weekColumns.length * weekWidth }}>
                 {/* Week header */}
                 <div className="flex" style={{ marginLeft: labelWidth }}>
