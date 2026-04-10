@@ -143,10 +143,16 @@ export default function TimelineView({ onGoToTaskList }) {
   const totalTimelineEnd = weekColumns[weekColumns.length - 1].endIso;
   const totalDays = Math.round((new Date(totalTimelineEnd) - new Date(totalTimelineStart)) / 864e5);
 
+  // Cada dia = 1/7 del ancho de semana. Usar esta formula uniforme para que las
+  // posiciones de las barras y la linea HOY caigan exactamente en las celdas
+  // de los dias mostrados en el header.
+  const dayPx = weekWidth / 7;
   const dateToPx = (dateStr) => {
     const d = Math.round((new Date(dateStr) - new Date(totalTimelineStart)) / 864e5);
-    return Math.max(0, Math.min(d / totalDays * weekColumns.length * weekWidth, weekColumns.length * weekWidth));
+    return Math.max(0, Math.min(d * dayPx, weekColumns.length * weekWidth));
   };
+  // Posicion del centro de la celda de HOY (para la linea vertical)
+  const todayCenterPx = dateToPx(now) + dayPx / 2;
 
   const resolveMembers = (assigneeStr) => {
     if (!assigneeStr) return [];
@@ -216,36 +222,34 @@ export default function TimelineView({ onGoToTaskList }) {
             >
               <div style={{ minWidth: labelWidth + weekColumns.length * weekWidth, position: 'relative' }}>
                 {/* Week header */}
-                <div className="flex relative" style={{ marginLeft: labelWidth }}>
+                <div className="flex" style={{ marginLeft: labelWidth }}>
                   {weekColumns.map((w, i) => (
                     <div key={i} className={`shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-red-500 bg-red-50/40' : 'border-gray-200'}`} style={{ width: weekWidth }}>
                       <div className="text-center">
                         <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
                         <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum + '\u2013' + w.endNum}</div>
                       </div>
-                      {/* D\u00edas individuales */}
-                      <div className="flex mt-0.5">
+                      {/* D\u00edas individuales con HOY anclado a la celda del dia actual */}
+                      <div className="flex mt-1 relative">
                         {w.days.map((d, di) => (
-                          <div key={di} className={`flex-1 text-[7px] text-center leading-none ${d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}`}>
-                            {d.num}
+                          <div key={di} className="flex-1 text-[7px] text-center leading-none relative">
+                            {d.isToday && (
+                              <span className="absolute left-1/2 -translate-x-1/2 -top-[10px] text-[7px] font-bold text-white bg-red-500 rounded px-1 leading-[10px] shadow-sm whitespace-nowrap z-10">
+                                HOY
+                              </span>
+                            )}
+                            <span className={d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}>{d.num}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   ))}
-                  {/* HOY label arriba de la l\u00ednea vertical */}
-                  <div
-                    className="absolute pointer-events-none flex flex-col items-center"
-                    style={{ left: dateToPx(now) - 14, top: -4, zIndex: 10 }}
-                  >
-                    <span className="text-[8px] font-bold text-white bg-red-500 rounded px-1 leading-[11px] tracking-wide shadow-sm">HOY</span>
-                  </div>
                 </div>
-                {/* L\u00ednea vertical "HOY" que cruza todas las filas */}
+                {/* L\u00ednea vertical "HOY" centrada en la celda del dia actual */}
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    left: labelWidth + dateToPx(now) - 1,
+                    left: labelWidth + todayCenterPx - 1,
                     top: 36,
                     bottom: 0,
                     width: 2,

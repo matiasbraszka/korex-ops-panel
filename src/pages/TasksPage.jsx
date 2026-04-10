@@ -247,7 +247,7 @@ export default function TasksPage({ embedded = false }) {
         {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
         <div
-          className={`hidden md:grid gap-2 py-2 px-4 items-center text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`}
+          className={`hidden md:grid gap-2 py-2 px-4 items-start text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`}
           style={{ gridTemplateColumns: '20px 28px 1fr 110px 50px 30px' }}
           onDragOver={(e) => handleDragOver(e, t, sortedGroup)}
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
@@ -279,10 +279,10 @@ export default function TasksPage({ embedded = false }) {
             items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
-          {/* Title row: all inline, title truncates when there's no space */}
+          {/* Title row: titulo wrappea + badges agrupados a la derecha */}
           <div className="min-w-0 flex flex-col gap-0.5">
-            <div className="flex items-center gap-1.5 min-w-0">
-              {blocked && <span className="shrink-0" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
+            <div className="flex items-start gap-1.5 min-w-0">
+              {blocked && <span className="shrink-0 mt-[1px]" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
               {editingTaskId === t.id ? (
                 <input
                   className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
@@ -295,34 +295,33 @@ export default function TasksPage({ embedded = false }) {
                 />
               ) : (
                 <span
-                  className="cursor-text py-[2px] px-1 rounded-[3px] min-w-0 truncate hover:bg-surface2 leading-tight"
-                  style={{ flex: '0 1 auto' }}
-                  title={t.title}
+                  className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 min-w-0 break-words hover:bg-surface2 leading-tight"
                   onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
                 >
                   {t.title}
                 </span>
               )}
-              {(() => {
-                const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
-                const elapsed = getElapsedDays(t, clientTasks);
-                if (elapsed <= 0) return null;
-                const est = getEstimatedDays(t); // solo si hay dueDate
-                const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
-                const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
-                return (
-                  <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold shrink-0" style={{ color, background: bg }}>
-                    {'\u23F1'} {elapsed}d{est !== null ? ` / ${est}d` : ''}
+              {/* Badges: cada uno con shrink-0, agrupados en su propio contenedor */}
+              <div className="flex items-center gap-1.5 shrink-0 mt-[1px]">
+                {(() => {
+                  const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
+                  const elapsed = getElapsedDays(t, clientTasks);
+                  if (elapsed <= 0) return null;
+                  const est = getEstimatedDays(t);
+                  const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
+                  const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
+                  return (
+                    <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold" style={{ color, background: bg }}>
+                      {'\u23F1'} {elapsed}d{est !== null ? ` / ${est}d` : ''}
+                    </span>
+                  );
+                })()}
+                {t.dueDate && (
+                  <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>
+                    {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
                   </span>
-                );
-              })()}
-              {t.dueDate && (
-                <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium shrink-0 ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>
-                  {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
-                </span>
-              )}
-              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0 ml-0.5" title="Tiene descripci\u00f3n" />}
-              <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                )}
+                {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue" title="Tiene descripci\u00f3n" />}
                 <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
                 <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
               </div>
@@ -452,7 +451,13 @@ export default function TasksPage({ embedded = false }) {
                         autoFocus
                       />
                     ) : (
-                      <span className="text-[13px] font-medium text-text leading-tight break-words">{t.title}</span>
+                      <span
+                        className="text-[13px] font-medium text-text leading-tight break-words cursor-text flex-1"
+                        onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
+                        title="Tocar para editar"
+                      >
+                        {t.title}
+                      </span>
                     )}
                     {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue shrink-0" />}
                   </div>
@@ -553,7 +558,16 @@ export default function TasksPage({ embedded = false }) {
                     <div className="text-[10px] text-red-500 mt-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
                   )}
                 </div>
-                <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 shrink-0" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <button
+                    className="bg-transparent border-none text-text3 cursor-pointer text-[10px] p-1"
+                    onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] })); }}
+                    title={isExpanded ? 'Colapsar' : 'Expandir'}
+                  >
+                    {isExpanded ? '\u25B2' : '\u25BC'}
+                  </button>
+                  <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
+                </div>
               </div>
             </div>
           );
