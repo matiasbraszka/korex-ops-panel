@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { LayoutDashboard, Users, ClipboardList, FileText } from 'lucide-react';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
@@ -75,10 +76,10 @@ function MainLayout() {
   const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '\u25A6' },
-    { id: 'clients',   label: 'Clientes',  icon: '\u2637' },
-    { id: 'tasks',     label: 'Tareas',    icon: '\u2611' },
-    { id: 'informe',   label: 'Informe',   icon: '\u2709' },
+    { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+    { id: 'clients',   label: 'Clientes',  Icon: Users },
+    { id: 'tasks',     label: 'Tareas',    Icon: ClipboardList },
+    { id: 'informe',   label: 'Informe',   Icon: FileText },
   ];
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
@@ -137,7 +138,7 @@ function MainLayout() {
               className={`flex items-center gap-2.5 py-2 px-3 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all duration-150
                 ${view === item.id ? 'text-blue bg-blue-bg font-semibold' : 'text-text2 bg-transparent hover:text-text hover:bg-surface2'}`}
             >
-              <span className="text-base w-5 text-center">{item.icon}</span>
+              <item.Icon size={17} strokeWidth={view === item.id ? 2.25 : 1.75} className="shrink-0" />
               {item.label}
               {item.id === 'tasks' && urgentCount > 0 && (
                 <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-[10px] min-w-[18px] text-center">{urgentCount}</span>
@@ -179,7 +180,7 @@ function MainLayout() {
             className={`flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1
               ${view === item.id ? 'text-blue bg-blue-bg' : 'text-text3 bg-transparent'}`}
           >
-            <span className="text-[18px] leading-none">{item.icon}</span>
+            <item.Icon size={18} strokeWidth={view === item.id ? 2.25 : 1.75} className="shrink-0" />
             <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
             {item.id === 'tasks' && urgentCount > 0 && (
               <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{urgentCount}</span>

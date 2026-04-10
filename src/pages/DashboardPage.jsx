@@ -4,7 +4,13 @@ import { daysBetween, daysAgo, today } from '../utils/helpers';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function DashboardPage() {
-  const { clients, tasks, dashboardAlerts, dismissAlert } = useApp();
+  const { clients, tasks, dashboardAlerts, dismissAlert, setView, setTaskClientFilter } = useApp();
+
+  // Navigate to Tareas view filtered by a specific client
+  const goToTaskClient = (clientId) => {
+    setTaskClientFilter(clientId || 'all');
+    setView('tasks');
+  };
 
   const now = today();
   const monthStart = now.substring(0, 7) + '-01';
@@ -48,7 +54,6 @@ export default function DashboardPage() {
   })();
 
   const kpis = [
-    { label: 'Clientes activos',   value: activeClients.length,  color: '#5B7CF5' },
     { label: 'Tareas pendientes',  value: pendingTasks.length,   color: '#EAB308' },
     { label: 'Tareas en progreso', value: inProgressTasks.length, color: '#22C55E' },
     { label: 'Tareas bloqueadas',  value: blockedTasks.length,   color: '#EF4444' },
@@ -126,7 +131,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5 overflow-x-hidden">
       {/* 1. KPI summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {kpis.map((k, i) => (
           <div
             key={i}
@@ -203,7 +208,12 @@ export default function DashboardPage() {
                   .map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name))
                   .filter(Boolean);
                 return (
-                  <div key={idx} className="flex items-center gap-2 py-2 px-5 border-b border-gray-50 last:border-b-0 text-xs max-md:px-3 max-md:flex-wrap">
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 py-2 px-5 border-b border-gray-50 last:border-b-0 text-xs max-md:px-3 max-md:flex-wrap cursor-pointer hover:bg-orange-50/40 transition-colors"
+                    onClick={() => goToTaskClient(item.client?.id)}
+                    title={`Abrir en Tareas: ${item.client?.name || ''}`}
+                  >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-gray-800">{item.client?.name || '?'}</span>
@@ -219,6 +229,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                     <span className="text-[11px] font-bold shrink-0 text-orange-500">+{item.daysOver}d</span>
+                    <span className="text-[11px] text-gray-300 shrink-0 group-hover:text-orange-400">{'\u2192'}</span>
                   </div>
                 );
               })}

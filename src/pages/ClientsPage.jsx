@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
+import { Users, Megaphone, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getBottleneck, daysAgo, fmtDate, clientPill } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
 import PublicidadPage from './PublicidadPage';
+import FeedbackPage from './FeedbackPage';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
+const VALID_TABS = ['lista', 'publicidad', 'feedback'];
 
 export default function ClientsPage() {
   const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals } = useApp();
@@ -14,7 +17,7 @@ export default function ClientsPage() {
   const [tab, setTab] = useState(() => {
     try {
       const saved = localStorage.getItem(CLIENTS_TAB_KEY);
-      return saved === 'publicidad' ? 'publicidad' : 'lista';
+      return VALID_TABS.includes(saved) ? saved : 'lista';
     } catch { return 'lista'; }
   });
   useEffect(() => {
@@ -85,30 +88,31 @@ export default function ClientsPage() {
         <div className="mt-2 text-[11px] text-blue font-semibold">Ver informe completo &rarr;</div>
       </div>
 
-      {/* Tabs: Lista / Publicidad */}
+      {/* Tabs: Lista / Publicidad / Feedback */}
       <div className="inline-flex items-center p-1 bg-gray-100 rounded-lg gap-0.5 mb-4 max-md:w-full">
-        <button
-          onClick={() => setTab('lista')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[12px] font-semibold font-sans transition-all max-md:flex-1 max-md:justify-center ${
-            tab === 'lista' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <span className="text-[11px]">{'\u2637'}</span>
-          Lista
-        </button>
-        <button
-          onClick={() => setTab('publicidad')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[12px] font-semibold font-sans transition-all max-md:flex-1 max-md:justify-center ${
-            tab === 'publicidad' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <span className="text-[11px]">{'\uD83D\uDCE3'}</span>
-          Publicidad
-        </button>
+        {[
+          { id: 'lista',      label: 'Lista',      Icon: Users },
+          { id: 'publicidad', label: 'Publicidad', Icon: Megaphone },
+          { id: 'feedback',   label: 'Feedback',   Icon: MessageSquare },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[12px] font-semibold font-sans transition-all max-md:flex-1 max-md:justify-center ${
+              tab === t.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <t.Icon size={14} strokeWidth={tab === t.id ? 2.25 : 1.75} className="shrink-0" />
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* Publicidad tab — embed full PublicidadPage */}
       {tab === 'publicidad' && <PublicidadPage />}
+
+      {/* Feedback tab — embed full FeedbackPage */}
+      {tab === 'feedback' && <FeedbackPage />}
 
       {/* Lista tab — KPIs + filters + client list */}
       {tab === 'lista' && (<>
