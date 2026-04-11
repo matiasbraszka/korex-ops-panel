@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { sbFetch } from '../utils/supabase';
-import { USERS, CLIENT_ADS_DATA } from '../utils/constants';
+import { USERS, CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled } from '../utils/helpers';
 
 const AppContext = createContext(null);
@@ -33,6 +33,9 @@ export function AppProvider({ children }) {
   const [hideBlockedTasks, setHideBlockedTasks] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [syncStatus, setSyncStatus] = useState('ok');
+  // Settings panel state (cargado desde Supabase)
+  const [appSettings, setAppSettings] = useState(null); // { roadmap_template, services, priority_labels }
+  const [teamMembers, setTeamMembers] = useState([]); // [{ id, name, role, ... }]
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -88,6 +91,7 @@ export function AppProvider({ children }) {
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
         phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
         template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+        days_from_unblock: t.daysFromUnblock != null ? t.daysFromUnblock : null,
         due_date: t.dueDate || null,
         accumulated_days: t.accumulatedDays || 0,
         timer_started_at: t.timerStartedAt || null,
@@ -131,6 +135,7 @@ export function AppProvider({ children }) {
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
         phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
         template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+        days_from_unblock: t.daysFromUnblock != null ? t.daysFromUnblock : null,
         due_date: t.dueDate || null,
         accumulated_days: t.accumulatedDays || 0,
         timer_started_at: t.timerStartedAt || null,
@@ -177,8 +182,25 @@ export function AppProvider({ children }) {
     const newClients = [...clientsRef.current, c];
     const injected = injectMetaMetrics(newClients);
     setClients(injected);
-    // Create default roadmap tasks for the new client
-    const defaultTasks = createDefaultTasks(c.id);
+    // Create default roadmap tasks for the new client (template viene de app_settings)
+    const tplFromSettings = appSettings?.roadmap_template;
+    const defaultTasks = createDefaultTasks(c.id, tplFromSettings);
+    // Sembrar deadlines de fases si el template tiene daysFromUnblock por fase
+    const phaseList = tplFromSettings?.phases || [];
+    if (phaseList.some(p => p.daysFromUnblock != null && p.daysFromUnblock >= 0)) {
+      const seededDeadlines = { ...(c.phaseDeadlines || {}) };
+      // Calculo el deadline de fase = today + dias (solo para fases que tienen dias)
+      // Lo dejo asi simple; despues recomputeStartedDates puede afinar por fase si hace falta.
+      phaseList.forEach(p => {
+        if (p.daysFromUnblock != null && p.daysFromUnblock >= 0 && !seededDeadlines[p.id]) {
+          const dt = new Date();
+          dt.setDate(dt.getDate() + Number(p.daysFromUnblock));
+          const pad = (x) => String(x).padStart(2, '0');
+          seededDeadlines[p.id] = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+        }
+      });
+      c.phaseDeadlines = seededDeadlines;
+    }
     let newTasks = [...tasksRef.current, ...defaultTasks];
     const result = recalculateTimers(c.id, newTasks);
     newTasks = result.tasks;
@@ -194,7 +216,7 @@ export function AppProvider({ children }) {
     }
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics]);
+  }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics, appSettings]);
 
   const updateClient = useCallback((id, updates) => {
     setClients(prev => {
@@ -205,6 +227,25 @@ export function AppProvider({ children }) {
       return newClients;
     });
   }, [save, dbSaveClient]);
+
+  // Borra un cliente y TODAS sus tareas (incluido fases custom y deadlines).
+  // Operacion irreversible. Persiste en Supabase y limpia el state local.
+  const deleteClient = useCallback(async (id) => {
+    const clientTasks = tasksRef.current.filter(t => t.clientId === id);
+    // 1) Borrar tareas en DB (en paralelo)
+    if (dbReady.current) {
+      await Promise.all([
+        ...clientTasks.map(t => sbFetch('tasks?id=eq.' + encodeURIComponent(t.id), { method: 'DELETE' })),
+        sbFetch('clients?id=eq.' + encodeURIComponent(id), { method: 'DELETE' }),
+      ]).catch(e => console.warn('deleteClient error', e));
+    }
+    // 2) Limpiar state local
+    const newClients = clientsRef.current.filter(c => c.id !== id);
+    const newTasks = tasksRef.current.filter(t => t.clientId !== id);
+    setClients(newClients);
+    setTasks(newTasks);
+    save(newClients, newTasks);
+  }, [save]);
 
   // ── Timer recalculation (must be before CRUD) ──
   const recalculateTimers = useCallback((clientId, taskList) => {
@@ -332,10 +373,33 @@ export function AppProvider({ children }) {
   }, [save, dbSaveTask]);
 
   // ── Auth ──
-  const doLogin = useCallback((username, password) => {
+  // Mapea una fila team_members al shape interno de currentUser.
+  const tmRowToUser = (row) => ({
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    color: row.color || '#5B7CF5',
+    initials: row.initials || row.name?.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase() || '',
+    avatar: row.avatar_url || row.avatarUrl || '',
+    pass: row.password,
+    canAccessSettings: !!row.can_access_settings,
+  });
+
+  const doLogin = useCallback(async (username, password) => {
     const u = username.trim().toLowerCase().replace(/@.*$/, '');
+    // 1) Intentar contra la tabla team_members
+    try {
+      const rows = await sbFetch('team_members?id=eq.' + encodeURIComponent(u) + '&select=*', { headers: { 'Prefer': 'return=representation' } });
+      if (rows && rows.length > 0 && rows[0].password === password) {
+        const user = tmRowToUser(rows[0]);
+        setCurrentUser(user);
+        localStorage.setItem('korex_user', u);
+        return true;
+      }
+    } catch (e) { /* fallback abajo */ }
+    // 2) Fallback al USERS hardcoded de constants.js
     if (USERS[u] && USERS[u].pass === password) {
-      const user = { ...USERS[u], id: u };
+      const user = { ...USERS[u], id: u, canAccessSettings: u === 'matias' };
       setCurrentUser(user);
       localStorage.setItem('korex_user', u);
       return true;
@@ -348,6 +412,68 @@ export function AppProvider({ children }) {
     setCurrentUser(null);
   }, []);
 
+  // ── CRUD: app_settings (template, services, priority_labels) ──
+  const updateAppSettings = useCallback(async (partial) => {
+    setAppSettings(prev => {
+      const merged = { ...(prev || {}), ...partial };
+      // Persistir en background
+      sbFetch('app_settings?key=eq.global', {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ value: merged, updated_at: new Date().toISOString() })
+      }).catch(e => console.warn('updateAppSettings error', e));
+      return merged;
+    });
+  }, []);
+
+  // ── CRUD: team_members ──
+  const addTeamMember = useCallback(async (member) => {
+    // member: { id, name, role, color, initials, avatar_url, password, can_access_settings, position }
+    const row = {
+      id: member.id,
+      name: member.name,
+      role: member.role || '',
+      color: member.color || '#5B7CF5',
+      initials: member.initials || '',
+      avatar_url: member.avatar_url || member.avatarUrl || null,
+      password: member.password || 'korex2026',
+      can_access_settings: !!member.can_access_settings,
+      position: member.position ?? 999,
+    };
+    await sbFetch('team_members', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+      body: JSON.stringify(row)
+    });
+    setTeamMembers(prev => [...prev, row]);
+  }, []);
+
+  const updateTeamMember = useCallback(async (id, fields) => {
+    // Mapear camelCase → snake_case
+    const dbFields = {};
+    if (fields.name !== undefined) dbFields.name = fields.name;
+    if (fields.role !== undefined) dbFields.role = fields.role;
+    if (fields.color !== undefined) dbFields.color = fields.color;
+    if (fields.initials !== undefined) dbFields.initials = fields.initials;
+    if (fields.avatar_url !== undefined || fields.avatarUrl !== undefined) dbFields.avatar_url = fields.avatar_url ?? fields.avatarUrl;
+    if (fields.password !== undefined) dbFields.password = fields.password;
+    if (fields.can_access_settings !== undefined || fields.canAccessSettings !== undefined) {
+      dbFields.can_access_settings = fields.can_access_settings ?? fields.canAccessSettings;
+    }
+    if (fields.position !== undefined) dbFields.position = fields.position;
+    await sbFetch('team_members?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(dbFields)
+    });
+    setTeamMembers(prev => prev.map(m => m.id === id ? { ...m, ...dbFields } : m));
+  }, []);
+
+  const deleteTeamMember = useCallback(async (id) => {
+    await sbFetch('team_members?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setTeamMembers(prev => prev.filter(m => m.id !== id));
+  }, []);
+
   // ── Normalize client priority (new 6-level scale) ──
   // 1: SUPER PRIORITARIO, 2: IMPORTANTES, 3: NORMAL, 4: POCO IMPORTANTES, 5: NUEVOS, 6: DESCARTADOS
   const normalizePriority = (p) => {
@@ -358,19 +484,23 @@ export function AppProvider({ children }) {
   // ── Load from Supabase ──
   const loadFromSupabase = useCallback(async () => {
     try {
-      const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts] = await Promise.all([
+      const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
         sbFetch('clients?select=*&order=priority.asc', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('tasks?select=*&order=created_at.asc', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('briefings?id=eq.latest&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('report_feedback?select=*&order=created_at.desc&limit=20', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('task_proposals?select=*&order=created_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('dashboard_alerts?select=*&dismissed=eq.false&order=days_old.desc', { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch('app_settings?key=eq.global&select=*', { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch('team_members?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } }),
       ]);
 
       if (briefings && briefings.length) setBriefing(briefings[0]);
       if (feedbacks && feedbacks.length) setReportFeedbacks(feedbacks);
       if (proposals && proposals.length) setTaskProposals(proposals);
       if (alerts) setDashboardAlerts(alerts);
+      if (sbSettings && sbSettings.length > 0) setAppSettings(sbSettings[0].value || null);
+      if (sbTeam && sbTeam.length > 0) setTeamMembers(sbTeam);
 
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
@@ -394,6 +524,7 @@ export function AppProvider({ children }) {
           startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
           phase: t.phase || null, dependsOn: t.depends_on || null, isRoadmapTask: t.is_roadmap_task || false,
           templateId: t.template_id || null, estimatedDays: t.estimated_days || null, isClientTask: t.is_client_task || false,
+          daysFromUnblock: t.days_from_unblock != null ? Number(t.days_from_unblock) : null,
           dueDate: t.due_date || null,
           accumulatedDays: t.accumulated_days || 0,
           timerStartedAt: t.timer_started_at || null,
@@ -575,10 +706,29 @@ export function AppProvider({ children }) {
     setClients(injected);
     setTasks(localTasks);
 
-    // Restore user session
+    // Restore user session: primero set rapido del fallback hardcoded,
+    // despues sobreescribir con datos de la tabla cuando lleguen
     const u = localStorage.getItem('korex_user');
     if (u && USERS[u]) {
-      setCurrentUser({ ...USERS[u], id: u });
+      setCurrentUser({ ...USERS[u], id: u, canAccessSettings: u === 'matias' });
+      // Hidratar canAccessSettings desde la tabla en background
+      sbFetch('team_members?id=eq.' + encodeURIComponent(u) + '&select=*', { headers: { 'Prefer': 'return=representation' } })
+        .then(rows => {
+          if (rows && rows.length > 0) {
+            const r = rows[0];
+            setCurrentUser({
+              id: r.id,
+              name: r.name,
+              role: r.role,
+              color: r.color || '#5B7CF5',
+              initials: r.initials || '',
+              avatar: r.avatar_url || '',
+              pass: r.password,
+              canAccessSettings: !!r.can_access_settings,
+            });
+          }
+        })
+        .catch(() => { /* fallback ya seteado */ });
     }
 
     // 2. Then try Supabase in background
@@ -644,6 +794,7 @@ export function AppProvider({ children }) {
     dbDeleteTask,
     createClient,
     updateClient,
+    deleteClient,
     createTask,
     updateTask,
     deleteTask,
@@ -652,6 +803,23 @@ export function AppProvider({ children }) {
     doLogout,
     injectMetaMetrics,
     recalculateTimers,
+    // Settings panel
+    appSettings,
+    teamMembers,
+    updateAppSettings,
+    addTeamMember,
+    updateTeamMember,
+    deleteTeamMember,
+    // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
+    getPriorityLabel: (p) => {
+      const fromDb = appSettings?.priority_labels?.[String(p)];
+      return fromDb || PRIO_CLIENT[p];
+    },
+    getAllPriorityLabels: () => {
+      const fromDb = appSettings?.priority_labels;
+      if (fromDb && Object.keys(fromDb).length > 0) return fromDb;
+      return PRIO_CLIENT;
+    },
   };
 
   return (

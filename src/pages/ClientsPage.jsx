@@ -12,7 +12,7 @@ const CLIENTS_TAB_KEY = 'clientes_current_tab';
 const VALID_TABS = ['lista', 'publicidad', 'feedback'];
 
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel } = useApp();
 
   const [tab, setTab] = useState(() => {
     try {
@@ -152,7 +152,7 @@ export default function ClientsPage() {
       )}
       {cls.map(c => {
         const p = c.priority || 5;
-        const pcfg = PRIO_CLIENT[p];
+        const pcfg = getPriorityLabel(p);
         const cur = currentTask(c, tasks);
         const pct = progress(c, tasks);
         const days = daysAgo(c.startDate);

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { PRIO_CLIENT } from '../../utils/constants';
 import ClientRoadmapPanel from './ClientRoadmapPanel';
 
 const EXPANDED_KEY = 'tareas_roadmap_expanded';
@@ -17,6 +16,7 @@ export default function RoadmapView() {
     taskDueFilter,
     hideCompletedTasks,
     hideBlockedTasks,
+    getPriorityLabel,
   } = useApp();
 
   // Expanded state persisted
@@ -107,7 +107,7 @@ export default function RoadmapView() {
       {filteredClients.map(c => {
         const isExpanded = isForceExpanded || !!expanded[c.id];
         const pct = clientProgress(c);
-        const prio = PRIO_CLIENT[c.priority || 5];
+        const prio = getPriorityLabel(c.priority || 5);
         const isCompleted = pct === 100;
         const isKorex = isKorexClient(c);
 

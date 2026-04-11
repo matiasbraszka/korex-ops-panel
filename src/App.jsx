@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, FileText, Settings as SettingsIcon } from 'lucide-react';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
@@ -8,17 +8,18 @@ import PublicidadPage from './pages/PublicidadPage';
 import InformePage from './pages/InformePage';
 import DashboardPage from './pages/DashboardPage';
 import FeedbackPage from './pages/FeedbackPage';
+import SettingsPage from './pages/SettingsPage';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
 
 function LoginPage() {
   const { doLogin } = useApp();
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const form = e.target;
     const user = form.user.value;
     const pass = form.pass.value;
-    const ok = doLogin(user, pass);
+    const ok = await doLogin(user, pass);
     if (!ok) {
       form.querySelector('.login-error').style.display = 'block';
       form.pass.value = '';
@@ -71,16 +72,22 @@ function LoginPage() {
 }
 
 function MainLayout() {
-  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, taskProposals, createClient: ctxCreateClient, briefing } = useApp();
+  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, taskProposals, createClient: ctxCreateClient, briefing, appSettings } = useApp();
   const [newClientModal, setNewClientModal] = useState(false);
-  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
+  const services = appSettings?.services && appSettings.services.length > 0
+    ? appSettings.services
+    : ['Funnel completo + Ads'];
+  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '' });
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
-    { id: 'clients',   label: 'Clientes',  Icon: Users },
-    { id: 'tasks',     label: 'Tareas',    Icon: ClipboardList },
-    { id: 'informe',   label: 'Informe',   Icon: FileText },
+  const allNavItems = [
+    { id: 'dashboard', label: 'Dashboard',     Icon: LayoutDashboard },
+    { id: 'clients',   label: 'Clientes',      Icon: Users },
+    { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList },
+    { id: 'informe',   label: 'Informe',       Icon: FileText },
+    { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, requiresPerm: true },
   ];
+  const canAccessSettings = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
+  const navItems = allNavItems.filter(item => !item.requiresPerm || canAccessSettings);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
   const pendingProposals = taskProposals.filter(p => p.approval === 'pending').length;
@@ -97,6 +104,7 @@ function MainLayout() {
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
     informe: ['Informe Diario', briefing?.date ? 'Último: ' + briefing.date : 'Sin informe aún'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
+    settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
   };
 
   const [title, subtitle] = titles[view] || ['', ''];
@@ -118,6 +126,7 @@ function MainLayout() {
     clients: <ClientsPage />,
     publicidad: <PublicidadPage />,
     tasks: <TareasPage />,
+    settings: <SettingsPage />,
     informe: <InformePage />,
     feedback: <FeedbackPage />,
   };
@@ -251,6 +260,7 @@ function MainLayout() {
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Teléfono</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="+34 612 345 678" value={ncForm.phone} onChange={e => setNcForm(f => ({ ...f, phone: e.target.value }))} /></div>
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Canal de Slack</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="nombre-del-canal" value={ncForm.slackChannel} onChange={e => setNcForm(f => ({ ...f, slackChannel: e.target.value }))} /></div>
         </div>
+        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] cursor-pointer" value={ncForm.service} onChange={e => setNcForm(f => ({ ...f, service: e.target.value }))}>{services.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="URL de la foto (opcional)" value={ncForm.avatarUrl} onChange={e => setNcForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
       </Modal>
     </div>

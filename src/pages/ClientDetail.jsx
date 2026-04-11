@@ -19,7 +19,7 @@ const LINK_CATEGORIES = {
 const LINK_CATEGORY_ORDER = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels } = useApp();
   const [linkModal, setLinkModal] = useState(false);
   const [linkForm, setLinkForm] = useState({ label: '', url: '', category: 'folder' });
   const [editingLinkIdx, setEditingLinkIdx] = useState(null);
@@ -47,8 +47,12 @@ export default function ClientDetail({ client: c }) {
   const [editPhaseValue, setEditPhaseValue] = useState('');
   const [deletePhaseConfirm, setDeletePhaseConfirm] = useState(null);
   const [editingDeadline, setEditingDeadline] = useState(null);
+  const [deleteClientModal, setDeleteClientModal] = useState(false);
+  const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
 
   const dropdownRefs = useRef({});
+
+  const canDeleteClient = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
 
   const clientTasks = tasks.filter(t => t.clientId === c.id);
   const roadmapTasks = getRoadmapTasks(c.id, tasks);
@@ -58,7 +62,7 @@ export default function ClientDetail({ client: c }) {
   const pct = progress(c, tasks);
   const days = daysAgo(c.startDate);
   const p = c.priority || 5;
-  const pcfg = PRIO_CLIENT[p];
+  const pcfg = getPriorityLabel(p);
   const pill = clientPill(c, tasks);
   const bn = getBottleneck(c, tasks);
   const ct = clientTasks.filter(t => t.status !== 'done').length;
@@ -1007,7 +1011,7 @@ export default function ClientDetail({ client: c }) {
                 open={openDropdown === 'client-prio'}
                 onClose={() => setOpenDropdown(null)}
                 anchorRef={getDropdownRef('client-prio')}
-                items={Object.entries(PRIO_CLIENT).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '\u25CF', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
+                items={Object.entries(getAllPriorityLabels()).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '\u25CF', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
               />
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>
@@ -1028,6 +1032,13 @@ export default function ClientDetail({ client: c }) {
           </div>
           <div className="flex gap-2 ml-auto shrink-0">
             <button className="py-1.5 px-2.5 rounded-md border border-border bg-white text-text2 text-xs cursor-pointer font-sans hover:bg-surface2 hover:text-text max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={openEditModal}>Editar</button>
+            {canDeleteClient && (
+              <button
+                className="py-1.5 px-2.5 rounded-md border border-red-200 bg-white text-red-500 text-xs cursor-pointer font-sans hover:bg-red-50 hover:border-red-300 max-md:py-1 max-md:px-2 max-md:text-[11px]"
+                onClick={() => { setDeleteClientConfirmName(''); setDeleteClientModal(true); }}
+                title="Eliminar cliente y todas sus tareas"
+              >Eliminar</button>
+            )}
           </div>
         </div>
 
@@ -1600,6 +1611,44 @@ export default function ClientDetail({ client: c }) {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* Eliminar cliente — modal de confirmacion (escribir nombre) */}
+      <Modal
+        open={deleteClientModal}
+        onClose={() => setDeleteClientModal(false)}
+        title="Eliminar cliente"
+        maxWidth={460}
+        footer={<>
+          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setDeleteClientModal(false)}>Cancelar</button>
+          <button
+            className="py-2 px-4 rounded-md border-none bg-red-500 text-white text-[13px] cursor-pointer font-sans hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={deleteClientConfirmName.trim() !== c.name.trim()}
+            onClick={async () => {
+              await deleteClient(c.id);
+              setDeleteClientModal(false);
+              setSelectedId(null);
+              setView('clients');
+            }}
+          >Eliminar definitivamente</button>
+        </>}
+      >
+        <div className="text-[13px] text-gray-700 leading-relaxed">
+          Esto va a borrar <strong>{c.name}</strong>, todas sus fases, todas sus tareas y todo su historial.
+          La acción <strong>no se puede deshacer</strong>.
+        </div>
+        <div className="mt-3 text-[12px] text-gray-500">
+          Para confirmar, escribí el nombre del cliente exacto:
+        </div>
+        <div className="mt-1 text-[11px] text-gray-400 font-mono bg-gray-50 border border-gray-200 rounded px-2 py-1 inline-block">{c.name}</div>
+        <input
+          type="text"
+          autoFocus
+          value={deleteClientConfirmName}
+          onChange={(e) => setDeleteClientConfirmName(e.target.value)}
+          placeholder="Escribí el nombre del cliente"
+          className="w-full mt-3 border border-gray-300 rounded-md py-2 px-3 text-[13px] font-sans outline-none focus:border-red-400 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.1)]"
+        />
       </Modal>
 
       {/* Link Modal (add / edit) */}
