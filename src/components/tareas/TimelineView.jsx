@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TEAM } from '../../utils/constants';
-import { today, fmtDate, getAllPhases, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
+import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 export default function TimelineView({ onGoToTaskList }) {
@@ -363,6 +363,13 @@ export default function TimelineView({ onGoToTaskList }) {
                                 title={`Deadline: ${ph.deadline}`}
                               >
                                 <div className="w-2.5 h-2.5 rotate-45 group-hover:scale-150 transition-transform" style={{ background: color, border: `1px solid ${color}` }} />
+                              </div>
+                              {/* Etiqueta dia-semana junto al diamante (ej: "Mar 13") */}
+                              <div
+                                className="absolute z-[2] text-[9px] font-semibold pointer-events-none whitespace-nowrap"
+                                style={{ left: dateToPx(ph.deadline) + 8, top: 6, color }}
+                              >
+                                {fmtDayShort(ph.deadline)}
                               </div>
                             </div>
                           </div>

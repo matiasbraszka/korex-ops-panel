@@ -31,6 +31,17 @@ export function fmtDate(d) {
 }
 
 /**
+ * Formato corto dia-semana + numero (ej: "Mar 13" para martes 13).
+ * Pensado para etiquetas compactas en el timeline.
+ */
+export function fmtDayShort(d) {
+  if (!d) return '';
+  const date = new Date(d + 'T12:00:00');
+  const days = ['Dom', 'Lun', 'Mar', 'Mi\u00e9', 'Jue', 'Vie', 'S\u00e1b'];
+  return `${days[date.getDay()]} ${date.getDate()}`;
+}
+
+/**
  * Returns roadmap tasks for a client.
  */
 export function getRoadmapTasks(clientId, tasks) {

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS, TEAM } from '../../utils/constants';
-import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays } from '../../utils/helpers';
+import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
@@ -107,7 +107,13 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     const totalCount = allPhaseTasks.length;
     const doneCount = allPhaseTasks.filter(t => t.status === 'done').length;
     const allDone = totalCount > 0 && doneCount === totalCount;
-    return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone };
+    // phaseStart = startedDate mas temprano entre las tareas de la fase
+    const startedDates = allPhaseTasks.map(t => t.startedDate).filter(Boolean);
+    const phaseStart = startedDates.length > 0 ? startedDates.sort()[0] : null;
+    // completedDate mas tardio si toda la fase esta hecha
+    const completedDates = allPhaseTasks.map(t => t.completedDate).filter(Boolean);
+    const phaseEnd = allDone && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : null;
+    return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, phaseStart, phaseEnd };
   }).filter(g => g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey)));
 
   const isCollapsed = (phaseKey, allDone) => {
@@ -452,7 +458,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
 
   return (
     <div className="space-y-2 p-3">
-      {phaseGroups.map(({ phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone }) => {
+      {phaseGroups.map(({ phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, phaseStart, phaseEnd }) => {
         const collapsed = isCollapsed(phaseKey, allDone);
         const getGroup = (t) => {
           if (t.status === 'done') return 2;
@@ -515,6 +521,28 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                 >{phInfo.label}</span>
               )}
               <span className="text-[11px] font-semibold text-gray-400">({doneCount}/{totalCount})</span>
+              {(() => {
+                // Badge de dias transcurridos / estimados — misma logica que las tareas
+                if (phaseKey === '_unphased') return null;
+                const deadline = (c.phaseDeadlines || {})[phaseKey];
+                if (allDone && phaseStart && phaseEnd) {
+                  const d = daysBetween(phaseStart, phaseEnd);
+                  if (d === null) return null;
+                  return <span className="text-[10px] text-gray-400" title="Duracion real">{'\u23F1'} hecho en {d}d</span>;
+                }
+                if (!phaseStart) return null;
+                const elapsed = daysAgo(phaseStart);
+                const estimated = deadline ? daysBetween(phaseStart, deadline) : null;
+                if (estimated !== null && estimated >= 0) {
+                  const color = elapsed >= estimated * 2 ? '#EF4444' : elapsed > estimated ? '#F97316' : '#22C55E';
+                  return (
+                    <span className="text-[10px] font-semibold" style={{ color }} title="Dias transcurridos / estimados">
+                      {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {estimated}d</span>
+                    </span>
+                  );
+                }
+                return <span className="text-[10px] text-blue-500 font-semibold" title="Dias transcurridos">{'\u23F1'} {elapsed}d</span>;
+              })()}
               {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
               {phaseKey !== '_unphased' && (() => {
                 const deadline = (c.phaseDeadlines || {})[phaseKey];
