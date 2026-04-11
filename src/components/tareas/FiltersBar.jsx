@@ -7,6 +7,7 @@ export default function FiltersBar() {
     taskClientFilter, setTaskClientFilter,
     taskAssignee, setTaskAssignee,
     taskPriority, setTaskPriority,
+    taskDueFilter, setTaskDueFilter,
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,
   } = useApp();
@@ -47,6 +48,19 @@ export default function FiltersBar() {
       >
         <option value="all">Todos los encargados</option>
         {TEAM.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+      </select>
+
+      <select
+        value={taskDueFilter}
+        onChange={(e) => setTaskDueFilter(e.target.value)}
+        className={selectBase}
+        title="Filtrar por fecha de entrega"
+      >
+        <option value="all">Entrega: todas</option>
+        <option value="overdue">Entrega: vencidas</option>
+        <option value="this-week">Entrega: esta semana</option>
+        <option value="next-week">Entrega: prox. semana</option>
+        <option value="this-month">Entrega: este mes</option>
       </select>
 
       <div className="flex items-center gap-3 ml-auto max-md:w-full max-md:ml-0 max-md:border-t max-md:border-gray-100 max-md:pt-2">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TEAM } from '../../utils/constants';
-import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
+import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 export default function TimelineView({ onGoToTaskList }) {
@@ -13,6 +13,7 @@ export default function TimelineView({ onGoToTaskList }) {
     taskClientFilter,
     taskPriority,
     taskAssignee,
+    taskDueFilter,
     hideCompletedTasks,
     hideBlockedTasks,
   } = useApp();
@@ -86,17 +87,27 @@ export default function TimelineView({ onGoToTaskList }) {
       // Apply hide toggles
       phaseTasks = phaseTasks.filter(t => !isTaskHidden(t));
       if (phaseTasks.length === 0 && !deadlines[phaseKey]) return;
+      // Filtro por rango de entrega: si esta activo, solo mostrar fases con deadline en rango
+      // o con al menos una tarea cuya dueDate caiga en rango
+      if (taskDueFilter && taskDueFilter !== 'all') {
+        const phDeadlineInRange = deadlines[phaseKey] && isInDueRange(deadlines[phaseKey], taskDueFilter);
+        const anyTaskInRange = phaseTasks.some(t => t.dueDate && isInDueRange(t.dueDate, taskDueFilter));
+        if (!phDeadlineInRange && !anyTaskInRange) return;
+      }
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
       const deadline = deadlines[phaseKey];
       // Earliest startedDate of any task in the phase (para que la barra arranque ah\u00ed, no en hoy)
       const startedDates = phaseTasks.map(t => t.startedDate).filter(Boolean);
       const phaseStart = startedDates.length > 0 ? startedDates.sort()[0] : null;
+      // Fase bloqueada: todas las tareas no completadas estan bloqueadas (por estado o por deps)
+      const pendingTasks = phaseTasks.filter(t => t.status !== 'done');
+      const phaseBlocked = pendingTasks.length > 0 && pendingTasks.every(t => isTaskBlockedAny(t));
       if (deadline && !done) {
         const isOverdue = deadline < now;
-        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseStart, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
+        ganttEntries.push({ client: c, phaseKey, phInfo, deadline, done, isOverdue, progress, phaseStart, phaseBlocked, phaseTasks: pendingTasks });
       } else if (!done) {
-        unscheduledPhases.push({ client: c, phaseKey, phInfo, progress, phaseTasks: phaseTasks.filter(t => t.status !== 'done') });
+        unscheduledPhases.push({ client: c, phaseKey, phInfo, progress, phaseBlocked, phaseTasks: pendingTasks });
       }
     });
   });
@@ -288,7 +299,7 @@ export default function TimelineView({ onGoToTaskList }) {
                       </div>
                     </div>
                     {phases.map((ph) => {
-                      const color = ph.done ? '#22C55E' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
+                      const color = ph.done ? '#22C55E' : ph.phaseBlocked ? '#9CA3AF' : ph.isOverdue ? '#EF4444' : ph.phInfo.color;
                       // La barra arranca en el startedDate m\u00e1s temprano de sus tareas. Si no hay ninguno,
                       // usa el deadline como extremo (barra m\u00ednima). Si no hay deadline, usa hoy.
                       const effectiveStart = ph.phaseStart || (ph.deadline < now ? ph.deadline : now);
@@ -342,20 +353,29 @@ export default function TimelineView({ onGoToTaskList }) {
                               {weekColumns.map((w, i) => (
                                 <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-red-50/30' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f0f0f0' }} />
                               ))}
-                              <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 18, top: 5 }}>
-                                <div className="w-full h-full rounded-sm relative overflow-hidden" style={{ background: color + '20' }}>
-                                  <div className="h-full rounded-sm" style={{ width: `${ph.progress}%`, background: color, opacity: 0.5 }} />
-                                  <span className="absolute inset-0 flex items-center px-1 gap-0.5">
-                                    <span className="flex -space-x-1 shrink-0">
-                                      {phaseMembers.slice(0, 4).map(m => (
-                                        <TeamAvatar key={m.id} member={m} size={14} className="ring-1 ring-white" />
-                                      ))}
-                                      {phaseMembers.length > 4 && <span className="text-[7px] font-bold ml-0.5" style={{ color }}>+{phaseMembers.length - 4}</span>}
+                              {/* Barra completa: oculta si la fase esta bloqueada (solo se muestra el diamante) */}
+                              {!ph.phaseBlocked && (
+                                <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 18, top: 5 }}>
+                                  <div className="w-full h-full rounded-sm relative overflow-hidden" style={{ background: color + '20' }}>
+                                    <div className="h-full rounded-sm" style={{ width: `${ph.progress}%`, background: color, opacity: 0.5 }} />
+                                    <span className="absolute inset-0 flex items-center px-1 gap-0.5">
+                                      <span className="flex -space-x-1 shrink-0">
+                                        {phaseMembers.slice(0, 4).map(m => (
+                                          <TeamAvatar key={m.id} member={m} size={14} className="ring-1 ring-white" />
+                                        ))}
+                                        {phaseMembers.length > 4 && <span className="text-[7px] font-bold ml-0.5" style={{ color }}>+{phaseMembers.length - 4}</span>}
+                                      </span>
+                                      <span className="text-[8px] font-bold ml-auto" style={{ color }}>{ph.progress}%</span>
                                     </span>
-                                    <span className="text-[8px] font-bold ml-auto" style={{ color }}>{ph.progress}%</span>
-                                  </span>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
+                              {/* Icono de candado cuando la fase esta bloqueada */}
+                              {ph.phaseBlocked && (
+                                <div className="absolute z-[2] flex items-center gap-1" style={{ left: Math.max(0, dateToPx(ph.deadline) - 28), top: 7 }}>
+                                  <span className="text-[11px] text-gray-400" title="Fase bloqueada">{'\uD83D\uDD12'}</span>
+                                </div>
+                              )}
                               <div
                                 className="absolute z-[3] cursor-pointer group"
                                 style={{ left: dateToPx(ph.deadline) - 6, top: 7, padding: 2 }}

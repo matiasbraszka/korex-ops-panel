@@ -42,6 +42,45 @@ export function fmtDayShort(d) {
 }
 
 /**
+ * Devuelve true si el dateStr (YYYY-MM-DD) cae dentro del rango del filtro.
+ * range: 'all' | 'this-week' | 'next-week' | 'this-month' | 'overdue'
+ * Semana empieza en lunes. Sin dateStr siempre devuelve false (salvo 'all').
+ */
+export function isInDueRange(dateStr, range) {
+  if (range === 'all' || !range) return true;
+  if (!dateStr) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = new Date(y, m - 1, d);
+  target.setHours(12, 0, 0, 0);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  if (range === 'overdue') return target < today;
+
+  // Lunes de esta semana (getDay: 0=Dom..6=Sab, convertir a Lun=0..Dom=6)
+  const dayFromMonday = (today.getDay() + 6) % 7;
+  const thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - dayFromMonday);
+  const thisSunday = new Date(thisMonday);
+  thisSunday.setDate(thisMonday.getDate() + 6);
+
+  if (range === 'this-week') return target >= thisMonday && target <= thisSunday;
+  if (range === 'next-week') {
+    const nextMonday = new Date(thisMonday);
+    nextMonday.setDate(thisMonday.getDate() + 7);
+    const nextSunday = new Date(thisSunday);
+    nextSunday.setDate(thisSunday.getDate() + 7);
+    return target >= nextMonday && target <= nextSunday;
+  }
+  if (range === 'this-month') {
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return target >= firstDay && target <= lastDay;
+  }
+  return true;
+}
+
+/**
  * Returns roadmap tasks for a client.
  */
 export function getRoadmapTasks(clientId, tasks) {

@@ -22,6 +22,7 @@ export function AppProvider({ children }) {
   const [taskAssignee, setTaskAssignee] = useState('all');
   const [taskClientFilter, setTaskClientFilter] = useState('all');
   const [taskPriority, setTaskPriority] = useState('all');
+  const [taskDueFilter, setTaskDueFilter] = useState('all'); // all | this-week | next-week | this-month
   const [currentUser, setCurrentUser] = useState(null);
   const [briefing, setBriefing] = useState(null);
   const [reportFeedbacks, setReportFeedbacks] = useState([]);
@@ -614,6 +615,7 @@ export function AppProvider({ children }) {
     taskAssignee, setTaskAssignee,
     taskClientFilter, setTaskClientFilter,
     taskPriority, setTaskPriority,
+    taskDueFilter, setTaskDueFilter,
     currentUser, setCurrentUser,
     briefing, setBriefing,
     reportFeedbacks, setReportFeedbacks,

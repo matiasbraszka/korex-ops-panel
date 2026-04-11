@@ -14,6 +14,7 @@ export default function RoadmapView() {
     taskClientFilter,
     taskPriority,
     taskAssignee,
+    taskDueFilter,
     hideCompletedTasks,
     hideBlockedTasks,
   } = useApp();
@@ -197,6 +198,7 @@ export default function RoadmapView() {
                   assigneeFilter={taskAssignee}
                   hideCompleted={hideCompletedTasks}
                   hideBlocked={hideBlockedTasks}
+                  dueFilter={taskDueFilter}
                 />
               </div>
             )}

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS, TEAM } from '../../utils/constants';
-import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo } from '../../utils/helpers';
+import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
@@ -14,7 +14,7 @@ import Modal from '../Modal';
  *
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
-export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false }) {
+export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
   const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask } = useApp();
 
   // Estado local al panel (cada cliente tiene su propio estado de UI)
@@ -89,6 +89,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     }
     if (hideCompleted) all = all.filter(t => t.status !== 'done');
     if (hideBlocked) all = all.filter(t => !(t.status === 'blocked' || isTaskBlocked(t)));
+    if (dueFilter && dueFilter !== 'all') {
+      // Solo tareas cuya dueDate caiga en el rango (tareas sin dueDate se ocultan)
+      all = all.filter(t => t.dueDate && isInDueRange(t.dueDate, dueFilter));
+    }
     return all;
   };
 
@@ -114,7 +118,15 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     const completedDates = allPhaseTasks.map(t => t.completedDate).filter(Boolean);
     const phaseEnd = allDone && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : null;
     return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, phaseStart, phaseEnd };
-  }).filter(g => g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey)));
+  }).filter(g => g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey)))
+    .filter(g => {
+      // Si hay filtro de entrega activo, ocultar fases que no tienen ni tareas en rango
+      // ni un deadline de fase en rango (asi solo queda lo que hay que entregar).
+      if (!dueFilter || dueFilter === 'all') return true;
+      if (g.phaseTasks.length > 0) return true;
+      const phDeadline = (c.phaseDeadlines || {})[g.phaseKey];
+      return phDeadline && isInDueRange(phDeadline, dueFilter);
+    });
 
   const isCollapsed = (phaseKey, allDone) => {
     if (collapsedPhases[phaseKey] !== undefined) return collapsedPhases[phaseKey];

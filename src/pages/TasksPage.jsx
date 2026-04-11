@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
-import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange } from '../utils/helpers';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask } = useApp();
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -121,6 +121,10 @@ export default function TasksPage({ embedded = false }) {
   }
 
   // Priority filter: only tasks belonging to clients of that priority
+  if (taskDueFilter && taskDueFilter !== 'all') {
+    // Solo tareas con dueDate en el rango (sin dueDate se ocultan)
+    filteredTasks = filteredTasks.filter(t => t.dueDate && isInDueRange(t.dueDate, taskDueFilter));
+  }
   if (taskPriority !== 'all') {
     const allowedClientIds = new Set(regularClients.filter(c => String(c.priority || 5) === taskPriority).map(c => c.id));
     filteredTasks = filteredTasks.filter(t => allowedClientIds.has(t.clientId));
