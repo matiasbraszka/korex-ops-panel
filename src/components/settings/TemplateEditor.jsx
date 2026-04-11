@@ -53,7 +53,7 @@ export default function TemplateEditor() {
   // ── Phase ops ──
   const updatePhase = (phaseId, fields) => {
     setTemplate({
-      ...template,
+      ...draft,
       phases: phases.map(p => p.id === phaseId ? { ...p, ...fields } : p),
     });
   };
@@ -67,7 +67,7 @@ export default function TemplateEditor() {
     const [moved] = reordered.splice(idx, 1);
     reordered.splice(target, 0, moved);
     const nextPhases = reordered.map((p, i) => ({ ...p, order: i }));
-    setTemplate({ ...template, phases: nextPhases });
+    setTemplate({ ...draft, phases: nextPhases });
   };
 
   const deletePhase = (phaseId) => {
@@ -80,7 +80,7 @@ export default function TemplateEditor() {
     }
     const remainingTaskIds = new Set(tasks.filter(t => t.phaseId !== phaseId).map(t => t.id));
     setTemplate({
-      ...template,
+      ...draft,
       phases: phases.filter(p => p.id !== phaseId),
       // Limpiar deps que apuntaban a tareas eliminadas
       tasks: tasks
@@ -96,7 +96,7 @@ export default function TemplateEditor() {
     const colors = ['#8B5CF6', '#5B7CF5', '#EAB308', '#22C55E', '#06B6D4', '#EC4899', '#F97316'];
     const color = colors[phases.length % colors.length];
     setTemplate({
-      ...template,
+      ...draft,
       phases: [...phases, { id, label, color, order: phases.length }],
     });
     setNewPhaseName('');
@@ -106,7 +106,7 @@ export default function TemplateEditor() {
   // ── Task ops ──
   const updateTask = (taskId, fields) => {
     setTemplate({
-      ...template,
+      ...draft,
       tasks: tasks.map(t => t.id === taskId ? { ...t, ...fields } : t),
     });
   };
@@ -114,7 +114,7 @@ export default function TemplateEditor() {
   const deleteTask = (taskId) => {
     if (!confirm('Eliminar esta tarea del template?')) return;
     setTemplate({
-      ...template,
+      ...draft,
       tasks: tasks
         .filter(t => t.id !== taskId)
         .map(t => ({ ...t, dependsOn: (t.dependsOn || []).filter(d => d !== taskId) })),
@@ -126,7 +126,7 @@ export default function TemplateEditor() {
     if (!name) return;
     const id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
     setTemplate({
-      ...template,
+      ...draft,
       tasks: [
         ...tasks,
         { id, name, phaseId, assignee: '', daysFromUnblock: 1, isClientTask: false, dependsOn: [] },
