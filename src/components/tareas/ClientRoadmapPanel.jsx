@@ -4,6 +4,7 @@ import { PROCESS_STEPS, TASK_STATUS, TEAM } from '../../utils/constants';
 import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
+import Modal from '../Modal';
 
 /**
  * Panel completo de roadmap para un cliente. Replica el comportamiento del roadmap
@@ -28,6 +29,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
+  const [depsModal, setDepsModal] = useState(null);
   const [rdDragId, setRdDragId] = useState(null);
   const [rdDragOverId, setRdDragOverId] = useState(null);
   const [rdDragOverHalf, setRdDragOverHalf] = useState(null);
@@ -235,7 +237,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
       <div key={t.id} className={`group ${blocked ? 'opacity-60' : ''} ${rdIsDragging ? 'drag-ghost' : ''}`}>
         {rdIsDragOver && rdDragOverHalf === 'top' && <div className="drag-indicator" />}
         <div
-          className={`hover:bg-gray-50 cursor-pointer ${rowBg} grid grid-cols-[20px_16px_20px_1fr_90px_80px_30px] items-center gap-1 py-[7px] px-3`}
+          className={`hover:bg-gray-50 cursor-pointer ${rowBg} grid grid-cols-[18px_22px_14px_1fr_70px_70px_56px] items-center gap-2 py-2 px-3`}
           onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           onDragOver={(e) => rdHandleDragOver(e, t)}
           onDrop={(e) => rdHandleDrop(e, t, sortedGroup)}
@@ -271,7 +273,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           <span className="text-gray-300 text-[11px] text-center select-none">{isLast ? '\u2514' : '\u251C'}</span>
 
           {/* Col 3: Title */}
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div className="flex items-center gap-1.5 min-w-0">
             {editingTitle === t.id ? (
               <input
                 className="w-full border border-blue-400 rounded py-0.5 px-1.5 text-[13px] font-sans outline-none"
@@ -284,23 +286,27 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               />
             ) : (
               <span
-                className={`text-[13px] leading-tight ${isDone ? 'text-gray-400 line-through' : blocked ? 'text-red-600' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
-                style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
+                className={`flex-1 min-w-0 text-[13px] leading-snug break-words ${isDone ? 'text-gray-400 line-through' : blocked ? 'text-red-600' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
                 onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(t.id); setEditTitleValue(t.title); }}
                 title="Doble click para renombrar"
               >
                 {t.title}
               </span>
             )}
-            {t.isClientTask && (
-              <span className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" style={{ flexShrink: 0 }} title="Tarea del cliente">C</span>
-            )}
-            {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ flexShrink: 0 }} title="Tiene descripci\u00f3n" />}
-            {t.dueDate && (
-              <span className={`text-[9px] font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} style={{ flexShrink: 0, whiteSpace: 'nowrap' }} title={`Vence: ${t.dueDate}`}>
-                {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
-              </span>
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              {t.isClientTask && (
+                <span className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" title="Tarea del cliente">C</span>
+              )}
+              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Tiene descripci\u00f3n" />}
+              {(t.dependsOn && t.dependsOn.length > 0) && (
+                <span className="text-[9px] text-gray-400" title={`${t.dependsOn.length} dependencia(s)`}>{'\uD83D\uDD17'}{t.dependsOn.length}</span>
+              )}
+              {t.dueDate && (
+                <span className={`text-[9px] font-medium whitespace-nowrap ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} title={`Vence: ${t.dueDate}`}>
+                  {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Col 4: Assignees */}
@@ -376,14 +382,19 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           </div>
 
           {/* Col 6: Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1px', minWidth: 0 }}>
+          <div className="flex items-center justify-end gap-0.5 min-w-0">
+            <button
+              className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center"
+              onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
+              title="Dependencias"
+            >{'\uD83D\uDD17'}</button>
             <div
               ref={el => movePhaseRef.current = el}
-              className="cursor-pointer opacity-0 group-hover:opacity-100"
+              className="w-5 h-5 cursor-pointer opacity-0 group-hover:opacity-100 rounded hover:bg-gray-200 flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-movephase-' + t.id); }}
               title="Mover a otra fase"
             >
-              <span className="text-[10px] py-[2px] px-0.5 rounded hover:bg-gray-200 text-gray-400">{'\u2194'}</span>
+              <span className="text-[11px] text-gray-400">{'\u2194'}</span>
             </div>
             <Dropdown
               open={openDropdown === 'rd-movephase-' + t.id}
@@ -392,10 +403,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
             />
             <button
-              className="text-[10px] py-[2px] px-0.5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500"
+              className="text-[11px] w-5 h-5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500 flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); if (confirm('Eliminar esta tarea?')) deleteTask(t.id); }}
               title="Eliminar"
-            >x</button>
+            >{'\u2715'}</button>
           </div>
         </div>
 
@@ -611,6 +622,66 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           onClick={() => setAddingPhase(true)}
         >+ Agregar fase</button>
       )}
+
+      <Modal
+        open={!!depsModal}
+        onClose={() => setDepsModal(null)}
+        title="Configurar dependencias"
+        maxWidth={450}
+        footer={<button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={() => setDepsModal(null)}>Cerrar</button>}
+      >
+        {depsModal && (() => {
+          const currentTask = clientTasks.find(t => t.id === depsModal);
+          if (!currentTask) return <div className="text-xs text-gray-400">Tarea no encontrada</div>;
+          const otherTasks = clientTasks.filter(t => t.id !== depsModal);
+          const currentDeps = currentTask.dependsOn || [];
+          const depPhaseKeys = [...Object.keys(allPh), '_unphased'];
+          const depPhaseGroups = depPhaseKeys.map(pk => {
+            const phInfo = pk === '_unphased' ? { label: 'Sin fase', color: '#9CA3AF' } : (allPh[pk] || { label: pk, color: '#9CA3AF' });
+            const tasksInPhase = otherTasks.filter(t => resolvePhase(t) === pk);
+            return { pk, phInfo, tasksInPhase };
+          }).filter(g => g.tasksInPhase.length > 0);
+
+          return (
+            <div>
+              <div className="text-xs text-gray-500 mb-3">Selecciona las tareas que deben completarse antes de <strong>{currentTask.title}</strong>:</div>
+              {otherTasks.length === 0 ? (
+                <div className="text-xs text-gray-400 py-4 text-center">No hay otras tareas en este cliente</div>
+              ) : (
+                <div className="max-h-[350px] overflow-y-auto">
+                  {depPhaseGroups.map(({ pk, phInfo, tasksInPhase }) => (
+                    <div key={pk} className="mb-2">
+                      <div className="flex items-center gap-1.5 py-1.5 px-1 sticky top-0 bg-white z-[1]">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: phInfo.color }} />
+                        <span className="text-[11px] font-bold" style={{ color: phInfo.color }}>{phInfo.label}</span>
+                      </div>
+                      {tasksInPhase.map(tt => {
+                        const isChecked = currentDeps.includes(tt.id);
+                        const isDone = tt.status === 'done';
+                        return (
+                          <label key={tt.id} className={`flex items-center gap-2.5 py-1.5 px-3 pl-6 rounded-md cursor-pointer text-xs hover:bg-gray-50 ${isDone ? 'opacity-50' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                const newDeps = isChecked ? currentDeps.filter(d => d !== tt.id) : [...currentDeps, tt.id];
+                                updateTask(depsModal, { dependsOn: newDeps });
+                              }}
+                              className="cursor-pointer"
+                            />
+                            <span className={`flex-1 ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>{tt.title}</span>
+                            {isDone && <span className="text-[9px] text-green-500 font-semibold">COMPLETADA</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }
