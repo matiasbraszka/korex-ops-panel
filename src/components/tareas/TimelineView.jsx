@@ -87,12 +87,11 @@ export default function TimelineView({ onGoToTaskList }) {
       // Apply hide toggles
       phaseTasks = phaseTasks.filter(t => !isTaskHidden(t));
       if (phaseTasks.length === 0 && !deadlines[phaseKey]) return;
-      // Filtro por rango de entrega: si esta activo, solo mostrar fases con deadline en rango
-      // o con al menos una tarea cuya dueDate caiga en rango
+      // Filtro por rango de entrega: en el Timeline la unidad de entrega es la fase,
+      // asi que solo mostrar fases cuyo DEADLINE caiga en el rango. Fases sin deadline
+      // tampoco pasan (no hay "fecha de entrega" que filtrar).
       if (taskDueFilter && taskDueFilter !== 'all') {
-        const phDeadlineInRange = deadlines[phaseKey] && isInDueRange(deadlines[phaseKey], taskDueFilter);
-        const anyTaskInRange = phaseTasks.some(t => t.dueDate && isInDueRange(t.dueDate, taskDueFilter));
-        if (!phDeadlineInRange && !anyTaskInRange) return;
+        if (!deadlines[phaseKey] || !isInDueRange(deadlines[phaseKey], taskDueFilter)) return;
       }
       const done = phaseTasks.length > 0 && phaseTasks.every(t => t.status === 'done');
       const progress = phaseTasks.length > 0 ? Math.round(phaseTasks.filter(t => t.status === 'done').length / phaseTasks.length * 100) : 0;
