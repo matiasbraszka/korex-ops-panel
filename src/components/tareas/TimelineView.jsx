@@ -52,9 +52,9 @@ export default function TimelineView({ onGoToTaskList }) {
     return false;
   };
 
-  // Apply client + priority filters (hide descartados unless explicitly filtered)
+  // Apply client + priority filters (hide descartados unless explicitly filtered).
+  // Korex se muestra con estilo distinto en las filas (no se filtra).
   const filteredClients = clients.filter(c => {
-    if (isKorexClient(c)) return false;
     if (taskClientFilter !== 'all' && c.id !== taskClientFilter) return false;
     if (taskPriority !== 'all') {
       if (String(c.priority || 5) !== taskPriority) return false;
@@ -264,11 +264,15 @@ export default function TimelineView({ onGoToTaskList }) {
                 />
 
 
-                {Object.values(ganttByClient).map(({ client: cl, phases }) => (
-                  <div key={cl.id} className="border-b border-gray-100 last:border-b-0">
+                {Object.values(ganttByClient).map(({ client: cl, phases }) => {
+                  const cIsKorex = isKorexClient(cl);
+                  return (
+                  <div key={cl.id} className={`border-b last:border-b-0 ${cIsKorex ? 'border-slate-200 bg-slate-50/50' : 'border-gray-100'}`}>
                     <div className="flex items-center" style={{ height: 24 }}>
-                      <div className="shrink-0 pr-2" style={{ width: labelWidth }}>
-                        <div className="text-[11px] font-bold text-gray-800 leading-tight">{cl.name}</div>
+                      <div className="shrink-0 pr-2 flex items-center gap-1" style={{ width: labelWidth }}>
+                        {cIsKorex && <span className="text-[10px]" title="Empresa Korex">{'\uD83C\uDFE2'}</span>}
+                        <div className={`text-[11px] font-bold leading-tight truncate ${cIsKorex ? 'text-slate-800' : 'text-gray-800'}`}>{cl.name}</div>
+                        {cIsKorex && <span className="text-[8px] font-bold px-1 py-[1px] rounded bg-slate-700 text-white shrink-0">INTERNO</span>}
                       </div>
                     </div>
                     {phases.map((ph) => {
@@ -504,7 +508,8 @@ export default function TimelineView({ onGoToTaskList }) {
                       );
                     })}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

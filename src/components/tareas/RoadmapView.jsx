@@ -31,8 +31,8 @@ export default function RoadmapView() {
 
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
 
-  // Active clients (no Korex, no descartados salvo filtro explicito)
-  let filteredClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c));
+  // Active clients (no descartados salvo filtro explicito). Korex se muestra con estilo distinto.
+  let filteredClients = clients.filter(c => c.status !== 'completed');
 
   if (taskClientFilter !== 'all') {
     filteredClients = filteredClients.filter(c => c.id === taskClientFilter);
@@ -60,8 +60,11 @@ export default function RoadmapView() {
     return Math.round(cTasks.filter(t => t.status === 'done').length / cTasks.length * 100);
   };
 
-  // Orden: prioridad → progreso
+  // Orden: Korex primero, luego prioridad → progreso
   filteredClients = [...filteredClients].sort((a, b) => {
+    const ka = isKorexClient(a) ? 0 : 1;
+    const kb = isKorexClient(b) ? 0 : 1;
+    if (ka !== kb) return ka - kb;
     const pa = a.priority || 5;
     const pb = b.priority || 5;
     if (pa !== pb) return pa - pb;
@@ -105,24 +108,34 @@ export default function RoadmapView() {
         const pct = clientProgress(c);
         const prio = PRIO_CLIENT[c.priority || 5];
         const isCompleted = pct === 100;
+        const isKorex = isKorexClient(c);
 
         return (
           <div
             key={c.id}
-            className={`bg-white border rounded-xl overflow-hidden transition-all ${
-              isCompleted ? 'opacity-60 border-gray-100' : 'border-gray-200 hover:border-gray-300'
+            className={`border rounded-xl overflow-hidden transition-all ${
+              isKorex
+                ? 'bg-slate-50 border-slate-300 hover:border-slate-400 border-l-[5px] border-l-slate-700'
+                : isCompleted
+                  ? 'bg-white opacity-60 border-gray-100'
+                  : 'bg-white border-gray-200 hover:border-gray-300'
             }`}
           >
-            {/* Client header */}
+            {/* Client header — grid para alinear badge column siempre en el mismo x */}
             <div
-              className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+              className={`grid grid-cols-[14px_32px_minmax(0,1fr)_140px_auto_auto] items-center gap-3 p-3 cursor-pointer transition-colors ${isKorex ? 'hover:bg-slate-100' : 'hover:bg-gray-50'}`}
               onClick={() => toggleExpand(c.id)}
             >
               <span className={`text-[10px] text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                 {'\u25B6'}
               </span>
 
-              {c.avatarUrl ? (
+              {isKorex ? (
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[14px] shrink-0 bg-slate-700"
+                  title="Empresa Korex"
+                >{'\uD83C\uDFE2'}</div>
+              ) : c.avatarUrl ? (
                 <img src={c.avatarUrl} alt={c.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
               ) : (
                 <div
@@ -133,31 +146,40 @@ export default function RoadmapView() {
                 </div>
               )}
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-bold text-gray-800 truncate">{c.name}</span>
-                  {prio && (
-                    <span
-                      className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
-                      style={{ background: prio.color + '18', color: prio.color }}
-                    >
-                      {prio.label}
-                    </span>
-                  )}
-                </div>
+              {/* Col 3: Name + company (flex-1) */}
+              <div className="min-w-0">
+                <div className={`text-[13px] font-bold truncate ${isKorex ? 'text-slate-800' : 'text-gray-800'}`}>{c.name}</div>
                 <div className="text-[10px] text-gray-400 truncate">{c.company}</div>
               </div>
 
-              <div className="shrink-0 flex items-center gap-2 max-md:hidden">
+              {/* Col 4: Badge column — ancho fijo para alinear SIEMPRE en el mismo x */}
+              <div className="flex items-center">
+                {isKorex ? (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase whitespace-nowrap bg-slate-700 text-white">
+                    {'\uD83C\uDFE2'} INTERNO
+                  </span>
+                ) : prio ? (
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase whitespace-nowrap"
+                    style={{ background: prio.color + '18', color: prio.color }}
+                  >
+                    {prio.label}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Col 5: Progress bar */}
+              <div className="flex items-center gap-2 max-md:hidden">
                 <div className="w-24 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
-                    style={{ width: `${pct}%`, background: pct === 100 ? '#22C55E' : '#5B7CF5' }}
+                    style={{ width: `${pct}%`, background: pct === 100 ? '#22C55E' : (isKorex ? '#475569' : '#5B7CF5') }}
                   />
                 </div>
                 <span className="text-[11px] font-semibold text-gray-600 w-8 text-right">{pct}%</span>
               </div>
 
+              {/* Col 6: Open button */}
               <button
                 className="text-[11px] text-gray-400 hover:text-blue-500 px-2 py-1 rounded hover:bg-blue-50 font-sans shrink-0"
                 onClick={(e) => { e.stopPropagation(); openInClientDetail(c.id); }}

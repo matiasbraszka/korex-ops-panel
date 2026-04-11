@@ -11,9 +11,8 @@ export default function FiltersBar() {
     hideBlockedTasks, setHideBlockedTasks,
   } = useApp();
 
-  // Only show non-Korex clients in the dropdown
-  const isKorexClient = (c) => /empresa|korex/i.test(c.name);
-  const activeClients = clients.filter(c => !isKorexClient(c) && c.status !== 'completed');
+  // Incluir Korex en el dropdown (aparece en roadmap/timeline con estilo distinto)
+  const activeClients = clients.filter(c => c.status !== 'completed');
 
   const selectBase = 'text-[12px] py-1.5 px-2 rounded-md border border-gray-200 bg-white font-sans outline-none hover:border-gray-300 cursor-pointer max-md:flex-1';
 
