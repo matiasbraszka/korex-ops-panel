@@ -463,7 +463,13 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
             >
               <span className="text-[11px] text-gray-400 shrink-0">{collapsed ? '\u25B6' : '\u25BC'}</span>
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: phInfo.color }} />
-              {editingPhase === phaseKey ? (
+              {phaseKey === '_unphased' ? (
+                <span
+                  className="text-[13px] font-bold py-0.5 px-1 italic"
+                  style={{ color: phInfo.color }}
+                  title="Fase del sistema: contiene tareas sin fase asignada"
+                >{phInfo.label}</span>
+              ) : editingPhase === phaseKey ? (
                 <input
                   className="text-[13px] font-bold border border-blue-400 rounded-md py-0.5 px-2 outline-none bg-white font-sans"
                   style={{ color: phInfo.color, width: Math.max(120, editPhaseValue.length * 9) }}

@@ -109,8 +109,12 @@ export default function TimelineView({ onGoToTaskList }) {
     ganttByClient[e.client.id].phases.push(e);
   });
 
-  // Timeline: week columns
-  const ganttStartDate = new Date(now);
+  // Timeline: week columns (todo en fecha LOCAL, sin toISOString que convierte a UTC)
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmtLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // Parsear `now` (YYYY-MM-DD) como fecha LOCAL, no UTC
+  const [ny, nm, nd] = now.split('-').map(Number);
+  const ganttStartDate = new Date(ny, nm - 1, nd);
   const startDay = ganttStartDate.getDay();
   const mondayOffset = startDay === 0 ? -6 : 1 - startDay;
   ganttStartDate.setDate(ganttStartDate.getDate() + mondayOffset - 7);
@@ -121,8 +125,8 @@ export default function TimelineView({ onGoToTaskList }) {
     weekStart.setDate(weekStart.getDate() + w * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
-    const startIso = weekStart.toISOString().split('T')[0];
-    const endIso = weekEnd.toISOString().split('T')[0];
+    const startIso = fmtLocal(weekStart);
+    const endIso = fmtLocal(weekEnd);
     const startNum = weekStart.getDate();
     const endNum = weekEnd.getDate();
     const monthLabel = weekStart.toLocaleDateString('es-AR', { month: 'short' });
@@ -132,7 +136,7 @@ export default function TimelineView({ onGoToTaskList }) {
     for (let d = 0; d < 7; d++) {
       const dayDate = new Date(weekStart);
       dayDate.setDate(dayDate.getDate() + d);
-      const iso = dayDate.toISOString().split('T')[0];
+      const iso = fmtLocal(dayDate);
       days.push({ iso, num: dayDate.getDate(), isToday: iso === now });
     }
     weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday, days });
@@ -143,12 +147,17 @@ export default function TimelineView({ onGoToTaskList }) {
   const totalTimelineEnd = weekColumns[weekColumns.length - 1].endIso;
   const totalDays = Math.round((new Date(totalTimelineEnd) - new Date(totalTimelineStart)) / 864e5);
 
-  // Cada dia = 1/7 del ancho de semana. Usar esta formula uniforme para que las
-  // posiciones de las barras y la linea HOY caigan exactamente en las celdas
-  // de los dias mostrados en el header.
+  // Cada dia = 1/7 del ancho de semana. Usar fecha local para parsear los strings
+  // YYYY-MM-DD (new Date('YYYY-MM-DD') los interpreta como UTC, y restarles otra
+  // fecha UTC da el mismo resultado; pero si cruzamos DST los offsets varian).
   const dayPx = weekWidth / 7;
+  const parseLocalDate = (dateStr) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const timelineStartDate = parseLocalDate(totalTimelineStart);
   const dateToPx = (dateStr) => {
-    const d = Math.round((new Date(dateStr) - new Date(totalTimelineStart)) / 864e5);
+    const d = Math.round((parseLocalDate(dateStr) - timelineStartDate) / 864e5);
     return Math.max(0, Math.min(d * dayPx, weekColumns.length * weekWidth));
   };
   // Posicion del centro de la celda de HOY (para la linea vertical)

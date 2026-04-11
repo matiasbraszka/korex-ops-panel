@@ -232,11 +232,25 @@ export default function TasksPage({ embedded = false }) {
     const clientAllPhases = client ? getAllPhases(client) : PHASES;
     const phaseInfo = t.phase ? clientAllPhases[t.phase] : null;
 
+    // El dropdown solo muestra fases que este cliente realmente usa:
+    // - fases que tienen al menos una tarea
+    // - fases con deadline asignada
+    // - fases custom del cliente
+    // - la fase actualmente asignada a la tarea (para no perderla si no hay otras)
+    const clientTaskPhases = new Set();
+    tasks.forEach(x => {
+      if (x.clientId === t.clientId && x.phase) clientTaskPhases.add(x.phase);
+    });
+    Object.keys(client?.phaseDeadlines || {}).forEach(k => clientTaskPhases.add(k));
+    (client?.customPhases || []).forEach(cp => clientTaskPhases.add(cp.id));
+    if (t.phase) clientTaskPhases.add(t.phase);
+
     const stepDropdownItems = [
       { label: 'Sin vincular', onClick: () => updateTask(t.id, { stepIdx: null, phase: null }) },
       { divider: true, label: 'Fases', color: '#9CA3AF' },
     ];
     Object.entries(clientAllPhases).forEach(([key, ph]) => {
+      if (!clientTaskPhases.has(key)) return; // ocultar fases default sin uso en este cliente
       stepDropdownItems.push({ label: ph.label, onClick: () => updateTask(t.id, { phase: key, stepIdx: null }), style: { paddingLeft: 8 }, icon: '\u25CF', iconColor: ph.color });
     });
 
@@ -739,7 +753,15 @@ export default function TasksPage({ embedded = false }) {
                       />
                       <select className="text-[11px] py-[3px] px-1.5 border border-border rounded text-text2 font-sans" value={inlinePhase} onChange={(e) => setInlinePhase(e.target.value)}>
                         <option value="">Sin vincular a fase</option>
-                        {Object.entries(getAllPhases(g.client)).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        {(() => {
+                          const inUse = new Set();
+                          tasks.forEach(x => { if (x.clientId === g.client.id && x.phase) inUse.add(x.phase); });
+                          Object.keys(g.client.phaseDeadlines || {}).forEach(k => inUse.add(k));
+                          (g.client.customPhases || []).forEach(cp => inUse.add(cp.id));
+                          return Object.entries(getAllPhases(g.client))
+                            .filter(([k]) => inUse.has(k))
+                            .map(([k, v]) => <option key={k} value={k}>{v.label}</option>);
+                        })()}
                       </select>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
