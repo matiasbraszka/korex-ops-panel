@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Plus, X, ArrowUp, ArrowDown, Link2, RotateCcw } from 'lucide-react';
 import Modal from '../Modal';
+import Dropdown from '../Dropdown';
 import SaveBar from './SaveBar';
 import { DEFAULT_TASKS_TEMPLATE, PHASES } from '../../utils/constants';
 
@@ -20,6 +21,12 @@ export default function TemplateEditor() {
   const [newTaskName, setNewTaskName] = useState('');
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
+  const [openAssigneeDropdown, setOpenAssigneeDropdown] = useState(null);
+  const assigneeRefs = useRef({});
+  const getAssigneeRef = useCallback((taskId) => {
+    if (!assigneeRefs.current[taskId]) assigneeRefs.current[taskId] = { current: null };
+    return assigneeRefs.current[taskId];
+  }, []);
 
   // Resync con contexto si no hay cambios pendientes
   useEffect(() => {
@@ -121,6 +128,36 @@ export default function TemplateEditor() {
     });
   };
 
+  // Mover tarea arriba/abajo dentro de su fase (swap)
+  const moveTask = (taskId, dir) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const phaseTaskIds = tasks.filter(t => t.phaseId === task.phaseId).map(t => t.id);
+    const localIdx = phaseTaskIds.indexOf(taskId);
+    const targetLocal = localIdx + dir;
+    if (targetLocal < 0 || targetLocal >= phaseTaskIds.length) return;
+    const otherId = phaseTaskIds[targetLocal];
+    const newTasks = [...tasks];
+    const aIdx = newTasks.findIndex(t => t.id === taskId);
+    const bIdx = newTasks.findIndex(t => t.id === otherId);
+    [newTasks[aIdx], newTasks[bIdx]] = [newTasks[bIdx], newTasks[aIdx]];
+    setTemplate({ ...draft, tasks: newTasks });
+  };
+
+  // Toggle un asignado para una tarea (assignee es CSV: "Jose, Marcos")
+  const toggleAssignee = (taskId, memberName) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const current = task.assignee
+      ? task.assignee.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
+    const updated = exists
+      ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase())
+      : [...current, memberName];
+    updateTask(taskId, { assignee: updated.join(', ') });
+  };
+
   const addTaskToPhase = (phaseId) => {
     const name = newTaskName.trim();
     if (!name) return;
@@ -220,22 +257,67 @@ export default function TemplateEditor() {
 
             {/* Tasks */}
             <div className="divide-y divide-gray-50">
-              {phaseTasks.map(t => (
-                <div key={t.id} className="grid grid-cols-[1fr_140px_90px_80px_56px] gap-2 items-center py-2 px-3 hover:bg-gray-50/50">
+              {phaseTasks.map((t, taskIdx) => {
+                const assigneeNames = t.assignee
+                  ? t.assignee.split(',').map(s => s.trim()).filter(Boolean)
+                  : [];
+                const assigneeRef = getAssigneeRef(t.id);
+                const assigneeLabel = assigneeNames.length === 0
+                  ? 'Sin asignar'
+                  : assigneeNames.length <= 2
+                    ? assigneeNames.join(', ')
+                    : `${assigneeNames[0]} +${assigneeNames.length - 1}`;
+                return (
+                <div key={t.id} className="grid grid-cols-[1fr_160px_90px_80px_88px] gap-2 items-center py-2 px-3 hover:bg-gray-50/50">
                   <input
                     type="text"
                     value={t.name}
                     onChange={(e) => updateTask(t.id, { name: e.target.value })}
                     className="text-[12px] font-medium text-gray-800 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded py-1 px-1.5 outline-none bg-transparent min-w-0"
                   />
-                  <select
-                    value={t.assignee || ''}
-                    onChange={(e) => updateTask(t.id, { assignee: e.target.value })}
-                    className="text-[11px] border border-gray-200 rounded py-1 px-1.5 outline-none bg-white focus:border-blue-400 cursor-pointer"
-                  >
-                    <option value="">Sin asignar</option>
-                    {teamMembers.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-                  </select>
+                  <div className="relative min-w-0">
+                    <button
+                      ref={el => assigneeRef.current = el}
+                      type="button"
+                      className="w-full text-left text-[11px] border border-gray-200 hover:border-gray-300 rounded py-1 px-1.5 outline-none bg-white cursor-pointer truncate"
+                      onClick={() => setOpenAssigneeDropdown(t.id)}
+                      title={assigneeNames.length > 0 ? assigneeNames.join(', ') : 'Sin asignar'}
+                    >
+                      <span className={assigneeNames.length === 0 ? 'text-gray-400' : 'text-gray-800'}>
+                        {assigneeLabel}
+                      </span>
+                    </button>
+                    <Dropdown
+                      open={openAssigneeDropdown === t.id}
+                      onClose={() => setOpenAssigneeDropdown(null)}
+                      anchorRef={assigneeRef}
+                      keepOpen
+                      searchable
+                      items={[
+                        { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenAssigneeDropdown(null); } },
+                        ...teamMembers.map(m => {
+                          const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
+                          return {
+                            label: m.name,
+                            node: (
+                              <div className="flex items-center gap-2 w-full">
+                                <input type="checkbox" checked={isSelected} readOnly className="pointer-events-none" />
+                                {m.avatar_url ? (
+                                  <img src={m.avatar_url} alt={m.name} className="w-5 h-5 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold" style={{ background: m.color || '#5B7CF5' }}>
+                                    {m.initials || m.name?.[0] || '?'}
+                                  </div>
+                                )}
+                                <span className="text-[12px]">{m.name}</span>
+                              </div>
+                            ),
+                            onClick: () => toggleAssignee(t.id, m.name),
+                          };
+                        })
+                      ]}
+                    />
+                  </div>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -257,7 +339,23 @@ export default function TemplateEditor() {
                     />
                     Cliente
                   </label>
-                  <div className="flex items-center justify-end gap-0.5">
+                  <div className="flex items-center justify-end gap-0">
+                    <button
+                      className="bg-transparent border-none text-gray-400 hover:text-gray-700 cursor-pointer p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      onClick={() => moveTask(t.id, -1)}
+                      disabled={taskIdx === 0}
+                      title="Subir"
+                    >
+                      <ArrowUp size={12} />
+                    </button>
+                    <button
+                      className="bg-transparent border-none text-gray-400 hover:text-gray-700 cursor-pointer p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      onClick={() => moveTask(t.id, 1)}
+                      disabled={taskIdx === phaseTasks.length - 1}
+                      title="Bajar"
+                    >
+                      <ArrowDown size={12} />
+                    </button>
                     <button
                       className="bg-transparent border-none text-gray-400 hover:text-blue-500 cursor-pointer p-1 rounded hover:bg-blue-50 relative"
                       onClick={() => setDepsModal(t.id)}
@@ -277,7 +375,8 @@ export default function TemplateEditor() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {/* Add task to phase */}
               {addingTaskTo === phase.id ? (
