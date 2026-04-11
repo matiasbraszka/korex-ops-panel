@@ -1,5 +1,5 @@
 import { useApp } from '../../context/AppContext';
-import { PRIO_CLIENT, TEAM } from '../../utils/constants';
+import { TEAM } from '../../utils/constants';
 
 export default function FiltersBar() {
   const {
@@ -10,6 +10,7 @@ export default function FiltersBar() {
     taskDueFilter, setTaskDueFilter,
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,
+    getAllPriorityLabels,
   } = useApp();
 
   // Incluir Korex en el dropdown (aparece en roadmap/timeline con estilo distinto)
@@ -36,7 +37,7 @@ export default function FiltersBar() {
         className={selectBase}
       >
         <option value="all">Todas las prioridades</option>
-        {Object.entries(PRIO_CLIENT).map(([k, v]) => (
+        {Object.entries(getAllPriorityLabels()).map(([k, v]) => (
           <option key={k} value={k}>{v.label}</option>
         ))}
       </select>

@@ -303,34 +303,57 @@ export function mkClient(name, company, service, start, pm, clientCount = 0, { p
 }
 
 /**
- * Creates 19 default roadmap tasks from DEFAULT_TASKS_TEMPLATE for a new client.
+ * Crea las tareas iniciales de un cliente nuevo a partir de un template.
+ *
+ * Acepta dos formas de template:
+ *   - El nuevo (objeto con `phases` y `tasks`, viene de app_settings)
+ *   - El viejo hardcodeado (array DEFAULT_TASKS_TEMPLATE como fallback)
+ *
+ * Cada tarea hereda `daysFromUnblock` (o el legacy `days`) que despues
+ * usa recomputeStartedDates para calcular `dueDate` automaticamente cuando
+ * la tarea queda habilitada.
  */
-export function createDefaultTasks(clientId) {
-  return DEFAULT_TASKS_TEMPLATE.map(tpl => ({
-    id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + tpl.id,
-    title: tpl.name,
-    clientId,
-    phase: tpl.phase,
-    status: 'backlog',
-    assignee: tpl.assignee || '',
-    priority: 'normal',
-    stepIdx: null,
-    dependsOn: [...tpl.dependsOn],
-    isRoadmapTask: true,
-    templateId: tpl.id,
-    estimatedDays: tpl.days,
-    isClientTask: tpl.client,
-    notes: '',
-    description: '',
-    createdDate: today(),
-    startedDate: null,
-    completedDate: null,
-    blockedSince: null,
-    dueDate: null,
-    accumulatedDays: 0,
-    timerStartedAt: null,
-    enabledDate: null,
-  }));
+export function createDefaultTasks(clientId, template = null) {
+  // Normalizar input: aceptar { phases, tasks } o array legacy
+  let taskList;
+  if (template && Array.isArray(template.tasks)) {
+    taskList = template.tasks;
+  } else if (Array.isArray(template)) {
+    taskList = template;
+  } else {
+    taskList = DEFAULT_TASKS_TEMPLATE;
+  }
+  return taskList.map(tpl => {
+    const phaseId = tpl.phaseId || tpl.phase;
+    const isClientTask = tpl.isClientTask !== undefined ? tpl.isClientTask : !!tpl.client;
+    const daysFromUnblock = tpl.daysFromUnblock !== undefined ? tpl.daysFromUnblock : tpl.days;
+    return {
+      id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + tpl.id,
+      title: tpl.name,
+      clientId,
+      phase: phaseId,
+      status: 'backlog',
+      assignee: tpl.assignee || '',
+      priority: 'normal',
+      stepIdx: null,
+      dependsOn: [...(tpl.dependsOn || [])],
+      isRoadmapTask: true,
+      templateId: tpl.id,
+      estimatedDays: daysFromUnblock,
+      daysFromUnblock: daysFromUnblock != null ? Number(daysFromUnblock) : null,
+      isClientTask,
+      notes: '',
+      description: '',
+      createdDate: today(),
+      startedDate: null,
+      completedDate: null,
+      blockedSince: null,
+      dueDate: null,
+      accumulatedDays: 0,
+      timerStartedAt: null,
+      enabledDate: null,
+    };
+  });
 }
 
 export function mkTask(title, clientId, assignee, priority, status, notes, stepIdx) {
@@ -410,11 +433,27 @@ export function recomputeStartedDates(tasks) {
     byClient[t.clientId].push(t);
   });
   const nowIso = today();
+  // Helper local: sumar dias a una fecha YYYY-MM-DD respetando timezone local
+  const addDaysToDate = (dateStr, n) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + Math.round(n));
+    const pad = (x) => String(x).padStart(2, '0');
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  };
   return tasks.map(t => {
     if (t.status === 'done') return t;
     const clientTasks = byClient[t.clientId] || [];
     const enabled = isTaskEnabled(t, clientTasks);
-    if (enabled && !t.startedDate) return { ...t, startedDate: nowIso };
+    if (enabled && !t.startedDate) {
+      // Tarea recien habilitada: setear startedDate y, si tiene daysFromUnblock
+      // y NO tiene dueDate manual, calcularla automaticamente.
+      const update = { ...t, startedDate: nowIso };
+      if (!t.dueDate && t.daysFromUnblock != null && t.daysFromUnblock >= 0) {
+        update.dueDate = addDaysToDate(nowIso, t.daysFromUnblock);
+      }
+      return update;
+    }
     if (!enabled && t.startedDate) return { ...t, startedDate: null };
     return t;
   });

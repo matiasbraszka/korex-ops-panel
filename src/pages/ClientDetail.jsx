@@ -19,7 +19,7 @@ const LINK_CATEGORIES = {
 const LINK_CATEGORY_ORDER = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels } = useApp();
   const [linkModal, setLinkModal] = useState(false);
   const [linkForm, setLinkForm] = useState({ label: '', url: '', category: 'folder' });
   const [editingLinkIdx, setEditingLinkIdx] = useState(null);
@@ -58,7 +58,7 @@ export default function ClientDetail({ client: c }) {
   const pct = progress(c, tasks);
   const days = daysAgo(c.startDate);
   const p = c.priority || 5;
-  const pcfg = PRIO_CLIENT[p];
+  const pcfg = getPriorityLabel(p);
   const pill = clientPill(c, tasks);
   const bn = getBottleneck(c, tasks);
   const ct = clientTasks.filter(t => t.status !== 'done').length;
@@ -1007,7 +1007,7 @@ export default function ClientDetail({ client: c }) {
                 open={openDropdown === 'client-prio'}
                 onClose={() => setOpenDropdown(null)}
                 anchorRef={getDropdownRef('client-prio')}
-                items={Object.entries(PRIO_CLIENT).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '\u25CF', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
+                items={Object.entries(getAllPriorityLabels()).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '\u25CF', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
               />
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>
