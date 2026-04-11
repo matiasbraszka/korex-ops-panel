@@ -26,6 +26,8 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
   const [editingPhase, setEditingPhase] = useState(null);
   const [editPhaseValue, setEditPhaseValue] = useState('');
   const [editingDeadline, setEditingDeadline] = useState(null);
+  const [addingPhase, setAddingPhase] = useState(false);
+  const [newPhaseName, setNewPhaseName] = useState('');
   const [rdDragId, setRdDragId] = useState(null);
   const [rdDragOverId, setRdDragOverId] = useState(null);
   const [rdDragOverHalf, setRdDragOverHalf] = useState(null);
@@ -502,7 +504,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               )}
               <span className="text-[11px] font-semibold text-gray-400">({doneCount}/{totalCount})</span>
               {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
-              {(() => {
+              {phaseKey !== '_unphased' && (() => {
                 const deadline = (c.phaseDeadlines || {})[phaseKey];
                 const deadlineOverdue = deadline && !allDone && deadline < now;
                 if (editingDeadline === phaseKey) {
@@ -568,6 +570,47 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           </div>
         );
       })}
+
+      {addingPhase ? (
+        <div className="rounded-lg overflow-hidden bg-white border border-blue-300 p-2.5 flex items-center gap-2" style={{ borderLeft: '3px solid #5B7CF5' }}>
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: '#5B7CF5' }} />
+          <input
+            className="flex-1 text-[13px] font-bold border border-blue-400 rounded-md py-1 px-2 outline-none bg-white font-sans"
+            placeholder="Nombre de la nueva fase..."
+            value={newPhaseName}
+            onChange={(e) => setNewPhaseName(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const label = newPhaseName.trim();
+                if (label) {
+                  const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                  const color = ['#8B5CF6', '#F97316', '#EC4899', '#14B8A6', '#06B6D4'][Math.floor(Math.random() * 5)];
+                  updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color }] });
+                }
+                setNewPhaseName('');
+                setAddingPhase(false);
+              }
+              if (e.key === 'Escape') { setNewPhaseName(''); setAddingPhase(false); }
+            }}
+            onBlur={() => {
+              const label = newPhaseName.trim();
+              if (label) {
+                const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                const color = ['#8B5CF6', '#F97316', '#EC4899', '#14B8A6', '#06B6D4'][Math.floor(Math.random() * 5)];
+                updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color }] });
+              }
+              setNewPhaseName('');
+              setAddingPhase(false);
+            }}
+          />
+        </div>
+      ) : (
+        <button
+          className="w-full text-[12px] text-gray-400 py-2.5 px-3 bg-white border border-dashed border-gray-200 rounded-lg cursor-pointer font-sans hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+          onClick={() => setAddingPhase(true)}
+        >+ Agregar fase</button>
+      )}
     </div>
   );
 }

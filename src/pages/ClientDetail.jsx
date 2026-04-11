@@ -74,7 +74,7 @@ export default function ClientDetail({ client: c }) {
   const openEditModal = () => {
     setEditForm({
       name: c.name, company: c.company, service: c.service || '',
-      startDate: c.startDate || '', pm: c.pm || '', bottleneck: c.bottleneck || '',
+      startDate: c.startDate || '', avatarUrl: c.avatarUrl || '', bottleneck: c.bottleneck || '',
       status: c.status, notes: c.notes || '',
     });
     setEditModal(true);
@@ -82,7 +82,7 @@ export default function ClientDetail({ client: c }) {
   const saveEdit = () => {
     updateClient(c.id, {
       name: editForm.name, company: editForm.company, service: editForm.service,
-      startDate: editForm.startDate, pm: editForm.pm, bottleneck: editForm.bottleneck,
+      startDate: editForm.startDate, avatarUrl: editForm.avatarUrl, bottleneck: editForm.bottleneck,
       status: editForm.status, notes: editForm.notes,
     });
     setEditModal(false);
@@ -1023,7 +1023,6 @@ export default function ClientDetail({ client: c }) {
                 )}{' '}
                 {'\u00B7'} Día {days}
               </span>
-              <span className="text-xs text-text2 flex items-center gap-1 max-md:hidden">{'\uD83D\uDC64'} {c.pm || '\u2014'}</span>
               {ct > 0 && <span className="text-xs text-blue flex items-center gap-1 max-md:text-[11px]">{'\uD83D\uDDD2'} {ct} tareas</span>}
             </div>
           </div>
@@ -1360,10 +1359,8 @@ export default function ClientDetail({ client: c }) {
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Empresa</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.company || ''} onChange={e => setEditForm(f => ({ ...f, company: e.target.value }))} /></div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.service || ''} onChange={e => setEditForm(f => ({ ...f, service: e.target.value }))} /></div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Fecha inicio</label><input type="date" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.startDate || ''} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Responsable</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.pm || ''} onChange={e => setEditForm(f => ({ ...f, pm: e.target.value }))} /></div>
-        </div>
+        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Fecha inicio</label><input type="date" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.startDate || ''} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></div>
+        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil (URL)</label><input type="text" placeholder="https://..." className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.avatarUrl || ''} onChange={e => setEditForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Cuello de botella</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.bottleneck || ''} onChange={e => setEditForm(f => ({ ...f, bottleneck: e.target.value }))} /></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Estado</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.status || 'active'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}><option value="active">Activo</option><option value="paused">Pausado</option><option value="completed">Completado</option></select></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Notas</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" value={editForm.notes || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} /></div>

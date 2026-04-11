@@ -145,9 +145,7 @@ export default function RoadmapView() {
                     </span>
                   )}
                 </div>
-                <div className="text-[10px] text-gray-400 truncate">
-                  {c.company} {c.pm ? `\u00b7 PM: ${c.pm}` : ''}
-                </div>
+                <div className="text-[10px] text-gray-400 truncate">{c.company}</div>
               </div>
 
               <div className="shrink-0 flex items-center gap-2 max-md:hidden">
