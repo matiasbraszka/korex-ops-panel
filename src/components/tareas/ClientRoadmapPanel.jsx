@@ -509,6 +509,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                 <span
                   className="text-[13px] font-bold cursor-text hover:bg-gray-100 py-0.5 px-1 rounded"
                   style={{ color: phInfo.color }}
+                  onClick={(e) => e.stopPropagation()}
                   onDoubleClick={(e) => { e.stopPropagation(); setEditingPhase(phaseKey); setEditPhaseValue(phInfo.label); }}
                   title="Doble click para renombrar"
                 >{phInfo.label}</span>

@@ -264,7 +264,19 @@ export default function TimelineView({ onGoToTaskList }) {
                 />
 
 
-                {Object.values(ganttByClient).map(({ client: cl, phases }) => {
+                {Object.values(ganttByClient).sort((a, b) => {
+                  // Korex primero, luego por prioridad del cliente (1 = super prioritario)
+                  const ka = isKorexClient(a.client) ? 0 : 1;
+                  const kb = isKorexClient(b.client) ? 0 : 1;
+                  if (ka !== kb) return ka - kb;
+                  const pa = a.client.priority || 5;
+                  const pb = b.client.priority || 5;
+                  if (pa !== pb) return pa - pb;
+                  // Desempate: deadline mas temprano del cliente
+                  const da = a.phases[0]?.deadline || '9999';
+                  const db = b.phases[0]?.deadline || '9999';
+                  return da.localeCompare(db);
+                }).map(({ client: cl, phases }) => {
                   const cIsKorex = isKorexClient(cl);
                   return (
                   <div key={cl.id} className={`border-b last:border-b-0 ${cIsKorex ? 'border-slate-200 bg-slate-50/50' : 'border-gray-100'}`}>
