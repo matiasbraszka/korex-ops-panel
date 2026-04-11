@@ -228,6 +228,25 @@ export function AppProvider({ children }) {
     });
   }, [save, dbSaveClient]);
 
+  // Borra un cliente y TODAS sus tareas (incluido fases custom y deadlines).
+  // Operacion irreversible. Persiste en Supabase y limpia el state local.
+  const deleteClient = useCallback(async (id) => {
+    const clientTasks = tasksRef.current.filter(t => t.clientId === id);
+    // 1) Borrar tareas en DB (en paralelo)
+    if (dbReady.current) {
+      await Promise.all([
+        ...clientTasks.map(t => sbFetch('tasks?id=eq.' + encodeURIComponent(t.id), { method: 'DELETE' })),
+        sbFetch('clients?id=eq.' + encodeURIComponent(id), { method: 'DELETE' }),
+      ]).catch(e => console.warn('deleteClient error', e));
+    }
+    // 2) Limpiar state local
+    const newClients = clientsRef.current.filter(c => c.id !== id);
+    const newTasks = tasksRef.current.filter(t => t.clientId !== id);
+    setClients(newClients);
+    setTasks(newTasks);
+    save(newClients, newTasks);
+  }, [save]);
+
   // ── Timer recalculation (must be before CRUD) ──
   const recalculateTimers = useCallback((clientId, taskList) => {
     const clientTasks = taskList.filter(t => t.clientId === clientId);
@@ -775,6 +794,7 @@ export function AppProvider({ children }) {
     dbDeleteTask,
     createClient,
     updateClient,
+    deleteClient,
     createTask,
     updateTask,
     deleteTask,

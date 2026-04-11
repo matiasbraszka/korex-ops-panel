@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import SaveBar from './SaveBar';
 
 const SLOTS = [1, 2, 3, 4, 5, 6];
 const DEFAULTS = {
@@ -12,15 +14,31 @@ const DEFAULTS = {
 
 export default function PrioritiesEditor() {
   const { appSettings, updateAppSettings } = useApp();
-  const labels = appSettings?.priority_labels || DEFAULTS;
+  const original = appSettings?.priority_labels || DEFAULTS;
+  const [draft, setDraft] = useState(original);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (!dirty) setDraft(appSettings?.priority_labels || DEFAULTS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appSettings]);
 
   const updateSlot = (slot, fields) => {
-    const next = { ...labels, [slot]: { ...(labels[slot] || DEFAULTS[slot]), ...fields } };
-    updateAppSettings({ priority_labels: next });
+    setDraft(prev => ({ ...prev, [slot]: { ...(prev[slot] || DEFAULTS[slot]), ...fields } }));
+    setDirty(true);
+  };
+
+  const handleSave = () => {
+    updateAppSettings({ priority_labels: draft });
+    setDirty(false);
+  };
+  const handleCancel = () => {
+    setDraft(appSettings?.priority_labels || DEFAULTS);
+    setDirty(false);
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 max-w-[600px]">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 max-w-[600px] relative">
       <div className="mb-3">
         <h2 className="text-[14px] font-bold text-gray-800">Etiquetas de prioridad</h2>
         <p className="text-[11px] text-gray-400 mt-0.5">Renombrá los niveles de prioridad de cada cliente y ajustá sus colores.</p>
@@ -28,7 +46,7 @@ export default function PrioritiesEditor() {
 
       <div className="space-y-2">
         {SLOTS.map(slot => {
-          const cur = labels[slot] || DEFAULTS[slot];
+          const cur = draft[slot] || DEFAULTS[slot];
           return (
             <div key={slot} className="flex items-center gap-3">
               <span className="text-[11px] font-bold text-gray-400 w-4 text-center">{slot}</span>
@@ -55,6 +73,8 @@ export default function PrioritiesEditor() {
           );
         })}
       </div>
+
+      <SaveBar dirty={dirty} onSave={handleSave} onCancel={handleCancel} />
     </div>
   );
 }

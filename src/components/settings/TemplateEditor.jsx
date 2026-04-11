@@ -1,29 +1,54 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Plus, X, ArrowUp, ArrowDown, Link2, RotateCcw } from 'lucide-react';
 import Modal from '../Modal';
+import SaveBar from './SaveBar';
 import { DEFAULT_TASKS_TEMPLATE, PHASES } from '../../utils/constants';
 
 /**
- * Editor del template global de roadmap. Opera sobre appSettings.roadmap_template.
- * Cambios se persisten via updateAppSettings (debounce manejado por el contexto).
+ * Editor del template global de roadmap. Trabaja sobre un draft local;
+ * los cambios se persisten en app_settings solo al clickear "Guardar cambios".
  */
 export default function TemplateEditor() {
   const { appSettings, updateAppSettings, teamMembers } = useApp();
-  const [depsModal, setDepsModal] = useState(null); // taskId siendo editada
-  const [addingTaskTo, setAddingTaskTo] = useState(null); // phaseId
+  const emptyTpl = { phases: [], tasks: [] };
+  const [draft, setDraft] = useState(appSettings?.roadmap_template || emptyTpl);
+  const [dirty, setDirty] = useState(false);
+
+  const [depsModal, setDepsModal] = useState(null);
+  const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [newTaskName, setNewTaskName] = useState('');
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
 
-  const template = appSettings?.roadmap_template || { phases: [], tasks: [] };
-  const phases = template.phases || [];
-  const tasks = template.tasks || [];
+  // Resync con contexto si no hay cambios pendientes
+  useEffect(() => {
+    if (!dirty && appSettings?.roadmap_template) {
+      setDraft(appSettings.roadmap_template);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appSettings]);
+
+  const phases = draft.phases || [];
+  const tasks = draft.tasks || [];
 
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [phases]);
 
-  // Helper para mutar el template completo
-  const setTemplate = (next) => updateAppSettings({ roadmap_template: next });
+  // Helper para mutar el draft completo
+  const setTemplate = (next) => { setDraft(next); setDirty(true); };
+
+  const handleSave = () => {
+    updateAppSettings({ roadmap_template: draft });
+    setDirty(false);
+  };
+  const handleCancel = () => {
+    setDraft(appSettings?.roadmap_template || emptyTpl);
+    setDirty(false);
+    setAddingTaskTo(null);
+    setAddingPhase(false);
+    setNewTaskName('');
+    setNewPhaseName('');
+  };
 
   // ── Phase ops ──
   const updatePhase = (phaseId, fields) => {
@@ -370,6 +395,8 @@ export default function TemplateEditor() {
           );
         })()}
       </Modal>
+
+      <SaveBar dirty={dirty} onSave={handleSave} onCancel={handleCancel} />
     </div>
   );
 }
