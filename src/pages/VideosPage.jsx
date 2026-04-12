@@ -96,12 +96,12 @@ export default function VideosPage() {
 
       {/* Video principal (tutorial del sistema) */}
       {mainVideo && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-blue-50/30">
-            <Star size={14} className="text-blue-500 fill-blue-500" />
-            <span className="text-[13px] font-bold text-blue-700">Tutorial del sistema</span>
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden max-w-[560px]">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-blue-50/30">
+            <Star size={12} className="text-blue-500 fill-blue-500" />
+            <span className="text-[12px] font-bold text-blue-700">Tutorial del sistema</span>
             {canEdit && (
-              <button className="ml-auto text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1" onClick={() => handleDelete(mainVideo.id)} title="Eliminar"><X size={13} /></button>
+              <button className="ml-auto text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1" onClick={() => handleDelete(mainVideo.id)} title="Eliminar"><X size={12} /></button>
             )}
           </div>
           <div className="aspect-video">
@@ -113,9 +113,9 @@ export default function VideosPage() {
               title={mainVideo.title}
             />
           </div>
-          <div className="px-4 py-3">
-            <div className="text-[15px] font-bold text-gray-800">{mainVideo.title}</div>
-            {mainVideo.description && <div className="text-[12px] text-gray-500 mt-1">{mainVideo.description}</div>}
+          <div className="px-3 py-2">
+            <div className="text-[13px] font-bold text-gray-800">{mainVideo.title}</div>
+            {mainVideo.description && <div className="text-[11px] text-gray-500 mt-0.5">{mainVideo.description}</div>}
           </div>
         </div>
       )}
