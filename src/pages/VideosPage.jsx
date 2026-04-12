@@ -94,81 +94,55 @@ export default function VideosPage() {
         )}
       </div>
 
-      {/* Video principal (tutorial del sistema) */}
-      {mainVideo && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden max-w-[560px]">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-blue-50/30">
-            <Star size={12} className="text-blue-500 fill-blue-500" />
-            <span className="text-[12px] font-bold text-blue-700">Tutorial del sistema</span>
-            {canEdit && (
-              <button className="ml-auto text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1" onClick={() => handleDelete(mainVideo.id)} title="Eliminar"><X size={12} /></button>
-            )}
+      {/* Grid unificado: principal (2 cols) + actualizaciones */}
+      <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+        {/* Video principal */}
+        {mainVideo && (
+          <div className="col-span-2 max-md:col-span-1 bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-blue-50/30">
+              <Star size={12} className="text-blue-500 fill-blue-500" />
+              <span className="text-[12px] font-bold text-blue-700">Tutorial del sistema</span>
+              {canEdit && (
+                <button className="ml-auto text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1" onClick={() => handleDelete(mainVideo.id)} title="Eliminar"><X size={12} /></button>
+              )}
+            </div>
+            <div className="aspect-video">
+              <iframe src={toEmbedUrl(mainVideo.loom_url)} frameBorder="0" allowFullScreen className="w-full h-full" title={mainVideo.title} />
+            </div>
+            <div className="px-3 py-2">
+              <div className="text-[13px] font-bold text-gray-800">{mainVideo.title}</div>
+              {mainVideo.description && <div className="text-[11px] text-gray-500 mt-0.5">{mainVideo.description}</div>}
+            </div>
           </div>
-          <div className="aspect-video">
-            <iframe
-              src={toEmbedUrl(mainVideo.loom_url)}
-              frameBorder="0"
-              allowFullScreen
-              className="w-full h-full"
-              title={mainVideo.title}
-            />
-          </div>
-          <div className="px-3 py-2">
-            <div className="text-[13px] font-bold text-gray-800">{mainVideo.title}</div>
-            {mainVideo.description && <div className="text-[11px] text-gray-500 mt-0.5">{mainVideo.description}</div>}
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Grid de actualizaciones */}
-      {updates.length > 0 && (
-        <div>
-          <h2 className="text-[14px] font-bold text-gray-700 mb-3">Actualizaciones</h2>
-          <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
-            {updates.map(v => {
-              const isNew = !getSeen().includes(v.id);
-              return (
-                <div key={v.id} className={`bg-white border rounded-xl overflow-hidden transition-all hover:shadow-sm ${isNew ? 'border-blue-300 ring-1 ring-blue-100' : 'border-gray-200'}`}>
-                  <div className="aspect-video relative">
-                    <iframe
-                      src={toEmbedUrl(v.loom_url)}
-                      frameBorder="0"
-                      allowFullScreen
-                      className="w-full h-full"
-                      title={v.title}
-                    />
-                    {isNew && (
-                      <span className="absolute top-2 right-2 text-[9px] font-bold text-white bg-blue-500 rounded-full px-2 py-0.5">NUEVO</span>
-                    )}
+        {/* Actualizaciones: llenan el resto del grid */}
+        {updates.map(v => {
+          const isNew = !getSeen().includes(v.id);
+          return (
+            <div key={v.id} className={`bg-white border rounded-xl overflow-hidden transition-all hover:shadow-sm ${isNew ? 'border-blue-300 ring-1 ring-blue-100' : 'border-gray-200'}`}>
+              <div className="aspect-video relative">
+                <iframe src={toEmbedUrl(v.loom_url)} frameBorder="0" allowFullScreen className="w-full h-full" title={v.title} />
+                {isNew && <span className="absolute top-2 right-2 text-[9px] font-bold text-white bg-blue-500 rounded-full px-2 py-0.5">NUEVO</span>}
+              </div>
+              <div className="px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-gray-800 leading-snug">{v.title}</div>
+                    {v.description && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{v.description}</div>}
                   </div>
-                  <div className="px-3 py-2.5">
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-gray-800 leading-snug">{v.title}</div>
-                        {v.description && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{v.description}</div>}
-                      </div>
-                      {canEdit && (
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <button
-                            className="text-gray-400 hover:text-yellow-500 bg-transparent border-none cursor-pointer p-1"
-                            onClick={() => handleSetMain(v.id)}
-                            title="Marcar como tutorial principal"
-                          ><Star size={12} /></button>
-                          <button
-                            className="text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1"
-                            onClick={() => handleDelete(v.id)}
-                            title="Eliminar"
-                          ><X size={12} /></button>
-                        </div>
-                      )}
+                  {canEdit && (
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button className="text-gray-400 hover:text-yellow-500 bg-transparent border-none cursor-pointer p-1" onClick={() => handleSetMain(v.id)} title="Marcar como tutorial principal"><Star size={12} /></button>
+                      <button className="text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1" onClick={() => handleDelete(v.id)} title="Eliminar"><X size={12} /></button>
                     </div>
-                  </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Empty state */}
       {loomVideos.length === 0 && !adding && (
