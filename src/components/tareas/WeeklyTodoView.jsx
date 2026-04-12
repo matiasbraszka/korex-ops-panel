@@ -97,40 +97,33 @@ export default function WeeklyTodoView() {
   const isCurrentWeek = mondayStr === getMonday(nowStr);
 
   // ── Navegacion por drag (zonas laterales) ──
-  const edgeTimerRef = useRef(null);
   const [dragOverEdge, setDragOverEdge] = useState(null); // 'prev' | 'next'
 
   const handleEdgeDragOver = (e, edge) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverEdge(edge);
-    // Auto-navegar despues de 600ms de hover sostenido
-    if (!edgeTimerRef.current) {
-      edgeTimerRef.current = setTimeout(async () => {
-        const todo = weeklyTodos.find(t => t.id === dragId);
-        if (!todo) return;
-        // Mover la tarea al lunes de la semana destino
-        const [y, m, d] = mondayStr.split('-').map(Number);
-        const dt = new Date(y, m - 1, d);
-        dt.setDate(dt.getDate() + (edge === 'prev' ? -7 : 7));
-        const targetMonday = fmtIso(dt);
-        await updateWeeklyTodo(todo.id, { date: targetMonday });
-        // Navegar a esa semana
-        setMondayStr(targetMonday);
-        edgeTimerRef.current = null;
-        setDragId(null);
-        setDragOverEdge(null);
-        setDragOverDay(null);
-      }, 600);
-    }
   };
 
   const handleEdgeDragLeave = () => {
     setDragOverEdge(null);
-    if (edgeTimerRef.current) {
-      clearTimeout(edgeTimerRef.current);
-      edgeTimerRef.current = null;
-    }
+  };
+
+  const handleEdgeDrop = async (e, edge) => {
+    e.preventDefault();
+    if (!dragId) return;
+    const todo = weeklyTodos.find(t => t.id === dragId);
+    if (!todo) { setDragId(null); setDragOverEdge(null); return; }
+    // Calcular lunes de la semana destino
+    const [y, m, d] = mondayStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + (edge === 'prev' ? -7 : 7));
+    const targetMonday = fmtIso(dt);
+    await updateWeeklyTodo(todo.id, { date: targetMonday });
+    setMondayStr(targetMonday);
+    setDragId(null);
+    setDragOverEdge(null);
+    setDragOverDay(null);
   };
 
   // ── Drag & drop handlers ──
@@ -249,19 +242,20 @@ export default function WeeklyTodoView() {
 
       {/* Grid semanal con zonas de drop laterales para cambiar de semana */}
       <div className="flex gap-2">
-        {/* Zona izquierda: semana anterior (solo visible mientras arrastras) */}
-        {dragId && (
-          <div
-            className={`w-10 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center transition-all cursor-pointer ${
-              dragOverEdge === 'prev' ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-gray-300'
-            }`}
-            onDragOver={(e) => handleEdgeDragOver(e, 'prev')}
-            onDragLeave={handleEdgeDragLeave}
-            title="Mover a semana anterior"
-          >
-            <ChevronLeft size={18} />
-          </div>
-        )}
+        {/* Zona izquierda: semana anterior */}
+        <div
+          className={`w-8 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center transition-all ${
+            dragId
+              ? dragOverEdge === 'prev' ? 'border-blue-400 bg-blue-50 text-blue-600 opacity-100' : 'border-gray-300 text-gray-400 opacity-100'
+              : 'border-transparent text-transparent opacity-0 pointer-events-none'
+          }`}
+          onDragOver={(e) => handleEdgeDragOver(e, 'prev')}
+          onDragLeave={handleEdgeDragLeave}
+          onDrop={(e) => handleEdgeDrop(e, 'prev')}
+          title="Soltar para mover a semana anterior"
+        >
+          <ChevronLeft size={16} />
+        </div>
 
       <div className="flex-1 grid grid-cols-7 gap-2 max-md:grid-cols-1">
         {dates.map((dateStr, dayIdx) => {
@@ -390,19 +384,20 @@ export default function WeeklyTodoView() {
         })}
       </div>
 
-        {/* Zona derecha: semana siguiente (solo visible mientras arrastras) */}
-        {dragId && (
-          <div
-            className={`w-10 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center transition-all cursor-pointer ${
-              dragOverEdge === 'next' ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-gray-300'
-            }`}
-            onDragOver={(e) => handleEdgeDragOver(e, 'next')}
-            onDragLeave={handleEdgeDragLeave}
-            title="Mover a semana siguiente"
-          >
-            <ChevronRight size={18} />
-          </div>
-        )}
+        {/* Zona derecha: semana siguiente */}
+        <div
+          className={`w-8 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center transition-all ${
+            dragId
+              ? dragOverEdge === 'next' ? 'border-blue-400 bg-blue-50 text-blue-600 opacity-100' : 'border-gray-300 text-gray-400 opacity-100'
+              : 'border-transparent text-transparent opacity-0 pointer-events-none'
+          }`}
+          onDragOver={(e) => handleEdgeDragOver(e, 'next')}
+          onDragLeave={handleEdgeDragLeave}
+          onDrop={(e) => handleEdgeDrop(e, 'next')}
+          title="Soltar para mover a semana siguiente"
+        >
+          <ChevronRight size={16} />
+        </div>
       </div>
 
       {/* Task picker modal */}
