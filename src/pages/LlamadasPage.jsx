@@ -18,7 +18,7 @@ function fmtFecha(d) {
 }
 
 export default function LlamadasPage() {
-  const { llamadas, updateLlamada, deleteLlamada, createTask, clients, currentUser } = useApp();
+  const { llamadas, updateLlamada, deleteLlamada, createTask, clients, tasks, currentUser } = useApp();
   const [expandedId, setExpandedId] = useState(null);
   const [catFilter, setCatFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
@@ -193,6 +193,10 @@ export default function LlamadasPage() {
                   onUpdate={updateLlamada}
                   onCreateTask={createTask}
                   clients={clients}
+                  tasks={tasks}
+                  onToggleRetro={(id) => {
+                    updateLlamada(id, { usar_como_contexto: !l.usar_como_contexto });
+                  }}
                 />
               )}
             </div>
