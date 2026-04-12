@@ -94,11 +94,11 @@ export default function VideosPage() {
         )}
       </div>
 
-      {/* Grid unificado: principal (2 cols) + actualizaciones */}
-      <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+      {/* Layout: principal a la izquierda + lista de actualizaciones a la derecha */}
+      <div className="grid grid-cols-[1fr_320px] gap-4 max-md:grid-cols-1">
         {/* Video principal */}
-        {mainVideo && (
-          <div className="col-span-2 max-md:col-span-1 bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {mainVideo ? (
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden self-start">
             <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-blue-50/30">
               <Star size={12} className="text-blue-500 fill-blue-500" />
               <span className="text-[12px] font-bold text-blue-700">Tutorial del sistema</span>
@@ -114,34 +114,45 @@ export default function VideosPage() {
               {mainVideo.description && <div className="text-[11px] text-gray-500 mt-0.5">{mainVideo.description}</div>}
             </div>
           </div>
+        ) : (
+          <div />
         )}
 
-        {/* Actualizaciones: llenan el resto del grid */}
-        {updates.map(v => {
-          const isNew = !getSeen().includes(v.id);
-          return (
-            <div key={v.id} className={`bg-white border rounded-xl overflow-hidden transition-all hover:shadow-sm ${isNew ? 'border-blue-300 ring-1 ring-blue-100' : 'border-gray-200'}`}>
-              <div className="aspect-video relative">
-                <iframe src={toEmbedUrl(v.loom_url)} frameBorder="0" allowFullScreen className="w-full h-full" title={v.title} />
-                {isNew && <span className="absolute top-2 right-2 text-[9px] font-bold text-white bg-blue-500 rounded-full px-2 py-0.5">NUEVO</span>}
-              </div>
-              <div className="px-3 py-2.5">
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-gray-800 leading-snug">{v.title}</div>
-                    {v.description && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{v.description}</div>}
+        {/* Sidebar de actualizaciones con scroll */}
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden self-start max-h-[500px] flex flex-col">
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 shrink-0">
+            <span className="text-[12px] font-bold text-gray-700">Actualizaciones</span>
+            <span className="text-[10px] text-gray-400">{updates.length}</span>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {updates.length === 0 && (
+              <div className="text-xs text-gray-400 text-center py-8">Sin actualizaciones</div>
+            )}
+            {updates.map(v => {
+              const isNew = !getSeen().includes(v.id);
+              return (
+                <div
+                  key={v.id}
+                  className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors ${isNew ? 'bg-blue-50/30' : ''}`}
+                >
+                  <div className="aspect-video relative">
+                    <iframe src={toEmbedUrl(v.loom_url)} frameBorder="0" allowFullScreen className="w-full h-full" title={v.title} />
+                    {isNew && <span className="absolute top-1.5 right-1.5 text-[8px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-[1px]">NUEVO</span>}
                   </div>
-                  {canEdit && (
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <button className="text-gray-400 hover:text-yellow-500 bg-transparent border-none cursor-pointer p-1" onClick={() => handleSetMain(v.id)} title="Marcar como tutorial principal"><Star size={12} /></button>
-                      <button className="text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-1" onClick={() => handleDelete(v.id)} title="Eliminar"><X size={12} /></button>
-                    </div>
-                  )}
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <span className={`text-[12px] font-semibold flex-1 min-w-0 truncate ${isNew ? 'text-blue-700' : 'text-gray-700'}`}>{v.title}</span>
+                    {canEdit && (
+                      <div className="flex items-center gap-0 shrink-0">
+                        <button className="text-gray-400 hover:text-yellow-500 bg-transparent border-none cursor-pointer p-0.5" onClick={() => handleSetMain(v.id)} title="Marcar como principal"><Star size={11} /></button>
+                        <button className="text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0.5" onClick={() => handleDelete(v.id)} title="Eliminar"><X size={11} /></button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Empty state */}
