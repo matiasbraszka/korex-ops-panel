@@ -44,7 +44,8 @@ export default function WeeklyTodoView() {
   const { tasks, clients, currentUser, weeklyTodos, loadWeeklyTodos, addWeeklyTodo, removeWeeklyTodo, updateWeeklyTodo, updateTask } = useApp();
 
   const nowStr = today();
-  const [subView, setSubView] = useState('semanal'); // 'semanal' | 'diaria'
+  const [subView, setSubView] = useState('3dias'); // '3dias' | 'diaria'
+  const [threeDayStart, setThreeDayStart] = useState(nowStr); // primer dia de la vista 3 dias
   const [mondayStr, setMondayStr] = useState(() => getMonday(nowStr));
   const [selectedDate, setSelectedDate] = useState(nowStr); // para vista diaria
   const [pickerDate, setPickerDate] = useState(null);
@@ -58,26 +59,45 @@ export default function WeeklyTodoView() {
 
   const dates = useMemo(() => weekDates(mondayStr), [mondayStr]);
 
-  // Cargar datos: en semanal carga la semana, en diaria carga solo el dia seleccionado
+  // Vista 3 dias: array de 3 fechas a partir de threeDayStart
+  const threeDays = useMemo(() => {
+    const [y, m, d] = threeDayStart.split('-').map(Number);
+    return Array.from({ length: 3 }, (_, i) => {
+      const dt = new Date(y, m - 1, d + i);
+      return fmtIso(dt);
+    });
+  }, [threeDayStart]);
+
+  // Label para vista 3 dias
+  const threeDayLabel = useMemo(() => {
+    const [, , d1] = threeDays[0].split('-').map(Number);
+    const [y3, m3, d3] = threeDays[2].split('-').map(Number);
+    const dt = new Date(y3, m3 - 1, d3);
+    const month = dt.toLocaleDateString('es-AR', { month: 'long' });
+    return `${d1} al ${d3} de ${month} ${y3}`;
+  }, [threeDays]);
+
+  // Cargar datos segun la vista activa
   useEffect(() => {
     if (!currentUser?.id) return;
-    if (subView === 'semanal') {
-      loadWeeklyTodos(currentUser.id, dates[0], dates[6]);
+    if (subView === '3dias') {
+      loadWeeklyTodos(currentUser.id, threeDays[0], threeDays[2]);
     } else {
       loadWeeklyTodos(currentUser.id, selectedDate, selectedDate);
     }
-  }, [currentUser?.id, mondayStr, selectedDate, subView, loadWeeklyTodos, dates]);
+  }, [currentUser?.id, threeDayStart, selectedDate, subView, loadWeeklyTodos, threeDays]);
 
-  // Navegacion semanal
-  const goWeek = (dir) => {
-    const [y, m, d] = mondayStr.split('-').map(Number);
+  // Navegacion 3 dias
+  const goThreeDays = (dir) => {
+    const [y, m, d] = threeDayStart.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + dir * 7);
-    setMondayStr(fmtIso(dt));
+    dt.setDate(dt.getDate() + dir * 3);
+    setThreeDayStart(fmtIso(dt));
   };
   const goToday = () => {
-    setMondayStr(getMonday(nowStr));
+    setThreeDayStart(nowStr);
     setSelectedDate(nowStr);
+    setMondayStr(getMonday(nowStr));
   };
 
   // Navegacion diaria
@@ -108,14 +128,15 @@ export default function WeeklyTodoView() {
 
   const dailyLinkedIds = useMemo(() => new Set(dailyTodos.map(wt => wt.taskId)), [dailyTodos]);
 
+  const activeDates = subView === '3dias' ? threeDays : [selectedDate];
+
   const todosByDate = useMemo(() => {
     const map = {};
-    dates.forEach(d => { map[d] = []; });
+    activeDates.forEach(d => { map[d] = []; });
     weeklyTodos.forEach(wt => { if (map[wt.date]) map[wt.date].push(wt); });
-    // Ordenar por position dentro de cada dia
     Object.values(map).forEach(arr => arr.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)));
     return map;
-  }, [weeklyTodos, dates]);
+  }, [weeklyTodos, activeDates]);
 
   const linkedTaskIds = useMemo(() => {
     if (!pickerDate) return new Set();
@@ -153,13 +174,13 @@ export default function WeeklyTodoView() {
     if (!dragId) return;
     const todo = weeklyTodos.find(t => t.id === dragId);
     if (!todo) { setDragId(null); setDragOverEdge(null); return; }
-    // Calcular lunes de la semana destino
-    const [y, m, d] = mondayStr.split('-').map(Number);
+    // Mover al primer dia del bloque anterior/siguiente
+    const [y, m, d] = threeDayStart.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + (edge === 'prev' ? -7 : 7));
-    const targetMonday = fmtIso(dt);
-    await updateWeeklyTodo(todo.id, { date: targetMonday });
-    setMondayStr(targetMonday);
+    dt.setDate(dt.getDate() + (edge === 'prev' ? -3 : 3));
+    const targetStart = fmtIso(dt);
+    await updateWeeklyTodo(todo.id, { date: targetStart });
+    setThreeDayStart(targetStart);
     setDragId(null);
     setDragOverEdge(null);
     setDragOverDay(null);
@@ -262,29 +283,29 @@ export default function WeeklyTodoView() {
         {/* Nav izquierda */}
         <button
           className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-800 bg-transparent border border-gray-200 hover:border-gray-300 rounded-lg py-1.5 px-2.5 cursor-pointer font-sans transition-colors"
-          onClick={() => subView === 'semanal' ? goWeek(-1) : goDay(-1)}
+          onClick={() => subView === '3dias' ? goThreeDays(-1) : goDay(-1)}
         >
-          <ChevronLeft size={14} /> {subView === 'semanal' ? 'Anterior' : 'Ayer'}
+          <ChevronLeft size={14} /> {subView === '3dias' ? 'Anterior' : 'Ayer'}
         </button>
 
         {/* Centro: titulo + sub-toggle */}
         <div className="text-center flex-1">
           <div className="text-[14px] font-bold text-gray-800">
-            {subView === 'semanal' ? weekLabel(dates) : dayLabel}
+            {subView === '3dias' ? threeDayLabel : dayLabel}
           </div>
           <div className="flex items-center justify-center gap-1 mt-1.5">
-            {['semanal', 'diaria'].map(v => (
+            {['3dias', 'diaria'].map(v => (
               <button
                 key={v}
-                onClick={() => { setSubView(v); if (v === 'diaria') setSelectedDate(nowStr); }}
+                onClick={() => { setSubView(v); if (v === 'diaria') setSelectedDate(nowStr); if (v === '3dias') setThreeDayStart(nowStr); }}
                 className={`text-[11px] font-semibold py-1 px-3 rounded-full border cursor-pointer font-sans transition-colors ${
                   subView === v ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                 }`}
               >
-                {v === 'semanal' ? 'Semanal' : 'Diaria'}
+                {v === '3dias' ? '3 dias' : 'Diaria'}
               </button>
             ))}
-            {((subView === 'semanal' && !isCurrentWeek) || (subView === 'diaria' && !isToday)) && (
+            {((subView === '3dias' && threeDayStart !== nowStr) || (subView === 'diaria' && !isToday)) && (
               <button className="text-[11px] text-blue-500 hover:text-blue-600 bg-transparent border-none cursor-pointer font-sans ml-1" onClick={goToday}>
                 Hoy
               </button>
@@ -295,14 +316,14 @@ export default function WeeklyTodoView() {
         {/* Nav derecha */}
         <button
           className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-800 bg-transparent border border-gray-200 hover:border-gray-300 rounded-lg py-1.5 px-2.5 cursor-pointer font-sans transition-colors"
-          onClick={() => subView === 'semanal' ? goWeek(1) : goDay(1)}
+          onClick={() => subView === '3dias' ? goThreeDays(1) : goDay(1)}
         >
-          {subView === 'semanal' ? 'Siguiente' : 'Mañana'} <ChevronRight size={14} />
+          {subView === '3dias' ? 'Siguiente' : 'Mañana'} <ChevronRight size={14} />
         </button>
       </div>
 
-      {/* ═══ Vista SEMANAL ═══ */}
-      {subView === 'semanal' && (
+      {/* ═══ Vista 3 DIAS ═══ */}
+      {subView === '3dias' && (
       <div className="flex gap-2">
         {/* Zona izquierda: semana anterior */}
         <div
@@ -319,13 +340,16 @@ export default function WeeklyTodoView() {
           <ChevronLeft size={16} />
         </div>
 
-      <div className="flex-1 grid grid-cols-7 gap-2 max-md:grid-cols-1">
-        {dates.map((dateStr, dayIdx) => {
-          const isToday = dateStr === nowStr;
-          const isWeekend = dayIdx >= 5;
+      <div className="flex-1 grid grid-cols-3 gap-3 max-md:grid-cols-1">
+        {threeDays.map((dateStr) => {
+          const [dy, dm, dayNum] = dateStr.split('-').map(Number);
+          const dtObj = new Date(dy, dm - 1, dayNum);
+          const dayIdx = (dtObj.getDay() + 6) % 7; // 0=Lun..6=Dom
+          const isTodayCol = dateStr === nowStr;
+          const isWeekend = dtObj.getDay() === 0 || dtObj.getDay() === 6;
           const dayTodos = todosByDate[dateStr] || [];
-          const [, , dayNum] = dateStr.split('-').map(Number);
           const isDragTarget = dragOverDay === dateStr && dragId;
+          const fullDayName = DAY_FULL[dtObj.getDay()];
 
           return (
             <div
@@ -333,7 +357,7 @@ export default function WeeklyTodoView() {
               className={`rounded-xl border min-h-[200px] flex flex-col transition-all ${
                 isDragTarget
                   ? 'border-blue-400 bg-blue-50/40 shadow-md ring-2 ring-blue-200'
-                  : isToday
+                  : isTodayCol
                     ? 'border-blue-400 bg-blue-50/30 shadow-sm'
                     : isWeekend
                       ? 'border-gray-100 bg-gray-50/50'
@@ -344,12 +368,12 @@ export default function WeeklyTodoView() {
               onDrop={(e) => handleDayDrop(e, dateStr)}
             >
               {/* Day header */}
-              <div className={`flex items-center justify-between px-3 py-2 border-b ${isToday ? 'border-blue-200' : 'border-gray-100'}`}>
+              <div className={`flex items-center justify-between px-3 py-2.5 border-b ${isTodayCol ? 'border-blue-200' : 'border-gray-100'}`}>
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-[13px] font-bold ${isToday ? 'text-blue-600' : 'text-gray-700'}`}>{DAY_LABELS[dayIdx]}</span>
-                  <span className={`text-[13px] ${isToday ? 'text-blue-500 font-semibold' : 'text-gray-400'}`}>{dayNum}</span>
+                  <span className={`text-[14px] font-bold ${isTodayCol ? 'text-blue-600' : 'text-gray-700'}`}>{fullDayName}</span>
+                  <span className={`text-[14px] ${isTodayCol ? 'text-blue-500 font-semibold' : 'text-gray-400'}`}>{dayNum}</span>
                 </div>
-                {isToday && <span className="text-[9px] font-bold text-blue-600 bg-blue-100 rounded-full px-1.5 py-[1px]">HOY</span>}
+                {isTodayCol && <span className="text-[9px] font-bold text-blue-600 bg-blue-100 rounded-full px-1.5 py-[1px]">HOY</span>}
                 {dayTodos.length > 0 && <span className="text-[10px] text-gray-400 font-semibold">{dayTodos.length}</span>}
               </div>
 
@@ -411,13 +435,10 @@ export default function WeeklyTodoView() {
                           />
 
                           <div className="flex-1 min-w-0">
-                            <div
-                              className={`text-[11px] font-medium leading-snug line-clamp-2 ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}
-                              title={task.title}
-                            >
+                            <div className={`text-[12px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {task.title}
                             </div>
-                            {cName && <div className="text-[9px] text-gray-400 mt-0.5 truncate">{cName}</div>}
+                            {cName && <div className="text-[10px] text-gray-400 mt-0.5 truncate">{cName}</div>}
                           </div>
 
                           <button
