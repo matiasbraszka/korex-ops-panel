@@ -506,6 +506,18 @@ export function AppProvider({ children }) {
     setWeeklyTodos(prev => prev.filter(t => t.id !== todoId));
   }, []);
 
+  const updateWeeklyTodo = useCallback(async (todoId, fields) => {
+    const dbFields = {};
+    if (fields.date !== undefined) dbFields.date = fields.date;
+    if (fields.position !== undefined) dbFields.position = fields.position;
+    await sbFetch('weekly_todos?id=eq.' + encodeURIComponent(todoId), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(dbFields)
+    });
+    setWeeklyTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...fields } : t));
+  }, []);
+
   // ── Normalize client priority (new 6-level scale) ──
   // 1: SUPER PRIORITARIO, 2: IMPORTANTES, 3: NORMAL, 4: POCO IMPORTANTES, 5: NUEVOS, 6: DESCARTADOS
   const normalizePriority = (p) => {
@@ -847,6 +859,7 @@ export function AppProvider({ children }) {
     loadWeeklyTodos,
     addWeeklyTodo,
     removeWeeklyTodo,
+    updateWeeklyTodo,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
