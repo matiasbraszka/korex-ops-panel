@@ -4,6 +4,7 @@ import ViewToggle from '../components/tareas/ViewToggle';
 import FiltersBar from '../components/tareas/FiltersBar';
 import RoadmapView from '../components/tareas/RoadmapView';
 import TimelineView from '../components/tareas/TimelineView';
+import WeeklyTodoView from '../components/tareas/WeeklyTodoView';
 import TasksPage from './TasksPage';
 
 const VIEW_KEY = 'tareas_current_view';
@@ -14,7 +15,7 @@ export default function TareasPage() {
   const [view, setView] = useState(() => {
     try {
       const saved = localStorage.getItem(VIEW_KEY);
-      return saved && ['roadmap', 'timeline', 'lista'].includes(saved) ? saved : 'roadmap';
+      return saved && ['roadmap', 'timeline', 'lista', 'mi-semana'].includes(saved) ? saved : 'roadmap';
     } catch {
       return 'roadmap';
     }
@@ -40,13 +41,14 @@ export default function TareasPage() {
       {/* View toggle */}
       <ViewToggle value={view} onChange={setView} />
 
-      {/* Unified filters bar — applies to all three views */}
-      <FiltersBar />
+      {/* Unified filters bar — applies to roadmap/timeline/lista (not mi-semana) */}
+      {view !== 'mi-semana' && <FiltersBar />}
 
       {/* Active view */}
       {view === 'roadmap' && <RoadmapView />}
       {view === 'timeline' && <TimelineView onGoToTaskList={handleGoToTaskList} />}
       {view === 'lista' && <TasksPage embedded />}
+      {view === 'mi-semana' && <WeeklyTodoView />}
     </div>
   );
 }

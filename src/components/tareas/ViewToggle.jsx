@@ -3,6 +3,7 @@ export default function ViewToggle({ value, onChange }) {
     { id: 'roadmap',  label: 'Roadmap',  icon: '\u25A6' },
     { id: 'timeline', label: 'Timeline', icon: '\u25AE' },
     { id: 'lista',    label: 'Lista',    icon: '\u2630' },
+    { id: 'mi-semana', label: 'Mi semana', icon: '\uD83D\uDCC5' },
   ];
 
   return (

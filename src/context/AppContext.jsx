@@ -36,6 +36,8 @@ export function AppProvider({ children }) {
   // Settings panel state (cargado desde Supabase)
   const [appSettings, setAppSettings] = useState(null); // { roadmap_template, services, priority_labels }
   const [teamMembers, setTeamMembers] = useState([]); // [{ id, name, role, ... }]
+  // Weekly to-do list (personal por usuario)
+  const [weeklyTodos, setWeeklyTodos] = useState([]); // [{ id, userId, taskId, date, position }]
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -474,6 +476,36 @@ export function AppProvider({ children }) {
     setTeamMembers(prev => prev.filter(m => m.id !== id));
   }, []);
 
+  // ── CRUD: weekly_todos (to-do semanal personal) ──
+  const loadWeeklyTodos = useCallback(async (userId, startDate, endDate) => {
+    if (!userId) return;
+    try {
+      const rows = await sbFetch(
+        `weekly_todos?user_id=eq.${encodeURIComponent(userId)}&date=gte.${startDate}&date=lte.${endDate}&order=position.asc&select=*`,
+        { headers: { 'Prefer': 'return=representation' } }
+      );
+      if (rows && Array.isArray(rows)) {
+        setWeeklyTodos(rows.map(r => ({ id: r.id, userId: r.user_id, taskId: r.task_id, date: r.date, position: r.position ?? 0 })));
+      }
+    } catch (e) { console.warn('loadWeeklyTodos error', e); }
+  }, []);
+
+  const addWeeklyTodo = useCallback(async (userId, taskId, date) => {
+    const id = 'wt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const row = { id, user_id: userId, task_id: taskId, date, position: 0 };
+    await sbFetch('weekly_todos', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row)
+    });
+    setWeeklyTodos(prev => [...prev, { id, userId, taskId, date, position: 0 }]);
+  }, []);
+
+  const removeWeeklyTodo = useCallback(async (todoId) => {
+    await sbFetch('weekly_todos?id=eq.' + encodeURIComponent(todoId), { method: 'DELETE' });
+    setWeeklyTodos(prev => prev.filter(t => t.id !== todoId));
+  }, []);
+
   // ── Normalize client priority (new 6-level scale) ──
   // 1: SUPER PRIORITARIO, 2: IMPORTANTES, 3: NORMAL, 4: POCO IMPORTANTES, 5: NUEVOS, 6: DESCARTADOS
   const normalizePriority = (p) => {
@@ -810,6 +842,11 @@ export function AppProvider({ children }) {
     addTeamMember,
     updateTeamMember,
     deleteTeamMember,
+    // Weekly to-do
+    weeklyTodos,
+    loadWeeklyTodos,
+    addWeeklyTodo,
+    removeWeeklyTodo,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
