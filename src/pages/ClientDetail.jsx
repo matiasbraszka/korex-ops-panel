@@ -1212,74 +1212,36 @@ export default function ClientDetail({ client: c }) {
 
       {/* Row 2: Llamadas + Client Feedback */}
       <div className="grid gap-4 md:grid-cols-2 mb-4">
-          {/* Calls */}
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-              <span className="inline-flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#ECFDF5', color: '#22C55E' }}>{'\uD83D\uDCDE'}</span>
-                Llamadas
-              </span>
-              <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setFbForm({ date: today(), sentiment: 'neutral', text: '', fathomLink: '', keypoints: '', transcription: '' }); setFeedbackModal(true); }}>+ Nueva</button>
-            </div>
-            <div className="py-3 px-4">
-              {!c.feedback.length ? (
-                <div className="text-center text-text3 text-xs py-3.5">Sin llamadas registradas</div>
-              ) : (
-                [...c.feedback].reverse().map((f, fi) => (
-                  <div key={fi} className="py-2.5 px-4 border-b border-border last:border-b-0">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-sm">{sentEmoji[f.sentiment] || ''}</span>
-                      <span className="text-[10px] text-text3">{fmtDate(f.date)}</span>
-                      {f.fathomLink && <a className="text-[10px] text-blue no-underline ml-auto hover:underline" href={f.fathomLink} target="_blank" rel="noreferrer">{'\uD83C\uDFAC'} Fathom</a>}
-                    </div>
-                    <div className="text-xs leading-relaxed mb-1">{f.text}</div>
-                    {f.keypoints && (
-                      <div className="mt-1">
-                        {f.keypoints.split('\n').filter(k => k.trim()).map((k, ki) => (
-                          <div key={ki} className="text-[11px] text-text2 py-[2px] flex items-start gap-1">
-                            <span className="text-blue font-bold shrink-0">{'\u2022'}</span>{k.trim()}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {f.transcription && (() => {
-                      const tKey = c.id + '_' + fi;
-                      return (
-                        <>
-                          <button className="text-[10px] text-text3 cursor-pointer mt-1 bg-transparent border-none font-sans hover:text-blue" onClick={() => setOpenTranscription(prev => ({ ...prev, [tKey]: !prev[tKey] }))}>{'\uD83D\uDCDD'} {openTranscription[tKey] ? 'Ocultar' : 'Ver'} transcripcion</button>
-                          {openTranscription[tKey] && <div className="text-[11px] text-text3 bg-surface2 py-2 px-2.5 rounded-md mt-1 max-h-[200px] overflow-y-auto whitespace-pre-wrap leading-relaxed">{f.transcription}</div>}
-                        </>
-                      );
-                    })()}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Llamadas procesadas (link a seccion Llamadas) */}
+          {/* Llamadas del cliente */}
           {(() => {
             const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id);
-            if (clientLlamadas.length === 0) return null;
             return (
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center gap-2">
                   <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EFF6FF', color: '#3B82F6' }}>{'\uD83D\uDCDE'}</span>
-                  Llamadas procesadas
-                  <span className="text-[10px] text-gray-400 font-normal ml-1">{clientLlamadas.length}</span>
+                  Llamadas
+                  {clientLlamadas.length > 0 && <span className="text-[10px] text-gray-400 font-normal">{clientLlamadas.length}</span>}
                 </div>
                 <div className="py-1">
-                  {clientLlamadas.map(l => (
-                    <div key={l.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50/50 transition-colors">
-                      <span className="text-[12px] font-medium text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
-                      {l.duracion_min && <span className="text-[10px] text-gray-400 shrink-0">{l.duracion_min}min</span>}
-                      {l.fecha && <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
-                      {l.recording_url && (
-                        <a href={l.recording_url} target="_blank" rel="noreferrer"
-                          className="text-[10px] text-blue-500 hover:text-blue-700 no-underline shrink-0">{'\uD83C\uDFAC'} Ver</a>
-                      )}
-                    </div>
-                  ))}
+                  {clientLlamadas.length === 0 ? (
+                    <div className="text-center text-text3 text-xs py-3.5">Sin llamadas registradas</div>
+                  ) : (
+                    clientLlamadas.map(l => (
+                      <div key={l.id} className="px-4 py-2.5 border-b border-border last:border-b-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[12px] font-semibold text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
+                          {l.fecha && <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
+                          {l.recording_url && (
+                            <a href={l.recording_url} target="_blank" rel="noreferrer"
+                              className="text-[10px] text-blue no-underline shrink-0 hover:underline">{'\uD83C\uDFAC'} Ver</a>
+                          )}
+                        </div>
+                        {l.resumen && (
+                          <div className="text-[11px] text-text3 mt-1 leading-relaxed line-clamp-2">{l.resumen}</div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             );
@@ -1403,27 +1365,6 @@ export default function ClientDetail({ client: c }) {
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Cuello de botella</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.bottleneck || ''} onChange={e => setEditForm(f => ({ ...f, bottleneck: e.target.value }))} /></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Estado</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.status || 'active'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}><option value="active">Activo</option><option value="paused">Pausado</option><option value="completed">Completado</option></select></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Notas</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" value={editForm.notes || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} /></div>
-      </Modal>
-
-      {/* Feedback (Call) Modal */}
-      <Modal
-        open={feedbackModal}
-        onClose={() => setFeedbackModal(false)}
-        title="Registrar llamada"
-        maxWidth={520}
-        footer={<>
-          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setFeedbackModal(false)}>Cancelar</button>
-          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={saveFeedback}>Guardar</button>
-        </>}
-      >
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Fecha</label><input type="date" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={fbForm.date} onChange={e => setFbForm(f => ({ ...f, date: e.target.value }))} /></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Sentimiento</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={fbForm.sentiment} onChange={e => setFbForm(f => ({ ...f, sentiment: e.target.value }))}><option value="positive">Positivo</option><option value="neutral">Neutral</option><option value="negative">Negativo</option></select></div>
-        </div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Link de Fathom</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="https://fathom.video/..." value={fbForm.fathomLink} onChange={e => setFbForm(f => ({ ...f, fathomLink: e.target.value }))} /></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Resumen de la llamada</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" value={fbForm.text} onChange={e => setFbForm(f => ({ ...f, text: e.target.value }))} /></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Puntos clave (uno por linea)</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" placeholder={'El cliente quiere lanzar antes del 15\nNecesita mas contenido visual'} value={fbForm.keypoints} onChange={e => setFbForm(f => ({ ...f, keypoints: e.target.value }))} /></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Transcripcion (opcional)</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[60px] leading-relaxed" placeholder="Pega aqui la transcripcion completa..." value={fbForm.transcription} onChange={e => setFbForm(f => ({ ...f, transcription: e.target.value }))} /></div>
       </Modal>
 
       {/* Client Feedback Modal */}
