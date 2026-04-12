@@ -477,7 +477,7 @@ export default function WeeklyTodoView() {
             <span className="text-[12px] text-gray-400">{dailyTodos.length} tarea{dailyTodos.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {/* Tasks del dia */}
+          {/* Tasks del dia — con drag & drop para reordenar */}
           <div className="px-4 py-3 space-y-2 min-h-[300px]">
             {dailyTodos.length === 0 && (
               <div className="text-center text-gray-400 text-xs py-12">Sin tareas para este dia. Usa el boton de abajo para agregar.</div>
@@ -489,57 +489,73 @@ export default function WeeklyTodoView() {
               const stRef = getStatusRef('daily_' + wt.id);
               const cName = clientName(task.clientId);
               const isDone = task.status === 'done';
+              const isBeingDragged = dragId === wt.id;
+              const isDragOverCard = dragOverIdx === wt.id && dragId !== wt.id;
 
               return (
-                <div
-                  key={wt.id}
-                  className={`group rounded-xl border px-4 py-3 transition-colors ${
-                    isDone ? 'bg-green-50/50 border-green-200' : 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Status dot */}
-                    <span
-                      ref={el => stRef.current = el}
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-0.5"
-                      style={{ background: (st?.color || '#9CA3AF') + '15', color: st?.color || '#9CA3AF', border: `1.5px solid ${st?.color || '#9CA3AF'}` }}
-                      onClick={() => setOpenStatusDropdown('daily_' + wt.id)}
-                      title={st?.label || task.status}
-                    >
-                      {st?.icon || '\u25CB'}
-                    </span>
-                    <Dropdown
-                      open={openStatusDropdown === 'daily_' + wt.id}
-                      onClose={() => setOpenStatusDropdown(null)}
-                      anchorRef={stRef}
-                      items={Object.entries(TASK_STATUS)
-                        .filter(([k]) => k !== 'blocked' && k !== 'retrasadas')
-                        .map(([k, v]) => ({
-                          label: v.label, icon: v.icon, iconColor: v.color,
-                          onClick: () => updateTask(task.id, { status: k }),
-                        }))}
-                    />
+                <div key={wt.id}>
+                  {isDragOverCard && <div className="h-0.5 bg-blue-400 rounded-full my-1" />}
+                  <div
+                    className={`group rounded-xl border px-4 py-3 transition-all cursor-grab active:cursor-grabbing ${
+                      isBeingDragged
+                        ? 'opacity-40 scale-[0.98]'
+                        : isDone
+                          ? 'bg-green-50/50 border-green-200'
+                          : 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm'
+                    }`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, wt.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleCardDragOver(e, wt.id, selectedDate)}
+                    onDrop={(e) => handleCardDrop(e, wt.id, selectedDate)}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Grip handle */}
+                      <GripVertical size={14} className="text-gray-300 shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[14px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                        {task.title}
+                      {/* Status dot */}
+                      <span
+                        ref={el => stRef.current = el}
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-0.5"
+                        style={{ background: (st?.color || '#9CA3AF') + '15', color: st?.color || '#9CA3AF', border: `1.5px solid ${st?.color || '#9CA3AF'}` }}
+                        onClick={(e) => { e.stopPropagation(); setOpenStatusDropdown('daily_' + wt.id); }}
+                        title={st?.label || task.status}
+                      >
+                        {st?.icon || '\u25CB'}
+                      </span>
+                      <Dropdown
+                        open={openStatusDropdown === 'daily_' + wt.id}
+                        onClose={() => setOpenStatusDropdown(null)}
+                        anchorRef={stRef}
+                        items={Object.entries(TASK_STATUS)
+                          .filter(([k]) => k !== 'blocked' && k !== 'retrasadas')
+                          .map(([k, v]) => ({
+                            label: v.label, icon: v.icon, iconColor: v.color,
+                            onClick: () => updateTask(task.id, { status: k }),
+                          }))}
+                      />
+
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[14px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                          {task.title}
+                        </div>
+                        {task.description && (
+                          <div className="text-[12px] text-gray-400 mt-1 line-clamp-2">{task.description}</div>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {cName && <span className="text-[11px] text-gray-400">{cName}</span>}
+                          <span className="text-[10px] font-semibold uppercase" style={{ color: st?.color || '#9CA3AF' }}>{st?.label || task.status}</span>
+                        </div>
                       </div>
-                      {task.description && (
-                        <div className="text-[12px] text-gray-400 mt-1 line-clamp-2">{task.description}</div>
-                      )}
-                      <div className="flex items-center gap-3 mt-1.5">
-                        {cName && <span className="text-[11px] text-gray-400">{cName}</span>}
-                        <span className="text-[10px] font-semibold uppercase" style={{ color: st?.color || '#9CA3AF' }}>{st?.label || task.status}</span>
-                      </div>
+
+                      <button
+                        className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={() => removeWeeklyTodo(wt.id)}
+                        title="Quitar del dia"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
-
-                    <button
-                      className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={() => removeWeeklyTodo(wt.id)}
-                      title="Quitar del dia"
-                    >
-                      <X size={14} />
-                    </button>
                   </div>
                 </div>
               );
