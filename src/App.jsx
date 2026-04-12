@@ -133,6 +133,7 @@ function MainLayout() {
       <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
         <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
           <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto" />
+          <span className="text-[13px] font-bold text-gray-700">Panel de Operaciones</span>
         </div>
         <nav className="p-3 flex-1">
           <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Menu</div>
