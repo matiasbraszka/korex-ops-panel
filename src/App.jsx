@@ -109,6 +109,7 @@ function MainLayout() {
     clients: ['Clientes', 'Perfiles, ads, feedback y recursos'],
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
+    llamadas: ['Llamadas', 'Registro de llamadas procesadas por IA'],
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
