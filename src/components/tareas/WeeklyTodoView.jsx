@@ -96,6 +96,43 @@ export default function WeeklyTodoView() {
   const clientName = (clientId) => clients.find(c => c.id === clientId)?.name || '';
   const isCurrentWeek = mondayStr === getMonday(nowStr);
 
+  // ── Navegacion por drag (zonas laterales) ──
+  const edgeTimerRef = useRef(null);
+  const [dragOverEdge, setDragOverEdge] = useState(null); // 'prev' | 'next'
+
+  const handleEdgeDragOver = (e, edge) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverEdge(edge);
+    // Auto-navegar despues de 600ms de hover sostenido
+    if (!edgeTimerRef.current) {
+      edgeTimerRef.current = setTimeout(async () => {
+        const todo = weeklyTodos.find(t => t.id === dragId);
+        if (!todo) return;
+        // Mover la tarea al lunes de la semana destino
+        const [y, m, d] = mondayStr.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        dt.setDate(dt.getDate() + (edge === 'prev' ? -7 : 7));
+        const targetMonday = fmtIso(dt);
+        await updateWeeklyTodo(todo.id, { date: targetMonday });
+        // Navegar a esa semana
+        setMondayStr(targetMonday);
+        edgeTimerRef.current = null;
+        setDragId(null);
+        setDragOverEdge(null);
+        setDragOverDay(null);
+      }, 600);
+    }
+  };
+
+  const handleEdgeDragLeave = () => {
+    setDragOverEdge(null);
+    if (edgeTimerRef.current) {
+      clearTimeout(edgeTimerRef.current);
+      edgeTimerRef.current = null;
+    }
+  };
+
   // ── Drag & drop handlers ──
   const handleDragStart = (e, todoId) => {
     setDragId(todoId);
@@ -210,8 +247,23 @@ export default function WeeklyTodoView() {
         </button>
       </div>
 
-      {/* Grid semanal */}
-      <div className="grid grid-cols-7 gap-2 max-md:grid-cols-1">
+      {/* Grid semanal con zonas de drop laterales para cambiar de semana */}
+      <div className="flex gap-2">
+        {/* Zona izquierda: semana anterior (solo visible mientras arrastras) */}
+        {dragId && (
+          <div
+            className={`w-10 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center transition-all cursor-pointer ${
+              dragOverEdge === 'prev' ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+            onDragOver={(e) => handleEdgeDragOver(e, 'prev')}
+            onDragLeave={handleEdgeDragLeave}
+            title="Mover a semana anterior"
+          >
+            <ChevronLeft size={18} />
+          </div>
+        )}
+
+      <div className="flex-1 grid grid-cols-7 gap-2 max-md:grid-cols-1">
         {dates.map((dateStr, dayIdx) => {
           const isToday = dateStr === nowStr;
           const isWeekend = dayIdx >= 5;
@@ -336,6 +388,21 @@ export default function WeeklyTodoView() {
             </div>
           );
         })}
+      </div>
+
+        {/* Zona derecha: semana siguiente (solo visible mientras arrastras) */}
+        {dragId && (
+          <div
+            className={`w-10 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center transition-all cursor-pointer ${
+              dragOverEdge === 'next' ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+            onDragOver={(e) => handleEdgeDragOver(e, 'next')}
+            onDragLeave={handleEdgeDragLeave}
+            title="Mover a semana siguiente"
+          >
+            <ChevronRight size={18} />
+          </div>
+        )}
       </div>
 
       {/* Task picker modal */}
