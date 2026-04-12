@@ -38,7 +38,6 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
       clientId: defaults.clientId || l.cliente_id || '',
       assignee: defaults.assignee || '',
       phase: '',
-      priority: defaults.priority || 'normal',
       onSave: defaults.onSave,
     });
   };
@@ -49,7 +48,7 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
       taskModal.title.trim(),
       taskModal.clientId,
       taskModal.assignee,
-      taskModal.priority,
+      'normal',
       'backlog',
       taskModal.description,
       null
@@ -84,7 +83,6 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
       description: `Desde llamada: ${l.titulo}${paso.plazo ? '\nPlazo: ' + paso.plazo : ''}`,
       assignee: paso.responsable || '',
       clientId: l.cliente_id || '',
-      priority: paso.urgencia === 'high' ? 'urgent' : 'normal',
       onSave: (task) => {
         const updated = [...(l.proximos_pasos || [])];
         updated[idx] = { ...updated[idx], task_proposal_id: task.id };
@@ -395,18 +393,6 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Asignado</label>
-                  <select value={taskModal.assignee} onChange={e => setTaskModal(f => ({ ...f, assignee: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
-                    <option value="">Sin asignar</option>
-                    {TEAM.map(m => (
-                      <option key={m.id} value={m.name}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1">Fase</label>
                   <select value={taskModal.phase} onChange={e => setTaskModal(f => ({ ...f, phase: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
@@ -416,15 +402,28 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Prioridad</label>
-                  <select value={taskModal.priority} onChange={e => setTaskModal(f => ({ ...f, priority: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgente</option>
-                    <option value="high">Alta</option>
-                    <option value="low">Baja</option>
-                  </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Asignados</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TEAM.map(m => {
+                    const assignees = (taskModal.assignee || '').split(',').map(s => s.trim()).filter(Boolean);
+                    const selected = assignees.includes(m.name);
+                    return (
+                      <button key={m.id} type="button"
+                        onClick={() => {
+                          const current = (taskModal.assignee || '').split(',').map(s => s.trim()).filter(Boolean);
+                          const next = selected ? current.filter(n => n !== m.name) : [...current, m.name];
+                          setTaskModal(f => ({ ...f, assignee: next.join(', ') }));
+                        }}
+                        className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer font-sans transition-colors ${
+                          selected
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                        }`}
+                      >{m.name.split(' ')[0]}</button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-2 justify-end">

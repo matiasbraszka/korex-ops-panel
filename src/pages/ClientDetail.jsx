@@ -19,7 +19,7 @@ const LINK_CATEGORIES = {
 const LINK_CATEGORY_ORDER = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas } = useApp();
   const [linkModal, setLinkModal] = useState(false);
   const [linkForm, setLinkForm] = useState({ label: '', url: '', category: 'folder' });
   const [editingLinkIdx, setEditingLinkIdx] = useState(null);
@@ -1257,7 +1257,33 @@ export default function ClientDetail({ client: c }) {
             </div>
           </div>
 
-          {/* Llamadas procesadas — se ven en la seccion Llamadas del sidebar */}
+          {/* Llamadas procesadas (link a seccion Llamadas) */}
+          {(() => {
+            const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id);
+            if (clientLlamadas.length === 0) return null;
+            return (
+              <div className="bg-white border border-border rounded-xl overflow-hidden">
+                <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EFF6FF', color: '#3B82F6' }}>{'\uD83D\uDCDE'}</span>
+                  Llamadas procesadas
+                  <span className="text-[10px] text-gray-400 font-normal ml-1">{clientLlamadas.length}</span>
+                </div>
+                <div className="py-1">
+                  {clientLlamadas.map(l => (
+                    <div key={l.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50/50 transition-colors">
+                      <span className="text-[12px] font-medium text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
+                      {l.duracion_min && <span className="text-[10px] text-gray-400 shrink-0">{l.duracion_min}min</span>}
+                      {l.fecha && <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
+                      {l.recording_url && (
+                        <a href={l.recording_url} target="_blank" rel="noreferrer"
+                          className="text-[10px] text-blue-500 hover:text-blue-700 no-underline shrink-0">{'\uD83C\uDFAC'} Ver</a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Client Feedback */}
           <div className="bg-white border border-border rounded-xl overflow-hidden">
