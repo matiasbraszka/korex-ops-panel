@@ -389,9 +389,22 @@ export function isTimerRunning(task, allClientTasks) {
 }
 
 /**
- * Get total elapsed days for a task (accumulated + current running period).
+ * Get total elapsed days for a task.
+ * - Done: usa startedDate → completedDate (tiempo real que tardo).
+ * - Active con timer: accumulatedDays + extra desde timerStartedAt.
+ * - Sin timer: accumulatedDays (congelado).
  */
 export function getElapsedDays(task, allClientTasks) {
+  // Tarea completada: calcular desde startedDate hasta completedDate (tiempo fijo)
+  if (task.status === 'done') {
+    if (task.startedDate && task.completedDate) {
+      const d = daysBetween(task.startedDate, task.completedDate);
+      return d != null && d >= 0 ? d : 0;
+    }
+    // Fallback: accumulatedDays (ya fue congelado al pasar a done)
+    return task.accumulatedDays || 0;
+  }
+  // Tarea activa: accumulated + running period
   let total = task.accumulatedDays || 0;
   if (task.timerStartedAt && isTimerRunning(task, allClientTasks)) {
     const extra = daysBetween(task.timerStartedAt, today());

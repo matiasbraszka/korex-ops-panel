@@ -118,14 +118,24 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     const completedDates = allPhaseTasks.map(t => t.completedDate).filter(Boolean);
     const phaseEnd = allDone && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : null;
     return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, phaseStart, phaseEnd };
-  }).filter(g => g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey)))
-    .filter(g => {
-      // Si hay filtro de entrega activo, ocultar fases que no tienen ni tareas en rango
-      // ni un deadline de fase en rango (asi solo queda lo que hay que entregar).
-      if (!dueFilter || dueFilter === 'all') return true;
-      if (g.phaseTasks.length > 0) return true;
-      const phDeadline = (c.phaseDeadlines || {})[g.phaseKey];
-      return phDeadline && isInDueRange(phDeadline, dueFilter);
+  }).filter(g => {
+      // Si hay algun filtro activo (assignee, hide completed, hide blocked, due range),
+      // ocultar fases cuyas tareas filtradas (phaseTasks) son 0 — no relleno vacio.
+      const anyFilterActive = assigneeFilter !== 'all' || hideCompleted || hideBlocked || (dueFilter && dueFilter !== 'all');
+      if (anyFilterActive) {
+        // Con filtro: solo mostrar fases con al menos 1 tarea visible
+        if (g.phaseTasks.length === 0) {
+          // Excepcion: si tiene deadline de fase en rango de dueFilter, mostrar (sin tareas pero con deadline relevante)
+          if (dueFilter && dueFilter !== 'all') {
+            const phDeadline = (c.phaseDeadlines || {})[g.phaseKey];
+            if (phDeadline && isInDueRange(phDeadline, dueFilter)) return true;
+          }
+          return false;
+        }
+        return true;
+      }
+      // Sin filtros: mostrar fases con tareas o custom phases vacias
+      return g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey));
     });
 
   const isCollapsed = (phaseKey, allDone) => {

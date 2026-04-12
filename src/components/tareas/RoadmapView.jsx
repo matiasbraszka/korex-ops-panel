@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { isInDueRange } from '../../utils/helpers';
 import ClientRoadmapPanel from './ClientRoadmapPanel';
 
 const EXPANDED_KEY = 'tareas_roadmap_expanded';
@@ -45,14 +46,41 @@ export default function RoadmapView() {
     filteredClients = filteredClients.filter(c => (c.priority || 5) !== 6);
   }
 
-  // Para filtro de encargado: mostrar solo clientes que tengan al menos una tarea del encargado
-  if (taskAssignee !== 'all') {
-    const matches = (t) => {
+  // Filtro integral: ocultar clientes cuyas tareas NO sobrevivan a TODOS los filtros activos.
+  // Si despues de aplicar assignee + hideCompleted + hideBlocked + dueFilter no queda ninguna
+  // tarea visible, el cliente se esconde del roadmap (no se muestra la card vacia).
+  {
+    const matchesAssignee = (t) => {
+      if (taskAssignee === 'all') return true;
       if (!t.assignee) return false;
       const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       return parts.includes(taskAssignee.toLowerCase());
     };
-    filteredClients = filteredClients.filter(c => tasks.some(t => t.clientId === c.id && matches(t)));
+    const isBlocked = (t) => {
+      if (t.status === 'blocked') return true;
+      if (t.dependsOn && t.dependsOn.length > 0) {
+        return t.dependsOn.some(depId => {
+          const dep = tasks.find(x => x.id === depId || x.templateId === depId);
+          return dep && dep.status !== 'done';
+        });
+      }
+      return false;
+    };
+    const anyFilterActive = taskAssignee !== 'all' || hideCompletedTasks || hideBlockedTasks || (taskDueFilter && taskDueFilter !== 'all');
+    if (anyFilterActive) {
+      filteredClients = filteredClients.filter(c => {
+        const clientTasks = tasks.filter(t => t.clientId === c.id);
+        return clientTasks.some(t => {
+          if (!matchesAssignee(t)) return false;
+          if (hideCompletedTasks && t.status === 'done') return false;
+          if (hideBlockedTasks && isBlocked(t)) return false;
+          if (taskDueFilter && taskDueFilter !== 'all') {
+            if (!t.dueDate || !isInDueRange(t.dueDate, taskDueFilter)) return false;
+          }
+          return true;
+        });
+      });
+    }
   }
 
   const clientProgress = (c) => {

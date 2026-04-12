@@ -1,6 +1,6 @@
 import { useApp } from '../context/AppContext';
 import { TEAM } from '../utils/constants';
-import { daysBetween, daysAgo, today } from '../utils/helpers';
+import { daysBetween, daysAgo, today, fmtDate } from '../utils/helpers';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function DashboardPage() {
@@ -60,17 +60,17 @@ export default function DashboardPage() {
     { label: 'Fases vencidas',     value: overduePhases,         color: '#F97316' },
   ];
 
-  // ── 3. Tareas retrasadas (in-progress tasks that exceeded their estimated days) ──
+  // ── 3. Tareas retrasadas (tareas cuya dueDate ya paso y no estan done) ──
   const overdueTasks = [];
+  const nowStr = today();
   tasks.forEach(t => {
-    if (t.status !== 'in-progress' || !t.startedDate) return;
+    if (t.status === 'done') return;
     if (korexClientIds.has(t.clientId)) return;
-    const d = daysAgo(t.startedDate);
-    const est = t.estimatedDays || 7;
-    if (d > est) {
-      const client = clients.find(x => x.id === t.clientId);
-      overdueTasks.push({ task: t, client, daysOver: d - est, elapsedDays: d, estimatedDays: est });
-    }
+    if (!t.dueDate || t.dueDate >= nowStr) return; // solo las que ya vencieron
+    const daysOver = daysAgo(t.dueDate);
+    const client = clients.find(x => x.id === t.clientId);
+    const elapsed = t.startedDate ? daysAgo(t.startedDate) : 0;
+    overdueTasks.push({ task: t, client, daysOver, elapsedDays: elapsed, estimatedDays: t.dueDate && t.startedDate ? daysBetween(t.startedDate, t.dueDate) : null });
   });
   overdueTasks.sort((a, b) => b.daysOver - a.daysOver);
 
@@ -220,7 +220,7 @@ export default function DashboardPage() {
                         <span className="text-gray-500 truncate">{'\u2022'} {item.task.title}</span>
                       </div>
                       <div className="text-[10px] text-gray-400 mt-0.5">
-                        {item.elapsedDays}d transcurridos · estimado {item.estimatedDays}d
+                        Vencida hace {item.daysOver}d {item.task.dueDate ? `· entrega: ${fmtDate(item.task.dueDate)}` : ''}
                       </div>
                     </div>
                     {members.length > 0 && (
