@@ -1,20 +1,26 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
+import { today, fmtDate, daysBetween } from '../../utils/helpers';
 import Modal from '../Modal';
+
+const FILTERS = [
+  { id: 'todas',      label: 'Todas' },
+  { id: 'atrasadas',  label: 'Atrasadas' },
+  { id: 'por-vencer', label: 'Por vencer (3d)' },
+  { id: 'sin-fecha',  label: 'Sin fecha' },
+];
 
 /**
  * Modal para elegir tareas pendientes del usuario actual y vincularlas a un dia.
- * Props:
- *   open: boolean
- *   onClose: () => void
- *   onSelect: (taskId) => void  — llamado al seleccionar una tarea
- *   excludeTaskIds: Set<string> — tareas ya vinculadas a este dia (para tildar)
- *   date: string (YYYY-MM-DD) — el dia al que se agrega
+ * Tareas agrupadas por cliente, ordenadas por prioridad del cliente (mas urgente primero).
  */
 export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskIds = new Set(), date }) {
-  const { tasks, clients, currentUser } = useApp();
+  const { tasks, clients, currentUser, getPriorityLabel } = useApp();
   const [search, setSearch] = useState('');
+  const [quickFilter, setQuickFilter] = useState('todas');
+
+  const nowStr = today();
 
   // Tareas del usuario actual (asignadas a el, no completadas)
   const myTasks = useMemo(() => {
@@ -28,17 +34,63 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     });
   }, [tasks, currentUser]);
 
-  // Filtrar por busqueda
+  // Aplicar filtros
   const filtered = useMemo(() => {
-    if (!search.trim()) return myTasks;
-    const q = search.toLowerCase();
-    return myTasks.filter(t =>
-      t.title?.toLowerCase().includes(q) ||
-      clients.find(c => c.id === t.clientId)?.name?.toLowerCase().includes(q)
-    );
-  }, [myTasks, search, clients]);
+    let list = myTasks;
 
-  const clientName = (clientId) => clients.find(c => c.id === clientId)?.name || '';
+    // Quick filter
+    if (quickFilter === 'atrasadas') {
+      list = list.filter(t => t.dueDate && t.dueDate < nowStr);
+    } else if (quickFilter === 'por-vencer') {
+      list = list.filter(t => {
+        if (!t.dueDate) return false;
+        const d = daysBetween(nowStr, t.dueDate);
+        return d !== null && d >= 0 && d <= 3;
+      });
+    } else if (quickFilter === 'sin-fecha') {
+      list = list.filter(t => !t.dueDate);
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(t =>
+        t.title?.toLowerCase().includes(q) ||
+        clients.find(c => c.id === t.clientId)?.name?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [myTasks, search, clients, quickFilter, nowStr]);
+
+  // Agrupar por cliente, ordenar por prioridad del cliente
+  const groupedByClient = useMemo(() => {
+    const map = {};
+    filtered.forEach(t => {
+      if (!map[t.clientId]) {
+        const client = clients.find(c => c.id === t.clientId);
+        map[t.clientId] = { client, tasks: [] };
+      }
+      map[t.clientId].tasks.push(t);
+    });
+    // Ordenar clientes por prioridad (1 = super prioritario)
+    return Object.values(map).sort((a, b) => {
+      const pa = a.client?.priority || 5;
+      const pb = b.client?.priority || 5;
+      return pa - pb;
+    });
+  }, [filtered, clients]);
+
+  // Contadores para los filtros
+  const counts = useMemo(() => ({
+    todas: myTasks.length,
+    atrasadas: myTasks.filter(t => t.dueDate && t.dueDate < nowStr).length,
+    'por-vencer': myTasks.filter(t => {
+      if (!t.dueDate) return false;
+      const d = daysBetween(nowStr, t.dueDate);
+      return d !== null && d >= 0 && d <= 3;
+    }).length,
+    'sin-fecha': myTasks.filter(t => !t.dueDate).length,
+  }), [myTasks, nowStr]);
 
   const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const dateLabel = (() => {
@@ -48,15 +100,22 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     return `${DAY_NAMES[dt.getDay()]} ${d}`;
   })();
 
+  const handleClose = () => {
+    onClose();
+    setSearch('');
+    setQuickFilter('todas');
+  };
+
   return (
     <Modal
       open={open}
-      onClose={() => { onClose(); setSearch(''); }}
+      onClose={handleClose}
       title={`Agregar tarea — ${dateLabel}`}
-      maxWidth={520}
-      footer={<button className="py-2 px-4 rounded-lg border border-gray-200 bg-white text-gray-600 text-[13px] cursor-pointer font-sans hover:bg-gray-50" onClick={() => { onClose(); setSearch(''); }}>Cerrar</button>}
+      maxWidth={560}
+      footer={<button className="py-2 px-4 rounded-lg border border-gray-200 bg-white text-gray-600 text-[13px] cursor-pointer font-sans hover:bg-gray-50" onClick={handleClose}>Cerrar</button>}
     >
-      <div className="mb-3">
+      {/* Search */}
+      <div className="mb-2.5">
         <input
           type="text"
           placeholder="Buscar tarea por nombre o cliente..."
@@ -67,48 +126,100 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {/* Quick filters */}
+      <div className="flex gap-1.5 mb-3 flex-wrap">
+        {FILTERS.map(f => {
+          const active = quickFilter === f.id;
+          const count = counts[f.id] || 0;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              className={`text-[11px] font-semibold py-1 px-2.5 rounded-full border cursor-pointer font-sans transition-colors ${
+                active
+                  ? f.id === 'atrasadas' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700'
+              }`}
+              onClick={() => setQuickFilter(f.id)}
+            >
+              {f.label} <span className="text-[10px] opacity-70">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Results grouped by client */}
+      {groupedByClient.length === 0 ? (
         <div className="text-xs text-gray-400 text-center py-8">
           {myTasks.length === 0
             ? 'No tenés tareas pendientes asignadas.'
-            : `Sin resultados para "${search}"`}
+            : `Sin resultados para los filtros aplicados`}
         </div>
       ) : (
-        <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-50">
-          {filtered.map(t => {
-            const isLinked = excludeTaskIds.has(t.id);
-            const st = TASK_STATUS[t.status];
-            const cName = clientName(t.clientId);
+        <div className="max-h-[400px] overflow-y-auto">
+          {groupedByClient.map(({ client, tasks: cTasks }) => {
+            const prio = getPriorityLabel(client?.priority || 5);
             return (
-              <button
-                key={t.id}
-                type="button"
-                disabled={isLinked}
-                className={`w-full text-left flex items-start gap-2.5 py-2.5 px-3 cursor-pointer border-none font-sans transition-colors ${
-                  isLinked
-                    ? 'bg-blue-50/50 opacity-60 cursor-not-allowed'
-                    : 'bg-transparent hover:bg-gray-50'
-                }`}
-                onClick={() => { if (!isLinked) { onSelect(t.id); } }}
-              >
-                <span
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] shrink-0 mt-0.5"
-                  style={{ background: (st?.color || '#9CA3AF') + '15', color: st?.color || '#9CA3AF', border: `1.5px solid ${st?.color || '#9CA3AF'}` }}
-                >
-                  {st?.icon || '\u25CB'}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-gray-800 leading-snug">{t.title}</div>
-                  {t.description && (
-                    <div className="text-[11px] text-gray-400 truncate mt-0.5">{t.description}</div>
+              <div key={client?.id || 'unknown'} className="mb-2">
+                {/* Client header */}
+                <div className="flex items-center gap-2 py-1.5 px-2 sticky top-0 bg-white z-[1] border-b border-gray-50">
+                  {client?.avatarUrl ? (
+                    <img src={client.avatarUrl} alt={client.name} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px] font-bold shrink-0" style={{ background: client?.color || '#5B7CF5' }}>
+                      {client?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
+                    </div>
                   )}
-                  <div className="flex items-center gap-2 mt-1">
-                    {cName && <span className="text-[10px] text-gray-400">{cName}</span>}
-                    <span className="text-[9px] font-semibold uppercase" style={{ color: st?.color || '#9CA3AF' }}>{st?.label || t.status}</span>
-                  </div>
+                  <span className="text-[12px] font-bold text-gray-700">{client?.name || 'Sin cliente'}</span>
+                  {prio && (
+                    <span className="text-[8px] font-bold px-1 py-[1px] rounded uppercase" style={{ background: prio.color + '18', color: prio.color }}>
+                      {prio.label}
+                    </span>
+                  )}
                 </div>
-                {isLinked && <span className="text-[10px] text-blue-500 font-semibold shrink-0 mt-1">Vinculada</span>}
-              </button>
+
+                {/* Tasks */}
+                {cTasks.map(t => {
+                  const isLinked = excludeTaskIds.has(t.id);
+                  const st = TASK_STATUS[t.status];
+                  const isOverdue = t.dueDate && t.dueDate < nowStr;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      disabled={isLinked}
+                      className={`w-full text-left flex items-start gap-2.5 py-2 px-3 pl-9 cursor-pointer border-none font-sans transition-colors ${
+                        isLinked
+                          ? 'bg-blue-50/50 opacity-60 cursor-not-allowed'
+                          : 'bg-transparent hover:bg-gray-50'
+                      }`}
+                      onClick={() => { if (!isLinked) onSelect(t.id); }}
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] shrink-0 mt-0.5"
+                        style={{ background: (st?.color || '#9CA3AF') + '15', color: st?.color || '#9CA3AF', border: `1.5px solid ${st?.color || '#9CA3AF'}` }}
+                      >
+                        {st?.icon || '\u25CB'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium text-gray-800 leading-snug">{t.title}</div>
+                        {t.description && (
+                          <div className="text-[10px] text-gray-400 truncate mt-0.5">{t.description}</div>
+                        )}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {t.dueDate && (
+                            <span className={`text-[10px] font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
+                              {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-semibold uppercase" style={{ color: st?.color || '#9CA3AF' }}>{st?.label || t.status}</span>
+                        </div>
+                      </div>
+                      {isLinked && <span className="text-[10px] text-blue-500 font-semibold shrink-0 mt-1">Vinculada</span>}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
