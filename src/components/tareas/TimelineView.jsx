@@ -86,7 +86,10 @@ export default function TimelineView({ onGoToTaskList }) {
       }
       // Apply hide toggles
       phaseTasks = phaseTasks.filter(t => !isTaskHidden(t));
-      if (phaseTasks.length === 0 && !deadlines[phaseKey]) return;
+      // Si algun filtro esta activo y no quedan tareas visibles, ocultar la fase
+      // (aunque tenga deadline). Sin filtros: mostrar fases con deadline aunque no tengan tareas.
+      const anyFilterActive = taskAssignee !== 'all' || hideCompletedTasks || hideBlockedTasks;
+      if (phaseTasks.length === 0 && (anyFilterActive || !deadlines[phaseKey])) return;
       // Filtro por rango de entrega: en el Timeline la unidad de entrega es la fase,
       // asi que solo mostrar fases cuyo DEADLINE caiga en el rango. Fases sin deadline
       // tampoco pasan (no hay "fecha de entrega" que filtrar).
