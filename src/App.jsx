@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, FileText, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon } from 'lucide-react';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
 import PublicidadPage from './pages/PublicidadPage';
-import InformePage from './pages/InformePage';
 import DashboardPage from './pages/DashboardPage';
 import FeedbackPage from './pages/FeedbackPage';
 import SettingsPage from './pages/SettingsPage';
+import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
 
@@ -37,7 +37,7 @@ function LoginPage() {
           <input
             type="text"
             name="user"
-            className="w-full bg-blue-bg2 border border-border rounded-[10px] py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
+            className="w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
             placeholder="usuario@email.com"
             autoFocus
           />
@@ -45,12 +45,12 @@ function LoginPage() {
           <input
             type="password"
             name="pass"
-            className="w-full bg-blue-bg2 border border-border rounded-[10px] py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
+            className="w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
             placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
           />
           <button
             type="submit"
-            className="w-full py-3.5 bg-blue text-white border-none rounded-[10px] text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark"
+            className="w-full py-3.5 bg-blue text-white border-none rounded-xl text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark"
           >
             Iniciar sesión
           </button>
@@ -72,7 +72,7 @@ function LoginPage() {
 }
 
 function MainLayout() {
-  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, taskProposals, createClient: ctxCreateClient, briefing, appSettings } = useApp();
+  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings } = useApp();
   const [newClientModal, setNewClientModal] = useState(false);
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
@@ -83,14 +83,12 @@ function MainLayout() {
     { id: 'dashboard', label: 'Dashboard',     Icon: LayoutDashboard },
     { id: 'clients',   label: 'Clientes',      Icon: Users },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList },
-    { id: 'informe',   label: 'Informe',       Icon: FileText },
     { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, requiresPerm: true },
   ];
   const canAccessSettings = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const navItems = allNavItems.filter(item => !item.requiresPerm || canAccessSettings);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
-  const pendingProposals = taskProposals.filter(p => p.approval === 'pending').length;
 
   const switchView = (v) => {
     setView(v);
@@ -102,7 +100,6 @@ function MainLayout() {
     clients: ['Clientes', 'Perfiles, ads, feedback y recursos'],
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
-    informe: ['Informe Diario', briefing?.date ? 'Último: ' + briefing.date : 'Sin informe aún'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
   };
@@ -127,7 +124,6 @@ function MainLayout() {
     publicidad: <PublicidadPage />,
     tasks: <TareasPage />,
     settings: <SettingsPage />,
-    informe: <InformePage />,
     feedback: <FeedbackPage />,
   };
 
@@ -150,10 +146,7 @@ function MainLayout() {
               <item.Icon size={17} strokeWidth={view === item.id ? 2.25 : 1.75} className="shrink-0" />
               {item.label}
               {item.id === 'tasks' && urgentCount > 0 && (
-                <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-[10px] min-w-[18px] text-center">{urgentCount}</span>
-              )}
-              {item.id === 'informe' && pendingProposals > 0 && (
-                <span className="ml-auto text-white text-[10px] font-bold py-[1px] px-1.5 rounded-[10px] min-w-[18px] text-center" style={{ background: 'var(--color-orange)' }}>{pendingProposals}</span>
+                <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{urgentCount}</span>
               )}
             </button>
           ))}
@@ -194,8 +187,8 @@ function MainLayout() {
             {item.id === 'tasks' && urgentCount > 0 && (
               <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{urgentCount}</span>
             )}
-            {item.id === 'informe' && pendingProposals > 0 && (
-              <span className="absolute -top-0.5 right-1 text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center" style={{ background: 'var(--color-orange)' }}>{pendingProposals}</span>
+            {false && (
+              <span className="hidden">{/* placeholder */}</span>
             )}
           </button>
         ))}
@@ -221,9 +214,10 @@ function MainLayout() {
             </div>
           </div>
           <div className="flex items-center gap-2.5 max-md:gap-1.5 shrink-0">
-            <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-[10px] bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
+            <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-xl bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
               {syncStatus === 'syncing' ? '\u21BB Guardando...' : syncStatus === 'error' ? '\u2715 Error sync' : '\u25CF Sincronizado'}
             </span>
+            <SearchBar />
             {view === 'clients' && (
               <button
                 className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 max-md:py-1 max-md:px-2 max-md:text-[11px]"

@@ -303,7 +303,7 @@ export default function TasksPage({ embedded = false }) {
               {blocked && <span className="shrink-0 mt-[1px]" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
               {editingTaskId === t.id ? (
                 <input
-                  className="border border-blue rounded-[3px] py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
+                  className="border border-blue rounded py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
                   value={editTitleVal}
                   onChange={(e) => setEditTitleVal(e.target.value)}
                   onBlur={() => saveEditTitle(t.id)}
@@ -313,7 +313,7 @@ export default function TasksPage({ embedded = false }) {
                 />
               ) : (
                 <span
-                  className="cursor-text py-[2px] px-1 rounded-[3px] flex-1 min-w-0 break-words hover:bg-surface2 leading-tight"
+                  className="cursor-text py-[2px] px-1 rounded flex-1 min-w-0 break-words hover:bg-surface2 leading-tight"
                   onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
                 >
                   {t.title}
@@ -340,8 +340,8 @@ export default function TasksPage({ embedded = false }) {
                   </span>
                 )}
                 {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue" title="Tiene descripci\u00f3n" />}
-                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
-                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded-[3px] hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
+                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
               </div>
             </div>
             {blocked && blockingNames.length > 0 && (
@@ -460,7 +460,7 @@ export default function TasksPage({ embedded = false }) {
                     {blocked && <span className="shrink-0 text-[11px]">{'\uD83D\uDD12'}</span>}
                     {editingTaskId === t.id ? (
                       <input
-                        className="border border-blue rounded-[3px] py-[2px] px-1.5 text-[13px] font-sans outline-none flex-1 bg-white w-full"
+                        className="border border-blue rounded py-[2px] px-1.5 text-[13px] font-sans outline-none flex-1 bg-white w-full"
                         value={editTitleVal}
                         onChange={(e) => setEditTitleVal(e.target.value)}
                         onBlur={() => saveEditTitle(t.id)}
@@ -655,7 +655,7 @@ export default function TasksPage({ embedded = false }) {
     <div>
       {/* Filters — hidden when embedded inside TareasPage (it has its own unified FiltersBar) */}
       {!embedded && (
-        <div className="bg-white border border-border rounded-[10px] p-3 mb-4 flex items-center gap-3 flex-wrap max-md:gap-2 max-md:p-2.5">
+        <div className="bg-white border border-border rounded-xl p-3 mb-4 flex items-center gap-3 flex-wrap max-md:gap-2 max-md:p-2.5">
           <select
             className="text-xs py-1.5 px-3 border border-border rounded-md bg-surface2 text-text font-sans outline-none cursor-pointer focus:border-blue"
             value={taskFilter}
@@ -702,7 +702,7 @@ export default function TasksPage({ embedded = false }) {
           <div className="text-center text-text3 text-xs py-[60px]">Sin tareas. Hace click en &quot;+ Agregar tarea&quot; debajo de un cliente.</div>
           <div className="mt-3">
             {clients.map(c => (
-              <div key={c.id} className="flex items-center gap-1.5 py-1.5 px-4 cursor-pointer text-text3 text-xs bg-white border border-border rounded-[10px] mb-1 hover:text-blue hover:bg-blue-bg2" onClick={() => setAddingTaskTo(c.id)}>+ Agregar tarea a <b className="ml-1">{c.name}</b></div>
+              <div key={c.id} className="flex items-center gap-1.5 py-1.5 px-4 cursor-pointer text-text3 text-xs bg-white border border-border rounded-xl mb-1 hover:text-blue hover:bg-blue-bg2" onClick={() => setAddingTaskTo(c.id)}>+ Agregar tarea a <b className="ml-1">{c.name}</b></div>
             ))}
           </div>
         </>
@@ -710,7 +710,7 @@ export default function TasksPage({ embedded = false }) {
 
       {/* Empresa Korex section — always at top, estilo slate como en el roadmap */}
       {korexClient && (
-        <div className="mb-2 bg-slate-50 border border-slate-300 border-l-[5px] border-l-slate-700 rounded-[10px] overflow-visible">
+        <div className="mb-2 bg-slate-50 border border-slate-300 border-l-[5px] border-l-slate-700 rounded-xl overflow-visible">
           <div
             className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold cursor-pointer select-none border-b border-slate-200 hover:bg-slate-100 rounded-t-[6px]"
             onClick={() => setCollapsedGroups(prev => ({ ...prev, '_korex': !prev['_korex'] }))}
@@ -719,7 +719,7 @@ export default function TasksPage({ embedded = false }) {
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[14px] shrink-0 bg-slate-700">{'\uD83C\uDFE2'}</div>
             <span className="text-slate-800">Empresa Korex</span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase whitespace-nowrap bg-slate-700 text-white">{'\uD83C\uDFE2'} INTERNO</span>
-            <span className="bg-slate-200 text-slate-600 text-[11px] font-semibold py-[1px] px-2 rounded-[10px] ml-auto">{korexTaskCount}</span>
+            <span className="bg-slate-200 text-slate-600 text-[11px] font-semibold py-[1px] px-2 rounded-xl ml-auto">{korexTaskCount}</span>
           </div>
           {!korexCollapsed && (
             <div>
@@ -797,14 +797,14 @@ export default function TasksPage({ embedded = false }) {
         const taskCount = g.tasks.filter(t => t.status !== 'done').length;
 
         return (
-          <div key={g.client.id} className="mb-1.5 bg-white border border-border rounded-[10px] overflow-visible">
+          <div key={g.client.id} className="mb-1.5 bg-white border border-border rounded-xl overflow-visible">
             <div
               className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold cursor-pointer select-none border-b border-border bg-surface2 hover:bg-surface3"
               onClick={() => setCollapsedGroups(prev => ({ ...prev, [g.client.id]: !prev[g.client.id] }))}
             >
               <span className={`text-xs text-text3 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
               <span>{g.client.name}</span>
-              <span className="bg-surface3 text-text2 text-[11px] font-semibold py-[1px] px-2 rounded-[10px]">{taskCount}</span>
+              <span className="bg-surface3 text-text2 text-[11px] font-semibold py-[1px] px-2 rounded-xl">{taskCount}</span>
             </div>
             {!collapsed && (
               <div>
@@ -864,7 +864,7 @@ export default function TasksPage({ embedded = false }) {
       {remaining.length > 0 && taskFilter === 'all' && (
         <div className="mt-2 py-1.5">
           {remaining.filter(c => addingTaskTo !== c.id).slice(0, 5).map(c => (
-            <span key={c.id} className="inline-block py-1.5 px-3.5 rounded-[20px] border border-border bg-white text-text2 text-xs cursor-pointer m-0.5 hover:border-blue hover:text-text" onClick={() => { setAddingTaskTo(c.id); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>{c.name}</span>
+            <span key={c.id} className="inline-block py-1.5 px-3.5 rounded-full border border-border bg-white text-text2 text-xs cursor-pointer m-0.5 hover:border-blue hover:text-text" onClick={() => { setAddingTaskTo(c.id); setTimeout(() => { const i = document.getElementById('inline-task-input'); if (i) i.focus(); }, 50); }}>{c.name}</span>
           ))}
           {remaining.length > 5 && <span className="text-[11px] text-text3 ml-1">+{remaining.length - 5} mas</span>}
         </div>

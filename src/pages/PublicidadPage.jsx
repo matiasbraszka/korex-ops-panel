@@ -52,7 +52,7 @@ export default function PublicidadPage() {
               const m = c.metaMetrics;
               const curr = m.currency || 'USD';
               return (
-                <div key={c.id} className="bg-white border border-border rounded-[10px] py-4 px-[18px] cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:py-3 max-md:px-3" onClick={() => openClient(c.id)}>
+                <div key={c.id} className="bg-white border border-border rounded-xl py-4 px-[18px] cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:py-3 max-md:px-3" onClick={() => openClient(c.id)}>
                   <div className="flex items-center gap-2.5 mb-3">
                     {c.avatarUrl ? (
                       <img src={c.avatarUrl} alt={c.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
@@ -60,7 +60,7 @@ export default function PublicidadPage() {
                       <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
                     )}
                     <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate">{c.name}</div><div className="text-[11px] text-text3 truncate">{c.company}</div></div>
-                    <span className="inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold bg-green-bg text-[#16A34A] shrink-0">{'\u25CF'} Activa</span>
+                    <span className="inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold bg-green-bg text-[#16A34A] shrink-0">{'\u25CF'} Activa</span>
                   </div>
                   {m.conversionEvent && <div className="mb-2"><span className="text-[9px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">Evento: {m.conversionEvent}</span></div>}
                   <div className="grid grid-cols-3 gap-2">
@@ -82,7 +82,7 @@ export default function PublicidadPage() {
       )}
 
       {/* Report table — sorted: active > paused > sin cuenta */}
-      <div className="bg-white border border-border rounded-[10px] p-[18px] mb-5 max-md:p-3 max-md:rounded-lg">
+      <div className="bg-white border border-border rounded-xl p-[18px] mb-5 max-md:p-3 max-md:rounded-lg">
         <div className="text-sm font-bold mb-1">Informe de publicidad</div>
         <div className="text-[11px] text-text3 mb-3">Métricas de los últimos 7 días en USD. Solo campañas con eventos de conversión de nuestro funnel.</div>
         <div className="overflow-x-auto">
@@ -111,7 +111,7 @@ export default function PublicidadPage() {
                       {!isActive && m.pauseReason && <div className="text-[9px] text-red mt-0.5">{'\u26A0'} {m.pauseReason}</div>}
                     </td>
                     <td className="py-2 px-2.5 border border-border">
-                      <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold ${isActive ? 'bg-green-bg text-[#16A34A]' : 'bg-yellow-bg text-[#CA8A04]'}`}>
+                      <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold ${isActive ? 'bg-green-bg text-[#16A34A]' : 'bg-yellow-bg text-[#CA8A04]'}`}>
                         {isActive ? '\u25CF Activa' : '\u23F8 Pausada'}
                       </span>
                     </td>
@@ -129,7 +129,7 @@ export default function PublicidadPage() {
               {noAds.map(c => (
                 <tr key={c.id} className="cursor-pointer hover:bg-blue-bg2" style={{ opacity: 0.5 }} onClick={() => openClient(c.id)}>
                   <td className="py-2 px-2.5 border border-border">{c.name} <span className="text-[10px] text-text3">{c.company}</span></td>
-                  <td className="py-2 px-2.5 border border-border"><span className="inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold bg-surface2 text-text3">Sin cuenta</span></td>
+                  <td className="py-2 px-2.5 border border-border"><span className="inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold bg-surface2 text-text3">Sin cuenta</span></td>
                   <td colSpan={3} className="py-2 px-2.5 border border-border text-[10px] text-text3 max-md:hidden">No tiene cuenta de Meta Ads configurada</td>
                   <td colSpan={3} className="py-2 px-2.5 border border-border text-[10px] text-text3 hidden max-md:table-cell">Sin cuenta</td>
                 </tr>

@@ -991,7 +991,7 @@ export default function ClientDetail({ client: c }) {
       </button>
 
       {/* Hero */}
-      <div className="bg-white border border-border rounded-[14px] p-6 mb-5 max-md:p-4 max-md:rounded-[10px] max-md:mb-3">
+      <div className="bg-white border border-border rounded-xl p-6 mb-5 max-md:p-4 max-md:rounded-xl max-md:mb-3">
         <div className="flex items-start gap-4 max-md:gap-3">
           {c.avatarUrl ? (
             <img src={c.avatarUrl} alt={c.name} className="w-[52px] h-[52px] rounded-full object-cover shrink-0 max-md:w-[40px] max-md:h-[40px]" />
@@ -1003,7 +1003,7 @@ export default function ClientDetail({ client: c }) {
               <div className="text-xl font-extrabold tracking-tight max-md:text-[17px]">{c.name}</div>
               <span
                 ref={el => getDropdownRef('client-prio').current = el}
-                className="inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold cursor-pointer hover:opacity-80"
+                className="inline-flex items-center gap-1 py-[3px] px-2.5 rounded-full text-[10px] font-semibold cursor-pointer hover:opacity-80"
                 style={{ background: pcfg.color + '12', color: pcfg.color }}
                 onClick={() => setOpenDropdown('client-prio')}
               >{pcfg.label}</span>
@@ -1023,7 +1023,7 @@ export default function ClientDetail({ client: c }) {
                 {editingStartDate ? (
                   <input type="date" className="border border-blue rounded py-[2px] px-1.5 text-xs font-sans outline-none" defaultValue={c.startDate || ''} autoFocus onBlur={(e) => handleInlineStartDate(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} />
                 ) : (
-                  <span className="cursor-pointer py-[1px] px-1 rounded-[3px] hover:bg-surface2" onClick={() => setEditingStartDate(true)}>{fmtDate(c.startDate)}</span>
+                  <span className="cursor-pointer py-[1px] px-1 rounded hover:bg-surface2" onClick={() => setEditingStartDate(true)}>{fmtDate(c.startDate)}</span>
                 )}{' '}
                 {'\u00B7'} Día {days}
               </span>
@@ -1044,8 +1044,8 @@ export default function ClientDetail({ client: c }) {
 
         <div className="mt-4">
           <div className="flex justify-between text-[11px] text-text2"><span>Progreso</span><span>{pct}% {'\u00B7'} {doneRoadmap}/{totalRoadmap}</span></div>
-          <div className="h-[5px] bg-surface3 rounded-[3px] overflow-hidden mt-1.5">
-            <div className="h-full rounded-[3px] bg-blue" style={{ width: pct + '%' }} />
+          <div className="h-[5px] bg-surface3 rounded overflow-hidden mt-1.5">
+            <div className="h-full rounded bg-blue" style={{ width: pct + '%' }} />
           </div>
         </div>
 
@@ -1073,7 +1073,7 @@ export default function ClientDetail({ client: c }) {
       {/* Row 1: Links + Publicidad (2-col, balanced) */}
       <div className="grid gap-4 md:grid-cols-2 mb-4">
         {/* Links del cliente — Drive, docs, etc. Agrupados por categoría */}
-        <div className="bg-white border border-border rounded-[10px] overflow-hidden">
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
           <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
             <span className="inline-flex items-center gap-2">
               <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EEF2FF', color: '#5B7CF5' }}>{'\uD83D\uDD17'}</span>
@@ -1168,13 +1168,13 @@ export default function ClientDetail({ client: c }) {
             const curr = m.currency || 'USD';
             const cs = curr === 'EUR' ? '\u20AC' : curr === 'MXN' ? 'MX$' : '$';
             return (
-              <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-3">
+              <div className="bg-white border border-border rounded-xl overflow-hidden mb-3">
                 <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
                   <span className="inline-flex items-center gap-2">
                     <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#FFF7ED', color: '#F97316' }}>{'\uD83D\uDCE3'}</span>
                     Publicidad
                   </span>
-                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[9px] font-bold ml-auto ${isActive ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{isActive ? '\u25CF Activa' : '\u25CB Inactiva'}</span>
+                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold ml-auto ${isActive ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{isActive ? '\u25CF Activa' : '\u25CB Inactiva'}</span>
                 </div>
                 <div className="py-3 px-4">
                   {isActive && m.totalSpend7d ? (
@@ -1199,7 +1199,7 @@ export default function ClientDetail({ client: c }) {
                     {c.metaAds.filter(a => a.status !== 'interna').map((a, ai) => (
                       <div key={ai} className="text-[11px] py-[3px] flex justify-between items-center">
                         <span>{a.name}</span>
-                        <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-[10px] text-[8px] font-bold ${a.status === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{a.status}</span>
+                        <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[8px] font-bold ${a.status === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{a.status}</span>
                       </div>
                     ))}
                   </div>
@@ -1213,7 +1213,7 @@ export default function ClientDetail({ client: c }) {
       {/* Row 2: Llamadas + Client Feedback */}
       <div className="grid gap-4 md:grid-cols-2 mb-4">
           {/* Calls */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden">
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
               <span className="inline-flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#ECFDF5', color: '#22C55E' }}>{'\uD83D\uDCDE'}</span>
@@ -1258,7 +1258,7 @@ export default function ClientDetail({ client: c }) {
           </div>
 
           {/* Client Feedback */}
-          <div className="bg-white border border-border rounded-[10px] overflow-hidden">
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
               <span className="inline-flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#F5F3FF', color: '#8B5CF6' }}>{'\uD83D\uDCAC'}</span>
@@ -1288,10 +1288,10 @@ export default function ClientDetail({ client: c }) {
                         >{'\u2715'}</button>
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-text3 flex-wrap">
-                        <span className="bg-surface2 py-[1px] px-1.5 rounded-[3px] font-semibold">{f.source || 'otro'}</span>
+                        <span className="bg-surface2 py-[1px] px-1.5 rounded font-semibold">{f.source || 'otro'}</span>
                         <span>{f.sourceDetail || ''}</span>
                         <span>{'\uD83D\uDCC5'} {fmtDate(f.date || today())}</span>
-                        <span className="py-[1px] px-1.5 rounded-[3px]" style={{ background: typeBg }}>{typeLabel}</span>
+                        <span className="py-[1px] px-1.5 rounded" style={{ background: typeBg }}>{typeLabel}</span>
                       </div>
                       {f.comments?.length > 0 && (
                         <div className="mt-1.5 pl-3 border-l-2 border-border">
@@ -1319,7 +1319,7 @@ export default function ClientDetail({ client: c }) {
       {/* End Row 2 */}
 
       {/* Historial del cliente (merged with brain points) — full width at bottom */}
-      <div className="bg-white border border-border rounded-[10px] overflow-hidden mb-4">
+      <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
             <div className="py-3 px-4 border-b border-border text-[13px] font-bold">
               <span className="inline-flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#F3F4F6', color: '#6B7280' }}>{'\uD83D\uDCDC'}</span>

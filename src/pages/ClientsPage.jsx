@@ -80,24 +80,6 @@ export default function ClientsPage() {
 
   return (
     <div>
-      {/* Briefing card */}
-      <div
-        className="border rounded-[14px] py-3.5 px-[18px] mb-5 relative cursor-pointer transition-all duration-150 hover:shadow-sm max-md:py-3 max-md:px-3.5 max-md:mb-3 max-md:rounded-[10px]"
-        style={{ background: 'linear-gradient(135deg, var(--color-blue-bg2), var(--color-surface))', borderColor: 'rgba(91,124,245,0.13)' }}
-        onClick={() => setView('informe')}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <span className="bg-blue text-white text-[9px] font-bold py-0.5 px-2 rounded-[10px] tracking-[0.5px]">INFORME DIARIO</span>
-          <span className="text-xs font-semibold text-text">Último informe de operaciones</span>
-          {pendingProposals > 0 && (
-            <span className="bg-orange text-white text-[9px] font-bold py-0.5 px-2 rounded-[10px]">{pendingProposals} propuestas</span>
-          )}
-          <span className="text-[11px] text-text3 ml-auto">{stored?.date ? fmtDate(stored.date) : '\u2014'}</span>
-        </div>
-        <div className="text-xs leading-[1.7] text-text2">{preview}</div>
-        <div className="mt-2 text-[11px] text-blue font-semibold">Ver informe completo &rarr;</div>
-      </div>
-
       {/* Tabs: Lista / Publicidad / Feedback */}
       <div className="inline-flex items-center p-1 bg-gray-100 rounded-lg gap-0.5 mb-4 max-md:w-full">
         {[
@@ -138,7 +120,7 @@ export default function ClientsPage() {
         {filterDefs.map(f => (
           <button
             key={f.key}
-            className={`py-1.5 px-3.5 rounded-[20px] border text-xs cursor-pointer font-sans transition-all duration-150 max-md:py-1 max-md:px-2.5 max-md:text-[11px] ${filter === f.key ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue hover:text-text'}`}
+            className={`py-1.5 px-3.5 rounded-full border text-xs cursor-pointer font-sans transition-all duration-150 max-md:py-1 max-md:px-2.5 max-md:text-[11px] ${filter === f.key ? 'bg-blue text-white border-blue' : 'bg-white text-text2 border-border hover:border-blue hover:text-text'}`}
             onClick={() => setFilter(f.key)}
           >
             {f.label}
@@ -180,7 +162,7 @@ export default function ClientsPage() {
           <div key={c.id}>
             {prioLabel}
             <div
-              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-[10px] mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_1.5fr_110px_60px_120px_90px_28px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
+              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-xl mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_1.5fr_110px_60px_120px_90px_28px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
               onClick={() => setSelectedId(c.id)}
             >
               {c.avatarUrl ? (
@@ -214,7 +196,7 @@ export default function ClientsPage() {
                     <div className="h-full rounded-sm" style={{ width: pct + '%', background: c.color }} />
                   </div>
                   <span className="text-[10px] text-text3 font-semibold">{pct}%</span>
-                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-[20px] text-[9px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
+                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-full text-[9px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
                     {pill.text}
                   </span>
                 </div>
@@ -233,7 +215,7 @@ export default function ClientsPage() {
                 </div>
               </div>
               <div className="max-md:hidden">
-                <span className={`inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
+                <span className={`inline-flex items-center gap-1 py-[3px] px-2.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
                   {pill.text}
                 </span>
               </div>

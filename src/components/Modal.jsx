@@ -23,7 +23,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
-        className="bg-white border border-border rounded-[14px] w-full max-h-[90vh] overflow-y-auto mx-3"
+        className="bg-white border border-border rounded-xl w-full max-h-[90vh] overflow-y-auto mx-3"
         style={{ maxWidth, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}
       >
         <div className="py-[18px] px-[22px] border-b border-border flex items-center justify-between max-md:py-3.5 max-md:px-4">

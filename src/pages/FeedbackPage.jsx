@@ -152,7 +152,7 @@ export default function FeedbackPage() {
         const srcCfg = SOURCE_CONFIG[f.source] || SOURCE_CONFIG.cliente;
         const prio = prioCfg(f.priority);
         return (
-          <div key={i} className="bg-white border border-border rounded-[10px] p-4 mb-2.5 group max-md:p-3">
+          <div key={i} className="bg-white border border-border rounded-xl p-4 mb-2.5 group max-md:p-3">
             {/* Header */}
             <div className="flex items-center gap-2 mb-2.5 max-md:flex-wrap max-md:gap-1.5">
               {c.avatarUrl ? (

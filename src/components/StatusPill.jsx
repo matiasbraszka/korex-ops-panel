@@ -11,7 +11,7 @@ export default function StatusPill({ text, pillClass, style, className = '' }) {
   const cls = pillClasses[pillClass] || 'bg-surface2 text-text3';
   return (
     <span
-      className={`inline-flex items-center gap-1 py-[3px] px-2.5 rounded-[20px] text-[10px] font-semibold whitespace-nowrap ${cls} ${className}`}
+      className={`inline-flex items-center gap-1 py-[3px] px-2.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${cls} ${className}`}
       style={style}
     >
       {text}
