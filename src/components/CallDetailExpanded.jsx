@@ -1,11 +1,16 @@
 import { useState } from 'react';
-import { Pencil, Trash2, ArrowRight, Check, X, RefreshCw } from 'lucide-react';
+import { Pencil, Trash2, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { TEAM } from '../utils/constants';
 
 const AREA_COLORS = {
   marketing: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' },
   empresa:   { bg: '#F0FDF4', text: '#166534', label: 'Empresa' },
   producto:  { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' },
+};
+
+const TIPO_COLORS = {
+  queja:  { bg: '#FEF2F2', text: '#DC2626', label: 'Queja' },
+  mejora: { bg: '#F0FDF4', text: '#16A34A', label: 'Mejora' },
 };
 
 export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, clients, tasks, onToggleRetro }) {
@@ -240,10 +245,10 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
         </div>
       )}
 
-      {/* Feedback */}
+      {/* Quejas y Mejoras */}
       {(l.feedback || []).length > 0 && (
         <div className="px-4 py-3 border-b border-gray-100">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Feedback</div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Quejas y mejoras</div>
           <div className="space-y-2">
             {(l.feedback || []).map((fb, i) => {
               const isEditing = editingSection === `fb-${i}`;
@@ -273,9 +278,13 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
                 );
               }
 
+              const tipo = TIPO_COLORS[fb.tipo] || TIPO_COLORS.mejora;
+
               return (
                 <div key={i} className={`rounded-lg px-2.5 py-2 hover:bg-white transition-colors group ${converted ? 'opacity-50' : ''}`}>
                   <div className="flex items-start gap-2">
+                    <span className="text-[9px] font-bold rounded px-1.5 py-0.5 shrink-0 mt-0.5 uppercase"
+                      style={{ background: tipo.bg, color: tipo.text }}>{tipo.label}</span>
                     <span className="text-[10px] font-semibold rounded-full px-1.5 py-0.5 shrink-0 mt-0.5"
                       style={{ background: area.bg, color: area.text }}>{area.label}</span>
                     <span className={`text-[12px] font-medium flex-1 min-w-0 ${converted ? 'line-through text-gray-400' : 'text-gray-700'}`}>{fb.texto}</span>

@@ -57,10 +57,8 @@ export default function LlamadasPage() {
       return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
     })
   );
-  const feedbackByArea = { marketing: [], empresa: [], producto: [] };
-  allFeedback.forEach(fb => {
-    if (feedbackByArea[fb.area]) feedbackByArea[fb.area].push(fb);
-  });
+  const quejas = allFeedback.filter(fb => fb.tipo === 'queja');
+  const mejoras = allFeedback.filter(fb => fb.tipo === 'mejora' || !fb.tipo);
   const hasInsights = allFeedback.length > 0 || allProblemas.length > 0 || allObjeciones.length > 0;
 
   // Filter
@@ -141,50 +139,76 @@ export default function LlamadasPage() {
             <TrendingUp size={15} className="text-blue-500" />
             <span className="text-[13px] font-bold text-gray-800">Insights de llamadas</span>
             <div className="flex items-center gap-1.5 ml-2">
-              {feedbackByArea.marketing.length > 0 && <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">Marketing {feedbackByArea.marketing.length}</span>}
-              {feedbackByArea.empresa.length > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">Empresa {feedbackByArea.empresa.length}</span>}
-              {feedbackByArea.producto.length > 0 && <span className="text-[9px] font-bold bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">Producto {feedbackByArea.producto.length}</span>}
-              {allProblemas.length > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5">Problemas {allProblemas.length}</span>}
+              {quejas.length > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5">Quejas {quejas.length}</span>}
+              {mejoras.length > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">Mejoras {mejoras.length}</span>}
+              {allProblemas.length > 0 && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5">Problemas {allProblemas.length}</span>}
               {allObjeciones.length > 0 && <span className="text-[9px] font-bold bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5">Objeciones {allObjeciones.length}</span>}
             </div>
             <span className="ml-auto text-gray-400 text-[10px]">{showInsights ? '\u25B2' : '\u25BC'}</span>
           </div>
           {showInsights && (
             <div className="border-t border-gray-100 px-4 py-3 space-y-4">
-              {/* Feedback by area */}
-              {Object.entries(feedbackByArea).filter(([, items]) => items.length > 0).map(([area, items]) => {
-                const cfg = area === 'marketing' ? { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' }
-                  : area === 'empresa' ? { bg: '#F0FDF4', text: '#166534', label: 'Empresa' }
-                  : { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' };
-                return (
-                  <div key={area}>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: cfg.bg, color: cfg.text }}>{cfg.label}</span>
-                      <span className="text-[10px] text-gray-400">{items.length} feedback{items.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {items.map((fb, i) => {
-                        const clientName = fb.clienteId ? clients?.find(c => c.id === fb.clienteId)?.name : null;
-                        return (
-                          <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
-                            <span className="text-[11px] text-gray-400 mt-0.5 shrink-0">•</span>
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[12px] text-gray-700 font-medium">{fb.texto}</span>
-                              {fb.descripcion && (
-                                <div className="text-[10px] text-gray-400 italic mt-0.5 line-clamp-1">"{fb.descripcion}"</div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {clientName && <span className="text-[9px] text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">{clientName}</span>}
-                              {fb.fecha && <span className="text-[9px] text-gray-400">{fmtFecha(fb.fecha)}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+              {/* Quejas */}
+              {quejas.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-100 text-red-700">Quejas</span>
+                    <span className="text-[10px] text-gray-400">{quejas.length}</span>
                   </div>
-                );
-              })}
+                  <div className="space-y-1">
+                    {quejas.map((fb, i) => {
+                      const clientName = fb.clienteId ? clients?.find(c => c.id === fb.clienteId)?.name : null;
+                      const areaCfg = fb.area === 'marketing' ? { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' }
+                        : fb.area === 'producto' ? { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' }
+                        : { bg: '#F0FDF4', text: '#166534', label: 'Empresa' };
+                      return (
+                        <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
+                          <span className="text-[10px] font-semibold rounded-full px-1.5 py-0.5 shrink-0 mt-0.5" style={{ background: areaCfg.bg, color: areaCfg.text }}>{areaCfg.label}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[12px] text-gray-700 font-medium">{fb.texto}</span>
+                            {fb.descripcion && <div className="text-[10px] text-gray-400 italic mt-0.5 line-clamp-1">"{fb.descripcion}"</div>}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {clientName && <span className="text-[9px] text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">{clientName}</span>}
+                            {fb.fecha && <span className="text-[9px] text-gray-400">{fmtFecha(fb.fecha)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Mejoras */}
+              {mejoras.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-green-100 text-green-700">Mejoras sugeridas</span>
+                    <span className="text-[10px] text-gray-400">{mejoras.length}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {mejoras.map((fb, i) => {
+                      const clientName = fb.clienteId ? clients?.find(c => c.id === fb.clienteId)?.name : null;
+                      const areaCfg = fb.area === 'marketing' ? { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' }
+                        : fb.area === 'producto' ? { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' }
+                        : { bg: '#F0FDF4', text: '#166534', label: 'Empresa' };
+                      return (
+                        <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
+                          <span className="text-[10px] font-semibold rounded-full px-1.5 py-0.5 shrink-0 mt-0.5" style={{ background: areaCfg.bg, color: areaCfg.text }}>{areaCfg.label}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[12px] text-gray-700 font-medium">{fb.texto}</span>
+                            {fb.descripcion && <div className="text-[10px] text-gray-400 italic mt-0.5 line-clamp-1">"{fb.descripcion}"</div>}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {clientName && <span className="text-[9px] text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">{clientName}</span>}
+                            {fb.fecha && <span className="text-[9px] text-gray-400">{fmtFecha(fb.fecha)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Problemas detectados */}
               {allProblemas.length > 0 && (

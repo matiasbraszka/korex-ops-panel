@@ -10,7 +10,7 @@ import FeedbackPage from './FeedbackPage';
 import InformePage from './InformePage';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
-const VALID_TABS = ['lista', 'publicidad', 'feedback', 'informe'];
+const VALID_TABS = ['lista', 'publicidad', 'informe'];
 
 export default function ClientsPage() {
   const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel } = useApp();
@@ -86,7 +86,6 @@ export default function ClientsPage() {
         {[
           { id: 'lista',      label: 'Lista',      Icon: Users },
           { id: 'publicidad', label: 'Publicidad', Icon: Megaphone },
-          { id: 'feedback',   label: 'Feedback',   Icon: MessageSquare },
           { id: 'informe',    label: 'Informe',    Icon: FileText },
         ].map(t => (
           <button
@@ -104,9 +103,6 @@ export default function ClientsPage() {
 
       {/* Publicidad tab — embed full PublicidadPage */}
       {tab === 'publicidad' && <PublicidadPage />}
-
-      {/* Feedback tab — embed full FeedbackPage */}
-      {tab === 'feedback' && <FeedbackPage />}
 
       {/* Informe tab — embed full InformePage */}
       {tab === 'informe' && <InformePage />}
@@ -201,9 +197,6 @@ export default function ClientsPage() {
                     <div className="h-full rounded-sm" style={{ width: pct + '%', background: c.color }} />
                   </div>
                   <span className="text-[10px] text-text3 font-semibold">{pct}%</span>
-                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-full text-[9px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
-                    {pill.text}
-                  </span>
                 </div>
               </div>
               <div className="text-[11px] text-text2 max-md:hidden">{cur ? PHASES[cur.phase]?.label : 'Lanzado'}</div>
@@ -218,11 +211,6 @@ export default function ClientsPage() {
                   </div>
                   <div className="text-[11px] text-text3 font-semibold min-w-[32px] text-right">{pct}%</div>
                 </div>
-              </div>
-              <div className="max-md:hidden">
-                <span className={`inline-flex items-center gap-1 py-[3px] px-2.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${pill.pillClass === 'pill-green' ? 'bg-green-bg text-[#16A34A]' : pill.pillClass === 'pill-red' ? 'bg-red-bg text-red' : pill.pillClass === 'pill-yellow' ? 'bg-yellow-bg text-[#CA8A04]' : pill.pillClass === 'pill-blue' ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>
-                  {pill.text}
-                </span>
               </div>
               <div className="text-text3 text-center max-md:self-center">&rsaquo;</div>
             </div>

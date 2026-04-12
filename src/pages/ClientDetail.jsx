@@ -1247,63 +1247,6 @@ export default function ClientDetail({ client: c }) {
             );
           })()}
 
-          {/* Client Feedback */}
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-              <span className="inline-flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#F5F3FF', color: '#8B5CF6' }}>{'\uD83D\uDCAC'}</span>
-                Feedback del cliente
-              </span>
-              <button className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans" onClick={() => { setCfbForm({ source: 'cliente', callUrl: '', priority: 'normal', currentItem: '', items: [] }); setClientFbModal(true); }}>+ Nuevo</button>
-            </div>
-            <div className="py-3 px-4">
-              {!(c.clientFeedbacks || []).length ? (
-                <div className="text-center text-text3 text-xs py-3.5">Sin feedback registrado</div>
-              ) : (
-                (c.clientFeedbacks || []).map((f, fi) => {
-                  const typeLabel = f.type === 'complaint' ? 'Queja' : f.type === 'problem' ? 'Problema' : f.type === 'suggestion' ? 'Sugerencia' : 'Pedido';
-                  const typeBg = f.type === 'complaint' ? 'var(--color-red-bg)' : f.type === 'problem' ? 'var(--color-orange-bg)' : 'var(--color-blue-bg)';
-                  return (
-                    <div key={fi} className="py-2.5 px-4 border-b border-border last:border-b-0 group/fb">
-                      <div className="flex items-start gap-1">
-                        <div className="text-xs leading-relaxed mb-1 flex-1">{f.text}</div>
-                        <button
-                          className="text-[10px] text-gray-300 bg-transparent border-none cursor-pointer py-[2px] px-1 rounded hover:text-red-500 hover:bg-red-50 shrink-0 opacity-0 group-hover/fb:opacity-100 transition-opacity"
-                          onClick={() => {
-                            const newFbs = [...(c.clientFeedbacks || [])];
-                            newFbs.splice(fi, 1);
-                            updateClient(c.id, { clientFeedbacks: newFbs });
-                          }}
-                          title="Eliminar feedback"
-                        >{'\u2715'}</button>
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-text3 flex-wrap">
-                        <span className="bg-surface2 py-[1px] px-1.5 rounded font-semibold">{f.source || 'otro'}</span>
-                        <span>{f.sourceDetail || ''}</span>
-                        <span>{'\uD83D\uDCC5'} {fmtDate(f.date || today())}</span>
-                        <span className="py-[1px] px-1.5 rounded" style={{ background: typeBg }}>{typeLabel}</span>
-                      </div>
-                      {f.comments?.length > 0 && (
-                        <div className="mt-1.5 pl-3 border-l-2 border-border">
-                          {f.comments.map((cm, ci) => (
-                            <div key={ci} className="text-[11px] text-text2 py-[3px]"><strong className="text-text">{cm.user}:</strong> {cm.text} <span className="text-[9px] text-text3">{fmtDate(cm.date)}</span></div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex gap-1.5 mt-1.5">
-                        <button className="bg-surface2 text-text2 border border-border rounded py-[3px] px-2 cursor-pointer font-sans text-[10px] hover:bg-surface3" onClick={() => addFbComment(fi)}>{'\uD83D\uDCAC'} Comentar</button>
-                        {!f.convertedTaskId ? (
-                          <button className="bg-blue-bg text-blue border rounded py-[3px] px-2 cursor-pointer font-sans text-[10px] font-semibold hover:bg-blue hover:text-white" style={{ borderColor: 'rgba(91,124,245,0.2)' }} onClick={() => convertFbItemToTask(fi, 0)}>{'\u2192'} Crear tarea</button>
-                        ) : (
-                          <span className="text-[10px] text-green">{'\u2713'} Tarea creada</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
 
       </div>
       {/* End Row 2 */}
@@ -1365,70 +1308,6 @@ export default function ClientDetail({ client: c }) {
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Cuello de botella</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.bottleneck || ''} onChange={e => setEditForm(f => ({ ...f, bottleneck: e.target.value }))} /></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Estado</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.status || 'active'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}><option value="active">Activo</option><option value="paused">Pausado</option><option value="completed">Completado</option></select></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Notas</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" value={editForm.notes || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} /></div>
-      </Modal>
-
-      {/* Client Feedback Modal */}
-      <Modal
-        open={clientFbModal}
-        onClose={() => setClientFbModal(false)}
-        title={'Feedback — ' + c.name}
-        footer={<>
-          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setClientFbModal(false)}>Cancelar</button>
-          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={saveClientFeedback}>Guardar</button>
-        </>}
-      >
-        {/* Source pills */}
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-1.5">Fuente</label>
-          <div className="flex gap-1.5">
-            {Object.entries(SOURCE_COLORS).map(([key, color]) => (
-              <button key={key} className={`py-1.5 px-3 rounded-full text-xs font-medium cursor-pointer font-sans border ${cfbForm.source === key ? 'text-white border-transparent' : 'bg-white border-border text-text2'}`}
-                style={cfbForm.source === key ? { background: color } : {}}
-                onClick={() => setCfbForm(f => ({ ...f, source: key }))}
-              >{SOURCE_LABELS[key]}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Call URL */}
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-1">URL de la llamada (opcional)</label>
-          <input type="text" className="w-full bg-bg border border-border rounded-md py-2 px-3 text-text text-[13px] font-sans outline-none focus:border-blue" placeholder="https://fathom.video/..." value={cfbForm.callUrl} onChange={e => setCfbForm(f => ({ ...f, callUrl: e.target.value }))} />
-        </div>
-
-        {/* Priority */}
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-1">Prioridad</label>
-          <select className="w-full bg-bg border border-border rounded-md py-2 px-3 text-text text-[13px] font-sans outline-none" value={cfbForm.priority} onChange={e => setCfbForm(f => ({ ...f, priority: e.target.value }))}>
-            {PRIO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-
-        {/* Feedback items */}
-        <div className="mb-2">
-          <label className="block text-xs font-semibold text-text2 mb-1">Feedback</label>
-          <textarea
-            className="w-full bg-bg border border-border rounded-md py-2 px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[70px] leading-relaxed"
-            placeholder="Escribe el feedback..."
-            value={cfbForm.currentItem}
-            onChange={e => setCfbForm(f => ({ ...f, currentItem: e.target.value }))}
-          />
-          {cfbForm.items.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {cfbForm.items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-1.5 bg-surface2 rounded-md py-1.5 px-2.5 text-xs text-text">
-                  <span className="flex-1">{item}</span>
-                  <button className="bg-transparent border-none text-text3 cursor-pointer hover:text-red text-sm" onClick={() => setCfbForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>&#x2715;</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button className="mt-1.5 text-[11px] text-blue bg-transparent border-none cursor-pointer font-sans hover:underline" onClick={() => {
-            if (cfbForm.currentItem.trim()) {
-              setCfbForm(f => ({ ...f, items: [...f.items, f.currentItem.trim()], currentItem: '' }));
-            }
-          }}>+ Agregar otro item</button>
-        </div>
       </Modal>
 
       {/* Delete Phase Confirmation */}
