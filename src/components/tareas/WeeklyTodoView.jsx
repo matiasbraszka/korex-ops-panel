@@ -411,11 +411,10 @@ export default function WeeklyTodoView() {
                           />
 
                           <div className="flex-1 min-w-0">
-                            <div className={`text-[12px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                            <div className={`text-[11px] font-medium leading-snug line-clamp-2 ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {task.title}
                             </div>
-                            {task.description && <div className="text-[10px] text-gray-400 truncate mt-0.5">{task.description}</div>}
-                            {cName && <div className="text-[10px] text-gray-400 mt-0.5">{cName}</div>}
+                            {cName && <div className="text-[9px] text-gray-400 mt-0.5 truncate">{cName}</div>}
                           </div>
 
                           <button
