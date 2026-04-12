@@ -108,121 +108,102 @@ export default function LlamadasPage() {
         </div>
       )}
 
-      {/* Add form */}
+      {/* Add call modal */}
       {adding && canEdit && (
-        <div className="bg-white border border-blue-300 rounded-xl p-5 max-w-[600px]">
-          <h3 className="text-[14px] font-bold text-gray-800 mb-3">Nueva llamada</h3>
-          <div className="space-y-3">
-            {/* URL */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Link de la llamada</label>
-              <input type="text" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-                placeholder="https://www.loom.com/share/... o https://fathom.video/share/..."
-                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" autoFocus />
-              {form.url && (
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
-                    source === 'loom' ? 'bg-purple-100 text-purple-700' :
-                    source === 'fathom' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>{source === 'loom' ? 'Loom' : source === 'fathom' ? 'Fathom' : 'Manual'}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Categoria pills */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Categoria</label>
-              <div className="flex gap-1.5">
-                {Object.entries(CAT_CONFIG).map(([key, cfg]) => (
-                  <button key={key} type="button"
-                    onClick={() => setForm(f => ({ ...f, categoria: key }))}
-                    className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
-                      form.categoria === key ? 'text-white border-transparent' : 'bg-white border-gray-200 hover:border-gray-300'
-                    }`}
-                    style={form.categoria === key ? { background: cfg.text, color: 'white' } : { color: cfg.text }}
-                  >{cfg.label}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Cliente (si categoria es cliente o ventas) */}
-            {(form.categoria === 'cliente' || form.categoria === 'ventas') && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }}>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 w-full max-w-[480px] shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[14px] font-bold text-gray-800 mb-4">Agregar llamada</h3>
+            <div className="space-y-3">
+              {/* URL */}
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente</label>
-                <select value={form.clienteId} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
-                  <option value="">Seleccionar cliente...</option>
-                  {(clients || []).map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Link de la llamada</label>
+                <input type="text" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                  placeholder="https://www.loom.com/share/... o https://fathom.video/share/..."
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" autoFocus />
+                {form.url && (
+                  <div className="mt-1">
+                    <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
+                      source === 'loom' ? 'bg-purple-100 text-purple-700' :
+                      source === 'fathom' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>{source === 'loom' ? 'Loom' : source === 'fathom' ? 'Fathom' : 'Manual'}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Categoria pills */}
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Categoria</label>
+                <div className="flex gap-1.5">
+                  {Object.entries(CAT_CONFIG).map(([key, cfg]) => (
+                    <button key={key} type="button"
+                      onClick={() => setForm(f => ({ ...f, categoria: key }))}
+                      className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
+                        form.categoria === key ? 'text-white border-transparent' : 'bg-white border-gray-200 hover:border-gray-300'
+                      }`}
+                      style={form.categoria === key ? { background: cfg.text, color: 'white' } : { color: cfg.text }}
+                    >{cfg.label}</button>
                   ))}
-                </select>
-              </div>
-            )}
-
-            {/* Participantes (si categoria es equipo o mentoria) */}
-            {(form.categoria === 'equipo' || form.categoria === 'mentoria') && (
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Participantes</label>
-                <div className="flex flex-wrap gap-1.5 mb-1.5">
-                  {TEAM.map(m => {
-                    const selected = (form.participantes || '').split(',').map(s => s.trim()).filter(Boolean).includes(m.name);
-                    return (
-                      <button key={m.id} type="button"
-                        onClick={() => {
-                          const current = (form.participantes || '').split(',').map(s => s.trim()).filter(Boolean);
-                          const next = selected ? current.filter(n => n !== m.name) : [...current, m.name];
-                          setForm(f => ({ ...f, participantes: next.join(', ') }));
-                        }}
-                        className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer font-sans transition-colors ${
-                          selected ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-                        }`}
-                      >{m.name.split(' ')[0]}</button>
-                    );
-                  })}
                 </div>
               </div>
-            )}
 
-            {/* Titulo (opcional) */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Titulo (opcional)</label>
-              <input type="text" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
-                placeholder="Ej: Reunion semanal de marketing"
-                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" />
-            </div>
-
-            {/* Contexto */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Notas de contexto (opcional)</label>
-              <input type="text" value={form.contexto} onChange={e => setForm(f => ({ ...f, contexto: e.target.value }))}
-                placeholder="Ej: Revision del funnel de Sergio, onboarding nuevo cliente"
-                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" />
-            </div>
-
-            {/* Transcript */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-                Transcript {source === 'loom' && <span className="text-amber-500">(recomendado para Loom)</span>}
-              </label>
-              <textarea value={form.transcript} onChange={e => setForm(f => ({ ...f, transcript: e.target.value }))}
-                placeholder="Pega el transcript de la llamada aqui..."
-                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 resize-y min-h-[80px]" />
-              {source === 'loom' && (
-                <p className="text-[10px] text-gray-400 mt-0.5">En Loom: abre el video → pestaña "Transcript" → copia todo el texto</p>
+              {/* Cliente (si categoria es cliente o ventas) */}
+              {(form.categoria === 'cliente' || form.categoria === 'ventas') && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente</label>
+                  <select value={form.clienteId} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
+                    <option value="">Seleccionar cliente...</option>
+                    {(clients || []).map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
-            </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2 pt-1">
-              <button onClick={handleAdd} disabled={!form.url.trim() || !form.categoria || saving}
-                className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40">
-                {saving ? 'Guardando...' : 'Agregar'}
-              </button>
-              <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }}
-                className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
-                Cancelar
-              </button>
+              {/* Participantes (si categoria es equipo o mentoria) */}
+              {(form.categoria === 'equipo' || form.categoria === 'mentoria') && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Participantes</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TEAM.map(m => {
+                      const selected = (form.participantes || '').split(',').map(s => s.trim()).filter(Boolean).includes(m.name);
+                      return (
+                        <button key={m.id} type="button"
+                          onClick={() => {
+                            const current = (form.participantes || '').split(',').map(s => s.trim()).filter(Boolean);
+                            const next = selected ? current.filter(n => n !== m.name) : [...current, m.name];
+                            setForm(f => ({ ...f, participantes: next.join(', ') }));
+                          }}
+                          className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer font-sans transition-colors ${
+                            selected ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                          }`}
+                        >{m.name.split(' ')[0]}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Contexto */}
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Contexto (opcional)</label>
+                <input type="text" value={form.contexto} onChange={e => setForm(f => ({ ...f, contexto: e.target.value }))}
+                  placeholder="Ej: Revision del funnel, onboarding nuevo cliente"
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-2 justify-end">
+                <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }}
+                  className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
+                  Cancelar
+                </button>
+                <button onClick={handleAdd} disabled={!form.url.trim() || !form.categoria || saving}
+                  className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40">
+                  {saving ? 'Guardando...' : 'Agregar'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
