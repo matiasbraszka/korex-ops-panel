@@ -7,6 +7,7 @@ import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
 import PublicidadPage from './PublicidadPage';
 import FeedbackPage from './FeedbackPage';
+import InformePage from './InformePage';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
 const VALID_TABS = ['lista', 'publicidad', 'feedback', 'informe'];
@@ -107,29 +108,8 @@ export default function ClientsPage() {
       {/* Feedback tab — embed full FeedbackPage */}
       {tab === 'feedback' && <FeedbackPage />}
 
-      {/* Informe tab — ultimo briefing del agente de ops */}
-      {tab === 'informe' && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-[14px] font-bold text-gray-800">Informe de operaciones</h2>
-              {stored?.date && <p className="text-[11px] text-gray-400 mt-0.5">Ultimo: {fmtDate(stored.date)}</p>}
-            </div>
-          </div>
-          <div className="px-5 py-4">
-            {stored?.text ? (
-              <div className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[70vh] overflow-y-auto"
-                dangerouslySetInnerHTML={{ __html: stored.text.replace(/^# .+$/gm, '<h2 class="text-[15px] font-bold text-gray-800 mt-4 mb-2">$&</h2>').replace(/^## .+$/gm, '<h3 class="text-[13px] font-bold text-gray-700 mt-3 mb-1">$&</h3>').replace(/^### .+$/gm, '<h4 class="text-[12px] font-semibold text-gray-600 mt-2 mb-1">$&</h4>') }} />
-            ) : (
-              <div className="text-center py-12">
-                <FileText size={36} className="text-gray-300 mx-auto mb-3" />
-                <p className="text-[13px] text-gray-500 font-medium">Sin informe disponible</p>
-                <p className="text-[11px] text-gray-400 mt-1">El agente de operaciones enviara el proximo informe automaticamente.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Informe tab — embed full InformePage */}
+      {tab === 'informe' && <InformePage />}
 
       {/* Lista tab — KPIs + filters + client list */}
       {tab === 'lista' && (<>
