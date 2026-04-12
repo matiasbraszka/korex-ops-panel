@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
+import CallDetailExpanded from '../components/CallDetailExpanded';
 
 // Link categories — used to organize Drive links, docs, landings, etc.
 const LINK_CATEGORIES = {
@@ -19,7 +20,7 @@ const LINK_CATEGORIES = {
 const LINK_CATEGORY_ORDER = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, updateLlamada, clients } = useApp();
   const [linkModal, setLinkModal] = useState(false);
   const [linkForm, setLinkForm] = useState({ label: '', url: '', category: 'folder' });
   const [editingLinkIdx, setEditingLinkIdx] = useState(null);
@@ -49,6 +50,7 @@ export default function ClientDetail({ client: c }) {
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [deleteClientModal, setDeleteClientModal] = useState(false);
   const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
+  const [expandedLlamadaId, setExpandedLlamadaId] = useState(null);
 
   const dropdownRefs = useRef({});
 
@@ -1256,6 +1258,55 @@ export default function ClientDetail({ client: c }) {
               )}
             </div>
           </div>
+
+          {/* Llamadas procesadas (IA) */}
+          {(() => {
+            const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id);
+            const CAT_COLORS = { cliente: { bg: '#EFF6FF', text: '#1D4ED8' }, equipo: { bg: '#F0FDF4', text: '#166534' }, mentoria: { bg: '#FDF4FF', text: '#7E22CE' }, ventas: { bg: '#FFF7ED', text: '#C2410C' } };
+            if (clientLlamadas.length === 0) return null;
+            return (
+              <div className="bg-white border border-border rounded-xl overflow-hidden">
+                <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EFF6FF', color: '#3B82F6' }}>{'\uD83E\uDD16'}</span>
+                  Llamadas procesadas
+                  <span className="text-[10px] text-gray-400 font-normal ml-1">{clientLlamadas.length}</span>
+                </div>
+                <div>
+                  {clientLlamadas.map(l => {
+                    const expanded = expandedLlamadaId === l.id;
+                    const cat = CAT_COLORS[l.categoria] || CAT_COLORS.equipo;
+                    return (
+                      <div key={l.id} className="border-b border-border last:border-b-0">
+                        <div
+                          className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                          onClick={() => setExpandedLlamadaId(expanded ? null : l.id)}
+                        >
+                          <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5 uppercase shrink-0"
+                            style={{ background: cat.bg, color: cat.text }}>{l.categoria}</span>
+                          <span className="text-[12px] font-medium text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
+                          {l.duracion_min && <span className="text-[10px] text-gray-400 shrink-0">{l.duracion_min}min</span>}
+                          {l.fecha && <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
+                          {l.recording_url && (
+                            <a href={l.recording_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                              className="text-[10px] text-blue-500 hover:text-blue-700 no-underline shrink-0">{'\uD83C\uDFAC'} Ver</a>
+                          )}
+                          <span className="text-gray-400 text-[10px] shrink-0">{expanded ? '\u25B2' : '\u25BC'}</span>
+                        </div>
+                        {expanded && (
+                          <CallDetailExpanded
+                            llamada={l}
+                            onUpdate={updateLlamada}
+                            onCreateTask={createTask}
+                            clients={clients}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Client Feedback */}
           <div className="bg-white border border-border rounded-xl overflow-hidden">

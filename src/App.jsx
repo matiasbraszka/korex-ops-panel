@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon, Play } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon, Play, Phone } from 'lucide-react';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import FeedbackPage from './pages/FeedbackPage';
 import SettingsPage from './pages/SettingsPage';
 import VideosPage from './pages/VideosPage';
+import LlamadasPage from './pages/LlamadasPage';
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
@@ -89,6 +90,7 @@ function MainLayout() {
     { id: 'dashboard', label: 'Dashboard',     Icon: LayoutDashboard },
     { id: 'clients',   label: 'Clientes',      Icon: Users },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList },
+    { id: 'llamadas',  label: 'Llamadas',      Icon: Phone },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play },
     { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, requiresPerm: true },
   ];
@@ -131,6 +133,7 @@ function MainLayout() {
     clients: <ClientsPage />,
     publicidad: <PublicidadPage />,
     tasks: <TareasPage />,
+    llamadas: <LlamadasPage />,
     videos: <VideosPage />,
     settings: <SettingsPage />,
     feedback: <FeedbackPage />,

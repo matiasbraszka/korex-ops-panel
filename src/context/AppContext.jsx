@@ -40,6 +40,8 @@ export function AppProvider({ children }) {
   const [weeklyTodos, setWeeklyTodos] = useState([]); // [{ id, userId, taskId, date, position }]
   // Loom videos (tutoriales y actualizaciones)
   const [loomVideos, setLoomVideos] = useState([]);
+  // Llamadas procesadas (desde Fathom via /procesa-llamadas)
+  const [llamadas, setLlamadas] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -527,6 +529,21 @@ export function AppProvider({ children }) {
     setLoomVideos(prev => prev.filter(v => v.id !== id));
   }, []);
 
+  // ── CRUD: llamadas ──
+  const updateLlamada = useCallback(async (id, fields) => {
+    await sbFetch('llamadas?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(fields)
+    });
+    setLlamadas(prev => prev.map(l => l.id === id ? { ...l, ...fields } : l));
+  }, []);
+
+  const deleteLlamada = useCallback(async (id) => {
+    await sbFetch('llamadas?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setLlamadas(prev => prev.filter(l => l.id !== id));
+  }, []);
+
   const updateWeeklyTodo = useCallback(async (todoId, fields) => {
     const dbFields = {};
     if (fields.date !== undefined) dbFields.date = fields.date;
@@ -571,6 +588,12 @@ export function AppProvider({ children }) {
       try {
         const vids = await sbFetch('loom_videos?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } });
         if (vids && Array.isArray(vids)) setLoomVideos(vids);
+      } catch (e) { /* silent */ }
+
+      // Cargar llamadas procesadas
+      try {
+        const calls = await sbFetch('llamadas?select=*&order=fecha.desc.nulls_last,created_at.desc', { headers: { 'Prefer': 'return=representation' } });
+        if (calls && Array.isArray(calls)) setLlamadas(calls);
       } catch (e) { /* silent */ }
 
       if (sbClients && sbClients.length > 0) {
@@ -892,6 +915,10 @@ export function AppProvider({ children }) {
     addLoomVideo,
     updateLoomVideo,
     deleteLoomVideo,
+    // Llamadas procesadas
+    llamadas,
+    updateLlamada,
+    deleteLlamada,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
