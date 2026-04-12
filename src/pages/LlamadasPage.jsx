@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader } from 'lucide-react';
+import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp } from 'lucide-react';
 import CallDetailExpanded from '../components/CallDetailExpanded';
 import { TEAM } from '../utils/constants';
 
@@ -36,9 +36,32 @@ export default function LlamadasPage() {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
+
+  // Aggregate insights across all calls
+  const allFeedback = (llamadas || []).flatMap(l =>
+    (l.feedback || []).map(fb => ({ ...fb, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha }))
+  );
+  const allProblemas = (llamadas || []).flatMap(l =>
+    (l.problemas_detectados || []).map(p => {
+      const text = typeof p === 'string' ? p : p?.text || '';
+      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
+    })
+  );
+  const allObjeciones = (llamadas || []).flatMap(l =>
+    (l.objeciones || []).map(o => {
+      const text = typeof o === 'string' ? o : o?.text || '';
+      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
+    })
+  );
+  const feedbackByArea = { marketing: [], empresa: [], producto: [] };
+  allFeedback.forEach(fb => {
+    if (feedbackByArea[fb.area]) feedbackByArea[fb.area].push(fb);
+  });
+  const hasInsights = allFeedback.length > 0 || allProblemas.length > 0 || allObjeciones.length > 0;
 
   // Filter
   let filtered = [...(llamadas || [])];
@@ -105,6 +128,109 @@ export default function LlamadasPage() {
             {pendingCallsCount} llamada{pendingCallsCount !== 1 ? 's' : ''} pendiente{pendingCallsCount !== 1 ? 's' : ''} de procesar
           </span>
           <span className="text-[11px] text-amber-500">Se procesan automaticamente a las 5:00 AM o con /procesa-llamadas</span>
+        </div>
+      )}
+
+      {/* Insights panel */}
+      {hasInsights && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div
+            className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-gray-50/50 transition-colors"
+            onClick={() => setShowInsights(prev => !prev)}
+          >
+            <TrendingUp size={15} className="text-blue-500" />
+            <span className="text-[13px] font-bold text-gray-800">Insights de llamadas</span>
+            <div className="flex items-center gap-1.5 ml-2">
+              {feedbackByArea.marketing.length > 0 && <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">Marketing {feedbackByArea.marketing.length}</span>}
+              {feedbackByArea.empresa.length > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">Empresa {feedbackByArea.empresa.length}</span>}
+              {feedbackByArea.producto.length > 0 && <span className="text-[9px] font-bold bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">Producto {feedbackByArea.producto.length}</span>}
+              {allProblemas.length > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5">Problemas {allProblemas.length}</span>}
+              {allObjeciones.length > 0 && <span className="text-[9px] font-bold bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5">Objeciones {allObjeciones.length}</span>}
+            </div>
+            <span className="ml-auto text-gray-400 text-[10px]">{showInsights ? '\u25B2' : '\u25BC'}</span>
+          </div>
+          {showInsights && (
+            <div className="border-t border-gray-100 px-4 py-3 space-y-4">
+              {/* Feedback by area */}
+              {Object.entries(feedbackByArea).filter(([, items]) => items.length > 0).map(([area, items]) => {
+                const cfg = area === 'marketing' ? { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' }
+                  : area === 'empresa' ? { bg: '#F0FDF4', text: '#166534', label: 'Empresa' }
+                  : { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' };
+                return (
+                  <div key={area}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: cfg.bg, color: cfg.text }}>{cfg.label}</span>
+                      <span className="text-[10px] text-gray-400">{items.length} feedback{items.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {items.map((fb, i) => {
+                        const clientName = fb.clienteId ? clients?.find(c => c.id === fb.clienteId)?.name : null;
+                        return (
+                          <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
+                            <span className="text-[11px] text-gray-400 mt-0.5 shrink-0">•</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[12px] text-gray-700 font-medium">{fb.texto}</span>
+                              {fb.descripcion && (
+                                <div className="text-[10px] text-gray-400 italic mt-0.5 line-clamp-1">"{fb.descripcion}"</div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {clientName && <span className="text-[9px] text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">{clientName}</span>}
+                              {fb.fecha && <span className="text-[9px] text-gray-400">{fmtFecha(fb.fecha)}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Problemas detectados */}
+              {allProblemas.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-100 text-red-700">Problemas detectados</span>
+                    <span className="text-[10px] text-gray-400">{allProblemas.length}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {allProblemas.map((p, i) => {
+                      const clientName = p.clienteId ? clients?.find(c => c.id === p.clienteId)?.name : null;
+                      return (
+                        <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
+                          <span className="text-[11px] text-red-400 mt-0.5 shrink-0">•</span>
+                          <span className="text-[12px] text-gray-700 flex-1 min-w-0">{p.text}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {clientName && <span className="text-[9px] text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">{clientName}</span>}
+                            {p.fecha && <span className="text-[9px] text-gray-400">{fmtFecha(p.fecha)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Objeciones */}
+              {allObjeciones.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-orange-100 text-orange-700">Objeciones de ventas</span>
+                    <span className="text-[10px] text-gray-400">{allObjeciones.length}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {allObjeciones.map((o, i) => (
+                      <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
+                        <span className="text-[11px] text-orange-400 mt-0.5 shrink-0">•</span>
+                        <span className="text-[12px] text-gray-700 flex-1 min-w-0">{o.text}</span>
+                        {o.fecha && <span className="text-[9px] text-gray-400 shrink-0">{fmtFecha(o.fecha)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
