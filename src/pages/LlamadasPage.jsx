@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2 } from 'lucide-react';
+import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader } from 'lucide-react';
 import CallDetailExpanded from '../components/CallDetailExpanded';
+import { TEAM } from '../utils/constants';
 
 const CAT_CONFIG = {
   cliente:  { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cliente' },
@@ -17,14 +18,27 @@ function fmtFecha(d) {
   } catch { return ''; }
 }
 
+function detectSource(url) {
+  if (!url) return 'manual';
+  if (url.includes('loom.com')) return 'loom';
+  if (url.includes('fathom.video')) return 'fathom';
+  return 'manual';
+}
+
+const EMPTY_FORM = { url: '', categoria: '', clienteId: '', participantes: '', contexto: '', transcript: '', titulo: '' };
+
 export default function LlamadasPage() {
-  const { llamadas, updateLlamada, deleteLlamada, createTask, clients, tasks, currentUser } = useApp();
+  const { llamadas, updateLlamada, deleteLlamada, createTask, clients, tasks, currentUser, addLlamadaInbox, pendingCallsCount } = useApp();
   const [expandedId, setExpandedId] = useState(null);
   const [catFilter, setCatFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [saving, setSaving] = useState(false);
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
+  const source = detectSource(form.url);
 
   // Filter
   let filtered = [...(llamadas || [])];
@@ -48,17 +62,171 @@ export default function LlamadasPage() {
     if (expandedId === id) setExpandedId(null);
   };
 
+  const handleAdd = async () => {
+    if (!form.url.trim() || !form.categoria) return;
+    setSaving(true);
+    try {
+      await addLlamadaInbox(form);
+      setForm({ ...EMPTY_FORM });
+      setAdding(false);
+    } catch (e) {
+      alert('Error al agregar: ' + (e.message || e));
+    }
+    setSaving(false);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div>
-        <h1 className="text-[20px] font-bold text-gray-800 flex items-center gap-2">
-          <Phone size={20} className="text-blue-500" /> Llamadas
-        </h1>
-        <p className="text-xs text-gray-400 mt-0.5">
-          Llamadas procesadas automaticamente desde Fathom. {filtered.length} llamada{filtered.length !== 1 ? 's' : ''}.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[20px] font-bold text-gray-800 flex items-center gap-2">
+            <Phone size={20} className="text-blue-500" /> Llamadas
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Llamadas procesadas desde Fathom y Loom. {filtered.length} llamada{filtered.length !== 1 ? 's' : ''}.
+          </p>
+        </div>
+        {canEdit && (
+          <button
+            className="flex items-center gap-1.5 text-[12px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors"
+            onClick={() => setAdding(true)}
+          >
+            <Plus size={14} /> Agregar llamada
+          </button>
+        )}
       </div>
+
+      {/* Pending badge */}
+      {pendingCallsCount > 0 && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <Loader size={14} className="text-amber-500 animate-spin" />
+          <span className="text-[12px] text-amber-700 font-medium">
+            {pendingCallsCount} llamada{pendingCallsCount !== 1 ? 's' : ''} pendiente{pendingCallsCount !== 1 ? 's' : ''} de procesar
+          </span>
+          <span className="text-[11px] text-amber-500">Se procesan automaticamente a las 5:00 AM o con /procesa-llamadas</span>
+        </div>
+      )}
+
+      {/* Add form */}
+      {adding && canEdit && (
+        <div className="bg-white border border-blue-300 rounded-xl p-5 max-w-[600px]">
+          <h3 className="text-[14px] font-bold text-gray-800 mb-3">Nueva llamada</h3>
+          <div className="space-y-3">
+            {/* URL */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Link de la llamada</label>
+              <input type="text" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                placeholder="https://www.loom.com/share/... o https://fathom.video/share/..."
+                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" autoFocus />
+              {form.url && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
+                    source === 'loom' ? 'bg-purple-100 text-purple-700' :
+                    source === 'fathom' ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>{source === 'loom' ? 'Loom' : source === 'fathom' ? 'Fathom' : 'Manual'}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Categoria pills */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Categoria</label>
+              <div className="flex gap-1.5">
+                {Object.entries(CAT_CONFIG).map(([key, cfg]) => (
+                  <button key={key} type="button"
+                    onClick={() => setForm(f => ({ ...f, categoria: key }))}
+                    className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
+                      form.categoria === key ? 'text-white border-transparent' : 'bg-white border-gray-200 hover:border-gray-300'
+                    }`}
+                    style={form.categoria === key ? { background: cfg.text, color: 'white' } : { color: cfg.text }}
+                  >{cfg.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cliente (si categoria es cliente o ventas) */}
+            {(form.categoria === 'cliente' || form.categoria === 'ventas') && (
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente</label>
+                <select value={form.clienteId} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
+                  <option value="">Seleccionar cliente...</option>
+                  {(clients || []).map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Participantes (si categoria es equipo o mentoria) */}
+            {(form.categoria === 'equipo' || form.categoria === 'mentoria') && (
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Participantes</label>
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {TEAM.map(m => {
+                    const selected = (form.participantes || '').split(',').map(s => s.trim()).filter(Boolean).includes(m.name);
+                    return (
+                      <button key={m.id} type="button"
+                        onClick={() => {
+                          const current = (form.participantes || '').split(',').map(s => s.trim()).filter(Boolean);
+                          const next = selected ? current.filter(n => n !== m.name) : [...current, m.name];
+                          setForm(f => ({ ...f, participantes: next.join(', ') }));
+                        }}
+                        className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer font-sans transition-colors ${
+                          selected ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                        }`}
+                      >{m.name.split(' ')[0]}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Titulo (opcional) */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Titulo (opcional)</label>
+              <input type="text" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
+                placeholder="Ej: Reunion semanal de marketing"
+                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" />
+            </div>
+
+            {/* Contexto */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Notas de contexto (opcional)</label>
+              <input type="text" value={form.contexto} onChange={e => setForm(f => ({ ...f, contexto: e.target.value }))}
+                placeholder="Ej: Revision del funnel de Sergio, onboarding nuevo cliente"
+                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" />
+            </div>
+
+            {/* Transcript */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                Transcript {source === 'loom' && <span className="text-amber-500">(recomendado para Loom)</span>}
+              </label>
+              <textarea value={form.transcript} onChange={e => setForm(f => ({ ...f, transcript: e.target.value }))}
+                placeholder="Pega el transcript de la llamada aqui..."
+                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 resize-y min-h-[80px]" />
+              {source === 'loom' && (
+                <p className="text-[10px] text-gray-400 mt-0.5">En Loom: abre el video → pestaña "Transcript" → copia todo el texto</p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              <button onClick={handleAdd} disabled={!form.url.trim() || !form.categoria || saving}
+                className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40">
+                {saving ? 'Guardando...' : 'Agregar'}
+              </button>
+              <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }}
+                className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -105,14 +273,14 @@ export default function LlamadasPage() {
       </div>
 
       {/* Empty state */}
-      {filtered.length === 0 && (
+      {filtered.length === 0 && !adding && (
         <div className="text-center py-16 bg-white border border-gray-200 rounded-xl">
           <Phone size={40} className="text-gray-300 mx-auto mb-3" />
           <div className="text-[14px] text-gray-500 font-medium">
             {(llamadas || []).length === 0 ? 'Sin llamadas procesadas' : 'Sin resultados para estos filtros'}
           </div>
           <div className="text-[12px] text-gray-400 mt-1">
-            {(llamadas || []).length === 0 ? 'Cuando proceses llamadas con /procesa-llamadas apareceran aca.' : 'Proba cambiar los filtros.'}
+            {(llamadas || []).length === 0 ? 'Agrega una llamada o espera a que Fathom las procese automaticamente.' : 'Proba cambiar los filtros.'}
           </div>
         </div>
       )}

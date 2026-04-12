@@ -42,6 +42,8 @@ export function AppProvider({ children }) {
   const [loomVideos, setLoomVideos] = useState([]);
   // Llamadas procesadas (desde Fathom via /procesa-llamadas)
   const [llamadas, setLlamadas] = useState([]);
+  // Llamadas pendientes de procesar (inbox)
+  const [pendingCallsCount, setPendingCallsCount] = useState(0);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -544,6 +546,32 @@ export function AppProvider({ children }) {
     setLlamadas(prev => prev.filter(l => l.id !== id));
   }, []);
 
+  const addLlamadaInbox = useCallback(async (data) => {
+    const id = 'inb_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 10);
+    const isLoom = (data.url || '').includes('loom.com');
+    const isFathom = (data.url || '').includes('fathom.video');
+    const source = isLoom ? 'loom' : isFathom ? 'fathom' : 'manual';
+    const row = {
+      id,
+      fathom_id: id,
+      recording_url: data.url,
+      title_fathom: data.titulo || null,
+      transcript: data.transcript || null,
+      raw_payload: {
+        source,
+        categoria_hint: data.categoria || null,
+        cliente_id_hint: data.clienteId || null,
+        participantes_hint: data.participantes || null,
+        contexto: data.contexto || null,
+        manual: true,
+      },
+      processed: false,
+    };
+    await sbFetch('llamadas_inbox', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(row) });
+    setPendingCallsCount(prev => prev + 1);
+    return row;
+  }, []);
+
   const updateWeeklyTodo = useCallback(async (todoId, fields) => {
     const dbFields = {};
     if (fields.date !== undefined) dbFields.date = fields.date;
@@ -594,6 +622,12 @@ export function AppProvider({ children }) {
       try {
         const calls = await sbFetch('llamadas?select=*&order=created_at.desc', { headers: { 'Prefer': 'return=representation' } });
         if (calls && Array.isArray(calls)) setLlamadas(calls);
+      } catch (e) { /* silent */ }
+
+      // Contar llamadas pendientes de procesar
+      try {
+        const pending = await sbFetch('llamadas_inbox?processed=eq.false&select=id', { headers: { 'Prefer': 'return=representation' } });
+        if (pending && Array.isArray(pending)) setPendingCallsCount(pending.length);
       } catch (e) { /* silent */ }
 
       if (sbClients && sbClients.length > 0) {
@@ -919,6 +953,8 @@ export function AppProvider({ children }) {
     llamadas,
     updateLlamada,
     deleteLlamada,
+    addLlamadaInbox,
+    pendingCallsCount,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
