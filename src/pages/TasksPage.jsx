@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange } from '../utils/helpers';
+import { GripVertical } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
@@ -171,13 +172,8 @@ export default function TasksPage({ embedded = false }) {
     dragGroupRef.current = getStatusGroup(task);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', task.id);
-    // Collapse to small ghost
-    const el = e.currentTarget;
-    el.classList.add('drag-dragging');
-    setTimeout(() => el.classList.add('drag-ghost'), 0);
   };
   const handleDragEnd = (e) => {
-    e.currentTarget.classList.remove('drag-dragging', 'drag-ghost');
     setDragTaskId(null);
     setDragOverTaskId(null);
     setDragOverHalf(null);
@@ -260,7 +256,7 @@ export default function TasksPage({ embedded = false }) {
 
     const isHighlighted = highlightTaskId === t.id;
     return (
-      <div id={'task-row-' + t.id} key={t.id} className={`border-b border-border last:border-b-0 ${isDragging ? 'drag-ghost' : ''} ${isHighlighted ? 'highlight-pulse' : ''}`}>
+      <div id={'task-row-' + t.id} key={t.id} className={`border-b border-border last:border-b-0 transition-all ${isDragging ? 'opacity-40 scale-[0.98]' : ''} ${isHighlighted ? 'highlight-pulse' : ''}`}>
         {/* Drop indicator */}
         {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
@@ -274,12 +270,12 @@ export default function TasksPage({ embedded = false }) {
           {/* Drag handle — solo tareas activas */}
           {getStatusGroup(t) === 0 ? (
             <div
-              className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-text3 text-[14px] select-none"
+              className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-gray-400 select-none"
               draggable
               onDragStart={(e) => handleDragStart(e, t, sortedGroup)}
               onDragEnd={handleDragEnd}
               title="Arrastrar para reordenar"
-            >{'\u2630'}</div>
+            ><GripVertical size={14} /></div>
           ) : <div />}
 
           {/* Status icon */}

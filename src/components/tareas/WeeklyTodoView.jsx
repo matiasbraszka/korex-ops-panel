@@ -7,6 +7,7 @@ import TaskPickerModal from './TaskPickerModal';
 import { ChevronLeft, ChevronRight, X, GripVertical } from 'lucide-react';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
+const DAY_FULL = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 const pad = (n) => String(n).padStart(2, '0');
 const fmtIso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -43,7 +44,9 @@ export default function WeeklyTodoView() {
   const { tasks, clients, currentUser, weeklyTodos, loadWeeklyTodos, addWeeklyTodo, removeWeeklyTodo, updateWeeklyTodo, updateTask } = useApp();
 
   const nowStr = today();
+  const [subView, setSubView] = useState('semanal'); // 'semanal' | 'diaria'
   const [mondayStr, setMondayStr] = useState(() => getMonday(nowStr));
+  const [selectedDate, setSelectedDate] = useState(nowStr); // para vista diaria
   const [pickerDate, setPickerDate] = useState(null);
   const [openStatusDropdown, setOpenStatusDropdown] = useState(null);
   const statusRefs = useRef({});
@@ -55,19 +58,55 @@ export default function WeeklyTodoView() {
 
   const dates = useMemo(() => weekDates(mondayStr), [mondayStr]);
 
+  // Cargar datos: en semanal carga la semana, en diaria carga solo el dia seleccionado
   useEffect(() => {
-    if (currentUser?.id) {
+    if (!currentUser?.id) return;
+    if (subView === 'semanal') {
       loadWeeklyTodos(currentUser.id, dates[0], dates[6]);
+    } else {
+      loadWeeklyTodos(currentUser.id, selectedDate, selectedDate);
     }
-  }, [currentUser?.id, mondayStr, loadWeeklyTodos, dates]);
+  }, [currentUser?.id, mondayStr, selectedDate, subView, loadWeeklyTodos, dates]);
 
+  // Navegacion semanal
   const goWeek = (dir) => {
     const [y, m, d] = mondayStr.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
     dt.setDate(dt.getDate() + dir * 7);
     setMondayStr(fmtIso(dt));
   };
-  const goToday = () => setMondayStr(getMonday(nowStr));
+  const goToday = () => {
+    setMondayStr(getMonday(nowStr));
+    setSelectedDate(nowStr);
+  };
+
+  // Navegacion diaria
+  const goDay = (dir) => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + dir);
+    const newDate = fmtIso(dt);
+    setSelectedDate(newDate);
+    setMondayStr(getMonday(newDate));
+  };
+
+  // Label del dia para vista diaria
+  const dayLabel = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dayName = DAY_FULL[dt.getDay()];
+    const monthName = dt.toLocaleDateString('es-AR', { month: 'long' });
+    return `${dayName} ${d} de ${monthName} ${y}`;
+  }, [selectedDate]);
+
+  // Todos del dia seleccionado (para vista diaria)
+  const dailyTodos = useMemo(() => {
+    return weeklyTodos
+      .filter(wt => wt.date === selectedDate)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }, [weeklyTodos, selectedDate]);
+
+  const dailyLinkedIds = useMemo(() => new Set(dailyTodos.map(wt => wt.taskId)), [dailyTodos]);
 
   const todosByDate = useMemo(() => {
     const map = {};
@@ -214,33 +253,56 @@ export default function WeeklyTodoView() {
     setDragOverIdx(null);
   };
 
+  const isToday = selectedDate === nowStr;
+
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 bg-white border border-gray-200 rounded-xl py-3 px-4">
+      {/* Header con sub-toggle + navegacion */}
+      <div className="flex items-center justify-between mb-4 bg-white border border-gray-200 rounded-xl py-3 px-4 gap-3 flex-wrap">
+        {/* Nav izquierda */}
         <button
           className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-800 bg-transparent border border-gray-200 hover:border-gray-300 rounded-lg py-1.5 px-2.5 cursor-pointer font-sans transition-colors"
-          onClick={() => goWeek(-1)}
+          onClick={() => subView === 'semanal' ? goWeek(-1) : goDay(-1)}
         >
-          <ChevronLeft size={14} /> Anterior
+          <ChevronLeft size={14} /> {subView === 'semanal' ? 'Anterior' : 'Ayer'}
         </button>
-        <div className="text-center">
-          <div className="text-[14px] font-bold text-gray-800">{weekLabel(dates)}</div>
-          {!isCurrentWeek && (
-            <button className="text-[11px] text-blue-500 hover:text-blue-600 bg-transparent border-none cursor-pointer font-sans mt-0.5" onClick={goToday}>
-              Ir a esta semana
-            </button>
-          )}
+
+        {/* Centro: titulo + sub-toggle */}
+        <div className="text-center flex-1">
+          <div className="text-[14px] font-bold text-gray-800">
+            {subView === 'semanal' ? weekLabel(dates) : dayLabel}
+          </div>
+          <div className="flex items-center justify-center gap-1 mt-1.5">
+            {['semanal', 'diaria'].map(v => (
+              <button
+                key={v}
+                onClick={() => { setSubView(v); if (v === 'diaria') setSelectedDate(nowStr); }}
+                className={`text-[11px] font-semibold py-1 px-3 rounded-full border cursor-pointer font-sans transition-colors ${
+                  subView === v ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {v === 'semanal' ? 'Semanal' : 'Diaria'}
+              </button>
+            ))}
+            {((subView === 'semanal' && !isCurrentWeek) || (subView === 'diaria' && !isToday)) && (
+              <button className="text-[11px] text-blue-500 hover:text-blue-600 bg-transparent border-none cursor-pointer font-sans ml-1" onClick={goToday}>
+                Hoy
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Nav derecha */}
         <button
           className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-800 bg-transparent border border-gray-200 hover:border-gray-300 rounded-lg py-1.5 px-2.5 cursor-pointer font-sans transition-colors"
-          onClick={() => goWeek(1)}
+          onClick={() => subView === 'semanal' ? goWeek(1) : goDay(1)}
         >
-          Siguiente <ChevronRight size={14} />
+          {subView === 'semanal' ? 'Siguiente' : 'Mañana'} <ChevronRight size={14} />
         </button>
       </div>
 
-      {/* Grid semanal con zonas de drop laterales para cambiar de semana */}
+      {/* ═══ Vista SEMANAL ═══ */}
+      {subView === 'semanal' && (
       <div className="flex gap-2">
         {/* Zona izquierda: semana anterior */}
         <div
@@ -399,6 +461,102 @@ export default function WeeklyTodoView() {
           <ChevronRight size={16} />
         </div>
       </div>
+      )}
+
+      {/* ═══ Vista DIARIA ═══ */}
+      {subView === 'diaria' && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden max-w-[700px] mx-auto">
+          {/* Day header */}
+          <div className={`flex items-center justify-between px-5 py-3 border-b ${selectedDate === nowStr ? 'border-blue-200 bg-blue-50/30' : 'border-gray-100'}`}>
+            <div className="flex items-center gap-2">
+              <span className={`text-[16px] font-bold ${selectedDate === nowStr ? 'text-blue-600' : 'text-gray-800'}`}>
+                {dayLabel}
+              </span>
+              {selectedDate === nowStr && <span className="text-[10px] font-bold text-blue-600 bg-blue-100 rounded-full px-2 py-[2px]">HOY</span>}
+            </div>
+            <span className="text-[12px] text-gray-400">{dailyTodos.length} tarea{dailyTodos.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Tasks del dia */}
+          <div className="px-4 py-3 space-y-2 min-h-[300px]">
+            {dailyTodos.length === 0 && (
+              <div className="text-center text-gray-400 text-xs py-12">Sin tareas para este dia. Usa el boton de abajo para agregar.</div>
+            )}
+            {dailyTodos.map(wt => {
+              const task = tasks.find(t => t.id === wt.taskId);
+              if (!task) return null;
+              const st = TASK_STATUS[task.status];
+              const stRef = getStatusRef('daily_' + wt.id);
+              const cName = clientName(task.clientId);
+              const isDone = task.status === 'done';
+
+              return (
+                <div
+                  key={wt.id}
+                  className={`group rounded-xl border px-4 py-3 transition-colors ${
+                    isDone ? 'bg-green-50/50 border-green-200' : 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Status dot */}
+                    <span
+                      ref={el => stRef.current = el}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] cursor-pointer shrink-0 mt-0.5"
+                      style={{ background: (st?.color || '#9CA3AF') + '15', color: st?.color || '#9CA3AF', border: `1.5px solid ${st?.color || '#9CA3AF'}` }}
+                      onClick={() => setOpenStatusDropdown('daily_' + wt.id)}
+                      title={st?.label || task.status}
+                    >
+                      {st?.icon || '\u25CB'}
+                    </span>
+                    <Dropdown
+                      open={openStatusDropdown === 'daily_' + wt.id}
+                      onClose={() => setOpenStatusDropdown(null)}
+                      anchorRef={stRef}
+                      items={Object.entries(TASK_STATUS)
+                        .filter(([k]) => k !== 'blocked' && k !== 'retrasadas')
+                        .map(([k, v]) => ({
+                          label: v.label, icon: v.icon, iconColor: v.color,
+                          onClick: () => updateTask(task.id, { status: k }),
+                        }))}
+                    />
+
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[14px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                        {task.title}
+                      </div>
+                      {task.description && (
+                        <div className="text-[12px] text-gray-400 mt-1 line-clamp-2">{task.description}</div>
+                      )}
+                      <div className="flex items-center gap-3 mt-1.5">
+                        {cName && <span className="text-[11px] text-gray-400">{cName}</span>}
+                        <span className="text-[10px] font-semibold uppercase" style={{ color: st?.color || '#9CA3AF' }}>{st?.label || task.status}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={() => removeWeeklyTodo(wt.id)}
+                      title="Quitar del dia"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add task button */}
+          <div className="px-4 pb-4">
+            <button
+              className="w-full text-[12px] text-gray-400 hover:text-blue-500 bg-transparent border border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-lg py-2.5 cursor-pointer font-sans transition-colors"
+              onClick={() => setPickerDate(selectedDate)}
+            >
+              + Agregar tarea
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Task picker modal */}
       <TaskPickerModal
