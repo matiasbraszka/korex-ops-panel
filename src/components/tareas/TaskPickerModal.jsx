@@ -22,16 +22,25 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
 
   const nowStr = today();
 
-  // Tareas del usuario actual (asignadas a el, no completadas)
+  // Match flexible: "Matias" matchea "Matias Braszka" y viceversa
+  const matchesUser = (assigneeStr) => {
+    if (!currentUser?.name) return false;
+    const userName = currentUser.name.toLowerCase();
+    const firstName = userName.split(' ')[0];
+    const parts = assigneeStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    return parts.some(p => p === userName || p === firstName || userName.startsWith(p) || p.startsWith(firstName));
+  };
+
+  // Tareas del usuario actual (asignadas a el o sin asignar, no completadas)
   const myTasks = useMemo(() => {
     if (!currentUser) return [];
-    const userName = currentUser.name?.toLowerCase() || '';
     return tasks.filter(t => {
       if (t.status === 'done') return false;
-      if (!t.assignee) return false;
-      const parts = t.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      return parts.includes(userName);
+      // Incluir tareas asignadas al usuario O sin asignar (disponibles para cualquiera)
+      if (!t.assignee || t.assignee.trim() === '') return true;
+      return matchesUser(t.assignee);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, currentUser]);
 
   // Aplicar filtros
