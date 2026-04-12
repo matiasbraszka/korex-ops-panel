@@ -387,7 +387,11 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
                   <select value={taskModal.clientId} onChange={e => setTaskModal(f => ({ ...f, clientId: e.target.value, phase: '' }))}
                     className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400">
                     <option value="">Sin cliente</option>
-                    {(clients || []).map(c => (
+                    {(clients || []).filter(c => c.name?.includes('Korex')).map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                    <option disabled>──────────</option>
+                    {(clients || []).filter(c => !c.name?.includes('Korex')).sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
