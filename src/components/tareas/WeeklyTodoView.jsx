@@ -411,7 +411,10 @@ export default function WeeklyTodoView() {
                           />
 
                           <div className="flex-1 min-w-0">
-                            <div className={`text-[11px] font-medium leading-snug line-clamp-2 ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                            <div
+                              className={`text-[11px] font-medium leading-snug line-clamp-2 ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}
+                              title={task.title}
+                            >
                               {task.title}
                             </div>
                             {cName && <div className="text-[9px] text-gray-400 mt-0.5 truncate">{cName}</div>}
