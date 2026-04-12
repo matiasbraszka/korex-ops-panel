@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon, Play } from 'lucide-react';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
@@ -8,6 +8,7 @@ import PublicidadPage from './pages/PublicidadPage';
 import DashboardPage from './pages/DashboardPage';
 import FeedbackPage from './pages/FeedbackPage';
 import SettingsPage from './pages/SettingsPage';
+import VideosPage from './pages/VideosPage';
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
@@ -72,17 +73,23 @@ function LoginPage() {
 }
 
 function MainLayout() {
-  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings } = useApp();
+  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings, loomVideos } = useApp();
   const [newClientModal, setNewClientModal] = useState(false);
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
     : ['Funnel completo + Ads'];
   const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '' });
 
+  // Contar videos no vistos para badge
+  const seenKey = `loom_seen_${currentUser?.id || 'anon'}`;
+  const seenVideos = (() => { try { return JSON.parse(localStorage.getItem(seenKey) || '[]'); } catch { return []; } })();
+  const unseenVideoCount = (loomVideos || []).filter(v => !seenVideos.includes(v.id)).length;
+
   const allNavItems = [
     { id: 'dashboard', label: 'Dashboard',     Icon: LayoutDashboard },
     { id: 'clients',   label: 'Clientes',      Icon: Users },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList },
+    { id: 'videos',    label: 'Tutoriales',    Icon: Play },
     { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, requiresPerm: true },
   ];
   const canAccessSettings = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
@@ -100,6 +107,7 @@ function MainLayout() {
     clients: ['Clientes', 'Perfiles, ads, feedback y recursos'],
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
+    videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
   };
@@ -123,6 +131,7 @@ function MainLayout() {
     clients: <ClientsPage />,
     publicidad: <PublicidadPage />,
     tasks: <TareasPage />,
+    videos: <VideosPage />,
     settings: <SettingsPage />,
     feedback: <FeedbackPage />,
   };
@@ -148,6 +157,9 @@ function MainLayout() {
               {item.label}
               {item.id === 'tasks' && urgentCount > 0 && (
                 <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{urgentCount}</span>
+              )}
+              {item.id === 'videos' && unseenVideoCount > 0 && (
+                <span className="ml-auto bg-blue-500 text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{unseenVideoCount}</span>
               )}
             </button>
           ))}

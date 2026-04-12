@@ -38,6 +38,8 @@ export function AppProvider({ children }) {
   const [teamMembers, setTeamMembers] = useState([]); // [{ id, name, role, ... }]
   // Weekly to-do list (personal por usuario)
   const [weeklyTodos, setWeeklyTodos] = useState([]); // [{ id, userId, taskId, date, position }]
+  // Loom videos (tutoriales y actualizaciones)
+  const [loomVideos, setLoomVideos] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -506,6 +508,25 @@ export function AppProvider({ children }) {
     setWeeklyTodos(prev => prev.filter(t => t.id !== todoId));
   }, []);
 
+  // ── CRUD: loom_videos ──
+  const addLoomVideo = useCallback(async (video) => {
+    const id = 'lv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const row = { id, title: video.title, loom_url: video.loom_url, description: video.description || '', is_main: !!video.is_main, position: video.position ?? 999 };
+    await sbFetch('loom_videos', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(row) });
+    setLoomVideos(prev => [...prev, row]);
+    return row;
+  }, []);
+
+  const updateLoomVideo = useCallback(async (id, fields) => {
+    await sbFetch('loom_videos?id=eq.' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(fields) });
+    setLoomVideos(prev => prev.map(v => v.id === id ? { ...v, ...fields } : v));
+  }, []);
+
+  const deleteLoomVideo = useCallback(async (id) => {
+    await sbFetch('loom_videos?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setLoomVideos(prev => prev.filter(v => v.id !== id));
+  }, []);
+
   const updateWeeklyTodo = useCallback(async (todoId, fields) => {
     const dbFields = {};
     if (fields.date !== undefined) dbFields.date = fields.date;
@@ -545,6 +566,12 @@ export function AppProvider({ children }) {
       if (alerts) setDashboardAlerts(alerts);
       if (sbSettings && sbSettings.length > 0) setAppSettings(sbSettings[0].value || null);
       if (sbTeam && sbTeam.length > 0) setTeamMembers(sbTeam);
+
+      // Cargar loom videos
+      try {
+        const vids = await sbFetch('loom_videos?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } });
+        if (vids && Array.isArray(vids)) setLoomVideos(vids);
+      } catch (e) { /* silent */ }
 
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
@@ -860,6 +887,11 @@ export function AppProvider({ children }) {
     addWeeklyTodo,
     removeWeeklyTodo,
     updateWeeklyTodo,
+    // Loom videos
+    loomVideos,
+    addLoomVideo,
+    updateLoomVideo,
+    deleteLoomVideo,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
