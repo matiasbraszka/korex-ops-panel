@@ -90,7 +90,7 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
       clientId: l.cliente_id || '',
       onSave: (task) => {
         const updated = [...(l.proximos_pasos || [])];
-        updated[idx] = { ...updated[idx], task_proposal_id: task.id };
+        updated[idx] = { ...updated[idx], task_id: task.id };
         onUpdate(l.id, { proximos_pasos: updated });
       }
     });
@@ -196,8 +196,11 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Proximos pasos</div>
           <div className="space-y-1.5">
             {(l.proximos_pasos || []).map((paso, i) => {
+              // Si ya es tarea real en el sistema, no mostrarlo
+              const isRealTask = !!paso.task_id && (tasks || []).some(t => t.id === paso.task_id);
+              if (isRealTask) return null;
+
               const isEditing = editingSection === `paso-${i}`;
-              const converted = !!paso.task_proposal_id;
 
               if (isEditing) {
                 return (
@@ -219,25 +222,23 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
               }
 
               return (
-                <div key={i} className={`flex items-start gap-2 group rounded-lg px-2.5 py-1.5 hover:bg-white transition-colors ${converted ? 'opacity-50' : ''}`}>
-                  <span className="text-[11px] text-gray-400 mt-0.5">{converted ? <Check size={12} className="text-green-500" /> : '•'}</span>
+                <div key={i} className="flex items-start gap-2 group rounded-lg px-2.5 py-1.5 hover:bg-white transition-colors">
+                  <span className="text-[11px] text-gray-400 mt-0.5">•</span>
                   <div className="flex-1 min-w-0">
-                    <span className={`text-[12px] ${converted ? 'line-through text-gray-400' : 'text-gray-700'}`}>{paso.accion}</span>
+                    <span className="text-[12px] text-gray-700">{paso.accion}</span>
                     <div className="flex items-center gap-2 mt-0.5">
                       {paso.responsable && <span className="text-[10px] text-gray-400">{paso.responsable}</span>}
                       {paso.plazo && <span className="text-[10px] text-gray-400">{paso.plazo}</span>}
                     </div>
                   </div>
-                  {!converted && (
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={() => startEdit('paso', i, { accion: paso.accion, responsable: paso.responsable, plazo: paso.plazo })}
-                        className="p-1 text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer" title="Editar"><Pencil size={11} /></button>
-                      <button onClick={() => deletePaso(i)}
-                        className="p-1 text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer" title="Eliminar"><Trash2 size={11} /></button>
-                      <button onClick={() => convertPasoToTask(i)}
-                        className="p-1 text-gray-400 hover:text-green-500 bg-transparent border-none cursor-pointer" title="Convertir a tarea"><ArrowRight size={11} /></button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button onClick={() => startEdit('paso', i, { accion: paso.accion, responsable: paso.responsable, plazo: paso.plazo })}
+                      className="p-1 text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer" title="Editar"><Pencil size={11} /></button>
+                    <button onClick={() => deletePaso(i)}
+                      className="p-1 text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer" title="Eliminar"><Trash2 size={11} /></button>
+                    <button onClick={() => convertPasoToTask(i)}
+                      className="p-1 text-gray-400 hover:text-green-500 bg-transparent border-none cursor-pointer" title="Convertir a tarea"><ArrowRight size={11} /></button>
+                  </div>
                 </div>
               );
             })}

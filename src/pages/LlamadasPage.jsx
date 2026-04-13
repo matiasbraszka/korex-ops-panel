@@ -5,10 +5,11 @@ import CallDetailExpanded from '../components/CallDetailExpanded';
 import { TEAM } from '../utils/constants';
 
 const CAT_CONFIG = {
-  cliente:  { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cliente' },
-  equipo:   { bg: '#F0FDF4', text: '#166534', label: 'Equipo' },
-  mentoria: { bg: '#FDF4FF', text: '#7E22CE', label: 'Mentoria' },
-  ventas:   { bg: '#FFF7ED', text: '#C2410C', label: 'Ventas' },
+  cliente:      { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cliente' },
+  consultoria:  { bg: '#FFFBEB', text: '#B45309', label: 'Consultoría' },
+  equipo:       { bg: '#F0FDF4', text: '#166534', label: 'Equipo' },
+  mentoria:     { bg: '#FDF4FF', text: '#7E22CE', label: 'Mentoria' },
+  ventas:       { bg: '#FFF7ED', text: '#C2410C', label: 'Ventas' },
 };
 
 function fmtFecha(d) {
@@ -298,7 +299,7 @@ export default function LlamadasPage() {
               </div>
 
               {/* Cliente (si categoria es cliente o ventas) */}
-              {(form.categoria === 'cliente' || form.categoria === 'ventas') && (
+              {(form.categoria === 'cliente' || form.categoria === 'ventas' || form.categoria === 'consultoria') && (
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente</label>
                   <select value={form.clienteId} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value }))}

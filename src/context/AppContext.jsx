@@ -620,7 +620,7 @@ export function AppProvider({ children }) {
 
       // Cargar llamadas procesadas
       try {
-        const calls = await sbFetch('llamadas?select=*&order=created_at.desc', { headers: { 'Prefer': 'return=representation' } });
+        const calls = await sbFetch('llamadas?select=*&order=fecha.desc.nullslast', { headers: { 'Prefer': 'return=representation' } }).then(r => Array.isArray(r) ? r.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)) : r);
         if (calls && Array.isArray(calls)) setLlamadas(calls);
       } catch (e) { /* silent */ }
 
