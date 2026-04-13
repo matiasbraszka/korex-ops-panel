@@ -42,26 +42,6 @@ export default function LlamadasPage() {
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
 
-  // Aggregate insights across all calls
-  const allFeedback = (llamadas || []).flatMap(l =>
-    (l.feedback || []).map(fb => ({ ...fb, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha }))
-  );
-  const allProblemas = (llamadas || []).flatMap(l =>
-    (l.problemas_detectados || []).map(p => {
-      const text = typeof p === 'string' ? p : p?.text || '';
-      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
-    })
-  );
-  const allObjeciones = (llamadas || []).flatMap(l =>
-    (l.objeciones || []).map(o => {
-      const text = typeof o === 'string' ? o : o?.text || '';
-      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
-    })
-  );
-  const quejas = allFeedback.filter(fb => fb.tipo === 'queja');
-  const mejoras = allFeedback.filter(fb => fb.tipo === 'mejora' || !fb.tipo);
-  const hasInsights = allFeedback.length > 0 || allProblemas.length > 0 || allObjeciones.length > 0;
-
   // Filter
   let filtered = [...(llamadas || [])];
   if (catFilter !== 'all') filtered = filtered.filter(l => l.categoria === catFilter);
@@ -70,6 +50,26 @@ export default function LlamadasPage() {
     const q = search.toLowerCase();
     filtered = filtered.filter(l => (l.titulo || '').toLowerCase().includes(q) || (l.resumen || '').toLowerCase().includes(q));
   }
+
+  // Aggregate insights from filtered calls
+  const allFeedback = filtered.flatMap(l =>
+    (l.feedback || []).map(fb => ({ ...fb, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha }))
+  );
+  const allProblemas = filtered.flatMap(l =>
+    (l.problemas_detectados || []).map(p => {
+      const text = typeof p === 'string' ? p : p?.text || '';
+      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
+    })
+  );
+  const allObjeciones = filtered.flatMap(l =>
+    (l.objeciones || []).map(o => {
+      const text = typeof o === 'string' ? o : o?.text || '';
+      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
+    })
+  );
+  const quejas = allFeedback.filter(fb => fb.tipo === 'queja');
+  const mejoras = allFeedback.filter(fb => fb.tipo === 'mejora' || !fb.tipo);
+  const hasInsights = allFeedback.length > 0 || allProblemas.length > 0 || allObjeciones.length > 0;
 
   // Clients that have calls (for filter dropdown)
   const clientsWithCalls = [...new Set((llamadas || []).map(l => l.cliente_id).filter(Boolean))];
