@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { PROCESS_STEPS, TASK_STATUS, TEAM } from '../../utils/constants';
+import { PROCESS_STEPS, TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
@@ -15,7 +15,8 @@ import Modal from '../Modal';
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
 export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
-  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask } = useApp();
+  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers } = useApp();
+  const TEAM = teamMembers || [];
 
   // Estado local al panel (cada cliente tiene su propio estado de UI)
   const [openDropdown, setOpenDropdown] = useState(null);

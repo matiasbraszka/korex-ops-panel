@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pencil, Trash2, ArrowRight, Check, RefreshCw } from 'lucide-react';
-import { TEAM } from '../utils/constants';
+import { useApp } from '../context/AppContext';
 
 const AREA_COLORS = {
   marketing: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' },
@@ -14,6 +14,8 @@ const TIPO_COLORS = {
 };
 
 export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, clients, tasks, onToggleRetro }) {
+  const { teamMembers } = useApp();
+  const TEAM = teamMembers || [];
   const [editingSection, setEditingSection] = useState(null);
   const [editForm, setEditForm] = useState({});
   // Task creation modal

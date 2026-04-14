@@ -1,5 +1,4 @@
 import { useApp } from '../../context/AppContext';
-import { TEAM } from '../../utils/constants';
 
 export default function FiltersBar() {
   const {
@@ -8,6 +7,7 @@ export default function FiltersBar() {
     taskAssignee, setTaskAssignee,
     taskPriority, setTaskPriority,
     taskDueFilter, setTaskDueFilter,
+    teamMembers,
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,
     getAllPriorityLabels,
@@ -48,7 +48,7 @@ export default function FiltersBar() {
         className={selectBase}
       >
         <option value="all">Todos los encargados</option>
-        {TEAM.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+        {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
       </select>
 
       <select

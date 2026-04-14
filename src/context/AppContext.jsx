@@ -610,7 +610,7 @@ export function AppProvider({ children }) {
       if (proposals && proposals.length) setTaskProposals(proposals);
       if (alerts) setDashboardAlerts(alerts);
       if (sbSettings && sbSettings.length > 0) setAppSettings(sbSettings[0].value || null);
-      if (sbTeam && sbTeam.length > 0) setTeamMembers(sbTeam);
+      if (sbTeam && sbTeam.length > 0) setTeamMembers(sbTeam.map(m => ({ ...m, avatar: m.avatar_url || m.avatar || null })));
 
       // Cargar loom videos
       try {

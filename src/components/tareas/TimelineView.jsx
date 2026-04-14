@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { TEAM } from '../../utils/constants';
 import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
@@ -16,7 +15,9 @@ export default function TimelineView({ onGoToTaskList }) {
     taskDueFilter,
     hideCompletedTasks,
     hideBlockedTasks,
+    teamMembers,
   } = useApp();
+  const TEAM = teamMembers || [];
 
   const [assigningDeadline, setAssigningDeadline] = useState(null);
   const [expandedPhases, setExpandedPhases] = useState({});

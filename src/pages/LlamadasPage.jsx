@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp } from 'lucide-react';
 import CallDetailExpanded from '../components/CallDetailExpanded';
-import { TEAM } from '../utils/constants';
 
 const CAT_CONFIG = {
   cliente:      { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cliente' },
@@ -29,7 +28,8 @@ function detectSource(url) {
 const EMPTY_FORM = { url: '', categoria: '', clienteId: '', participantes: '', contexto: '', transcript: '', titulo: '' };
 
 export default function LlamadasPage() {
-  const { llamadas, updateLlamada, deleteLlamada, createTask, clients, tasks, currentUser, addLlamadaInbox, pendingCallsCount } = useApp();
+  const { llamadas, updateLlamada, deleteLlamada, createTask, clients, tasks, currentUser, addLlamadaInbox, pendingCallsCount, teamMembers } = useApp();
+  const TEAM = teamMembers || [];
   const [expandedId, setExpandedId] = useState(null);
   const [catFilter, setCatFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');

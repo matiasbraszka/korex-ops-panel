@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS, TEAM } from '../utils/constants';
+import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS } from '../utils/constants';
 import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, getElapsedDays } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
@@ -19,7 +19,8 @@ const LINK_CATEGORIES = {
 const LINK_CATEGORY_ORDER = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers } = useApp();
+  const TEAM = teamMembers || [];
   const [linkModal, setLinkModal] = useState(false);
   const [linkForm, setLinkForm] = useState({ label: '', url: '', category: 'folder' });
   const [editingLinkIdx, setEditingLinkIdx] = useState(null);

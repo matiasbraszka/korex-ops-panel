@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { PROCESS_STEPS, PHASES, TASK_STATUS, TEAM } from '../utils/constants';
+import { PROCESS_STEPS, PHASES, TASK_STATUS } from '../utils/constants';
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange } from '../utils/helpers';
 import { GripVertical } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
@@ -8,7 +8,8 @@ import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers } = useApp();
+  const TEAM = teamMembers || [];
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});

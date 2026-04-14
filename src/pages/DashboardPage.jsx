@@ -1,10 +1,9 @@
 import { useApp } from '../context/AppContext';
-import { TEAM } from '../utils/constants';
 import { daysBetween, daysAgo, today, fmtDate } from '../utils/helpers';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function DashboardPage() {
-  const { clients, tasks, dashboardAlerts, dismissAlert, setView, setTaskClientFilter } = useApp();
+  const { clients, tasks, dashboardAlerts, dismissAlert, setView, setTaskClientFilter, teamMembers } = useApp();
 
   // Navigate to Tareas view filtered by a specific client
   const goToTaskClient = (clientId) => {
@@ -20,7 +19,6 @@ export default function DashboardPage() {
 
   // Active (non-completed, non-Korex, non-descartados) clients
   const activeClients = clients.filter(c => c.status !== 'completed' && !isKorexClient(c) && (c.priority || 5) !== 6);
-  const teamMembers = TEAM;
   const korexClientIds = new Set(clients.filter(c => isKorexClient(c)).map(c => c.id));
 
   // Helper: check if a task is blocked by unmet dependencies
