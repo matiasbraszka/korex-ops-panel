@@ -3,7 +3,8 @@ import { daysBetween, daysAgo, today, fmtDate } from '../utils/helpers';
 import TeamAvatar from '../components/TeamAvatar';
 
 export default function DashboardPage() {
-  const { clients, tasks, dashboardAlerts, dismissAlert, setView, setTaskClientFilter, teamMembers } = useApp();
+  const { clients, tasks, dashboardAlerts, dismissAlert, setView, setTaskClientFilter, teamMembers: _tm } = useApp();
+  const teamMembers = _tm || [];
 
   // Navigate to Tareas view filtered by a specific client
   const goToTaskClient = (clientId) => {
