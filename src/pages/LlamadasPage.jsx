@@ -127,7 +127,7 @@ export default function LlamadasPage() {
           <span className="text-[12px] text-amber-700 font-medium">
             {pendingCallsCount} llamada{pendingCallsCount !== 1 ? 's' : ''} pendiente{pendingCallsCount !== 1 ? 's' : ''} de procesar
           </span>
-          <span className="text-[11px] text-amber-500">Se procesan automaticamente a las 5:00 AM o con /procesa-llamadas</span>
+          <span className="text-[11px] text-amber-500">Se importan cada hora desde Fathom · Procesar con /procesa-llamadas</span>
         </div>
       )}
 
