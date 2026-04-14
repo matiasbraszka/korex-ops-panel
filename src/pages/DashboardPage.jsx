@@ -204,7 +204,7 @@ export default function DashboardPage() {
             <div className="max-h-[280px] overflow-y-auto">
               {overdueTasks.slice(0, 20).map((item, idx) => {
                 const members = (item.task.assignee ? item.task.assignee.split(',').map(s => s.trim()).filter(Boolean) : [])
-                  .map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name))
+                  .map(name => teamMembers.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name))
                   .filter(Boolean);
                 return (
                   <div
