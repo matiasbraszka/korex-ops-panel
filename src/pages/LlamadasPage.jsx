@@ -38,6 +38,7 @@ export default function LlamadasPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [editingCatId, setEditingCatId] = useState(null);
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
@@ -432,9 +433,25 @@ export default function LlamadasPage() {
                 className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
                 onClick={() => setExpandedId(expanded ? null : l.id)}
               >
-                {/* Category badge */}
-                <span className="text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0 mt-0.5 uppercase tracking-wide"
-                  style={{ background: cat.bg, color: cat.text }}>{cat.label}</span>
+                {/* Category badge — click to change */}
+                {canEdit && editingCatId === l.id ? (
+                  <div className="flex flex-col gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                    {Object.entries(CAT_CONFIG).map(([key, cfg]) => (
+                      <button key={key}
+                        onClick={() => { updateLlamada(l.id, { categoria: key }); setEditingCatId(null); }}
+                        className={`text-[9px] font-bold rounded-full px-2 py-0.5 border-none cursor-pointer font-sans uppercase tracking-wide transition-colors ${key === l.categoria ? 'ring-1 ring-offset-1 ring-gray-400' : 'opacity-70 hover:opacity-100'}`}
+                        style={{ background: cfg.bg, color: cfg.text }}
+                      >{cfg.label}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <span
+                    className={`text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0 mt-0.5 uppercase tracking-wide ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-gray-300' : ''}`}
+                    style={{ background: cat.bg, color: cat.text }}
+                    onClick={canEdit ? (e) => { e.stopPropagation(); setEditingCatId(l.id); } : undefined}
+                    title={canEdit ? 'Click para cambiar categoría' : undefined}
+                  >{cat.label}</span>
+                )}
 
                 <div className="flex-1 min-w-0">
                   {/* Title */}
