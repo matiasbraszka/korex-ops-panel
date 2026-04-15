@@ -186,12 +186,28 @@ export default function WeeklyTodoView() {
     setDragOverDay(null);
   };
 
+  // ── Auto-scroll during drag ──
+  const scrollInterval = useRef(null);
+  const startAutoScroll = (e) => {
+    const threshold = 80;
+    const speed = 12;
+    const y = e.clientY;
+    const h = window.innerHeight;
+    if (y < threshold) {
+      if (!scrollInterval.current) scrollInterval.current = setInterval(() => window.scrollBy(0, -speed), 16);
+    } else if (y > h - threshold) {
+      if (!scrollInterval.current) scrollInterval.current = setInterval(() => window.scrollBy(0, speed), 16);
+    } else {
+      if (scrollInterval.current) { clearInterval(scrollInterval.current); scrollInterval.current = null; }
+    }
+  };
+  const stopAutoScroll = () => { if (scrollInterval.current) { clearInterval(scrollInterval.current); scrollInterval.current = null; } };
+
   // ── Drag & drop handlers ──
   const handleDragStart = (e, todoId) => {
     setDragId(todoId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', todoId);
-    // Slight delay for visual ghost
     setTimeout(() => e.currentTarget.classList.add('opacity-40'), 0);
   };
 
@@ -200,6 +216,7 @@ export default function WeeklyTodoView() {
     setDragId(null);
     setDragOverDay(null);
     setDragOverIdx(null);
+    stopAutoScroll();
   };
 
   const handleDayDragOver = (e, dateStr) => {
@@ -238,6 +255,7 @@ export default function WeeklyTodoView() {
     e.dataTransfer.dropEffect = 'move';
     setDragOverDay(dateStr);
     setDragOverIdx(todoId);
+    startAutoScroll(e);
   };
 
   const handleCardDrop = async (e, targetTodoId, dateStr) => {
