@@ -491,20 +491,31 @@ export function AppProvider({ children }) {
         { headers: { 'Prefer': 'return=representation' } }
       );
       if (rows && Array.isArray(rows)) {
-        setWeeklyTodos(rows.map(r => ({ id: r.id, userId: r.user_id, taskId: r.task_id, date: r.date, position: r.position ?? 0 })));
+        setWeeklyTodos(rows.map(r => ({ id: r.id, userId: r.user_id, taskId: r.task_id, date: r.date, position: r.position ?? 0, type: r.type || 'task', noteText: r.note_text || null, noteClientId: r.note_client_id || null })));
       }
     } catch (e) { console.warn('loadWeeklyTodos error', e); }
   }, []);
 
   const addWeeklyTodo = useCallback(async (userId, taskId, date) => {
     const id = 'wt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-    const row = { id, user_id: userId, task_id: taskId, date, position: 0 };
+    const row = { id, user_id: userId, task_id: taskId, date, position: 0, type: 'task' };
     await sbFetch('weekly_todos', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify(row)
     });
-    setWeeklyTodos(prev => [...prev, { id, userId, taskId, date, position: 0 }]);
+    setWeeklyTodos(prev => [...prev, { id, userId, taskId, date, position: 0, type: 'task' }]);
+  }, []);
+
+  const addWeeklyNote = useCallback(async (userId, date, text, clientId) => {
+    const id = 'wn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const row = { id, user_id: userId, task_id: null, date, position: 0, type: 'note', note_text: text, note_client_id: clientId || null };
+    await sbFetch('weekly_todos', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row)
+    });
+    setWeeklyTodos(prev => [...prev, { id, userId, taskId: null, date, position: 0, type: 'note', noteText: text, noteClientId: clientId || null }]);
   }, []);
 
   const removeWeeklyTodo = useCallback(async (todoId) => {
@@ -942,6 +953,7 @@ export function AppProvider({ children }) {
     weeklyTodos,
     loadWeeklyTodos,
     addWeeklyTodo,
+    addWeeklyNote,
     removeWeeklyTodo,
     updateWeeklyTodo,
     // Loom videos

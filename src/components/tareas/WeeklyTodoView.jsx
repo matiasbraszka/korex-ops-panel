@@ -4,7 +4,7 @@ import { TASK_STATUS } from '../../utils/constants';
 import { today } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TaskPickerModal from './TaskPickerModal';
-import { ChevronLeft, ChevronRight, X, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, GripVertical, StickyNote, ListChecks } from 'lucide-react';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
 const DAY_FULL = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
@@ -41,7 +41,7 @@ function weekLabel(dates) {
 }
 
 export default function WeeklyTodoView() {
-  const { tasks, clients, currentUser, weeklyTodos, loadWeeklyTodos, addWeeklyTodo, removeWeeklyTodo, updateWeeklyTodo, updateTask } = useApp();
+  const { tasks, clients, currentUser, weeklyTodos, loadWeeklyTodos, addWeeklyTodo, addWeeklyNote, removeWeeklyTodo, updateWeeklyTodo, updateTask } = useApp();
 
   const nowStr = today();
   const [subView, setSubView] = useState('3dias'); // '3dias' | 'diaria'
@@ -49,6 +49,10 @@ export default function WeeklyTodoView() {
   const [mondayStr, setMondayStr] = useState(() => getMonday(nowStr));
   const [selectedDate, setSelectedDate] = useState(nowStr); // para vista diaria
   const [pickerDate, setPickerDate] = useState(null);
+  const [noteDate, setNoteDate] = useState(null); // fecha para agregar apunte
+  const [noteText, setNoteText] = useState('');
+  const [noteClientId, setNoteClientId] = useState('');
+  const [addMenuDate, setAddMenuDate] = useState(null); // menú de agregar (tarea o apunte)
   const [openStatusDropdown, setOpenStatusDropdown] = useState(null);
   const statusRefs = useRef({});
 
@@ -395,9 +399,36 @@ export default function WeeklyTodoView() {
                 {dayTodos.length > 0 && <span className="text-[10px] text-gray-400 font-semibold">{dayTodos.length}</span>}
               </div>
 
-              {/* Tasks */}
+              {/* Tasks + Notes */}
               <div className="flex-1 px-2 py-1.5 space-y-1.5">
                 {dayTodos.map(wt => {
+                  // ── Apunte (vista 3 dias) ──
+                  if (wt.type === 'note') {
+                    const noteCName = wt.noteClientId ? clientName(wt.noteClientId) : null;
+                    const isBeingDragged = dragId === wt.id;
+                    const isDragOverCard = dragOverIdx === wt.id && dragId !== wt.id;
+                    return (
+                      <div key={wt.id}>
+                        {isDragOverCard && <div className="h-0.5 bg-amber-400 rounded-full my-1" />}
+                        <div className={`group rounded-lg border-l-2 border-amber-300 border border-amber-100 bg-amber-50/40 px-2.5 py-2 transition-all cursor-grab active:cursor-grabbing ${isBeingDragged ? 'opacity-40 scale-95' : 'hover:shadow-sm'}`}
+                          draggable onDragStart={(e) => handleDragStart(e, wt.id)} onDragEnd={handleDragEnd}
+                          onDragOver={(e) => handleCardDragOver(e, wt.id, dateStr)} onDrop={(e) => handleCardDrop(e, wt.id, dateStr)}>
+                          <div className="flex items-start gap-1.5">
+                            <GripVertical size={12} className="text-amber-300 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <StickyNote size={11} className="text-amber-400 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] text-gray-600 leading-snug">{wt.noteText}</div>
+                              {noteCName && <div className="text-[9px] text-amber-500 mt-0.5 truncate">{noteCName}</div>}
+                            </div>
+                            <button className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              onClick={() => removeWeeklyTodo(wt.id)}><X size={12} /></button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // ── Tarea real (vista 3 dias) ──
                   const task = tasks.find(t => t.id === wt.taskId);
                   if (!task) return null;
                   const st = TASK_STATUS[task.status];
@@ -473,14 +504,31 @@ export default function WeeklyTodoView() {
                 })}
               </div>
 
-              {/* Add button */}
-              <div className="px-2 pb-2">
-                <button
-                  className="w-full text-[11px] text-gray-400 hover:text-blue-500 bg-transparent border border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-lg py-1.5 cursor-pointer font-sans transition-colors"
-                  onClick={() => setPickerDate(dateStr)}
-                >
-                  +
-                </button>
+              {/* Add button with menu */}
+              <div className="px-2 pb-2 relative">
+                {addMenuDate === dateStr ? (
+                  <div className="flex gap-1">
+                    <button className="flex-1 flex items-center justify-center gap-1 text-[10px] text-blue-600 bg-blue-50 border border-blue-200 rounded-lg py-1.5 cursor-pointer font-sans font-medium hover:bg-blue-100 transition-colors"
+                      onClick={() => { setPickerDate(dateStr); setAddMenuDate(null); }}>
+                      <ListChecks size={12} /> Tarea
+                    </button>
+                    <button className="flex-1 flex items-center justify-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg py-1.5 cursor-pointer font-sans font-medium hover:bg-amber-100 transition-colors"
+                      onClick={() => { setNoteDate(dateStr); setAddMenuDate(null); }}>
+                      <StickyNote size={12} /> Apunte
+                    </button>
+                    <button className="text-[10px] text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer px-1"
+                      onClick={() => setAddMenuDate(null)}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="w-full text-[11px] text-gray-400 hover:text-blue-500 bg-transparent border border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-lg py-1.5 cursor-pointer font-sans transition-colors"
+                    onClick={() => setAddMenuDate(dateStr)}
+                  >
+                    +
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -521,9 +569,49 @@ export default function WeeklyTodoView() {
           {/* Tasks del dia — con drag & drop para reordenar */}
           <div className="px-4 py-3 space-y-2 min-h-[300px]">
             {dailyTodos.length === 0 && (
-              <div className="text-center text-gray-400 text-xs py-12">Sin tareas para este dia. Usa el boton de abajo para agregar.</div>
+              <div className="text-center text-gray-400 text-xs py-12">Sin items para este dia. Usa el boton de abajo para agregar.</div>
             )}
             {dailyTodos.map(wt => {
+              // ── Apunte personal ──
+              if (wt.type === 'note') {
+                const noteCName = wt.noteClientId ? clientName(wt.noteClientId) : null;
+                const isBeingDragged = dragId === wt.id;
+                const isDragOverCard = dragOverIdx === wt.id && dragId !== wt.id;
+                return (
+                  <div key={wt.id}>
+                    {isDragOverCard && <div className="h-0.5 bg-amber-400 rounded-full my-1" />}
+                    <div
+                      className={`group rounded-xl border-l-[3px] border-amber-300 border border-amber-100 bg-amber-50/40 px-4 py-3 transition-all cursor-grab active:cursor-grabbing ${isBeingDragged ? 'opacity-40 scale-[0.98]' : 'hover:shadow-sm'}`}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, wt.id)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleCardDragOver(e, wt.id, selectedDate)}
+                      onDrop={(e) => handleCardDrop(e, wt.id, selectedDate)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <GripVertical size={14} className="text-amber-300 shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <StickyNote size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] text-gray-700">{wt.noteText}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] font-bold text-amber-500 bg-amber-100 rounded-full px-1.5 py-0.5 uppercase">Apunte</span>
+                            {noteCName && <span className="text-[11px] text-gray-400">{noteCName}</span>}
+                          </div>
+                        </div>
+                        <button
+                          className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          onClick={() => removeWeeklyTodo(wt.id)}
+                          title="Quitar apunte"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ── Tarea real ──
               const task = tasks.find(t => t.id === wt.taskId);
               if (!task) return null;
               const st = TASK_STATUS[task.status];
@@ -603,14 +691,31 @@ export default function WeeklyTodoView() {
             })}
           </div>
 
-          {/* Add task button */}
+          {/* Add buttons */}
           <div className="px-4 pb-4">
-            <button
-              className="w-full text-[12px] text-gray-400 hover:text-blue-500 bg-transparent border border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-lg py-2.5 cursor-pointer font-sans transition-colors"
-              onClick={() => setPickerDate(selectedDate)}
-            >
-              + Agregar tarea
-            </button>
+            {addMenuDate === selectedDate ? (
+              <div className="flex gap-2">
+                <button className="flex-1 flex items-center justify-center gap-1.5 text-[11px] text-blue-600 bg-blue-50 border border-blue-200 rounded-lg py-2.5 cursor-pointer font-sans font-medium hover:bg-blue-100 transition-colors"
+                  onClick={() => { setPickerDate(selectedDate); setAddMenuDate(null); }}>
+                  <ListChecks size={13} /> Tarea real
+                </button>
+                <button className="flex-1 flex items-center justify-center gap-1.5 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg py-2.5 cursor-pointer font-sans font-medium hover:bg-amber-100 transition-colors"
+                  onClick={() => { setNoteDate(selectedDate); setAddMenuDate(null); }}>
+                  <StickyNote size={13} /> Apunte personal
+                </button>
+                <button className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer px-2"
+                  onClick={() => setAddMenuDate(null)}>
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                className="w-full text-[12px] text-gray-400 hover:text-blue-500 bg-transparent border border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-lg py-2.5 cursor-pointer font-sans transition-colors"
+                onClick={() => setAddMenuDate(selectedDate)}
+              >
+                + Agregar
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -623,6 +728,60 @@ export default function WeeklyTodoView() {
         excludeTaskIds={linkedTaskIds}
         date={pickerDate}
       />
+
+      {/* Note modal */}
+      {noteDate && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => { setNoteDate(null); setNoteText(''); setNoteClientId(''); }}>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 w-full max-w-[420px] shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <StickyNote size={16} className="text-amber-500" />
+              <h3 className="text-[14px] font-bold text-gray-800">Agregar apunte personal</h3>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Apunte</label>
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Ej: Revisar propuesta de Melany, llamar a Victor..."
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-amber-400 resize-none"
+                  rows={3}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente (opcional)</label>
+                <select
+                  value={noteClientId}
+                  onChange={e => setNoteClientId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-amber-400"
+                >
+                  <option value="">Sin cliente</option>
+                  {(clients || []).filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => { setNoteDate(null); setNoteText(''); setNoteClientId(''); }}
+                  className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
+                  Cancelar
+                </button>
+                <button
+                  disabled={!noteText.trim()}
+                  onClick={async () => {
+                    if (!noteText.trim() || !currentUser?.id) return;
+                    await addWeeklyNote(currentUser.id, noteDate, noteText.trim(), noteClientId || null);
+                    setNoteDate(null); setNoteText(''); setNoteClientId('');
+                  }}
+                  className="py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40">
+                  Agregar apunte
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
