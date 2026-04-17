@@ -491,7 +491,7 @@ export function AppProvider({ children }) {
         { headers: { 'Prefer': 'return=representation' } }
       );
       if (rows && Array.isArray(rows)) {
-        setWeeklyTodos(rows.map(r => ({ id: r.id, userId: r.user_id, taskId: r.task_id, date: r.date, position: r.position ?? 0, type: r.type || 'task', noteText: r.note_text || null, noteClientId: r.note_client_id || null })));
+        setWeeklyTodos(rows.map(r => ({ id: r.id, userId: r.user_id, taskId: r.task_id, date: r.date, position: r.position ?? 0, type: r.type || 'task', noteText: r.note_text || null, noteClientId: r.note_client_id || null, noteDone: !!r.note_done })));
       }
     } catch (e) { console.warn('loadWeeklyTodos error', e); }
   }, []);
@@ -587,12 +587,15 @@ export function AppProvider({ children }) {
     const dbFields = {};
     if (fields.date !== undefined) dbFields.date = fields.date;
     if (fields.position !== undefined) dbFields.position = fields.position;
+    if (fields.note_done !== undefined) dbFields.note_done = fields.note_done;
     await sbFetch('weekly_todos?id=eq.' + encodeURIComponent(todoId), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify(dbFields)
     });
-    setWeeklyTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...fields } : t));
+    const localFields = { ...fields };
+    if (fields.note_done !== undefined) localFields.noteDone = fields.note_done;
+    setWeeklyTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...localFields } : t));
   }, []);
 
   // ── Normalize client priority (new 6-level scale) ──

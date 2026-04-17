@@ -415,9 +415,12 @@ export default function WeeklyTodoView() {
                           onDragOver={(e) => handleCardDragOver(e, wt.id, dateStr)} onDrop={(e) => handleCardDrop(e, wt.id, dateStr)}>
                           <div className="flex items-start gap-1.5">
                             <GripVertical size={12} className="text-amber-300 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <StickyNote size={11} className="text-amber-400 shrink-0 mt-0.5" />
+                            <span
+                              className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 cursor-pointer flex items-center justify-center text-[9px] transition-colors ${wt.noteDone ? 'bg-amber-400 border-amber-400 text-white' : 'border-amber-300 bg-white hover:border-amber-400'}`}
+                              onClick={(e) => { e.stopPropagation(); updateWeeklyTodo(wt.id, { note_done: !wt.noteDone }); }}
+                            >{wt.noteDone ? '✓' : ''}</span>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[11px] text-gray-600 leading-snug">{wt.noteText}</div>
+                              <div className={`text-[11px] leading-snug ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{wt.noteText}</div>
                               {noteCName && <div className="text-[9px] text-amber-500 mt-0.5 truncate">{noteCName}</div>}
                             </div>
                             <button className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
@@ -590,9 +593,12 @@ export default function WeeklyTodoView() {
                     >
                       <div className="flex items-start gap-3">
                         <GripVertical size={14} className="text-amber-300 shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <StickyNote size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                        <span
+                          className={`w-5 h-5 rounded border-2 shrink-0 mt-0.5 cursor-pointer flex items-center justify-center text-[10px] transition-colors ${wt.noteDone ? 'bg-amber-400 border-amber-400 text-white' : 'border-amber-300 bg-white hover:border-amber-400'}`}
+                          onClick={(e) => { e.stopPropagation(); updateWeeklyTodo(wt.id, { note_done: !wt.noteDone }); }}
+                        >{wt.noteDone ? '✓' : ''}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] text-gray-700">{wt.noteText}</div>
+                          <div className={`text-[13px] ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{wt.noteText}</div>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[9px] font-bold text-amber-500 bg-amber-100 rounded-full px-1.5 py-0.5 uppercase">Apunte</span>
                             {noteCName && <span className="text-[11px] text-gray-400">{noteCName}</span>}
