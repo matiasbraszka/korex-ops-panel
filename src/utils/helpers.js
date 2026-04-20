@@ -323,12 +323,23 @@ export function createDefaultTasks(clientId, template = null) {
   } else {
     taskList = DEFAULT_TASKS_TEMPLATE;
   }
-  return taskList.map(tpl => {
+  // Primera pasada: generar IDs y mapear templateId -> nuevo taskId
+  // para poder remapear las dependencias en la segunda pasada.
+  const tplIdToNewId = {};
+  const prepared = taskList.map(tpl => {
+    const newId = 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + tpl.id;
+    tplIdToNewId[tpl.id] = newId;
+    return { tpl, newId };
+  });
+  return prepared.map(({ tpl, newId }) => {
     const phaseId = tpl.phaseId || tpl.phase;
     const isClientTask = tpl.isClientTask !== undefined ? tpl.isClientTask : !!tpl.client;
     const daysFromUnblock = tpl.daysFromUnblock !== undefined ? tpl.daysFromUnblock : tpl.days;
+    // Remapear cada dep del template (templateId) al id real de la tarea del cliente.
+    // Si por algun motivo la dep no esta en el template, la dejamos como viene (fallback).
+    const remappedDeps = (tpl.dependsOn || []).map(depTplId => tplIdToNewId[depTplId] || depTplId);
     return {
-      id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + tpl.id,
+      id: newId,
       title: tpl.name,
       clientId,
       phase: phaseId,
@@ -336,7 +347,7 @@ export function createDefaultTasks(clientId, template = null) {
       assignee: tpl.assignee || '',
       priority: 'normal',
       stepIdx: null,
-      dependsOn: [...(tpl.dependsOn || [])],
+      dependsOn: remappedDeps,
       isRoadmapTask: true,
       templateId: tpl.id,
       estimatedDays: daysFromUnblock,
