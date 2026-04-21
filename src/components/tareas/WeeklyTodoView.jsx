@@ -4,7 +4,7 @@ import { TASK_STATUS } from '../../utils/constants';
 import { today } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TaskPickerModal from './TaskPickerModal';
-import { ChevronLeft, ChevronRight, X, GripVertical, StickyNote, ListChecks } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, GripVertical, StickyNote, ListChecks, Pencil } from 'lucide-react';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
 const DAY_FULL = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
@@ -55,6 +55,12 @@ export default function WeeklyTodoView() {
   const [addMenuDate, setAddMenuDate] = useState(null); // menú de agregar (tarea o apunte)
   const [openStatusDropdown, setOpenStatusDropdown] = useState(null);
   const statusRefs = useRef({});
+
+  // Editor inline de tarea/apunte (por wt.id)
+  const [editingItem, setEditingItem] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editNoteClientId, setEditNoteClientId] = useState('');
 
   // Drag state
   const [dragId, setDragId] = useState(null);
@@ -150,6 +156,45 @@ export default function WeeklyTodoView() {
   const handlePickTask = async (taskId) => {
     if (!currentUser?.id || !pickerDate) return;
     await addWeeklyTodo(currentUser.id, taskId, pickerDate);
+  };
+
+  const openEditor = (wt) => {
+    setEditingItem(wt);
+    if (wt.type === 'note') {
+      setEditTitle(wt.noteText || '');
+      setEditDescription('');
+      setEditNoteClientId(wt.noteClientId || '');
+    } else {
+      const task = tasks.find(t => t.id === wt.taskId);
+      setEditTitle(task?.title || '');
+      setEditDescription(task?.description || '');
+      setEditNoteClientId('');
+    }
+  };
+
+  const closeEditor = () => {
+    setEditingItem(null);
+    setEditTitle('');
+    setEditDescription('');
+    setEditNoteClientId('');
+  };
+
+  const saveEditor = async () => {
+    if (!editingItem) return;
+    const title = editTitle.trim();
+    if (!title) { closeEditor(); return; }
+    if (editingItem.type === 'note') {
+      await updateWeeklyTodo(editingItem.id, {
+        note_text: title,
+        note_client_id: editNoteClientId || null,
+      });
+    } else {
+      updateTask(editingItem.taskId, {
+        title,
+        description: editDescription,
+      });
+    }
+    closeEditor();
   };
 
   const getStatusRef = useCallback((key) => {
@@ -419,10 +464,12 @@ export default function WeeklyTodoView() {
                               className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 cursor-pointer flex items-center justify-center text-[9px] transition-colors ${wt.noteDone ? 'bg-amber-400 border-amber-400 text-white' : 'border-amber-300 bg-white hover:border-amber-400'}`}
                               onClick={(e) => { e.stopPropagation(); updateWeeklyTodo(wt.id, { note_done: !wt.noteDone }); }}
                             >{wt.noteDone ? '✓' : ''}</span>
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
                               <div className={`text-[11px] leading-snug ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{wt.noteText}</div>
                               {noteCName && <div className="text-[9px] text-amber-500 mt-0.5 truncate">{noteCName}</div>}
                             </div>
+                            <button className="bg-transparent border-none text-gray-300 hover:text-amber-500 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              onClick={(e) => { e.stopPropagation(); openEditor(wt); }} title="Editar"><Pencil size={11} /></button>
                             <button className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                               onClick={() => removeWeeklyTodo(wt.id)}><X size={12} /></button>
                           </div>
@@ -486,13 +533,20 @@ export default function WeeklyTodoView() {
                               }))}
                           />
 
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
                             <div className={`text-[12px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {task.title}
                             </div>
                             {cName && <div className="text-[10px] text-gray-400 mt-0.5 truncate">{cName}</div>}
                           </div>
 
+                          <button
+                            className="bg-transparent border-none text-gray-300 hover:text-blue-500 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
+                            title="Editar"
+                          >
+                            <Pencil size={11} />
+                          </button>
                           <button
                             className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                             onClick={() => removeWeeklyTodo(wt.id)}
@@ -597,13 +651,20 @@ export default function WeeklyTodoView() {
                           className={`w-5 h-5 rounded border-2 shrink-0 mt-0.5 cursor-pointer flex items-center justify-center text-[10px] transition-colors ${wt.noteDone ? 'bg-amber-400 border-amber-400 text-white' : 'border-amber-300 bg-white hover:border-amber-400'}`}
                           onClick={(e) => { e.stopPropagation(); updateWeeklyTodo(wt.id, { note_done: !wt.noteDone }); }}
                         >{wt.noteDone ? '✓' : ''}</span>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
                           <div className={`text-[13px] ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{wt.noteText}</div>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[9px] font-bold text-amber-500 bg-amber-100 rounded-full px-1.5 py-0.5 uppercase">Apunte</span>
                             {noteCName && <span className="text-[11px] text-gray-400">{noteCName}</span>}
                           </div>
                         </div>
+                        <button
+                          className="bg-transparent border-none text-gray-300 hover:text-amber-500 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
+                          title="Editar"
+                        >
+                          <Pencil size={12} />
+                        </button>
                         <button
                           className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                           onClick={() => removeWeeklyTodo(wt.id)}
@@ -670,7 +731,7 @@ export default function WeeklyTodoView() {
                           }))}
                       />
 
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
                         <div className={`text-[14px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                           {task.title}
                         </div>
@@ -683,6 +744,13 @@ export default function WeeklyTodoView() {
                         </div>
                       </div>
 
+                      <button
+                        className="bg-transparent border-none text-gray-300 hover:text-blue-500 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
+                        title="Editar"
+                      >
+                        <Pencil size={12} />
+                      </button>
                       <button
                         className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                         onClick={() => removeWeeklyTodo(wt.id)}
@@ -788,6 +856,88 @@ export default function WeeklyTodoView() {
           </div>
         </div>
       )}
+
+      {/* Edit modal (tarea o apunte) */}
+      {editingItem && (() => {
+        const isNote = editingItem.type === 'note';
+        const task = !isNote ? tasks.find(t => t.id === editingItem.taskId) : null;
+        const focusBorder = isNote ? 'focus:border-amber-400' : 'focus:border-blue-400';
+        return (
+          <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={closeEditor}>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 w-full max-w-[460px] shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-2 mb-4">
+                {isNote ? <StickyNote size={16} className="text-amber-500" /> : <ListChecks size={16} className="text-blue-500" />}
+                <h3 className="text-[14px] font-bold text-gray-800">{isNote ? 'Editar apunte' : 'Editar tarea'}</h3>
+                {task && (
+                  <span className="text-[10px] text-gray-400 truncate max-w-[160px] ml-1">{clientName(task.clientId)}</span>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">{isNote ? 'Apunte' : 'Titulo'}</label>
+                  {isNote ? (
+                    <textarea
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      className={`w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none ${focusBorder} resize-none`}
+                      rows={3}
+                      autoFocus
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      className={`w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none ${focusBorder}`}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveEditor(); if (e.key === 'Escape') closeEditor(); }}
+                      autoFocus
+                    />
+                  )}
+                </div>
+                {!isNote && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">Descripcion</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      placeholder="Detalles, contexto, links..."
+                      className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 resize-y min-h-[80px]"
+                      rows={4}
+                    />
+                  </div>
+                )}
+                {isNote && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente (opcional)</label>
+                    <select
+                      value={editNoteClientId}
+                      onChange={e => setEditNoteClientId(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-amber-400"
+                    >
+                      <option value="">Sin cliente</option>
+                      {(clients || []).filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <button onClick={closeEditor}
+                    className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={!editTitle.trim()}
+                    onClick={saveEditor}
+                    className={`py-2 px-4 ${isNote ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'} text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40`}>
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

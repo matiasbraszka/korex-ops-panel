@@ -588,6 +588,8 @@ export function AppProvider({ children }) {
     if (fields.date !== undefined) dbFields.date = fields.date;
     if (fields.position !== undefined) dbFields.position = fields.position;
     if (fields.note_done !== undefined) dbFields.note_done = fields.note_done;
+    if (fields.note_text !== undefined) dbFields.note_text = fields.note_text;
+    if (fields.note_client_id !== undefined) dbFields.note_client_id = fields.note_client_id;
     await sbFetch('weekly_todos?id=eq.' + encodeURIComponent(todoId), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
@@ -595,6 +597,8 @@ export function AppProvider({ children }) {
     });
     const localFields = { ...fields };
     if (fields.note_done !== undefined) localFields.noteDone = fields.note_done;
+    if (fields.note_text !== undefined) localFields.noteText = fields.note_text;
+    if (fields.note_client_id !== undefined) localFields.noteClientId = fields.note_client_id;
     setWeeklyTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...localFields } : t));
   }, []);
 
