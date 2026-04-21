@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { today, fmtDate, daysBetween } from '../../utils/helpers';
 import Modal from '../Modal';
+import { Plus } from 'lucide-react';
 
 const FILTERS = [
   { id: 'todas',      label: 'Todas' },
@@ -16,9 +17,13 @@ const FILTERS = [
  * Tareas agrupadas por cliente, ordenadas por prioridad del cliente (mas urgente primero).
  */
 export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskIds = new Set(), date }) {
-  const { tasks, clients, currentUser, getPriorityLabel } = useApp();
+  const { tasks, clients, currentUser, getPriorityLabel, createTask } = useApp();
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('todas');
+  const [createMode, setCreateMode] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskClientId, setNewTaskClientId] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const nowStr = today();
 
@@ -113,6 +118,28 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     onClose();
     setSearch('');
     setQuickFilter('todas');
+    setCreateMode(false);
+    setNewTaskTitle('');
+    setNewTaskClientId('');
+  };
+
+  const activeClients = useMemo(
+    () => (clients || []).filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name)),
+    [clients]
+  );
+
+  const handleCreateTask = () => {
+    const title = newTaskTitle.trim();
+    if (!title || !newTaskClientId || creating) return;
+    setCreating(true);
+    // Asignada al usuario actual asi tambien aparece como suya en el sistema
+    const assignee = currentUser?.name || '';
+    const t = createTask(title, newTaskClientId, assignee, 'normal', 'backlog', '', null);
+    setCreating(false);
+    setCreateMode(false);
+    setNewTaskTitle('');
+    setNewTaskClientId('');
+    if (t?.id) onSelect(t.id);
   };
 
   return (
@@ -123,6 +150,61 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
       maxWidth={560}
       footer={<button className="py-2 px-4 rounded-lg border border-gray-200 bg-white text-gray-600 text-[13px] cursor-pointer font-sans hover:bg-gray-50" onClick={handleClose}>Cerrar</button>}
     >
+      {/* Crear tarea nueva (inline) */}
+      {createMode ? (
+        <div className="mb-3 border border-blue-300 rounded-lg p-3 bg-blue-50/30">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Plus size={14} className="text-blue-600" />
+            <span className="text-[12px] font-bold text-blue-700">Crear tarea nueva</span>
+          </div>
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Titulo de la tarea..."
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newTaskTitle.trim() && newTaskClientId) handleCreateTask();
+                if (e.key === 'Escape') { setCreateMode(false); setNewTaskTitle(''); setNewTaskClientId(''); }
+              }}
+              className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white"
+            />
+            <select
+              value={newTaskClientId}
+              onChange={(e) => setNewTaskClientId(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white"
+            >
+              <option value="">Elegir cliente...</option>
+              {activeClients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setCreateMode(false); setNewTaskTitle(''); setNewTaskClientId(''); }}
+                className="py-1.5 px-3 bg-transparent border border-gray-200 text-gray-600 text-[12px] rounded-lg cursor-pointer font-sans hover:bg-gray-50"
+              >Cancelar</button>
+              <button
+                type="button"
+                disabled={!newTaskTitle.trim() || !newTaskClientId || creating}
+                onClick={handleCreateTask}
+                className="py-1.5 px-3 bg-blue-500 hover:bg-blue-600 text-white text-[12px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40 disabled:cursor-not-allowed"
+              >Crear y agregar al dia</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setCreateMode(true)}
+          className="w-full mb-2.5 flex items-center justify-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 border border-dashed border-blue-300 rounded-lg py-2 cursor-pointer font-sans hover:bg-blue-100 transition-colors"
+        >
+          <Plus size={13} /> Crear tarea nueva para un cliente
+        </button>
+      )}
+
       {/* Search */}
       <div className="mb-2.5">
         <input
@@ -130,7 +212,7 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
           placeholder="Buscar tarea por nombre o cliente..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          autoFocus
+          autoFocus={!createMode}
           className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-gray-50"
         />
       </div>
