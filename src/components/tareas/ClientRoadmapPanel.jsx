@@ -30,6 +30,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
+  const [newPhaseColor, setNewPhaseColor] = useState('#8B5CF6');
   const [depsModal, setDepsModal] = useState(null);
   const [deletePhaseConfirm, setDeletePhaseConfirm] = useState(null);
   const [rdDragId, setRdDragId] = useState(null);
@@ -121,6 +122,11 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     const phaseEnd = allDone && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : null;
     return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, phaseStart, phaseEnd };
   }).filter(g => {
+      // Las fases custom del cliente siempre se muestran — aunque esten vacias o
+      // haya filtros activos. Es la unica forma de poder llenarlas recien creadas.
+      const isCustomPhase = g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey);
+      if (isCustomPhase) return true;
+
       // Si hay algun filtro activo (assignee, hide completed, hide blocked, due range),
       // ocultar fases cuyas tareas filtradas (phaseTasks) son 0 — no relleno vacio.
       const anyFilterActive = assigneeFilter !== 'all' || hideCompleted || hideBlocked || (dueFilter && dueFilter !== 'all');
@@ -136,8 +142,8 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
         }
         return true;
       }
-      // Sin filtros: mostrar fases con tareas o custom phases vacias
-      return g.totalCount > 0 || (g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey));
+      // Sin filtros: mostrar fases con tareas
+      return g.totalCount > 0;
     });
 
   const isCollapsed = (phaseKey, allDone) => {
@@ -647,41 +653,66 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
         );
       })}
 
-      {addingPhase ? (
-        <div className="rounded-lg overflow-hidden bg-white border border-blue-300 p-2.5 flex items-center gap-2" style={{ borderLeft: '3px solid #5B7CF5' }}>
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: '#5B7CF5' }} />
-          <input
-            className="flex-1 text-[13px] font-bold border border-blue-400 rounded-md py-1 px-2 outline-none bg-white font-sans"
-            placeholder="Nombre de la nueva fase..."
-            value={newPhaseName}
-            onChange={(e) => setNewPhaseName(e.target.value)}
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const label = newPhaseName.trim();
-                if (label) {
-                  const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-                  const color = ['#8B5CF6', '#F97316', '#EC4899', '#14B8A6', '#06B6D4'][Math.floor(Math.random() * 5)];
-                  updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color }] });
-                }
-                setNewPhaseName('');
-                setAddingPhase(false);
-              }
-              if (e.key === 'Escape') { setNewPhaseName(''); setAddingPhase(false); }
-            }}
-            onBlur={() => {
-              const label = newPhaseName.trim();
-              if (label) {
-                const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-                const color = ['#8B5CF6', '#F97316', '#EC4899', '#14B8A6', '#06B6D4'][Math.floor(Math.random() * 5)];
-                updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color }] });
-              }
-              setNewPhaseName('');
-              setAddingPhase(false);
-            }}
-          />
-        </div>
-      ) : (
+      {addingPhase ? (() => {
+        const PRESET_COLORS = ['#8B5CF6', '#5B7CF5', '#22C55E', '#EAB308', '#F97316', '#EC4899', '#06B6D4', '#14B8A6'];
+        const commitPhase = () => {
+          const label = newPhaseName.trim();
+          if (label) {
+            const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+            updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color: newPhaseColor }] });
+            // Abrir la fase automaticamente para que se vea al instante
+            setCollapsedPhases(prev => ({ ...prev, [id]: false }));
+          }
+          setNewPhaseName('');
+          setAddingPhase(false);
+          setNewPhaseColor('#8B5CF6');
+        };
+        return (
+          <div className="rounded-lg overflow-hidden bg-white border border-blue-300 p-2.5 flex items-center gap-2" style={{ borderLeft: `3px solid ${newPhaseColor}` }}>
+            <input
+              type="color"
+              value={newPhaseColor}
+              onChange={(e) => setNewPhaseColor(e.target.value)}
+              className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0 bg-white shrink-0"
+              title="Color personalizado"
+            />
+            <div className="flex items-center gap-1 shrink-0">
+              {PRESET_COLORS.map(col => (
+                <button
+                  key={col}
+                  type="button"
+                  onClick={() => setNewPhaseColor(col)}
+                  className={`w-4 h-4 rounded-full border cursor-pointer p-0 transition-transform ${newPhaseColor.toLowerCase() === col.toLowerCase() ? 'border-gray-700 scale-125' : 'border-gray-200 hover:scale-110'}`}
+                  style={{ background: col }}
+                  title={col}
+                />
+              ))}
+            </div>
+            <input
+              className="flex-1 text-[13px] font-bold border border-blue-400 rounded-md py-1 px-2 outline-none bg-white font-sans min-w-0"
+              placeholder="Nombre de la nueva fase..."
+              value={newPhaseName}
+              onChange={(e) => setNewPhaseName(e.target.value)}
+              autoFocus
+              style={{ color: newPhaseColor }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitPhase();
+                if (e.key === 'Escape') { setNewPhaseName(''); setAddingPhase(false); setNewPhaseColor('#8B5CF6'); }
+              }}
+            />
+            <button
+              type="button"
+              onClick={commitPhase}
+              className="text-[11px] font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none rounded-md py-1.5 px-3 cursor-pointer font-sans shrink-0"
+            >Agregar</button>
+            <button
+              type="button"
+              onClick={() => { setNewPhaseName(''); setAddingPhase(false); setNewPhaseColor('#8B5CF6'); }}
+              className="text-[11px] text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer font-sans shrink-0"
+            >Cancelar</button>
+          </div>
+        );
+      })() : (
         <button
           className="w-full text-[12px] text-gray-400 py-2.5 px-3 bg-white border border-dashed border-gray-200 rounded-lg cursor-pointer font-sans hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
           onClick={() => setAddingPhase(true)}
