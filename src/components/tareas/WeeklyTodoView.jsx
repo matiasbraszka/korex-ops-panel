@@ -51,7 +51,9 @@ export default function WeeklyTodoView() {
   const [pickerDate, setPickerDate] = useState(null);
   const [noteDate, setNoteDate] = useState(null); // fecha para agregar apunte
   const [noteText, setNoteText] = useState('');
+  const [noteDescription, setNoteDescription] = useState('');
   const [noteClientId, setNoteClientId] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState(null); // si se está editando un apunte existente
   const [addMenuDate, setAddMenuDate] = useState(null); // menú de agregar (tarea o apunte)
   const [openStatusDropdown, setOpenStatusDropdown] = useState(null);
   const statusRefs = useRef({});
@@ -204,6 +206,23 @@ export default function WeeklyTodoView() {
 
   const clientName = (clientId) => clients.find(c => c.id === clientId)?.name || '';
   const isCurrentWeek = mondayStr === getMonday(nowStr);
+
+  // Abrir editor de apunte existente
+  const openEditNote = (wt) => {
+    setEditingNoteId(wt.id);
+    setNoteText(wt.noteText || '');
+    setNoteDescription(wt.noteDescription || '');
+    setNoteClientId(wt.noteClientId || '');
+    setNoteDate(wt.date);
+  };
+
+  const closeNoteModal = () => {
+    setNoteDate(null);
+    setEditingNoteId(null);
+    setNoteText('');
+    setNoteDescription('');
+    setNoteClientId('');
+  };
 
   // ── Navegacion por drag (zonas laterales) ──
   const [dragOverEdge, setDragOverEdge] = useState(null); // 'prev' | 'next'
@@ -464,12 +483,15 @@ export default function WeeklyTodoView() {
                               className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 cursor-pointer flex items-center justify-center text-[9px] transition-colors ${wt.noteDone ? 'bg-amber-400 border-amber-400 text-white' : 'border-amber-300 bg-white hover:border-amber-400'}`}
                               onClick={(e) => { e.stopPropagation(); updateWeeklyTodo(wt.id, { note_done: !wt.noteDone }); }}
                             >{wt.noteDone ? '✓' : ''}</span>
-                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
-                              <div className={`text-[11px] leading-snug ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{wt.noteText}</div>
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditNote(wt)} title="Click para editar">
+                              <div className="flex items-center gap-1">
+                                <div className={`text-[11px] font-medium leading-snug ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{wt.noteText}</div>
+                                {wt.noteDescription && <span className="text-[9px] text-amber-400" title="Tiene descripcion">📝</span>}
+                              </div>
                               {noteCName && <div className="text-[9px] text-amber-500 mt-0.5 truncate">{noteCName}</div>}
                             </div>
                             <button className="bg-transparent border-none text-gray-300 hover:text-amber-500 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                              onClick={(e) => { e.stopPropagation(); openEditor(wt); }} title="Editar"><Pencil size={11} /></button>
+                              onClick={(e) => { e.stopPropagation(); openEditNote(wt); }} title="Editar"><Pencil size={11} /></button>
                             <button className="bg-transparent border-none text-gray-300 hover:text-red-400 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                               onClick={() => removeWeeklyTodo(wt.id)}><X size={12} /></button>
                           </div>
@@ -533,7 +555,7 @@ export default function WeeklyTodoView() {
                               }))}
                           />
 
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditNote(wt)} title="Click para editar">
                             <div className={`text-[12px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {task.title}
                             </div>
@@ -542,7 +564,7 @@ export default function WeeklyTodoView() {
 
                           <button
                             className="bg-transparent border-none text-gray-300 hover:text-blue-500 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
+                            onClick={(e) => { e.stopPropagation(); openEditNote(wt); }}
                             title="Editar"
                           >
                             <Pencil size={11} />
@@ -651,8 +673,11 @@ export default function WeeklyTodoView() {
                           className={`w-5 h-5 rounded border-2 shrink-0 mt-0.5 cursor-pointer flex items-center justify-center text-[10px] transition-colors ${wt.noteDone ? 'bg-amber-400 border-amber-400 text-white' : 'border-amber-300 bg-white hover:border-amber-400'}`}
                           onClick={(e) => { e.stopPropagation(); updateWeeklyTodo(wt.id, { note_done: !wt.noteDone }); }}
                         >{wt.noteDone ? '✓' : ''}</span>
-                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
-                          <div className={`text-[13px] ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{wt.noteText}</div>
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditNote(wt)} title="Click para editar">
+                          <div className={`text-[13px] font-medium ${wt.noteDone ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{wt.noteText}</div>
+                          {wt.noteDescription && (
+                            <div className={`text-[11px] mt-1 whitespace-pre-wrap ${wt.noteDone ? 'text-gray-300 line-through' : 'text-gray-500'}`}>{wt.noteDescription}</div>
+                          )}
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[9px] font-bold text-amber-500 bg-amber-100 rounded-full px-1.5 py-0.5 uppercase">Apunte</span>
                             {noteCName && <span className="text-[11px] text-gray-400">{noteCName}</span>}
@@ -660,7 +685,7 @@ export default function WeeklyTodoView() {
                         </div>
                         <button
                           className="bg-transparent border-none text-gray-300 hover:text-amber-500 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                          onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
+                          onClick={(e) => { e.stopPropagation(); openEditNote(wt); }}
                           title="Editar"
                         >
                           <Pencil size={12} />
@@ -731,7 +756,7 @@ export default function WeeklyTodoView() {
                           }))}
                       />
 
-                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
+                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditNote(wt)} title="Click para editar">
                         <div className={`text-[14px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                           {task.title}
                         </div>
@@ -746,7 +771,7 @@ export default function WeeklyTodoView() {
 
                       <button
                         className="bg-transparent border-none text-gray-300 hover:text-blue-500 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
+                        onClick={(e) => { e.stopPropagation(); openEditNote(wt); }}
                         title="Editar"
                       >
                         <Pencil size={12} />
@@ -805,22 +830,32 @@ export default function WeeklyTodoView() {
 
       {/* Note modal */}
       {noteDate && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => { setNoteDate(null); setNoteText(''); setNoteClientId(''); }}>
-          <div className="bg-white rounded-xl border border-gray-200 p-5 w-full max-w-[420px] shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={closeNoteModal}>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 w-full max-w-[480px] shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-4">
               <StickyNote size={16} className="text-amber-500" />
-              <h3 className="text-[14px] font-bold text-gray-800">Agregar apunte personal</h3>
+              <h3 className="text-[14px] font-bold text-gray-800">{editingNoteId ? 'Editar apunte' : 'Agregar apunte personal'}</h3>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Apunte</label>
-                <textarea
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Título</label>
+                <input
+                  type="text"
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
-                  placeholder="Ej: Revisar propuesta de Melany, llamar a Victor..."
-                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-amber-400 resize-none"
-                  rows={3}
+                  placeholder="Ej: Revisar propuesta Melany"
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-amber-400"
                   autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Descripción (opcional)</label>
+                <textarea
+                  value={noteDescription}
+                  onChange={e => setNoteDescription(e.target.value)}
+                  placeholder="Detalles, contexto, links, lo que necesites recordar..."
+                  className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-amber-400 resize-none"
+                  rows={4}
                 />
               </div>
               <div>
@@ -837,7 +872,7 @@ export default function WeeklyTodoView() {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button onClick={() => { setNoteDate(null); setNoteText(''); setNoteClientId(''); }}
+                <button onClick={closeNoteModal}
                   className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
                   Cancelar
                 </button>
@@ -845,11 +880,19 @@ export default function WeeklyTodoView() {
                   disabled={!noteText.trim()}
                   onClick={async () => {
                     if (!noteText.trim() || !currentUser?.id) return;
-                    await addWeeklyNote(currentUser.id, noteDate, noteText.trim(), noteClientId || null);
-                    setNoteDate(null); setNoteText(''); setNoteClientId('');
+                    if (editingNoteId) {
+                      await updateWeeklyTodo(editingNoteId, {
+                        note_text: noteText.trim(),
+                        note_description: noteDescription.trim() || null,
+                        note_client_id: noteClientId || null,
+                      });
+                    } else {
+                      await addWeeklyNote(currentUser.id, noteDate, noteText.trim(), noteClientId || null, noteDescription.trim() || null);
+                    }
+                    closeNoteModal();
                   }}
                   className="py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40">
-                  Agregar apunte
+                  {editingNoteId ? 'Guardar cambios' : 'Agregar apunte'}
                 </button>
               </div>
             </div>
