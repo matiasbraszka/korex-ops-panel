@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core';
 import LeadCard from './LeadCard.jsx';
 
-export default function KanbanColumn({ stage, leads, ownersByUserId, onCardDetail, onPatchLead, canEditOwners }) {
+export default function KanbanColumn({ stage, leads, ownersByUserId, salesTeam, onCardDetail, onPatchLead, canEditOwners }) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id, data: { type: 'stage', stage_id: stage.id },
   });
@@ -20,6 +20,7 @@ export default function KanbanColumn({ stage, leads, ownersByUserId, onCardDetai
             lead={lead}
             owner={ownersByUserId?.[lead.owner_id]}
             setter={ownersByUserId?.[lead.setter_id]}
+            salesTeam={salesTeam}
             canEditOwners={canEditOwners}
             onDetail={() => onCardDetail(lead)}
             onPatch={(patch) => onPatchLead(lead.id, patch)}

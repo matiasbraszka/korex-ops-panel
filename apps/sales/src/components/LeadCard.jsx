@@ -1,219 +1,243 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Flame, MessageCircle, MoreHorizontal } from 'lucide-react';
+import {
+  Flame, MessageCircle, MoreHorizontal, GripVertical,
+  User, UserCheck, ArrowRight,
+} from 'lucide-react';
 
-// Card de lead con TODO editable inline:
-// - Nombre y empresa (input que se guarda al blur).
-// - Score 1-3 con fueguitos clickeables.
-// - Owner + Setter avatares (informativos; cambian solo desde modal por admin).
-// - Monto estimado (input) con selector de moneda.
-// - Próximo paso (textarea).
-// - Botón WhatsApp si hay teléfono.
-// - "···" abre el modal con detalles secundarios (notas, telefono, email,
-//   historial de llamadas, asignacion).
-//
-// Stop-propagation en eventos de pointerdown sobre inputs/buttons para
-// evitar que el listener de drag los robe.
+// Card del Kanban con TODO editable inline.
+//   Drag handle dedicado arriba (icono ⋮⋮) -> ahí van los listeners de @dnd-kit.
+//   Resto del card es interactivo (inputs, selects, botones) sin stopPropagation.
 
 const CURRENCIES = ['USD', 'EUR', 'MXN', 'ARS'];
 const CURRENCY_SIGN = { USD: '$', EUR: '€', MXN: 'MX$', ARS: '$' };
 
-export default function LeadCard({ lead, owner, setter, onDetail, onPatch, canEditOwners }) {
+export default function LeadCard({
+  lead, owner, setter, salesTeam = [], canEditOwners,
+  onDetail, onPatch,
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: lead.id, data: { type: 'lead', stage_id: lead.stage_id },
+    id: lead.id,
+    data: { type: 'lead', stage_id: lead.stage_id },
   });
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
   };
 
-  // El stopPropagation evita que el click/drag empiece desde dentro de inputs.
-  const stop = (e) => e.stopPropagation();
-
-  // Estado local para edicion inline; persiste en blur si cambio.
-  const [name, setName]       = useState(lead.full_name || '');
-  const [company, setCompany] = useState(lead.company_multinivel || '');
+  // Estado local para inputs (persiste al blur si cambió).
+  const [name, setName]         = useState(lead.full_name || '');
+  const [company, setCompany]   = useState(lead.company_multinivel || '');
   const [nextStep, setNextStep] = useState(lead.next_step || '');
   const [estimated, setEstimated] = useState(lead.estimated_value ?? '');
-  const [currency, setCurrency] = useState(lead.estimated_currency || 'USD');
+  const [currency, setCurrency]   = useState(lead.estimated_currency || 'USD');
 
-  // Resync si llegan cambios remotos (sin tocar lo que el user esta editando).
   const focusedRef = useRef(null);
-  useEffect(() => { if (focusedRef.current !== 'name')     setName(lead.full_name || ''); },        [lead.full_name]);
-  useEffect(() => { if (focusedRef.current !== 'company')  setCompany(lead.company_multinivel || ''); }, [lead.company_multinivel]);
-  useEffect(() => { if (focusedRef.current !== 'nextStep') setNextStep(lead.next_step || ''); },     [lead.next_step]);
-  useEffect(() => { if (focusedRef.current !== 'estimated') setEstimated(lead.estimated_value ?? ''); }, [lead.estimated_value]);
+  useEffect(() => { if (focusedRef.current !== 'name')      setName(lead.full_name || ''); },              [lead.full_name]);
+  useEffect(() => { if (focusedRef.current !== 'company')   setCompany(lead.company_multinivel || ''); },  [lead.company_multinivel]);
+  useEffect(() => { if (focusedRef.current !== 'nextStep')  setNextStep(lead.next_step || ''); },          [lead.next_step]);
+  useEffect(() => { if (focusedRef.current !== 'estimated') setEstimated(lead.estimated_value ?? ''); },   [lead.estimated_value]);
   useEffect(() => { setCurrency(lead.estimated_currency || 'USD'); }, [lead.estimated_currency]);
 
-  const persistIfChanged = (key, current, original) => {
-    if ((current ?? '') === (original ?? '')) return;
+  const persist = (key, value, original) => {
+    if ((value ?? '') === (original ?? '')) return;
     if (key === 'estimated_value') {
-      const num = current === '' ? null : Number(current);
+      const num = value === '' ? null : Number(value);
       if (num !== null && Number.isNaN(num)) return;
       onPatch?.({ estimated_value: num });
     } else {
-      onPatch?.({ [key]: (current ?? '').toString().trim() || null });
+      onPatch?.({ [key]: (value ?? '').toString().trim() || null });
     }
   };
 
   const setScore = (n) => {
-    const next = lead.score === n ? null : n;
-    onPatch?.({ score: next });
+    onPatch?.({ score: lead.score === n ? null : n });
   };
 
   const waUrl = whatsappUrl(lead.phone);
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="bg-white border border-border rounded-lg p-3 mb-2 cursor-grab active:cursor-grabbing hover:border-blue/60 transition-colors space-y-2"
-    >
-      {/* Header: avatares + score + acciones */}
-      <div className="flex items-center gap-2" onPointerDown={stop}>
-        <div className="flex -space-x-2">
-          {owner ? (
-            <Avatar tm={owner} title={`Dueño: ${owner.name}`} ring="ring-2 ring-white" />
-          ) : (
-            <EmptyAvatar title="Sin dueño" />
-          )}
-          {setter ? (
-            <Avatar tm={setter} title={`Seguidor: ${setter.name}`} ring="ring-2 ring-white" />
-          ) : (
-            <EmptyAvatar title="Sin seguidor" dashed />
-          )}
-        </div>
-
-        {/* Score con fueguitos */}
-        <div className="flex items-center gap-0.5 ml-auto">
+    <div ref={setNodeRef} style={style}
+         className="bg-white border border-border rounded-lg mb-2 overflow-hidden hover:border-blue/60 transition-colors">
+      {/* DRAG HANDLE: solo este recibe los listeners. */}
+      <div {...attributes} {...listeners}
+           className="flex items-center justify-between px-2 py-1 bg-gradient-to-b from-surface2/60 to-transparent cursor-grab active:cursor-grabbing border-b border-border/50">
+        <GripVertical size={13} className="text-text3" />
+        {/* Score (clickeable, fuera del handle real) */}
+        <div className="flex items-center gap-0.5">
           {[1, 2, 3].map((n) => (
-            <button
-              key={n} type="button"
-              onClick={(e) => { stop(e); setScore(n); }}
-              onPointerDown={stop}
-              title={`Probabilidad ${n}/3`}
-              className="bg-transparent border-0 p-0.5 cursor-pointer"
-            >
-              <Flame
-                size={14}
-                fill={(lead.score ?? 0) >= n ? '#F97316' : 'transparent'}
-                stroke={(lead.score ?? 0) >= n ? '#F97316' : '#D1D5DB'}
-                strokeWidth={1.75}
-              />
+            <button key={n} type="button"
+                    onClick={() => setScore(n)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title={`Probabilidad ${n}/3`}
+                    className="bg-transparent border-0 p-0.5 cursor-pointer">
+              <Flame size={13}
+                     fill={(lead.score ?? 0) >= n ? '#F97316' : 'transparent'}
+                     stroke={(lead.score ?? 0) >= n ? '#F97316' : '#D1D5DB'}
+                     strokeWidth={1.75} />
             </button>
           ))}
         </div>
-
-        {waUrl && (
-          <a href={waUrl} target="_blank" rel="noreferrer"
-             onPointerDown={stop} onClick={stop}
-             title={`WhatsApp: ${lead.phone}`}
-             className="text-green-600 hover:bg-green-50 rounded p-1 -m-1">
-            <MessageCircle size={15} />
-          </a>
-        )}
-        <button onPointerDown={stop} onClick={(e) => { stop(e); onDetail?.(); }}
-                title="Ver detalle / editar todo"
-                className="text-text3 hover:text-text bg-transparent border-0 p-1 -m-1 cursor-pointer">
-          <MoreHorizontal size={15} />
-        </button>
       </div>
 
-      {/* Nombre */}
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onFocus={() => { focusedRef.current = 'name'; }}
-        onBlur={() => { focusedRef.current = null; persistIfChanged('full_name', name, lead.full_name); }}
-        onPointerDown={stop}
-        placeholder="Nombre"
-        className="w-full text-[13px] font-semibold text-text border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent"
-      />
-
-      {/* Empresa */}
-      <input
-        value={company}
-        onChange={(e) => setCompany(e.target.value)}
-        onFocus={() => { focusedRef.current = 'company'; }}
-        onBlur={() => { focusedRef.current = null; persistIfChanged('company_multinivel', company, lead.company_multinivel); }}
-        onPointerDown={stop}
-        placeholder="Empresa multinivel"
-        className="w-full text-[11px] text-text2 border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent"
-      />
-
-      {/* Próximo paso */}
-      <textarea
-        rows={2}
-        value={nextStep}
-        onChange={(e) => setNextStep(e.target.value)}
-        onFocus={() => { focusedRef.current = 'nextStep'; }}
-        onBlur={() => { focusedRef.current = null; persistIfChanged('next_step', nextStep, lead.next_step); }}
-        onPointerDown={stop}
-        placeholder="Próximo paso…"
-        className="w-full text-[11px] text-text2 border border-border focus:border-blue rounded px-1.5 py-1 outline-none bg-bg resize-y"
-      />
-
-      {/* Monto estimado */}
-      <div className="flex items-center gap-1" onPointerDown={stop}>
-        <select
-          value={currency}
-          onChange={(e) => { setCurrency(e.target.value); onPatch?.({ estimated_currency: e.target.value }); }}
-          onPointerDown={stop}
-          className="text-[10px] text-text2 border border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-bg cursor-pointer"
-        >
-          {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <span className="text-[11px] text-text3">{CURRENCY_SIGN[currency] || ''}</span>
+      {/* CONTENIDO INTERACTIVO */}
+      <div className="p-2.5 space-y-2">
+        {/* Nombre */}
         <input
-          type="number" min="0" step="0.01"
-          value={estimated}
-          onChange={(e) => setEstimated(e.target.value)}
-          onFocus={() => { focusedRef.current = 'estimated'; }}
-          onBlur={() => { focusedRef.current = null; persistIfChanged('estimated_value', estimated, lead.estimated_value); }}
-          onPointerDown={stop}
-          placeholder="Monto estimado"
-          className="flex-1 text-[11px] border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onFocus={() => { focusedRef.current = 'name'; }}
+          onBlur={() => { focusedRef.current = null; persist('full_name', name, lead.full_name); }}
+          placeholder="Nombre completo"
+          className="w-full text-[14px] font-bold text-text border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-0.5 outline-none bg-transparent"
         />
-      </div>
 
-      {lead.origin === 'llamada_auto' && (
-        <div className="text-[9px] text-blue uppercase tracking-wider">Desde llamada</div>
-      )}
-      {lead.closed_at && (
-        <div className="text-[9px] text-green-600 uppercase tracking-wider">
-          Cerrado · {new Date(lead.closed_at).toLocaleDateString('es-AR')}
+        {/* Empresa */}
+        <input
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+          onFocus={() => { focusedRef.current = 'company'; }}
+          onBlur={() => { focusedRef.current = null; persist('company_multinivel', company, lead.company_multinivel); }}
+          placeholder="Empresa multinivel"
+          className="w-full text-[11px] text-text2 border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-0.5 outline-none bg-transparent"
+        />
+
+        {/* ASIGNACIÓN */}
+        <div className="flex items-center gap-2 pt-0.5">
+          <AssigneePicker
+            icon={<User size={11} />}
+            label="Dueño"
+            valueId={lead.owner_id}
+            valuePerson={owner}
+            options={salesTeam}
+            disabled={!canEditOwners}
+            onChange={(uid) => onPatch?.({ owner_id: uid || null })}
+          />
+          <AssigneePicker
+            icon={<UserCheck size={11} />}
+            label="Setter"
+            valueId={lead.setter_id}
+            valuePerson={setter}
+            options={salesTeam}
+            disabled={!canEditOwners}
+            onChange={(uid) => onPatch?.({ setter_id: uid || null })}
+          />
         </div>
+
+        {/* PRÓXIMO PASO */}
+        <div>
+          <div className="flex items-center gap-1 mb-0.5">
+            <ArrowRight size={10} className="text-blue" />
+            <span className="text-[9px] font-bold text-text3 uppercase tracking-wider">Próximo paso</span>
+          </div>
+          <textarea
+            rows={2}
+            value={nextStep}
+            onChange={(e) => setNextStep(e.target.value)}
+            onFocus={() => { focusedRef.current = 'nextStep'; }}
+            onBlur={() => { focusedRef.current = null; persist('next_step', nextStep, lead.next_step); }}
+            placeholder="Llamar el viernes, mandar propuesta…"
+            className="w-full text-[11px] text-text2 border border-border focus:border-blue rounded px-2 py-1 outline-none bg-bg resize-y"
+          />
+        </div>
+
+        {/* MONTO */}
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <span className="text-[10px] font-bold text-text3 uppercase tracking-wider shrink-0">Estimado</span>
+          <select
+            value={currency}
+            onChange={(e) => { setCurrency(e.target.value); onPatch?.({ estimated_currency: e.target.value }); }}
+            className="text-[10px] text-text2 border border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-bg cursor-pointer"
+          >
+            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <span className="text-[11px] text-text3">{CURRENCY_SIGN[currency] || ''}</span>
+          <input
+            type="number" min="0" step="0.01"
+            value={estimated}
+            onChange={(e) => setEstimated(e.target.value)}
+            onFocus={() => { focusedRef.current = 'estimated'; }}
+            onBlur={() => { focusedRef.current = null; persist('estimated_value', estimated, lead.estimated_value); }}
+            placeholder="0.00"
+            className="flex-1 min-w-0 text-[11px] text-text border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent text-right"
+          />
+        </div>
+
+        {/* BADGES */}
+        {(lead.origin === 'llamada_auto' || lead.closed_at) && (
+          <div className="flex flex-wrap gap-1 pt-0.5">
+            {lead.origin === 'llamada_auto' && (
+              <span className="text-[9px] bg-blue-bg text-blue px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold">Desde llamada</span>
+            )}
+            {lead.closed_at && (
+              <span className="text-[9px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold">
+                ✓ Cerrado · {new Date(lead.closed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* FOOTER: acciones */}
+        <div className="flex items-center justify-between pt-1 border-t border-border/60 -mx-2.5 px-2.5">
+          {waUrl ? (
+            <a href={waUrl} target="_blank" rel="noreferrer"
+               title={`WhatsApp: ${lead.phone}`}
+               className="flex items-center gap-1 text-[11px] text-green-600 hover:bg-green-50 rounded px-1.5 py-1">
+              <MessageCircle size={13} /> WhatsApp
+            </a>
+          ) : (
+            <span className="text-[10px] text-text3 px-1.5">Sin teléfono</span>
+          )}
+          <button onClick={onDetail}
+                  title="Ver detalle"
+                  className="text-text3 hover:text-text bg-transparent border-0 px-1.5 py-1 cursor-pointer flex items-center gap-1 text-[10px]">
+            Detalle <MoreHorizontal size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pequeño picker para owner/setter: muestra avatar + nombre y un select
+// nativo encima invisible para que admin elija. Si disabled, queda solo visual.
+function AssigneePicker({ icon, label, valueId, valuePerson, options, disabled, onChange }) {
+  return (
+    <div className={`flex-1 min-w-0 relative flex items-center gap-1.5 px-1.5 py-1 rounded border border-transparent ${disabled ? '' : 'hover:border-border hover:bg-surface2/70 cursor-pointer'}`}>
+      <span className="text-text3 shrink-0" title={label}>{icon}</span>
+      {valuePerson ? (
+        valuePerson.avatar_url ? (
+          <img src={valuePerson.avatar_url} alt={valuePerson.name}
+               className="w-5 h-5 rounded-full object-cover shrink-0" />
+        ) : (
+          <span className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[8px] shrink-0"
+                style={{ background: (valuePerson.color || '#5B7CF5') + '24', color: valuePerson.color || '#5B7CF5' }}>
+            {valuePerson.initials || valuePerson.name?.slice(0, 2).toUpperCase()}
+          </span>
+        )
+      ) : (
+        <span className="w-5 h-5 rounded-full bg-surface2 border border-dashed border-border flex items-center justify-center text-text3 text-[8px] shrink-0">?</span>
       )}
-    </div>
-  );
-}
-
-function Avatar({ tm, title, ring = '' }) {
-  if (tm.avatar_url) {
-    return (
-      <img src={tm.avatar_url} alt={tm.name} title={title}
-           className={`w-7 h-7 rounded-full object-cover ${ring}`} />
-    );
-  }
-  return (
-    <div title={title}
-         className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] ${ring}`}
-         style={{ background: (tm.color || '#5B7CF5') + '24', color: tm.color || '#5B7CF5' }}>
-      {tm.initials || tm.name?.slice(0, 2).toUpperCase()}
-    </div>
-  );
-}
-
-function EmptyAvatar({ title, dashed }) {
-  return (
-    <div title={title}
-         className={`w-7 h-7 rounded-full bg-surface2 ring-2 ring-white flex items-center justify-center text-text3 text-[10px] ${dashed ? 'border-2 border-dashed border-border' : ''}`}>
-      ?
+      <span className="text-[11px] text-text2 truncate flex-1">
+        {valuePerson?.name || <em className="text-text3">Sin asignar</em>}
+      </span>
+      {!disabled && (
+        <select
+          value={valueId || ''}
+          onChange={(e) => onChange?.(e.target.value || null)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+          aria-label={label}
+        >
+          <option value="">Sin asignar</option>
+          {options.map((tm) => (
+            <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

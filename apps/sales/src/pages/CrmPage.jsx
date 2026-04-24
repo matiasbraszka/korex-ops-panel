@@ -154,6 +154,7 @@ export default function CrmPage() {
                   stage={stage}
                   leads={leadsByStage[stage.id] || []}
                   ownersByUserId={ownersByUserId}
+                  salesTeam={salesTeam}
                   canEditOwners={isAdmin}
                   onCardDetail={openEditLead}
                   onPatchLead={updateLead}
