@@ -1,6 +1,6 @@
 import { useState, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -12,6 +12,7 @@ import FeedbackPage from './pages/FeedbackPage';
 import SettingsPage from './pages/SettingsPage';
 import VideosPage from './pages/VideosPage';
 import LlamadasPage from './pages/LlamadasPage';
+import AdminUsersPage from './pages/AdminUsersPage';
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
@@ -145,9 +146,13 @@ function MainLayout() {
     { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, path: '/operations/settings', requiresPerm: canAccessSettings },
   ].filter(i => i.requiresPerm !== false);
   const salesItems = salesNavItems;
+  const adminItems = [
+    { id: 'users', label: 'Usuarios y permisos', Icon: Shield, path: '/admin/users' },
+  ];
   const sections = [
     canAccessOperations && { id: 'operations', label: 'Operaciones', items: opsItems },
     canAccessSales      && { id: 'sales',      label: 'Ventas',      items: salesItems },
+    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems },
   ].filter(Boolean);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
@@ -198,6 +203,10 @@ function MainLayout() {
       <Route path="/operations/publicidad" element={<PublicidadPage />} />
       <Route path="/operations/feedback" element={<FeedbackPage />} />
       <Route path="/operations/dashboard" element={<DashboardPage />} />
+      <Route
+        path="/admin/users"
+        element={currentUser?.isAdmin ? <AdminUsersPage /> : <Navigate to="/operations/clients" replace />}
+      />
       <Route
         path="/sales/*"
         element={
