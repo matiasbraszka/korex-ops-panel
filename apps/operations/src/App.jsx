@@ -147,7 +147,7 @@ function MainLayout() {
   ].filter(i => i.requiresPerm !== false);
   const salesItems = salesNavItems;
   const adminItems = [
-    { id: 'users', label: 'Usuarios y permisos', Icon: Shield, path: '/admin/users' },
+    { id: 'users', label: 'Usuarios y equipo', Icon: Shield, path: '/admin/users' },
   ];
   const sections = [
     canAccessOperations && { id: 'operations', label: 'Operaciones', items: opsItems },
