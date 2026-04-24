@@ -165,19 +165,20 @@ function MainLayout() {
     setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
   };
 
-  // Rutas del modulo Operaciones. El 'view' viene derivado del pathname
-  // en AppContext; aca mapeamos path -> componente.
+  // Rutas del modulo Operaciones bajo el prefix /operations. El shell a
+  // futuro (Fase 1+) va a agregar mas prefixes como /sales.
   const routes = (
     <Routes>
-      <Route path="/" element={<Navigate to="/clients" replace />} />
-      <Route path="/clients" element={<ClientsPage />} />
-      <Route path="/tasks" element={<TareasPage />} />
-      <Route path="/llamadas" element={<LlamadasPage />} />
-      <Route path="/videos" element={<VideosPage />} />
-      <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/publicidad" element={<PublicidadPage />} />
-      <Route path="/feedback" element={<FeedbackPage />} />
-      <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/" element={<Navigate to="/operations/clients" replace />} />
+      <Route path="/operations" element={<Navigate to="/operations/clients" replace />} />
+      <Route path="/operations/clients" element={<ClientsPage />} />
+      <Route path="/operations/tasks" element={<TareasPage />} />
+      <Route path="/operations/llamadas" element={<LlamadasPage />} />
+      <Route path="/operations/videos" element={<VideosPage />} />
+      <Route path="/operations/settings" element={<SettingsPage />} />
+      <Route path="/operations/publicidad" element={<PublicidadPage />} />
+      <Route path="/operations/feedback" element={<FeedbackPage />} />
+      <Route path="/operations/dashboard" element={<DashboardPage />} />
       <Route path="*" element={<div className="text-text3 text-center py-20">Vista no encontrada</div>} />
     </Routes>
   );
@@ -191,7 +192,7 @@ function MainLayout() {
           <span className="text-[13px] font-bold text-gray-700">Panel de Operaciones</span>
         </div>
         <nav className="p-3 flex-1">
-          <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Menu</div>
+          <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Operaciones</div>
           {navItems.map(item => (
             <button
               key={item.id}

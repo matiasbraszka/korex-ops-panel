@@ -16,17 +16,17 @@ export function useApp() {
 export function AppProvider({ children }) {
   const [clients, setClients] = useState([]);
   const [tasks, setTasks] = useState([]);
-  // view se deriva de la URL (primer segmento del pathname). setView navega
-  // a la ruta correspondiente. Mantiene compat con todos los callers que
-  // usaban useState para esto.
+  // view se deriva de la URL. Pathname esperado: /operations/<view>.
+  // setView navega dentro del modulo Operaciones manteniendo el prefix.
   const location = useLocation();
   const navigate = useNavigate();
   const view = useMemo(() => {
-    const first = location.pathname.split('/').filter(Boolean)[0];
-    return first || 'clients';
+    const segments = location.pathname.split('/').filter(Boolean);
+    // /operations/<view> -> segmento [1]; fallback a 'clients'.
+    return segments[1] || 'clients';
   }, [location.pathname]);
   const setView = useCallback((v) => {
-    navigate('/' + v);
+    navigate('/operations/' + v);
   }, [navigate]);
   const [selectedId, setSelectedId] = useState(null);
   const [phase, setPhase] = useState('all');
