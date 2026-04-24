@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
@@ -15,7 +16,18 @@ export function useApp() {
 export function AppProvider({ children }) {
   const [clients, setClients] = useState([]);
   const [tasks, setTasks] = useState([]);
-  const [view, setView] = useState('clients');
+  // view se deriva de la URL (primer segmento del pathname). setView navega
+  // a la ruta correspondiente. Mantiene compat con todos los callers que
+  // usaban useState para esto.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const view = useMemo(() => {
+    const first = location.pathname.split('/').filter(Boolean)[0];
+    return first || 'clients';
+  }, [location.pathname]);
+  const setView = useCallback((v) => {
+    navigate('/' + v);
+  }, [navigate]);
   const [selectedId, setSelectedId] = useState(null);
   const [phase, setPhase] = useState('all');
   const [filter, setFilter] = useState('all');

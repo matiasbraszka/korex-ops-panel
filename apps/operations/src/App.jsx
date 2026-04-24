@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon, Play, Phone } from 'lucide-react';
 import { useAuth, signIn, sendPasswordReset } from '@korex/auth';
 import { useApp } from './context/AppContext';
@@ -165,16 +165,22 @@ function MainLayout() {
     setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
   };
 
-  const pages = {
-    dashboard: <DashboardPage />,
-    clients: <ClientsPage />,
-    publicidad: <PublicidadPage />,
-    tasks: <TareasPage />,
-    llamadas: <LlamadasPage />,
-    videos: <VideosPage />,
-    settings: <SettingsPage />,
-    feedback: <FeedbackPage />,
-  };
+  // Rutas del modulo Operaciones. El 'view' viene derivado del pathname
+  // en AppContext; aca mapeamos path -> componente.
+  const routes = (
+    <Routes>
+      <Route path="/" element={<Navigate to="/clients" replace />} />
+      <Route path="/clients" element={<ClientsPage />} />
+      <Route path="/tasks" element={<TareasPage />} />
+      <Route path="/llamadas" element={<LlamadasPage />} />
+      <Route path="/videos" element={<VideosPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/publicidad" element={<PublicidadPage />} />
+      <Route path="/feedback" element={<FeedbackPage />} />
+      <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="*" element={<div className="text-text3 text-center py-20">Vista no encontrada</div>} />
+    </Routes>
+  );
 
   return (
     <div className="flex min-h-screen">
@@ -284,7 +290,7 @@ function MainLayout() {
 
         {/* Content area */}
         <div className="p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden">
-          {pages[view] || <div className="text-text3 text-center py-20">Vista no encontrada</div>}
+          {routes}
         </div>
       </div>
 
@@ -324,23 +330,9 @@ function App() {
       </div>
     );
   }
-
-  let root;
-  if (!authUser) {
-    root = <LoginPage />;
-  } else if (!profile) {
-    root = <AccountPending email={authUser.email} />;
-  } else {
-    root = <MainLayout />;
-  }
-
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/*" element={root} />
-      </Routes>
-    </BrowserRouter>
-  );
+  if (!authUser) return <LoginPage />;
+  if (!profile) return <AccountPending email={authUser.email} />;
+  return <MainLayout />;
 }
 
 export default App;
