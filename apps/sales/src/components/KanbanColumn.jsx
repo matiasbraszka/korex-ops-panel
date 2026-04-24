@@ -7,7 +7,7 @@ export default function KanbanColumn({ stage, leads, ownersByUserId, salesTeam, 
   });
 
   return (
-    <div className="flex flex-col w-[260px] shrink-0 max-h-full">
+    <div className="flex flex-col w-[260px] max-md:w-[78vw] shrink-0 max-h-full">
       <div className="flex items-center gap-2 px-2 pb-2 border-b-2 shrink-0" style={{ borderColor: stage.color }}>
         <span className="text-[13px] font-semibold text-text">{stage.name}</span>
         <span className="text-[11px] text-text3">{leads.length}</span>

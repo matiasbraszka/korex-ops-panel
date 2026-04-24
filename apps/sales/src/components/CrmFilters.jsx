@@ -1,14 +1,17 @@
-import { Search, X, Flame } from 'lucide-react';
+import { useState } from 'react';
+import { Search, X, Flame, SlidersHorizontal } from 'lucide-react';
 
-// Barra de filtros del CRM. Estado controlado por el padre.
+// Barra de filtros minimal: buscador siempre visible + botón "Filtros" que
+// despliega un panel con los selects (etapa, asignado, score).
 export default function CrmFilters({ filters, setFilters, stages, salesTeam }) {
-  const hasActive = !!(
-    filters.search ||
-    filters.stageId ||
-    filters.ownerId ||
-    filters.setterId ||
-    (filters.scores && filters.scores.length)
-  );
+  const [open, setOpen] = useState(false);
+
+  const activeCount =
+    (filters.stageId ? 1 : 0) +
+    (filters.assigneeId ? 1 : 0) +
+    (filters.scores?.length ? 1 : 0);
+
+  const hasAny = !!(filters.search || activeCount > 0);
 
   const toggleScore = (n) => {
     const set = new Set(filters.scores || []);
@@ -16,70 +19,92 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam }) {
     setFilters((f) => ({ ...f, scores: [...set] }));
   };
 
-  const clear = () => setFilters({ search: '', stageId: '', ownerId: '', setterId: '', scores: [] });
+  const clear = () => setFilters({ search: '', stageId: '', assigneeId: '', scores: [] });
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {/* Buscador */}
-      <div className="relative flex-1 min-w-[200px] max-w-[280px]">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text3" />
-        <input
-          value={filters.search || ''}
-          onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-          placeholder="Buscar nombre o empresa…"
-          className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-bg border border-border rounded-md outline-none focus:border-blue"
-        />
-      </div>
+    <div className="space-y-2">
+      {/* Fila principal: buscador + boton filtros */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text3" />
+          <input
+            value={filters.search || ''}
+            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+            placeholder="Buscar nombre, empresa, email o teléfono…"
+            className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-bg border border-border rounded-md outline-none focus:border-blue"
+          />
+        </div>
 
-      {/* Stage */}
-      <select value={filters.stageId || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, stageId: e.target.value }))}
-              className={selectCls}>
-        <option value="">Todas las etapas</option>
-        {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-      </select>
-
-      {/* Owner */}
-      <select value={filters.ownerId || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, ownerId: e.target.value }))}
-              className={selectCls}>
-        <option value="">Todos los dueños</option>
-        {salesTeam.map((tm) => <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>)}
-      </select>
-
-      {/* Setter */}
-      <select value={filters.setterId || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, setterId: e.target.value }))}
-              className={selectCls}>
-        <option value="">Todos los setters</option>
-        {salesTeam.map((tm) => <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>)}
-      </select>
-
-      {/* Score (multi) */}
-      <div className="flex items-center gap-0.5 px-1 py-0.5 bg-bg border border-border rounded-md">
-        {[1, 2, 3].map((n) => {
-          const active = filters.scores?.includes(n);
-          return (
-            <button key={n} type="button" onClick={() => toggleScore(n)}
-                    title={`${n}/3`}
-                    className={`p-1 rounded ${active ? 'bg-orange-100' : 'hover:bg-surface2'}`}>
-              <Flame size={12}
-                     fill={active ? '#F97316' : 'transparent'}
-                     stroke={active ? '#F97316' : '#9CA3AF'}
-                     strokeWidth={1.75} />
-            </button>
-          );
-        })}
-      </div>
-
-      {hasActive && (
-        <button onClick={clear} title="Limpiar filtros"
-                className="text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer flex items-center gap-1 text-[11px]">
-          <X size={12} /> Limpiar
+        <button onClick={() => setOpen((v) => !v)}
+                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-md border text-[12px] ${activeCount > 0 ? 'border-blue text-blue bg-blue-bg' : 'border-border text-text2 bg-white hover:bg-surface2'}`}>
+          <SlidersHorizontal size={12} />
+          Filtros
+          {activeCount > 0 && (
+            <span className="bg-blue text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">
+              {activeCount}
+            </span>
+          )}
         </button>
+
+        {hasAny && (
+          <button onClick={clear} title="Limpiar filtros"
+                  className="text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer flex items-center gap-1 text-[11px]">
+            <X size={12} /> Limpiar
+          </button>
+        )}
+      </div>
+
+      {/* Panel desplegado */}
+      {open && (
+        <div className="bg-white border border-border rounded-md p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Field label="Etapa">
+            <select value={filters.stageId || ''}
+                    onChange={(e) => setFilters((f) => ({ ...f, stageId: e.target.value }))}
+                    className={selectCls}>
+              <option value="">Todas</option>
+              {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+
+          <Field label="Asignado a">
+            <select value={filters.assigneeId || ''}
+                    onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value }))}
+                    className={selectCls}>
+              <option value="">Todos</option>
+              {salesTeam.map((tm) => <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>)}
+            </select>
+          </Field>
+
+          <Field label="Probabilidad">
+            <div className="flex items-center gap-1 px-1 py-1 bg-bg border border-border rounded-md w-fit">
+              {[1, 2, 3].map((n) => {
+                const active = filters.scores?.includes(n);
+                return (
+                  <button key={n} type="button" onClick={() => toggleScore(n)}
+                          title={`${n}/3`}
+                          className={`p-1 rounded ${active ? 'bg-orange-100' : 'hover:bg-surface2'}`}>
+                    <Flame size={14}
+                           fill={active ? '#F97316' : 'transparent'}
+                           stroke={active ? '#F97316' : '#9CA3AF'}
+                           strokeWidth={1.75} />
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        </div>
       )}
     </div>
   );
 }
 
-const selectCls = 'text-[12px] py-1.5 px-2 bg-bg border border-border rounded-md outline-none focus:border-blue cursor-pointer';
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-[10px] font-semibold text-text3 uppercase tracking-wider mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const selectCls = 'w-full text-[12px] py-1.5 px-2 bg-bg border border-border rounded-md outline-none focus:border-blue cursor-pointer';

@@ -13,7 +13,6 @@ import LeadsTable from '../components/LeadsTable.jsx';
 import LeadModal from '../components/LeadModal.jsx';
 import StagesEditorModal from '../components/StagesEditorModal.jsx';
 import CrmFilters from '../components/CrmFilters.jsx';
-import CrmStatsBar from '../components/CrmStatsBar.jsx';
 
 export default function CrmPage() {
   const { isAdmin } = useAuth();
@@ -28,7 +27,7 @@ export default function CrmPage() {
   const [activeLead, setActiveLead] = useState(null);
   const [stagesEditorOpen, setStagesEditorOpen] = useState(false);
   const [draggingLead, setDraggingLead] = useState(null);
-  const [filters, setFilters] = useState({ search: '', stageId: '', ownerId: '', setterId: '', scores: [] });
+  const [filters, setFilters] = useState({ search: '', stageId: '', assigneeId: '', scores: [] });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -39,12 +38,12 @@ export default function CrmPage() {
   }, [salesTeam]);
 
   // Aplicar filtros + busqueda al universo total de leads.
+  // 'assigneeId' filtra leads donde la persona es owner O setter.
   const filteredLeads = useMemo(() => {
     const q = (filters.search || '').trim().toLowerCase();
     return leads.filter((l) => {
-      if (filters.stageId  && l.stage_id  !== filters.stageId)  return false;
-      if (filters.ownerId  && l.owner_id  !== filters.ownerId)  return false;
-      if (filters.setterId && l.setter_id !== filters.setterId) return false;
+      if (filters.stageId && l.stage_id !== filters.stageId) return false;
+      if (filters.assigneeId && l.owner_id !== filters.assigneeId && l.setter_id !== filters.assigneeId) return false;
       if (filters.scores?.length && !filters.scores.includes(l.score)) return false;
       if (q) {
         const hay = (l.full_name || '').toLowerCase().includes(q)
@@ -160,19 +159,20 @@ export default function CrmPage() {
             </div>
             {isAdmin && (
               <button onClick={() => setStagesEditorOpen(true)}
-                      className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
-                <SettingsIcon size={14} /> Columnas
+                      title="Editar columnas"
+                      className="py-2 px-3 max-md:px-2 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
+                <SettingsIcon size={14} /> <span className="max-md:hidden">Columnas</span>
               </button>
             )}
             <button onClick={openNewLead}
-                    className="py-2 px-3 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
-              <Plus size={14} /> Nuevo lead
+                    title="Nuevo lead"
+                    className="py-2 px-3 max-md:px-2 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
+              <Plus size={14} /> <span className="max-md:hidden">Nuevo lead</span>
             </button>
           </div>
         </div>
 
         <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
-        <CrmStatsBar leads={filteredLeads} stages={stages} />
       </div>
 
       {/* Body */}
@@ -191,7 +191,7 @@ export default function CrmPage() {
           <DndContext sensors={sensors} collisionDetection={collisionDetection}
                       onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
-              <div className="flex gap-3 overflow-x-auto overflow-y-hidden h-full">
+              <div className="flex gap-2 overflow-x-auto overflow-y-hidden h-full -mx-1 px-1">
                 {stages.map((stage) => (
                   <KanbanColumn
                     key={stage.id}
