@@ -1,38 +1,31 @@
 {
-  "name": "korex-ops-panel",
+  "name": "korex-system",
   "private": true,
   "version": "1.0.0",
+  "description": "Sistema integral de gestión interna Korex. Monorepo con módulos por área (operations, sales, ...).",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@supabase/supabase-js": "^2.101.1",
-    "lucide-react": "^1.7.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.14.0"
+    "dev": "npm run dev -w @korex/operations",
+    "dev:operations": "npm run dev -w @korex/operations",
+    "build": "npm run build -w @korex/operations",
+    "build:operations": "npm run build -w @korex/operations",
+    "lint": "npm run lint -w @korex/operations",
+    "preview": "npm run preview -w @korex/operations"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@tailwindcss/vite": "^4.2.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.4.0",
-    "tailwindcss": "^4.2.2",
-    "vite": "^6.4.1"
+    "globals": "^17.4.0"
   }
 }
