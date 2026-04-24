@@ -161,7 +161,7 @@ export default function CrmPage() {
           <DndContext sensors={sensors} collisionDetection={collisionDetection}
                       onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
-              <div className="flex gap-3 overflow-x-scroll overflow-y-hidden h-full pb-1" style={{ scrollbarGutter: 'stable' }}>
+              <div className="flex gap-3 overflow-x-auto overflow-y-hidden h-full">
                 {stages.map((stage) => (
                   <KanbanColumn
                     key={stage.id}
