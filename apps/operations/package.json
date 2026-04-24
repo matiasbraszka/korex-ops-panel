@@ -15,6 +15,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@korex/auth": "*",
     "@korex/db": "*",
+    "@korex/sales": "*",
     "@supabase/supabase-js": "^2.101.1",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon, Play, Phone } from 'lucide-react';
-import { useAuth, signIn, sendPasswordReset } from '@korex/auth';
+import { useState, Suspense, lazy } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone } from 'lucide-react';
+import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
+import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
@@ -14,6 +15,11 @@ import LlamadasPage from './pages/LlamadasPage';
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
+
+// Lazy-load del modulo Ventas: el chunk se baja solo si el usuario entra.
+const SalesRoutes = lazy(() =>
+  import('@korex/sales').then((m) => ({ default: m.SalesRoutes }))
+);
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -111,7 +117,8 @@ function AccountPending({ email }) {
 }
 
 function MainLayout() {
-  const { view, setView, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings, loomVideos } = useApp();
+  const { view, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings, loomVideos } = useApp();
+  const navigate = useNavigate();
   const [newClientModal, setNewClientModal] = useState(false);
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
@@ -123,21 +130,33 @@ function MainLayout() {
   const seenVideos = (() => { try { return JSON.parse(localStorage.getItem(seenKey) || '[]'); } catch { return []; } })();
   const unseenVideoCount = (loomVideos || []).filter(v => !seenVideos.includes(v.id)).length;
 
-  const allNavItems = [
-    { id: 'clients',   label: 'Clientes',      Icon: Users },
-    { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList },
-    { id: 'llamadas',  label: 'Llamadas',      Icon: Phone },
-    { id: 'videos',    label: 'Tutoriales',    Icon: Play },
-    { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, requiresPerm: true },
-  ];
   const canAccessSettings = currentUser?.isAdmin || currentUser?.canAccessSettings === true;
-  const navItems = allNavItems.filter(item => !item.requiresPerm || canAccessSettings);
+  const canAccessOperations = useCan('operations', 'read');
+  const canAccessSales = useCan('sales', 'read');
+  const location = useLocation();
+
+  // Menu organizado por macro pestaña (area). Cada seccion se esconde si
+  // el usuario no tiene permiso de lectura sobre el modulo.
+  const opsItems = [
+    { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
+    { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
+    { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
+    { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
+    { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, path: '/operations/settings', requiresPerm: canAccessSettings },
+  ].filter(i => i.requiresPerm !== false);
+  const salesItems = salesNavItems;
+  const sections = [
+    canAccessOperations && { id: 'operations', label: 'Operaciones', items: opsItems },
+    canAccessSales      && { id: 'sales',      label: 'Ventas',      items: salesItems },
+  ].filter(Boolean);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
+  const activeModule = location.pathname.split('/').filter(Boolean)[0] || 'operations';
+  const mobileItems = (sections.find(s => s.id === activeModule) || sections[0] || { items: [] }).items;
 
-  const switchView = (v) => {
-    setView(v);
+  const switchTo = (path) => {
     setSelectedId(null);
+    navigate(path);
   };
 
   const titles = {
@@ -179,6 +198,18 @@ function MainLayout() {
       <Route path="/operations/publicidad" element={<PublicidadPage />} />
       <Route path="/operations/feedback" element={<FeedbackPage />} />
       <Route path="/operations/dashboard" element={<DashboardPage />} />
+      <Route
+        path="/sales/*"
+        element={
+          canAccessSales ? (
+            <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
+              <SalesRoutes />
+            </Suspense>
+          ) : (
+            <Navigate to="/operations/clients" replace />
+          )
+        }
+      />
       <Route path="*" element={<div className="text-text3 text-center py-20">Vista no encontrada</div>} />
     </Routes>
   );
@@ -189,26 +220,33 @@ function MainLayout() {
       <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
         <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
           <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto" />
-          <span className="text-[13px] font-bold text-gray-700">Panel de Operaciones</span>
+          <span className="text-[13px] font-bold text-gray-700">Método Korex</span>
         </div>
-        <nav className="p-3 flex-1">
-          <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">Operaciones</div>
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => switchView(item.id)}
-              className={`flex items-center gap-2.5 py-2 px-3 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all duration-150
-                ${view === item.id ? 'text-blue bg-blue-bg font-semibold' : 'text-text2 bg-transparent hover:text-text hover:bg-surface2'}`}
-            >
-              <item.Icon size={17} strokeWidth={view === item.id ? 2.25 : 1.75} className="shrink-0" />
-              {item.label}
-              {item.id === 'tasks' && urgentCount > 0 && (
-                <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{urgentCount}</span>
-              )}
-              {item.id === 'videos' && unseenVideoCount > 0 && (
-                <span className="ml-auto bg-blue-500 text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{unseenVideoCount}</span>
-              )}
-            </button>
+        <nav className="p-3 flex-1 overflow-y-auto">
+          {sections.map((section) => (
+            <div key={section.id} className="mb-3">
+              <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">{section.label}</div>
+              {section.items.map((item) => {
+                const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => switchTo(item.path)}
+                    className={`flex items-center gap-2.5 py-2 px-3 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all duration-150
+                      ${isActive ? 'text-blue bg-blue-bg font-semibold' : 'text-text2 bg-transparent hover:text-text hover:bg-surface2'}`}
+                  >
+                    <item.Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
+                    {item.label}
+                    {item.id === 'tasks' && urgentCount > 0 && (
+                      <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{urgentCount}</span>
+                    )}
+                    {item.id === 'videos' && unseenVideoCount > 0 && (
+                      <span className="ml-auto bg-blue-500 text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{unseenVideoCount}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </nav>
         <div className="p-3.5 px-4 border-t border-border flex items-center gap-2.5">
@@ -233,25 +271,25 @@ function MainLayout() {
         </div>
       </div>
 
-      {/* Bottom nav — mobile only */}
+      {/* Bottom nav — mobile only (items del modulo activo) */}
       <div className="hidden max-md:flex mobile-bottom-nav fixed bottom-0 left-0 right-0 bg-white border-t border-border z-50 justify-around items-center px-1 py-1 safe-bottom">
-        {navItems.map(item => (
-          <button
-            key={item.id}
-            onClick={() => switchView(item.id)}
-            className={`flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1
-              ${view === item.id ? 'text-blue bg-blue-bg' : 'text-text3 bg-transparent'}`}
-          >
-            <item.Icon size={18} strokeWidth={view === item.id ? 2.25 : 1.75} className="shrink-0" />
-            <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
-            {item.id === 'tasks' && urgentCount > 0 && (
-              <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{urgentCount}</span>
-            )}
-            {false && (
-              <span className="hidden">{/* placeholder */}</span>
-            )}
-          </button>
-        ))}
+        {mobileItems.map((item) => {
+          const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+          return (
+            <button
+              key={item.id}
+              onClick={() => switchTo(item.path)}
+              className={`flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1
+                ${isActive ? 'text-blue bg-blue-bg' : 'text-text3 bg-transparent'}`}
+            >
+              <item.Icon size={18} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
+              <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
+              {item.id === 'tasks' && urgentCount > 0 && (
+                <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{urgentCount}</span>
+              )}
+            </button>
+          );
+        })}
         <button
           onClick={doLogout}
           className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
