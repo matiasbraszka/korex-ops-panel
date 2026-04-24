@@ -1,18 +1,34 @@
+import { ResourcesPanel } from '@korex/ui';
+import { useSalesResources } from '../hooks/useSalesResources.js';
+
+// Recursos de Ventas: biblioteca compartida de links (guiones, presentaciones,
+// testimonios, etc.) que cualquier vendedor puede consultar y editar.
+const ALLOWED_CATEGORIES = [
+  'guion', 'presentacion', 'testimonio', 'video', 'doc', 'pdf', 'landing', 'folder', 'other',
+];
+
 export default function ResourcesPage() {
+  const { items, loading, add, update, remove } = useSalesResources();
+
+  if (loading) return <div className="text-text3 text-center py-20">Cargando recursos…</div>;
+
   return (
     <div className="max-w-3xl">
-      <h1 className="text-xl font-bold mb-2">Recursos</h1>
-      <p className="text-sm text-text3 mb-6">
-        Biblioteca de materiales de venta: guiones, presentaciones, testimonios, documentos.
+      <h1 className="text-xl font-bold mb-1">Recursos</h1>
+      <p className="text-xs text-text3 mb-5">
+        Biblioteca compartida del equipo de Ventas. Guiones, presentaciones, testimonios, documentos.
       </p>
-      <div className="rounded-lg border border-border bg-white p-6">
-        <div className="text-sm text-text2">
-          Módulo en construcción. En Fase 4 vamos a reutilizar el componente de recursos
-          que hoy vive en la ficha de Cliente de Operaciones, extrayéndolo a
-          <code> packages/ui/Resources </code>
-          para que lo consuman ambos módulos sin duplicación de código.
-        </div>
-      </div>
+      <ResourcesPanel
+        title="Biblioteca de Ventas"
+        icon="📚"
+        links={items}
+        onAdd={add}
+        onUpdate={update}
+        onDelete={remove}
+        allowedCategories={ALLOWED_CATEGORIES}
+        emptyText="Sin recursos cargados"
+        emptyHint="Agregá guiones, presentaciones, testimonios y links útiles para la gestión de potenciales clientes."
+      />
     </div>
   );
 }
