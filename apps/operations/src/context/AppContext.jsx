@@ -823,6 +823,13 @@ export function AppProvider({ children }) {
 
   // ── Init on mount ──
   useEffect(() => {
+    // Sin sesion no hacemos ningun fetch a Supabase: RLS bloquearia igual y
+    // ensuciaria la consola con 401s antes del login.
+    if (!authUser) return;
+
+    // Cleanup de clave legacy (antes guardaba el slug del usuario en localStorage).
+    localStorage.removeItem('korex_user');
+
     // 1. Load from localStorage first (instant)
     const raw = localStorage.getItem('korex_v6');
     let localClients = [];
@@ -837,9 +844,6 @@ export function AppProvider({ children }) {
     const injected = injectMetaMetrics(localClients);
     setClients(injected);
     setTasks(localTasks);
-
-    // Cleanup de clave legacy (antes guardaba el slug del usuario en localStorage).
-    localStorage.removeItem('korex_user');
 
     // 2. Then try Supabase in background
     loadFromSupabase().then(loaded => {
@@ -861,7 +865,7 @@ export function AppProvider({ children }) {
     const pollInterval = setInterval(pollSupabase, 30000);
     return () => clearInterval(pollInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authUser]);
 
   const value = {
     // State
