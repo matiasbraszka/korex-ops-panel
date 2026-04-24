@@ -6,24 +6,14 @@ import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
+import { ResourcesPanel } from '@korex/ui';
 
-// Link categories — used to organize Drive links, docs, landings, etc.
-const LINK_CATEGORIES = {
-  folder:  { label: 'Carpetas',     icon: '\uD83D\uDCC1', color: '#F59E0B' },
-  doc:     { label: 'Docs',         icon: '\uD83D\uDCC4', color: '#3B82F6' },
-  sheet:   { label: 'Sheets',       icon: '\uD83D\uDCCA', color: '#10B981' },
-  landing: { label: 'Landings',     icon: '\uD83C\uDF10', color: '#8B5CF6' },
-  pdf:     { label: 'PDFs',         icon: '\uD83D\uDCC4', color: '#EF4444' },
-  other:   { label: 'Otros',        icon: '\uD83D\uDD17', color: '#6B7280' },
-};
-const LINK_CATEGORY_ORDER = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
+const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
+
 
 export default function ClientDetail({ client: c }) {
   const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers } = useApp();
   const TEAM = teamMembers || [];
-  const [linkModal, setLinkModal] = useState(false);
-  const [linkForm, setLinkForm] = useState({ label: '', url: '', category: 'folder' });
-  const [editingLinkIdx, setEditingLinkIdx] = useState(null);
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
   const [editModal, setEditModal] = useState(false);
@@ -1073,94 +1063,22 @@ export default function ClientDetail({ client: c }) {
 
       {/* Row 1: Links + Publicidad (2-col, balanced) */}
       <div className="grid gap-4 md:grid-cols-2 mb-4">
-        {/* Links del cliente — Drive, docs, etc. Agrupados por categoría */}
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-            <span className="inline-flex items-center gap-2">
-              <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EEF2FF', color: '#5B7CF5' }}>{'\uD83D\uDD17'}</span>
-              Links y recursos
-            </span>
-            <button
-              className="bg-transparent border-none text-text2 cursor-pointer text-xs py-1 px-2 rounded hover:bg-surface2 font-sans"
-              onClick={() => { setLinkForm({ label: '', url: '', category: 'folder' }); setEditingLinkIdx(null); setLinkModal(true); }}
-            >
-              + Nuevo
-            </button>
-          </div>
-          <div className="py-3 px-4">
-            {!(c.links || []).length ? (
-              <div className="text-center text-text3 text-xs py-6">
-                Sin links registrados
-                <div className="text-[10px] text-text3 mt-1">Agregá carpetas de Drive, docs, landings, PDFs, etc.</div>
-              </div>
-            ) : (() => {
-              // Group links by category
-              const grouped = {};
-              (c.links || []).forEach((link, originalIdx) => {
-                const cat = link.category || 'other';
-                if (!grouped[cat]) grouped[cat] = [];
-                grouped[cat].push({ ...link, originalIdx });
-              });
-              return (
-                <div className="space-y-3">
-                  {LINK_CATEGORY_ORDER.filter(cat => grouped[cat]?.length).map(cat => {
-                    const catInfo = LINK_CATEGORIES[cat];
-                    return (
-                      <div key={cat}>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: catInfo.color }}>
-                            {catInfo.icon} {catInfo.label}
-                          </span>
-                          <span className="text-[9px] text-text3">({grouped[cat].length})</span>
-                        </div>
-                        <div className="space-y-0.5">
-                          {grouped[cat].map(link => (
-                            <div
-                              key={link.originalIdx}
-                              className="group/link flex items-center gap-2.5 py-1.5 px-2.5 rounded-md hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-colors"
-                            >
-                              <span className="text-sm shrink-0">{catInfo.icon}</span>
-                              <a
-                                href={link.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex-1 min-w-0 text-[12px] text-gray-800 hover:text-blue-600 no-underline font-sans font-medium truncate"
-                              >
-                                {link.label || link.url}
-                              </a>
-                              <button
-                                className="text-[10px] text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
-                                onClick={() => {
-                                  setLinkForm({ label: link.label || '', url: link.url || '', category: link.category || 'other' });
-                                  setEditingLinkIdx(link.originalIdx);
-                                  setLinkModal(true);
-                                }}
-                                title="Editar"
-                              >
-                                {'\u270F\uFE0F'}
-                              </button>
-                              <button
-                                className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans"
-                                onClick={() => {
-                                  const newLinks = [...(c.links || [])];
-                                  newLinks.splice(link.originalIdx, 1);
-                                  updateClient(c.id, { links: newLinks });
-                                }}
-                                title="Eliminar"
-                              >
-                                {'\u2715'}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-          </div>
-        </div>
+        <ResourcesPanel
+          title="Links y recursos"
+          links={c.links || []}
+          allowedCategories={CLIENT_RESOURCE_CATEGORIES}
+          onAdd={(link) => updateClient(c.id, { links: [...(c.links || []), link] })}
+          onUpdate={(prevLink, patch) => {
+            const newLinks = (c.links || []).map((l, i) =>
+              i === prevLink.originalIdx ? { ...l, ...patch } : l,
+            );
+            updateClient(c.id, { links: newLinks });
+          }}
+          onDelete={(prevLink) => {
+            const newLinks = (c.links || []).filter((_, i) => i !== prevLink.originalIdx);
+            updateClient(c.id, { links: newLinks });
+          }}
+        />
 
         {/* Publicidad (Meta Ads) */}
         {c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna') && (() => {
@@ -1500,82 +1418,6 @@ export default function ClientDetail({ client: c }) {
         />
       </Modal>
 
-      {/* Link Modal (add / edit) */}
-      <Modal
-        open={linkModal}
-        onClose={() => setLinkModal(false)}
-        title={editingLinkIdx !== null ? 'Editar link' : 'Nuevo link'}
-        maxWidth={440}
-        footer={<>
-          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setLinkModal(false)}>Cancelar</button>
-          <button
-            className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark disabled:opacity-50"
-            disabled={!linkForm.url.trim()}
-            onClick={() => {
-              const url = linkForm.url.trim();
-              if (!url) return;
-              const newLink = {
-                label: linkForm.label.trim() || url,
-                url: url.startsWith('http') ? url : 'https://' + url,
-                category: linkForm.category || 'other',
-              };
-              const newLinks = [...(c.links || [])];
-              if (editingLinkIdx !== null) {
-                newLinks[editingLinkIdx] = newLink;
-              } else {
-                newLinks.push(newLink);
-              }
-              updateClient(c.id, { links: newLinks });
-              setLinkModal(false);
-              setLinkForm({ label: '', url: '', category: 'folder' });
-              setEditingLinkIdx(null);
-            }}
-          >
-            Guardar
-          </button>
-        </>}
-      >
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-[5px]">Categoría</label>
-          <div className="grid grid-cols-3 gap-1.5">
-            {LINK_CATEGORY_ORDER.map(cat => {
-              const info = LINK_CATEGORIES[cat];
-              const active = linkForm.category === cat;
-              return (
-                <button
-                  key={cat}
-                  className={`py-2 px-2 rounded-md border flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer font-sans transition-all ${active ? 'border-blue bg-blue-bg text-blue' : 'border-border bg-white text-text2 hover:bg-surface2'}`}
-                  onClick={() => setLinkForm({ ...linkForm, category: cat })}
-                >
-                  <span className="text-sm">{info.icon}</span>
-                  <span className="truncate">{info.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre</label>
-          <input
-            type="text"
-            className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue"
-            placeholder="Ej: Drive principal, Doc estrategia, Landing final..."
-            value={linkForm.label}
-            onChange={(e) => setLinkForm({ ...linkForm, label: e.target.value })}
-          />
-        </div>
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-[5px]">URL</label>
-          <input
-            type="url"
-            className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue"
-            placeholder="https://drive.google.com/..."
-            value={linkForm.url}
-            onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value })}
-            autoFocus
-          />
-        </div>
-      </Modal>
     </div>
   );
 }
