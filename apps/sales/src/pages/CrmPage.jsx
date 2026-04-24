@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import { DndContext, PointerSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
+import {
+  DndContext, PointerSensor, useSensor, useSensors,
+  closestCorners, DragOverlay, pointerWithin, rectIntersection,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Plus, Settings as SettingsIcon } from 'lucide-react';
 import { useCrm } from '../hooks/useCrm.js';
 import KanbanColumn from '../components/KanbanColumn.jsx';
@@ -15,12 +19,13 @@ export default function CrmPage() {
   } = useCrm();
 
   const [leadModalOpen, setLeadModalOpen] = useState(false);
-  const [activeLead, setActiveLead] = useState(null);      // lead siendo editado
+  const [activeLead, setActiveLead] = useState(null);
   const [stagesEditorOpen, setStagesEditorOpen] = useState(false);
-  const [draggingLead, setDraggingLead] = useState(null);  // para DragOverlay
+  const [draggingLead, setDraggingLead] = useState(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
+  // Leads por stage, ordenados por position.
   const leadsByStage = useMemo(() => {
     const map = {};
     stages.forEach((s) => { map[s.id] = []; });
@@ -30,6 +35,12 @@ export default function CrmPage() {
     return map;
   }, [stages, leads]);
 
+  // IDs de todos los leads en el orden en que aparecen en el board.
+  // Necesario para el SortableContext global que habilita drag entre columnas.
+  const allLeadIds = useMemo(() => {
+    return stages.flatMap((s) => (leadsByStage[s.id] || []).map((l) => l.id));
+  }, [stages, leadsByStage]);
+
   const openNewLead = () => { setActiveLead(null); setLeadModalOpen(true); };
   const openEditLead = (lead) => { setActiveLead(lead); setLeadModalOpen(true); };
 
@@ -38,32 +49,51 @@ export default function CrmPage() {
     setDraggingLead(lead || null);
   };
 
+  // Estrategia de colisión: preferir pointerWithin (columna bajo el cursor),
+  // caer a rectIntersection para cubrir casos de cards apiladas.
+  const collisionDetection = (args) => {
+    const pointer = pointerWithin(args);
+    if (pointer.length) return pointer;
+    return rectIntersection(args);
+  };
+
   const handleDragEnd = (e) => {
     setDraggingLead(null);
     const { active, over } = e;
     if (!over) return;
 
-    const leadId = active.id;
-    const lead = leads.find((l) => l.id === leadId);
-    if (!lead) return;
+    const activeId = active.id;
+    const overId = over.id;
+    if (activeId === overId) return;
 
-    // Determinar stage y posicion destino.
+    const activeLead = leads.find((l) => l.id === activeId);
+    if (!activeLead) return;
+
+    // over puede ser una columna (type 'stage') o una card (type 'lead').
     const overData = over.data.current;
-    let toStageId, toPosition;
-    if (overData?.type === 'stage') {
-      toStageId = over.id;
-      toPosition = leadsByStage[toStageId]?.length ?? 0;
-    } else if (overData?.type === 'lead') {
-      toStageId = overData.stage_id;
+    const isOverColumn = overData?.type === 'stage';
+    const isOverCard = overData?.type === 'lead';
+
+    let toStageId;
+    let toPosition;
+
+    if (isOverColumn) {
+      toStageId = overId;
       const list = leadsByStage[toStageId] || [];
-      const overIndex = list.findIndex((l) => l.id === over.id);
-      toPosition = overIndex >= 0 ? overIndex : list.length;
+      toPosition = list.length;
+    } else if (isOverCard) {
+      const overLead = leads.find((l) => l.id === overId);
+      if (!overLead) return;
+      toStageId = overLead.stage_id;
+      const list = leadsByStage[toStageId] || [];
+      toPosition = list.findIndex((l) => l.id === overId);
+      if (toPosition < 0) toPosition = list.length;
     } else {
       return;
     }
 
-    if (lead.stage_id === toStageId && lead.position === toPosition) return;
-    moveLead(leadId, toStageId, toPosition);
+    if (activeLead.stage_id === toStageId && activeLead.position === toPosition) return;
+    moveLead(activeId, toStageId, toPosition);
   };
 
   if (loading) return <div className="text-text3 text-center py-20">Cargando CRM...</div>;
@@ -101,20 +131,22 @@ export default function CrmPage() {
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-3 overflow-x-auto pb-3">
-            {stages.map((stage) => (
-              <KanbanColumn
-                key={stage.id}
-                stage={stage}
-                leads={leadsByStage[stage.id] || []}
-                onCardClick={openEditLead}
-              />
-            ))}
-          </div>
+          <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
+            <div className="flex gap-3 overflow-x-auto pb-3">
+              {stages.map((stage) => (
+                <KanbanColumn
+                  key={stage.id}
+                  stage={stage}
+                  leads={leadsByStage[stage.id] || []}
+                  onCardClick={openEditLead}
+                />
+              ))}
+            </div>
+          </SortableContext>
           <DragOverlay>
             {draggingLead && <LeadCard lead={draggingLead} />}
           </DragOverlay>

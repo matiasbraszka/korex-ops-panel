@@ -1,11 +1,12 @@
 import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import LeadCard from './LeadCard.jsx';
 
+// Columna del Kanban: solo droppable. El SortableContext es global a nivel
+// del board (ver CrmPage) para permitir arrastrar entre columnas.
 export default function KanbanColumn({ stage, leads, onCardClick }) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
-    data: { type: 'stage' },
+    data: { type: 'stage', stage_id: stage.id },
   });
 
   return (
@@ -18,13 +19,11 @@ export default function KanbanColumn({ stage, leads, onCardClick }) {
         ref={setNodeRef}
         className={`flex-1 p-2 rounded-b-lg min-h-[200px] transition-colors ${isOver ? 'bg-blue-bg2' : 'bg-surface2'}`}
       >
-        <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-          {leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onClick={() => onCardClick(lead)} />
-          ))}
-        </SortableContext>
+        {leads.map((lead) => (
+          <LeadCard key={lead.id} lead={lead} onClick={() => onCardClick(lead)} />
+        ))}
         {leads.length === 0 && (
-          <div className="text-center text-[11px] text-text3 py-8">Sin leads</div>
+          <div className="text-center text-[11px] text-text3 py-8 pointer-events-none">Sin leads</div>
         )}
       </div>
     </div>
