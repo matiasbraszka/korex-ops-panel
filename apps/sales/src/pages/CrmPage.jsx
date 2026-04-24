@@ -110,7 +110,7 @@ export default function CrmPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-110px)] max-md:h-[calc(100dvh-90px)] overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div>

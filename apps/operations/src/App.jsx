@@ -337,7 +337,7 @@ function MainLayout() {
         </div>
 
         {/* Content area */}
-        <div className="p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden">
+        <div className="p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden h-[calc(100vh-60px)] max-md:h-[calc(100vh-52px-64px)] overflow-y-auto">
           {routes}
         </div>
       </div>
