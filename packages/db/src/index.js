@@ -12,20 +12,21 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Low-level REST fetch for upsert operations with custom headers
-const SB_HEADERS = {
-  apikey: SUPABASE_ANON_KEY,
-  Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
-  'Content-Type': 'application/json',
-  Prefer: 'return=minimal',
-};
-
+// Low-level REST fetch para PostgREST. Usa el JWT del usuario autenticado
+// cuando hay sesión (para que RLS vea auth.uid() correctamente); cae a
+// la anon key solamente si no hay sesión.
 export async function sbFetch(path, opts = {}) {
   const { headers: extraH, ...restOpts } = opts;
-  const r = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
-    headers: { ...SB_HEADERS, ...(extraH || {}) },
-    ...restOpts,
-  });
+  const { data: { session } } = await supabase.auth.getSession();
+  const bearer = session?.access_token || SUPABASE_ANON_KEY;
+  const headers = {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: 'Bearer ' + bearer,
+    'Content-Type': 'application/json',
+    Prefer: 'return=minimal',
+    ...(extraH || {}),
+  };
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers, ...restOpts });
   if (!r.ok && r.status !== 406) {
     console.warn('SB error:', r.status, await r.text());
     return null;
