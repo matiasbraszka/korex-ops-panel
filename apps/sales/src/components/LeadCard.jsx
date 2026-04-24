@@ -3,10 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Flame, MessageCircle, MoreHorizontal, GripVertical, Trash2 } from 'lucide-react';
 
-const CURRENCIES = ['USD', 'EUR', 'MXN', 'ARS'];
-
-// Card compacta editable inline. Drag handle dedicado a la izquierda
-// (vertical, ocupa toda la altura del card) -> resto del card es interactivo.
+// Card compacta. Drag handle vertical a la izq, todo lo demas interactivo.
 export default function LeadCard({
   lead, owner, setter, salesTeam = [], canEditOwners,
   onDetail, onPatch, onDelete,
@@ -19,13 +16,11 @@ export default function LeadCard({
   const [name, setName]         = useState(lead.full_name || '');
   const [nextStep, setNextStep] = useState(lead.next_step || '');
   const [estimated, setEstimated] = useState(lead.estimated_value ?? '');
-  const [currency, setCurrency]   = useState(lead.estimated_currency || 'USD');
 
   const focusedRef = useRef(null);
   useEffect(() => { if (focusedRef.current !== 'name')      setName(lead.full_name || ''); },              [lead.full_name]);
   useEffect(() => { if (focusedRef.current !== 'nextStep')  setNextStep(lead.next_step || ''); },          [lead.next_step]);
   useEffect(() => { if (focusedRef.current !== 'estimated') setEstimated(lead.estimated_value ?? ''); },   [lead.estimated_value]);
-  useEffect(() => { setCurrency(lead.estimated_currency || 'USD'); }, [lead.estimated_currency]);
 
   const persist = (key, value, original) => {
     if ((value ?? '') === (original ?? '')) return;
@@ -44,7 +39,7 @@ export default function LeadCard({
   return (
     <div ref={setNodeRef} style={style}
          className="group bg-white border border-border rounded-md mb-1.5 hover:border-blue/60 transition-colors flex">
-      {/* Drag handle vertical a la izquierda */}
+      {/* Drag handle vertical */}
       <div {...attributes} {...listeners}
            className="w-4 flex items-center justify-center cursor-grab active:cursor-grabbing border-r border-border/40 bg-surface2/40 hover:bg-surface2"
            title="Arrastrar">
@@ -52,7 +47,7 @@ export default function LeadCard({
       </div>
 
       <div className="flex-1 min-w-0 p-2 space-y-1">
-        {/* Fila 1: nombre + score + acciones */}
+        {/* Fila 1: nombre + score + delete */}
         <div className="flex items-center gap-1.5">
           <input
             value={name}
@@ -91,17 +86,28 @@ export default function LeadCard({
           className="w-full text-[10px] text-text2 border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent"
         />
 
-        {/* Fila 3: dueño + setter */}
+        {/* Fila 3: dueño + setter (solo avatar) */}
         <div className="flex items-center gap-1">
-          <AssigneePicker label="Dueño" valueId={lead.owner_id} valuePerson={owner}
+          <AssigneePicker label="Dueño" valuePerson={owner} valueId={lead.owner_id}
                           options={salesTeam} disabled={!canEditOwners}
                           onChange={(uid) => onPatch?.({ owner_id: uid || null })} />
-          <AssigneePicker label="Setter" valueId={lead.setter_id} valuePerson={setter}
+          <AssigneePicker label="Setter" valuePerson={setter} valueId={lead.setter_id}
                           options={salesTeam} disabled={!canEditOwners}
                           onChange={(uid) => onPatch?.({ setter_id: uid || null })} />
+          <div className="flex-1" />
+          {waUrl && (
+            <a href={waUrl} target="_blank" rel="noreferrer" title={`WhatsApp: ${lead.phone}`}
+               className="text-green-600 hover:bg-green-50 rounded p-1">
+              <MessageCircle size={12} />
+            </a>
+          )}
+          <button onClick={onDetail} title="Detalle"
+                  className="text-text3 hover:text-text bg-transparent border-0 p-1 cursor-pointer">
+            <MoreHorizontal size={12} />
+          </button>
         </div>
 
-        {/* Fila 4: próximo paso (1 linea, expande al focus) */}
+        {/* Fila 4: próximo paso */}
         <textarea
           rows={1}
           value={nextStep}
@@ -112,33 +118,18 @@ export default function LeadCard({
           className="w-full text-[10px] text-text2 border border-border focus:border-blue rounded px-1.5 py-0.5 outline-none bg-bg resize-none"
         />
 
-        {/* Fila 5: monto + acciones */}
+        {/* Fila 5: monto USD */}
         <div className="flex items-center gap-1">
-          <select value={currency}
-                  onChange={(e) => { setCurrency(e.target.value); onPatch?.({ estimated_currency: e.target.value }); }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="text-[9px] text-text2 border border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-bg cursor-pointer">
-            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <span className="text-[11px] text-text3 font-semibold">$</span>
           <input
             type="number" min="0" step="0.01"
             value={estimated}
             onChange={(e) => setEstimated(e.target.value)}
             onFocus={() => { focusedRef.current = 'estimated'; }}
             onBlur={() => { focusedRef.current = null; persist('estimated_value', estimated, lead.estimated_value); }}
-            placeholder="Estimado"
-            className="flex-1 min-w-0 text-[10px] text-text border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent text-right"
+            placeholder="Estimado USD"
+            className="flex-1 min-w-0 text-[10px] text-text border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent"
           />
-          {waUrl && (
-            <a href={waUrl} target="_blank" rel="noreferrer" title={`WhatsApp: ${lead.phone}`}
-               className="text-green-600 hover:bg-green-50 rounded p-0.5">
-              <MessageCircle size={12} />
-            </a>
-          )}
-          <button onClick={onDetail} title="Detalle"
-                  className="text-text3 hover:text-text bg-transparent border-0 p-0.5 cursor-pointer">
-            <MoreHorizontal size={12} />
-          </button>
         </div>
 
         {(lead.origin === 'llamada_auto' || lead.closed_at) && (
@@ -158,28 +149,27 @@ export default function LeadCard({
   );
 }
 
+// Avatar circular con dropdown encima (cuando no esta disabled).
 function AssigneePicker({ label, valueId, valuePerson, options, disabled, onChange }) {
-  return (
-    <div className={`flex-1 min-w-0 relative flex items-center gap-1 px-1 py-0.5 rounded border border-transparent ${disabled ? '' : 'hover:border-border hover:bg-surface2/70 cursor-pointer'}`}>
-      {valuePerson ? (
-        valuePerson.avatar_url ? (
-          <img src={valuePerson.avatar_url} alt={valuePerson.name}
-               className="w-4 h-4 rounded-full object-cover shrink-0" />
-        ) : (
-          <span className="w-4 h-4 rounded-full flex items-center justify-center font-bold text-[7px] shrink-0"
-                style={{ background: (valuePerson.color || '#5B7CF5') + '24', color: valuePerson.color || '#5B7CF5' }}>
-            {valuePerson.initials || valuePerson.name?.slice(0, 2).toUpperCase()}
-          </span>
-        )
-      ) : (
-        <span className="w-4 h-4 rounded-full bg-surface2 border border-dashed border-border flex items-center justify-center text-text3 text-[7px] shrink-0">?</span>
-      )}
-      <span className="text-[10px] text-text2 truncate flex-1">
-        {valuePerson?.name?.split(' ')[0] || <em className="text-text3">{label}</em>}
+  const content = valuePerson ? (
+    valuePerson.avatar_url ? (
+      <img src={valuePerson.avatar_url} alt={valuePerson.name} className="w-5 h-5 rounded-full object-cover" />
+    ) : (
+      <span className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[8px]"
+            style={{ background: (valuePerson.color || '#5B7CF5') + '24', color: valuePerson.color || '#5B7CF5' }}>
+        {valuePerson.initials || valuePerson.name?.slice(0, 2).toUpperCase()}
       </span>
+    )
+  ) : (
+    <span className="w-5 h-5 rounded-full bg-surface2 border border-dashed border-border flex items-center justify-center text-text3 text-[8px]">?</span>
+  );
+
+  return (
+    <div className={`relative ${disabled ? '' : 'cursor-pointer hover:opacity-80'}`}
+         title={`${label}: ${valuePerson?.name || 'Sin asignar'}`}>
+      {content}
       {!disabled && (
-        <select value={valueId || ''}
-                onChange={(e) => onChange?.(e.target.value || null)}
+        <select value={valueId || ''} onChange={(e) => onChange?.(e.target.value || null)}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 className="absolute inset-0 opacity-0 cursor-pointer" aria-label={label}>

@@ -1,27 +1,24 @@
 import { Flame, MessageCircle, MoreHorizontal, Trash2 } from 'lucide-react';
 
-// Vista de tabla del CRM. Cada fila es un lead, edicion inline directa.
-const CURRENCIES = ['USD', 'EUR', 'MXN', 'ARS'];
-
 export default function LeadsTable({
   leads, stages, salesTeam, ownersByUserId, canEditOwners,
   onPatchLead, onDeleteLead, onDetail,
 }) {
   return (
-    <div className="bg-white border border-border rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-[12px] min-w-[1100px]">
-          <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider">
+    <div className="bg-white border border-border rounded-lg overflow-hidden h-full flex flex-col">
+      <div className="overflow-auto flex-1">
+        <table className="w-full text-[12px] min-w-[1000px]">
+          <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider sticky top-0 z-10">
             <tr>
               <th className="text-left py-2 px-2.5 font-semibold">Nombre</th>
               <th className="text-left py-2 px-2 font-semibold">Empresa</th>
-              <th className="text-left py-2 px-2 font-semibold">Etapa</th>
-              <th className="text-left py-2 px-2 font-semibold w-[120px]">Dueño</th>
-              <th className="text-left py-2 px-2 font-semibold w-[120px]">Setter</th>
+              <th className="text-left py-2 px-2 font-semibold w-[160px]">Etapa</th>
+              <th className="text-center py-2 px-2 font-semibold w-[60px]">Dueño</th>
+              <th className="text-center py-2 px-2 font-semibold w-[60px]">Setter</th>
               <th className="text-center py-2 px-2 font-semibold w-[80px]">Score</th>
-              <th className="text-left py-2 px-2 font-semibold w-[140px]">Estimado</th>
+              <th className="text-right py-2 px-2 font-semibold w-[110px]">Estimado</th>
               <th className="text-left py-2 px-2 font-semibold">Próximo paso</th>
-              <th className="w-[80px]"></th>
+              <th className="w-[100px]"></th>
             </tr>
           </thead>
           <tbody>
@@ -57,6 +54,7 @@ function Row({ lead, stages, salesTeam, owner, setter, canEditOwners, onPatch, o
     if (num !== lead[key]) onPatch({ [key]: num });
   };
 
+  const stage = stages.find((s) => s.id === lead.stage_id);
   const waUrl = whatsappUrl(lead.phone);
 
   return (
@@ -73,24 +71,21 @@ function Row({ lead, stages, salesTeam, owner, setter, canEditOwners, onPatch, o
                onBlur={(e) => persistText('company_multinivel', e.target.value)}
                className={inlineInput} />
       </td>
-      {/* Etapa */}
+      {/* Etapa con color */}
       <td className="px-2 py-1.5">
-        <select value={lead.stage_id || ''}
-                onChange={(e) => onPatch({ stage_id: e.target.value || null })}
-                className={inlineSelect}>
-          {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <StageSelect stages={stages} valueId={lead.stage_id}
+                     onChange={(id) => onPatch({ stage_id: id })} />
       </td>
-      {/* Dueño */}
-      <td className="px-2 py-1.5">
-        <AssignSelect valueId={lead.owner_id} valuePerson={owner} options={salesTeam}
-                      disabled={!canEditOwners}
+      {/* Dueño - solo avatar */}
+      <td className="px-2 py-1.5 text-center">
+        <AssignAvatar valueId={lead.owner_id} valuePerson={owner} options={salesTeam}
+                      label="Dueño" disabled={!canEditOwners}
                       onChange={(uid) => onPatch({ owner_id: uid || null })} />
       </td>
-      {/* Setter */}
-      <td className="px-2 py-1.5">
-        <AssignSelect valueId={lead.setter_id} valuePerson={setter} options={salesTeam}
-                      disabled={!canEditOwners}
+      {/* Setter - solo avatar */}
+      <td className="px-2 py-1.5 text-center">
+        <AssignAvatar valueId={lead.setter_id} valuePerson={setter} options={salesTeam}
+                      label="Setter" disabled={!canEditOwners}
                       onChange={(uid) => onPatch({ setter_id: uid || null })} />
       </td>
       {/* Score */}
@@ -108,18 +103,14 @@ function Row({ lead, stages, salesTeam, owner, setter, canEditOwners, onPatch, o
           ))}
         </div>
       </td>
-      {/* Estimado */}
+      {/* Estimado USD */}
       <td className="px-2 py-1.5">
-        <div className="flex items-center gap-1">
-          <select value={lead.estimated_currency || 'USD'}
-                  onChange={(e) => onPatch({ estimated_currency: e.target.value })}
-                  className="text-[10px] text-text2 border border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-bg cursor-pointer">
-            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+        <div className="flex items-center gap-0.5 justify-end">
+          <span className="text-[11px] text-text3">$</span>
           <input type="number" min="0" step="0.01"
                  defaultValue={lead.estimated_value ?? ''}
                  onBlur={(e) => persistNum('estimated_value', e.target.value)}
-                 className={inlineInput + ' text-right w-[80px]'} />
+                 className={inlineInput + ' text-right'} placeholder="0" />
         </div>
       </td>
       {/* Próximo paso */}
@@ -152,25 +143,49 @@ function Row({ lead, stages, salesTeam, owner, setter, canEditOwners, onPatch, o
   );
 }
 
-function AssignSelect({ valueId, valuePerson, options, disabled, onChange }) {
+// Select de etapa con badge de color (lo que vez).
+function StageSelect({ stages, valueId, onChange }) {
+  const stage = stages.find((s) => s.id === valueId);
   return (
-    <div className={`relative flex items-center gap-1.5 px-1.5 py-1 rounded border border-transparent ${disabled ? '' : 'hover:border-border hover:bg-surface2/70 cursor-pointer'}`}>
-      {valuePerson ? (
-        valuePerson.avatar_url ? (
-          <img src={valuePerson.avatar_url} alt={valuePerson.name} className="w-5 h-5 rounded-full object-cover shrink-0" />
-        ) : (
-          <span className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[8px] shrink-0"
-                style={{ background: (valuePerson.color || '#5B7CF5') + '24', color: valuePerson.color || '#5B7CF5' }}>
-            {valuePerson.initials || valuePerson.name?.slice(0, 2).toUpperCase()}
-          </span>
-        )
-      ) : (
-        <span className="w-5 h-5 rounded-full bg-surface2 border border-dashed border-border flex items-center justify-center text-text3 text-[8px] shrink-0">?</span>
-      )}
-      <span className="text-[11px] text-text2 truncate">{valuePerson?.name || <em className="text-text3">—</em>}</span>
+    <div className="relative inline-block">
+      <span className="inline-flex items-center gap-1.5 py-1 px-2 rounded text-[11px] font-semibold"
+            style={{
+              background: stage ? stage.color + '22' : '#F3F4F6',
+              color: stage ? stage.color : '#9CA3AF',
+            }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: stage?.color || '#9CA3AF' }} />
+        {stage?.name || '—'}
+      </span>
+      <select value={valueId || ''}
+              onChange={(e) => onChange?.(e.target.value)}
+              className="absolute inset-0 opacity-0 cursor-pointer">
+        {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function AssignAvatar({ valueId, valuePerson, options, label, disabled, onChange }) {
+  const content = valuePerson ? (
+    valuePerson.avatar_url ? (
+      <img src={valuePerson.avatar_url} alt={valuePerson.name} className="w-6 h-6 rounded-full object-cover mx-auto" />
+    ) : (
+      <span className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[9px] mx-auto"
+            style={{ background: (valuePerson.color || '#5B7CF5') + '24', color: valuePerson.color || '#5B7CF5' }}>
+        {valuePerson.initials || valuePerson.name?.slice(0, 2).toUpperCase()}
+      </span>
+    )
+  ) : (
+    <span className="w-6 h-6 rounded-full bg-surface2 border border-dashed border-border flex items-center justify-center text-text3 text-[9px] mx-auto">?</span>
+  );
+
+  return (
+    <div className={`relative inline-block ${disabled ? '' : 'cursor-pointer hover:opacity-80'}`}
+         title={`${label}: ${valuePerson?.name || 'Sin asignar'}`}>
+      {content}
       {!disabled && (
         <select value={valueId || ''} onChange={(e) => onChange?.(e.target.value || null)}
-                className="absolute inset-0 opacity-0 cursor-pointer">
+                className="absolute inset-0 opacity-0 cursor-pointer" aria-label={label}>
           <option value="">Sin asignar</option>
           {options.map((tm) => <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>)}
         </select>
@@ -187,4 +202,3 @@ function whatsappUrl(phone) {
 }
 
 const inlineInput = 'w-full border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 text-[12px] outline-none bg-transparent';
-const inlineSelect = 'w-full text-[11px] border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent cursor-pointer';

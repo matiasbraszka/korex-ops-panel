@@ -110,7 +110,7 @@ export default function CrmPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-130px)] max-md:h-[calc(100vh-110px)]">
+    <div className="flex flex-col h-[calc(100dvh-110px)] max-md:h-[calc(100dvh-90px)] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div>
@@ -161,7 +161,7 @@ export default function CrmPage() {
           <DndContext sensors={sensors} collisionDetection={collisionDetection}
                       onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
-              <div className="flex gap-3 overflow-x-auto h-full pb-2">
+              <div className="flex gap-3 overflow-x-scroll overflow-y-hidden h-full pb-1" style={{ scrollbarGutter: 'stable' }}>
                 {stages.map((stage) => (
                   <KanbanColumn
                     key={stage.id}
