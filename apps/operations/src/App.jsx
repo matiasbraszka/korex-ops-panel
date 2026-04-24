@@ -143,11 +143,11 @@ function MainLayout() {
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
-    { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, path: '/operations/settings', requiresPerm: canAccessSettings },
-  ].filter(i => i.requiresPerm !== false);
+  ];
   const salesItems = salesNavItems;
   const adminItems = [
-    { id: 'users', label: 'Usuarios y equipo', Icon: Shield, path: '/admin/users' },
+    { id: 'users',    label: 'Usuarios y equipo', Icon: Shield,        path: '/admin/users' },
+    { id: 'settings', label: 'Configuración',     Icon: SettingsIcon,  path: '/admin/settings' },
   ];
   const sections = [
     canAccessOperations && { id: 'operations', label: 'Operaciones', items: opsItems },
@@ -199,13 +199,18 @@ function MainLayout() {
       <Route path="/operations/tasks" element={<TareasPage />} />
       <Route path="/operations/llamadas" element={<LlamadasPage />} />
       <Route path="/operations/videos" element={<VideosPage />} />
-      <Route path="/operations/settings" element={<SettingsPage />} />
       <Route path="/operations/publicidad" element={<PublicidadPage />} />
       <Route path="/operations/feedback" element={<FeedbackPage />} />
       <Route path="/operations/dashboard" element={<DashboardPage />} />
+      {/* Configuración antes vivía en /operations/settings; redirigimos por compat. */}
+      <Route path="/operations/settings" element={<Navigate to="/admin/settings" replace />} />
       <Route
         path="/admin/users"
         element={currentUser?.isAdmin ? <AdminUsersPage /> : <Navigate to="/operations/clients" replace />}
+      />
+      <Route
+        path="/admin/settings"
+        element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to="/operations/clients" replace />}
       />
       <Route
         path="/sales/*"
