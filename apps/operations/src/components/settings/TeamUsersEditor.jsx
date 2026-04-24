@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@korex/db';
 import { useAuth } from '@korex/auth';
 import { useApp } from '../../context/AppContext';
-import { UserPlus, Trash2, ImagePlus } from 'lucide-react';
+import { UserPlus, Trash2, ImagePlus, Zap } from 'lucide-react';
 
 // Editor unico de equipo + cuentas + roles del sistema.
 // Vive como tab dentro de Configuraciones. Sin paginas separadas.
@@ -21,6 +21,8 @@ export default function TeamUsersEditor() {
   const [accountModal, setAccountModal] = useState(null); // { member, role }
   // Modal alta de miembro nuevo (no estaba en la lista).
   const [newMemberModal, setNewMemberModal] = useState(false);
+  // Modal de activacion masiva.
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,17 +106,25 @@ export default function TeamUsersEditor() {
 
   return (
     <div className="bg-white border border-border rounded-xl p-5 relative">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <div>
           <h2 className="text-[14px] font-bold text-text">Equipo y usuarios</h2>
           <p className="text-[11px] text-text3 mt-0.5">
             Agregá miembros y tildá los roles del sistema. Si el miembro no tiene cuenta, te pedimos el email en el momento.
           </p>
         </div>
-        <button onClick={() => setNewMemberModal(true)}
-                className="py-1.5 px-3 rounded-md bg-blue text-white text-[12px] hover:bg-blue-dark flex items-center gap-1.5">
-          <UserPlus size={13} /> Nuevo usuario
-        </button>
+        <div className="flex items-center gap-2">
+          {members.some((m) => !m.user_id) && (
+            <button onClick={() => setBulkModalOpen(true)}
+                    className="py-1.5 px-3 rounded-md border border-border bg-white text-text2 text-[12px] hover:bg-surface2 flex items-center gap-1.5">
+              <Zap size={13} /> Activar miembros sin cuenta
+            </button>
+          )}
+          <button onClick={() => setNewMemberModal(true)}
+                  className="py-1.5 px-3 rounded-md bg-blue text-white text-[12px] hover:bg-blue-dark flex items-center gap-1.5">
+            <UserPlus size={13} /> Nuevo usuario
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -230,7 +240,208 @@ export default function TeamUsersEditor() {
           onDone={async () => { setNewMemberModal(false); await load(); }}
         />
       )}
+
+      {bulkModalOpen && (
+        <BulkActivateModal
+          unlinkedMembers={members.filter((m) => !m.user_id)}
+          rolesCatalog={rolesCatalog}
+          onClose={() => setBulkModalOpen(false)}
+          onDone={async () => { setBulkModalOpen(false); await load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// Modal de activacion masiva: lista todos los miembros sin cuenta, permite
+// editar email y password de cada uno, y crea las cuentas en lote.
+function BulkActivateModal({ unlinkedMembers, rolesCatalog, onClose, onDone }) {
+  const [rows, setRows] = useState(() =>
+    unlinkedMembers.map((m) => ({
+      member: m,
+      include: true,
+      email: `${m.id}@metodokorex.com`,
+      password: suggestPassword(),
+      roles: ['operations'],
+    }))
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [results, setResults] = useState(null); // null | array de {member, ok, error?, credentials?}
+
+  const updateRow = (id, patch) => setRows((prev) => prev.map((r) => (r.member.id === id ? { ...r, ...patch } : r)));
+
+  const toggleRole = (id, role) => {
+    setRows((prev) => prev.map((r) => {
+      if (r.member.id !== id) return r;
+      let next;
+      if (role === 'admin') next = r.roles.includes('admin') ? [] : ['admin'];
+      else {
+        const s = new Set(r.roles); s.delete('admin');
+        if (s.has(role)) s.delete(role); else s.add(role);
+        next = [...s];
+      }
+      return { ...r, roles: next };
+    }));
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const targets = rows.filter((r) => r.include);
+    if (targets.length === 0) return;
+    setSubmitting(true);
+    const out = [];
+    for (const r of targets) {
+      const { data, error: fnErr } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email: r.email.trim().toLowerCase(),
+          password: r.password,
+          name: r.member.name,
+          team_member_id: r.member.id,
+          roles: r.roles,
+        },
+      });
+      if (fnErr || data?.error) {
+        out.push({ member: r.member, ok: false, error: data?.detail || data?.error || fnErr?.message || 'error' });
+      } else {
+        out.push({ member: r.member, ok: true, credentials: { email: r.email, password: r.password } });
+      }
+    }
+    setResults(out);
+    setSubmitting(false);
+  };
+
+  const close = () => { if (results) onDone(); else onClose(); };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={close}>
+      <div className="bg-white rounded-xl w-full max-w-[860px] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <form onSubmit={submit}>
+          <div className="p-5 border-b border-border">
+            <h2 className="text-[15px] font-bold">Activar miembros sin cuenta</h2>
+            <p className="text-xs text-text3 mt-1">
+              Le creamos una cuenta a cada uno con el email y contraseña que dejes acá. Por defecto les damos rol <strong>operations</strong>.
+              Después de crear, copiale las credenciales a cada uno; pueden cambiar la contraseña con "¿Olvidaste tu contraseña?".
+            </p>
+          </div>
+
+          {!results ? (
+            <>
+              <div className="p-5 overflow-x-auto">
+                <table className="w-full text-[12px]">
+                  <thead className="text-[10px] uppercase text-text3">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 px-1 w-[40px]">✓</th>
+                      <th className="text-left py-2 px-2">Nombre</th>
+                      <th className="text-left py-2 px-2">Email</th>
+                      <th className="text-left py-2 px-2">Contraseña</th>
+                      {rolesCatalog.map((rc) => (
+                        <th key={rc.name} className="text-center py-2 px-2 capitalize w-[70px]">{rc.name}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.member.id} className="border-b border-border last:border-b-0">
+                        <td className="py-2 px-1">
+                          <input type="checkbox" checked={r.include}
+                                 onChange={(e) => updateRow(r.member.id, { include: e.target.checked })}
+                                 className="w-4 h-4 cursor-pointer" />
+                        </td>
+                        <td className="py-2 px-2 font-semibold">{r.member.name}</td>
+                        <td className="py-2 px-2">
+                          <input value={r.email}
+                                 onChange={(e) => updateRow(r.member.id, { email: e.target.value })}
+                                 className="w-full bg-bg border border-border rounded py-1 px-2 text-[12px] outline-none focus:border-blue" />
+                        </td>
+                        <td className="py-2 px-2">
+                          <div className="flex gap-1 items-center">
+                            <input value={r.password}
+                                   onChange={(e) => updateRow(r.member.id, { password: e.target.value })}
+                                   className="w-full bg-bg border border-border rounded py-1 px-2 text-[11px] font-mono outline-none focus:border-blue" />
+                            <button type="button" onClick={() => updateRow(r.member.id, { password: suggestPassword() })}
+                                    className="text-[10px] text-text3 hover:text-blue px-1">⟳</button>
+                          </div>
+                        </td>
+                        {rolesCatalog.map((rc) => {
+                          const checked = r.roles.includes(rc.name);
+                          const greyed = rc.name !== 'admin' && r.roles.includes('admin');
+                          return (
+                            <td key={rc.name} className="text-center py-2 px-2">
+                              <input type="checkbox" checked={checked} disabled={greyed}
+                                     onChange={() => toggleRole(r.member.id, rc.name)}
+                                     className="w-4 h-4 cursor-pointer disabled:opacity-30" />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-5 border-t border-border flex justify-end gap-2">
+                <button type="button" onClick={onClose}
+                        className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={submitting}
+                        className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark disabled:opacity-60">
+                  {submitting ? `Creando ${rows.filter((r) => r.include).length} cuentas…` : `Activar ${rows.filter((r) => r.include).length}`}
+                </button>
+              </div>
+            </>
+          ) : (
+            <ResultsView results={results} onDone={onDone} />
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ResultsView({ results, onDone }) {
+  const ok = results.filter((r) => r.ok);
+  const failed = results.filter((r) => !r.ok);
+  const allText = ok.map((r) => `${r.member.name}\t${r.credentials.email}\t${r.credentials.password}`).join('\n');
+
+  return (
+    <>
+      <div className="p-5 space-y-4">
+        <div className="flex gap-3 text-[13px]">
+          <span className="text-green-600">✓ {ok.length} creadas</span>
+          {failed.length > 0 && <span className="text-red">✕ {failed.length} fallaron</span>}
+        </div>
+
+        {ok.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-text2">Credenciales (copialas y pasáselas al equipo)</label>
+              <button type="button" onClick={() => navigator.clipboard?.writeText(allText)}
+                      className="text-[11px] text-blue hover:underline">Copiar todo</button>
+            </div>
+            <pre className="bg-surface2 rounded-md p-3 text-[11px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto">
+              {ok.map((r) => `${r.member.name.padEnd(28)}  ${r.credentials.email.padEnd(35)}  ${r.credentials.password}`).join('\n')}
+            </pre>
+          </div>
+        )}
+
+        {failed.length > 0 && (
+          <div>
+            <label className="block text-xs font-semibold text-text2 mb-2">Fallaron:</label>
+            <ul className="text-[12px] space-y-1">
+              {failed.map((r) => (
+                <li key={r.member.id}><strong>{r.member.name}:</strong> <span className="text-red">{r.error}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      <div className="p-5 border-t border-border flex justify-end">
+        <button type="button" onClick={onDone}
+                className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark">
+          Listo
+        </button>
+      </div>
+    </>
   );
 }
 
