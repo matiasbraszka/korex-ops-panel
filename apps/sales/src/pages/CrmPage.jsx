@@ -12,6 +12,8 @@ import LeadCard from '../components/LeadCard.jsx';
 import LeadsTable from '../components/LeadsTable.jsx';
 import LeadModal from '../components/LeadModal.jsx';
 import StagesEditorModal from '../components/StagesEditorModal.jsx';
+import CrmFilters from '../components/CrmFilters.jsx';
+import CrmStatsBar from '../components/CrmStatsBar.jsx';
 
 export default function CrmPage() {
   const { isAdmin } = useAuth();
@@ -26,6 +28,7 @@ export default function CrmPage() {
   const [activeLead, setActiveLead] = useState(null);
   const [stagesEditorOpen, setStagesEditorOpen] = useState(false);
   const [draggingLead, setDraggingLead] = useState(null);
+  const [filters, setFilters] = useState({ search: '', stageId: '', ownerId: '', setterId: '', scores: [] });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -35,29 +38,58 @@ export default function CrmPage() {
     return m;
   }, [salesTeam]);
 
+  // Aplicar filtros + busqueda al universo total de leads.
+  const filteredLeads = useMemo(() => {
+    const q = (filters.search || '').trim().toLowerCase();
+    return leads.filter((l) => {
+      if (filters.stageId  && l.stage_id  !== filters.stageId)  return false;
+      if (filters.ownerId  && l.owner_id  !== filters.ownerId)  return false;
+      if (filters.setterId && l.setter_id !== filters.setterId) return false;
+      if (filters.scores?.length && !filters.scores.includes(l.score)) return false;
+      if (q) {
+        const hay = (l.full_name || '').toLowerCase().includes(q)
+                 || (l.company_multinivel || '').toLowerCase().includes(q)
+                 || (l.email || '').toLowerCase().includes(q)
+                 || (l.phone || '').toLowerCase().includes(q);
+        if (!hay) return false;
+      }
+      return true;
+    });
+  }, [leads, filters]);
+
+  // Orden compuesto: score desc (3 → 2 → 1 → null), luego position manual.
+  const sortLeads = (arr) => [...arr].sort((a, b) => {
+    const sa = a.score ?? 0;
+    const sb = b.score ?? 0;
+    if (sb !== sa) return sb - sa;
+    return (a.position || 0) - (b.position || 0);
+  });
+
   const leadsByStage = useMemo(() => {
     const map = {};
     stages.forEach((s) => { map[s.id] = []; });
-    [...leads]
-      .sort((a, b) => a.position - b.position)
-      .forEach((l) => { if (map[l.stage_id]) map[l.stage_id].push(l); });
+    filteredLeads.forEach((l) => { if (map[l.stage_id]) map[l.stage_id].push(l); });
+    Object.keys(map).forEach((k) => { map[k] = sortLeads(map[k]); });
     return map;
-  }, [stages, leads]);
+  }, [stages, filteredLeads]);
 
   const allLeadIds = useMemo(() => {
     return stages.flatMap((s) => (leadsByStage[s.id] || []).map((l) => l.id));
   }, [stages, leadsByStage]);
 
-  // Para vista de tabla: leads en orden de stage + position.
+  // Tabla: orden por stage primero, dentro por score desc + position.
   const orderedLeads = useMemo(() => {
     const stageIdx = Object.fromEntries(stages.map((s, i) => [s.id, i]));
-    return [...leads].sort((a, b) => {
+    return [...filteredLeads].sort((a, b) => {
       const sa = stageIdx[a.stage_id] ?? 999;
       const sb = stageIdx[b.stage_id] ?? 999;
       if (sa !== sb) return sa - sb;
+      const scA = a.score ?? 0;
+      const scB = b.score ?? 0;
+      if (scB !== scA) return scB - scA;
       return (a.position || 0) - (b.position || 0);
     });
-  }, [leads, stages]);
+  }, [filteredLeads, stages]);
 
   const openNewLead = () => { setActiveLead(null); setLeadModalOpen(true); };
   const openEditLead = (lead) => { setActiveLead(lead); setLeadModalOpen(true); };
@@ -111,38 +143,36 @@ export default function CrmPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <div>
+      {/* Header: titulo + acciones + filtros + stats */}
+      <div className="shrink-0 space-y-2 mb-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-xl font-bold">CRM</h1>
-          <p className="text-xs text-text3 mt-0.5">
-            {leads.length} {leads.length === 1 ? 'lead' : 'leads'} · {stages.length} {stages.length === 1 ? 'etapa' : 'etapas'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Toggle vista */}
-          <div className="flex items-center bg-surface2 rounded-md p-0.5 border border-border">
-            <button onClick={() => setView('kanban')} title="Kanban"
-                    className={`p-1.5 rounded ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-              <LayoutGrid size={14} />
-            </button>
-            <button onClick={() => setView('table')} title="Tabla"
-                    className={`p-1.5 rounded ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-              <Rows3 size={14} />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-surface2 rounded-md p-0.5 border border-border">
+              <button onClick={() => setView('kanban')} title="Kanban"
+                      className={`p-1.5 rounded ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+                <LayoutGrid size={14} />
+              </button>
+              <button onClick={() => setView('table')} title="Tabla"
+                      className={`p-1.5 rounded ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+                <Rows3 size={14} />
+              </button>
+            </div>
+            {isAdmin && (
+              <button onClick={() => setStagesEditorOpen(true)}
+                      className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
+                <SettingsIcon size={14} /> Columnas
+              </button>
+            )}
+            <button onClick={openNewLead}
+                    className="py-2 px-3 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
+              <Plus size={14} /> Nuevo lead
             </button>
           </div>
-
-          {isAdmin && (
-            <button onClick={() => setStagesEditorOpen(true)}
-                    className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
-              <SettingsIcon size={14} /> Columnas
-            </button>
-          )}
-          <button onClick={openNewLead}
-                  className="py-2 px-3 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
-            <Plus size={14} /> Nuevo lead
-          </button>
         </div>
+
+        <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
+        <CrmStatsBar leads={filteredLeads} stages={stages} />
       </div>
 
       {/* Body */}
