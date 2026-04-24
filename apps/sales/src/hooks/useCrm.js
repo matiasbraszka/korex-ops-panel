@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@korex/db';
 
-// Hook centralizado para el CRM: pipeline activo + stages + leads del usuario.
-// Maneja bootstrap (crea pipeline default si no existe) y expone CRUDs con
-// actualizacion optimista para el Kanban.
+// Hook centralizado del CRM. Tras el cambio a pipeline compartido por el
+// equipo de Ventas:
+//  - stages = columnas globales (admin las edita).
+//  - leads = los que el RLS deja ver (owner OR setter OR admin).
 export function useCrm() {
   const [pipelineId, setPipelineId] = useState(null);
   const [stages, setStages] = useState([]);
   const [leads, setLeads] = useState([]);
-  const [salesTeam, setSalesTeam] = useState([]); // team_members con rol sales/admin
+  const [salesTeam, setSalesTeam] = useState([]);
+  const [me, setMe] = useState(null); // user id de la sesion
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -18,18 +20,19 @@ export function useCrm() {
       { data: leadsData, error: lErr },
       { data: membersData, error: mErr },
       { data: rolesData, error: rErr },
+      { data: { user } },
     ] = await Promise.all([
       supabase.from('sales_pipeline_stages').select('*').eq('pipeline_id', pId).order('position'),
       supabase.from('sales_leads').select('*').eq('pipeline_id', pId).order('position'),
       supabase.from('team_members').select('id, name, initials, color, avatar_url, user_id').not('user_id', 'is', null),
       supabase.from('user_roles').select('user_id, role'),
+      supabase.auth.getUser(),
     ]);
     if (sErr) throw sErr;
     if (lErr) throw lErr;
     if (mErr) throw mErr;
     if (rErr) throw rErr;
 
-    // Filtrar members que tienen rol sales o admin; cachear el objeto para lookup por user_id.
     const rolesByUser = {};
     (rolesData || []).forEach((r) => {
       if (!rolesByUser[r.user_id]) rolesByUser[r.user_id] = [];
@@ -43,6 +46,7 @@ export function useCrm() {
     setStages(stagesData || []);
     setLeads(leadsData || []);
     setSalesTeam(eligible);
+    setMe(user?.id || null);
   }, []);
 
   const bootstrap = useCallback(async () => {
@@ -63,15 +67,14 @@ export function useCrm() {
 
   useEffect(() => { bootstrap(); }, [bootstrap]);
 
-  // ── Stages CRUD ──
+  // ── Stages CRUD (solo admin via RLS) ──
   const addStage = useCallback(async (name, color = '#5B7CF5') => {
     if (!pipelineId) return;
     const position = stages.length;
     const { data, error: e } = await supabase
       .from('sales_pipeline_stages')
       .insert({ pipeline_id: pipelineId, name, color, position })
-      .select()
-      .single();
+      .select().single();
     if (e) { console.error(e); return; }
     setStages((prev) => [...prev, data]);
   }, [pipelineId, stages.length]);
@@ -93,16 +96,13 @@ export function useCrm() {
   }, [leads]);
 
   const reorderStages = useCallback(async (orderedIds) => {
-    // Actualiza posicion localmente y persiste.
     setStages((prev) => {
       const byId = Object.fromEntries(prev.map((s) => [s.id, s]));
       return orderedIds.map((id, idx) => ({ ...byId[id], position: idx }));
     });
-    await Promise.all(
-      orderedIds.map((id, idx) =>
-        supabase.from('sales_pipeline_stages').update({ position: idx }).eq('id', id)
-      )
-    );
+    await Promise.all(orderedIds.map((id, idx) =>
+      supabase.from('sales_pipeline_stages').update({ position: idx }).eq('id', id),
+    ));
   }, []);
 
   // ── Leads CRUD ──
@@ -110,19 +110,25 @@ export function useCrm() {
     if (!pipelineId) return null;
     const firstStage = stages[0];
     const { data: userData } = await supabase.auth.getUser();
-    const ownerId = userData?.user?.id;
+    const ownerId = payload.owner_id || userData?.user?.id;
     if (!ownerId) return null;
-    const position = leads.filter((l) => l.stage_id === (payload.stage_id || firstStage?.id)).length;
+    const stageId = payload.stage_id || firstStage?.id || null;
+    const position = leads.filter((l) => l.stage_id === stageId).length;
     const row = {
       pipeline_id: pipelineId,
       owner_id: ownerId,
-      stage_id: payload.stage_id || firstStage?.id || null,
+      setter_id: payload.setter_id || null,
+      stage_id: stageId,
       full_name: payload.full_name,
       company_multinivel: payload.company_multinivel || null,
       proposal: payload.proposal || null,
       phone: payload.phone || null,
       email: payload.email || null,
       notes: payload.notes || null,
+      next_step: payload.next_step || null,
+      score: payload.score ?? null,
+      estimated_value: payload.estimated_value ?? null,
+      estimated_currency: payload.estimated_currency || 'USD',
       origin: payload.origin || 'manual',
       position,
     };
@@ -135,8 +141,12 @@ export function useCrm() {
   const updateLead = useCallback(async (id, patch) => {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
     const { error: e } = await supabase.from('sales_leads').update(patch).eq('id', id);
-    if (e) console.error(e);
-  }, []);
+    if (e) {
+      console.error(e);
+      // Si fallo (ej. trigger ownership), recargamos para revertir el optimistic.
+      await loadAll(pipelineId);
+    }
+  }, [loadAll, pipelineId]);
 
   const deleteLead = useCallback(async (id) => {
     setLeads((prev) => prev.filter((l) => l.id !== id));
@@ -145,33 +155,17 @@ export function useCrm() {
   }, []);
 
   const moveLead = useCallback(async (leadId, toStageId, toPosition) => {
-    // Actualiza local primero (optimistic), luego persiste.
-    setLeads((prev) => {
-      const next = prev.map((l) =>
-        l.id === leadId ? { ...l, stage_id: toStageId, position: toPosition } : l
-      );
-      return next;
-    });
+    setLeads((prev) => prev.map((l) =>
+      l.id === leadId ? { ...l, stage_id: toStageId, position: toPosition } : l));
     await supabase.from('sales_leads')
       .update({ stage_id: toStageId, position: toPosition })
       .eq('id', leadId);
   }, []);
 
   return {
-    pipelineId,
-    stages,
-    leads,
-    salesTeam,
-    loading,
-    error,
+    pipelineId, stages, leads, salesTeam, me, loading, error,
     refresh: bootstrap,
-    addStage,
-    updateStage,
-    deleteStage,
-    reorderStages,
-    createLead,
-    updateLead,
-    deleteLead,
-    moveLead,
+    addStage, updateStage, deleteStage, reorderStages,
+    createLead, updateLead, deleteLead, moveLead,
   };
 }

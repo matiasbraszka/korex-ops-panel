@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors,
-  closestCorners, DragOverlay, pointerWithin, rectIntersection,
+  DragOverlay, pointerWithin, rectIntersection,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Plus, Settings as SettingsIcon } from 'lucide-react';
+import { useAuth } from '@korex/auth';
 import { useCrm } from '../hooks/useCrm.js';
 import KanbanColumn from '../components/KanbanColumn.jsx';
 import LeadCard from '../components/LeadCard.jsx';
@@ -12,8 +13,9 @@ import LeadModal from '../components/LeadModal.jsx';
 import StagesEditorModal from '../components/StagesEditorModal.jsx';
 
 export default function CrmPage() {
+  const { isAdmin } = useAuth();
   const {
-    pipelineId, stages, leads, salesTeam, loading, error,
+    pipelineId, stages, leads, salesTeam, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead,
   } = useCrm();
@@ -116,10 +118,12 @@ export default function CrmPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setStagesEditorOpen(true)}
-                  className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
-            <SettingsIcon size={14} /> Editar columnas
-          </button>
+          {isAdmin && (
+            <button onClick={() => setStagesEditorOpen(true)}
+                    className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
+              <SettingsIcon size={14} /> Editar columnas
+            </button>
+          )}
           <button onClick={openNewLead}
                   className="py-2 px-3 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
             <Plus size={14} /> Nuevo lead
@@ -150,7 +154,9 @@ export default function CrmPage() {
                   stage={stage}
                   leads={leadsByStage[stage.id] || []}
                   ownersByUserId={ownersByUserId}
-                  onCardClick={openEditLead}
+                  canEditOwners={isAdmin}
+                  onCardDetail={openEditLead}
+                  onPatchLead={updateLead}
                 />
               ))}
             </div>
@@ -167,6 +173,8 @@ export default function CrmPage() {
         lead={activeLead}
         stages={stages}
         salesTeam={salesTeam}
+        canEditOwners={isAdmin}
+        currentUserId={me}
         onCreate={createLead}
         onUpdate={updateLead}
         onDelete={deleteLead}

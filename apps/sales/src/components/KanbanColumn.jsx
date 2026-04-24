@@ -1,30 +1,28 @@
 import { useDroppable } from '@dnd-kit/core';
 import LeadCard from './LeadCard.jsx';
 
-// Columna del Kanban: solo droppable. El SortableContext es global a nivel
-// del board (ver CrmPage) para permitir arrastrar entre columnas.
-export default function KanbanColumn({ stage, leads, ownersByUserId, onCardClick }) {
+export default function KanbanColumn({ stage, leads, ownersByUserId, onCardDetail, onPatchLead, canEditOwners }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: stage.id,
-    data: { type: 'stage', stage_id: stage.id },
+    id: stage.id, data: { type: 'stage', stage_id: stage.id },
   });
 
   return (
-    <div className="flex flex-col w-[280px] shrink-0">
+    <div className="flex flex-col w-[320px] shrink-0">
       <div className="flex items-center gap-2 px-2 pb-2 border-b-2" style={{ borderColor: stage.color }}>
         <span className="text-[13px] font-semibold text-text">{stage.name}</span>
         <span className="text-[11px] text-text3">{leads.length}</span>
       </div>
-      <div
-        ref={setNodeRef}
-        className={`flex-1 p-2 rounded-b-lg min-h-[200px] transition-colors ${isOver ? 'bg-blue-bg2' : 'bg-surface2'}`}
-      >
+      <div ref={setNodeRef}
+           className={`flex-1 p-2 rounded-b-lg min-h-[200px] transition-colors ${isOver ? 'bg-blue-bg2' : 'bg-surface2'}`}>
         {leads.map((lead) => (
           <LeadCard
             key={lead.id}
             lead={lead}
             owner={ownersByUserId?.[lead.owner_id]}
-            onClick={() => onCardClick(lead)}
+            setter={ownersByUserId?.[lead.setter_id]}
+            canEditOwners={canEditOwners}
+            onDetail={() => onCardDetail(lead)}
+            onPatch={(patch) => onPatchLead(lead.id, patch)}
           />
         ))}
         {leads.length === 0 && (
