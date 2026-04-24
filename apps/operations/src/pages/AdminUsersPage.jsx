@@ -18,6 +18,8 @@ export default function AdminUsersPage() {
   const [saving, setSaving] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAvatar, setEditingAvatar] = useState(null);
+  // Si esta seteado, abrimos el modal en modo "darle acceso" con el miembro pre-elegido.
+  const [linkPrefill, setLinkPrefill] = useState(null); // { team_member_id, role? }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,18 +158,33 @@ export default function AdminUsersPage() {
                   {m.user_id ? (
                     <span className="text-[11px] text-green-600">● Vinculada</span>
                   ) : (
-                    <span className="text-[11px] text-text3">Sin cuenta</span>
+                    <button onClick={() => { setLinkPrefill({ team_member_id: m.id }); setModalOpen(true); }}
+                            className="text-[11px] text-blue hover:underline cursor-pointer bg-transparent border-0 p-0">
+                      + Crear cuenta
+                    </button>
                   )}
                 </td>
                 {rolesCatalog.map((r) => {
-                  const has = m.user_id && (rolesByUser[m.user_id]?.has(r.name) ?? false);
-                  const disabled = !m.user_id || saving === m.user_id;
+                  const hasAccount = !!m.user_id;
+                  const has = hasAccount && (rolesByUser[m.user_id]?.has(r.name) ?? false);
+                  const isSaving = saving === m.user_id;
                   return (
                     <td key={r.name} className="text-center px-2 py-2">
-                      <input type="checkbox" checked={has}
-                             onChange={() => toggleRole(m.user_id, r.name)}
-                             disabled={disabled}
-                             className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40" />
+                      {hasAccount ? (
+                        <input type="checkbox" checked={has}
+                               onChange={() => toggleRole(m.user_id, r.name)}
+                               disabled={isSaving}
+                               className="w-4 h-4 cursor-pointer disabled:opacity-40" />
+                      ) : (
+                        <button
+                          type="button"
+                          title="Este miembro no tiene cuenta. Click para crearla y asignar este rol."
+                          onClick={() => { setLinkPrefill({ team_member_id: m.id, role: r.name }); setModalOpen(true); }}
+                          className="text-text3 hover:text-blue cursor-pointer text-[11px] bg-transparent border border-dashed border-border hover:border-blue rounded px-2 py-0.5"
+                        >
+                          + cuenta
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -209,11 +226,12 @@ export default function AdminUsersPage() {
 
       <NewMemberModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setLinkPrefill(null); }}
         rolesCatalog={rolesCatalog}
         unlinkedMembers={members.filter((m) => !m.user_id)}
         addTeamMember={addTeamMember}
-        onDone={async () => { setModalOpen(false); await load(); }}
+        prefill={linkPrefill}
+        onDone={async () => { setModalOpen(false); setLinkPrefill(null); await load(); }}
       />
     </div>
   );
@@ -222,12 +240,28 @@ export default function AdminUsersPage() {
 // Modal unificado:
 //  - Crear perfil (solo team_member) o crear perfil + cuenta.
 //  - Alternativa: vincular cuenta nueva a un team_member ya existente.
-function NewMemberModal({ open, onClose, rolesCatalog, unlinkedMembers, addTeamMember, onDone }) {
+function NewMemberModal({ open, onClose, rolesCatalog, unlinkedMembers, addTeamMember, prefill, onDone }) {
   const [form, setForm] = useState(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => { if (open) { setForm(emptyForm()); setError(''); } }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    setError('');
+    if (prefill?.team_member_id) {
+      // Abrir directamente en "Vincular miembro existente" con ese miembro elegido
+      // y, si vino prefill.role, marcar ese rol del sistema.
+      setForm({
+        ...emptyForm(),
+        mode: 'link_existing',
+        create_account: true,
+        team_member_id: prefill.team_member_id,
+        roles: prefill.role ? [prefill.role] : [],
+      });
+    } else {
+      setForm(emptyForm());
+    }
+  }, [open, prefill]);
 
   if (!open) return null;
 
