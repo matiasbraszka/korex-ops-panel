@@ -64,18 +64,6 @@ export const TEAM = [
   { id: 'christian', name: 'Christian Uscanga',     role: 'Programador',     color: '#A855F7', initials: 'CU', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc3.png' },
 ];
 
-export const USERS = {
-  matias:   { pass: 'korex2026', name: 'Matias Braszka',       role: 'COO',          initials: 'MB', color: '#5B7CF5', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/684cd8d92809a925e80880c2.png' },
-  cristian: { pass: 'korex2026', name: 'Cristian Fernandez',   role: 'CEO',          initials: 'CF', color: '#06B6D4', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3e0afed7575d4e87884.png' },
-  josem:    { pass: 'korex2026', name: 'Jose Martin',          role: 'CMO',          initials: 'JM', color: '#EAB308', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
-  david:    { pass: 'korex2026', name: 'David Castañeda',      role: 'Trafficker',   initials: 'DC', color: '#F97316', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/68a4a3df7842793384dc77b7.png' },
-  marcos:   { pass: 'korex2026', name: 'Marcos del Rey',        role: 'CTO',          initials: 'MR', color: '#22C55E', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2e3d829c73b26a9deb.png' },
-  zil:      { pass: 'korex2026', name: 'Zil Oliveros',         role: 'Coordinación', initials: 'ZO', color: '#8B5CF6', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38ef24cde4bbc2afcd13e.png' },
-  zerillos: { pass: 'korex2026', name: 'Jose Zerillo',         role: 'Diseño',       initials: 'JZ', color: '#EC4899', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc4.png' },
-  jordi:    { pass: 'korex2026', name: 'Jordi Miró Nolla',     role: 'Project Manager', initials: 'JM', color: '#14B8A6' },
-  christian:{ pass: 'korex2026', name: 'Christian Uscanga',     role: 'Programador',  initials: 'CU', color: '#A855F7', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c8484c045c2748d2fc3.png' },
-};
-
 export const STATUS = {
   'pending':        { label: 'Pendiente',    color: '#9CA3AF', pill: 'pill-gray',   icon: '\u25CB' },
   'in-progress':    { label: 'En progreso',  color: '#5B7CF5', pill: 'pill-blue',   icon: '\u25C9' },

@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { sbFetch } from '@korex/db';
-import { USERS, CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
+import { useCurrentUser, signOut } from '@korex/auth';
+import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled } from '../utils/helpers';
 
 const AppContext = createContext(null);
@@ -23,7 +24,22 @@ export function AppProvider({ children }) {
   const [taskClientFilter, setTaskClientFilter] = useState('all');
   const [taskPriority, setTaskPriority] = useState('all');
   const [taskDueFilter, setTaskDueFilter] = useState('all'); // all | this-week | next-week | this-month
-  const [currentUser, setCurrentUser] = useState(null);
+  // currentUser deriva de Supabase Auth + team_members (ver derivacion mas abajo).
+  const { user: authUser, profile, isAdmin } = useCurrentUser();
+  const currentUser = useMemo(() => {
+    if (!profile) return null;
+    return {
+      id: profile.id,
+      name: profile.name,
+      role: profile.role,
+      color: profile.color || '#5B7CF5',
+      initials: profile.initials || (profile.name?.split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase() || ''),
+      avatar: profile.avatar_url || '',
+      canAccessSettings: isAdmin || !!profile.can_access_settings,
+      authId: authUser?.id || null,
+      isAdmin,
+    };
+  }, [profile, isAdmin, authUser]);
   const [briefing, setBriefing] = useState(null);
   const [reportFeedbacks, setReportFeedbacks] = useState([]);
   const [taskProposals, setTaskProposals] = useState([]);
@@ -381,43 +397,11 @@ export function AppProvider({ children }) {
   }, [save, dbSaveTask]);
 
   // ── Auth ──
-  // Mapea una fila team_members al shape interno de currentUser.
-  const tmRowToUser = (row) => ({
-    id: row.id,
-    name: row.name,
-    role: row.role,
-    color: row.color || '#5B7CF5',
-    initials: row.initials || row.name?.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase() || '',
-    avatar: row.avatar_url || row.avatarUrl || '',
-    pass: row.password,
-    canAccessSettings: !!row.can_access_settings,
-  });
-
-  const doLogin = useCallback(async (username, password) => {
-    const u = username.trim().toLowerCase().replace(/@.*$/, '');
-    // 1) Intentar contra la tabla team_members
-    try {
-      const rows = await sbFetch('team_members?id=eq.' + encodeURIComponent(u) + '&select=*', { headers: { 'Prefer': 'return=representation' } });
-      if (rows && rows.length > 0 && rows[0].password === password) {
-        const user = tmRowToUser(rows[0]);
-        setCurrentUser(user);
-        localStorage.setItem('korex_user', u);
-        return true;
-      }
-    } catch (e) { /* fallback abajo */ }
-    // 2) Fallback al USERS hardcoded de constants.js
-    if (USERS[u] && USERS[u].pass === password) {
-      const user = { ...USERS[u], id: u, canAccessSettings: u === 'matias' };
-      setCurrentUser(user);
-      localStorage.setItem('korex_user', u);
-      return true;
-    }
-    return false;
-  }, []);
-
-  const doLogout = useCallback(() => {
-    localStorage.removeItem('korex_user');
-    setCurrentUser(null);
+  // doLogin vive ahora en @korex/auth (Supabase Auth).
+  // AppContext solo expone doLogout para que el sidebar siga funcionando igual.
+  const doLogout = useCallback(async () => {
+    await signOut();
+    localStorage.removeItem('korex_user'); // cleanup legacy
   }, []);
 
   // ── CRUD: app_settings (template, services, priority_labels) ──
@@ -854,30 +838,8 @@ export function AppProvider({ children }) {
     setClients(injected);
     setTasks(localTasks);
 
-    // Restore user session: primero set rapido del fallback hardcoded,
-    // despues sobreescribir con datos de la tabla cuando lleguen
-    const u = localStorage.getItem('korex_user');
-    if (u && USERS[u]) {
-      setCurrentUser({ ...USERS[u], id: u, canAccessSettings: u === 'matias' });
-      // Hidratar canAccessSettings desde la tabla en background
-      sbFetch('team_members?id=eq.' + encodeURIComponent(u) + '&select=*', { headers: { 'Prefer': 'return=representation' } })
-        .then(rows => {
-          if (rows && rows.length > 0) {
-            const r = rows[0];
-            setCurrentUser({
-              id: r.id,
-              name: r.name,
-              role: r.role,
-              color: r.color || '#5B7CF5',
-              initials: r.initials || '',
-              avatar: r.avatar_url || '',
-              pass: r.password,
-              canAccessSettings: !!r.can_access_settings,
-            });
-          }
-        })
-        .catch(() => { /* fallback ya seteado */ });
-    }
+    // Cleanup de clave legacy (antes guardaba el slug del usuario en localStorage).
+    localStorage.removeItem('korex_user');
 
     // 2. Then try Supabase in background
     loadFromSupabase().then(loaded => {
@@ -914,7 +876,9 @@ export function AppProvider({ children }) {
     taskClientFilter, setTaskClientFilter,
     taskPriority, setTaskPriority,
     taskDueFilter, setTaskDueFilter,
-    currentUser, setCurrentUser,
+    currentUser,
+    authUser,
+    isAdmin,
     briefing, setBriefing,
     reportFeedbacks, setReportFeedbacks,
     taskProposals, setTaskProposals,
@@ -947,7 +911,6 @@ export function AppProvider({ children }) {
     updateTask,
     deleteTask,
     reorderTask,
-    doLogin,
     doLogout,
     injectMetaMetrics,
     recalculateTimers,

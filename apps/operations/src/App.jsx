@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { LayoutDashboard, Users, ClipboardList, Settings as SettingsIcon, Play, Phone } from 'lucide-react';
+import { useAuth, signIn, sendPasswordReset } from '@korex/auth';
 import { useApp } from './context/AppContext';
 import ClientsPage from './pages/ClientsPage';
 import TareasPage from './pages/TareasPage';
@@ -15,17 +16,32 @@ import Modal from './components/Modal';
 import { today } from './utils/helpers';
 
 function LoginPage() {
-  const { doLogin } = useApp();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [resetMsg, setResetMsg] = useState('');
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const form = e.target;
-    const user = form.user.value;
-    const pass = form.pass.value;
-    const ok = await doLogin(user, pass);
-    if (!ok) {
-      form.querySelector('.login-error').style.display = 'block';
-      form.pass.value = '';
+    setError('');
+    setResetMsg('');
+    setSubmitting(true);
+    const { error: authError } = await signIn(email.trim().toLowerCase(), password);
+    setSubmitting(false);
+    if (authError) {
+      setError('Email o contraseña incorrectos');
+      setPassword('');
     }
+  };
+
+  const handleReset = async () => {
+    setResetMsg('');
+    if (!email.trim()) { setError('Ingresá tu email primero'); return; }
+    setError('');
+    const { error: resetError } = await sendPasswordReset(email.trim().toLowerCase());
+    if (resetError) setError('No se pudo enviar el email de reseteo');
+    else setResetMsg('Te mandamos un email con un link para resetear la contraseña.');
   };
 
   return (
@@ -37,37 +53,58 @@ function LoginPage() {
         <form onSubmit={handleSubmit}>
           <label className="block text-[13px] font-semibold text-text mb-2">Correo electrónico</label>
           <input
-            type="text"
-            name="user"
+            type="email"
+            name="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
             placeholder="usuario@email.com"
             autoFocus
+            required
           />
           <label className="block text-[13px] font-semibold text-text mb-2">Contraseña</label>
           <input
             type="password"
-            name="pass"
+            name="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
-            placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+            placeholder={'••••••••••'}
+            required
           />
           <button
             type="submit"
-            className="w-full py-3.5 bg-blue text-white border-none rounded-xl text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark"
+            disabled={submitting}
+            className="w-full py-3.5 bg-blue text-white border-none rounded-xl text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark disabled:opacity-60"
           >
-            Iniciar sesión
+            {submitting ? 'Entrando...' : 'Iniciar sesión'}
           </button>
-          <div className="login-error text-red text-xs text-center mt-3.5 hidden">
-            Usuario o contraseña incorrectos
-          </div>
+          {error && <div className="text-red text-xs text-center mt-3.5">{error}</div>}
+          {resetMsg && <div className="text-green-600 text-xs text-center mt-3.5">{resetMsg}</div>}
         </form>
         <div className="text-center mt-6">
-          <a href="#" className="text-blue text-[13px] no-underline">
-            {'\u00BF'}Olvidaste tu contraseña?
-          </a>
+          <button type="button" onClick={handleReset} className="text-blue text-[13px] no-underline bg-transparent border-0 cursor-pointer">
+            {'¿'}Olvidaste tu contraseña?
+          </button>
         </div>
         <div className="text-center mt-10 text-xs text-text3">
           Política de Privacidad &middot; Términos y Condiciones
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountPending({ email }) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="w-full max-w-[440px] px-8 text-center">
+        <h1 className="text-lg font-bold text-text mb-3">Cuenta sin acceso</h1>
+        <p className="text-sm text-text2 mb-6">
+          Tu email ({email}) está autenticado pero todavía no está vinculado a ningún
+          perfil del equipo ni tiene roles asignados. Contactá a un administrador
+          para que complete la configuración de tu cuenta.
+        </p>
       </div>
     </div>
   );
@@ -93,7 +130,7 @@ function MainLayout() {
     { id: 'videos',    label: 'Tutoriales',    Icon: Play },
     { id: 'settings',  label: 'Configuración', Icon: SettingsIcon, requiresPerm: true },
   ];
-  const canAccessSettings = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
+  const canAccessSettings = currentUser?.isAdmin || currentUser?.canAccessSettings === true;
   const navItems = allNavItems.filter(item => !item.requiresPerm || canAccessSettings);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
@@ -184,7 +221,7 @@ function MainLayout() {
             className="ml-auto bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red"
             title="Cerrar sesión"
           >
-            {'\u2192'}
+            {'→'}
           </button>
         </div>
       </div>
@@ -213,7 +250,7 @@ function MainLayout() {
           className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
           title="Cerrar sesión"
         >
-          <span className="text-[18px] leading-none">{'\u2192'}</span>
+          <span className="text-[18px] leading-none">{'→'}</span>
           <span className="text-[9px] font-medium leading-none">Salir</span>
         </button>
       </div>
@@ -231,7 +268,7 @@ function MainLayout() {
           </div>
           <div className="flex items-center gap-2.5 max-md:gap-1.5 shrink-0">
             <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-xl bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
-              {syncStatus === 'syncing' ? '\u21BB Guardando...' : syncStatus === 'error' ? '\u2715 Error sync' : '\u25CF Sincronizado'}
+              {syncStatus === 'syncing' ? '↻ Guardando...' : syncStatus === 'error' ? '✕ Error sync' : '● Sincronizado'}
             </span>
             <SearchBar />
             {view === 'clients' && (
@@ -278,12 +315,29 @@ function MainLayout() {
 }
 
 function App() {
-  const { currentUser } = useApp();
+  const { user: authUser, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-white">
+        <div className="text-text3 text-sm">Cargando...</div>
+      </div>
+    );
+  }
+
+  let root;
+  if (!authUser) {
+    root = <LoginPage />;
+  } else if (!profile) {
+    root = <AccountPending email={authUser.email} />;
+  } else {
+    root = <MainLayout />;
+  }
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/*" element={currentUser ? <MainLayout /> : <LoginPage />} />
+        <Route path="/*" element={root} />
       </Routes>
     </BrowserRouter>
   );
