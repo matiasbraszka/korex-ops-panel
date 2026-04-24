@@ -8,18 +8,41 @@ export function useCrm() {
   const [pipelineId, setPipelineId] = useState(null);
   const [stages, setStages] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [salesTeam, setSalesTeam] = useState([]); // team_members con rol sales/admin
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const loadAll = useCallback(async (pId) => {
-    const [{ data: stagesData, error: sErr }, { data: leadsData, error: lErr }] = await Promise.all([
+    const [
+      { data: stagesData, error: sErr },
+      { data: leadsData, error: lErr },
+      { data: membersData, error: mErr },
+      { data: rolesData, error: rErr },
+    ] = await Promise.all([
       supabase.from('sales_pipeline_stages').select('*').eq('pipeline_id', pId).order('position'),
       supabase.from('sales_leads').select('*').eq('pipeline_id', pId).order('position'),
+      supabase.from('team_members').select('id, name, initials, color, avatar_url, user_id').not('user_id', 'is', null),
+      supabase.from('user_roles').select('user_id, role'),
     ]);
     if (sErr) throw sErr;
     if (lErr) throw lErr;
+    if (mErr) throw mErr;
+    if (rErr) throw rErr;
+
+    // Filtrar members que tienen rol sales o admin; cachear el objeto para lookup por user_id.
+    const rolesByUser = {};
+    (rolesData || []).forEach((r) => {
+      if (!rolesByUser[r.user_id]) rolesByUser[r.user_id] = [];
+      rolesByUser[r.user_id].push(r.role);
+    });
+    const eligible = (membersData || []).filter((m) => {
+      const roles = rolesByUser[m.user_id] || [];
+      return roles.includes('sales') || roles.includes('admin');
+    });
+
     setStages(stagesData || []);
     setLeads(leadsData || []);
+    setSalesTeam(eligible);
   }, []);
 
   const bootstrap = useCallback(async () => {
@@ -138,6 +161,7 @@ export function useCrm() {
     pipelineId,
     stages,
     leads,
+    salesTeam,
     loading,
     error,
     refresh: bootstrap,

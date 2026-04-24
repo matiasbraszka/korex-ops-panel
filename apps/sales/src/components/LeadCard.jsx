@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-export default function LeadCard({ lead, onClick }) {
+export default function LeadCard({ lead, owner, onClick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: lead.id,
     data: { type: 'lead', stage_id: lead.stage_id },
@@ -22,10 +22,15 @@ export default function LeadCard({ lead, onClick }) {
       onClick={onClick}
       className="bg-white border border-border rounded-lg p-3 mb-2 cursor-grab active:cursor-grabbing hover:border-blue transition-colors"
     >
-      <div className="text-[13px] font-semibold text-text truncate">{lead.full_name}</div>
-      {lead.company_multinivel && (
-        <div className="text-[11px] text-text2 truncate mt-0.5">{lead.company_multinivel}</div>
-      )}
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-text truncate">{lead.full_name}</div>
+          {lead.company_multinivel && (
+            <div className="text-[11px] text-text2 truncate mt-0.5">{lead.company_multinivel}</div>
+          )}
+        </div>
+        {owner && <OwnerAvatar owner={owner} />}
+      </div>
       {lead.proposal && (
         <div className="text-[11px] text-text3 mt-1.5 line-clamp-2">{lead.proposal}</div>
       )}
@@ -36,6 +41,23 @@ export default function LeadCard({ lead, onClick }) {
       {lead.origin === 'llamada_auto' && (
         <div className="text-[9px] text-blue mt-1 uppercase tracking-wider">Desde llamada</div>
       )}
+    </div>
+  );
+}
+
+function OwnerAvatar({ owner }) {
+  if (owner.avatar_url) {
+    return (
+      <img src={owner.avatar_url} alt={owner.name}
+           title={owner.name}
+           className="w-6 h-6 rounded-full object-cover shrink-0" />
+    );
+  }
+  return (
+    <div title={owner.name}
+         className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+         style={{ background: (owner.color || '#5B7CF5') + '18', color: owner.color || '#5B7CF5' }}>
+      {owner.initials || owner.name?.slice(0, 2).toUpperCase()}
     </div>
   );
 }

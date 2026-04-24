@@ -3,7 +3,7 @@ import { supabase } from '@korex/db';
 
 // Modal para crear o editar un lead.
 // Props: open, onClose, lead (null = crear), stages, onCreate, onUpdate, onDelete.
-export default function LeadModal({ open, onClose, lead, stages, onCreate, onUpdate, onDelete }) {
+export default function LeadModal({ open, onClose, lead, stages, salesTeam = [], onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(emptyForm(stages));
   const [calls, setCalls] = useState([]);
   const [loadingCalls, setLoadingCalls] = useState(false);
@@ -38,26 +38,20 @@ export default function LeadModal({ open, onClose, lead, stages, onCreate, onUpd
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.full_name?.trim()) { alert('El nombre es obligatorio.'); return; }
+    const basePayload = {
+      full_name: form.full_name.trim(),
+      company_multinivel: form.company_multinivel?.trim() || null,
+      proposal: form.proposal?.trim() || null,
+      phone: form.phone?.trim() || null,
+      email: form.email?.trim() || null,
+      notes: form.notes?.trim() || null,
+      stage_id: form.stage_id || null,
+      owner_id: form.owner_id || null,
+    };
     if (isEdit) {
-      await onUpdate(lead.id, {
-        full_name: form.full_name.trim(),
-        company_multinivel: form.company_multinivel?.trim() || null,
-        proposal: form.proposal?.trim() || null,
-        phone: form.phone?.trim() || null,
-        email: form.email?.trim() || null,
-        notes: form.notes?.trim() || null,
-        stage_id: form.stage_id || null,
-      });
+      await onUpdate(lead.id, basePayload);
     } else {
-      await onCreate({
-        full_name: form.full_name.trim(),
-        company_multinivel: form.company_multinivel?.trim() || null,
-        proposal: form.proposal?.trim() || null,
-        phone: form.phone?.trim() || null,
-        email: form.email?.trim() || null,
-        notes: form.notes?.trim() || null,
-        stage_id: form.stage_id || stages[0]?.id,
-      });
+      await onCreate({ ...basePayload, stage_id: form.stage_id || stages[0]?.id });
     }
     onClose();
   };
@@ -98,12 +92,21 @@ export default function LeadModal({ open, onClose, lead, stages, onCreate, onUpd
                        className={inputCls} placeholder="correo@ejemplo.com" />
               </Field>
             </div>
-            <Field label="Etapa">
-              <select value={form.stage_id || ''} onChange={(e) => setForm((f) => ({ ...f, stage_id: e.target.value }))}
-                      className={inputCls + ' cursor-pointer'}>
-                {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Etapa">
+                <select value={form.stage_id || ''} onChange={(e) => setForm((f) => ({ ...f, stage_id: e.target.value }))}
+                        className={inputCls + ' cursor-pointer'}>
+                  {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Asignado a">
+                <select value={form.owner_id || ''} onChange={(e) => setForm((f) => ({ ...f, owner_id: e.target.value }))}
+                        className={inputCls + ' cursor-pointer'}>
+                  <option value="">Sin asignar</option>
+                  {salesTeam.map((tm) => <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>)}
+                </select>
+              </Field>
+            </div>
             <Field label="Notas">
               <textarea rows={4} value={form.notes || ''} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                         className={inputCls + ' resize-y'} placeholder="Historial, observaciones, próximos pasos..." />
@@ -184,6 +187,7 @@ function emptyForm(stages) {
     email: '',
     notes: '',
     stage_id: stages?.[0]?.id || '',
+    owner_id: '',
   };
 }
 

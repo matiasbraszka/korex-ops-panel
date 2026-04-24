@@ -13,10 +13,17 @@ import StagesEditorModal from '../components/StagesEditorModal.jsx';
 
 export default function CrmPage() {
   const {
-    pipelineId, stages, leads, loading, error,
+    pipelineId, stages, leads, salesTeam, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead,
   } = useCrm();
+
+  // Lookup rapido owner_id (uuid auth.users) -> team_member.
+  const ownersByUserId = useMemo(() => {
+    const m = {};
+    salesTeam.forEach((tm) => { m[tm.user_id] = tm; });
+    return m;
+  }, [salesTeam]);
 
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [activeLead, setActiveLead] = useState(null);
@@ -142,6 +149,7 @@ export default function CrmPage() {
                   key={stage.id}
                   stage={stage}
                   leads={leadsByStage[stage.id] || []}
+                  ownersByUserId={ownersByUserId}
                   onCardClick={openEditLead}
                 />
               ))}
@@ -158,6 +166,7 @@ export default function CrmPage() {
         onClose={() => setLeadModalOpen(false)}
         lead={activeLead}
         stages={stages}
+        salesTeam={salesTeam}
         onCreate={createLead}
         onUpdate={updateLead}
         onDelete={deleteLead}
