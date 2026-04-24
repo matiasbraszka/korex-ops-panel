@@ -87,7 +87,6 @@ function MainLayout() {
   const unseenVideoCount = (loomVideos || []).filter(v => !seenVideos.includes(v.id)).length;
 
   const allNavItems = [
-    { id: 'dashboard', label: 'Dashboard',     Icon: LayoutDashboard },
     { id: 'clients',   label: 'Clientes',      Icon: Users },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone },
