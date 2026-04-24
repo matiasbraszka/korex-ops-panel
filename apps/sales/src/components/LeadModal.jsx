@@ -1,13 +1,35 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '@korex/db';
 
 // Modal para crear o editar un lead.
 // Props: open, onClose, lead (null = crear), stages, onCreate, onUpdate, onDelete.
 export default function LeadModal({ open, onClose, lead, stages, onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(emptyForm(stages));
+  const [calls, setCalls] = useState([]);
+  const [loadingCalls, setLoadingCalls] = useState(false);
 
   useEffect(() => {
     if (open) setForm(lead ? { ...emptyForm(stages), ...lead } : emptyForm(stages));
   }, [open, lead, stages]);
+
+  // Cargar historial de llamadas del lead (vista sales_v_lead_calls).
+  useEffect(() => {
+    if (!open || !lead?.id) { setCalls([]); return; }
+    let cancelled = false;
+    setLoadingCalls(true);
+    supabase
+      .from('sales_v_lead_calls')
+      .select('*')
+      .eq('lead_id', lead.id)
+      .order('fecha', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error('Error cargando llamadas del lead', error);
+        setCalls(data || []);
+        setLoadingCalls(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, lead?.id]);
 
   if (!open) return null;
 
@@ -86,6 +108,46 @@ export default function LeadModal({ open, onClose, lead, stages, onCreate, onUpd
               <textarea rows={4} value={form.notes || ''} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                         className={inputCls + ' resize-y'} placeholder="Historial, observaciones, próximos pasos..." />
             </Field>
+
+            {isEdit && (
+              <div className="pt-2 border-t border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-text2">Historial de llamadas</label>
+                  <span className="text-[10px] text-text3">{calls.length} {calls.length === 1 ? 'llamada' : 'llamadas'}</span>
+                </div>
+                {loadingCalls ? (
+                  <div className="text-[11px] text-text3 text-center py-3">Cargando…</div>
+                ) : calls.length === 0 ? (
+                  <div className="text-[11px] text-text3 text-center py-3 bg-surface2 rounded-md">
+                    Sin llamadas registradas. Cuando entre una llamada de ventas con este nombre,
+                    se va a asociar automáticamente acá.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {calls.map((c) => (
+                      <div key={c.llamada_id} className="bg-surface2 rounded-md p-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-[12px] font-semibold text-text truncate flex-1">{c.titulo}</div>
+                          <div className="text-[10px] text-text3 shrink-0">
+                            {c.fecha ? new Date(c.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }) : ''}
+                          </div>
+                        </div>
+                        {c.resumen && <div className="text-[11px] text-text2 mt-1 line-clamp-3">{c.resumen}</div>}
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {c.duracion_min && <span className="text-[10px] text-text3">{c.duracion_min} min</span>}
+                          {c.recording_url && (
+                            <a href={c.recording_url} target="_blank" rel="noreferrer"
+                               className="text-[10px] text-blue hover:underline">
+                              Ver grabación
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="p-5 border-t border-border flex items-center justify-between gap-2">
             <div>
