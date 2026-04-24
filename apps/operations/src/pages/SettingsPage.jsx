@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
+import TeamUsersEditor from '../components/settings/TeamUsersEditor';
 
-// Configuración del módulo Operaciones. La gestión de usuarios/equipo vive
-// en Administración > Usuarios y equipo.
 const TABS = [
+  { id: 'team',       label: 'Equipo y usuarios',     Icon: Users },
   { id: 'template',   label: 'Plantilla de Roadmap', Icon: LayoutGrid },
   { id: 'services',   label: 'Servicios',             Icon: Briefcase },
   { id: 'priorities', label: 'Prioridades',           Icon: Tag },
 ];
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState('template');
+  const [tab, setTab] = useState('team');
 
   return (
     <div className="space-y-4">
@@ -43,6 +43,7 @@ export default function SettingsPage() {
       </div>
 
       <div>
+        {tab === 'team'       && <TeamUsersEditor />}
         {tab === 'template'   && <TemplateEditor />}
         {tab === 'services'   && <ServicesEditor />}
         {tab === 'priorities' && <PrioritiesEditor />}
