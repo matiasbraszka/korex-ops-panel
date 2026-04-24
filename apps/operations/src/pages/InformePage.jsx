@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { fmtDate, today } from '../utils/helpers';
-import { sbFetch } from '../utils/supabase';
+import { sbFetch } from '@korex/db';
 
 export default function InformePage() {
   const { clients, briefing, reportFeedbacks, setReportFeedbacks, taskProposals, setTaskProposals, currentUser, createTask, updateTask, tasks } = useApp();

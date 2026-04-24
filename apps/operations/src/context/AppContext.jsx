@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { sbFetch } from '../utils/supabase';
+import { sbFetch } from '@korex/db';
 import { USERS, CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled } from '../utils/helpers';
 
