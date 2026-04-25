@@ -102,9 +102,19 @@ export default function LeadModal({
   const patchField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-stretch md:items-stretch md:justify-end"
-         onClick={onClose}>
-      <div className="bg-white rounded-none w-full md:w-[440px] md:max-w-[440px] h-full flex flex-col md:shadow-[-8px_0_32px_rgba(0,0,0,.12)] shadow-2xl overflow-hidden md:border-l md:border-border animate-[slideInRight_.2s_ease-out]"
+    <>
+      {/* Click-catcher para cerrar al tocar fuera. En mobile oscurece el fondo;
+          en desktop es transparente para que el kanban se siga viendo nitido. */}
+      <div className="fixed inset-0 z-40 bg-black/40 md:bg-transparent" onClick={onClose} />
+
+      {/* Ventana flotante: en mobile pantalla completa; en desktop panel a la
+          derecha con margenes (no fullscreen) y bordes redondeados. */}
+      <div className="fixed z-50 bg-white flex flex-col overflow-hidden
+                      inset-0
+                      md:inset-auto md:top-4 md:right-4 md:bottom-4 md:w-[420px]
+                      md:rounded-2xl md:border md:border-border
+                      shadow-2xl md:shadow-[0_20px_60px_rgba(0,0,0,.18),0_8px_24px_rgba(0,0,0,.08)]
+                      animate-[slideInRight_.2s_ease-out]"
            onClick={(e) => e.stopPropagation()}>
         {/* Sheet header */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
@@ -225,7 +235,7 @@ export default function LeadModal({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
 

@@ -15,7 +15,9 @@ export default function LeadCard({
     id: lead.id, data: { type: 'lead', stage_id: lead.stage_id },
   });
 
-  // Long-press (mobile): mantener presionado para mover a otra etapa
+  // Long-press (mobile): mantener presionado para mover a otra etapa.
+  // IMPORTANTE: dnd-kit pone su propio onPointerDown en `listeners`. Hay que
+  // llamarlo PRIMERO y despues nuestro startLP, sino se rompe el drag-and-drop.
   const lpRef = useRef(null);
   const startLP = () => {
     if (!onLongPress) return;
@@ -26,6 +28,13 @@ export default function LeadCard({
     }, 500);
   };
   const cancelLP = () => clearTimeout(lpRef.current);
+
+  // Separamos onPointerDown de los demas listeners para poder combinarlo
+  const { onPointerDown: dndPointerDown, ...otherListeners } = listeners || {};
+  const handlePointerDown = (e) => {
+    dndPointerDown?.(e);
+    startLP();
+  };
 
   const [name, setName]           = useState(lead.full_name || '');
   const [nextStep, setNextStep]   = useState(lead.next_step || '');
@@ -61,9 +70,9 @@ export default function LeadCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}
+    <div ref={setNodeRef} style={style} {...attributes} {...otherListeners}
          className="group lead-card bg-white border border-border rounded-[10px] mb-2 cursor-grab active:cursor-grabbing select-none"
-         onPointerDown={startLP}
+         onPointerDown={handlePointerDown}
          onPointerUp={cancelLP}
          onPointerLeave={cancelLP}
          onPointerCancel={cancelLP}
