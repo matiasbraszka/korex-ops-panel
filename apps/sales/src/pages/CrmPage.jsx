@@ -179,10 +179,11 @@ export default function CrmPage() {
     <div className="flex flex-col">
       {/* Topbar integrado: titulo + KPIs + buscador + view toggle + acciones */}
       <div className="mb-3">
-        {/* DESKTOP topbar — bloque blanco prominente con todo en una unica zona
-            visible. Hago bg-white + border + padding para que NO se confunda con
-            el fondo gris de la pagina. flex-wrap por si el viewport es angosto. */}
-        <div className="crm-desktop-topbar hidden md:block bg-white border border-border rounded-xl shadow-sm p-3 mb-2.5">
+        {/* DESKTOP topbar — render condicional con isMobile state (NO uso
+            hidden md:block porque fallaba en algun viewport del user).
+            Bloque blanco prominente con bg-white + border + padding. */}
+        {!isMobile && (
+        <div className="bg-white border border-border rounded-xl shadow-sm p-3 mb-2.5">
           {/* Fila 1: titulo + buscador + acciones */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="min-w-[140px]">
@@ -240,9 +241,11 @@ export default function CrmPage() {
             </button>
           </div>
         </div>
+        )}
 
-        {/* Mobile: titulo + acciones; busqueda y filtros via CrmFilters debajo */}
-        <div className="md:hidden flex items-start justify-between gap-3 mb-2.5">
+        {/* MOBILE topbar — solo si isMobile */}
+        {isMobile && (<>
+        <div className="flex items-start justify-between gap-3 mb-2.5">
           <div className="min-w-0">
             <h1 className="text-[15px] font-bold leading-tight">CRM</h1>
             <p className="text-[10.5px] text-text3 mt-0.5">
@@ -266,12 +269,14 @@ export default function CrmPage() {
         </div>
 
         {/* Mobile: buscador/filtros */}
-        <div className="md:hidden mb-2">
+        <div className="mb-2">
           <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
         </div>
+        </>)}
 
         {/* Quick filter chips · solo desktop */}
-        <div className="hidden md:flex items-center gap-2 flex-wrap py-1">
+        {!isMobile && (
+        <div className="flex items-center gap-2 flex-wrap py-1">
           <Chip active={quickFilter === 'mine'} onClick={() => setQuickFilter(quickFilter === 'mine' ? '' : 'mine')}
                 tone="blue">Míos · {myCount}</Chip>
           <Chip active={quickFilter === ''} onClick={() => setQuickFilter('')}>
@@ -282,6 +287,7 @@ export default function CrmPage() {
           <Chip active={quickFilter === 'closing'} onClick={() => setQuickFilter(quickFilter === 'closing' ? '' : 'closing')}
                 tone="green">Cerrando 🔥🔥🔥</Chip>
         </div>
+        )}
       </div>
 
       {/* Body wrapper relative: el LeadModal en desktop se posiciona absolute
