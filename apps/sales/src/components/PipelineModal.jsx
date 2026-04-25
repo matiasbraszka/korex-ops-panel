@@ -1,42 +1,63 @@
 import { useState, useEffect } from 'react';
-import { X, Users } from 'lucide-react';
+import { X, Users, Crown } from 'lucide-react';
 
-// Modal para crear o EDITAR un CRM (pipeline). Si pipeline prop existe → edit.
-// Admin puede asignar el CRM a cualquier vendedor del equipo. Sales solo
-// puede asignarse a si mismo (selector deshabilitado).
+// Modal para crear / editar un CRM (pipeline). Soporta multi-asignación con
+// un picker visual de avatares (no <select> nativo — el nativo cerraba el
+// modal al abrir el dropdown). Click en una persona la agrega/quita.
 export default function PipelineModal({
   open, onClose, onCreate, onUpdate,
-  pipeline, // si viene → modo edicion
+  pipeline,                  // si viene → modo edicion
   isAdmin, currentUserId, salesTeam = [],
 }) {
   const isEdit = !!pipeline;
   const [name, setName] = useState('');
   const [ownerId, setOwnerId] = useState('');
+  const [memberIds, setMemberIds] = useState([]); // user_ids asignados (incluye al owner)
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName(pipeline?.name || '');
     setOwnerId(pipeline?.owner_id || currentUserId || '');
+    // En edicion: arranca con los members actuales. En create: solo el owner.
+    setMemberIds(pipeline?.member_ids?.length
+      ? [...pipeline.member_ids]
+      : [pipeline?.owner_id || currentUserId].filter(Boolean));
   }, [open, pipeline, currentUserId]);
 
   if (!open) return null;
+
+  const toggleMember = (uid) => {
+    if (uid === ownerId) return; // owner siempre member
+    setMemberIds((prev) => prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]);
+  };
+  const setOwner = (uid) => {
+    setOwnerId(uid);
+    // Owner nuevo se agrega como member; el viejo queda
+    setMemberIds((prev) => prev.includes(uid) ? prev : [...prev, uid]);
+  };
 
   const handleSave = async (e) => {
     e?.preventDefault?.();
     if (!name.trim()) return;
     setSaving(true);
     if (isEdit) {
-      await onUpdate?.(pipeline.id, { name: name.trim(), owner_id: ownerId });
+      // Update name + owner; members se setean por separado via RPC
+      await onUpdate?.(pipeline.id, {
+        name: name.trim(),
+        owner_id: ownerId,
+        member_ids: memberIds.filter(Boolean),
+      });
     } else {
-      await onCreate?.(name.trim(), isAdmin ? (ownerId || null) : null);
+      const extras = memberIds.filter((id) => id && id !== ownerId);
+      await onCreate?.(name.trim(), isAdmin ? (ownerId || null) : null, extras);
     }
     setSaving(false);
   };
 
-  // El selector "Asignar a" siempre se muestra (mas claro). Si no es admin,
-  // queda deshabilitado mostrando "Yo" - el sales no puede asignar a otra persona.
-  const ownerSelectDisabled = !isAdmin;
+  // Opciones disponibles: todo el equipo (admin elige cualquier rol);
+  // si NO es admin, ve el equipo pero el owner queda fijo en si mismo.
+  const team = salesTeam.filter((tm) => !!tm.user_id);
 
   return (
     <>
@@ -46,7 +67,8 @@ export default function PipelineModal({
       <div className="fixed z-[70] bg-white rounded-2xl border border-border
                       inset-x-4 top-1/2 -translate-y-1/2
                       md:inset-x-auto md:left-1/2 md:-translate-x-1/2
-                      md:w-[440px] max-w-[460px] p-5
+                      md:w-[480px] max-w-[520px] p-5
+                      max-h-[88vh] overflow-y-auto
                       shadow-[0_24px_60px_-12px_rgba(26,29,38,.18),0_8px_24px_-8px_rgba(26,29,38,.12)]"
            style={{ animation: 'scaleIn .18s cubic-bezier(.16,1,.3,1)' }}
            onClick={(e) => e.stopPropagation()}>
@@ -58,8 +80,8 @@ export default function PipelineModal({
             <div className="text-[14px] font-bold text-text">{isEdit ? 'Editar CRM' : 'Nuevo CRM'}</div>
             <div className="text-[11px] text-text2 mt-0.5">
               {isEdit
-                ? 'Cambiá el nombre o el responsable de este CRM.'
-                : 'Se crea con etapas por defecto. Podés editarlas después.'}
+                ? 'Cambiá el nombre o las personas asignadas.'
+                : 'Se crea con etapas por defecto. Asigná a quién va dirigido.'}
             </div>
           </div>
           <button onClick={onClose} type="button"
@@ -68,7 +90,7 @@ export default function PipelineModal({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="flex flex-col gap-3.5">
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
           <div>
             <label className="block text-[10.5px] font-bold uppercase tracking-wider text-text3 mb-1.5">
               Nombre del CRM <span className="text-red">*</span>
@@ -79,26 +101,71 @@ export default function PipelineModal({
                    className="w-full text-[13px] text-text bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-blue" />
           </div>
 
+          {/* Picker visual de personas */}
           <div>
             <label className="block text-[10.5px] font-bold uppercase tracking-wider text-text3 mb-1.5">
-              Asignar a <span className="text-red">*</span>
+              Asignar a {isAdmin ? '(podés elegir varias personas)' : ''}
             </label>
-            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}
-                    disabled={ownerSelectDisabled}
-                    className="w-full text-[13px] text-text bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-blue cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value={currentUserId}>
-                Yo {isAdmin ? '(admin)' : ''}
-              </option>
-              {salesTeam
-                .filter((tm) => tm.user_id && tm.user_id !== currentUserId)
-                .map((tm) => (
-                  <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>
-                ))}
-            </select>
-            <div className="text-[10.5px] text-text3 mt-1">
-              {ownerSelectDisabled
-                ? 'Solo los admins pueden asignar CRMs a otras personas.'
-                : 'El asignado y los admins pueden ver y editar este CRM.'}
+            <div className="border border-border rounded-lg bg-bg p-2 max-h-[280px] overflow-y-auto">
+              {team.length === 0 ? (
+                <div className="text-[11.5px] text-text3 text-center py-4">
+                  No hay personas en el equipo de Ventas.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {team.map((tm) => {
+                    const isSelected = memberIds.includes(tm.user_id);
+                    const isOwner = tm.user_id === ownerId;
+                    const canChangeOwner = isAdmin && !isOwner;
+                    const canToggleMember = isAdmin || tm.user_id === currentUserId;
+                    return (
+                      <div key={tm.user_id}
+                           className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-colors ${
+                             isSelected ? 'bg-blue-bg' : 'hover:bg-surface2'
+                           }`}>
+                        {/* Toggle para member */}
+                        <button type="button"
+                                onClick={() => canToggleMember && toggleMember(tm.user_id)}
+                                disabled={isOwner || !canToggleMember}
+                                title={isOwner ? 'Responsable principal' : (isSelected ? 'Quitar' : 'Agregar')}
+                                className="flex-1 flex items-center gap-2.5 bg-transparent border-0 p-0 cursor-pointer text-left disabled:cursor-default">
+                          <Avatar person={tm} selected={isSelected || isOwner} />
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-[12.5px] truncate ${isSelected || isOwner ? 'font-semibold text-text' : 'text-text2'}`}>
+                              {tm.name}
+                              {tm.user_id === currentUserId && <span className="text-text3 font-normal"> · vos</span>}
+                            </div>
+                            {isOwner && (
+                              <div className="text-[10px] text-blue font-semibold flex items-center gap-1">
+                                <Crown size={9} /> Responsable principal
+                              </div>
+                            )}
+                          </div>
+                          {(isSelected || isOwner) && !isOwner && (
+                            <span className="text-[9px] uppercase tracking-wider font-bold text-blue px-1.5 py-0.5 bg-white rounded">
+                              asignado
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Boton Hacer responsable (solo admin, solo si no es owner ya) */}
+                        {canChangeOwner && (
+                          <button type="button"
+                                  onClick={() => setOwner(tm.user_id)}
+                                  title="Hacer responsable principal"
+                                  className="text-text3 hover:text-blue bg-transparent border-0 p-1 cursor-pointer rounded hover:bg-white">
+                            <Crown size={11} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="text-[10.5px] text-text3 mt-1.5">
+              El responsable y los asignados ven y editan este CRM.
+              {isAdmin && ' Click en 👑 para cambiar el responsable principal.'}
             </div>
           </div>
         </form>
@@ -115,5 +182,21 @@ export default function PipelineModal({
         </div>
       </div>
     </>
+  );
+}
+
+function Avatar({ person, selected }) {
+  const color = person?.color || '#5B7CF5';
+  if (person?.avatar_url) {
+    return (
+      <img src={person.avatar_url} alt={person.name}
+           className={`w-8 h-8 rounded-full object-cover shrink-0 transition-all ${selected ? 'ring-2 ring-blue ring-offset-1' : ''}`} />
+    );
+  }
+  return (
+    <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 transition-all ${selected ? 'ring-2 ring-blue ring-offset-1' : ''}`}
+          style={{ background: color + '24', color }}>
+      {person?.initials || person?.name?.slice(0, 2).toUpperCase()}
+    </span>
   );
 }

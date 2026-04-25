@@ -9,6 +9,7 @@ export default function PipelineSwitcher({
   pipelines, pipelineId, onSelect,
   onNew, onEdit, onDelete,
   isAdmin, currentUserId,
+  salesTeam = [],
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -57,10 +58,9 @@ export default function PipelineSwitcher({
                       <div className={`text-[12.5px] truncate ${isOn ? 'font-semibold text-text' : 'text-text2'}`}>
                         {p.name}
                       </div>
-                      <div className="text-[10px] text-text3 truncate">
-                        {p.is_shared
-                          ? `Compartido · ${p.lead_count} leads`
-                          : `${p.owner_name || 'Sin asignar'} · ${p.lead_count} leads`}
+                      <div className="text-[10px] text-text3 flex items-center gap-1.5 mt-0.5">
+                        <MemberStack memberIds={p.member_ids || []} salesTeam={salesTeam} />
+                        <span>{p.lead_count} leads</span>
                       </div>
                     </div>
                     {isOn && <Check size={14} className="text-blue shrink-0" />}
@@ -91,5 +91,43 @@ export default function PipelineSwitcher({
         </div>
       )}
     </div>
+  );
+}
+
+// Stack de avatares de los members del pipeline (max 3 + "+N")
+function MemberStack({ memberIds, salesTeam }) {
+  const members = memberIds
+    .map((id) => salesTeam.find((tm) => tm.user_id === id))
+    .filter(Boolean);
+  if (members.length === 0) return <span className="text-text3">Sin asignados</span>;
+  const visible = members.slice(0, 3);
+  const extra = members.length - visible.length;
+  return (
+    <span className="inline-flex items-center -space-x-1.5">
+      {visible.map((m) => (
+        <MiniAvatar key={m.user_id} person={m} />
+      ))}
+      {extra > 0 && (
+        <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-surface3 text-text3 text-[8px] font-bold ring-2 ring-white">
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function MiniAvatar({ person }) {
+  const color = person?.color || '#5B7CF5';
+  if (person?.avatar_url) {
+    return <img src={person.avatar_url} alt={person.name}
+                title={person.name}
+                className="w-[18px] h-[18px] rounded-full object-cover ring-2 ring-white shrink-0" />;
+  }
+  return (
+    <span title={person?.name}
+          className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full font-bold text-[8px] ring-2 ring-white shrink-0"
+          style={{ background: color + '24', color }}>
+      {person?.initials || person?.name?.slice(0, 2).toUpperCase()}
+    </span>
   );
 }

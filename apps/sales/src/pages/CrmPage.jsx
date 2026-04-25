@@ -21,7 +21,7 @@ export default function CrmPage() {
   const { isAdmin } = useAuth();
   const {
     pipelines, pipelineId, setPipelineId,
-    createPipeline, updatePipeline, removePipeline,
+    createPipeline, updatePipeline, removePipeline, setPipelineMembers,
     stages, leads, salesTeam, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
@@ -77,8 +77,14 @@ export default function CrmPage() {
     showToast('CRM creado', 'success');
   };
   const handleUpdatePipeline = async (id, patch) => {
-    const res = await updatePipeline(id, patch);
+    // Separar member_ids del patch propio del pipeline
+    const { member_ids, ...rest } = patch || {};
+    const res = await updatePipeline(id, rest);
     if (res?.error) { showToast(res.error, 'error'); return; }
+    if (member_ids) {
+      const r2 = await setPipelineMembers(id, member_ids);
+      if (r2?.error) { showToast(r2.error, 'error'); return; }
+    }
     setPipelineModalOpen(false);
     setPipelineToEdit(null);
     showToast('CRM actualizado', 'success');
@@ -263,6 +269,7 @@ export default function CrmPage() {
                 onDelete={handleDeletePipeline}
                 isAdmin={isAdmin}
                 currentUserId={me}
+                salesTeam={salesTeam}
               />
               <p className="text-[11.5px] text-text3 mt-0.5 whitespace-nowrap pl-1">
                 {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
@@ -332,6 +339,7 @@ export default function CrmPage() {
               onDelete={handleDeletePipeline}
               isAdmin={isAdmin}
               currentUserId={me}
+              salesTeam={salesTeam}
             />
             <p className="text-[10.5px] text-text3 mt-0.5 pl-1">
               {totalActive} {totalActive === 1 ? 'lead' : 'leads'}

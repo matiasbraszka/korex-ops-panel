@@ -128,15 +128,25 @@ export function useCrm() {
   }, [pipelineId, loadPipelineData]);
 
   // ── Pipelines CRUD ──
-  const createPipeline = useCallback(async (name, ownerId = null) => {
+  const createPipeline = useCallback(async (name, ownerId = null, memberIds = null) => {
     const { data, error: e } = await supabase.rpc('create_sales_pipeline', {
-      p_name: name, p_owner_id: ownerId,
+      p_name: name, p_owner_id: ownerId, p_member_ids: memberIds,
     });
     if (e) return { error: e.message };
     await loadPipelines();
     setPipelineId(data); // switchea automatico al nuevo
     return { data };
   }, [loadPipelines, setPipelineId]);
+
+  // Reemplaza la lista completa de miembros del pipeline
+  const setPipelineMembers = useCallback(async (id, userIds) => {
+    const { error: e } = await supabase.rpc('set_pipeline_members', {
+      p_pipeline_id: id, p_user_ids: userIds || [],
+    });
+    if (e) return { error: e.message };
+    await loadPipelines();
+    return {};
+  }, [loadPipelines]);
 
   const renamePipeline = useCallback(async (id, newName) => {
     setPipelines((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
@@ -323,7 +333,7 @@ export function useCrm() {
 
   return {
     pipelines, pipelineId, setPipelineId,
-    createPipeline, renamePipeline, updatePipeline, removePipeline,
+    createPipeline, renamePipeline, updatePipeline, removePipeline, setPipelineMembers,
     stages, leads, salesTeam, me, loading, error,
     refresh: bootstrap,
     addStage, updateStage, deleteStage, reorderStages,
