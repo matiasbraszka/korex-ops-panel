@@ -131,6 +131,47 @@ body {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
+/* LeadModal · panel posicionado segun device (Tailwind v4 no genera clamp() con commas) */
+.lead-modal-panel {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  background: var(--color-surface);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+  animation: slideInRight .2s ease-out;
+}
+@media (min-width: 768px) {
+  .lead-modal-panel {
+    position: absolute;
+    inset: auto;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: clamp(360px, 33vw, 480px);
+    border-top-left-radius: 1rem;
+    border-bottom-left-radius: 1rem;
+    border-left: 1px solid var(--color-border);
+    box-shadow: -12px 0 40px rgba(0,0,0,.12);
+  }
+}
+
+.lead-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0,0,0,.4);
+}
+@media (min-width: 768px) {
+  .lead-modal-backdrop {
+    position: absolute;
+    background: transparent;
+  }
+}
+
 /* Hide scrollbar for carousel */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

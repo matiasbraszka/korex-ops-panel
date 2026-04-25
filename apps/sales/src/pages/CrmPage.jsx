@@ -176,7 +176,7 @@ export default function CrmPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* Topbar integrado: titulo + KPIs + buscador + view toggle + acciones */}
       <div className="mb-3">
         {/* Desktop: dos filas — fila 1 con titulo + acciones; fila 2 con buscador + filtros */}
@@ -278,8 +278,9 @@ export default function CrmPage() {
       </div>
 
       {/* Body wrapper relative: el LeadModal en desktop se posiciona absolute
-          dentro de este wrapper, asi NO tapa el topbar (buscador, columnas, etc). */}
-      <div className="relative flex-1 min-h-0">
+          dentro de este wrapper, asi NO tapa el topbar (buscador, columnas, etc).
+          min-h asegura que el modal tenga espacio aunque el contenido sea chico. */}
+      <div className="relative min-h-[calc(100vh-240px)]">
       {stages.length === 0 ? (
         <div className="rounded-lg border border-border bg-white p-8 text-center">
           <p className="text-sm text-text2 mb-4">El pipeline no tiene columnas. Pedile al admin que las configure.</p>

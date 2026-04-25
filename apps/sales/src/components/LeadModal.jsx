@@ -103,21 +103,11 @@ export default function LeadModal({
 
   return (
     <>
-      {/* Click-catcher: cierra al tocar fuera. En mobile oscurece el fondo
-          completo (fixed); en desktop solo cubre el body (absolute en wrapper)
-          y queda transparente para que el kanban detras se siga viendo nitido. */}
-      <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={onClose} />
-      <div className="hidden md:block absolute inset-0 z-40" onClick={onClose} />
+      {/* Backdrop: mobile dimmed; desktop transparente y absolute al body wrapper */}
+      <div className="lead-modal-backdrop" onClick={onClose} />
 
-      {/* Ventana: mobile pantalla completa (fixed); desktop panel a la derecha
-          DENTRO del body wrapper (absolute), asi no tapa la topbar de arriba. */}
-      <div className="bg-white flex flex-col overflow-hidden
-                      fixed inset-0 z-50
-                      md:absolute md:inset-auto md:right-0 md:top-0 md:bottom-0
-                      md:w-[clamp(360px,33vw,480px)]
-                      md:rounded-l-2xl md:border-l md:border-border
-                      shadow-2xl md:shadow-[-12px_0_40px_rgba(0,0,0,.12)]
-                      animate-[slideInRight_.2s_ease-out]"
+      {/* Panel: mobile fullscreen fixed; desktop absolute width clamp(360,33vw,480) */}
+      <div className="lead-modal-panel"
            onClick={(e) => e.stopPropagation()}>
         {/* Sheet header */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
