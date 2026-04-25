@@ -31,15 +31,15 @@ function aggregateView(data, sellers, vendor) {
 
   // Build vendor rows = todos los sellers + cualquier owner que aparezca con datos
   const sellersById = Object.fromEntries(sellers.map((s) => [s.user_id, s]));
-  const ownerIds = new Set([
-    ...sellers.map((s) => s.user_id),
-    ...perOwner.map((r) => r.owner_id),
-  ]);
+  // SOLO mostrar miembros validos del equipo de ventas (sellers + admins).
+  // Owner_ids de leads que ya no estan en el equipo no se renderizan.
+  const ownerIds = new Set(sellers.map((s) => s.user_id).filter(Boolean));
 
-  const rows = [...ownerIds].filter(Boolean).map((uid) => {
+  const rows = [...ownerIds].map((uid) => {
     const po = perOwner.find((r) => r.owner_id === uid) || {};
     const prev = prevByOwner[uid] || {};
     const seller = sellersById[uid] || {};
+    if (!seller.user_id) return null;
     const calls = callsByOwner[uid] || 0;
     const proposals = Number(po.proposals || 0);
     const won = Number(po.won || 0);
@@ -63,7 +63,7 @@ function aggregateView(data, sellers, vendor) {
       proposals_prev: Number(prev.proposals_prev || 0),
       revenue_prev: Number(prev.revenue_prev || 0),
     };
-  });
+  }).filter(Boolean);
 
   const filtered = vendor === 'all' ? rows : rows.filter((r) => r.user_id === vendor);
   const sum = filtered.reduce((a, r) => {
@@ -95,10 +95,13 @@ export default function DashboardPage() {
   const [targetsOpen, setTargetsOpen] = useState(false);
 
   const { data, loading, error, reload } = useDashboard(range);
-  const { sellers } = useCrm();
+  const { sellers, salesTeam } = useCrm();
   const isAdmin = useIsAdmin();
 
-  const view = useMemo(() => aggregateView(data, sellers, vendor), [data, sellers, vendor]);
+  // salesTeam = vendedores + admins. Es el universo permitido para aparecer
+  // en la tabla. Filtra los owner_id "fantasma" que vinieron del RPC pero no
+  // pertenecen al equipo de ventas (ej: leads creados por usuarios borrados).
+  const view = useMemo(() => aggregateView(data, salesTeam, vendor), [data, salesTeam, vendor]);
   const { kpis, sparks, vendorRows, funnel, heat } = view;
 
   const convRate = kpis.proposals > 0 ? kpis.won / kpis.proposals : 0;
@@ -160,8 +163,8 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Funnel + Heat */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3.5 max-md:gap-3">
+          {/* Funnel + Heat — siempre lado a lado en desktop/tablet */}
+          <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-3.5 max-md:gap-3">
             <FunnelChart funnel={funnel} />
             <HeatChart heat={heat} />
           </div>
@@ -178,8 +181,7 @@ export default function DashboardPage() {
       <TargetsModal
         open={targetsOpen}
         onClose={() => setTargetsOpen(false)}
-        sellers={sellers}
-        targets={data?.targets || {}}
+        sellers={salesTeam}
         onSaved={reload}
       />
     </div>

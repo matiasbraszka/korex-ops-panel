@@ -2,9 +2,14 @@ import { fmtMoney } from './format.js';
 
 // Funnel: barra horizontal por etapa, sin probabilidad ponderada.
 export default function FunnelChart({ funnel = [] }) {
-  const max = Math.max(...funnel.map((p) => Number(p.amount) || 0), 1);
   const totalCount = funnel.reduce((a, b) => a + Number(b.cnt || 0), 0);
   const totalAmount = funnel.reduce((a, b) => a + Number(b.amount || 0), 0);
+  // Si no hay montos cargados, escalar las barras por cantidad de leads para
+  // que igual se vean (caso comun en CRMs sin estimated_value).
+  const useAmount = totalAmount > 0;
+  const max = useAmount
+    ? Math.max(...funnel.map((p) => Number(p.amount) || 0), 1)
+    : Math.max(...funnel.map((p) => Number(p.cnt) || 0), 1);
 
   return (
     <div className="bg-white border border-border rounded-xl">
@@ -18,7 +23,8 @@ export default function FunnelChart({ funnel = [] }) {
         ) : (
           <div className="flex flex-col gap-2.5">
             {funnel.map((p) => {
-              const pct = (Number(p.amount || 0) / max) * 100;
+              const basis = useAmount ? Number(p.amount || 0) : Number(p.cnt || 0);
+              const pct = (basis / max) * 100;
               const color = p.color || '#5B7CF5';
               return (
                 <div key={p.name}>
@@ -31,8 +37,8 @@ export default function FunnelChart({ funnel = [] }) {
                     </span>
                   </div>
                   <div className="relative h-[14px] bg-surface2 rounded-md overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 rounded-md"
-                         style={{ width: pct + '%', background: color, opacity: 0.85 }} />
+                    <div className="absolute inset-y-0 left-0 rounded-md transition-[width] duration-500 ease-out"
+                         style={{ width: Math.max(pct, p.cnt > 0 ? 4 : 0) + '%', background: color, opacity: 0.85 }} />
                   </div>
                 </div>
               );

@@ -1,26 +1,57 @@
 import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { initials } from './format.js';
 
-// Modal de admin para fijar la meta USD por vendedor del MES en curso.
-export default function TargetsModal({ open, onClose, sellers = [], targets = {}, onSaved }) {
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Modal de admin para fijar la meta USD por vendedor + mes seleccionable.
+// Por defecto abre en el mes en curso pero se puede navegar a cualquier mes.
+export default function TargetsModal({ open, onClose, sellers = [], onSaved }) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth() + 1);
   const [values, setValues] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Cargar las metas existentes del mes seleccionado cada vez que cambia
   useEffect(() => {
     if (!open) return;
-    const init = {};
-    sellers.forEach((s) => { init[s.user_id] = targets[s.user_id] != null ? String(targets[s.user_id]) : ''; });
-    setValues(init);
-    setError('');
-  }, [open, sellers, targets]);
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      setError('');
+      const { data, error: e } = await supabase
+        .from('sales_targets')
+        .select('user_id, target_usd')
+        .eq('year', year).eq('month', month);
+      if (!alive) return;
+      if (e) {
+        console.error(e);
+        setError(e.message);
+      } else {
+        const map = {};
+        (data || []).forEach((r) => { map[r.user_id] = String(r.target_usd ?? ''); });
+        const init = {};
+        sellers.forEach((s) => { init[s.user_id] = map[s.user_id] || ''; });
+        setValues(init);
+      }
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [open, sellers, year, month]);
 
   if (!open) return null;
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  const shiftMonth = (delta) => {
+    let m = month + delta;
+    let y = year;
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    setMonth(m); setYear(y);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -52,19 +83,35 @@ export default function TargetsModal({ open, onClose, sellers = [], targets = {}
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col"
            style={{ maxHeight: '90vh' }}
            onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <div>
-            <h2 className="text-[15px] font-bold text-text">Metas del mes</h2>
-            <p className="text-[11px] text-text2 mt-0.5">
-              Meta USD por vendedor · {month.toString().padStart(2, '0')}/{year}
-            </p>
+        <div className="px-5 py-4 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-[15px] font-bold text-text">Metas por vendedor</h2>
+              <p className="text-[11px] text-text2 mt-0.5">Meta USD a alcanzar en el mes seleccionado</p>
+            </div>
+            <button onClick={onClose}
+                    className="text-text3 hover:text-text bg-transparent border-0 text-2xl leading-none cursor-pointer w-8 h-8 flex items-center justify-center rounded hover:bg-surface2">×</button>
           </div>
-          <button onClick={onClose}
-                  className="text-text3 hover:text-text bg-transparent border-0 text-2xl leading-none cursor-pointer w-8 h-8 flex items-center justify-center rounded hover:bg-surface2">×</button>
+          <div className="mt-3 flex items-center justify-center gap-3 bg-surface2 rounded-lg px-2 py-1.5">
+            <button type="button" onClick={() => shiftMonth(-1)}
+                    className="w-7 h-7 rounded-md bg-white border border-border text-text2 hover:text-text hover:bg-surface flex items-center justify-center cursor-pointer">
+              <ChevronLeft size={14} />
+            </button>
+            <div className="text-[13px] font-bold text-text tabular-nums min-w-[140px] text-center">
+              {MONTH_NAMES[month - 1]} {year}
+            </div>
+            <button type="button" onClick={() => shiftMonth(1)}
+                    className="w-7 h-7 rounded-md bg-white border border-border text-text2 hover:text-text hover:bg-surface flex items-center justify-center cursor-pointer">
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {sellers.length === 0 && (
+          {loading && (
+            <div className="text-[12px] text-text3 text-center py-3">Cargando metas…</div>
+          )}
+          {!loading && sellers.length === 0 && (
             <div className="text-[12px] text-text3 text-center py-6">Sin vendedores cargados.</div>
           )}
           {sellers.map((s) => (
