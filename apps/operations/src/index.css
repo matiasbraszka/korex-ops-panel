@@ -131,17 +131,17 @@ body {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
-/* ConfirmDialog · backdrop+modal */
+/* ConfirmDialog · backdrop+modal
+   IMPORTANTE: el centrado lo hace Tailwind v4 con la propiedad CSS nativa
+   'translate' (separada de 'transform'). Si el keyframe pone tambien
+   'transform: translate(...)' el modal queda DOBLEMENTE desplazado y
+   aparece off-center, donde los clicks no caen sobre los botones.
+   Por eso animamos SOLO scale via 'transform' — los translates de centrado
+   los maneja Tailwind por su cuenta. */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scaleIn {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
-  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-@media (max-width: 767px) {
-  @keyframes scaleIn {
-    from { opacity: 0; transform: translateY(-46%) scale(.96); }
-    to   { opacity: 1; transform: translateY(-50%) scale(1); }
-  }
+  from { opacity: 0; transform: scale(.96); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 /* LeadModal · panel posicionado segun device (Tailwind v4 no genera clamp() con commas) */
