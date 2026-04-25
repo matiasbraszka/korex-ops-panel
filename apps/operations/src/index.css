@@ -58,6 +58,10 @@ body {
   }
 }
 
+/* LeadCard hover · sin transform para no chocar con dnd-kit */
+.lead-card { transition: box-shadow .18s, border-color .18s; }
+.lead-card:hover { border-color: var(--color-border-light); box-shadow: 0 4px 14px rgba(26,29,38,.08) !important; }
+
 /* Drag & drop task reordering */
 .drag-ghost {
   opacity: 0.3;
@@ -84,16 +88,20 @@ body {
   background: var(--color-blue);
 }
 
-/* Main content area — constrain width */
+/* Main content area — width reacciona al colapso del sidebar via CSS var */
 .main-content {
-  width: calc(100% - 240px);
-  max-width: calc(100vw - 240px);
+  --sb-w: 240px;
+  width: calc(100% - var(--sb-w));
+  max-width: calc(100vw - var(--sb-w));
+  margin-left: var(--sb-w);
   overflow-x: hidden;
+  transition: margin .2s, width .2s, max-width .2s;
 }
 @media (max-width: 767px) {
   .main-content {
     width: 100%;
     max-width: 100vw;
+    margin-left: 0 !important;
   }
 }
 

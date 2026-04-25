@@ -244,7 +244,8 @@ export default function CrmPage() {
                     onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
             {/* DESKTOP · kanban horizontal · tabla en md+ */}
-            <div className="hidden md:flex gap-3 overflow-x-auto h-[calc(100dvh-260px)] -mx-1 px-1 pb-2">
+            <div className="hidden md:flex gap-3 overflow-x-auto -mx-1 px-1 pb-2"
+                 style={{ height: 'calc(100vh - 260px)', minHeight: 480 }}>
               {stages.map((stage) => (
                 <KanbanColumn
                   key={stage.id}

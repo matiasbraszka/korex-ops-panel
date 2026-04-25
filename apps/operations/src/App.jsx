@@ -1,6 +1,6 @@
 import { useState, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -120,6 +120,19 @@ function MainLayout() {
   const { view, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings, loomVideos } = useApp();
   const navigate = useNavigate();
   const [newClientModal, setNewClientModal] = useState(false);
+  // Sidebar colapsable (PC) — persiste en localStorage
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('korex_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+  const toggleSidebar = () => {
+    setSidebarCollapsed((v) => {
+      const nv = !v;
+      try { localStorage.setItem('korex_sidebar_collapsed', nv ? '1' : '0'); } catch {}
+      return nv;
+    });
+  };
+  // Drawer mobile para cambiar de area
+  const [areaDrawerOpen, setAreaDrawerOpen] = useState(false);
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
     : ['Funnel completo + Ads'];
@@ -234,16 +247,33 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar — hidden on mobile · 2 niveles: area switcher + modulos */}
-      <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
-        {/* Logo */}
-        <div className="h-[60px] flex items-center px-4 gap-2.5 border-b border-border shrink-0">
-          <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto" />
-          <span className="text-[13px] font-bold text-text">Método Korex</span>
+      {/* Sidebar — colapsable en PC · oculto en mobile */}
+      <div className="bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden transition-[width] duration-200"
+           style={{ width: sidebarCollapsed ? 60 : 240 }}>
+        {/* Logo + boton colapsar */}
+        <div className="h-[60px] flex items-center border-b border-border shrink-0"
+             style={{ paddingLeft: sidebarCollapsed ? 0 : 16, paddingRight: sidebarCollapsed ? 0 : 8, justifyContent: sidebarCollapsed ? 'center' : 'flex-start', gap: 10 }}>
+          <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto shrink-0" />
+          {!sidebarCollapsed && (
+            <>
+              <span className="text-[13px] font-bold text-text flex-1">Método Korex</span>
+              <button onClick={toggleSidebar} title="Ocultar sidebar"
+                      className="bg-transparent border-0 text-text3 hover:text-text hover:bg-surface2 rounded w-6 h-6 flex items-center justify-center cursor-pointer transition-colors">
+                <ChevronLeft size={14} />
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Area switcher (solo si tiene >1 area) */}
-        {hasMultipleAreas && (
+        {sidebarCollapsed ? (
+          <button onClick={toggleSidebar} title="Mostrar sidebar"
+                  className="bg-transparent border-0 text-text3 hover:text-text hover:bg-surface2 rounded w-8 h-8 flex items-center justify-center cursor-pointer transition-colors mx-auto mt-2">
+            <ChevronRight size={14} />
+          </button>
+        ) : null}
+
+        {/* Area switcher · solo expandido y si tiene >1 area */}
+        {!sidebarCollapsed && hasMultipleAreas && (
           <div className="px-2.5 pt-3 pb-1">
             <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-2 mb-1.5">Área</div>
             <div className="bg-surface2 rounded-lg p-1 flex flex-col gap-0.5">
@@ -271,8 +301,8 @@ function MainLayout() {
           </div>
         )}
 
-        {/* Header informativo del area (cuando solo tiene 1) */}
-        {!hasMultipleAreas && activeArea && (
+        {/* Header informativo del area · solo expandido y si tiene 1 sola area */}
+        {!sidebarCollapsed && !hasMultipleAreas && activeArea && (
           <div className="px-3.5 pt-3 pb-1">
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md"
                  style={{ background: activeArea.bg, color: activeArea.color }}>
@@ -282,28 +312,64 @@ function MainLayout() {
           </div>
         )}
 
-        {/* Modulos del area activa, coloreados con el color del area */}
-        <nav className="px-2 py-2 flex-1 overflow-y-auto">
+        {/* Colapsado: dots de areas */}
+        {sidebarCollapsed && hasMultipleAreas && (
+          <div className="px-2 pt-3 flex flex-col gap-1.5 items-center">
+            {areas.map((a) => {
+              const isOn = a.id === activeArea?.id;
+              const Icon = a.icon;
+              return (
+                <button key={a.id} onClick={() => switchTo(a.items[0].path)}
+                        title={a.label}
+                        className="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer transition-all border"
+                        style={{
+                          background: isOn ? a.color : 'transparent',
+                          color: isOn ? '#fff' : a.color,
+                          borderColor: isOn ? a.color : a.color + '30',
+                        }}>
+                  <Icon size={14} strokeWidth={2.25} />
+                </button>
+              );
+            })}
+            <div className="w-6 h-px bg-border my-1" />
+          </div>
+        )}
+
+        {/* Modulos del area activa */}
+        <nav className="py-2 flex-1 overflow-y-auto"
+             style={{ paddingLeft: sidebarCollapsed ? 6 : 8, paddingRight: sidebarCollapsed ? 6 : 8 }}>
           {(activeArea?.items || []).map((item) => {
             const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+            const badge = item.id === 'tasks' && urgentCount > 0 ? urgentCount
+                        : item.id === 'videos' && unseenVideoCount > 0 ? unseenVideoCount : null;
             return (
               <button key={item.id}
                       onClick={() => switchTo(item.path)}
-                      className="flex items-center gap-2.5 py-2 px-2.5 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all"
+                      title={sidebarCollapsed ? item.label : undefined}
+                      className="cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all flex items-center"
                       style={{
                         background: isActive ? activeArea.bg : 'transparent',
                         color: isActive ? activeArea.color : 'var(--color-text2)',
+                        padding: sidebarCollapsed ? '8px 0' : '8px 10px',
+                        gap: sidebarCollapsed ? 0 : 10,
+                        justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                        position: 'relative',
                       }}
                       onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = 'var(--color-surface2)'; e.currentTarget.style.color = 'var(--color-text)'; } }}
                       onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text2)'; } }}>
                 <item.Icon size={16} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
-                <span className="flex-1">{item.label}</span>
-                {item.id === 'tasks' && urgentCount > 0 && (
-                  <span className="text-[10px] font-bold py-[1px] px-1.5 rounded-full min-w-[18px] text-center"
-                        style={{ background: isActive ? activeArea.color : 'var(--color-red)', color: '#fff' }}>{urgentCount}</span>
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="flex-1">{item.label}</span>
+                    {badge && (
+                      <span className="text-[10px] font-bold py-[1px] px-1.5 rounded-full min-w-[18px] text-center"
+                            style={{ background: isActive ? activeArea.color : 'var(--color-red)', color: '#fff' }}>{badge}</span>
+                    )}
+                  </>
                 )}
-                {item.id === 'videos' && unseenVideoCount > 0 && (
-                  <span className="text-[10px] font-bold py-[1px] px-1.5 rounded-full min-w-[18px] text-center bg-blue text-white">{unseenVideoCount}</span>
+                {sidebarCollapsed && badge && (
+                  <span className="absolute top-1 right-1 text-[8px] font-bold w-3 h-3 rounded-full flex items-center justify-center"
+                        style={{ background: 'var(--color-red)', color: '#fff' }} />
                 )}
               </button>
             );
@@ -311,7 +377,8 @@ function MainLayout() {
         </nav>
 
         {/* Footer · usuario + rol pill */}
-        <div className="p-3 border-t border-border flex items-center gap-2.5">
+        <div className="border-t border-border flex items-center gap-2.5"
+             style={{ padding: sidebarCollapsed ? 8 : 12, justifyContent: sidebarCollapsed ? 'center' : 'flex-start' }}>
           {currentUser?.avatar ? (
             <img src={currentUser.avatar} alt={currentUser.name} className="w-[32px] h-[32px] rounded-full object-cover shrink-0" />
           ) : (
@@ -320,24 +387,28 @@ function MainLayout() {
               {currentUser?.initials}
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold truncate">{currentUser?.name}</div>
-            <div className="flex items-center gap-1 mt-px">
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded"
-                    style={{ background: activeArea?.bg, color: activeArea?.color }}>
-                {currentUser?.isAdmin ? 'Admin' : (activeArea?.short || 'User')}
-              </span>
-            </div>
-          </div>
-          <button onClick={doLogout}
-                  className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red shrink-0"
-                  title="Cerrar sesión">
-            {'→'}
-          </button>
+          {!sidebarCollapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold truncate">{currentUser?.name}</div>
+                <div className="flex items-center gap-1 mt-px">
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded"
+                        style={{ background: activeArea?.bg, color: activeArea?.color }}>
+                    {currentUser?.isAdmin ? 'Admin' : (activeArea?.short || 'User')}
+                  </span>
+                </div>
+              </div>
+              <button onClick={doLogout}
+                      className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red shrink-0"
+                      title="Cerrar sesión">
+                {'→'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Bottom nav — mobile only · 4 modulos del area activa + Salir.
+      {/* Bottom nav mobile · 4 modulos del area + boton Menu (drawer).
           Color del area activa para destacar la pantalla. */}
       <div className="hidden max-md:flex mobile-bottom-nav fixed bottom-0 left-0 right-0 bg-white border-t border-border z-50 justify-around items-center px-1 py-1 safe-bottom">
         {mobileItems.slice(0, 4).map((item) => {
@@ -358,33 +429,118 @@ function MainLayout() {
             </button>
           );
         })}
-        {/* Switcher de area si hay >1 (como item "Más") · sino Salir */}
-        {hasMultipleAreas ? (
-          <div className="relative min-w-0 flex-1">
-            <select onChange={(e) => { const a = areas.find(x => x.id === e.target.value); if (a) switchTo(a.items[0].path); }}
-                    value={activeArea?.id || ''}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                    aria-label="Cambiar de área">
-              {areas.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-            </select>
-            <div className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg pointer-events-none"
-                 style={{ color: 'var(--color-text3)' }}>
-              <span className="text-[14px] leading-none">⋯</span>
-              <span className="text-[9px] font-medium leading-none">Áreas</span>
-            </div>
-          </div>
-        ) : (
-          <button onClick={doLogout}
-                  className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
-                  title="Cerrar sesión">
-            <span className="text-[18px] leading-none">{'→'}</span>
-            <span className="text-[9px] font-medium leading-none">Salir</span>
-          </button>
-        )}
+        {/* Boton "Más" abre drawer con todas las areas y modulos */}
+        <button onClick={() => setAreaDrawerOpen(true)}
+                className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans bg-transparent min-w-0 flex-1"
+                style={{ color: 'var(--color-text3)' }}
+                title="Menú">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+          <span className="text-[9px] font-medium leading-none">Menú</span>
+        </button>
       </div>
 
-      {/* Main area */}
-      <div className="main-content ml-[240px] min-h-screen max-md:ml-0 max-md:pb-16 overflow-x-hidden">
+      {/* Drawer mobile · areas + modulos · cierra con tap en backdrop */}
+      {areaDrawerOpen && (
+        <div className="hidden max-md:flex fixed inset-0 z-[60] bg-black/45"
+             onClick={() => setAreaDrawerOpen(false)}>
+          <div className="ml-auto bg-white h-full w-[85%] max-w-[340px] flex flex-col shadow-2xl"
+               onClick={(e) => e.stopPropagation()}>
+            {/* Header del drawer · usuario */}
+            <div className="px-4 py-3.5 border-b border-border flex items-center gap-2.5">
+              {currentUser?.avatar ? (
+                <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[12px] shrink-0"
+                     style={{ background: (currentUser?.color || '#5B7CF5') + '24', color: currentUser?.color || '#5B7CF5' }}>
+                  {currentUser?.initials}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold truncate">{currentUser?.name}</div>
+                <div className="text-[10.5px] text-text3 truncate">{currentUser?.role || (currentUser?.isAdmin ? 'Administrador' : 'Usuario')}</div>
+              </div>
+              <button onClick={() => setAreaDrawerOpen(false)}
+                      className="bg-transparent border-0 text-text3 hover:text-text rounded p-1 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Areas · solo si tiene >1 */}
+            {hasMultipleAreas && (
+              <div className="px-3 pt-3">
+                <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-1 mb-1.5">Áreas</div>
+                <div className="flex flex-col gap-1">
+                  {areas.map((a) => {
+                    const isOn = a.id === activeArea?.id;
+                    const Icon = a.icon;
+                    return (
+                      <button key={a.id}
+                              onClick={() => { switchTo(a.items[0].path); setAreaDrawerOpen(false); }}
+                              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left border cursor-pointer transition-all"
+                              style={{
+                                background: isOn ? a.bg : 'transparent',
+                                borderColor: isOn ? a.color + '40' : 'transparent',
+                                color: isOn ? a.color : 'var(--color-text)',
+                              }}>
+                        <span className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center text-white"
+                              style={{ background: a.color }}>
+                          <Icon size={13} strokeWidth={2.25} />
+                        </span>
+                        <span className="text-[13px] font-semibold flex-1">{a.label}</span>
+                        {isOn && <span className="text-[10px] font-bold uppercase tracking-wider">activa</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Modulos del area activa */}
+            <div className="px-3 pt-3 flex-1 overflow-y-auto">
+              <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-1 mb-1.5 flex items-center gap-1.5">
+                {activeArea?.short || 'Módulos'} · módulos
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {(activeArea?.items || []).map((item) => {
+                  const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                  const badge = item.id === 'tasks' && urgentCount > 0 ? urgentCount
+                              : item.id === 'videos' && unseenVideoCount > 0 ? unseenVideoCount : null;
+                  return (
+                    <button key={item.id}
+                            onClick={() => { switchTo(item.path); setAreaDrawerOpen(false); }}
+                            className="flex items-center gap-3 px-2.5 py-2.5 rounded-md text-left border-0 cursor-pointer transition-all"
+                            style={{
+                              background: isActive ? activeArea.bg : 'transparent',
+                              color: isActive ? activeArea.color : 'var(--color-text2)',
+                            }}>
+                      <item.Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
+                      <span className="text-[13px] font-medium flex-1">{item.label}</span>
+                      {badge && (
+                        <span className="text-[10px] font-bold py-px px-1.5 rounded-full min-w-[18px] text-center"
+                              style={{ background: isActive ? activeArea.color : 'var(--color-red)', color: '#fff' }}>{badge}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer · logout */}
+            <div className="border-t border-border p-3">
+              <button onClick={() => { doLogout(); setAreaDrawerOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-transparent hover:bg-red/10 text-red text-[13px] font-medium border-0 cursor-pointer transition-colors">
+                <span>→</span> Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main area · margen reactivo al colapso (CSS var leida en .main-content) */}
+      <div className="main-content min-h-screen max-md:ml-0 max-md:pb-16 overflow-x-hidden transition-[margin] duration-200"
+           style={{ '--sb-w': (sidebarCollapsed ? 60 : 240) + 'px' }}>
         {/* Topbar */}
         <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10 max-md:px-4 max-md:h-[52px]">
           <div className="flex items-center gap-2.5 max-md:gap-2 min-w-0">
