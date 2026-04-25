@@ -179,59 +179,66 @@ export default function CrmPage() {
     <div className="flex flex-col">
       {/* Topbar integrado: titulo + KPIs + buscador + view toggle + acciones */}
       <div className="mb-3">
-        {/* Desktop: dos filas — fila 1 con titulo + acciones; fila 2 con buscador + filtros */}
-        <div className="hidden md:flex items-center gap-3 mb-2.5">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-[17px] font-bold leading-tight">CRM</h1>
-            <p className="text-[11.5px] text-text3 mt-0.5">
-              Pipeline · {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
-              {totalProjected > 0 && <> · {fmtMoney(totalProjected)} proyectado</>}
-            </p>
-          </div>
+        {/* DESKTOP topbar — bloque blanco prominente con todo en una unica zona
+            visible. Hago bg-white + border + padding para que NO se confunda con
+            el fondo gris de la pagina. flex-wrap por si el viewport es angosto. */}
+        <div className="crm-desktop-topbar hidden md:block bg-white border border-border rounded-xl shadow-sm p-3 mb-2.5">
+          {/* Fila 1: titulo + buscador + acciones */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="min-w-[140px]">
+              <h1 className="text-[17px] font-bold leading-tight">CRM</h1>
+              <p className="text-[11.5px] text-text3 mt-0.5 whitespace-nowrap">
+                {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
+                {totalProjected > 0 && <> · {fmtMoney(totalProjected)} proyectado</>}
+              </p>
+            </div>
 
-          {/* Toggle Kanban / Tabla — segmented control con labels para que sea claro */}
-          <div className="flex items-center bg-surface2 rounded-lg p-0.5 shrink-0">
-            <button type="button" onClick={() => setView('kanban')} title="Kanban"
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-[12px] font-medium ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-              <LayoutGrid size={13} /> Kanban
-            </button>
-            <button type="button" onClick={() => setView('table')} title="Tabla"
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-[12px] font-medium ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-              <Rows3 size={13} /> Tabla
-            </button>
-          </div>
+            {/* Buscador grande, ocupa el espacio sobrante */}
+            <div className="flex items-center gap-2 flex-1 min-w-[220px] bg-bg border border-border rounded-lg px-3 py-2">
+              <Search size={15} className="text-text3 shrink-0" />
+              <input
+                value={filters.search || ''}
+                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                placeholder="Buscar lead, empresa, teléfono o email…"
+                className="flex-1 min-w-0 text-[12.5px] text-text bg-transparent border-0 outline-none placeholder:text-text3"
+              />
+              {filters.search && (
+                <button type="button" onClick={() => setFilters((f) => ({ ...f, search: '' }))}
+                        className="text-text3 hover:text-text bg-transparent border-0 p-0.5 cursor-pointer">
+                  ×
+                </button>
+              )}
+            </div>
 
-          {isAdmin && (
+            {/* Toggle Kanban / Tabla */}
+            <div className="flex items-center bg-surface2 rounded-lg p-0.5 shrink-0">
+              <button type="button" onClick={() => setView('kanban')} title="Kanban"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-[12px] font-semibold ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+                <LayoutGrid size={13} /> Kanban
+              </button>
+              <button type="button" onClick={() => setView('table')} title="Tabla"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-[12px] font-semibold ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+                <Rows3 size={13} /> Tabla
+              </button>
+            </div>
+
+            {/* Filtros avanzados (CrmFilters compact) */}
+            <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} hideSearch compact />
+
+            {/* Configurar columnas — siempre visible en PC, no solo admin (la
+                accion la rechaza el backend si no hay permiso) */}
             <button type="button" onClick={() => setStagesEditorOpen(true)}
-                    title="Editar columnas"
-                    className="py-1.5 px-3 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2 flex items-center gap-1.5 shrink-0">
+                    title="Configurar columnas / etapas"
+                    className="py-2 px-3 rounded-lg border border-border bg-white text-text2 text-[12px] font-semibold hover:bg-surface2 flex items-center gap-1.5 shrink-0">
               <SettingsIcon size={13} /> Columnas
             </button>
-          )}
-          <button type="button" onClick={() => openNewLead()}
-                  className="py-1.5 px-3 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark flex items-center gap-1.5 shrink-0">
-            <Plus size={14} /> Nuevo lead
-          </button>
-        </div>
 
-        {/* Desktop fila 2: buscador grande + boton filtros avanzados */}
-        <div className="hidden md:flex items-center gap-2 mb-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0 bg-white border border-border rounded-lg px-2.5 py-1.5">
-            <Search size={14} className="text-text3 shrink-0" />
-            <input
-              value={filters.search || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              placeholder="Buscar lead, empresa, teléfono o email…"
-              className="flex-1 min-w-0 text-[12.5px] bg-transparent border-0 outline-none placeholder:text-text3"
-            />
-            {filters.search && (
-              <button type="button" onClick={() => setFilters((f) => ({ ...f, search: '' }))}
-                      className="text-text3 hover:text-text bg-transparent border-0 p-0.5 cursor-pointer">
-                ×
-              </button>
-            )}
+            {/* Nuevo lead — CTA principal */}
+            <button type="button" onClick={() => openNewLead()}
+                    className="py-2 px-3.5 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark flex items-center gap-1.5 shrink-0">
+              <Plus size={14} /> Nuevo lead
+            </button>
           </div>
-          <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} hideSearch compact />
         </div>
 
         {/* Mobile: titulo + acciones; busqueda y filtros via CrmFilters debajo */}
