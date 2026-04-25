@@ -1,6 +1,6 @@
-import { useState, Suspense, lazy } from 'react';
+import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -116,10 +116,135 @@ function AccountPending({ email }) {
   );
 }
 
+// AreaDropdown — selector compacto de area (Operaciones / Ventas / Administracion).
+// Funciona expandido (muestra label + chevron) y colapsado (solo icono).
+// Cuando colapsado el popover se posiciona FIJO a la derecha del sidebar.
+function AreaDropdown({ areas, activeArea, onSwitch, collapsed = false }) {
+  const [open, setOpen] = useState(false);
+  const [popPos, setPopPos] = useState(null);
+  const ref = useRef(null);
+  const triggerRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && ref.current.contains(e.target)) return;
+      // Click en el popover fixed tampoco cierra
+      if (e.target.closest('[data-area-popover]')) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const togglePop = () => {
+    if (!open && collapsed && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPopPos({ left: rect.right + 8, top: rect.top, minWidth: 200 });
+    }
+    setOpen(!open);
+  };
+
+  const ActiveIcon = activeArea.icon;
+
+  return (
+    <div className={`relative ${collapsed ? 'px-2 pt-3 pb-1 flex justify-center' : 'px-2.5 pt-3 pb-1'}`} ref={ref}>
+      {!collapsed && (
+        <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-2 mb-1.5">Área</div>
+      )}
+      {collapsed ? (
+        <button ref={triggerRef} type="button" onClick={togglePop}
+                title={`Área: ${activeArea.label}`}
+                className="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer transition-all relative"
+                style={{ background: activeArea.color }}>
+          <ActiveIcon size={14} strokeWidth={2.25} className="text-white" />
+          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-white rounded-full border border-border flex items-center justify-center">
+            <ChevronDown size={8} className="text-text3" strokeWidth={2.5} />
+          </span>
+        </button>
+      ) : (
+        <button ref={triggerRef} type="button" onClick={togglePop}
+                className="w-full flex items-center gap-2 px-2 py-2 rounded-lg border bg-white hover:bg-surface2 transition-colors cursor-pointer"
+                style={{ borderColor: activeArea.color + '40' }}>
+          <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
+                style={{ background: activeArea.color }}>
+            <ActiveIcon size={11} strokeWidth={2.25} />
+          </span>
+          <span className="text-[12px] font-semibold flex-1 text-left" style={{ color: activeArea.color }}>
+            {activeArea.label}
+          </span>
+          <ChevronDown size={12} className="text-text3 transition-transform"
+                       style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)' }} />
+        </button>
+      )}
+
+      {open && !collapsed && (
+        <div className="absolute left-2.5 right-2.5 top-full mt-1 bg-white border border-border rounded-lg shadow-lg z-40 overflow-hidden">
+          {areas.map((a) => {
+            const isOn = a.id === activeArea.id;
+            const Icon = a.icon;
+            return (
+              <button key={a.id} type="button"
+                      onClick={() => { setOpen(false); onSwitch(a.items[0].path); }}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-surface2 transition-colors cursor-pointer text-left"
+                      style={{ background: isOn ? a.bg : 'transparent', color: isOn ? a.color : 'var(--color-text2)' }}>
+                <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
+                      style={{ background: a.color }}>
+                  <Icon size={11} strokeWidth={2.25} />
+                </span>
+                <span className="text-[12px] font-semibold flex-1">{a.label}</span>
+                {isOn && <span className="text-[10px]" style={{ color: a.color }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Popover fixed para sidebar colapsado */}
+      {open && collapsed && popPos && (
+        <div data-area-popover
+             style={{ position: 'fixed', left: popPos.left, top: popPos.top, minWidth: popPos.minWidth, zIndex: 60 }}
+             className="bg-white border border-border rounded-lg shadow-xl overflow-hidden">
+          <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-3 py-2 border-b border-border">Área</div>
+          {areas.map((a) => {
+            const isOn = a.id === activeArea.id;
+            const Icon = a.icon;
+            return (
+              <button key={a.id} type="button"
+                      onClick={() => { setOpen(false); onSwitch(a.items[0].path); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface2 transition-colors cursor-pointer text-left"
+                      style={{ background: isOn ? a.bg : 'transparent', color: isOn ? a.color : 'var(--color-text2)' }}>
+                <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
+                      style={{ background: a.color }}>
+                  <Icon size={11} strokeWidth={2.25} />
+                </span>
+                <span className="text-[12px] font-semibold flex-1">{a.label}</span>
+                {isOn && <span className="text-[10px]" style={{ color: a.color }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MainLayout() {
   const { view, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings, loomVideos } = useApp();
   const navigate = useNavigate();
   const [newClientModal, setNewClientModal] = useState(false);
+  // Sidebar colapsable (PC) — persiste en localStorage
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('korex_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+  const toggleSidebar = () => {
+    setSidebarCollapsed((v) => {
+      const nv = !v;
+      try { localStorage.setItem('korex_sidebar_collapsed', nv ? '1' : '0'); } catch {}
+      return nv;
+    });
+  };
+  // Drawer mobile para cambiar de area
+  const [areaDrawerOpen, setAreaDrawerOpen] = useState(false);
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
     : ['Funnel completo + Ads'];
@@ -135,27 +260,39 @@ function MainLayout() {
   const canAccessSales = useCan('sales', 'read');
   const location = useLocation();
 
-  // Menu organizado por macro pestaña (area). Cada seccion se esconde si
-  // el usuario no tiene permiso de lectura sobre el modulo.
+  // Areas del panel: cada una tiene color propio, ruta base y modulos.
+  // El sidebar muestra un "area switcher" arriba (si el usuario tiene >1)
+  // y abajo los modulos del area activa, coloreados con ese mismo color.
   const opsItems = [
     { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
-  const salesItems = salesNavItems;
+  // Contactos solo visible para admins. Si no es admin, ocultar del nav.
+  const salesItems = currentUser?.isAdmin
+    ? salesNavItems
+    : salesNavItems.filter((it) => it.id !== 'contacts');
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
   ];
-  const sections = [
-    canAccessOperations && { id: 'operations', label: 'Operaciones', items: opsItems },
-    canAccessSales      && { id: 'sales',      label: 'Ventas',      items: salesItems },
-    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems },
+  // Tokens de color por area (mantienen consistencia con la paleta Korex).
+  const areaTokens = {
+    operations: { color: '#22C55E', bg: '#ECFDF5', short: 'Ops',    icon: ClipboardList,  base: '/operations' },
+    sales:      { color: '#5B7CF5', bg: '#EEF2FF', short: 'Ventas', icon: Users,          base: '/sales' },
+    admin:      { color: '#8B5CF6', bg: '#F5F3FF', short: 'Admin',  icon: Shield,         base: '/admin' },
+  };
+  const areas = [
+    canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,   ...areaTokens.operations },
+    canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems, ...areaTokens.sales },
+    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems, ...areaTokens.admin },
   ].filter(Boolean);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
-  const activeModule = location.pathname.split('/').filter(Boolean)[0] || 'operations';
-  const mobileItems = (sections.find(s => s.id === activeModule) || sections[0] || { items: [] }).items;
+  const pathPrefix = location.pathname.split('/').filter(Boolean)[0] || 'operations';
+  const activeArea = areas.find((a) => a.id === pathPrefix) || areas[0];
+  const mobileItems = activeArea?.items || [];
+  const hasMultipleAreas = areas.length > 1;
 
   const switchTo = (path) => {
     setSelectedId(null);
@@ -225,72 +362,138 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar — hidden on mobile */}
-      <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
-        <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
-          <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto" />
-          <span className="text-[13px] font-bold text-gray-700">Método Korex</span>
+      {/* Sidebar — colapsable en PC · oculto en mobile */}
+      <div className="bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden transition-[width] duration-200"
+           style={{ width: sidebarCollapsed ? 60 : 240 }}>
+        {/* Logo + boton colapsar */}
+        <div className="h-[60px] flex items-center border-b border-border shrink-0"
+             style={{ paddingLeft: sidebarCollapsed ? 0 : 16, paddingRight: sidebarCollapsed ? 0 : 8, justifyContent: sidebarCollapsed ? 'center' : 'flex-start', gap: 10 }}>
+          <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto shrink-0" />
+          {!sidebarCollapsed && (
+            <>
+              <span className="text-[13px] font-bold text-text flex-1">Método Korex</span>
+              <button onClick={toggleSidebar} title="Ocultar sidebar"
+                      className="bg-transparent border-0 text-text3 hover:text-text hover:bg-surface2 rounded w-6 h-6 flex items-center justify-center cursor-pointer transition-colors">
+                <ChevronLeft size={14} />
+              </button>
+            </>
+          )}
         </div>
-        <nav className="p-3 flex-1 overflow-y-auto">
-          {sections.map((section) => (
-            <div key={section.id} className="mb-3">
-              <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">{section.label}</div>
-              {section.items.map((item) => {
-                const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => switchTo(item.path)}
-                    className={`flex items-center gap-2.5 py-2 px-3 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all duration-150
-                      ${isActive ? 'text-blue bg-blue-bg font-semibold' : 'text-text2 bg-transparent hover:text-text hover:bg-surface2'}`}
-                  >
-                    <item.Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
-                    {item.label}
-                    {item.id === 'tasks' && urgentCount > 0 && (
-                      <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{urgentCount}</span>
-                    )}
-                    {item.id === 'videos' && unseenVideoCount > 0 && (
-                      <span className="ml-auto bg-blue-500 text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{unseenVideoCount}</span>
-                    )}
-                  </button>
-                );
-              })}
+
+        {sidebarCollapsed ? (
+          <button onClick={toggleSidebar} title="Mostrar sidebar"
+                  className="bg-transparent border-0 text-text3 hover:text-text hover:bg-surface2 rounded w-8 h-8 flex items-center justify-center cursor-pointer transition-colors mx-auto mt-2">
+            <ChevronRight size={14} />
+          </button>
+        ) : null}
+
+        {/* Area switcher · dropdown compacto que ahorra espacio */}
+        {!sidebarCollapsed && hasMultipleAreas && activeArea && (
+          <AreaDropdown areas={areas} activeArea={activeArea} onSwitch={switchTo} />
+        )}
+
+        {/* Header informativo del area · solo expandido y si tiene 1 sola area */}
+        {!sidebarCollapsed && !hasMultipleAreas && activeArea && (
+          <div className="px-3.5 pt-3 pb-1">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md"
+                 style={{ background: activeArea.bg, color: activeArea.color }}>
+              <activeArea.icon size={12} strokeWidth={2.25} />
+              <span className="text-[11.5px] font-bold">{activeArea.label}</span>
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* Colapsado: el mismo AreaDropdown pero en modo mini con popover lateral */}
+        {sidebarCollapsed && hasMultipleAreas && activeArea && (
+          <AreaDropdown areas={areas} activeArea={activeArea} onSwitch={switchTo} collapsed />
+        )}
+
+        {/* Modulos del area activa */}
+        <nav className="py-2 flex-1 overflow-y-auto"
+             style={{ paddingLeft: sidebarCollapsed ? 6 : 8, paddingRight: sidebarCollapsed ? 6 : 8 }}>
+          {(activeArea?.items || []).map((item) => {
+            const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+            const badge = item.id === 'tasks' && urgentCount > 0 ? urgentCount
+                        : item.id === 'videos' && unseenVideoCount > 0 ? unseenVideoCount : null;
+            return (
+              <button key={item.id}
+                      onClick={() => switchTo(item.path)}
+                      title={sidebarCollapsed ? item.label : undefined}
+                      className="cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all flex items-center"
+                      style={{
+                        background: isActive ? activeArea.bg : 'transparent',
+                        color: isActive ? activeArea.color : 'var(--color-text2)',
+                        padding: sidebarCollapsed ? '8px 0' : '8px 10px',
+                        gap: sidebarCollapsed ? 0 : 10,
+                        justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                        position: 'relative',
+                      }}
+                      onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = 'var(--color-surface2)'; e.currentTarget.style.color = 'var(--color-text)'; } }}
+                      onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text2)'; } }}>
+                <item.Icon size={16} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="flex-1">{item.label}</span>
+                    {badge && (
+                      <span className="text-[10px] font-bold py-[1px] px-1.5 rounded-full min-w-[18px] text-center"
+                            style={{ background: isActive ? activeArea.color : 'var(--color-red)', color: '#fff' }}>{badge}</span>
+                    )}
+                  </>
+                )}
+                {sidebarCollapsed && badge && (
+                  <span className="absolute top-1 right-1 text-[8px] font-bold w-3 h-3 rounded-full flex items-center justify-center"
+                        style={{ background: 'var(--color-red)', color: '#fff' }} />
+                )}
+              </button>
+            );
+          })}
         </nav>
-        <div className="p-3.5 px-4 border-t border-border flex items-center gap-2.5">
+
+        {/* Footer · usuario + rol pill */}
+        <div className="border-t border-border flex items-center gap-2.5"
+             style={{ padding: sidebarCollapsed ? 8 : 12, justifyContent: sidebarCollapsed ? 'center' : 'flex-start' }}>
           {currentUser?.avatar ? (
-            <img src={currentUser.avatar} alt={currentUser.name} className="w-[34px] h-[34px] rounded-full object-cover shrink-0" />
+            <img src={currentUser.avatar} alt={currentUser.name} className="w-[32px] h-[32px] rounded-full object-cover shrink-0" />
           ) : (
-            <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-xs shrink-0" style={{ background: currentUser?.color + '18', color: currentUser?.color }}>
+            <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center font-bold text-[11px] shrink-0"
+                 style={{ background: (currentUser?.color || '#5B7CF5') + '24', color: currentUser?.color || '#5B7CF5' }}>
               {currentUser?.initials}
             </div>
           )}
-          <div>
-            <div className="text-[13px] font-semibold">{currentUser?.name}</div>
-            <div className="text-[11px] text-text3">{currentUser?.role}</div>
-          </div>
-          <button
-            onClick={doLogout}
-            className="ml-auto bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red"
-            title="Cerrar sesión"
-          >
-            {'→'}
-          </button>
+          {!sidebarCollapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold truncate">{currentUser?.name}</div>
+                <div className="flex items-center gap-1 mt-px">
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded"
+                        style={{ background: activeArea?.bg, color: activeArea?.color }}>
+                    {currentUser?.isAdmin ? 'Admin' : (activeArea?.short || 'User')}
+                  </span>
+                </div>
+              </div>
+              <button onClick={doLogout}
+                      className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red shrink-0"
+                      title="Cerrar sesión">
+                {'→'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Bottom nav — mobile only (items del modulo activo) */}
+      {/* Bottom nav mobile · 4 modulos del area + boton Menu (drawer).
+          Color del area activa para destacar la pantalla. */}
       <div className="hidden max-md:flex mobile-bottom-nav fixed bottom-0 left-0 right-0 bg-white border-t border-border z-50 justify-around items-center px-1 py-1 safe-bottom">
-        {mobileItems.map((item) => {
+        {mobileItems.slice(0, 4).map((item) => {
           const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
           return (
-            <button
-              key={item.id}
-              onClick={() => switchTo(item.path)}
-              className={`flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1
-                ${isActive ? 'text-blue bg-blue-bg' : 'text-text3 bg-transparent'}`}
-            >
+            <button key={item.id}
+                    onClick={() => switchTo(item.path)}
+                    className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1"
+                    style={{
+                      background: isActive ? activeArea?.bg : 'transparent',
+                      color: isActive ? activeArea?.color : 'var(--color-text3)',
+                    }}>
               <item.Icon size={18} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
               <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
               {item.id === 'tasks' && urgentCount > 0 && (
@@ -299,18 +502,118 @@ function MainLayout() {
             </button>
           );
         })}
-        <button
-          onClick={doLogout}
-          className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
-          title="Cerrar sesión"
-        >
-          <span className="text-[18px] leading-none">{'→'}</span>
-          <span className="text-[9px] font-medium leading-none">Salir</span>
+        {/* Boton "Más" abre drawer con todas las areas y modulos */}
+        <button onClick={() => setAreaDrawerOpen(true)}
+                className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans bg-transparent min-w-0 flex-1"
+                style={{ color: 'var(--color-text3)' }}
+                title="Menú">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+          <span className="text-[9px] font-medium leading-none">Menú</span>
         </button>
       </div>
 
-      {/* Main area */}
-      <div className="main-content ml-[240px] min-h-screen max-md:ml-0 max-md:pb-16 overflow-x-hidden">
+      {/* Drawer mobile · areas + modulos · cierra con tap en backdrop */}
+      {areaDrawerOpen && (
+        <div className="hidden max-md:flex fixed inset-0 z-[60] bg-black/45"
+             onClick={() => setAreaDrawerOpen(false)}>
+          <div className="ml-auto bg-white h-full w-[85%] max-w-[340px] flex flex-col shadow-2xl"
+               onClick={(e) => e.stopPropagation()}>
+            {/* Header del drawer · usuario */}
+            <div className="px-4 py-3.5 border-b border-border flex items-center gap-2.5">
+              {currentUser?.avatar ? (
+                <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[12px] shrink-0"
+                     style={{ background: (currentUser?.color || '#5B7CF5') + '24', color: currentUser?.color || '#5B7CF5' }}>
+                  {currentUser?.initials}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold truncate">{currentUser?.name}</div>
+                <div className="text-[10.5px] text-text3 truncate">{currentUser?.role || (currentUser?.isAdmin ? 'Administrador' : 'Usuario')}</div>
+              </div>
+              <button onClick={() => setAreaDrawerOpen(false)}
+                      className="bg-transparent border-0 text-text3 hover:text-text rounded p-1 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Areas · solo si tiene >1 */}
+            {hasMultipleAreas && (
+              <div className="px-3 pt-3">
+                <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-1 mb-1.5">Áreas</div>
+                <div className="flex flex-col gap-1">
+                  {areas.map((a) => {
+                    const isOn = a.id === activeArea?.id;
+                    const Icon = a.icon;
+                    return (
+                      <button key={a.id}
+                              onClick={() => { switchTo(a.items[0].path); setAreaDrawerOpen(false); }}
+                              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left border cursor-pointer transition-all"
+                              style={{
+                                background: isOn ? a.bg : 'transparent',
+                                borderColor: isOn ? a.color + '40' : 'transparent',
+                                color: isOn ? a.color : 'var(--color-text)',
+                              }}>
+                        <span className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center text-white"
+                              style={{ background: a.color }}>
+                          <Icon size={13} strokeWidth={2.25} />
+                        </span>
+                        <span className="text-[13px] font-semibold flex-1">{a.label}</span>
+                        {isOn && <span className="text-[10px] font-bold uppercase tracking-wider">activa</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Modulos del area activa */}
+            <div className="px-3 pt-3 flex-1 overflow-y-auto">
+              <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-1 mb-1.5 flex items-center gap-1.5">
+                {activeArea?.short || 'Módulos'} · módulos
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {(activeArea?.items || []).map((item) => {
+                  const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                  const badge = item.id === 'tasks' && urgentCount > 0 ? urgentCount
+                              : item.id === 'videos' && unseenVideoCount > 0 ? unseenVideoCount : null;
+                  return (
+                    <button key={item.id}
+                            onClick={() => { switchTo(item.path); setAreaDrawerOpen(false); }}
+                            className="flex items-center gap-3 px-2.5 py-2.5 rounded-md text-left border-0 cursor-pointer transition-all"
+                            style={{
+                              background: isActive ? activeArea.bg : 'transparent',
+                              color: isActive ? activeArea.color : 'var(--color-text2)',
+                            }}>
+                      <item.Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
+                      <span className="text-[13px] font-medium flex-1">{item.label}</span>
+                      {badge && (
+                        <span className="text-[10px] font-bold py-px px-1.5 rounded-full min-w-[18px] text-center"
+                              style={{ background: isActive ? activeArea.color : 'var(--color-red)', color: '#fff' }}>{badge}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer · logout */}
+            <div className="border-t border-border p-3">
+              <button onClick={() => { doLogout(); setAreaDrawerOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-transparent hover:bg-red/10 text-red text-[13px] font-medium border-0 cursor-pointer transition-colors">
+                <span>→</span> Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main area · margen reactivo al colapso (CSS var leida en .main-content) */}
+      <div className="main-content min-h-screen max-md:ml-0 max-md:pb-16 overflow-x-hidden transition-[margin] duration-200"
+           style={{ '--sb-w': (sidebarCollapsed ? 60 : 240) + 'px' }}>
         {/* Topbar */}
         <div className="h-[60px] bg-white border-b border-border flex items-center justify-between px-7 sticky top-0 z-10 max-md:px-4 max-md:h-[52px]">
           <div className="flex items-center gap-2.5 max-md:gap-2 min-w-0">
@@ -324,7 +627,8 @@ function MainLayout() {
             <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-xl bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
               {syncStatus === 'syncing' ? '↻ Guardando...' : syncStatus === 'error' ? '✕ Error sync' : '● Sincronizado'}
             </span>
-            <SearchBar />
+            {/* SearchBar global solo busca clientes/tareas de Operaciones — ocultar en area Ventas */}
+            {pathPrefix !== 'sales' && <SearchBar />}
             {view === 'clients' && (
               <button
                 className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 max-md:py-1 max-md:px-2 max-md:text-[11px]"
@@ -337,7 +641,7 @@ function MainLayout() {
         </div>
 
         {/* Content area — sales pages handle their own scroll, ops pages use parent scroll */}
-        <div className={`p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden h-[calc(100vh-60px)] max-md:h-[calc(100vh-52px-64px)] ${location.pathname.startsWith('/sales') ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
+        <div className="p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden h-[calc(100dvh-60px)] max-md:h-[calc(100dvh-52px-64px)] overflow-y-auto">
           {routes}
         </div>
       </div>

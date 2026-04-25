@@ -3,7 +3,7 @@ import { Search, X, Flame, SlidersHorizontal } from 'lucide-react';
 
 // Barra de filtros minimal: buscador siempre visible + botón "Filtros" que
 // despliega un panel con los selects (etapa, asignado, score).
-export default function CrmFilters({ filters, setFilters, stages, salesTeam }) {
+export default function CrmFilters({ filters, setFilters, stages, salesTeam, hideSearch = false, compact = false }) {
   const [open, setOpen] = useState(false);
 
   const activeCount =
@@ -22,21 +22,23 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam }) {
   const clear = () => setFilters({ search: '', stageId: '', assigneeId: '', scores: [] });
 
   return (
-    <div className="space-y-2">
+    <div className={compact ? 'relative' : 'space-y-2'}>
       {/* Fila principal: buscador + boton filtros */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text3" />
-          <input
-            value={filters.search || ''}
-            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-            placeholder="Buscar nombre, empresa, email o teléfono…"
-            className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-bg border border-border rounded-md outline-none focus:border-blue"
-          />
-        </div>
+      <div className={`flex items-center gap-2 ${compact ? '' : 'flex-wrap'}`}>
+        {!hideSearch && (
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text3" />
+            <input
+              value={filters.search || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              placeholder="Buscar nombre, empresa, email o teléfono…"
+              className="w-full pl-7 pr-2 py-1.5 text-[12px] text-text bg-white border border-border rounded-md outline-none focus:border-blue placeholder:text-text3"
+            />
+          </div>
+        )}
 
         <button onClick={() => setOpen((v) => !v)}
-                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-md border text-[12px] ${activeCount > 0 ? 'border-blue text-blue bg-blue-bg' : 'border-border text-text2 bg-white hover:bg-surface2'}`}>
+                className={`flex items-center gap-1.5 ${compact ? 'py-1 px-2.5 text-[10.5px] rounded-full' : 'py-1.5 px-3 text-[12px] rounded-md'} border ${activeCount > 0 ? 'border-blue text-blue bg-blue-bg' : 'border-border text-text2 bg-white hover:bg-surface2'}`}>
           <SlidersHorizontal size={12} />
           Filtros
           {activeCount > 0 && (
@@ -56,7 +58,8 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam }) {
 
       {/* Panel desplegado */}
       {open && (
-        <div className="bg-white border border-border rounded-md p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className={`bg-white border border-border rounded-md p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${compact ? 'absolute right-0 mt-2 z-30 shadow-lg w-[480px] max-w-[90vw]' : ''}`}
+             style={compact ? { position: 'absolute' } : undefined}>
           <Field label="Etapa">
             <select value={filters.stageId || ''}
                     onChange={(e) => setFilters((f) => ({ ...f, stageId: e.target.value }))}
@@ -107,4 +110,6 @@ function Field({ label, children }) {
   );
 }
 
-const selectCls = 'w-full text-[12px] py-1.5 px-2 bg-bg border border-border rounded-md outline-none focus:border-blue cursor-pointer';
+// text-text explicito + appearance-none asegura que el <select> nativo no
+// tome estilos del OS (en algunos Android/iOS el texto se renderiza blanco).
+const selectCls = 'w-full text-[12px] text-text py-1.5 px-2 bg-white border border-border rounded-md outline-none focus:border-blue cursor-pointer appearance-none';

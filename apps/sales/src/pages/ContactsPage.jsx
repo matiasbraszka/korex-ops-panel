@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, X, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Search, X, Trash2, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '@korex/db';
-import ContactModal from '../components/ContactModal.jsx';
+import { useAuth } from '@korex/auth';
+import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
 const CATEGORIES = [
   { id: 'prospect',     label: 'Potencial cliente', short: 'Pot. cliente', color: '#5B7CF5' },
@@ -13,17 +14,35 @@ const CATEGORIES = [
   { id: 'usuario',      label: 'Usuario / red',     short: 'Usuario',      color: '#EC4899' },
   { id: 'other',        label: 'Otro',              short: 'Otro',         color: '#9CA3AF' },
 ];
-const catShort = (id) => CATEGORIES.find((c) => c.id === id)?.short || id;
 const catColor = (id) => CATEGORIES.find((c) => c.id === id)?.color || '#9CA3AF';
+const catShort = (id) => CATEGORIES.find((c) => c.id === id)?.short || id;
 
 export default function ContactsPage() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return (
+    <div className="text-center text-text3 py-20">
+      <div className="text-[14px] font-semibold text-text mb-1">Sin acceso</div>
+      <div className="text-[12px]">Esta sección está disponible solo para admins.</div>
+    </div>
+  );
+  return <ContactsPageInner />;
+}
+
+function ContactsPageInner() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCats, setFilterCats] = useState([]);
-  const [editing, setEditing] = useState(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const { confirm, dialog } = useConfirm();
+  const { showToast, toasts } = useToast();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mq.matches);
+    mq.addEventListener?.('change', update);
+    return () => mq.removeEventListener?.('change', update);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -50,7 +69,7 @@ export default function ContactsPage() {
         if (!has) return false;
       }
       if (q) {
-        const hay = [c.first_name, c.last_name, c.phone, c.email, c.company, c.notes]
+        const hay = [c.full_name, c.first_name, c.last_name, c.phone, c.email, c.company, c.notes]
           .some((v) => v && String(v).toLowerCase().includes(q));
         if (!hay) return false;
       }
@@ -60,147 +79,391 @@ export default function ContactsPage() {
 
   const toggleCat = (id) => setFilterCats((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
-  const handleSave = async (form) => {
-    const payload = {
-      first_name: form.first_name?.trim() || '',
-      last_name: form.last_name?.trim() || '',
-      phone: form.phone?.trim() || null,
-      email: form.email?.trim() || null,
-      company: form.company?.trim() || null,
-      notes: form.notes?.trim() || null,
-      categories: form.categories || [],
-    };
-    if (!payload.first_name && !payload.last_name) { alert('Falta nombre.'); return; }
-    if (editing?.id) {
-      const { error: e } = await supabase.from('contacts').update(payload).eq('id', editing.id);
-      if (e) { alert(e.message); return; }
-    } else {
-      const { error: e } = await supabase.from('contacts').insert(payload);
-      if (e) { alert(e.message); return; }
-    }
-    setModalOpen(false);
-    setEditing(null);
-    await load();
+  // Patch un campo de un contacto. Persiste en DB y actualiza estado local.
+  const patchContact = async (id, patch) => {
+    setContacts((cs) => cs.map((c) => c.id === id ? { ...c, ...patch } : c));
+    const { error: e } = await supabase.from('contacts').update(patch).eq('id', id);
+    if (e) { showToast('No se pudo guardar: ' + e.message, 'error'); await load(); }
+  };
+
+  const toggleContactCategory = async (id, catId) => {
+    const c = contacts.find((x) => x.id === id);
+    if (!c) return;
+    const cur = c.categories || [];
+    const nextCats = cur.includes(catId) ? cur.filter((x) => x !== catId) : [...cur, catId];
+    await patchContact(id, { categories: nextCats });
+  };
+
+  const createContact = async () => {
+    const { data, error: e } = await supabase.from('contacts')
+      .insert({ full_name: '', categories: [], source: 'manual' })
+      .select().single();
+    if (e) { showToast('No se pudo crear: ' + e.message, 'error'); return; }
+    setContacts((cs) => [data, ...cs]);
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este contacto? Si tiene leads vinculados, se eliminarán.')) return;
+    const ok = await confirm({
+      title: '¿Eliminar este contacto?',
+      message: 'Si tiene leads vinculados, se eliminarán también.',
+      danger: true,
+    });
+    if (!ok) return;
     const { error: e } = await supabase.from('contacts').delete().eq('id', id);
-    if (e) { alert(e.message); return; }
+    if (e) { showToast('Error: ' + e.message, 'error'); return; }
     await load();
+    showToast('Contacto eliminado', 'success');
   };
-
-  const openNew = () => { setEditing(null); setModalOpen(true); };
-  const openDetail = (c) => { setEditing(c); setModalOpen(true); };
 
   if (loading) return <div className="text-text3 text-center py-20">Cargando contactos...</div>;
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 space-y-2 mb-2">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold">Contactos</h1>
-            <p className="text-[11px] text-text3 mt-0.5">{counts.total} contactos · click en una fila para editar</p>
-          </div>
-          <button onClick={openNew}
-                  className="py-2 px-3 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
-            <Plus size={14} /> Nuevo contacto
-          </button>
-        </div>
+    <div className="flex flex-col">
+      {/* TOPBAR alineado al CRM (bloque blanco border shadow rounded) */}
+      {!isMobile && (
+        <div className="bg-white border border-border rounded-xl shadow-sm p-3 mb-2.5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="min-w-[140px]">
+              <h1 className="text-[17px] font-bold leading-tight">Contactos</h1>
+              <p className="text-[11.5px] text-text3 mt-0.5">{counts.total} contactos · edición inline</p>
+            </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
+            <div className="flex items-center gap-2 flex-1 min-w-[220px] bg-bg border border-border rounded-lg px-3 py-2">
+              <Search size={15} className="text-text3 shrink-0" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)}
+                     placeholder="Buscar nombre, teléfono, email o empresa…"
+                     className="flex-1 min-w-0 text-[12.5px] text-text bg-transparent border-0 outline-none placeholder:text-text3" />
+              {search && (
+                <button type="button" onClick={() => setSearch('')}
+                        className="text-text3 hover:text-text bg-transparent border-0 p-0.5 cursor-pointer">×</button>
+              )}
+            </div>
+
+            {/* Boton Filtros (categorias) tipo CRM */}
+            <FiltersDropdown filterCats={filterCats} setFilterCats={setFilterCats} counts={counts} />
+
+            {(search || filterCats.length > 0) && (
+              <button onClick={() => { setSearch(''); setFilterCats([]); }}
+                      className="py-2 px-2.5 rounded-lg border border-border bg-white text-text3 hover:text-red text-[11px] flex items-center gap-1 shrink-0">
+                <X size={12} /> Limpiar
+              </button>
+            )}
+
+            <button onClick={createContact}
+                    className="py-2 px-3.5 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark flex items-center gap-1.5 shrink-0">
+              <Plus size={14} /> Nuevo contacto
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isMobile && (
+        <div className="mb-2.5">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <h1 className="text-[15px] font-bold leading-tight">Contactos</h1>
+              <p className="text-[10.5px] text-text3 mt-0.5">{counts.total}</p>
+            </div>
+            <button onClick={createContact}
+                    className="py-1.5 px-2.5 rounded-md bg-blue text-white text-[11.5px] font-semibold flex items-center gap-1">
+              <Plus size={13} /> Nuevo
+            </button>
+          </div>
+          <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text3" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
-                   placeholder="Buscar nombre, teléfono, email, empresa…"
-                   className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-bg border border-border rounded-md outline-none focus:border-blue" />
+                   placeholder="Buscar nombre, teléfono, email o empresa…"
+                   className="w-full pl-7 pr-2 py-1.5 text-[12px] text-text bg-white border border-border rounded-md outline-none focus:border-blue" />
           </div>
-          {(search || filterCats.length > 0) && (
-            <button onClick={() => { setSearch(''); setFilterCats([]); }}
-                    className="text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer flex items-center gap-1 text-[11px]">
-              <X size={12} /> Limpiar
-            </button>
-          )}
         </div>
+      )}
 
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {CATEGORIES.map((c) => {
-            const active = filterCats.includes(c.id);
-            const n = counts[c.id] || 0;
-            return (
-              <button key={c.id} onClick={() => toggleCat(c.id)}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] border transition-colors ${active ? 'border-transparent text-white' : 'border-border bg-white text-text2 hover:bg-surface2'}`}
-                      style={active ? { background: c.color } : undefined}>
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? '#fff' : c.color }} />
-                {c.label}
-                <span className={active ? 'opacity-90' : 'text-text3'}>({n})</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Tabla 3 columnas. Click en fila → modal. */}
-      <div className="flex-1 min-h-0 bg-white border border-border rounded-lg overflow-hidden flex flex-col">
-        <div className="overflow-auto flex-1">
+      {/* PC: tabla con edicion inline. MOBILE: cards verticales. */}
+      {!isMobile ? (
+        <div className="bg-white border border-border rounded-xl overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider sticky top-0 z-10">
+            <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider">
               <tr>
-                <th className="text-left py-2 px-3 font-semibold w-[35%]">Nombre completo</th>
-                <th className="text-left py-2 px-2 font-semibold w-[30%]">Empresa</th>
+                <th className="text-left py-2 px-3 font-semibold">Nombre completo</th>
+                <th className="text-left py-2 px-2 font-semibold">Empresa</th>
+                <th className="text-left py-2 px-2 font-semibold">Teléfono</th>
+                <th className="text-left py-2 px-2 font-semibold">Email</th>
                 <th className="text-left py-2 px-2 font-semibold">Categorías</th>
+                <th className="text-left py-2 px-2 font-semibold">Notas</th>
                 <th className="w-[40px]"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={4} className="text-center text-text3 py-8 text-[12px]">Sin resultados</td></tr>
+                <tr><td colSpan={7} className="text-center text-text3 py-8 text-[12px]">Sin resultados</td></tr>
               ) : filtered.map((c) => (
-                <tr key={c.id}
-                    onClick={() => openDetail(c)}
-                    className="border-b border-border last:border-b-0 hover:bg-surface2/40 cursor-pointer group">
-                  <td className="px-3 py-2 font-semibold text-text">
-                    {[c.first_name, c.last_name].filter(Boolean).join(' ') ||
-                      <span className="text-text3 italic font-normal">Sin nombre</span>}
-                  </td>
-                  <td className="px-2 py-2 text-text2">{c.company || <span className="text-text3">—</span>}</td>
-                  <td className="px-2 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {(c.categories || []).map((cat) => (
-                        <span key={cat} className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
-                              style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
-                          {catShort(cat)}
-                        </span>
-                      ))}
-                      {(c.categories || []).length === 0 && (
-                        <span className="text-text3 text-[10px] italic">sin categoría</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-right">
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}
-                            title="Eliminar"
-                            className="opacity-0 group-hover:opacity-100 text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer transition-opacity">
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
+                <ContactRow key={c.id} contact={c}
+                            onPatch={(patch) => patchContact(c.id, patch)}
+                            onToggleCat={(catId) => toggleContactCategory(c.id, catId)}
+                            onDelete={() => handleDelete(c.id)} />
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filtered.length === 0 ? (
+            <div className="text-center text-text3 py-8 text-[12px] bg-white border border-border rounded-xl">
+              Sin resultados
+            </div>
+          ) : filtered.map((c) => (
+            <ContactCardMobile key={c.id} contact={c}
+                               onPatch={(patch) => patchContact(c.id, patch)}
+                               onToggleCat={(catId) => toggleContactCategory(c.id, catId)}
+                               onDelete={() => handleDelete(c.id)} />
+          ))}
+        </div>
+      )}
 
-      <ContactModal
-        open={modalOpen}
-        contact={editing}
-        categories={CATEGORIES}
-        onClose={() => { setModalOpen(false); setEditing(null); }}
-        onSave={handleSave}
-      />
+      {dialog}
+      {toasts}
     </div>
   );
 }
+
+// Boton "Filtros" tipo CRM con dropdown que muestra checkboxes por categoria.
+// Cuenta de cada cat al lado. Click para toggle. Cierra al click afuera.
+function FiltersDropdown({ filterCats, setFilterCats, counts }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  const toggle = (id) => setFilterCats((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+  const activeCount = filterCats.length;
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button type="button" onClick={() => setOpen((v) => !v)}
+              className={`flex items-center gap-1.5 py-2 px-3 rounded-lg border text-[12px] font-medium ${
+                activeCount > 0 ? 'border-blue text-blue bg-blue-bg' : 'border-border text-text2 bg-white hover:bg-surface2'
+              }`}>
+        <SlidersHorizontal size={13} /> Filtros
+        {activeCount > 0 && (
+          <span className="bg-blue text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">
+            {activeCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-border rounded-lg shadow-xl p-1.5 min-w-[220px]">
+          <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1.5">Categorías</div>
+          {CATEGORIES.map((c) => {
+            const on = filterCats.includes(c.id);
+            const n = counts[c.id] || 0;
+            return (
+              <button key={c.id} type="button" onClick={() => toggle(c.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c.color }} />
+                <span className="flex-1">{c.label}</span>
+                <span className="text-text3 text-[10px]">{n}</span>
+                {on && <span className="text-[10px]" style={{ color: c.color }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fila editable inline. Cada campo es input editable. Categorías abren picker en click.
+// IMPORTANTE: el popover de categorias usa position FIXED con coords del trigger
+// (calculadas con getBoundingClientRect) para escapar el stacking context de la
+// tabla — sin esto el popover queda detras de los chips de otras filas.
+function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
+  const [catOpen, setCatOpen] = useState(false);
+  const [popupPos, setPopupPos] = useState(null);
+  const triggerRef = useRef(null);
+  const openCatPicker = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPopupPos({ left: rect.left, top: rect.bottom + 4, width: Math.max(220, rect.width) });
+    }
+    setCatOpen(true);
+  };
+  const persist = (key, current) => {
+    const v = (current ?? '').trim();
+    const original = contact[key] || '';
+    if (v !== original) onPatch({ [key]: v || null });
+  };
+  return (
+    <tr className="border-b border-border last:border-b-0 hover:bg-surface2/40 group align-top">
+      <td className="px-3 py-1">
+        <input defaultValue={contact.full_name || ''} placeholder="Nombre completo"
+               onBlur={(e) => persist('full_name', e.target.value)}
+               className={inlineInput + ' font-semibold'} />
+      </td>
+      <td className="px-2 py-1">
+        <input defaultValue={contact.company || ''} placeholder="Empresa"
+               onBlur={(e) => persist('company', e.target.value)}
+               className={inlineInput} />
+      </td>
+      <td className="px-2 py-1">
+        <input defaultValue={contact.phone || ''} placeholder="+54..."
+               onBlur={(e) => persist('phone', e.target.value)}
+               className={inlineInput} />
+      </td>
+      <td className="px-2 py-1">
+        <input defaultValue={contact.email || ''} placeholder="email@..."
+               onBlur={(e) => persist('email', e.target.value)}
+               className={inlineInput} />
+      </td>
+      <td className="px-2 py-1.5">
+        <button ref={triggerRef} type="button" onClick={openCatPicker}
+                className="flex flex-wrap gap-1 w-full min-h-[28px] items-center px-1 py-0.5 rounded border border-transparent hover:border-border cursor-pointer text-left">
+          {(contact.categories || []).length === 0 && (
+            <span className="text-text3 text-[10px] italic">+ agregar</span>
+          )}
+          {(contact.categories || []).map((cat) => (
+            <span key={cat} className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                  style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
+              {catShort(cat)}
+            </span>
+          ))}
+        </button>
+        {catOpen && popupPos && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setCatOpen(false)} />
+            <div style={{ position: 'fixed', left: popupPos.left, top: popupPos.top, width: popupPos.width, zIndex: 50, background: '#FFFFFF' }}
+                 className="border border-border rounded-lg shadow-xl p-1.5 max-h-[320px] overflow-y-auto">
+              <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1">Categorías</div>
+              {CATEGORIES.map((cat) => {
+                const on = (contact.categories || []).includes(cat.id);
+                return (
+                  <button key={cat.id} type="button"
+                          onClick={() => onToggleCat(cat.id)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.color }} />
+                    <span className="flex-1">{cat.label}</span>
+                    {on && <span className="text-[10px]" style={{ color: cat.color }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </td>
+      <td className="px-2 py-1">
+        <input defaultValue={contact.notes || ''} placeholder="Notas…"
+               onBlur={(e) => persist('notes', e.target.value)}
+               className={inlineInput} />
+      </td>
+      <td className="px-2 py-1.5 text-right">
+        <button onClick={onDelete} title="Eliminar"
+                className="opacity-0 group-hover:opacity-100 text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer transition-opacity">
+          <Trash2 size={13} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+const inlineInput = 'w-full text-[12px] text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-1 outline-none placeholder:text-text3';
+
+// ContactCardMobile: vista compacta para mobile. Por defecto colapsada
+// (solo nombre + categorias). Tap para expandir y editar todos los campos.
+function ContactCardMobile({ contact, onPatch, onToggleCat, onDelete }) {
+  const [expanded, setExpanded] = useState(false);
+  const [catOpen, setCatOpen] = useState(false);
+  const persist = (key, current) => {
+    const v = (current ?? '').trim();
+    const original = contact[key] || '';
+    if (v !== original) onPatch({ [key]: v || null });
+  };
+
+  return (
+    <div className="bg-white border border-border rounded-xl">
+      {/* Cabecera siempre visible: nombre + cats + acciones */}
+      <div className="flex items-center gap-2 p-2.5">
+        <button type="button" onClick={() => setExpanded(!expanded)}
+                className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer">
+          <div className="text-[13.5px] font-semibold text-text truncate">
+            {contact.full_name || <span className="text-text3 italic font-normal">Sin nombre</span>}
+          </div>
+          {(contact.categories || []).length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(contact.categories || []).slice(0, 3).map((cat) => (
+                <span key={cat} className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full"
+                      style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
+                  {catShort(cat)}
+                </span>
+              ))}
+              {(contact.categories || []).length > 3 && (
+                <span className="text-[9.5px] text-text3">+{contact.categories.length - 3}</span>
+              )}
+            </div>
+          )}
+        </button>
+        <button onClick={onDelete} title="Eliminar"
+                className="text-text3 hover:text-red bg-transparent border-0 p-1.5 cursor-pointer shrink-0">
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      {/* Detalle expandido: todos los campos editables */}
+      {expanded && (
+        <div className="border-t border-border p-2.5 flex flex-col gap-2">
+          <input defaultValue={contact.full_name || ''} placeholder="Nombre completo"
+                 onBlur={(e) => persist('full_name', e.target.value)}
+                 className={mInputCls + ' font-semibold'} />
+          <input defaultValue={contact.company || ''} placeholder="Empresa"
+                 onBlur={(e) => persist('company', e.target.value)}
+                 className={mInputCls} />
+          <input defaultValue={contact.phone || ''} placeholder="Teléfono"
+                 onBlur={(e) => persist('phone', e.target.value)}
+                 className={mInputCls} />
+          <input defaultValue={contact.email || ''} placeholder="Email"
+                 onBlur={(e) => persist('email', e.target.value)}
+                 className={mInputCls} />
+
+          {/* Categorías editables */}
+          <div>
+            <div className="flex flex-wrap gap-1 items-center">
+              {(contact.categories || []).map((cat) => (
+                <span key={cat} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
+                  {catShort(cat)}
+                  <button type="button" onClick={() => onToggleCat(cat)}
+                          className="hover:bg-white/40 rounded-full p-0.5 cursor-pointer">
+                    <X size={9} strokeWidth={2.5} />
+                  </button>
+                </span>
+              ))}
+              <button type="button" onClick={() => setCatOpen(!catOpen)}
+                      className="text-[10px] text-text3 bg-surface2 hover:bg-surface3 rounded-full px-2 py-0.5 inline-flex items-center gap-0.5">
+                <Plus size={9} /> categoría
+              </button>
+            </div>
+            {catOpen && (
+              <div className="mt-2 bg-bg border border-border rounded-lg p-1 max-h-[200px] overflow-y-auto">
+                {CATEGORIES.filter((c) => !(contact.categories || []).includes(c.id)).map((cat) => (
+                  <button key={cat.id} type="button"
+                          onClick={() => { onToggleCat(cat.id); setCatOpen(false); }}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[11.5px]">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.color }} />
+                    <span className="flex-1">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <textarea defaultValue={contact.notes || ''} placeholder="Notas…"
+                    onBlur={(e) => persist('notes', e.target.value)}
+                    rows={2}
+                    className={mInputCls + ' resize-none'} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const mInputCls = 'w-full text-[12.5px] text-text bg-bg border border-border rounded-md px-2 py-1.5 outline-none focus:border-blue placeholder:text-text3';

@@ -58,6 +58,30 @@ body {
   }
 }
 
+/* LeadCard hover · sin transform para no chocar con dnd-kit */
+.lead-card { transition: box-shadow .18s, border-color .18s; }
+.lead-card:hover { border-color: var(--color-border-light); box-shadow: 0 4px 14px rgba(26,29,38,.08) !important; }
+
+/* CRM Kanban desktop: altura calculada del viewport real, columnas scrollean adentro */
+.crm-kanban-desktop {
+  height: calc(100vh - 260px);
+  min-height: 500px;
+  scrollbar-width: thin;
+  scrollbar-color: #C0C7D4 transparent;
+}
+.crm-kanban-desktop::-webkit-scrollbar { height: 10px; }
+.crm-kanban-desktop::-webkit-scrollbar-track { background: transparent; }
+.crm-kanban-desktop::-webkit-scrollbar-thumb {
+  background: #C0C7D4; border-radius: 5px; border: 2px solid var(--color-bg);
+}
+.crm-kanban-desktop::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+@media (min-height: 900px) {
+  .crm-kanban-desktop { height: calc(100vh - 260px); }
+}
+@media (max-height: 700px) {
+  .crm-kanban-desktop { height: calc(100vh - 220px); min-height: 400px; }
+}
+
 /* Drag & drop task reordering */
 .drag-ghost {
   opacity: 0.3;
@@ -84,16 +108,80 @@ body {
   background: var(--color-blue);
 }
 
-/* Main content area — constrain width */
+/* Main content area — width reacciona al colapso del sidebar via CSS var */
 .main-content {
-  width: calc(100% - 240px);
-  max-width: calc(100vw - 240px);
+  --sb-w: 240px;
+  width: calc(100% - var(--sb-w));
+  max-width: calc(100vw - var(--sb-w));
+  margin-left: var(--sb-w);
   overflow-x: hidden;
+  transition: margin .2s, width .2s, max-width .2s;
 }
 @media (max-width: 767px) {
   .main-content {
     width: 100%;
     max-width: 100vw;
+    margin-left: 0 !important;
+  }
+}
+
+/* Slide-over panel animation (LeadModal desktop) */
+@keyframes slideInRight {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ConfirmDialog · backdrop+modal */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (max-width: 767px) {
+  @keyframes scaleIn {
+    from { opacity: 0; transform: translateY(-46%) scale(.96); }
+    to   { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+}
+
+/* LeadModal · panel posicionado segun device (Tailwind v4 no genera clamp() con commas) */
+.lead-modal-panel {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  background: var(--color-surface);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+  animation: slideInRight .2s ease-out;
+}
+@media (min-width: 768px) {
+  .lead-modal-panel {
+    position: absolute;
+    inset: auto;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: clamp(360px, 33vw, 480px);
+    border-top-left-radius: 1rem;
+    border-bottom-left-radius: 1rem;
+    border-left: 1px solid var(--color-border);
+    box-shadow: -12px 0 40px rgba(0,0,0,.12);
+  }
+}
+
+.lead-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0,0,0,.4);
+}
+@media (min-width: 768px) {
+  .lead-modal-backdrop {
+    position: absolute;
+    background: transparent;
   }
 }
 
