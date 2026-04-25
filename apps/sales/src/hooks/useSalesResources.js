@@ -25,8 +25,12 @@ export function useSalesResources() {
   const create = useCallback(async (payload) => {
     const { data: userData } = await supabase.auth.getUser();
     const created_by = userData?.user?.id || null;
+    const type = payload.type || 'recursos';
     const row = {
-      type: payload.type || 'docs',
+      type,
+      // category es columna legacy NOT NULL hasta v15. Pasamos el type tambien
+      // ahi para no romper inserts en DBs que aun tienen el constraint viejo.
+      category: payload.category || type,
       title: payload.title?.trim() || '',
       body: payload.body?.trim() || null,
       body_alt: payload.body_alt?.trim() || null,

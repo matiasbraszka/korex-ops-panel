@@ -11,6 +11,8 @@ const CONTACT_FIELDS = new Set(['full_name', 'phone', 'email', 'company_multiniv
 
 function fullName(c) {
   if (!c) return '';
+  // Preferir full_name (canonico v13+); fallback a first+last legacy
+  if (c.full_name && c.full_name.trim()) return c.full_name.trim();
   return [c.first_name, c.last_name].filter(Boolean).join(' ').trim();
 }
 
@@ -110,12 +112,12 @@ export function useCrm() {
 
   const deleteStage = useCallback(async (id) => {
     if (leads.some((l) => l.stage_id === id)) {
-      alert('No podés eliminar una columna con leads. Movelos a otra columna primero.');
-      return;
+      return { error: 'No podés eliminar una columna con leads. Movelos a otra columna primero.' };
     }
     setStages((prev) => prev.filter((s) => s.id !== id));
     const { error: e } = await supabase.from('sales_pipeline_stages').delete().eq('id', id);
-    if (e) console.error(e);
+    if (e) { console.error(e); return { error: e.message }; }
+    return {};
   }, [leads]);
 
   const reorderStages = useCallback(async (orderedIds) => {
@@ -144,8 +146,8 @@ export function useCrm() {
       p_default_category: 'prospect',
       p_source: 'manual',
     });
-    if (rpcErr) { console.error(rpcErr); return null; }
-    if (!contactId) { alert('Falta nombre, telefono o email para crear el contacto.'); return null; }
+    if (rpcErr) { console.error(rpcErr); return { error: rpcErr.message }; }
+    if (!contactId) { return { error: 'Falta nombre, teléfono o email para crear el contacto.' }; }
 
     // Setear empresa si vino y el contacto no la tenia.
     if (payload.company_multinivel) {
@@ -174,15 +176,17 @@ export function useCrm() {
     const { data, error: e } = await supabase
       .from('sales_leads').insert(row).select('*, contact:contacts(*)').single();
     if (e) {
-      if (e.code === '23505') { alert('Ya existe un lead para ese contacto en este pipeline.'); return null; }
-      console.error(e); return null;
+      if (e.code === '23505') { return { error: 'Ya existe un lead para ese contacto en este pipeline.' }; }
+      console.error(e); return { error: e.message };
     }
     const flat = flattenLead(data);
     setLeads((prev) => [...prev, flat]);
-    return flat;
+    return { data: flat };
   }, [pipelineId, stages, leads]);
 
   // Actualizar lead: separa campos del contacto vs del lead.
+  // Para full_name escribimos directo a contacts.full_name — el trigger
+  // contacts_sync_names mantiene first_name/last_name sincronizados.
   const updateLead = useCallback(async (id, patch) => {
     const lead = leads.find((l) => l.id === id);
     if (!lead) return;
@@ -191,9 +195,7 @@ export function useCrm() {
     const leadPatch = {};
     for (const [k, v] of Object.entries(patch)) {
       if (k === 'full_name') {
-        const parts = (v || '').trim().split(/\s+/);
-        contactPatch.first_name = parts[0] || '';
-        contactPatch.last_name = parts.slice(1).join(' ');
+        contactPatch.full_name = (v || '').trim();
       } else if (k === 'company_multinivel') {
         contactPatch.company = v;
       } else if (CONTACT_FIELDS.has(k)) {

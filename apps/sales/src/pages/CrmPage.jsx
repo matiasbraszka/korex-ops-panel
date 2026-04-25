@@ -13,6 +13,7 @@ import LeadsTable from '../components/LeadsTable.jsx';
 import LeadModal from '../components/LeadModal.jsx';
 import StagesEditorModal from '../components/StagesEditorModal.jsx';
 import CrmFilters from '../components/CrmFilters.jsx';
+import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
 export default function CrmPage() {
   const { isAdmin } = useAuth();
@@ -34,6 +35,32 @@ export default function CrmPage() {
   const [quickFilter, setQuickFilter] = useState('');
   // Lead presionado largo en mobile para mostrar bottom sheet de "Mover a etapa"
   const [lpLead, setLpLead] = useState(null);
+  const { confirm, dialog } = useConfirm();
+  const { showToast, toasts } = useToast();
+
+  // Wrappers para mostrar errores in-app (los hooks devuelven {error}).
+  const handleCreateLead = async (payload) => {
+    const res = await createLead(payload);
+    if (res?.error) showToast(res.error, 'error');
+    return res?.data;
+  };
+  const handleDeleteStage = async (id) => {
+    const ok = await confirm({ title: '¿Eliminar columna?', danger: true });
+    if (!ok) return;
+    const res = await deleteStage(id);
+    if (res?.error) showToast(res.error, 'error');
+  };
+  const handleDeleteLead = async (id) => {
+    const lead = leads.find((l) => l.id === id);
+    if (!lead) return;
+    const ok = await confirm({
+      title: `¿Eliminar a "${lead.full_name || 'este lead'}"?`,
+      message: 'No se puede deshacer.',
+      danger: true,
+    });
+    if (!ok) return;
+    deleteLead(id);
+  };
   // Detectar mobile en runtime para render condicional (no doble-registrar
   // los mismos IDs en dnd-kit como pasaba con `hidden md:flex` + `md:hidden`).
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
@@ -128,12 +155,8 @@ export default function CrmPage() {
   };
   const openEditLead = (lead) => { setActiveLead(lead); setLeadModalOpen(true); };
 
-  const handleDeleteWithConfirm = (id) => {
-    const lead = leads.find((l) => l.id === id);
-    if (!lead) return;
-    if (!confirm(`¿Eliminar a "${lead.full_name}"? No se puede deshacer.`)) return;
-    deleteLead(id);
-  };
+  // Alias legacy para no romper el resto de los callers
+  const handleDeleteWithConfirm = handleDeleteLead;
 
   const handleDragStart = (e) => {
     const lead = leads.find((l) => l.id === e.active.id);
@@ -408,7 +431,7 @@ export default function CrmPage() {
         salesTeam={salesTeam}
         canEditOwners={isAdmin}
         currentUserId={me}
-        onCreate={createLead}
+        onCreate={handleCreateLead}
         onUpdate={updateLead}
         onDelete={deleteLead}
         onConvertToClient={convertLeadToClient}
@@ -421,9 +444,12 @@ export default function CrmPage() {
         stages={stages}
         onAdd={addStage}
         onUpdate={updateStage}
-        onDelete={deleteStage}
+        onDelete={handleDeleteStage}
         onReorder={reorderStages}
       />
+
+      {dialog}
+      {toasts}
 
       {/* Bottom sheet mobile · long-press para mover lead a otra etapa */}
       {lpLead && (

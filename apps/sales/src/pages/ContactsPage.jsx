@@ -96,7 +96,7 @@ function ContactsPageInner() {
 
   const createContact = async () => {
     const { data, error: e } = await supabase.from('contacts')
-      .insert({ full_name: '', categories: [] })
+      .insert({ full_name: '', categories: [], source: 'manual' })
       .select().single();
     if (e) { showToast('No se pudo crear: ' + e.message, 'error'); return; }
     setContacts((cs) => [data, ...cs]);
