@@ -13,15 +13,20 @@ import LeadsTable from '../components/LeadsTable.jsx';
 import LeadModal from '../components/LeadModal.jsx';
 import StagesEditorModal from '../components/StagesEditorModal.jsx';
 import CrmFilters from '../components/CrmFilters.jsx';
+import PipelineSwitcher from '../components/PipelineSwitcher.jsx';
+import PipelineModal from '../components/PipelineModal.jsx';
 import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
 export default function CrmPage() {
   const { isAdmin } = useAuth();
   const {
-    pipelineId, stages, leads, salesTeam, me, loading, error,
+    pipelines, pipelineId, setPipelineId,
+    createPipeline, renamePipeline, removePipeline,
+    stages, leads, salesTeam, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
   } = useCrm();
+  const [pipelineModalOpen, setPipelineModalOpen] = useState(false);
 
   const [view, setView] = useState('kanban'); // 'kanban' | 'table'
   const [leadModalOpen, setLeadModalOpen] = useState(false);
@@ -60,6 +65,32 @@ export default function CrmPage() {
     });
     if (!ok) return;
     deleteLead(id);
+  };
+
+  // Pipeline handlers
+  const handleCreatePipeline = async (name, ownerId) => {
+    const res = await createPipeline(name, ownerId);
+    if (res.error) { showToast(res.error, 'error'); return; }
+    setPipelineModalOpen(false);
+    showToast('CRM creado', 'success');
+  };
+  const handleRenamePipeline = async (id, newName) => {
+    const res = await renamePipeline(id, newName);
+    if (res?.error) showToast(res.error, 'error');
+  };
+  const handleDeletePipeline = async (p) => {
+    const ok = await confirm({
+      title: `¿Eliminar el CRM "${p.name}"?`,
+      message: p.lead_count > 0
+        ? `Tiene ${p.lead_count} leads. Se eliminarán todos. No se puede deshacer.`
+        : 'No tiene leads. Se borrará el CRM y sus etapas.',
+      danger: true,
+      confirmLabel: 'Eliminar CRM',
+    });
+    if (!ok) return;
+    const res = await removePipeline(p.id);
+    if (res.error) showToast(res.error, 'error');
+    else showToast('CRM eliminado', 'success');
   };
   // Detectar mobile en runtime para render condicional (no doble-registrar
   // los mismos IDs en dnd-kit como pasaba con `hidden md:flex` + `md:hidden`).
@@ -210,8 +241,17 @@ export default function CrmPage() {
           {/* Fila 1: titulo + buscador + acciones */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="min-w-[140px]">
-              <h1 className="text-[17px] font-bold leading-tight">CRM</h1>
-              <p className="text-[11.5px] text-text3 mt-0.5 whitespace-nowrap">
+              <PipelineSwitcher
+                pipelines={pipelines}
+                pipelineId={pipelineId}
+                onSelect={setPipelineId}
+                onNew={() => setPipelineModalOpen(true)}
+                onRename={handleRenamePipeline}
+                onDelete={handleDeletePipeline}
+                isAdmin={isAdmin}
+                currentUserId={me}
+              />
+              <p className="text-[11.5px] text-text3 mt-0.5 whitespace-nowrap pl-1">
                 {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
                 {totalProjected > 0 && <> · {fmtMoney(totalProjected)} proyectado</>}
               </p>
@@ -269,9 +309,18 @@ export default function CrmPage() {
         {/* MOBILE topbar — solo si isMobile */}
         {isMobile && (<>
         <div className="flex items-start justify-between gap-3 mb-2.5">
-          <div className="min-w-0">
-            <h1 className="text-[15px] font-bold leading-tight">CRM</h1>
-            <p className="text-[10.5px] text-text3 mt-0.5">
+          <div className="min-w-0 flex-1">
+            <PipelineSwitcher
+              pipelines={pipelines}
+              pipelineId={pipelineId}
+              onSelect={setPipelineId}
+              onNew={() => setPipelineModalOpen(true)}
+              onRename={handleRenamePipeline}
+              onDelete={handleDeletePipeline}
+              isAdmin={isAdmin}
+              currentUserId={me}
+            />
+            <p className="text-[10.5px] text-text3 mt-0.5 pl-1">
               {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
               {totalProjected > 0 && <> · {fmtMoney(totalProjected)}</>}
             </p>
@@ -446,6 +495,15 @@ export default function CrmPage() {
         onUpdate={updateStage}
         onDelete={handleDeleteStage}
         onReorder={reorderStages}
+      />
+
+      <PipelineModal
+        open={pipelineModalOpen}
+        onClose={() => setPipelineModalOpen(false)}
+        onCreate={handleCreatePipeline}
+        isAdmin={isAdmin}
+        currentUserId={me}
+        salesTeam={salesTeam}
       />
 
       {dialog}

@@ -30,8 +30,12 @@ function flattenLead(l) {
   };
 }
 
+// Persistir el ultimo pipeline elegido por usuario en localStorage.
+const LS_KEY = 'korex_crm_active_pipeline';
+
 export function useCrm() {
-  const [pipelineId, setPipelineId] = useState(null);
+  const [pipelines, setPipelines] = useState([]);
+  const [pipelineId, setPipelineIdState] = useState(null);
   const [stages, setStages] = useState([]);
   const [leads, setLeads] = useState([]);
   const [salesTeam, setSalesTeam] = useState([]);
@@ -39,25 +43,46 @@ export function useCrm() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const loadAll = useCallback(async (pId) => {
+  // Setter publico que persiste eleccion en localStorage
+  const setPipelineId = useCallback((id) => {
+    setPipelineIdState(id);
+    try { if (id) localStorage.setItem(LS_KEY, id); } catch {}
+  }, []);
+
+  const loadPipelineData = useCallback(async (pId) => {
+    if (!pId) { setStages([]); setLeads([]); return; }
     const [
       { data: stagesData, error: sErr },
       { data: leadsData, error: lErr },
+    ] = await Promise.all([
+      supabase.from('sales_pipeline_stages').select('*').eq('pipeline_id', pId).order('position'),
+      supabase.from('sales_leads').select('*, contact:contacts(*)').eq('pipeline_id', pId).order('position'),
+    ]);
+    if (sErr) throw sErr;
+    if (lErr) throw lErr;
+    setStages(stagesData || []);
+    setLeads((leadsData || []).map(flattenLead));
+  }, []);
+
+  const loadPipelines = useCallback(async () => {
+    const { data, error: e } = await supabase.rpc('list_my_sales_pipelines');
+    if (e) throw e;
+    setPipelines(data || []);
+    return data || [];
+  }, []);
+
+  const loadTeamAndUser = useCallback(async () => {
+    const [
       { data: membersData, error: mErr },
       { data: rolesData, error: rErr },
       { data: { user } },
     ] = await Promise.all([
-      supabase.from('sales_pipeline_stages').select('*').eq('pipeline_id', pId).order('position'),
-      supabase.from('sales_leads').select('*, contact:contacts(*)').eq('pipeline_id', pId).order('position'),
       supabase.from('team_members').select('id, name, initials, color, avatar_url, user_id').not('user_id', 'is', null),
       supabase.from('user_roles').select('user_id, role'),
       supabase.auth.getUser(),
     ]);
-    if (sErr) throw sErr;
-    if (lErr) throw lErr;
     if (mErr) throw mErr;
     if (rErr) throw rErr;
-
     const rolesByUser = {};
     (rolesData || []).forEach((r) => {
       if (!rolesByUser[r.user_id]) rolesByUser[r.user_id] = [];
@@ -67,9 +92,6 @@ export function useCrm() {
       const roles = rolesByUser[m.user_id] || [];
       return roles.includes('sales') || roles.includes('admin');
     });
-
-    setStages(stagesData || []);
-    setLeads((leadsData || []).map(flattenLead));
     setSalesTeam(eligible);
     setMe(user?.id || null);
   }, []);
@@ -78,19 +100,60 @@ export function useCrm() {
     setLoading(true);
     setError(null);
     try {
-      const { data: pId, error: rpcErr } = await supabase.rpc('ensure_sales_pipeline');
-      if (rpcErr) throw rpcErr;
-      setPipelineId(pId);
-      await loadAll(pId);
+      // 1) Asegurar al menos un pipeline (legacy: crea el global compartido)
+      try { await supabase.rpc('ensure_sales_pipeline'); } catch (e) { console.warn('ensure_sales_pipeline:', e.message); }
+      // 2) Listar pipelines visibles + cargar equipo en paralelo
+      const [list] = await Promise.all([loadPipelines(), loadTeamAndUser()]);
+      // 3) Elegir pipeline activo: ultimo en LS si visible, sino el primero
+      let initial = null;
+      try { initial = localStorage.getItem(LS_KEY); } catch {}
+      const found = initial && list.find((p) => p.id === initial);
+      const pid = found ? initial : (list[0]?.id || null);
+      setPipelineIdState(pid);
+      if (pid) await loadPipelineData(pid);
     } catch (e) {
       console.error('CRM bootstrap error', e);
       setError(e.message || 'Error cargando CRM');
     } finally {
       setLoading(false);
     }
-  }, [loadAll]);
+  }, [loadPipelines, loadTeamAndUser, loadPipelineData]);
 
   useEffect(() => { bootstrap(); }, [bootstrap]);
+
+  // Cuando el usuario cambia de pipeline, recargar stages+leads
+  useEffect(() => {
+    if (!pipelineId) return;
+    loadPipelineData(pipelineId).catch((e) => console.error(e));
+  }, [pipelineId, loadPipelineData]);
+
+  // ── Pipelines CRUD ──
+  const createPipeline = useCallback(async (name, ownerId = null) => {
+    const { data, error: e } = await supabase.rpc('create_sales_pipeline', {
+      p_name: name, p_owner_id: ownerId,
+    });
+    if (e) return { error: e.message };
+    await loadPipelines();
+    setPipelineId(data); // switchea automatico al nuevo
+    return { data };
+  }, [loadPipelines, setPipelineId]);
+
+  const renamePipeline = useCallback(async (id, newName) => {
+    setPipelines((prev) => prev.map((p) => (p.id === id ? { ...p, name: newName } : p)));
+    const { error: e } = await supabase.from('sales_pipelines').update({ name: newName }).eq('id', id);
+    if (e) { console.error(e); await loadPipelines(); return { error: e.message }; }
+    return {};
+  }, [loadPipelines]);
+
+  const removePipeline = useCallback(async (id) => {
+    const { error: e } = await supabase.from('sales_pipelines').delete().eq('id', id);
+    if (e) return { error: e.message };
+    const list = await loadPipelines();
+    if (id === pipelineId) {
+      setPipelineId(list[0]?.id || null);
+    }
+    return {};
+  }, [loadPipelines, pipelineId, setPipelineId]);
 
   // ── Stages CRUD ──
   const addStage = useCallback(async (name, color = '#5B7CF5') => {
@@ -247,7 +310,9 @@ export function useCrm() {
   }, []);
 
   return {
-    pipelineId, stages, leads, salesTeam, me, loading, error,
+    pipelines, pipelineId, setPipelineId,
+    createPipeline, renamePipeline, removePipeline,
+    stages, leads, salesTeam, me, loading, error,
     refresh: bootstrap,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
