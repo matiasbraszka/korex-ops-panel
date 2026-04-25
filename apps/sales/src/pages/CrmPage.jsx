@@ -176,7 +176,7 @@ export default function CrmPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full">
       {/* Topbar integrado: titulo + KPIs + buscador + view toggle + acciones */}
       <div className="mb-3">
         {/* Desktop: dos filas — fila 1 con titulo + acciones; fila 2 con buscador + filtros */}
@@ -277,7 +277,9 @@ export default function CrmPage() {
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body wrapper relative: el LeadModal en desktop se posiciona absolute
+          dentro de este wrapper, asi NO tapa el topbar (buscador, columnas, etc). */}
+      <div className="relative flex-1 min-h-0">
       {stages.length === 0 ? (
         <div className="rounded-lg border border-border bg-white p-8 text-center">
           <p className="text-sm text-text2 mb-4">El pipeline no tiene columnas. Pedile al admin que las configure.</p>
@@ -396,6 +398,8 @@ export default function CrmPage() {
         </DndContext>
       )}
 
+      {/* LeadModal va DENTRO del wrapper relative para que en desktop se
+          posicione absolute respecto al body y NO tape el topbar */}
       <LeadModal
         open={leadModalOpen}
         onClose={() => setLeadModalOpen(false)}
@@ -409,6 +413,7 @@ export default function CrmPage() {
         onDelete={deleteLead}
         onConvertToClient={convertLeadToClient}
       />
+      </div>{/* /relative wrapper */}
 
       <StagesEditorModal
         open={stagesEditorOpen}

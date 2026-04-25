@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2 } from 'lucide-react';
+import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2, ArrowRightLeft } from 'lucide-react';
 
 // LeadCard · diseño Korex hi-fi.
 // - Toda la card es draggable (no hay handle lateral).
@@ -175,6 +175,17 @@ export default function LeadCard({
           )}
           {lead.closed_at && (
             <span className="text-[8px] bg-green-50 text-green-700 px-1 py-0.5 rounded font-semibold uppercase tracking-wider">cerrado</span>
+          )}
+          {/* Boton sutil para mover etapa (solo se ve si onLongPress esta activo,
+              o sea solo en mobile). Tambien se puede mantener apretada la card. */}
+          {onLongPress && (
+            <button type="button"
+                    title="Cambiar etapa"
+                    onClick={(e) => { e.stopPropagation(); onLongPress(lead); }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="bg-surface2 text-text2 hover:bg-surface3 rounded-[7px] w-[26px] h-[26px] flex items-center justify-center transition-colors">
+              <ArrowRightLeft size={12} />
+            </button>
           )}
           {waUrl && (
             <a href={waUrl} target="_blank" rel="noreferrer" title={`WhatsApp: ${lead.phone}`}

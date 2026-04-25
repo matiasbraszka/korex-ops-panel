@@ -103,17 +103,20 @@ export default function LeadModal({
 
   return (
     <>
-      {/* Click-catcher para cerrar al tocar fuera. En mobile oscurece el fondo;
-          en desktop es transparente para que el kanban se siga viendo nitido. */}
-      <div className="fixed inset-0 z-40 bg-black/40 md:bg-transparent" onClick={onClose} />
+      {/* Click-catcher: cierra al tocar fuera. En mobile oscurece el fondo
+          completo (fixed); en desktop solo cubre el body (absolute en wrapper)
+          y queda transparente para que el kanban detras se siga viendo nitido. */}
+      <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={onClose} />
+      <div className="hidden md:block absolute inset-0 z-40" onClick={onClose} />
 
-      {/* Ventana flotante: en mobile pantalla completa; en desktop panel a la
-          derecha con margenes (no fullscreen) y bordes redondeados. */}
-      <div className="fixed z-50 bg-white flex flex-col overflow-hidden
-                      inset-0
-                      md:inset-auto md:top-4 md:right-4 md:bottom-4 md:w-[420px]
-                      md:rounded-2xl md:border md:border-border
-                      shadow-2xl md:shadow-[0_20px_60px_rgba(0,0,0,.18),0_8px_24px_rgba(0,0,0,.08)]
+      {/* Ventana: mobile pantalla completa (fixed); desktop panel a la derecha
+          DENTRO del body wrapper (absolute), asi no tapa la topbar de arriba. */}
+      <div className="bg-white flex flex-col overflow-hidden
+                      fixed inset-0 z-50
+                      md:absolute md:inset-auto md:right-0 md:top-0 md:bottom-0
+                      md:w-[clamp(360px,33vw,480px)]
+                      md:rounded-l-2xl md:border-l md:border-border
+                      shadow-2xl md:shadow-[-12px_0_40px_rgba(0,0,0,.12)]
                       animate-[slideInRight_.2s_ease-out]"
            onClick={(e) => e.stopPropagation()}>
         {/* Sheet header */}
