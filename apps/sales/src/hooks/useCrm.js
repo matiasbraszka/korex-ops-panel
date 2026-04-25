@@ -145,6 +145,18 @@ export function useCrm() {
     return {};
   }, [loadPipelines]);
 
+  // Actualizar pipeline (nombre + owner). Permite reasignar el CRM a otra persona.
+  const updatePipeline = useCallback(async (id, patch) => {
+    const cleaned = {};
+    if (patch.name != null) cleaned.name = (patch.name || '').trim() || 'Mi CRM';
+    if (patch.owner_id != null) cleaned.owner_id = patch.owner_id;
+    if (Object.keys(cleaned).length === 0) return {};
+    const { error: e } = await supabase.from('sales_pipelines').update(cleaned).eq('id', id);
+    if (e) { console.error(e); return { error: e.message }; }
+    await loadPipelines();
+    return {};
+  }, [loadPipelines]);
+
   const removePipeline = useCallback(async (id) => {
     const { error: e } = await supabase.from('sales_pipelines').delete().eq('id', id);
     if (e) return { error: e.message };
@@ -311,7 +323,7 @@ export function useCrm() {
 
   return {
     pipelines, pipelineId, setPipelineId,
-    createPipeline, renamePipeline, removePipeline,
+    createPipeline, renamePipeline, updatePipeline, removePipeline,
     stages, leads, salesTeam, me, loading, error,
     refresh: bootstrap,
     addStage, updateStage, deleteStage, reorderStages,

@@ -21,12 +21,13 @@ export default function CrmPage() {
   const { isAdmin } = useAuth();
   const {
     pipelines, pipelineId, setPipelineId,
-    createPipeline, renamePipeline, removePipeline,
+    createPipeline, updatePipeline, removePipeline,
     stages, leads, salesTeam, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
   } = useCrm();
   const [pipelineModalOpen, setPipelineModalOpen] = useState(false);
+  const [pipelineToEdit, setPipelineToEdit] = useState(null);
 
   const [view, setView] = useState('kanban'); // 'kanban' | 'table'
   const [leadModalOpen, setLeadModalOpen] = useState(false);
@@ -72,11 +73,23 @@ export default function CrmPage() {
     const res = await createPipeline(name, ownerId);
     if (res.error) { showToast(res.error, 'error'); return; }
     setPipelineModalOpen(false);
+    setPipelineToEdit(null);
     showToast('CRM creado', 'success');
   };
-  const handleRenamePipeline = async (id, newName) => {
-    const res = await renamePipeline(id, newName);
-    if (res?.error) showToast(res.error, 'error');
+  const handleUpdatePipeline = async (id, patch) => {
+    const res = await updatePipeline(id, patch);
+    if (res?.error) { showToast(res.error, 'error'); return; }
+    setPipelineModalOpen(false);
+    setPipelineToEdit(null);
+    showToast('CRM actualizado', 'success');
+  };
+  const openEditPipeline = (p) => {
+    setPipelineToEdit(p);
+    setPipelineModalOpen(true);
+  };
+  const openNewPipeline = () => {
+    setPipelineToEdit(null);
+    setPipelineModalOpen(true);
   };
   const handleDeletePipeline = async (p) => {
     const ok = await confirm({
@@ -245,8 +258,8 @@ export default function CrmPage() {
                 pipelines={pipelines}
                 pipelineId={pipelineId}
                 onSelect={setPipelineId}
-                onNew={() => setPipelineModalOpen(true)}
-                onRename={handleRenamePipeline}
+                onNew={openNewPipeline}
+                onEdit={openEditPipeline}
                 onDelete={handleDeletePipeline}
                 isAdmin={isAdmin}
                 currentUserId={me}
@@ -314,8 +327,8 @@ export default function CrmPage() {
               pipelines={pipelines}
               pipelineId={pipelineId}
               onSelect={setPipelineId}
-              onNew={() => setPipelineModalOpen(true)}
-              onRename={handleRenamePipeline}
+              onNew={openNewPipeline}
+              onEdit={openEditPipeline}
               onDelete={handleDeletePipeline}
               isAdmin={isAdmin}
               currentUserId={me}
@@ -499,8 +512,10 @@ export default function CrmPage() {
 
       <PipelineModal
         open={pipelineModalOpen}
-        onClose={() => setPipelineModalOpen(false)}
+        onClose={() => { setPipelineModalOpen(false); setPipelineToEdit(null); }}
         onCreate={handleCreatePipeline}
+        onUpdate={handleUpdatePipeline}
+        pipeline={pipelineToEdit}
         isAdmin={isAdmin}
         currentUserId={me}
         salesTeam={salesTeam}

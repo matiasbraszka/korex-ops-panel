@@ -1,17 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Plus, Check, Pencil, Trash2, Users, Globe } from 'lucide-react';
+import { ChevronDown, Plus, Check, Pencil, Trash2, Users, Globe, Settings2 } from 'lucide-react';
 
 // Selector sutil de pipeline (CRM) en el topbar.
 // Click en el nombre -> dropdown con la lista de pipelines visibles + boton
-// "+ Nuevo CRM". Boton lapicito junto a cada uno (admin o owner) para editar.
+// "+ Nuevo CRM". Boton engranaje (Settings2) abre el modal de edit (nombre +
+// owner). Boton trash elimina (admin/owner, no shared).
 export default function PipelineSwitcher({
   pipelines, pipelineId, onSelect,
-  onNew, onRename, onDelete,
+  onNew, onEdit, onDelete,
   isAdmin, currentUserId,
 }) {
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState('');
   const ref = useRef(null);
 
   useEffect(() => {
@@ -21,14 +20,6 @@ export default function PipelineSwitcher({
   }, []);
 
   const active = pipelines.find((p) => p.id === pipelineId);
-  const startEdit = (p) => { setEditingId(p.id); setEditName(p.name); };
-  const commitEdit = async () => {
-    if (editingId && editName.trim() && editName !== pipelines.find((p) => p.id === editingId)?.name) {
-      await onRename?.(editingId, editName.trim());
-    }
-    setEditingId(null);
-  };
-
   const canEdit = (p) => isAdmin || p.owner_id === currentUserId;
   const canDelete = (p) => !p.is_shared && (isAdmin || p.owner_id === currentUserId);
 
@@ -51,54 +42,41 @@ export default function PipelineSwitcher({
             )}
             {pipelines.map((p) => {
               const isOn = p.id === pipelineId;
-              const isEditing = editingId === p.id;
               return (
                 <div key={p.id}
-                     className={`group/item flex items-center gap-2 px-2 py-2 transition-colors ${
+                     className={`group/item flex items-center gap-1 px-2 py-2 transition-colors ${
                        isOn ? 'bg-blue-bg' : 'hover:bg-surface2'
                      }`}>
-                  {isEditing ? (
-                    <input autoFocus
-                           value={editName}
-                           onChange={(e) => setEditName(e.target.value)}
-                           onBlur={commitEdit}
-                           onKeyDown={(e) => {
-                             if (e.key === 'Enter') commitEdit();
-                             if (e.key === 'Escape') { setEditingId(null); }
-                           }}
-                           className="flex-1 text-[12.5px] font-semibold bg-white border border-blue rounded px-1.5 py-0.5 outline-none" />
-                  ) : (
-                    <button type="button"
-                            onClick={() => { onSelect(p.id); setOpen(false); }}
-                            className="flex-1 min-w-0 flex items-center gap-2 text-left bg-transparent border-0 p-0 cursor-pointer">
-                      <span className={`shrink-0 ${isOn ? 'text-blue' : 'text-text3'}`}>
-                        {p.is_shared ? <Globe size={12} /> : <Users size={12} />}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-[12.5px] truncate ${isOn ? 'font-semibold text-text' : 'text-text2'}`}>
-                          {p.name}
-                        </div>
-                        <div className="text-[10px] text-text3 truncate">
-                          {p.is_shared
-                            ? `Compartido · ${p.lead_count} leads`
-                            : `${p.owner_name || 'Sin asignar'} · ${p.lead_count} leads`}
-                        </div>
+                  <button type="button"
+                          onClick={() => { onSelect(p.id); setOpen(false); }}
+                          className="flex-1 min-w-0 flex items-center gap-2 text-left bg-transparent border-0 p-0 cursor-pointer">
+                    <span className={`shrink-0 ${isOn ? 'text-blue' : 'text-text3'}`}>
+                      {p.is_shared ? <Globe size={12} /> : <Users size={12} />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-[12.5px] truncate ${isOn ? 'font-semibold text-text' : 'text-text2'}`}>
+                        {p.name}
                       </div>
-                      {isOn && <Check size={14} className="text-blue shrink-0" />}
+                      <div className="text-[10px] text-text3 truncate">
+                        {p.is_shared
+                          ? `Compartido · ${p.lead_count} leads`
+                          : `${p.owner_name || 'Sin asignar'} · ${p.lead_count} leads`}
+                      </div>
+                    </div>
+                    {isOn && <Check size={14} className="text-blue shrink-0" />}
+                  </button>
+                  {canEdit(p) && (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit?.(p); }}
+                            title="Editar (nombre + asignado)"
+                            className="text-text3 hover:text-text hover:bg-surface3 bg-transparent border-0 p-1.5 rounded cursor-pointer transition-colors">
+                      <Settings2 size={12} />
                     </button>
                   )}
-                  {!isEditing && canEdit(p) && (
-                    <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(p); }}
-                            title="Renombrar"
-                            className="opacity-0 group-hover/item:opacity-100 text-text3 hover:text-text bg-transparent border-0 p-1 cursor-pointer transition-opacity">
-                      <Pencil size={11} />
-                    </button>
-                  )}
-                  {!isEditing && canDelete(p) && (
+                  {canDelete(p) && (
                     <button type="button" onClick={(e) => { e.stopPropagation(); onDelete?.(p); }}
                             title="Eliminar CRM"
-                            className="opacity-0 group-hover/item:opacity-100 text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer transition-opacity">
-                      <Trash2 size={11} />
+                            className="text-text3 hover:text-red hover:bg-red-bg bg-transparent border-0 p-1.5 rounded cursor-pointer transition-colors">
+                      <Trash2 size={12} />
                     </button>
                   )}
                 </div>

@@ -1,22 +1,24 @@
 import { useState, useEffect } from 'react';
 import { X, Users } from 'lucide-react';
 
-// Modal para crear un CRM nuevo. Si el user es admin, puede asignar el CRM a
-// otra persona del equipo de Ventas. Si no es admin, se asigna al user actual.
+// Modal para crear o EDITAR un CRM (pipeline). Si pipeline prop existe → edit.
+// Admin puede asignar el CRM a cualquier vendedor del equipo. Sales solo
+// puede asignarse a si mismo (selector deshabilitado).
 export default function PipelineModal({
-  open, onClose, onCreate,
+  open, onClose, onCreate, onUpdate,
+  pipeline, // si viene → modo edicion
   isAdmin, currentUserId, salesTeam = [],
 }) {
+  const isEdit = !!pipeline;
   const [name, setName] = useState('');
-  const [ownerId, setOwnerId] = useState(currentUserId || '');
+  const [ownerId, setOwnerId] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setName('');
-      setOwnerId(currentUserId || '');
-    }
-  }, [open, currentUserId]);
+    if (!open) return;
+    setName(pipeline?.name || '');
+    setOwnerId(pipeline?.owner_id || currentUserId || '');
+  }, [open, pipeline, currentUserId]);
 
   if (!open) return null;
 
@@ -24,9 +26,17 @@ export default function PipelineModal({
     e?.preventDefault?.();
     if (!name.trim()) return;
     setSaving(true);
-    await onCreate?.(name.trim(), isAdmin ? (ownerId || null) : null);
+    if (isEdit) {
+      await onUpdate?.(pipeline.id, { name: name.trim(), owner_id: ownerId });
+    } else {
+      await onCreate?.(name.trim(), isAdmin ? (ownerId || null) : null);
+    }
     setSaving(false);
   };
+
+  // El selector "Asignar a" siempre se muestra (mas claro). Si no es admin,
+  // queda deshabilitado mostrando "Yo" - el sales no puede asignar a otra persona.
+  const ownerSelectDisabled = !isAdmin;
 
   return (
     <>
@@ -45,9 +55,11 @@ export default function PipelineModal({
             <Users size={18} />
           </span>
           <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-bold text-text">Nuevo CRM</div>
+            <div className="text-[14px] font-bold text-text">{isEdit ? 'Editar CRM' : 'Nuevo CRM'}</div>
             <div className="text-[11px] text-text2 mt-0.5">
-              Se crea con etapas por defecto. Podés editarlas después.
+              {isEdit
+                ? 'Cambiá el nombre o el responsable de este CRM.'
+                : 'Se crea con etapas por defecto. Podés editarlas después.'}
             </div>
           </div>
           <button onClick={onClose} type="button"
@@ -67,25 +79,28 @@ export default function PipelineModal({
                    className="w-full text-[13px] text-text bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-blue" />
           </div>
 
-          {isAdmin && salesTeam.length > 0 && (
-            <div>
-              <label className="block text-[10.5px] font-bold uppercase tracking-wider text-text3 mb-1.5">
-                Asignar a
-              </label>
-              <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}
-                      className="w-full text-[13px] text-text bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-blue cursor-pointer">
-                <option value={currentUserId}>Yo (admin)</option>
-                {salesTeam
-                  .filter((tm) => tm.user_id !== currentUserId)
-                  .map((tm) => (
-                    <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>
-                  ))}
-              </select>
-              <div className="text-[10.5px] text-text3 mt-1">
-                Solo el asignado y los admins pueden ver este CRM.
-              </div>
+          <div>
+            <label className="block text-[10.5px] font-bold uppercase tracking-wider text-text3 mb-1.5">
+              Asignar a <span className="text-red">*</span>
+            </label>
+            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}
+                    disabled={ownerSelectDisabled}
+                    className="w-full text-[13px] text-text bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-blue cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value={currentUserId}>
+                Yo {isAdmin ? '(admin)' : ''}
+              </option>
+              {salesTeam
+                .filter((tm) => tm.user_id && tm.user_id !== currentUserId)
+                .map((tm) => (
+                  <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>
+                ))}
+            </select>
+            <div className="text-[10.5px] text-text3 mt-1">
+              {ownerSelectDisabled
+                ? 'Solo los admins pueden asignar CRMs a otras personas.'
+                : 'El asignado y los admins pueden ver y editar este CRM.'}
             </div>
-          )}
+          </div>
         </form>
 
         <div className="flex items-center justify-end gap-2 mt-5">
@@ -95,7 +110,7 @@ export default function PipelineModal({
           </button>
           <button onClick={handleSave} type="submit" disabled={saving || !name.trim()}
                   className="py-2 px-3.5 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark disabled:opacity-50 disabled:cursor-not-allowed">
-            {saving ? 'Creando…' : 'Crear CRM'}
+            {saving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Crear CRM')}
           </button>
         </div>
       </div>
