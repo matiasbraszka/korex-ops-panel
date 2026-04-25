@@ -10,7 +10,8 @@ import FeedbackPage from './FeedbackPage';
 import InformePage from './InformePage';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
-const VALID_TABS = ['lista', 'publicidad', 'informe'];
+// 'informe' queda oculto del menu pero la ruta interna sigue funcionando.
+const VALID_TABS = ['lista', 'publicidad'];
 
 export default function ClientsPage() {
   const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel } = useApp();
@@ -81,12 +82,11 @@ export default function ClientsPage() {
 
   return (
     <div>
-      {/* Tabs: Lista / Publicidad / Feedback */}
+      {/* Tabs: Lista / Publicidad (Informe oculto a pedido del user) */}
       <div className="inline-flex items-center p-1 bg-gray-100 rounded-lg gap-0.5 mb-4 max-md:w-full">
         {[
           { id: 'lista',      label: 'Lista',      Icon: Users },
           { id: 'publicidad', label: 'Publicidad', Icon: Megaphone },
-          { id: 'informe',    label: 'Informe',    Icon: FileText },
         ].map(t => (
           <button
             key={t.id}
