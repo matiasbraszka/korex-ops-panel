@@ -129,21 +129,20 @@ export function useCrm() {
 
   // ── Pipelines CRUD ──
   const createPipeline = useCallback(async (name, ownerId = null, memberIds = null) => {
-    const { data, error: e } = await supabase.rpc('create_sales_pipeline', {
-      p_name: name, p_owner_id: ownerId, p_member_ids: memberIds,
-    });
-    if (e) return { error: e.message };
+    const payload = { p_name: name, p_owner_id: ownerId, p_member_ids: (memberIds && memberIds.length > 0) ? memberIds : null };
+    console.log('[CRM] createPipeline payload:', payload);
+    const { data, error: e } = await supabase.rpc('create_sales_pipeline', payload);
+    if (e) { console.error('[CRM] createPipeline error:', e); return { error: e.message }; }
     await loadPipelines();
-    setPipelineId(data); // switchea automatico al nuevo
+    setPipelineId(data);
     return { data };
   }, [loadPipelines, setPipelineId]);
 
-  // Reemplaza la lista completa de miembros del pipeline
   const setPipelineMembers = useCallback(async (id, userIds) => {
-    const { error: e } = await supabase.rpc('set_pipeline_members', {
-      p_pipeline_id: id, p_user_ids: userIds || [],
-    });
-    if (e) return { error: e.message };
+    const payload = { p_pipeline_id: id, p_user_ids: userIds || [] };
+    console.log('[CRM] setPipelineMembers payload:', payload);
+    const { error: e } = await supabase.rpc('set_pipeline_members', payload);
+    if (e) { console.error('[CRM] setPipelineMembers error:', e); return { error: e.message }; }
     await loadPipelines();
     return {};
   }, [loadPipelines]);
@@ -159,10 +158,11 @@ export function useCrm() {
   const updatePipeline = useCallback(async (id, patch) => {
     const cleaned = {};
     if (patch.name != null) cleaned.name = (patch.name || '').trim() || 'Mi CRM';
-    if (patch.owner_id != null) cleaned.owner_id = patch.owner_id;
+    if (patch.owner_id) cleaned.owner_id = patch.owner_id; // solo si truthy
     if (Object.keys(cleaned).length === 0) return {};
+    console.log('[CRM] updatePipeline', id, cleaned);
     const { error: e } = await supabase.from('sales_pipelines').update(cleaned).eq('id', id);
-    if (e) { console.error(e); return { error: e.message }; }
+    if (e) { console.error('[CRM] updatePipeline error:', e); return { error: e.message }; }
     await loadPipelines();
     return {};
   }, [loadPipelines]);

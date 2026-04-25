@@ -69,9 +69,11 @@ export default function CrmPage() {
   };
 
   // Pipeline handlers
-  const handleCreatePipeline = async (name, ownerId) => {
-    const res = await createPipeline(name, ownerId);
-    if (res.error) { showToast(res.error, 'error'); return; }
+  // BUGFIX: antes ignorabamos el 3er arg (memberIds) — los miembros que el
+  // user seleccionaba al crear se perdian.
+  const handleCreatePipeline = async (name, ownerId, memberIds) => {
+    const res = await createPipeline(name, ownerId, memberIds);
+    if (res?.error) { showToast(res.error, 'error'); return; }
     setPipelineModalOpen(false);
     setPipelineToEdit(null);
     showToast('CRM creado', 'success');
@@ -79,8 +81,10 @@ export default function CrmPage() {
   const handleUpdatePipeline = async (id, patch) => {
     // Separar member_ids del patch propio del pipeline
     const { member_ids, ...rest } = patch || {};
-    const res = await updatePipeline(id, rest);
-    if (res?.error) { showToast(res.error, 'error'); return; }
+    if (Object.keys(rest).length > 0) {
+      const res = await updatePipeline(id, rest);
+      if (res?.error) { showToast(res.error, 'error'); return; }
+    }
     if (member_ids) {
       const r2 = await setPipelineMembers(id, member_ids);
       if (r2?.error) { showToast(r2.error, 'error'); return; }

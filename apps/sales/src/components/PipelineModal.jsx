@@ -14,16 +14,21 @@ export default function PipelineModal({
   const [ownerId, setOwnerId] = useState('');
   const [memberIds, setMemberIds] = useState([]); // user_ids asignados (incluye al owner)
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
+  // SOLO resetear el state cuando el modal se abre (open: false→true). No
+  // depender de currentUserId / pipeline para no pisar lo que el user tipea
+  // si esas props cambian mientras el modal esta abierto.
   useEffect(() => {
     if (!open) return;
     setName(pipeline?.name || '');
     setOwnerId(pipeline?.owner_id || currentUserId || '');
-    // En edicion: arranca con los members actuales. En create: solo el owner.
     setMemberIds(pipeline?.member_ids?.length
       ? [...pipeline.member_ids]
       : [pipeline?.owner_id || currentUserId].filter(Boolean));
-  }, [open, pipeline, currentUserId]);
+    setErrorMsg('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
@@ -39,20 +44,28 @@ export default function PipelineModal({
 
   const handleSave = async (e) => {
     e?.preventDefault?.();
-    if (!name.trim()) return;
+    e?.stopPropagation?.();
+    if (!name.trim()) { setErrorMsg('Falta el nombre.'); return; }
+    setErrorMsg('');
     setSaving(true);
-    if (isEdit) {
-      // Update name + owner; members se setean por separado via RPC
-      await onUpdate?.(pipeline.id, {
-        name: name.trim(),
-        owner_id: ownerId,
-        member_ids: memberIds.filter(Boolean),
-      });
-    } else {
-      const extras = memberIds.filter((id) => id && id !== ownerId);
-      await onCreate?.(name.trim(), isAdmin ? (ownerId || null) : null, extras);
+    try {
+      if (isEdit) {
+        await onUpdate?.(pipeline.id, {
+          name: name.trim(),
+          owner_id: ownerId || currentUserId || null,
+          member_ids: memberIds.filter(Boolean),
+        });
+      } else {
+        const finalOwner = isAdmin ? (ownerId || currentUserId || null) : null;
+        const extras = memberIds.filter((id) => id && id !== finalOwner);
+        await onCreate?.(name.trim(), finalOwner, extras);
+      }
+    } catch (err) {
+      console.error('PipelineModal save error:', err);
+      setErrorMsg(err?.message || 'Error al guardar');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   // Opciones disponibles: todo el equipo (admin elige cualquier rol);
@@ -170,12 +183,18 @@ export default function PipelineModal({
           </div>
         </form>
 
+        {errorMsg && (
+          <div className="mt-3 p-2.5 bg-red-bg text-red text-[11.5px] rounded-lg border border-red/20">
+            {errorMsg}
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-2 mt-5">
           <button onClick={onClose} type="button" disabled={saving}
                   className="py-2 px-3.5 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2">
             Cancelar
           </button>
-          <button onClick={handleSave} type="submit" disabled={saving || !name.trim()}
+          <button onClick={handleSave} type="button" disabled={saving || !name.trim()}
                   className="py-2 px-3.5 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark disabled:opacity-50 disabled:cursor-not-allowed">
             {saving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Crear CRM')}
           </button>
