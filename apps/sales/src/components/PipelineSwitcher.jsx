@@ -73,7 +73,7 @@ export default function PipelineSwitcher({
                     </button>
                   )}
                   {canDelete(p) && (
-                    <button type="button" onClick={(e) => { e.stopPropagation(); onDelete?.(p); }}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete?.(p); }}
                             title="Eliminar CRM"
                             className="text-text3 hover:text-red hover:bg-red-bg bg-transparent border-0 p-1.5 rounded cursor-pointer transition-colors">
                       <Trash2 size={12} />
