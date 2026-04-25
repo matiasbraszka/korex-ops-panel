@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors,
   DragOverlay, pointerWithin, rectIntersection,
@@ -32,6 +32,16 @@ export default function CrmPage() {
   const [mobileStageId, setMobileStageId] = useState(null);
   // Quick filters chip activo: '' | 'mine' | 'stale' | 'closing'
   const [quickFilter, setQuickFilter] = useState('');
+  // Detectar mobile en runtime para render condicional (no doble-registrar
+  // los mismos IDs en dnd-kit como pasaba con `hidden md:flex` + `md:hidden`).
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener?.('change', update);
+    return () => mq.removeEventListener?.('change', update);
+  }, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -242,86 +252,83 @@ export default function CrmPage() {
       ) : (
         <DndContext sensors={sensors} collisionDetection={collisionDetection}
                     onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
-            {/* DESKTOP · kanban horizontal · tabla en md+ */}
-            <div className="hidden md:flex gap-3 overflow-x-auto -mx-1 px-1 pb-2"
-                 style={{ height: 'calc(100vh - 260px)', minHeight: 480 }}>
-              {stages.map((stage) => (
-                <KanbanColumn
-                  key={stage.id}
-                  stage={stage}
-                  leads={leadsByStage[stage.id] || []}
-                  ownersByUserId={ownersByUserId}
-                  salesTeam={salesTeam}
-                  canEditOwners={isAdmin}
-                  onCardDetail={openEditLead}
-                  onPatchLead={updateLead}
-                  onDeleteLead={handleDeleteWithConfirm}
-                  onNewLead={openNewLead}
-                />
-              ))}
-            </div>
-
-            {/* MOBILE · tabs por etapa + lista vertical */}
-            <div className="md:hidden flex flex-col gap-2.5">
-              {/* Stage tabs scrollable */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-                {stages.map((s) => {
-                  const n = (leadsByStage[s.id] || []).length;
-                  const isOn = s.id === activeMobileStage;
-                  return (
-                    <button key={s.id} onClick={() => setMobileStageId(s.id)}
-                            className={`px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all border ${
-                              isOn
-                                ? 'bg-text text-white border-text'
-                                : 'bg-white text-text2 border-border hover:bg-surface2'
-                            }`}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
-                      {s.name}
-                      <span className={`text-[10px] px-1.5 py-px rounded-full font-bold ${
-                        isOn ? 'bg-white/20 text-white' : 'bg-surface3 text-text3'
-                      }`}>{n}</span>
-                    </button>
-                  );
-                })}
+          <SortableContext items={isMobile ? mobileLeads.map((l) => l.id) : allLeadIds}
+                           strategy={verticalListSortingStrategy}>
+            {!isMobile ? (
+              /* DESKTOP · kanban horizontal */
+              <div className="flex gap-3 overflow-x-auto overflow-y-hidden -mx-1 px-1 pb-2 crm-kanban-desktop">
+                {stages.map((stage) => (
+                  <KanbanColumn
+                    key={stage.id}
+                    stage={stage}
+                    leads={leadsByStage[stage.id] || []}
+                    ownersByUserId={ownersByUserId}
+                    salesTeam={salesTeam}
+                    canEditOwners={isAdmin}
+                    onCardDetail={openEditLead}
+                    onPatchLead={updateLead}
+                    onDeleteLead={handleDeleteWithConfirm}
+                    onNewLead={openNewLead}
+                  />
+                ))}
               </div>
+            ) : (
+              /* MOBILE · tabs por etapa + lista vertical */
+              <div className="flex flex-col gap-2.5">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                  {stages.map((s) => {
+                    const n = (leadsByStage[s.id] || []).length;
+                    const isOn = s.id === activeMobileStage;
+                    return (
+                      <button key={s.id} onClick={() => setMobileStageId(s.id)}
+                              className={`px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all border ${
+                                isOn ? 'bg-text text-white border-text' : 'bg-white text-text2 border-border hover:bg-surface2'
+                              }`}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
+                        {s.name}
+                        <span className={`text-[10px] px-1.5 py-px rounded-full font-bold ${
+                          isOn ? 'bg-white/20 text-white' : 'bg-surface3 text-text3'
+                        }`}>{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-              {/* Active stage summary */}
-              {mobileStage && (
-                <div className="flex items-end justify-between px-1">
-                  <div>
-                    <div className="text-[15px] font-bold leading-tight">{mobileStage.name}</div>
-                    <div className="text-[10.5px] text-text3 mt-0.5">
-                      {mobileLeads.length} {mobileLeads.length === 1 ? 'lead' : 'leads'}
-                      {mobileTotal > 0 && <> · {fmtMoney(mobileTotal)} proyectado</>}
+                {mobileStage && (
+                  <div className="flex items-end justify-between px-1">
+                    <div>
+                      <div className="text-[15px] font-bold leading-tight">{mobileStage.name}</div>
+                      <div className="text-[10.5px] text-text3 mt-0.5">
+                        {mobileLeads.length} {mobileLeads.length === 1 ? 'lead' : 'leads'}
+                        {mobileTotal > 0 && <> · {fmtMoney(mobileTotal)} proyectado</>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Lista vertical de la etapa activa */}
-              <div className="flex flex-col gap-1">
-                {mobileLeads.length === 0 ? (
-                  <div className="text-center text-[12px] text-text3 py-10 border border-dashed border-border-light rounded-lg">
-                    No hay leads en esta etapa
-                  </div>
-                ) : (
-                  mobileLeads.map((lead) => (
-                    <LeadCard
-                      key={lead.id}
-                      lead={lead}
-                      owner={ownersByUserId?.[lead.owner_id]}
-                      setter={ownersByUserId?.[lead.setter_id]}
-                      salesTeam={salesTeam}
-                      canEditOwners={isAdmin}
-                      onDetail={() => openEditLead(lead)}
-                      onPatch={(patch) => updateLead(lead.id, patch)}
-                      onDelete={() => handleDeleteWithConfirm(lead.id)}
-                    />
-                  ))
                 )}
+
+                <div className="flex flex-col gap-1">
+                  {mobileLeads.length === 0 ? (
+                    <div className="text-center text-[12px] text-text3 py-10 border border-dashed border-border-light rounded-lg">
+                      No hay leads en esta etapa
+                    </div>
+                  ) : (
+                    mobileLeads.map((lead) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        owner={ownersByUserId?.[lead.owner_id]}
+                        setter={ownersByUserId?.[lead.setter_id]}
+                        salesTeam={salesTeam}
+                        canEditOwners={isAdmin}
+                        onDetail={() => openEditLead(lead)}
+                        onPatch={(patch) => updateLead(lead.id, patch)}
+                        onDelete={() => handleDeleteWithConfirm(lead.id)}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </SortableContext>
           <DragOverlay>
             {draggingLead && <LeadCard lead={draggingLead}

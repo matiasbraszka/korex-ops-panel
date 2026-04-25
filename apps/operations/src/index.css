@@ -62,6 +62,18 @@ body {
 .lead-card { transition: box-shadow .18s, border-color .18s; }
 .lead-card:hover { border-color: var(--color-border-light); box-shadow: 0 4px 14px rgba(26,29,38,.08) !important; }
 
+/* CRM Kanban desktop: altura calculada del viewport real, columnas scrollean adentro */
+.crm-kanban-desktop {
+  height: calc(100vh - 260px);
+  min-height: 500px;
+}
+@media (min-height: 900px) {
+  .crm-kanban-desktop { height: calc(100vh - 260px); }
+}
+@media (max-height: 700px) {
+  .crm-kanban-desktop { height: calc(100vh - 220px); min-height: 400px; }
+}
+
 /* Drag & drop task reordering */
 .drag-ghost {
   opacity: 0.3;
