@@ -102,9 +102,9 @@ export default function LeadModal({
   const patchField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-stretch md:items-center justify-center md:p-4"
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-stretch md:items-stretch md:justify-end"
          onClick={onClose}>
-      <div className="bg-white rounded-none md:rounded-xl w-full max-w-[560px] md:max-h-[90vh] h-full md:h-auto flex flex-col shadow-2xl overflow-hidden"
+      <div className="bg-white rounded-none w-full md:w-[440px] md:max-w-[440px] h-full flex flex-col md:shadow-[-8px_0_32px_rgba(0,0,0,.12)] shadow-2xl overflow-hidden md:border-l md:border-border animate-[slideInRight_.2s_ease-out]"
            onClick={(e) => e.stopPropagation()}>
         {/* Sheet header */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
@@ -487,22 +487,22 @@ function RowField({ icon: Icon, value, placeholder, onChange }) {
 function AssignCard({ label, person, disabled, options, onChange }) {
   const color = person?.color || '#5B7CF5';
   return (
-    <div className="bg-surface2 rounded-lg px-2 py-2 flex items-center gap-2 relative">
+    <div className="bg-surface2 rounded-lg px-2 py-1.5 flex items-center gap-2 relative">
       {person ? (
         person.avatar_url ? (
-          <img src={person.avatar_url} alt={person.name} className="w-[26px] h-[26px] rounded-full object-cover shrink-0" />
+          <img src={person.avatar_url} alt={person.name} className="w-[22px] h-[22px] rounded-full object-cover shrink-0" />
         ) : (
-          <span className="w-[26px] h-[26px] rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+          <span className="w-[22px] h-[22px] rounded-full flex items-center justify-center font-bold text-[9px] shrink-0"
                 style={{ background: color + '24', color }}>
             {person.initials || person.name?.slice(0, 2).toUpperCase()}
           </span>
         )
       ) : (
-        <span className="w-[26px] h-[26px] rounded-full bg-surface3 border border-dashed border-border flex items-center justify-center text-text3 text-[10px] shrink-0">?</span>
+        <span className="w-[22px] h-[22px] rounded-full bg-surface3 border border-dashed border-border flex items-center justify-center text-text3 text-[9px] shrink-0">?</span>
       )}
       <div className="flex-1 min-w-0">
-        <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">{label}</div>
-        <div className="text-[11.5px] font-semibold truncate">{person?.name || 'Sin asignar'}</div>
+        <div className="text-[9px] font-bold uppercase tracking-wider text-text3">{label}</div>
+        <div className="text-[11px] font-semibold truncate">{person?.name || 'Sin asignar'}</div>
       </div>
       <ChevronRight size={12} className="text-text3" />
       {!disabled && (

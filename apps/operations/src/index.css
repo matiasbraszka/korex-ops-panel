@@ -66,7 +66,15 @@ body {
 .crm-kanban-desktop {
   height: calc(100vh - 260px);
   min-height: 500px;
+  scrollbar-width: thin;
+  scrollbar-color: #C0C7D4 transparent;
 }
+.crm-kanban-desktop::-webkit-scrollbar { height: 10px; }
+.crm-kanban-desktop::-webkit-scrollbar-track { background: transparent; }
+.crm-kanban-desktop::-webkit-scrollbar-thumb {
+  background: #C0C7D4; border-radius: 5px; border: 2px solid var(--color-bg);
+}
+.crm-kanban-desktop::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
 @media (min-height: 900px) {
   .crm-kanban-desktop { height: calc(100vh - 260px); }
 }
@@ -115,6 +123,12 @@ body {
     max-width: 100vw;
     margin-left: 0 !important;
   }
+}
+
+/* Slide-over panel animation (LeadModal desktop) */
+@keyframes slideInRight {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
 }
 
 /* Hide scrollbar for carousel */

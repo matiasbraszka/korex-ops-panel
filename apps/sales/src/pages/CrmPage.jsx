@@ -4,7 +4,7 @@ import {
   DragOverlay, pointerWithin, rectIntersection,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Plus, Settings as SettingsIcon, LayoutGrid, Rows3 } from 'lucide-react';
+import { Plus, Settings as SettingsIcon, LayoutGrid, Rows3, Search } from 'lucide-react';
 import { useAuth } from '@korex/auth';
 import { useCrm } from '../hooks/useCrm.js';
 import KanbanColumn from '../components/KanbanColumn.jsx';
@@ -175,46 +175,83 @@ export default function CrmPage() {
 
   return (
     <div className="flex flex-col">
-      {/* Header: titulo + KPIs + acciones */}
-      <div className="space-y-2.5 mb-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold leading-tight">CRM</h1>
+      {/* Topbar integrado: titulo + KPIs + buscador + view toggle + acciones */}
+      <div className="mb-3">
+        {/* Desktop: una sola fila */}
+        <div className="hidden md:flex items-center gap-3.5 mb-2.5">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[17px] font-bold leading-tight">CRM</h1>
             <p className="text-[11.5px] text-text3 mt-0.5">
               Pipeline · {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
               {totalProjected > 0 && <> · {fmtMoney(totalProjected)} proyectado</>}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-surface2 rounded-md p-0.5 border border-border max-md:hidden">
-              <button onClick={() => setView('kanban')} title="Kanban"
-                      className={`p-1.5 rounded ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-                <LayoutGrid size={14} />
-              </button>
-              <button onClick={() => setView('table')} title="Tabla"
-                      className={`p-1.5 rounded ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-                <Rows3 size={14} />
-              </button>
-            </div>
+
+          <div className="flex items-center gap-2 w-[280px] bg-white border border-border rounded-lg px-2.5 py-1.5">
+            <Search size={14} className="text-text3 shrink-0" />
+            <input
+              value={filters.search || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              placeholder="Buscar lead, empresa, teléfono…"
+              className="flex-1 min-w-0 text-[12px] bg-transparent border-0 outline-none placeholder:text-text3"
+            />
+          </div>
+
+          <div className="flex items-center bg-surface2 rounded-lg p-0.5">
+            <button onClick={() => setView('kanban')} title="Kanban"
+                    className={`px-2.5 py-1.5 rounded-md transition-colors ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+              <LayoutGrid size={14} />
+            </button>
+            <button onClick={() => setView('table')} title="Tabla"
+                    className={`px-2.5 py-1.5 rounded-md transition-colors ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+              <Rows3 size={14} />
+            </button>
+          </div>
+
+          {isAdmin && (
+            <button onClick={() => setStagesEditorOpen(true)}
+                    title="Editar columnas"
+                    className="py-1.5 px-3 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2 flex items-center gap-1.5">
+              <SettingsIcon size={13} /> Columnas
+            </button>
+          )}
+          <button onClick={() => openNewLead()}
+                  className="py-1.5 px-3 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark flex items-center gap-1.5 shrink-0">
+            <Plus size={14} /> Nuevo lead
+          </button>
+        </div>
+
+        {/* Mobile: titulo + acciones; busqueda y filtros via CrmFilters debajo */}
+        <div className="md:hidden flex items-start justify-between gap-3 mb-2.5">
+          <div className="min-w-0">
+            <h1 className="text-[15px] font-bold leading-tight">CRM</h1>
+            <p className="text-[10.5px] text-text3 mt-0.5">
+              {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
+              {totalProjected > 0 && <> · {fmtMoney(totalProjected)}</>}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
             {isAdmin && (
               <button onClick={() => setStagesEditorOpen(true)}
-                      title="Editar columnas"
-                      className="py-2 px-3 max-md:px-2 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2 flex items-center gap-1.5">
-                <SettingsIcon size={14} /> <span className="max-md:hidden">Columnas</span>
+                      title="Columnas"
+                      className="py-1.5 px-2 rounded-md border border-border bg-white text-text2 hover:bg-surface2 flex items-center">
+                <SettingsIcon size={14} />
               </button>
             )}
             <button onClick={() => openNewLead()}
-                    title="Nuevo lead"
-                    className="py-2 px-3 max-md:px-2 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
-              <Plus size={14} /> <span className="max-md:hidden">Nuevo lead</span>
+                    className="py-1.5 px-2.5 rounded-md bg-blue text-white text-[11.5px] font-semibold hover:bg-blue-dark flex items-center gap-1">
+              <Plus size={13} /> Nuevo
             </button>
           </div>
         </div>
 
-        <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
+        {/* Mobile: buscador/filtros */}
+        <div className="md:hidden mb-2">
+          <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
+        </div>
 
         {/* Quick filter chips · solo desktop */}
-        <div className="flex items-center gap-1.5 flex-wrap max-md:hidden">
+        <div className="hidden md:flex items-center gap-2 flex-wrap py-1">
           <Chip active={quickFilter === 'mine'} onClick={() => setQuickFilter(quickFilter === 'mine' ? '' : 'mine')}
                 tone="blue">Míos · {myCount}</Chip>
           <Chip active={quickFilter === ''} onClick={() => setQuickFilter('')}>
@@ -224,6 +261,8 @@ export default function CrmPage() {
                 tone="yellow">Sin actividad 7d</Chip>
           <Chip active={quickFilter === 'closing'} onClick={() => setQuickFilter(quickFilter === 'closing' ? '' : 'closing')}
                 tone="green">Cerrando 🔥🔥🔥</Chip>
+          <span className="flex-1" />
+          <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} hideSearch compact />
         </div>
       </div>
 
@@ -275,16 +314,16 @@ export default function CrmPage() {
             ) : (
               /* MOBILE · tabs por etapa + lista vertical */
               <div className="flex flex-col gap-2.5">
-                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                <div className="flex gap-1.5 overflow-x-auto py-1 -mx-1 px-1 scrollbar-hide">
                   {stages.map((s) => {
                     const n = (leadsByStage[s.id] || []).length;
                     const isOn = s.id === activeMobileStage;
                     return (
                       <button key={s.id} onClick={() => setMobileStageId(s.id)}
-                              className={`px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all border ${
-                                isOn ? 'bg-text text-white border-text' : 'bg-white text-text2 border-border hover:bg-surface2'
+                              className={`px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all ${
+                                isOn ? 'bg-text text-white' : 'bg-surface2 text-text2 hover:bg-surface3'
                               }`}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color, opacity: isOn ? 1 : 0.85 }} />
                         {s.name}
                         <span className={`text-[10px] px-1.5 py-px rounded-full font-bold ${
                           isOn ? 'bg-white/20 text-white' : 'bg-surface3 text-text3'
@@ -365,16 +404,19 @@ export default function CrmPage() {
   );
 }
 
+// Chip estilo handoff (kpill): no activos en bg-surface2 (no blanco) para
+// evitar el efecto "letras blancas sobre blanco". Activos en bg saturado del
+// tono con texto del mismo tono más oscuro.
 function Chip({ active, onClick, tone = 'gray', children }) {
   const tones = {
-    gray:   active ? 'bg-text text-white border-text'              : 'bg-white text-text2 border-border hover:bg-surface2',
-    blue:   active ? 'bg-blue-bg text-blue border-blue/30'         : 'bg-white text-text2 border-border hover:bg-blue-bg/40',
-    yellow: active ? 'bg-yellow-bg text-yellow-700 border-yellow/30': 'bg-white text-text2 border-border hover:bg-yellow-bg/40',
-    green:  active ? 'bg-green-bg text-green-700 border-green/30'  : 'bg-white text-text2 border-border hover:bg-green-bg/40',
+    gray:   active ? 'bg-text text-white'                          : 'bg-surface2 text-text2 hover:bg-surface3',
+    blue:   active ? 'bg-blue-bg text-blue'                        : 'bg-surface2 text-text2 hover:bg-blue-bg/60',
+    yellow: active ? 'bg-yellow-bg text-yellow-700'                : 'bg-surface2 text-text2 hover:bg-yellow-bg/60',
+    green:  active ? 'bg-green-bg text-green-700'                  : 'bg-surface2 text-text2 hover:bg-green-bg/60',
   };
   return (
     <button onClick={onClick}
-            className={`px-2.5 py-1 rounded-full border text-[10.5px] font-semibold transition-all ${tones[tone]}`}>
+            className={`px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition-all ${tones[tone]}`}>
       {children}
     </button>
   );

@@ -14,7 +14,7 @@ export default function KanbanColumn({
   const total = leads.reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
 
   return (
-    <div className="flex flex-col w-[260px] max-md:w-[78vw] shrink-0 max-h-full bg-surface2 rounded-xl">
+    <div className="flex flex-col w-[236px] max-md:w-[78vw] shrink-0 max-h-full bg-surface2 rounded-xl">
       {/* Header con color-dot · nombre · count · total · btn + */}
       <div className="px-3 pt-3 pb-2 flex items-center gap-1.5 shrink-0">
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: stage.color }} />

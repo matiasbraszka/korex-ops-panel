@@ -1,33 +1,69 @@
-import { Flame, MessageCircle, MoreHorizontal, Trash2, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Flame, MessageCircle, MoreHorizontal, Trash2, ArrowRight, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
-// Tabla agrupada por etapa con color-bar.
+const PAGE_SIZE = 20;
+
+// Tabla agrupada por etapa con secciones colapsables y paginación de 20 leads/pág.
 export default function LeadsTable({
   leads, stages, salesTeam, ownersByUserId, canEditOwners,
   onPatchLead, onDeleteLead, onDetail,
 }) {
-  // Agrupar por etapa preservando orden de etapas
+  const totalLeads = leads.length;
+  const totalPages = Math.max(1, Math.ceil(totalLeads / PAGE_SIZE));
+
+  const [page, setPage] = useState(1);
+  // Reset a página 1 cuando cambia el conjunto de leads (filtros aplicados)
+  useEffect(() => { setPage(1); }, [totalLeads]);
+  // Si por alguna razón page queda fuera de rango, corregir
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  // Slice paginado preservando el orden recibido
+  const pagedLeads = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return leads.slice(start, start + PAGE_SIZE);
+  }, [leads, page]);
+
+  // Agrupar por etapa preservando orden
   const grouped = stages
-    .map((s) => ({ stage: s, rows: leads.filter((l) => l.stage_id === s.id) }))
+    .map((s) => ({ stage: s, rows: pagedLeads.filter((l) => l.stage_id === s.id) }))
     .filter((g) => g.rows.length > 0);
 
+  const [collapsed, setCollapsed] = useState({});
+  const toggle = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+
+  const fromIdx = totalLeads === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const toIdx = Math.min(page * PAGE_SIZE, totalLeads);
+
   return (
-    <div className="space-y-4 overflow-x-auto">
+    <div className="space-y-3 overflow-x-auto">
       {grouped.length === 0 ? (
         <div className="text-center text-text3 py-12 text-[12px]">Sin leads</div>
       ) : grouped.map((g) => {
         const total = g.rows.reduce((s, r) => s + (Number(r.estimated_value) || 0), 0);
+        const isCollapsed = !!collapsed[g.stage.id];
         return (
           <div key={g.stage.id} className="min-w-[1000px]">
-            {/* Header de grupo con color-bar */}
-            <div className="flex items-center gap-2 px-1 mb-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ background: g.stage.color }} />
+            {/* Header de grupo colapsable */}
+            <button onClick={() => toggle(g.stage.id)}
+                    className="w-full flex items-center gap-2 px-1 py-1.5 mb-1 bg-transparent border-0 cursor-pointer text-left">
+              <ChevronDown size={12}
+                           className="text-text3 transition-transform shrink-0"
+                           style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0)' }} />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: g.stage.color }} />
               <span className="text-[11px] font-bold uppercase tracking-wider">{g.stage.name}</span>
               <span className="text-[10.5px] text-text3 font-medium">
                 {g.rows.length} {g.rows.length === 1 ? 'lead' : 'leads'}
                 {total > 0 && <> · {fmtMoney(total)}</>}
               </span>
-            </div>
+              <span className="flex-1" />
+              {isCollapsed && (
+                <span className="text-[10px] text-text3">
+                  {g.rows.length} {g.rows.length === 1 ? 'lead' : 'leads'} ocultos
+                </span>
+              )}
+            </button>
 
+            {!isCollapsed && (
             <div className="bg-white border border-border rounded-lg overflow-hidden">
               {/* Column headers solo en el primer grupo */}
               <div className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider grid items-center"
@@ -56,11 +92,84 @@ export default function LeadsTable({
                      onDetail={() => onDetail(l)} />
               ))}
             </div>
+            )}
           </div>
         );
       })}
+
+      {/* Footer de paginación */}
+      {totalLeads > 0 && (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          fromIdx={fromIdx}
+          toIdx={toIdx}
+          totalLeads={totalLeads}
+          onChange={setPage}
+        />
+      )}
     </div>
   );
+}
+
+// Paginación: 'Mostrando X-Y de Z' + Anterior · 1 2 3 … · Siguiente
+function Pagination({ page, totalPages, fromIdx, toIdx, totalLeads, onChange }) {
+  // Generar lista de páginas con elipsis cuando hay muchas
+  const pages = pageRange(page, totalPages);
+
+  return (
+    <div className="flex items-center justify-between flex-wrap gap-2 py-3 px-1">
+      <div className="text-[11px] text-text3">
+        Mostrando <span className="text-text2 font-semibold">{fromIdx}</span>–
+        <span className="text-text2 font-semibold">{toIdx}</span> de{' '}
+        <span className="text-text2 font-semibold">{totalLeads}</span>
+        {' '}{totalLeads === 1 ? 'lead' : 'leads'}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          className="bg-white border border-border rounded-md px-2.5 py-1 text-[11.5px] font-medium text-text2 hover:bg-surface2 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+          <ChevronLeft size={13} /> Anterior
+        </button>
+
+        {pages.map((p, i) => p === '…' ? (
+          <span key={'e' + i} className="px-1 text-text3 text-[11px]">…</span>
+        ) : (
+          <button key={p}
+                  onClick={() => onChange(p)}
+                  className={`min-w-[28px] py-1 px-2 rounded-md text-[11.5px] font-semibold ${
+                    p === page
+                      ? 'bg-blue text-white'
+                      : 'bg-white border border-border text-text2 hover:bg-surface2'
+                  }`}>
+            {p}
+          </button>
+        ))}
+
+        <button
+          onClick={() => onChange(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          className="bg-white border border-border rounded-md px-2.5 py-1 text-[11.5px] font-medium text-text2 hover:bg-surface2 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+          Siguiente <ChevronRight size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Devuelve [1, 2, '…', current-1, current, current+1, '…', last] o variantes
+function pageRange(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
+  const arr = [...out].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  const result = [];
+  for (let i = 0; i < arr.length; i++) {
+    result.push(arr[i]);
+    if (i < arr.length - 1 && arr[i + 1] - arr[i] > 1) result.push('…');
+  }
+  return result;
 }
 
 function Row({ lead, stage, stages, salesTeam, owner, setter, canEditOwners, onPatch, onDelete, onDetail }) {
