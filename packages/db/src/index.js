@@ -3,14 +3,17 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    'Faltan variables de entorno VITE_SUPABASE_URL y/o VITE_SUPABASE_ANON_KEY. ' +
-    'Copiá apps/operations/.env.example a apps/operations/.env y completá los valores.'
-  );
+export const envMissing = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+
+if (envMissing) {
+  console.error('Faltan VITE_SUPABASE_URL/ANON_KEY. Configurá las env vars en Vercel.');
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Si faltan vars usamos un cliente dummy para evitar crash al import; la UI
+// muestra un banner explicando el problema (ver apps/operations/src/main.jsx).
+export const supabase = envMissing
+  ? createClient('https://invalid.invalid', 'invalid')
+  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Low-level REST fetch para PostgREST. Usa el JWT del usuario autenticado
 // cuando hay sesión (para que RLS vea auth.uid() correctamente); cae a
