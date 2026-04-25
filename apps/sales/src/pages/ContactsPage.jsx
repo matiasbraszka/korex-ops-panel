@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, X, Trash2, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '@korex/db';
+import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
 const CATEGORIES = [
   { id: 'prospect',     label: 'Potencial cliente', short: 'Pot. cliente', color: '#5B7CF5' },
@@ -21,6 +22,8 @@ export default function ContactsPage() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCats, setFilterCats] = useState([]);
+  const { confirm, dialog } = useConfirm();
+  const { showToast, toasts } = useToast();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -54,7 +57,7 @@ export default function ContactsPage() {
         if (!has) return false;
       }
       if (q) {
-        const hay = [c.first_name, c.last_name, c.phone, c.email, c.company, c.notes]
+        const hay = [c.full_name, c.first_name, c.last_name, c.phone, c.email, c.company, c.notes]
           .some((v) => v && String(v).toLowerCase().includes(q));
         if (!hay) return false;
       }
@@ -68,7 +71,7 @@ export default function ContactsPage() {
   const patchContact = async (id, patch) => {
     setContacts((cs) => cs.map((c) => c.id === id ? { ...c, ...patch } : c));
     const { error: e } = await supabase.from('contacts').update(patch).eq('id', id);
-    if (e) { alert(e.message); await load(); }
+    if (e) { showToast('No se pudo guardar: ' + e.message, 'error'); await load(); }
   };
 
   const toggleContactCategory = async (id, catId) => {
@@ -81,17 +84,23 @@ export default function ContactsPage() {
 
   const createContact = async () => {
     const { data, error: e } = await supabase.from('contacts')
-      .insert({ first_name: '', last_name: '', categories: [] })
+      .insert({ full_name: '', categories: [] })
       .select().single();
-    if (e) { alert(e.message); return; }
+    if (e) { showToast('No se pudo crear: ' + e.message, 'error'); return; }
     setContacts((cs) => [data, ...cs]);
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este contacto? Si tiene leads vinculados, se eliminarán.')) return;
+    const ok = await confirm({
+      title: '¿Eliminar este contacto?',
+      message: 'Si tiene leads vinculados, se eliminarán también.',
+      danger: true,
+    });
+    if (!ok) return;
     const { error: e } = await supabase.from('contacts').delete().eq('id', id);
-    if (e) { alert(e.message); return; }
+    if (e) { showToast('Error: ' + e.message, 'error'); return; }
     await load();
+    showToast('Contacto eliminado', 'success');
   };
 
   if (loading) return <div className="text-text3 text-center py-20">Cargando contactos...</div>;
@@ -158,13 +167,12 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Tabla con edición inline en TODOS los campos */}
+      {/* Tabla con edición inline. Una sola columna 'Nombre completo' */}
       <div className="bg-white border border-border rounded-xl overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider">
             <tr>
-              <th className="text-left py-2 px-3 font-semibold">Nombre</th>
-              <th className="text-left py-2 px-2 font-semibold">Apellido</th>
+              <th className="text-left py-2 px-3 font-semibold">Nombre completo</th>
               <th className="text-left py-2 px-2 font-semibold">Empresa</th>
               <th className="text-left py-2 px-2 font-semibold">Teléfono</th>
               <th className="text-left py-2 px-2 font-semibold">Email</th>
@@ -175,7 +183,7 @@ export default function ContactsPage() {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="text-center text-text3 py-8 text-[12px]">Sin resultados</td></tr>
+              <tr><td colSpan={7} className="text-center text-text3 py-8 text-[12px]">Sin resultados</td></tr>
             ) : filtered.map((c) => (
               <ContactRow key={c.id} contact={c}
                           onPatch={(patch) => patchContact(c.id, patch)}
@@ -185,6 +193,9 @@ export default function ContactsPage() {
           </tbody>
         </table>
       </div>
+
+      {dialog}
+      {toasts}
     </div>
   );
 }
@@ -259,14 +270,9 @@ function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
   return (
     <tr className="border-b border-border last:border-b-0 hover:bg-surface2/40 group align-top">
       <td className="px-3 py-1">
-        <input defaultValue={contact.first_name || ''} placeholder="Nombre"
-               onBlur={(e) => persist('first_name', e.target.value)}
-               className={inlineInput} />
-      </td>
-      <td className="px-2 py-1">
-        <input defaultValue={contact.last_name || ''} placeholder="Apellido"
-               onBlur={(e) => persist('last_name', e.target.value)}
-               className={inlineInput} />
+        <input defaultValue={contact.full_name || ''} placeholder="Nombre completo"
+               onBlur={(e) => persist('full_name', e.target.value)}
+               className={inlineInput + ' font-semibold'} />
       </td>
       <td className="px-2 py-1">
         <input defaultValue={contact.company || ''} placeholder="Empresa"

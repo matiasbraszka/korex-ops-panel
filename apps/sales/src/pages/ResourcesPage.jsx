@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, MessageCircle, Sparkles, Paperclip, Play, Phone, Image as ImageIcon, ExternalLink, Trash2, Copy, Check, X } from 'lucide-react';
 import { useSalesResources } from '../hooks/useSalesResources.js';
+import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
 // Recursos · V1 conservadora del handoff — tabs por tipo + lista limpia.
 
@@ -18,6 +19,8 @@ export default function ResourcesPage() {
   const [tab, setTab] = useState('mensajes');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const { confirm, dialog } = useConfirm();
+  const { showToast, toasts } = useToast();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -53,8 +56,31 @@ export default function ResourcesPage() {
   }, [tabItems, search]);
 
   const handleCreate = async (payload) => {
-    await create({ ...payload, type: tab });
+    const res = await create({ ...payload, type: tab });
+    if (res.error) {
+      showToast('No se pudo crear: ' + res.error, 'error');
+      return false;
+    }
     setModalOpen(false);
+    showToast('Recurso creado', 'success');
+    return true;
+  };
+
+  const handleDelete = async (item) => {
+    const ok = await confirm({
+      title: '¿Eliminar este recurso?',
+      message: 'Se borra de la biblioteca compartida del equipo.',
+      danger: true,
+    });
+    if (!ok) return;
+    const res = await remove(item);
+    if (res.error) showToast('Error: ' + res.error, 'error');
+    else showToast('Recurso eliminado', 'success');
+  };
+
+  const handleUpdate = async (item, patch) => {
+    const res = await update(item, patch);
+    if (res.error) showToast('No se pudo guardar: ' + res.error, 'error');
   };
 
   if (loading) return <div className="text-text3 text-center py-20">Cargando recursos…</div>;
@@ -140,23 +166,26 @@ export default function ResourcesPage() {
               : <>Sin {tdef?.l.toLowerCase()} cargados todavía. <button onClick={() => setModalOpen(true)} className="text-blue font-semibold hover:underline bg-transparent border-0 p-0 cursor-pointer">Agregá el primero</button></>}
           </div>
         ) : tab === 'mensajes' ? (
-          filtered.map((it) => <MensajeCard key={it.id} item={it} onUpdate={update} onDelete={() => remove(it)} />)
+          filtered.map((it) => <MensajeCard key={it.id} item={it} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
         ) : tab === 'objeciones' ? (
-          filtered.map((it) => <ObjecionCard key={it.id} item={it} onUpdate={update} onDelete={() => remove(it)} />)
+          filtered.map((it) => <ObjecionCard key={it.id} item={it} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
         ) : (
-          filtered.map((it) => <ResourceCard key={it.id} item={it} type={tdef} onUpdate={update} onDelete={() => remove(it)} />)
+          filtered.map((it) => <ResourceCard key={it.id} item={it} type={tdef} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
         )}
       </div>
 
       {modalOpen && (
-        <ResourceModal type={tdef} onClose={() => setModalOpen(false)} onCreate={handleCreate} />
+        <ResourceModal type={tdef} onClose={() => setModalOpen(false)} onCreate={handleCreate} showToast={showToast} />
       )}
+
+      {dialog}
+      {toasts}
     </div>
   );
 }
 
 // Modal para crear un recurso del tipo activo. Campos varian segun el tipo.
-function ResourceModal({ type, onClose, onCreate }) {
+function ResourceModal({ type, onClose, onCreate, showToast }) {
   const [form, setForm] = useState({ title: '', body: '', body_alt: '', url: '', description: '', tags: '' });
   const [saving, setSaving] = useState(false);
   const Icon = type.Ico;
@@ -165,7 +194,7 @@ function ResourceModal({ type, onClose, onCreate }) {
 
   const handleSave = async (e) => {
     e?.preventDefault?.();
-    if (!form.title.trim()) { alert('El título es obligatorio.'); return; }
+    if (!form.title.trim()) { showToast?.('El título es obligatorio.', 'error'); return; }
     setSaving(true);
     const tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean);
     await onCreate({ ...form, tags });

@@ -20,6 +20,8 @@ export function useSalesResources() {
 
   useEffect(() => { load(); }, [load]);
 
+  // create / update / remove son agnósticos a la UI: si falla, devuelven el
+  // error como string para que el caller lo muestre como toast in-app.
   const create = useCallback(async (payload) => {
     const { data: userData } = await supabase.auth.getUser();
     const created_by = userData?.user?.id || null;
@@ -38,24 +40,25 @@ export function useSalesResources() {
       .insert(row)
       .select()
       .single();
-    if (e) { console.error(e); alert('Error: ' + e.message); return null; }
+    if (e) { console.error(e); return { error: e.message }; }
     setItems((prev) => [data, ...prev]);
-    return data;
+    return { data };
   }, []);
 
   const update = useCallback(async (item, patch) => {
-    if (!item?.id) return;
+    if (!item?.id) return { error: 'Sin id' };
     setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...patch } : x)));
     const { error: e } = await supabase.from('sales_resources').update(patch).eq('id', item.id);
-    if (e) { console.error(e); alert('Error: ' + e.message); }
+    if (e) { console.error(e); return { error: e.message }; }
+    return {};
   }, []);
 
   const remove = useCallback(async (item) => {
-    if (!item?.id) return;
-    if (!confirm('¿Eliminar este recurso?')) return;
+    if (!item?.id) return { error: 'Sin id' };
     setItems((prev) => prev.filter((x) => x.id !== item.id));
     const { error: e } = await supabase.from('sales_resources').delete().eq('id', item.id);
-    if (e) { console.error(e); alert('Error: ' + e.message); }
+    if (e) { console.error(e); return { error: e.message }; }
+    return {};
   }, []);
 
   // Compat con la API antigua de ResourcesPanel
