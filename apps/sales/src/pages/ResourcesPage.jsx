@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Plus, MessageCircle, Sparkles, Folder, ExternalLink, Trash2, Copy, Check, X } from 'lucide-react';
+import { Search, Plus, MessageCircle, Sparkles, Folder, ExternalLink, Trash2, Copy, Check, X, SlidersHorizontal } from 'lucide-react';
 import { useSalesResources } from '../hooks/useSalesResources.js';
 import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
@@ -82,8 +82,6 @@ export default function ResourcesPage() {
     return result;
   }, [tabItems, search, activeTags]);
 
-  const toggleTagFilter = (t) => setActiveTags((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]);
-
   const handleCreate = async (payload) => {
     const res = await create({ ...payload, type: tab });
     if (res.error) { showToast('No se pudo crear: ' + res.error, 'error'); return false; }
@@ -135,6 +133,9 @@ export default function ResourcesPage() {
               )}
             </div>
 
+            {/* Boton Filtros (etiquetas) tipo Contactos */}
+            <TagFilterDropdown allTags={uniqueTags} activeTags={activeTags} onChange={setActiveTags} />
+
             <button onClick={() => setModalOpen(true)}
                     className="py-2 px-3.5 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark flex items-center gap-1.5 shrink-0">
               <Plus size={14} /> Nuevo
@@ -182,32 +183,6 @@ export default function ResourcesPage() {
         })}
       </div>
 
-      {/* Filtro por etiqueta — chips clickeables */}
-      {uniqueTags.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap mb-3">
-          <span className="text-[10.5px] text-text3 font-semibold mr-1">Filtrar:</span>
-          {uniqueTags.map((t) => {
-            const on = activeTags.includes(t);
-            const c = tagColor(t);
-            return (
-              <button key={t} onClick={() => toggleTagFilter(t)}
-                      className="text-[10.5px] font-semibold px-2.5 py-1 rounded-full transition-colors"
-                      style={on
-                        ? { background: c, color: '#fff' }
-                        : { background: c + '1F', color: c }}>
-                {t}
-              </button>
-            );
-          })}
-          {activeTags.length > 0 && (
-            <button onClick={() => setActiveTags([])}
-                    className="text-[10.5px] text-text3 hover:text-red bg-transparent border-0 cursor-pointer flex items-center gap-1">
-              <X size={11} /> Limpiar
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Body */}
       <div className="flex flex-col gap-2">
         {filtered.length === 0 ? (
@@ -236,21 +211,50 @@ export default function ResourcesPage() {
 }
 
 // ─── TagEditor: editar etiquetas inline + autocomplete con tags existentes ──
+// IMPORTANTE: el dropdown de sugerencias usa position:FIXED con coords del
+// trigger (getBoundingClientRect) para escapar overflow:hidden de modales y
+// stacking contexts. Sin esto el dropdown se cortaba dentro del modal.
 function TagEditor({ tags = [], onChange, allTags = [] }) {
   const [input, setInput] = useState('');
   const [editing, setEditing] = useState(false);
+  const [popPos, setPopPos] = useState(null);
   const inputRef = useRef(null);
-  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const popRef = useRef(null);
 
-  // Cierra al click afuera
+  const updatePos = () => {
+    const el = inputRef.current || triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setPopPos({ left: rect.left, top: rect.bottom + 4, width: Math.max(220, rect.width) });
+  };
+
+  const startEditing = () => {
+    setEditing(true);
+    // Calcular posicion despues de que el input se monte
+    requestAnimationFrame(updatePos);
+  };
+
+  // Cierra al click afuera (fuera del input Y fuera del popover)
   useEffect(() => {
     if (!editing) return;
-    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-      addTag(input);
-      setEditing(false);
-    } };
+    const handler = (e) => {
+      const inInput = inputRef.current && inputRef.current.contains(e.target);
+      const inPop = popRef.current && popRef.current.contains(e.target);
+      if (!inInput && !inPop) {
+        addTag(input);
+        setEditing(false);
+      }
+    };
+    const onResize = () => updatePos();
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onResize, true);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onResize, true);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, input, tags]);
 
@@ -260,6 +264,7 @@ function TagEditor({ tags = [], onChange, allTags = [] }) {
     if (tags.includes(t)) { setInput(''); return; }
     onChange([...tags, t]);
     setInput('');
+    setEditing(false);
   };
 
   const removeTag = (t) => onChange(tags.filter((x) => x !== t));
@@ -277,15 +282,14 @@ function TagEditor({ tags = [], onChange, allTags = [] }) {
     }
   };
 
-  // Sugerencias: tags existentes que NO esten ya en el item, filtradas por input
   const q = input.trim().toLowerCase();
   const suggestions = (allTags || [])
     .filter((t) => !tags.includes(t))
     .filter((t) => !q || t.toLowerCase().includes(q))
-    .slice(0, 8);
+    .slice(0, 12);
 
   return (
-    <div ref={wrapRef} className="flex flex-wrap gap-1 items-center relative">
+    <div className="flex flex-wrap gap-1 items-center">
       {tags.map((t) => {
         const c = tagColor(t);
         return (
@@ -301,46 +305,105 @@ function TagEditor({ tags = [], onChange, allTags = [] }) {
         );
       })}
       {editing ? (
-        <>
-          <input ref={inputRef} autoFocus
-                 value={input}
-                 onChange={(e) => setInput(e.target.value)}
-                 onKeyDown={handleKey}
-                 placeholder="escribir o elegir…"
-                 className="text-[10.5px] bg-bg border border-border rounded-full px-2 py-0.5 outline-none focus:border-blue placeholder:text-text3 min-w-[100px]" />
-          {/* Dropdown de sugerencias (tags existentes) */}
-          {suggestions.length > 0 && (
-            <div className="absolute left-0 top-full mt-1 z-30 bg-white border border-border rounded-lg shadow-xl p-1 min-w-[180px] max-h-[200px] overflow-y-auto">
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1">
-                Etiquetas existentes
-              </div>
-              {suggestions.map((t) => {
-                const c = tagColor(t);
-                return (
-                  <button key={t} type="button"
-                          onMouseDown={(e) => { e.preventDefault(); addTag(t); }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[11.5px]">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c }} />
-                    <span className="flex-1">{t}</span>
-                  </button>
-                );
-              })}
-              {q && !allTags.includes(q) && (
-                <button type="button"
-                        onMouseDown={(e) => { e.preventDefault(); addTag(q); }}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-blue-bg text-[11.5px] text-blue font-semibold border-t border-border mt-1">
-                  <Plus size={11} />
-                  <span>Crear "{q}"</span>
-                </button>
-              )}
-            </div>
-          )}
-        </>
+        <input ref={inputRef} autoFocus
+               value={input}
+               onChange={(e) => { setInput(e.target.value); updatePos(); }}
+               onKeyDown={handleKey}
+               placeholder="escribir o elegir…"
+               className="text-[10.5px] bg-bg border border-border rounded-full px-2 py-0.5 outline-none focus:border-blue placeholder:text-text3 min-w-[120px]" />
       ) : (
-        <button type="button" onClick={() => setEditing(true)}
+        <button ref={triggerRef} type="button" onClick={startEditing}
                 className="inline-flex items-center gap-0.5 text-[10.5px] text-text3 bg-surface2 hover:bg-surface3 rounded-full px-2 py-0.5 cursor-pointer">
           <Plus size={10} /> etiqueta
         </button>
+      )}
+
+      {/* Popover sugerencias (fixed para escapar overflow del modal) */}
+      {editing && popPos && (suggestions.length > 0 || (q && !allTags.includes(q))) && (
+        <div ref={popRef}
+             style={{ position: 'fixed', left: popPos.left, top: popPos.top, minWidth: popPos.width, zIndex: 1000, background: '#FFFFFF' }}
+             className="border border-border rounded-lg shadow-xl p-1 max-h-[260px] overflow-y-auto">
+          {suggestions.length > 0 && (
+            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1">
+              Etiquetas existentes
+            </div>
+          )}
+          {suggestions.map((t) => {
+            const c = tagColor(t);
+            return (
+              <button key={t} type="button"
+                      onMouseDown={(e) => { e.preventDefault(); addTag(t); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[12px]">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c }} />
+                <span className="flex-1">{t}</span>
+              </button>
+            );
+          })}
+          {q && !allTags.includes(q) && (
+            <button type="button"
+                    onMouseDown={(e) => { e.preventDefault(); addTag(q); }}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-blue-bg text-[12px] text-blue font-semibold ${suggestions.length > 0 ? 'border-t border-border mt-1' : ''}`}>
+              <Plus size={11} />
+              <span>Crear "{q}"</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TagFilterDropdown: boton "Filtros" tipo Contactos ──────────────────────
+function TagFilterDropdown({ allTags, activeTags, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  const toggle = (t) => onChange(activeTags.includes(t) ? activeTags.filter((x) => x !== t) : [...activeTags, t]);
+  const activeCount = activeTags.length;
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button type="button" onClick={() => setOpen(!open)}
+              disabled={allTags.length === 0}
+              className={`flex items-center gap-1.5 py-2 px-3 rounded-lg border text-[12px] font-medium ${
+                activeCount > 0 ? 'border-blue text-blue bg-blue-bg'
+                : allTags.length === 0 ? 'border-border text-text3 bg-white opacity-50 cursor-not-allowed'
+                : 'border-border text-text2 bg-white hover:bg-surface2'
+              }`}>
+        <SlidersHorizontal size={13} /> Filtros
+        {activeCount > 0 && (
+          <span className="bg-blue text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">
+            {activeCount}
+          </span>
+        )}
+      </button>
+      {open && allTags.length > 0 && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-border rounded-lg shadow-xl p-1.5 min-w-[220px] max-h-[320px] overflow-y-auto">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Etiquetas</span>
+            {activeCount > 0 && (
+              <button onClick={() => onChange([])}
+                      className="text-[10px] text-text3 hover:text-red bg-transparent border-0 cursor-pointer">
+                Limpiar
+              </button>
+            )}
+          </div>
+          {allTags.map((t) => {
+            const on = activeTags.includes(t);
+            const c = tagColor(t);
+            return (
+              <button key={t} type="button" onClick={() => toggle(t)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c }} />
+                <span className="flex-1">{t}</span>
+                {on && <span className="text-[11px]" style={{ color: c }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );

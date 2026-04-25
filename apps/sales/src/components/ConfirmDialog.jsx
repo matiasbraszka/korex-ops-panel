@@ -33,11 +33,16 @@ export function useConfirm() {
 
   const dialog = state ? (
     <>
-      <div className="fixed inset-0 z-[60] bg-black/45" onClick={() => close(false)} />
-      <div className="fixed z-[70] bg-white rounded-2xl border border-border shadow-2xl
+      {/* Backdrop sutil con blur, no negro */}
+      <div className="fixed inset-0 z-[60] bg-text/15 backdrop-blur-sm transition-opacity"
+           style={{ animation: 'fadeIn .15s ease-out' }}
+           onClick={() => close(false)} />
+      <div className="fixed z-[70] bg-white rounded-2xl border border-border
                       inset-x-4 top-1/2 -translate-y-1/2
                       md:inset-x-auto md:left-1/2 md:-translate-x-1/2
-                      md:w-[420px] max-w-[440px] p-5"
+                      md:w-[400px] max-w-[440px] p-5
+                      shadow-[0_24px_60px_-12px_rgba(26,29,38,.18),0_8px_24px_-8px_rgba(26,29,38,.12)]"
+           style={{ animation: 'scaleIn .18s cubic-bezier(.16,1,.3,1)' }}
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3 mb-4">
           <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
@@ -54,11 +59,11 @@ export function useConfirm() {
         </div>
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={() => close(false)}
-                  className="py-2 px-3.5 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2">
+                  className="py-2 px-3.5 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2 transition-colors">
             {state.cancelLabel}
           </button>
-          <button type="button" onClick={() => close(true)}
-                  className={`py-2 px-3.5 rounded-lg text-white text-[12px] font-semibold ${
+          <button type="button" autoFocus onClick={() => close(true)}
+                  className={`py-2 px-3.5 rounded-lg text-white text-[12px] font-semibold transition-colors ${
                     state.danger ? 'bg-red hover:bg-red/90' : 'bg-blue hover:bg-blue-dark'
                   }`}>
             {state.confirmLabel}

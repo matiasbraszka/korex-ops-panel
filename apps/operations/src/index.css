@@ -131,6 +131,19 @@ body {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
+/* ConfirmDialog · backdrop+modal */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (max-width: 767px) {
+  @keyframes scaleIn {
+    from { opacity: 0; transform: translateY(-46%) scale(.96); }
+    to   { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+}
+
 /* LeadModal · panel posicionado segun device (Tailwind v4 no genera clamp() con commas) */
 .lead-modal-panel {
   position: fixed;
