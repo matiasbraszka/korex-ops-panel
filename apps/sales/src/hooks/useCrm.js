@@ -39,6 +39,9 @@ export function useCrm() {
   const [stages, setStages] = useState([]);
   const [leads, setLeads] = useState([]);
   const [salesTeam, setSalesTeam] = useState([]);
+  // Solo personas con rol 'sales' (sin contar admins puros). Para asignar
+  // CRMs a vendedores especificos sin que aparezcan los admins.
+  const [sellers, setSellers] = useState([]);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -92,7 +95,11 @@ export function useCrm() {
       const roles = rolesByUser[m.user_id] || [];
       return roles.includes('sales') || roles.includes('admin');
     });
+    // Solo vendedores: tienen rol 'sales' (puede tambien ser admin si es algo
+    // hibrido). Excluye admins puros que no venden.
+    const onlySellers = eligible.filter((m) => (rolesByUser[m.user_id] || []).includes('sales'));
     setSalesTeam(eligible);
+    setSellers(onlySellers);
     setMe(user?.id || null);
   }, []);
 
@@ -360,7 +367,7 @@ export function useCrm() {
   return {
     pipelines, pipelineId, setPipelineId,
     createPipeline, renamePipeline, updatePipeline, removePipeline, setPipelineMembers,
-    stages, leads, salesTeam, me, loading, error,
+    stages, leads, salesTeam, sellers, me, loading, error,
     refresh: bootstrap,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,

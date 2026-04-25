@@ -22,7 +22,7 @@ export default function CrmPage() {
   const {
     pipelines, pipelineId, setPipelineId,
     createPipeline, updatePipeline, removePipeline, setPipelineMembers,
-    stages, leads, salesTeam, me, loading, error,
+    stages, leads, salesTeam, sellers, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
   } = useCrm();
@@ -530,7 +530,7 @@ export default function CrmPage() {
         pipeline={pipelineToEdit}
         isAdmin={isAdmin}
         currentUserId={me}
-        salesTeam={salesTeam}
+        sellers={sellers}
       />
 
       {dialog}
