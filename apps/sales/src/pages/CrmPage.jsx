@@ -214,18 +214,16 @@ export default function CrmPage() {
             </DragOverlay>
           </DndContext>
         ) : (
-          <div className="h-full overflow-auto">
-            <LeadsTable
-              leads={orderedLeads}
-              stages={stages}
-              salesTeam={salesTeam}
-              ownersByUserId={ownersByUserId}
-              canEditOwners={isAdmin}
-              onPatchLead={updateLead}
-              onDeleteLead={(id) => handleDeleteWithConfirm(id)}
-              onDetail={openEditLead}
-            />
-          </div>
+          <LeadsTable
+            leads={orderedLeads}
+            stages={stages}
+            salesTeam={salesTeam}
+            ownersByUserId={ownersByUserId}
+            canEditOwners={isAdmin}
+            onPatchLead={updateLead}
+            onDeleteLead={(id) => handleDeleteWithConfirm(id)}
+            onDetail={openEditLead}
+          />
         )}
       </div>
 
