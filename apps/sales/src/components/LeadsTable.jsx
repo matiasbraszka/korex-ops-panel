@@ -5,7 +5,7 @@ export default function LeadsTable({
   onPatchLead, onDeleteLead, onDetail,
 }) {
   return (
-    <div className="bg-white border border-border rounded-lg h-full min-h-0 overflow-auto">
+    <div className="bg-white border border-border rounded-lg overflow-x-auto">
       <table className="w-full text-[12px] min-w-[1000px]">
           <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider sticky top-0 z-10">
             <tr>

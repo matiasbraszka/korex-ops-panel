@@ -141,9 +141,9 @@ export default function CrmPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       {/* Header: titulo + acciones + filtros + stats */}
-      <div className="shrink-0 space-y-2 mb-2">
+      <div className="space-y-2 mb-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-xl font-bold">CRM</h1>
           <div className="flex items-center gap-2">
@@ -175,8 +175,8 @@ export default function CrmPage() {
         <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
       </div>
 
-      {/* Body */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      {/* Body — kanban necesita altura fija para scroll vertical interno; tabla fluye libre. */}
+      <div className={view === 'kanban' ? 'h-[calc(100dvh-220px)] max-md:h-[calc(100dvh-260px)] overflow-hidden' : ''}>
         {stages.length === 0 ? (
           <div className="rounded-lg border border-border bg-white p-8 text-center">
             <p className="text-sm text-text2 mb-4">El pipeline no tiene columnas. Pedile al admin que las configure.</p>

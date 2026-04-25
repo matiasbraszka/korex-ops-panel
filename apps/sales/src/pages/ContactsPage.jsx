@@ -97,9 +97,9 @@ export default function ContactsPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col">
       {/* Header */}
-      <div className="shrink-0 space-y-2 mb-2">
+      <div className="space-y-2 mb-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-bold">Contactos</h1>
@@ -144,7 +144,7 @@ export default function ContactsPage() {
       </div>
 
       {/* Tabla 3 columnas. Click en fila → modal. */}
-      <div className="flex-1 min-h-0 bg-white border border-border rounded-lg overflow-auto">
+      <div className="bg-white border border-border rounded-lg overflow-x-auto">
         <table className="w-full text-[13px]">
             <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider sticky top-0 z-10">
               <tr>
