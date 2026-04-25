@@ -144,9 +144,8 @@ export default function ContactsPage() {
       </div>
 
       {/* Tabla 3 columnas. Click en fila → modal. */}
-      <div className="flex-1 min-h-0 bg-white border border-border rounded-lg overflow-hidden flex flex-col">
-        <div className="overflow-auto flex-1">
-          <table className="w-full text-[13px]">
+      <div className="flex-1 min-h-0 bg-white border border-border rounded-lg overflow-auto">
+        <table className="w-full text-[13px]">
             <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider sticky top-0 z-10">
               <tr>
                 <th className="text-left py-2 px-3 font-semibold w-[35%]">Nombre completo</th>
@@ -191,7 +190,6 @@ export default function ContactsPage() {
               ))}
             </tbody>
           </table>
-        </div>
       </div>
 
       <ContactModal
