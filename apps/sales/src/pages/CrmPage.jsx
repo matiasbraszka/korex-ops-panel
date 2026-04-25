@@ -28,6 +28,10 @@ export default function CrmPage() {
   const [stagesEditorOpen, setStagesEditorOpen] = useState(false);
   const [draggingLead, setDraggingLead] = useState(null);
   const [filters, setFilters] = useState({ search: '', stageId: '', assigneeId: '', scores: [] });
+  // Tab activo en vista mobile (1 etapa a la vez)
+  const [mobileStageId, setMobileStageId] = useState(null);
+  // Quick filters chip activo: '' | 'mine' | 'stale' | 'closing'
+  const [quickFilter, setQuickFilter] = useState('');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -37,14 +41,21 @@ export default function CrmPage() {
     return m;
   }, [salesTeam]);
 
-  // Aplicar filtros + busqueda al universo total de leads.
-  // 'assigneeId' filtra leads donde la persona es owner O setter.
   const filteredLeads = useMemo(() => {
     const q = (filters.search || '').trim().toLowerCase();
+    const now = Date.now();
     return leads.filter((l) => {
       if (filters.stageId && l.stage_id !== filters.stageId) return false;
       if (filters.assigneeId && l.owner_id !== filters.assigneeId && l.setter_id !== filters.assigneeId) return false;
       if (filters.scores?.length && !filters.scores.includes(l.score)) return false;
+      if (quickFilter === 'mine' && l.owner_id !== me && l.setter_id !== me) return false;
+      if (quickFilter === 'stale') {
+        const updated = l.updated_at ? new Date(l.updated_at).getTime() : 0;
+        if (!updated || (now - updated) < 7 * 86400_000) return false;
+      }
+      if (quickFilter === 'closing') {
+        if (!(l.score === 3)) return false;
+      }
       if (q) {
         const hay = (l.full_name || '').toLowerCase().includes(q)
                  || (l.company_multinivel || '').toLowerCase().includes(q)
@@ -54,9 +65,8 @@ export default function CrmPage() {
       }
       return true;
     });
-  }, [leads, filters]);
+  }, [leads, filters, quickFilter, me]);
 
-  // Orden compuesto: score desc (3 → 2 → 1 → null), luego position manual.
   const sortLeads = (arr) => [...arr].sort((a, b) => {
     const sa = a.score ?? 0;
     const sb = b.score ?? 0;
@@ -76,7 +86,6 @@ export default function CrmPage() {
     return stages.flatMap((s) => (leadsByStage[s.id] || []).map((l) => l.id));
   }, [stages, leadsByStage]);
 
-  // Tabla: orden por stage primero, dentro por score desc + position.
   const orderedLeads = useMemo(() => {
     const stageIdx = Object.fromEntries(stages.map((s, i) => [s.id, i]));
     return [...filteredLeads].sort((a, b) => {
@@ -90,7 +99,21 @@ export default function CrmPage() {
     });
   }, [filteredLeads, stages]);
 
-  const openNewLead = () => { setActiveLead(null); setLeadModalOpen(true); };
+  // KPIs del topbar
+  const totalActive = filteredLeads.length;
+  const totalProjected = filteredLeads.reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
+  const myCount = leads.filter((l) => l.owner_id === me || l.setter_id === me).length;
+
+  // Etapa activa en mobile (default: primera etapa con leads)
+  const activeMobileStage = mobileStageId || stages[0]?.id;
+  const mobileLeads = activeMobileStage ? (leadsByStage[activeMobileStage] || []) : [];
+  const mobileStage = stages.find((s) => s.id === activeMobileStage);
+  const mobileTotal = mobileLeads.reduce((s, l) => s + (Number(l.estimated_value) || 0), 0);
+
+  const openNewLead = (stageId) => {
+    setActiveLead(stageId ? { stage_id: stageId } : null);
+    setLeadModalOpen(true);
+  };
   const openEditLead = (lead) => { setActiveLead(lead); setLeadModalOpen(true); };
 
   const handleDeleteWithConfirm = (id) => {
@@ -142,12 +165,18 @@ export default function CrmPage() {
 
   return (
     <div className="flex flex-col">
-      {/* Header: titulo + acciones + filtros + stats */}
-      <div className="space-y-2 mb-2">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-xl font-bold">CRM</h1>
+      {/* Header: titulo + KPIs + acciones */}
+      <div className="space-y-2.5 mb-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold leading-tight">CRM</h1>
+            <p className="text-[11.5px] text-text3 mt-0.5">
+              Pipeline · {totalActive} {totalActive === 1 ? 'lead' : 'leads'}
+              {totalProjected > 0 && <> · {fmtMoney(totalProjected)} proyectado</>}
+            </p>
+          </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-surface2 rounded-md p-0.5 border border-border">
+            <div className="flex items-center bg-surface2 rounded-md p-0.5 border border-border max-md:hidden">
               <button onClick={() => setView('kanban')} title="Kanban"
                       className={`p-1.5 rounded ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
                 <LayoutGrid size={14} />
@@ -164,7 +193,7 @@ export default function CrmPage() {
                 <SettingsIcon size={14} /> <span className="max-md:hidden">Columnas</span>
               </button>
             )}
-            <button onClick={openNewLead}
+            <button onClick={() => openNewLead()}
                     title="Nuevo lead"
                     className="py-2 px-3 max-md:px-2 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1.5">
               <Plus size={14} /> <span className="max-md:hidden">Nuevo lead</span>
@@ -173,59 +202,133 @@ export default function CrmPage() {
         </div>
 
         <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} />
+
+        {/* Quick filter chips · solo desktop */}
+        <div className="flex items-center gap-1.5 flex-wrap max-md:hidden">
+          <Chip active={quickFilter === 'mine'} onClick={() => setQuickFilter(quickFilter === 'mine' ? '' : 'mine')}
+                tone="blue">Míos · {myCount}</Chip>
+          <Chip active={quickFilter === ''} onClick={() => setQuickFilter('')}>
+            Todos · {leads.length}
+          </Chip>
+          <Chip active={quickFilter === 'stale'} onClick={() => setQuickFilter(quickFilter === 'stale' ? '' : 'stale')}
+                tone="yellow">Sin actividad 7d</Chip>
+          <Chip active={quickFilter === 'closing'} onClick={() => setQuickFilter(quickFilter === 'closing' ? '' : 'closing')}
+                tone="green">Cerrando 🔥🔥🔥</Chip>
+        </div>
       </div>
 
-      {/* Body — kanban necesita altura fija para scroll vertical interno; tabla fluye libre. */}
-      <div className={view === 'kanban' ? 'h-[calc(100dvh-220px)] max-md:h-[calc(100dvh-260px)] overflow-hidden' : ''}>
-        {stages.length === 0 ? (
-          <div className="rounded-lg border border-border bg-white p-8 text-center">
-            <p className="text-sm text-text2 mb-4">El pipeline no tiene columnas. Pedile al admin que las configure.</p>
-            {isAdmin && (
-              <button onClick={() => setStagesEditorOpen(true)}
-                      className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark">
-                Configurar columnas
-              </button>
-            )}
-          </div>
-        ) : view === 'kanban' ? (
-          <DndContext sensors={sensors} collisionDetection={collisionDetection}
-                      onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
-              <div className="flex gap-2 overflow-x-auto overflow-y-hidden h-full -mx-1 px-1">
-                {stages.map((stage) => (
-                  <KanbanColumn
-                    key={stage.id}
-                    stage={stage}
-                    leads={leadsByStage[stage.id] || []}
-                    ownersByUserId={ownersByUserId}
-                    salesTeam={salesTeam}
-                    canEditOwners={isAdmin}
-                    onCardDetail={openEditLead}
-                    onPatchLead={updateLead}
-                    onDeleteLead={handleDeleteWithConfirm}
-                  />
-                ))}
+      {/* Body */}
+      {stages.length === 0 ? (
+        <div className="rounded-lg border border-border bg-white p-8 text-center">
+          <p className="text-sm text-text2 mb-4">El pipeline no tiene columnas. Pedile al admin que las configure.</p>
+          {isAdmin && (
+            <button onClick={() => setStagesEditorOpen(true)}
+                    className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark">
+              Configurar columnas
+            </button>
+          )}
+        </div>
+      ) : view === 'table' ? (
+        <LeadsTable
+          leads={orderedLeads}
+          stages={stages}
+          salesTeam={salesTeam}
+          ownersByUserId={ownersByUserId}
+          canEditOwners={isAdmin}
+          onPatchLead={updateLead}
+          onDeleteLead={(id) => handleDeleteWithConfirm(id)}
+          onDetail={openEditLead}
+        />
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={collisionDetection}
+                    onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <SortableContext items={allLeadIds} strategy={verticalListSortingStrategy}>
+            {/* DESKTOP · kanban horizontal · tabla en md+ */}
+            <div className="hidden md:flex gap-3 overflow-x-auto h-[calc(100dvh-260px)] -mx-1 px-1 pb-2">
+              {stages.map((stage) => (
+                <KanbanColumn
+                  key={stage.id}
+                  stage={stage}
+                  leads={leadsByStage[stage.id] || []}
+                  ownersByUserId={ownersByUserId}
+                  salesTeam={salesTeam}
+                  canEditOwners={isAdmin}
+                  onCardDetail={openEditLead}
+                  onPatchLead={updateLead}
+                  onDeleteLead={handleDeleteWithConfirm}
+                  onNewLead={openNewLead}
+                />
+              ))}
+            </div>
+
+            {/* MOBILE · tabs por etapa + lista vertical */}
+            <div className="md:hidden flex flex-col gap-2.5">
+              {/* Stage tabs scrollable */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                {stages.map((s) => {
+                  const n = (leadsByStage[s.id] || []).length;
+                  const isOn = s.id === activeMobileStage;
+                  return (
+                    <button key={s.id} onClick={() => setMobileStageId(s.id)}
+                            className={`px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all border ${
+                              isOn
+                                ? 'bg-text text-white border-text'
+                                : 'bg-white text-text2 border-border hover:bg-surface2'
+                            }`}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
+                      {s.name}
+                      <span className={`text-[10px] px-1.5 py-px rounded-full font-bold ${
+                        isOn ? 'bg-white/20 text-white' : 'bg-surface3 text-text3'
+                      }`}>{n}</span>
+                    </button>
+                  );
+                })}
               </div>
-            </SortableContext>
-            <DragOverlay>
-              {draggingLead && <LeadCard lead={draggingLead}
-                                          owner={ownersByUserId[draggingLead.owner_id]}
-                                          setter={ownersByUserId[draggingLead.setter_id]} />}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          <LeadsTable
-            leads={orderedLeads}
-            stages={stages}
-            salesTeam={salesTeam}
-            ownersByUserId={ownersByUserId}
-            canEditOwners={isAdmin}
-            onPatchLead={updateLead}
-            onDeleteLead={(id) => handleDeleteWithConfirm(id)}
-            onDetail={openEditLead}
-          />
-        )}
-      </div>
+
+              {/* Active stage summary */}
+              {mobileStage && (
+                <div className="flex items-end justify-between px-1">
+                  <div>
+                    <div className="text-[15px] font-bold leading-tight">{mobileStage.name}</div>
+                    <div className="text-[10.5px] text-text3 mt-0.5">
+                      {mobileLeads.length} {mobileLeads.length === 1 ? 'lead' : 'leads'}
+                      {mobileTotal > 0 && <> · {fmtMoney(mobileTotal)} proyectado</>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista vertical de la etapa activa */}
+              <div className="flex flex-col gap-1">
+                {mobileLeads.length === 0 ? (
+                  <div className="text-center text-[12px] text-text3 py-10 border border-dashed border-border-light rounded-lg">
+                    No hay leads en esta etapa
+                  </div>
+                ) : (
+                  mobileLeads.map((lead) => (
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
+                      owner={ownersByUserId?.[lead.owner_id]}
+                      setter={ownersByUserId?.[lead.setter_id]}
+                      salesTeam={salesTeam}
+                      canEditOwners={isAdmin}
+                      onDetail={() => openEditLead(lead)}
+                      onPatch={(patch) => updateLead(lead.id, patch)}
+                      onDelete={() => handleDeleteWithConfirm(lead.id)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </SortableContext>
+          <DragOverlay>
+            {draggingLead && <LeadCard lead={draggingLead}
+                                        owner={ownersByUserId[draggingLead.owner_id]}
+                                        setter={ownersByUserId[draggingLead.setter_id]} />}
+          </DragOverlay>
+        </DndContext>
+      )}
 
       <LeadModal
         open={leadModalOpen}
@@ -252,4 +355,25 @@ export default function CrmPage() {
       />
     </div>
   );
+}
+
+function Chip({ active, onClick, tone = 'gray', children }) {
+  const tones = {
+    gray:   active ? 'bg-text text-white border-text'              : 'bg-white text-text2 border-border hover:bg-surface2',
+    blue:   active ? 'bg-blue-bg text-blue border-blue/30'         : 'bg-white text-text2 border-border hover:bg-blue-bg/40',
+    yellow: active ? 'bg-yellow-bg text-yellow-700 border-yellow/30': 'bg-white text-text2 border-border hover:bg-yellow-bg/40',
+    green:  active ? 'bg-green-bg text-green-700 border-green/30'  : 'bg-white text-text2 border-border hover:bg-green-bg/40',
+  };
+  return (
+    <button onClick={onClick}
+            className={`px-2.5 py-1 rounded-full border text-[10.5px] font-semibold transition-all ${tones[tone]}`}>
+      {children}
+    </button>
+  );
+}
+
+function fmtMoney(n) {
+  if (!n) return 'US$ 0';
+  if (n >= 1000) return `US$ ${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return `US$ ${Math.round(n)}`;
 }

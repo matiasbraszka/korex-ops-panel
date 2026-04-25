@@ -135,8 +135,9 @@ function MainLayout() {
   const canAccessSales = useCan('sales', 'read');
   const location = useLocation();
 
-  // Menu organizado por macro pestaña (area). Cada seccion se esconde si
-  // el usuario no tiene permiso de lectura sobre el modulo.
+  // Areas del panel: cada una tiene color propio, ruta base y modulos.
+  // El sidebar muestra un "area switcher" arriba (si el usuario tiene >1)
+  // y abajo los modulos del area activa, coloreados con ese mismo color.
   const opsItems = [
     { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
@@ -147,15 +148,23 @@ function MainLayout() {
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
   ];
-  const sections = [
-    canAccessOperations && { id: 'operations', label: 'Operaciones', items: opsItems },
-    canAccessSales      && { id: 'sales',      label: 'Ventas',      items: salesItems },
-    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems },
+  // Tokens de color por area (mantienen consistencia con la paleta Korex).
+  const areaTokens = {
+    operations: { color: '#22C55E', bg: '#ECFDF5', short: 'Ops',    icon: ClipboardList,  base: '/operations' },
+    sales:      { color: '#5B7CF5', bg: '#EEF2FF', short: 'Ventas', icon: Users,          base: '/sales' },
+    admin:      { color: '#8B5CF6', bg: '#F5F3FF', short: 'Admin',  icon: Shield,         base: '/admin' },
+  };
+  const areas = [
+    canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,   ...areaTokens.operations },
+    canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems, ...areaTokens.sales },
+    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems, ...areaTokens.admin },
   ].filter(Boolean);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
-  const activeModule = location.pathname.split('/').filter(Boolean)[0] || 'operations';
-  const mobileItems = (sections.find(s => s.id === activeModule) || sections[0] || { items: [] }).items;
+  const pathPrefix = location.pathname.split('/').filter(Boolean)[0] || 'operations';
+  const activeArea = areas.find((a) => a.id === pathPrefix) || areas[0];
+  const mobileItems = activeArea?.items || [];
+  const hasMultipleAreas = areas.length > 1;
 
   const switchTo = (path) => {
     setSelectedId(null);
@@ -225,72 +234,122 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar — hidden on mobile */}
+      {/* Sidebar — hidden on mobile · 2 niveles: area switcher + modulos */}
       <div className="w-[240px] bg-white border-r border-border flex flex-col fixed h-screen z-30 max-md:hidden">
-        <div className="h-[60px] flex items-center px-5 gap-2.5 border-b border-border shrink-0">
+        {/* Logo */}
+        <div className="h-[60px] flex items-center px-4 gap-2.5 border-b border-border shrink-0">
           <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d814cde4bbc2afc8dc3.png" alt="Método Korex" className="h-[28px] w-auto" />
-          <span className="text-[13px] font-bold text-gray-700">Método Korex</span>
+          <span className="text-[13px] font-bold text-text">Método Korex</span>
         </div>
-        <nav className="p-3 flex-1 overflow-y-auto">
-          {sections.map((section) => (
-            <div key={section.id} className="mb-3">
-              <div className="text-[10px] font-semibold text-text3 uppercase tracking-[1px] px-3 pt-3 pb-1.5">{section.label}</div>
-              {section.items.map((item) => {
-                const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+
+        {/* Area switcher (solo si tiene >1 area) */}
+        {hasMultipleAreas && (
+          <div className="px-2.5 pt-3 pb-1">
+            <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-2 mb-1.5">Área</div>
+            <div className="bg-surface2 rounded-lg p-1 flex flex-col gap-0.5">
+              {areas.map((a) => {
+                const isOn = a.id === activeArea?.id;
+                const Icon = a.icon;
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => switchTo(item.path)}
-                    className={`flex items-center gap-2.5 py-2 px-3 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all duration-150
-                      ${isActive ? 'text-blue bg-blue-bg font-semibold' : 'text-text2 bg-transparent hover:text-text hover:bg-surface2'}`}
-                  >
-                    <item.Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
-                    {item.label}
-                    {item.id === 'tasks' && urgentCount > 0 && (
-                      <span className="ml-auto bg-red text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{urgentCount}</span>
-                    )}
-                    {item.id === 'videos' && unseenVideoCount > 0 && (
-                      <span className="ml-auto bg-blue-500 text-white text-[10px] font-bold py-[1px] px-1.5 rounded-xl min-w-[18px] text-center">{unseenVideoCount}</span>
-                    )}
+                  <button key={a.id}
+                          onClick={() => switchTo(a.items[0].path)}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border"
+                          style={{
+                            background: isOn ? a.bg : 'transparent',
+                            borderColor: isOn ? a.color + '40' : 'transparent',
+                            color: isOn ? a.color : 'var(--color-text2)',
+                          }}>
+                    <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
+                          style={{ background: a.color }}>
+                      <Icon size={11} strokeWidth={2.25} />
+                    </span>
+                    <span className="text-[12px] font-semibold flex-1">{a.label}</span>
                   </button>
                 );
               })}
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* Header informativo del area (cuando solo tiene 1) */}
+        {!hasMultipleAreas && activeArea && (
+          <div className="px-3.5 pt-3 pb-1">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md"
+                 style={{ background: activeArea.bg, color: activeArea.color }}>
+              <activeArea.icon size={12} strokeWidth={2.25} />
+              <span className="text-[11.5px] font-bold">{activeArea.label}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Modulos del area activa, coloreados con el color del area */}
+        <nav className="px-2 py-2 flex-1 overflow-y-auto">
+          {(activeArea?.items || []).map((item) => {
+            const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+            return (
+              <button key={item.id}
+                      onClick={() => switchTo(item.path)}
+                      className="flex items-center gap-2.5 py-2 px-2.5 cursor-pointer text-[13px] font-medium w-full text-left font-sans rounded-md mb-0.5 border-none transition-all"
+                      style={{
+                        background: isActive ? activeArea.bg : 'transparent',
+                        color: isActive ? activeArea.color : 'var(--color-text2)',
+                      }}
+                      onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = 'var(--color-surface2)'; e.currentTarget.style.color = 'var(--color-text)'; } }}
+                      onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text2)'; } }}>
+                <item.Icon size={16} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
+                <span className="flex-1">{item.label}</span>
+                {item.id === 'tasks' && urgentCount > 0 && (
+                  <span className="text-[10px] font-bold py-[1px] px-1.5 rounded-full min-w-[18px] text-center"
+                        style={{ background: isActive ? activeArea.color : 'var(--color-red)', color: '#fff' }}>{urgentCount}</span>
+                )}
+                {item.id === 'videos' && unseenVideoCount > 0 && (
+                  <span className="text-[10px] font-bold py-[1px] px-1.5 rounded-full min-w-[18px] text-center bg-blue text-white">{unseenVideoCount}</span>
+                )}
+              </button>
+            );
+          })}
         </nav>
-        <div className="p-3.5 px-4 border-t border-border flex items-center gap-2.5">
+
+        {/* Footer · usuario + rol pill */}
+        <div className="p-3 border-t border-border flex items-center gap-2.5">
           {currentUser?.avatar ? (
-            <img src={currentUser.avatar} alt={currentUser.name} className="w-[34px] h-[34px] rounded-full object-cover shrink-0" />
+            <img src={currentUser.avatar} alt={currentUser.name} className="w-[32px] h-[32px] rounded-full object-cover shrink-0" />
           ) : (
-            <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center font-bold text-xs shrink-0" style={{ background: currentUser?.color + '18', color: currentUser?.color }}>
+            <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center font-bold text-[11px] shrink-0"
+                 style={{ background: (currentUser?.color || '#5B7CF5') + '24', color: currentUser?.color || '#5B7CF5' }}>
               {currentUser?.initials}
             </div>
           )}
-          <div>
-            <div className="text-[13px] font-semibold">{currentUser?.name}</div>
-            <div className="text-[11px] text-text3">{currentUser?.role}</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12.5px] font-semibold truncate">{currentUser?.name}</div>
+            <div className="flex items-center gap-1 mt-px">
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-px rounded"
+                    style={{ background: activeArea?.bg, color: activeArea?.color }}>
+                {currentUser?.isAdmin ? 'Admin' : (activeArea?.short || 'User')}
+              </span>
+            </div>
           </div>
-          <button
-            onClick={doLogout}
-            className="ml-auto bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red"
-            title="Cerrar sesión"
-          >
+          <button onClick={doLogout}
+                  className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1 rounded hover:text-red shrink-0"
+                  title="Cerrar sesión">
             {'→'}
           </button>
         </div>
       </div>
 
-      {/* Bottom nav — mobile only (items del modulo activo) */}
+      {/* Bottom nav — mobile only · 4 modulos del area activa + Salir.
+          Color del area activa para destacar la pantalla. */}
       <div className="hidden max-md:flex mobile-bottom-nav fixed bottom-0 left-0 right-0 bg-white border-t border-border z-50 justify-around items-center px-1 py-1 safe-bottom">
-        {mobileItems.map((item) => {
+        {mobileItems.slice(0, 4).map((item) => {
           const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
           return (
-            <button
-              key={item.id}
-              onClick={() => switchTo(item.path)}
-              className={`flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1
-                ${isActive ? 'text-blue bg-blue-bg' : 'text-text3 bg-transparent'}`}
-            >
+            <button key={item.id}
+                    onClick={() => switchTo(item.path)}
+                    className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans transition-all duration-150 relative min-w-0 flex-1"
+                    style={{
+                      background: isActive ? activeArea?.bg : 'transparent',
+                      color: isActive ? activeArea?.color : 'var(--color-text3)',
+                    }}>
               <item.Icon size={18} strokeWidth={isActive ? 2.25 : 1.75} className="shrink-0" />
               <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
               {item.id === 'tasks' && urgentCount > 0 && (
@@ -299,14 +358,29 @@ function MainLayout() {
             </button>
           );
         })}
-        <button
-          onClick={doLogout}
-          className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
-          title="Cerrar sesión"
-        >
-          <span className="text-[18px] leading-none">{'→'}</span>
-          <span className="text-[9px] font-medium leading-none">Salir</span>
-        </button>
+        {/* Switcher de area si hay >1 (como item "Más") · sino Salir */}
+        {hasMultipleAreas ? (
+          <div className="relative min-w-0 flex-1">
+            <select onChange={(e) => { const a = areas.find(x => x.id === e.target.value); if (a) switchTo(a.items[0].path); }}
+                    value={activeArea?.id || ''}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                    aria-label="Cambiar de área">
+              {areas.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+            <div className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg pointer-events-none"
+                 style={{ color: 'var(--color-text3)' }}>
+              <span className="text-[14px] leading-none">⋯</span>
+              <span className="text-[9px] font-medium leading-none">Áreas</span>
+            </div>
+          </div>
+        ) : (
+          <button onClick={doLogout}
+                  className="flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg border-none cursor-pointer font-sans text-text3 bg-transparent min-w-0 flex-1"
+                  title="Cerrar sesión">
+            <span className="text-[18px] leading-none">{'→'}</span>
+            <span className="text-[9px] font-medium leading-none">Salir</span>
+          </button>
+        )}
       </div>
 
       {/* Main area */}
