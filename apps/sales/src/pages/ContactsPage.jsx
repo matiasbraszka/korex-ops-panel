@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, X, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Search, X, Trash2, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '@korex/db';
 
 const CATEGORIES = [
@@ -119,6 +119,9 @@ export default function ContactsPage() {
               )}
             </div>
 
+            {/* Boton Filtros (categorias) tipo CRM */}
+            <FiltersDropdown filterCats={filterCats} setFilterCats={setFilterCats} counts={counts} />
+
             {(search || filterCats.length > 0) && (
               <button onClick={() => { setSearch(''); setFilterCats([]); }}
                       className="py-2 px-2.5 rounded-lg border border-border bg-white text-text3 hover:text-red text-[11px] flex items-center gap-1 shrink-0">
@@ -155,25 +158,6 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Chips de categorías para filtrar */}
-      <div className="flex items-center gap-1.5 flex-wrap mb-2">
-        {CATEGORIES.map((c) => {
-          const active = filterCats.includes(c.id);
-          const n = counts[c.id] || 0;
-          return (
-            <button key={c.id} onClick={() => toggleCat(c.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors ${
-                      active ? 'text-white' : 'bg-surface2 text-text2 hover:bg-surface3'
-                    }`}
-                    style={active ? { background: c.color } : undefined}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? '#fff' : c.color }} />
-              {c.label}
-              <span className={active ? 'opacity-90 font-semibold' : 'text-text3 font-semibold'}>({n})</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Tabla con edición inline en TODOS los campos */}
       <div className="bg-white border border-border rounded-xl overflow-x-auto">
         <table className="w-full text-[13px]">
@@ -205,9 +189,68 @@ export default function ContactsPage() {
   );
 }
 
+// Boton "Filtros" tipo CRM con dropdown que muestra checkboxes por categoria.
+// Cuenta de cada cat al lado. Click para toggle. Cierra al click afuera.
+function FiltersDropdown({ filterCats, setFilterCats, counts }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  const toggle = (id) => setFilterCats((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+  const activeCount = filterCats.length;
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button type="button" onClick={() => setOpen((v) => !v)}
+              className={`flex items-center gap-1.5 py-2 px-3 rounded-lg border text-[12px] font-medium ${
+                activeCount > 0 ? 'border-blue text-blue bg-blue-bg' : 'border-border text-text2 bg-white hover:bg-surface2'
+              }`}>
+        <SlidersHorizontal size={13} /> Filtros
+        {activeCount > 0 && (
+          <span className="bg-blue text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">
+            {activeCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-border rounded-lg shadow-xl p-1.5 min-w-[220px]">
+          <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1.5">Categorías</div>
+          {CATEGORIES.map((c) => {
+            const on = filterCats.includes(c.id);
+            const n = counts[c.id] || 0;
+            return (
+              <button key={c.id} type="button" onClick={() => toggle(c.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c.color }} />
+                <span className="flex-1">{c.label}</span>
+                <span className="text-text3 text-[10px]">{n}</span>
+                {on && <span className="text-[10px]" style={{ color: c.color }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Fila editable inline. Cada campo es input editable. Categorías abren picker en click.
+// IMPORTANTE: el popover de categorias usa position FIXED con coords del trigger
+// (calculadas con getBoundingClientRect) para escapar el stacking context de la
+// tabla — sin esto el popover queda detras de los chips de otras filas.
 function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
   const [catOpen, setCatOpen] = useState(false);
+  const [popupPos, setPopupPos] = useState(null);
+  const triggerRef = useRef(null);
+  const openCatPicker = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPopupPos({ left: rect.left, top: rect.bottom + 4, width: Math.max(220, rect.width) });
+    }
+    setCatOpen(true);
+  };
   const persist = (key, current) => {
     const v = (current ?? '').trim();
     const original = contact[key] || '';
@@ -240,8 +283,8 @@ function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
                onBlur={(e) => persist('email', e.target.value)}
                className={inlineInput} />
       </td>
-      <td className="px-2 py-1.5 relative">
-        <button type="button" onClick={() => setCatOpen((v) => !v)}
+      <td className="px-2 py-1.5">
+        <button ref={triggerRef} type="button" onClick={openCatPicker}
                 className="flex flex-wrap gap-1 w-full min-h-[28px] items-center px-1 py-0.5 rounded border border-transparent hover:border-border cursor-pointer text-left">
           {(contact.categories || []).length === 0 && (
             <span className="text-text3 text-[10px] italic">+ agregar</span>
@@ -253,17 +296,19 @@ function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
             </span>
           ))}
         </button>
-        {catOpen && (
+        {catOpen && popupPos && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setCatOpen(false)} />
-            <div className="absolute left-1 top-full mt-1 z-20 bg-white border border-border rounded-lg shadow-lg p-1.5 min-w-[180px]">
+            <div className="fixed inset-0 z-40" onClick={() => setCatOpen(false)} />
+            <div style={{ position: 'fixed', left: popupPos.left, top: popupPos.top, width: popupPos.width, zIndex: 50, background: '#FFFFFF' }}
+                 className="border border-border rounded-lg shadow-xl p-1.5 max-h-[320px] overflow-y-auto">
+              <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1">Categorías</div>
               {CATEGORIES.map((cat) => {
                 const on = (contact.categories || []).includes(cat.id);
                 return (
                   <button key={cat.id} type="button"
                           onClick={() => onToggleCat(cat.id)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[11.5px] ${on ? 'font-semibold' : ''}`}>
-                    <span className="w-2 h-2 rounded-full" style={{ background: cat.color }} />
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.color }} />
                     <span className="flex-1">{cat.label}</span>
                     {on && <span className="text-[10px]" style={{ color: cat.color }}>✓</span>}
                   </button>
