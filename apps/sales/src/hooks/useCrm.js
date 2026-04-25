@@ -162,10 +162,17 @@ export function useCrm() {
       .eq('id', leadId);
   }, []);
 
+  const convertLeadToClient = useCallback(async (leadId) => {
+    const { data, error: e } = await supabase.rpc('convert_lead_to_client', { p_lead_id: leadId });
+    if (e) throw e;
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, client_id: data } : l)));
+    return data;
+  }, []);
+
   return {
     pipelineId, stages, leads, salesTeam, me, loading, error,
     refresh: bootstrap,
     addStage, updateStage, deleteStage, reorderStages,
-    createLead, updateLead, deleteLead, moveLead,
+    createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
   };
 }

@@ -7,11 +7,12 @@ import { supabase } from '@korex/db';
 export default function LeadModal({
   open, onClose, lead, stages, salesTeam = [],
   canEditOwners, currentUserId,
-  onCreate, onUpdate, onDelete,
+  onCreate, onUpdate, onDelete, onConvertToClient,
 }) {
   const [form, setForm] = useState(emptyForm(stages, currentUserId));
   const [calls, setCalls] = useState([]);
   const [loadingCalls, setLoadingCalls] = useState(false);
+  const [converting, setConverting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +71,21 @@ export default function LeadModal({
     if (!confirm('¿Eliminar este lead? No se puede deshacer.')) return;
     await onDelete(lead.id);
     onClose();
+  };
+
+  const handleConvert = async () => {
+    if (!onConvertToClient || !lead?.id) return;
+    if (!confirm(`¿Convertir "${form.full_name}" en cliente activo de Operaciones?\n\nSe creará una ficha en el panel de Ops y este lead quedará linkeado.`)) return;
+    setConverting(true);
+    try {
+      const newClientId = await onConvertToClient(lead.id);
+      alert(`Cliente creado en Operaciones (id: ${newClientId}). Ya aparece en el panel de Ops.`);
+      onClose();
+    } catch (e) {
+      alert('No se pudo convertir: ' + (e.message || e));
+    } finally {
+      setConverting(false);
+    }
   };
 
   return (
@@ -230,6 +246,25 @@ export default function LeadModal({
               </div>
             )}
           </div>
+          {isEdit && (
+            <div className="px-5 py-3 border-t border-border bg-surface2">
+              {form.client_id ? (
+                <div className="text-[12px] text-green-700 font-medium">
+                  ✓ Ya convertido a cliente de Operaciones (id: <code className="text-[11px]">{form.client_id}</code>)
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-[11px] text-text3">
+                    Cuando cierres trato, convertí el lead en cliente activo de Operaciones.
+                  </div>
+                  <button type="button" onClick={handleConvert} disabled={converting}
+                          className="py-1.5 px-3 rounded-md bg-green-600 text-white text-[12px] hover:bg-green-700 disabled:opacity-60">
+                    {converting ? 'Convirtiendo…' : 'Convertir a cliente'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="p-5 border-t border-border flex items-center justify-between gap-2">
             <div>
               {isEdit && (

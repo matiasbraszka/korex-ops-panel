@@ -19,7 +19,7 @@ export default function CrmPage() {
   const {
     pipelineId, stages, leads, salesTeam, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
-    createLead, updateLead, deleteLead, moveLead,
+    createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
   } = useCrm();
 
   const [view, setView] = useState('kanban'); // 'kanban' | 'table'
@@ -240,6 +240,7 @@ export default function CrmPage() {
         onCreate={createLead}
         onUpdate={updateLead}
         onDelete={deleteLead}
+        onConvertToClient={convertLeadToClient}
       />
 
       <StagesEditorModal
