@@ -32,7 +32,7 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam, hid
               value={filters.search || ''}
               onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               placeholder="Buscar nombre, empresa, email o teléfono…"
-              className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-bg border border-border rounded-md outline-none focus:border-blue"
+              className="w-full pl-7 pr-2 py-1.5 text-[12px] text-text bg-white border border-border rounded-md outline-none focus:border-blue placeholder:text-text3"
             />
           </div>
         )}
@@ -110,4 +110,6 @@ function Field({ label, children }) {
   );
 }
 
-const selectCls = 'w-full text-[12px] py-1.5 px-2 bg-bg border border-border rounded-md outline-none focus:border-blue cursor-pointer';
+// text-text explicito + appearance-none asegura que el <select> nativo no
+// tome estilos del OS (en algunos Android/iOS el texto se renderiza blanco).
+const selectCls = 'w-full text-[12px] text-text py-1.5 px-2 bg-white border border-border rounded-md outline-none focus:border-blue cursor-pointer appearance-none';

@@ -1,6 +1,6 @@
-import { useState, Suspense, lazy } from 'react';
+import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -112,6 +112,58 @@ function AccountPending({ email }) {
           para que complete la configuración de tu cuenta.
         </p>
       </div>
+    </div>
+  );
+}
+
+// AreaDropdown — selector compacto de area (Operaciones / Ventas / Administracion)
+// para sidebar expandido en PC. Reemplaza la lista de 3 botones que ocupaba mucho espacio.
+function AreaDropdown({ areas, activeArea, onSwitch }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  const ActiveIcon = activeArea.icon;
+  return (
+    <div className="px-2.5 pt-3 pb-1 relative" ref={ref}>
+      <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-2 mb-1.5">Área</div>
+      <button type="button" onClick={() => setOpen((v) => !v)}
+              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg border bg-white hover:bg-surface2 transition-colors cursor-pointer"
+              style={{ borderColor: activeArea.color + '40' }}>
+        <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
+              style={{ background: activeArea.color }}>
+          <ActiveIcon size={11} strokeWidth={2.25} />
+        </span>
+        <span className="text-[12px] font-semibold flex-1 text-left" style={{ color: activeArea.color }}>
+          {activeArea.label}
+        </span>
+        <ChevronDown size={12} className="text-text3 transition-transform"
+                     style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)' }} />
+      </button>
+      {open && (
+        <div className="absolute left-2.5 right-2.5 top-full mt-1 bg-white border border-border rounded-lg shadow-lg z-40 overflow-hidden">
+          {areas.map((a) => {
+            const isOn = a.id === activeArea.id;
+            const Icon = a.icon;
+            return (
+              <button key={a.id} type="button"
+                      onClick={() => { setOpen(false); onSwitch(a.items[0].path); }}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-surface2 transition-colors cursor-pointer text-left"
+                      style={{ background: isOn ? a.bg : 'transparent', color: isOn ? a.color : 'var(--color-text2)' }}>
+                <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
+                      style={{ background: a.color }}>
+                  <Icon size={11} strokeWidth={2.25} />
+                </span>
+                <span className="text-[12px] font-semibold flex-1">{a.label}</span>
+                {isOn && <span className="text-[10px]" style={{ color: a.color }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -272,33 +324,9 @@ function MainLayout() {
           </button>
         ) : null}
 
-        {/* Area switcher · solo expandido y si tiene >1 area */}
-        {!sidebarCollapsed && hasMultipleAreas && (
-          <div className="px-2.5 pt-3 pb-1">
-            <div className="text-[9.5px] font-bold tracking-[0.08em] text-text3 uppercase px-2 mb-1.5">Área</div>
-            <div className="bg-surface2 rounded-lg p-1 flex flex-col gap-0.5">
-              {areas.map((a) => {
-                const isOn = a.id === activeArea?.id;
-                const Icon = a.icon;
-                return (
-                  <button key={a.id}
-                          onClick={() => switchTo(a.items[0].path)}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border"
-                          style={{
-                            background: isOn ? a.bg : 'transparent',
-                            borderColor: isOn ? a.color + '40' : 'transparent',
-                            color: isOn ? a.color : 'var(--color-text2)',
-                          }}>
-                    <span className="w-5 h-5 rounded shrink-0 flex items-center justify-center text-white"
-                          style={{ background: a.color }}>
-                      <Icon size={11} strokeWidth={2.25} />
-                    </span>
-                    <span className="text-[12px] font-semibold flex-1">{a.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        {/* Area switcher · dropdown compacto que ahorra espacio */}
+        {!sidebarCollapsed && hasMultipleAreas && activeArea && (
+          <AreaDropdown areas={areas} activeArea={activeArea} onSwitch={switchTo} />
         )}
 
         {/* Header informativo del area · solo expandido y si tiene 1 sola area */}
@@ -554,7 +582,8 @@ function MainLayout() {
             <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-xl bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
               {syncStatus === 'syncing' ? '↻ Guardando...' : syncStatus === 'error' ? '✕ Error sync' : '● Sincronizado'}
             </span>
-            <SearchBar />
+            {/* SearchBar global solo busca clientes/tareas de Operaciones — ocultar en area Ventas */}
+            {pathPrefix !== 'sales' && <SearchBar />}
             {view === 'clients' && (
               <button
                 className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 max-md:py-1 max-md:px-2 max-md:text-[11px]"

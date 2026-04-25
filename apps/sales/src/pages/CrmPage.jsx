@@ -32,6 +32,8 @@ export default function CrmPage() {
   const [mobileStageId, setMobileStageId] = useState(null);
   // Quick filters chip activo: '' | 'mine' | 'stale' | 'closing'
   const [quickFilter, setQuickFilter] = useState('');
+  // Lead presionado largo en mobile para mostrar bottom sheet de "Mover a etapa"
+  const [lpLead, setLpLead] = useState(null);
   // Detectar mobile en runtime para render condicional (no doble-registrar
   // los mismos IDs en dnd-kit como pasaba con `hidden md:flex` + `md:hidden`).
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
@@ -177,8 +179,8 @@ export default function CrmPage() {
     <div className="flex flex-col">
       {/* Topbar integrado: titulo + KPIs + buscador + view toggle + acciones */}
       <div className="mb-3">
-        {/* Desktop: una sola fila */}
-        <div className="hidden md:flex items-center gap-3.5 mb-2.5">
+        {/* Desktop: dos filas — fila 1 con titulo + acciones; fila 2 con buscador + filtros */}
+        <div className="hidden md:flex items-center gap-3 mb-2.5">
           <div className="flex-1 min-w-0">
             <h1 className="text-[17px] font-bold leading-tight">CRM</h1>
             <p className="text-[11.5px] text-text3 mt-0.5">
@@ -187,38 +189,49 @@ export default function CrmPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 w-[280px] bg-white border border-border rounded-lg px-2.5 py-1.5">
-            <Search size={14} className="text-text3 shrink-0" />
-            <input
-              value={filters.search || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              placeholder="Buscar lead, empresa, teléfono…"
-              className="flex-1 min-w-0 text-[12px] bg-transparent border-0 outline-none placeholder:text-text3"
-            />
-          </div>
-
-          <div className="flex items-center bg-surface2 rounded-lg p-0.5">
-            <button onClick={() => setView('kanban')} title="Kanban"
-                    className={`px-2.5 py-1.5 rounded-md transition-colors ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-              <LayoutGrid size={14} />
+          {/* Toggle Kanban / Tabla — segmented control con labels para que sea claro */}
+          <div className="flex items-center bg-surface2 rounded-lg p-0.5 shrink-0">
+            <button type="button" onClick={() => setView('kanban')} title="Kanban"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-[12px] font-medium ${view === 'kanban' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+              <LayoutGrid size={13} /> Kanban
             </button>
-            <button onClick={() => setView('table')} title="Tabla"
-                    className={`px-2.5 py-1.5 rounded-md transition-colors ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
-              <Rows3 size={14} />
+            <button type="button" onClick={() => setView('table')} title="Tabla"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-[12px] font-medium ${view === 'table' ? 'bg-white shadow-sm text-text' : 'text-text3 hover:text-text'}`}>
+              <Rows3 size={13} /> Tabla
             </button>
           </div>
 
           {isAdmin && (
-            <button onClick={() => setStagesEditorOpen(true)}
+            <button type="button" onClick={() => setStagesEditorOpen(true)}
                     title="Editar columnas"
-                    className="py-1.5 px-3 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2 flex items-center gap-1.5">
+                    className="py-1.5 px-3 rounded-lg border border-border bg-white text-text2 text-[12px] font-medium hover:bg-surface2 flex items-center gap-1.5 shrink-0">
               <SettingsIcon size={13} /> Columnas
             </button>
           )}
-          <button onClick={() => openNewLead()}
+          <button type="button" onClick={() => openNewLead()}
                   className="py-1.5 px-3 rounded-lg bg-blue text-white text-[12px] font-semibold hover:bg-blue-dark flex items-center gap-1.5 shrink-0">
             <Plus size={14} /> Nuevo lead
           </button>
+        </div>
+
+        {/* Desktop fila 2: buscador grande + boton filtros avanzados */}
+        <div className="hidden md:flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0 bg-white border border-border rounded-lg px-2.5 py-1.5">
+            <Search size={14} className="text-text3 shrink-0" />
+            <input
+              value={filters.search || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              placeholder="Buscar lead, empresa, teléfono o email…"
+              className="flex-1 min-w-0 text-[12.5px] bg-transparent border-0 outline-none placeholder:text-text3"
+            />
+            {filters.search && (
+              <button type="button" onClick={() => setFilters((f) => ({ ...f, search: '' }))}
+                      className="text-text3 hover:text-text bg-transparent border-0 p-0.5 cursor-pointer">
+                ×
+              </button>
+            )}
+          </div>
+          <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} hideSearch compact />
         </div>
 
         {/* Mobile: titulo + acciones; busqueda y filtros via CrmFilters debajo */}
@@ -261,8 +274,6 @@ export default function CrmPage() {
                 tone="yellow">Sin actividad 7d</Chip>
           <Chip active={quickFilter === 'closing'} onClick={() => setQuickFilter(quickFilter === 'closing' ? '' : 'closing')}
                 tone="green">Cerrando 🔥🔥🔥</Chip>
-          <span className="flex-1" />
-          <CrmFilters filters={filters} setFilters={setFilters} stages={stages} salesTeam={salesTeam} hideSearch compact />
         </div>
       </div>
 
@@ -319,15 +330,22 @@ export default function CrmPage() {
                     const n = (leadsByStage[s.id] || []).length;
                     const isOn = s.id === activeMobileStage;
                     return (
-                      <button key={s.id} onClick={() => setMobileStageId(s.id)}
-                              className={`px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all ${
-                                isOn ? 'bg-text text-white' : 'bg-surface2 text-text2 hover:bg-surface3'
-                              }`}>
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color, opacity: isOn ? 1 : 0.85 }} />
+                      <button key={s.id} type="button" onClick={() => setMobileStageId(s.id)}
+                              className="px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all"
+                              style={isOn
+                                ? { background: s.color + '1F', color: s.color, boxShadow: `inset 0 0 0 1px ${s.color}66` }
+                                : { background: 'var(--color-surface2)', color: 'var(--color-text2)' }
+                              }>
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ background: s.color }} />
                         {s.name}
-                        <span className={`text-[10px] px-1.5 py-px rounded-full font-bold ${
-                          isOn ? 'bg-white/20 text-white' : 'bg-surface3 text-text3'
-                        }`}>{n}</span>
+                        <span className="text-[10px] px-1.5 py-px rounded-full font-bold"
+                              style={isOn
+                                ? { background: s.color + '33', color: s.color }
+                                : { background: 'var(--color-surface3)', color: 'var(--color-text3)' }
+                              }>
+                          {n}
+                        </span>
                       </button>
                     );
                   })}
@@ -362,6 +380,7 @@ export default function CrmPage() {
                         onDetail={() => openEditLead(lead)}
                         onPatch={(patch) => updateLead(lead.id, patch)}
                         onDelete={() => handleDeleteWithConfirm(lead.id)}
+                        onLongPress={(l) => setLpLead(l)}
                       />
                     ))
                   )}
@@ -400,6 +419,46 @@ export default function CrmPage() {
         onDelete={deleteStage}
         onReorder={reorderStages}
       />
+
+      {/* Bottom sheet mobile · long-press para mover lead a otra etapa */}
+      {lpLead && (
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex flex-col p-4"
+             onClick={() => setLpLead(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-3.5"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="text-[10px] font-bold tracking-[0.08em] text-text3 uppercase">Mover a etapa</div>
+            <div className="text-[14px] font-bold mt-1 mb-2.5 truncate">{lpLead.full_name}</div>
+            <div className="flex flex-col gap-1">
+              {stages.map((s) => {
+                const isCurrent = s.id === lpLead.stage_id;
+                return (
+                  <button key={s.id}
+                          type="button"
+                          disabled={isCurrent}
+                          onClick={() => {
+                            if (isCurrent) return;
+                            moveLead(lpLead.id, s.id, (leadsByStage[s.id] || []).length);
+                            setLpLead(null);
+                          }}
+                          className={`flex items-center gap-2 px-2.5 py-2.5 rounded-lg border text-left text-[12.5px] ${
+                            isCurrent
+                              ? 'bg-surface2 text-text3 border-border cursor-default'
+                              : 'bg-white text-text border-border hover:bg-surface2 cursor-pointer'
+                          }`}>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+                    <span className="font-semibold flex-1">{s.name}</span>
+                    {isCurrent && <span className="text-[10px] text-text3">actual</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex-1" />
+          <div className="text-white/80 text-[11px] text-center">
+            Mantén presionada una tarjeta para moverla
+          </div>
+        </div>
+      )}
     </div>
   );
 }

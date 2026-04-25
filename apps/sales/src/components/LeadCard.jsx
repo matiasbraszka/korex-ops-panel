@@ -9,11 +9,23 @@ import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2 } from 'lucide
 // - Score inline · proximo paso destacado · avatars apilados · WhatsApp pill.
 export default function LeadCard({
   lead, owner, setter, salesTeam = [], canEditOwners,
-  onDetail, onPatch, onDelete,
+  onDetail, onPatch, onDelete, onLongPress,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: lead.id, data: { type: 'lead', stage_id: lead.stage_id },
   });
+
+  // Long-press (mobile): mantener presionado para mover a otra etapa
+  const lpRef = useRef(null);
+  const startLP = () => {
+    if (!onLongPress) return;
+    clearTimeout(lpRef.current);
+    lpRef.current = setTimeout(() => {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+      onLongPress(lead);
+    }, 500);
+  };
+  const cancelLP = () => clearTimeout(lpRef.current);
 
   const [name, setName]           = useState(lead.full_name || '');
   const [nextStep, setNextStep]   = useState(lead.next_step || '');
@@ -51,6 +63,10 @@ export default function LeadCard({
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}
          className="group lead-card bg-white border border-border rounded-[10px] mb-2 cursor-grab active:cursor-grabbing select-none"
+         onPointerDown={startLP}
+         onPointerUp={cancelLP}
+         onPointerLeave={cancelLP}
+         onPointerCancel={cancelLP}
          onClick={(e) => {
            // No abrir detalle si el click vino de un input / boton / link
            const tag = e.target.tagName;
@@ -127,13 +143,11 @@ export default function LeadCard({
           <AssigneePicker label="Dueño" valuePerson={owner} valueId={lead.owner_id}
                           options={salesTeam} disabled={!canEditOwners}
                           onChange={(uid) => onPatch?.({ owner_id: uid || null })} />
-          {setter && setter.user_id !== owner?.user_id && (
-            <span className="-ml-1.5 ring-2 ring-white rounded-full">
-              <AssigneePicker label="Setter" valuePerson={setter} valueId={lead.setter_id}
-                              options={salesTeam} disabled={!canEditOwners}
-                              onChange={(uid) => onPatch?.({ setter_id: uid || null })} />
-            </span>
-          )}
+          <span className="-ml-1.5 ring-2 ring-white rounded-full">
+            <AssigneePicker label="Setter" valuePerson={setter} valueId={lead.setter_id}
+                            options={salesTeam} disabled={!canEditOwners}
+                            onChange={(uid) => onPatch?.({ setter_id: uid || null })} />
+          </span>
           <div className="flex-1" />
           {!showAmount && (
             <input
