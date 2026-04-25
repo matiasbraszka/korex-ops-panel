@@ -167,32 +167,47 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Tabla con edición inline. Una sola columna 'Nombre completo' */}
-      <div className="bg-white border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider">
-            <tr>
-              <th className="text-left py-2 px-3 font-semibold">Nombre completo</th>
-              <th className="text-left py-2 px-2 font-semibold">Empresa</th>
-              <th className="text-left py-2 px-2 font-semibold">Teléfono</th>
-              <th className="text-left py-2 px-2 font-semibold">Email</th>
-              <th className="text-left py-2 px-2 font-semibold">Categorías</th>
-              <th className="text-left py-2 px-2 font-semibold">Notas</th>
-              <th className="w-[40px]"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="text-center text-text3 py-8 text-[12px]">Sin resultados</td></tr>
-            ) : filtered.map((c) => (
-              <ContactRow key={c.id} contact={c}
-                          onPatch={(patch) => patchContact(c.id, patch)}
-                          onToggleCat={(catId) => toggleContactCategory(c.id, catId)}
-                          onDelete={() => handleDelete(c.id)} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* PC: tabla con edicion inline. MOBILE: cards verticales. */}
+      {!isMobile ? (
+        <div className="bg-white border border-border rounded-xl overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead className="bg-surface2 border-b border-border text-text2 text-[10px] uppercase tracking-wider">
+              <tr>
+                <th className="text-left py-2 px-3 font-semibold">Nombre completo</th>
+                <th className="text-left py-2 px-2 font-semibold">Empresa</th>
+                <th className="text-left py-2 px-2 font-semibold">Teléfono</th>
+                <th className="text-left py-2 px-2 font-semibold">Email</th>
+                <th className="text-left py-2 px-2 font-semibold">Categorías</th>
+                <th className="text-left py-2 px-2 font-semibold">Notas</th>
+                <th className="w-[40px]"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={7} className="text-center text-text3 py-8 text-[12px]">Sin resultados</td></tr>
+              ) : filtered.map((c) => (
+                <ContactRow key={c.id} contact={c}
+                            onPatch={(patch) => patchContact(c.id, patch)}
+                            onToggleCat={(catId) => toggleContactCategory(c.id, catId)}
+                            onDelete={() => handleDelete(c.id)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filtered.length === 0 ? (
+            <div className="text-center text-text3 py-8 text-[12px] bg-white border border-border rounded-xl">
+              Sin resultados
+            </div>
+          ) : filtered.map((c) => (
+            <ContactCardMobile key={c.id} contact={c}
+                               onPatch={(patch) => patchContact(c.id, patch)}
+                               onToggleCat={(catId) => toggleContactCategory(c.id, catId)}
+                               onDelete={() => handleDelete(c.id)} />
+          ))}
+        </div>
+      )}
 
       {dialog}
       {toasts}
@@ -340,3 +355,96 @@ function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
 }
 
 const inlineInput = 'w-full text-[12px] text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-1 outline-none placeholder:text-text3';
+
+// ContactCardMobile: vista de card para mobile, todos los campos editables inline.
+function ContactCardMobile({ contact, onPatch, onToggleCat, onDelete }) {
+  const [catOpen, setCatOpen] = useState(false);
+  const persist = (key, current) => {
+    const v = (current ?? '').trim();
+    const original = contact[key] || '';
+    if (v !== original) onPatch({ [key]: v || null });
+  };
+  return (
+    <div className="bg-white border border-border rounded-xl p-3 group">
+      <div className="flex items-start gap-2 mb-2">
+        <input defaultValue={contact.full_name || ''} placeholder="Nombre completo"
+               onBlur={(e) => persist('full_name', e.target.value)}
+               className="flex-1 text-[14px] font-bold text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-1 outline-none placeholder:text-text3" />
+        <button onClick={onDelete} title="Eliminar"
+                className="text-text3 hover:text-red bg-transparent border-0 p-1.5 cursor-pointer">
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 mb-2">
+        <Mfield label="Empresa">
+          <input defaultValue={contact.company || ''} placeholder="—"
+                 onBlur={(e) => persist('company', e.target.value)}
+                 className={mInputCls} />
+        </Mfield>
+        <Mfield label="Teléfono">
+          <input defaultValue={contact.phone || ''} placeholder="+54…"
+                 onBlur={(e) => persist('phone', e.target.value)}
+                 className={mInputCls} />
+        </Mfield>
+        <Mfield label="Email" full>
+          <input defaultValue={contact.email || ''} placeholder="email@…"
+                 onBlur={(e) => persist('email', e.target.value)}
+                 className={mInputCls} />
+        </Mfield>
+      </div>
+
+      {/* Categorias */}
+      <div className="mb-2">
+        <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 mb-1">Categorías</div>
+        <div className="flex flex-wrap gap-1">
+          {(contact.categories || []).map((cat) => (
+            <span key={cat} className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
+              {catShort(cat)}
+            </span>
+          ))}
+          <button type="button" onClick={() => setCatOpen(!catOpen)}
+                  className="text-[10px] text-text3 bg-surface2 hover:bg-surface3 rounded-full px-2 py-0.5 inline-flex items-center gap-0.5">
+            <Plus size={9} /> {(contact.categories || []).length === 0 ? 'agregar' : ''}
+          </button>
+        </div>
+        {catOpen && (
+          <div className="mt-2 bg-bg border border-border rounded-lg p-1.5 max-h-[240px] overflow-y-auto">
+            {CATEGORIES.map((cat) => {
+              const on = (contact.categories || []).includes(cat.id);
+              return (
+                <button key={cat.id} type="button"
+                        onClick={() => onToggleCat(cat.id)}
+                        className={`w-full flex items-center gap-2 px-2 py-2 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.color }} />
+                  <span className="flex-1">{cat.label}</span>
+                  {on && <span className="text-[11px]" style={{ color: cat.color }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Notas */}
+      <Mfield label="Notas" full>
+        <textarea defaultValue={contact.notes || ''} placeholder="—"
+                  onBlur={(e) => persist('notes', e.target.value)}
+                  rows={2}
+                  className={mInputCls + ' resize-none'} />
+      </Mfield>
+    </div>
+  );
+}
+
+function Mfield({ label, full, children }) {
+  return (
+    <div className={full ? 'col-span-2' : ''}>
+      <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 mb-0.5">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+const mInputCls = 'w-full text-[12.5px] text-text bg-bg border border-border rounded-md px-2 py-1.5 outline-none focus:border-blue placeholder:text-text3';
