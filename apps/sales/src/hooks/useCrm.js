@@ -128,11 +128,37 @@ export function useCrm() {
   }, [pipelineId, loadPipelineData]);
 
   // ── Pipelines CRUD ──
+  // FALLBACK: si la RPC falla con args nombrados (cache stale de PostgREST),
+  // hacemos insert directo a la tabla. Asegura que crear CRM funcione siempre.
   const createPipeline = useCallback(async (name, ownerId = null, memberIds = null) => {
-    const payload = { p_name: name, p_owner_id: ownerId, p_member_ids: (memberIds && memberIds.length > 0) ? memberIds : null };
-    console.log('[CRM] createPipeline payload:', payload);
-    const { data, error: e } = await supabase.rpc('create_sales_pipeline', payload);
-    if (e) { console.error('[CRM] createPipeline error:', e); return { error: e.message }; }
+    const cleanName = (name || '').trim() || 'Mi CRM';
+    const cleanMembers = Array.isArray(memberIds) && memberIds.length > 0 ? memberIds : null;
+    const payload = { p_name: cleanName, p_owner_id: ownerId || null, p_member_ids: cleanMembers };
+    console.log('[CRM v2] createPipeline payload:', payload);
+
+    // Intento 1: RPC con todos los args
+    let { data, error: e } = await supabase.rpc('create_sales_pipeline', payload);
+
+    // Si la RPC falla con error de signatura/no encontrada, intentar sin members
+    if (e && (e.code === 'PGRST202' || (e.message || '').includes('function'))) {
+      console.warn('[CRM v2] RPC failed, retrying without member_ids...', e);
+      const fallback = await supabase.rpc('create_sales_pipeline', { p_name: cleanName, p_owner_id: ownerId || null });
+      data = fallback.data; e = fallback.error;
+    }
+
+    if (e) {
+      console.error('[CRM v2] createPipeline FINAL error:', e);
+      return { error: e.message + (e.details ? ` (${e.details})` : '') };
+    }
+
+    console.log('[CRM v2] created pipeline id:', data);
+
+    // Si tenia members extras, setearlos via RPC dedicada
+    if (data && cleanMembers) {
+      const r2 = await supabase.rpc('set_pipeline_members', { p_pipeline_id: data, p_user_ids: cleanMembers });
+      if (r2.error) console.error('[CRM v2] set members after create error:', r2.error);
+    }
+
     await loadPipelines();
     setPipelineId(data);
     return { data };

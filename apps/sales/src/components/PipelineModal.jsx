@@ -90,7 +90,10 @@ export default function PipelineModal({
             <Users size={18} />
           </span>
           <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-bold text-text">{isEdit ? 'Editar CRM' : 'Nuevo CRM'}</div>
+            <div className="text-[14px] font-bold text-text">
+              {isEdit ? 'Editar CRM' : 'Nuevo CRM'}
+              <span className="ml-1.5 text-[9px] text-text3 font-normal">v2</span>
+            </div>
             <div className="text-[11px] text-text2 mt-0.5">
               {isEdit
                 ? 'Cambiá el nombre o las personas asignadas.'
