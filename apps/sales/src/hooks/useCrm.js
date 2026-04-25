@@ -284,9 +284,9 @@ export function useCrm() {
     const results = await Promise.all(tasks);
     if (results.some((r) => r.error)) {
       console.error('updateLead error', results);
-      await loadAll(pipelineId);
+      await loadPipelineData(pipelineId);
     }
-  }, [leads, loadAll, pipelineId]);
+  }, [leads, loadPipelineData, pipelineId]);
 
   const deleteLead = useCallback(async (id) => {
     setLeads((prev) => prev.filter((l) => l.id !== id));
