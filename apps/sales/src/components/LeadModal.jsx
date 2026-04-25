@@ -121,20 +121,11 @@ export default function LeadModal({
               <div className="text-[9.5px] text-text3 mt-0.5">Agregado · {ago}</div>
             )}
           </div>
-          {isEdit && (
-            <button className="bg-transparent border-0 text-text3 hover:text-text rounded p-1 cursor-pointer">
-              <MoreVertical size={16} />
-            </button>
-          )}
         </div>
 
-        {/* Identity row */}
+        {/* Identity row — sin avatar de iniciales (no usamos fotos de leads) */}
         <div className="px-4 pt-3.5 pb-2.5 shrink-0">
           <div className="flex items-center gap-3">
-            <span className="w-[42px] h-[42px] rounded-full flex items-center justify-center font-bold text-[14px] shrink-0"
-                  style={{ background: ownerColor + '24', color: ownerColor }}>
-              {initials}
-            </span>
             <div className="flex-1 min-w-0">
               <input
                 value={form.full_name || ''}

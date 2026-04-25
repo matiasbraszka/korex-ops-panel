@@ -274,20 +274,6 @@ export default function CrmPage() {
         </div>
         </>)}
 
-        {/* Quick filter chips · solo desktop */}
-        {!isMobile && (
-        <div className="flex items-center gap-2 flex-wrap py-1">
-          <Chip active={quickFilter === 'mine'} onClick={() => setQuickFilter(quickFilter === 'mine' ? '' : 'mine')}
-                tone="blue">Míos · {myCount}</Chip>
-          <Chip active={quickFilter === ''} onClick={() => setQuickFilter('')}>
-            Todos · {leads.length}
-          </Chip>
-          <Chip active={quickFilter === 'stale'} onClick={() => setQuickFilter(quickFilter === 'stale' ? '' : 'stale')}
-                tone="yellow">Sin actividad 7d</Chip>
-          <Chip active={quickFilter === 'closing'} onClick={() => setQuickFilter(quickFilter === 'closing' ? '' : 'closing')}
-                tone="green">Cerrando 🔥🔥🔥</Chip>
-        </div>
-        )}
       </div>
 
       {/* Body wrapper relative: el LeadModal en desktop se posiciona absolute

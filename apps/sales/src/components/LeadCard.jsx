@@ -71,7 +71,7 @@ export default function LeadCard({
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...otherListeners}
-         className="group lead-card bg-white border border-border rounded-[10px] mb-2 cursor-grab active:cursor-grabbing select-none"
+         className="group lead-card bg-white border border-border rounded-2xl mb-2 cursor-grab active:cursor-grabbing select-none"
          onPointerDown={handlePointerDown}
          onPointerUp={cancelLP}
          onPointerLeave={cancelLP}
