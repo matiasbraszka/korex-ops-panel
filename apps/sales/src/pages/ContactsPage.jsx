@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, X, Trash2, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '@korex/db';
+import { useAuth } from '@korex/auth';
 import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
 const CATEGORIES = [
@@ -17,6 +18,17 @@ const catColor = (id) => CATEGORIES.find((c) => c.id === id)?.color || '#9CA3AF'
 const catShort = (id) => CATEGORIES.find((c) => c.id === id)?.short || id;
 
 export default function ContactsPage() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return (
+    <div className="text-center text-text3 py-20">
+      <div className="text-[14px] font-semibold text-text mb-1">Sin acceso</div>
+      <div className="text-[12px]">Esta sección está disponible solo para admins.</div>
+    </div>
+  );
+  return <ContactsPageInner />;
+}
+
+function ContactsPageInner() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -356,93 +368,100 @@ function ContactRow({ contact, onPatch, onToggleCat, onDelete }) {
 
 const inlineInput = 'w-full text-[12px] text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-1 outline-none placeholder:text-text3';
 
-// ContactCardMobile: vista de card para mobile, todos los campos editables inline.
+// ContactCardMobile: vista compacta para mobile. Por defecto colapsada
+// (solo nombre + categorias). Tap para expandir y editar todos los campos.
 function ContactCardMobile({ contact, onPatch, onToggleCat, onDelete }) {
+  const [expanded, setExpanded] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
   const persist = (key, current) => {
     const v = (current ?? '').trim();
     const original = contact[key] || '';
     if (v !== original) onPatch({ [key]: v || null });
   };
+
   return (
-    <div className="bg-white border border-border rounded-xl p-3 group">
-      <div className="flex items-start gap-2 mb-2">
-        <input defaultValue={contact.full_name || ''} placeholder="Nombre completo"
-               onBlur={(e) => persist('full_name', e.target.value)}
-               className="flex-1 text-[14px] font-bold text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1.5 py-1 outline-none placeholder:text-text3" />
+    <div className="bg-white border border-border rounded-xl">
+      {/* Cabecera siempre visible: nombre + cats + acciones */}
+      <div className="flex items-center gap-2 p-2.5">
+        <button type="button" onClick={() => setExpanded(!expanded)}
+                className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer">
+          <div className="text-[13.5px] font-semibold text-text truncate">
+            {contact.full_name || <span className="text-text3 italic font-normal">Sin nombre</span>}
+          </div>
+          {(contact.categories || []).length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(contact.categories || []).slice(0, 3).map((cat) => (
+                <span key={cat} className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full"
+                      style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
+                  {catShort(cat)}
+                </span>
+              ))}
+              {(contact.categories || []).length > 3 && (
+                <span className="text-[9.5px] text-text3">+{contact.categories.length - 3}</span>
+              )}
+            </div>
+          )}
+        </button>
         <button onClick={onDelete} title="Eliminar"
-                className="text-text3 hover:text-red bg-transparent border-0 p-1.5 cursor-pointer">
+                className="text-text3 hover:text-red bg-transparent border-0 p-1.5 cursor-pointer shrink-0">
           <Trash2 size={14} />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <Mfield label="Empresa">
-          <input defaultValue={contact.company || ''} placeholder="—"
+      {/* Detalle expandido: todos los campos editables */}
+      {expanded && (
+        <div className="border-t border-border p-2.5 flex flex-col gap-2">
+          <input defaultValue={contact.full_name || ''} placeholder="Nombre completo"
+                 onBlur={(e) => persist('full_name', e.target.value)}
+                 className={mInputCls + ' font-semibold'} />
+          <input defaultValue={contact.company || ''} placeholder="Empresa"
                  onBlur={(e) => persist('company', e.target.value)}
                  className={mInputCls} />
-        </Mfield>
-        <Mfield label="Teléfono">
-          <input defaultValue={contact.phone || ''} placeholder="+54…"
+          <input defaultValue={contact.phone || ''} placeholder="Teléfono"
                  onBlur={(e) => persist('phone', e.target.value)}
                  className={mInputCls} />
-        </Mfield>
-        <Mfield label="Email" full>
-          <input defaultValue={contact.email || ''} placeholder="email@…"
+          <input defaultValue={contact.email || ''} placeholder="Email"
                  onBlur={(e) => persist('email', e.target.value)}
                  className={mInputCls} />
-        </Mfield>
-      </div>
 
-      {/* Categorias */}
-      <div className="mb-2">
-        <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 mb-1">Categorías</div>
-        <div className="flex flex-wrap gap-1">
-          {(contact.categories || []).map((cat) => (
-            <span key={cat} className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
-              {catShort(cat)}
-            </span>
-          ))}
-          <button type="button" onClick={() => setCatOpen(!catOpen)}
-                  className="text-[10px] text-text3 bg-surface2 hover:bg-surface3 rounded-full px-2 py-0.5 inline-flex items-center gap-0.5">
-            <Plus size={9} /> {(contact.categories || []).length === 0 ? 'agregar' : ''}
-          </button>
-        </div>
-        {catOpen && (
-          <div className="mt-2 bg-bg border border-border rounded-lg p-1.5 max-h-[240px] overflow-y-auto">
-            {CATEGORIES.map((cat) => {
-              const on = (contact.categories || []).includes(cat.id);
-              return (
-                <button key={cat.id} type="button"
-                        onClick={() => onToggleCat(cat.id)}
-                        className={`w-full flex items-center gap-2 px-2 py-2 text-left rounded hover:bg-surface2 text-[12px] ${on ? 'font-semibold' : ''}`}>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.color }} />
-                  <span className="flex-1">{cat.label}</span>
-                  {on && <span className="text-[11px]" style={{ color: cat.color }}>✓</span>}
-                </button>
-              );
-            })}
+          {/* Categorías editables */}
+          <div>
+            <div className="flex flex-wrap gap-1 items-center">
+              {(contact.categories || []).map((cat) => (
+                <span key={cat} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
+                  {catShort(cat)}
+                  <button type="button" onClick={() => onToggleCat(cat)}
+                          className="hover:bg-white/40 rounded-full p-0.5 cursor-pointer">
+                    <X size={9} strokeWidth={2.5} />
+                  </button>
+                </span>
+              ))}
+              <button type="button" onClick={() => setCatOpen(!catOpen)}
+                      className="text-[10px] text-text3 bg-surface2 hover:bg-surface3 rounded-full px-2 py-0.5 inline-flex items-center gap-0.5">
+                <Plus size={9} /> categoría
+              </button>
+            </div>
+            {catOpen && (
+              <div className="mt-2 bg-bg border border-border rounded-lg p-1 max-h-[200px] overflow-y-auto">
+                {CATEGORIES.filter((c) => !(contact.categories || []).includes(c.id)).map((cat) => (
+                  <button key={cat.id} type="button"
+                          onClick={() => { onToggleCat(cat.id); setCatOpen(false); }}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[11.5px]">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.color }} />
+                    <span className="flex-1">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Notas */}
-      <Mfield label="Notas" full>
-        <textarea defaultValue={contact.notes || ''} placeholder="—"
-                  onBlur={(e) => persist('notes', e.target.value)}
-                  rows={2}
-                  className={mInputCls + ' resize-none'} />
-      </Mfield>
-    </div>
-  );
-}
-
-function Mfield({ label, full, children }) {
-  return (
-    <div className={full ? 'col-span-2' : ''}>
-      <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 mb-0.5">{label}</div>
-      {children}
+          <textarea defaultValue={contact.notes || ''} placeholder="Notas…"
+                    onBlur={(e) => persist('notes', e.target.value)}
+                    rows={2}
+                    className={mInputCls + ' resize-none'} />
+        </div>
+      )}
     </div>
   );
 }

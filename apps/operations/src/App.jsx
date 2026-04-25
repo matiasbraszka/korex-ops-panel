@@ -209,7 +209,10 @@ function MainLayout() {
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
-  const salesItems = salesNavItems;
+  // Contactos solo visible para admins. Si no es admin, ocultar del nav.
+  const salesItems = currentUser?.isAdmin
+    ? salesNavItems
+    : salesNavItems.filter((it) => it.id !== 'contacts');
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
   ];

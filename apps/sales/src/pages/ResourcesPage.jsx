@@ -217,16 +217,16 @@ export default function ResourcesPage() {
               : <>Sin {tdef?.l.toLowerCase()} cargados todavía. <button onClick={() => setModalOpen(true)} className="text-blue font-semibold hover:underline bg-transparent border-0 p-0 cursor-pointer">Agregá el primero</button></>}
           </div>
         ) : tab === 'mensajes' ? (
-          filtered.map((it) => <MensajeCard key={it.id} item={it} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
+          filtered.map((it) => <MensajeCard key={it.id} item={it} allTags={uniqueTags} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
         ) : tab === 'objeciones' ? (
-          filtered.map((it) => <ObjecionCard key={it.id} item={it} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
+          filtered.map((it) => <ObjecionCard key={it.id} item={it} allTags={uniqueTags} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
         ) : (
-          filtered.map((it) => <RecursoCard key={it.id} item={it} type={tdef} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} />)
+          filtered.map((it) => <RecursoCard key={it.id} item={it} type={tdef} allTags={uniqueTags} onUpdate={handleUpdate} onDelete={() => handleDelete(it)} showToast={showToast} />)
         )}
       </div>
 
       {modalOpen && (
-        <ResourceModal type={tdef} onClose={() => setModalOpen(false)} onCreate={handleCreate} showToast={showToast} />
+        <ResourceModal type={tdef} allTags={uniqueTags} onClose={() => setModalOpen(false)} onCreate={handleCreate} showToast={showToast} />
       )}
 
       {dialog}
@@ -235,11 +235,24 @@ export default function ResourcesPage() {
   );
 }
 
-// ─── TagEditor: editar etiquetas inline (agregar/quitar) ────────────────────
-function TagEditor({ tags = [], onChange }) {
+// ─── TagEditor: editar etiquetas inline + autocomplete con tags existentes ──
+function TagEditor({ tags = [], onChange, allTags = [] }) {
   const [input, setInput] = useState('');
   const [editing, setEditing] = useState(false);
   const inputRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  // Cierra al click afuera
+  useEffect(() => {
+    if (!editing) return;
+    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+      addTag(input);
+      setEditing(false);
+    } };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, input, tags]);
 
   const addTag = (raw) => {
     const t = (raw || '').trim().toLowerCase();
@@ -264,12 +277,19 @@ function TagEditor({ tags = [], onChange }) {
     }
   };
 
+  // Sugerencias: tags existentes que NO esten ya en el item, filtradas por input
+  const q = input.trim().toLowerCase();
+  const suggestions = (allTags || [])
+    .filter((t) => !tags.includes(t))
+    .filter((t) => !q || t.toLowerCase().includes(q))
+    .slice(0, 8);
+
   return (
-    <div className="flex flex-wrap gap-1 items-center">
+    <div ref={wrapRef} className="flex flex-wrap gap-1 items-center relative">
       {tags.map((t) => {
         const c = tagColor(t);
         return (
-          <span key={t} className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-full group/tag"
+          <span key={t} className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
                 style={{ background: c + '1F', color: c }}>
             {t}
             <button type="button" onClick={() => removeTag(t)}
@@ -281,13 +301,41 @@ function TagEditor({ tags = [], onChange }) {
         );
       })}
       {editing ? (
-        <input ref={inputRef} autoFocus
-               value={input}
-               onChange={(e) => setInput(e.target.value)}
-               onBlur={() => { addTag(input); setEditing(false); }}
-               onKeyDown={handleKey}
-               placeholder="nueva etiqueta…"
-               className="text-[10.5px] bg-bg border border-border rounded-full px-2 py-0.5 outline-none focus:border-blue placeholder:text-text3 min-w-[80px]" />
+        <>
+          <input ref={inputRef} autoFocus
+                 value={input}
+                 onChange={(e) => setInput(e.target.value)}
+                 onKeyDown={handleKey}
+                 placeholder="escribir o elegir…"
+                 className="text-[10.5px] bg-bg border border-border rounded-full px-2 py-0.5 outline-none focus:border-blue placeholder:text-text3 min-w-[100px]" />
+          {/* Dropdown de sugerencias (tags existentes) */}
+          {suggestions.length > 0 && (
+            <div className="absolute left-0 top-full mt-1 z-30 bg-white border border-border rounded-lg shadow-xl p-1 min-w-[180px] max-h-[200px] overflow-y-auto">
+              <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 px-2 py-1">
+                Etiquetas existentes
+              </div>
+              {suggestions.map((t) => {
+                const c = tagColor(t);
+                return (
+                  <button key={t} type="button"
+                          onMouseDown={(e) => { e.preventDefault(); addTag(t); }}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-surface2 text-[11.5px]">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c }} />
+                    <span className="flex-1">{t}</span>
+                  </button>
+                );
+              })}
+              {q && !allTags.includes(q) && (
+                <button type="button"
+                        onMouseDown={(e) => { e.preventDefault(); addTag(q); }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-blue-bg text-[11.5px] text-blue font-semibold border-t border-border mt-1">
+                  <Plus size={11} />
+                  <span>Crear "{q}"</span>
+                </button>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <button type="button" onClick={() => setEditing(true)}
                 className="inline-flex items-center gap-0.5 text-[10.5px] text-text3 bg-surface2 hover:bg-surface3 rounded-full px-2 py-0.5 cursor-pointer">
@@ -299,7 +347,7 @@ function TagEditor({ tags = [], onChange }) {
 }
 
 // ─── Modal crear ──────────────────────────────────────────────────────────
-function ResourceModal({ type, onClose, onCreate, showToast }) {
+function ResourceModal({ type, allTags = [], onClose, onCreate, showToast }) {
   const [form, setForm] = useState({ title: '', body: '', body_alt: '', url: '', description: '', tags: [] });
   const [saving, setSaving] = useState(false);
   const Icon = type.Ico;
@@ -342,14 +390,9 @@ function ResourceModal({ type, onClose, onCreate, showToast }) {
               <input value={form.title} onChange={(e) => set('title', e.target.value)}
                      placeholder='Ej: "Me parece muy caro"' className={inputCls} autoFocus />
             </Field>
-            <Field label="Respuesta corta (1 línea)" required hint="Para usar en chat.">
+            <Field label="Respuesta" required hint="Cómo responder a esta objeción.">
               <textarea value={form.body} onChange={(e) => set('body', e.target.value)}
-                        rows={2} placeholder="Lo entiendo. ¿Comparado con qué te resulta caro?"
-                        className={textareaCls} />
-            </Field>
-            <Field label="Respuesta larga (guion)" hint="Para llamadas. Podés incluir varios pasos.">
-              <textarea value={form.body_alt} onChange={(e) => set('body_alt', e.target.value)}
-                        rows={5} placeholder="1. Validar la objeción…&#10;2. Pivot al valor…&#10;3. Cierre…"
+                        rows={6} placeholder="1. Validar la objeción…&#10;2. Pivot al valor…&#10;3. Cierre…"
                         className={textareaCls} />
             </Field>
           </>
@@ -398,8 +441,8 @@ function ResourceModal({ type, onClose, onCreate, showToast }) {
 
         <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5">
           {renderFields()}
-          <Field label="Etiquetas" hint="Click + etiqueta para agregar. Click × para quitar.">
-            <TagEditor tags={form.tags} onChange={(tags) => set('tags', tags)} />
+          <Field label="Etiquetas" hint="Click + etiqueta para agregar (elegí una existente o creá nueva).">
+            <TagEditor tags={form.tags} allTags={allTags} onChange={(tags) => set('tags', tags)} />
           </Field>
         </form>
 
@@ -434,7 +477,7 @@ const inputCls = 'w-full text-[13px] text-text bg-bg border border-border rounde
 const textareaCls = inputCls + ' resize-none leading-relaxed';
 
 // ─── Card Mensaje ─────────────────────────────────────────────────────────
-function MensajeCard({ item, onUpdate, onDelete }) {
+function MensajeCard({ item, allTags, onUpdate, onDelete }) {
   const [copied, setCopied] = useState(false);
   const [showAlt, setShowAlt] = useState(!!item.body_alt);
 
@@ -467,7 +510,7 @@ function MensajeCard({ item, onUpdate, onDelete }) {
           {copied ? <><Check size={11} /> Copiado</> : <><Copy size={11} /> Copiar</>}
         </button>
         <button onClick={onDelete} type="button" title="Eliminar"
-                className="opacity-0 group-hover:opacity-100 text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer transition-opacity">
+                className="text-text3 hover:text-red hover:bg-red-bg bg-transparent border-0 p-1.5 rounded cursor-pointer">
           <Trash2 size={13} />
         </button>
       </div>
@@ -507,19 +550,26 @@ function MensajeCard({ item, onUpdate, onDelete }) {
       </div>
 
       <div className="mt-2.5 pt-2.5 border-t border-border">
-        <TagEditor tags={item.tags || []} onChange={(tags) => onUpdate(item, { tags })} />
+        <TagEditor tags={item.tags || []} allTags={allTags} onChange={(tags) => onUpdate(item, { tags })} />
       </div>
     </div>
   );
 }
 
 // ─── Card Objeción ────────────────────────────────────────────────────────
-function ObjecionCard({ item, onUpdate, onDelete }) {
-  const [open, setOpen] = useState(!!item.body_alt);
-
+function ObjecionCard({ item, allTags, onUpdate, onDelete }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(item.body || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      onUpdate(item, { used_count: (item.used_count || 0) + 1 });
+    } catch {}
+  };
   return (
     <div className="bg-white border border-border rounded-xl p-3.5 group">
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-center gap-2 mb-2">
         <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-purple-bg text-purple">
           <Sparkles size={14} />
         </span>
@@ -527,57 +577,67 @@ function ObjecionCard({ item, onUpdate, onDelete }) {
           <input defaultValue={item.title || ''}
                  onBlur={(e) => e.target.value !== item.title && onUpdate(item, { title: e.target.value })}
                  placeholder='Objeción ej: "es muy caro"'
-                 className="w-full text-[13.5px] font-semibold text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none mb-1.5" />
-
-          <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 mb-1">Respuesta corta</div>
-          <textarea defaultValue={item.body || ''}
-                    onBlur={(e) => e.target.value !== item.body && onUpdate(item, { body: e.target.value })}
-                    placeholder="1 línea para chat"
-                    rows={2}
-                    className="w-full text-[12px] text-text bg-blue-bg2 border border-blue-bg rounded-lg p-2 outline-none resize-none focus:border-blue" />
-
-          {open ? (
-            <>
-              <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3 mb-1 mt-3">Respuesta larga (guion)</div>
-              <textarea defaultValue={item.body_alt || ''}
-                        onBlur={(e) => e.target.value !== item.body_alt && onUpdate(item, { body_alt: e.target.value })}
-                        placeholder="Pasos para llamada…"
-                        rows={5}
-                        className="w-full text-[12px] text-text bg-bg border border-border rounded-lg p-2 outline-none resize-none focus:border-blue" />
-            </>
-          ) : (
-            <button type="button" onClick={() => setOpen(true)}
-                    className="text-[10.5px] text-blue hover:underline bg-transparent border-0 cursor-pointer mt-2 flex items-center gap-1">
-              <Plus size={10} /> Agregar respuesta larga
-            </button>
-          )}
+                 className="w-full text-[13.5px] font-semibold text-text bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none" />
+          <div className="text-[10.5px] text-text3 mt-0.5">{(item.used_count || 0)}× copiado</div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {open && (
-            <button onClick={() => setOpen(false)} type="button"
-                    className="text-[10.5px] text-text3 hover:text-text bg-transparent border-0 cursor-pointer px-2 py-1 hover:bg-surface2 rounded">
-              Cerrar
-            </button>
-          )}
-          <button onClick={onDelete} type="button" title="Eliminar"
-                  className="opacity-0 group-hover:opacity-100 text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer transition-opacity">
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <button onClick={copy} type="button"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                  copied ? 'bg-green text-white' : 'bg-surface2 text-text2 hover:bg-surface3'
+                }`}>
+          {copied ? <><Check size={11} /> Copiado</> : <><Copy size={11} /> Copiar</>}
+        </button>
+        <button onClick={onDelete} type="button" title="Eliminar"
+                className="text-text3 hover:text-red hover:bg-red-bg bg-transparent border-0 p-1.5 rounded cursor-pointer">
+          <Trash2 size={13} />
+        </button>
       </div>
 
-      <div className="mt-3 pt-2.5 border-t border-border ml-9">
-        <TagEditor tags={item.tags || []} onChange={(tags) => onUpdate(item, { tags })} />
+      <textarea defaultValue={item.body || ''}
+                onBlur={(e) => e.target.value !== item.body && onUpdate(item, { body: e.target.value })}
+                placeholder="Respuesta a esta objeción…"
+                rows={Math.max(3, Math.min(8, ((item.body || '').match(/\n/g) || []).length + 2))}
+                className="w-full text-[12px] text-text bg-bg border border-dashed border-border rounded-lg p-2.5 outline-none resize-none focus:border-blue leading-relaxed" />
+
+      <div className="mt-2.5 pt-2.5 border-t border-border">
+        <TagEditor tags={item.tags || []} allTags={allTags} onChange={(tags) => onUpdate(item, { tags })} />
       </div>
     </div>
   );
 }
 
 // ─── Card Recurso (genérico: docs/videos/audios/imagenes/links) ──────────
-function RecursoCard({ item, type, onUpdate, onDelete }) {
+function RecursoCard({ item, type, allTags, onUpdate, onDelete, showToast }) {
   const Icon = type.Ico;
+  const [copied, setCopied] = useState(false);
+
+  // Click en la card (no en inputs/botones) abre el URL en pestaña nueva
+  const openUrl = (e) => {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'SVG' || tag === 'PATH') return;
+    if (e.target.closest('button, input, textarea, a')) return;
+    if (!item.url) return;
+    window.open(item.url, '_blank', 'noopener,noreferrer');
+    onUpdate(item, { used_count: (item.used_count || 0) + 1 });
+  };
+
+  const copyUrl = async () => {
+    if (!item.url) {
+      showToast?.('Este recurso no tiene URL para copiar.', 'error');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(item.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      onUpdate(item, { used_count: (item.used_count || 0) + 1 });
+    } catch {
+      showToast?.('No se pudo copiar el link.', 'error');
+    }
+  };
+
   return (
-    <div className="bg-white border border-border rounded-xl p-3 group">
+    <div onClick={openUrl}
+         className={`bg-white border border-border rounded-xl p-3 group transition-shadow ${item.url ? 'cursor-pointer hover:shadow-md' : ''}`}>
       <div className="flex items-center gap-3">
         <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
               style={{ background: type.bg, color: type.color }}>
@@ -593,15 +653,14 @@ function RecursoCard({ item, type, onUpdate, onDelete }) {
                  placeholder="URL (Drive, YouTube, Loom…)"
                  className="w-full text-[11px] text-text3 bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none mt-0.5 truncate" />
         </div>
-        {item.url && (
-          <a href={item.url} target="_blank" rel="noreferrer" title="Abrir"
-             onClick={() => onUpdate(item, { used_count: (item.used_count || 0) + 1 })}
-             className="bg-surface2 text-text2 hover:bg-surface3 rounded-md px-2.5 py-1.5 text-[11px] font-semibold inline-flex items-center gap-1.5 no-underline">
-            <ExternalLink size={11} /> Abrir
-          </a>
-        )}
+        <button onClick={copyUrl} type="button" title="Copiar link"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                  copied ? 'bg-green text-white' : 'bg-surface2 text-text2 hover:bg-surface3'
+                }`}>
+          {copied ? <><Check size={11} /> Copiado</> : <><Copy size={11} /> Copiar</>}
+        </button>
         <button onClick={onDelete} type="button" title="Eliminar"
-                className="opacity-0 group-hover:opacity-100 text-text3 hover:text-red bg-transparent border-0 p-1 cursor-pointer transition-opacity">
+                className="text-text3 hover:text-red hover:bg-red-bg bg-transparent border-0 p-1.5 rounded cursor-pointer">
           <Trash2 size={13} />
         </button>
       </div>
@@ -614,8 +673,14 @@ function RecursoCard({ item, type, onUpdate, onDelete }) {
                 className="w-full text-[11.5px] text-text2 bg-transparent border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none resize-none mt-2 placeholder:text-text3" />
 
       <div className="mt-2 pt-2 border-t border-border">
-        <TagEditor tags={item.tags || []} onChange={(tags) => onUpdate(item, { tags })} />
+        <TagEditor tags={item.tags || []} allTags={allTags} onChange={(tags) => onUpdate(item, { tags })} />
       </div>
+
+      {item.url && (
+        <div className="text-[10px] text-text3 mt-2 flex items-center gap-1">
+          <ExternalLink size={9} /> Click en la tarjeta para abrir
+        </div>
+      )}
     </div>
   );
 }
