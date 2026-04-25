@@ -336,8 +336,8 @@ function MainLayout() {
           </div>
         </div>
 
-        {/* Content area */}
-        <div className="p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden h-[calc(100vh-60px)] max-md:h-[calc(100vh-52px-64px)] overflow-y-auto">
+        {/* Content area — sales pages handle their own scroll, ops pages use parent scroll */}
+        <div className={`p-6 px-7 max-md:p-2.5 max-md:px-2.5 min-w-0 overflow-x-hidden h-[calc(100vh-60px)] max-md:h-[calc(100vh-52px-64px)] ${location.pathname.startsWith('/sales') ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
           {routes}
         </div>
       </div>

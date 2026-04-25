@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, X, Trash2, MoreHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Search, X, Trash2, MoreHorizontal, Tag } from 'lucide-react';
 import { supabase } from '@korex/db';
 import ContactModal from '../components/ContactModal.jsx';
 
@@ -25,7 +25,6 @@ export default function ContactsPage() {
   const [filterCats, setFilterCats] = useState([]);
   const [editing, setEditing] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [catPopoverFor, setCatPopoverFor] = useState(null); // contact id with open categories popover
 
   const load = async () => {
     setLoading(true);
@@ -116,7 +115,7 @@ export default function ContactsPage() {
   if (error) return <div className="text-red text-center py-20">Error: {error}</div>;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" onClick={() => setCatPopoverFor(null)}>
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="shrink-0 space-y-2 mb-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -192,39 +191,9 @@ export default function ContactsPage() {
                         placeholder="—" />
                   <Cell value={c.email} onSave={(v) => patchContact(c.id, { email: v || null })}
                         placeholder="—" type="email" />
-                  <td className="px-2 py-1 relative" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => setCatPopoverFor((p) => p === c.id ? null : c.id)}
-                            className="bg-transparent border-0 p-0 cursor-pointer text-left w-full">
-                      <div className="flex flex-wrap gap-1 min-h-[20px]">
-                        {(c.categories || []).map((cat) => (
-                          <span key={cat} className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider"
-                                style={{ background: catColor(cat) + '22', color: catColor(cat) }}>
-                            {catShort(cat)}
-                          </span>
-                        ))}
-                        {(c.categories || []).length === 0 && (
-                          <span className="text-text3 text-[10px] italic">click para agregar</span>
-                        )}
-                      </div>
-                    </button>
-                    {catPopoverFor === c.id && (
-                      <div className="absolute left-2 top-full mt-1 bg-white border border-border rounded-md shadow-lg p-2 z-20 min-w-[200px]"
-                           onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap gap-1">
-                          {CATEGORIES.map((cat) => {
-                            const active = (c.categories || []).includes(cat.id);
-                            return (
-                              <button key={cat.id} type="button"
-                                      onClick={() => toggleContactCat(c, cat.id)}
-                                      className={`px-1.5 py-0.5 rounded text-[10px] border transition-colors ${active ? 'border-transparent text-white' : 'border-border bg-white text-text2 hover:bg-surface2'}`}
-                                      style={active ? { background: cat.color } : undefined}>
-                                {cat.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                  <td className="px-2 py-1">
+                    <CategoryEditor contact={c} categories={CATEGORIES}
+                                    onToggle={(catId) => toggleContactCat(c, catId)} />
                   </td>
                   <td className="px-2 py-1 text-right whitespace-nowrap">
                     <button onClick={() => openDetail(c)} title="Detalle (notas + linked)"
@@ -250,6 +219,61 @@ export default function ContactsPage() {
         onClose={() => { setModalOpen(false); setEditing(null); }}
         onSave={handleSave}
       />
+    </div>
+  );
+}
+
+// Editor de categorías inline: chips activas con X para sacar, "+ agregar" abre dropdown.
+function CategoryEditor({ contact, categories, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const active = contact.categories || [];
+  const available = categories.filter((c) => !active.includes(c.id));
+
+  return (
+    <div ref={ref} className="relative flex flex-wrap gap-1 items-center min-h-[24px]">
+      {active.map((catId) => {
+        const cat = categories.find((c) => c.id === catId);
+        const color = cat?.color || '#9CA3AF';
+        return (
+          <span key={catId}
+                className="inline-flex items-center gap-1 text-[9px] font-semibold pl-1.5 pr-1 py-0.5 rounded uppercase tracking-wider"
+                style={{ background: color + '22', color }}>
+            {cat?.short || catId}
+            <button onClick={() => onToggle(catId)}
+                    className="bg-transparent border-0 p-0 cursor-pointer hover:opacity-70"
+                    style={{ color }} title="Quitar">
+              <X size={10} />
+            </button>
+          </span>
+        );
+      })}
+      {available.length > 0 && (
+        <button onClick={() => setOpen((v) => !v)}
+                className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded border border-dashed border-border text-text3 hover:bg-surface2 cursor-pointer"
+                title="Agregar categoría">
+          <Plus size={10} /> agregar
+        </button>
+      )}
+      {open && (
+        <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-md shadow-lg py-1 z-20 min-w-[180px]">
+          {available.map((cat) => (
+            <button key={cat.id} type="button"
+                    onClick={() => { onToggle(cat.id); setOpen(false); }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-[12px] hover:bg-surface2 bg-transparent border-0 cursor-pointer text-left">
+              <span className="w-2 h-2 rounded-full" style={{ background: cat.color }} />
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
