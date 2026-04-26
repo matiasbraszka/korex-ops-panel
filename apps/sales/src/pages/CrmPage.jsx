@@ -34,7 +34,7 @@ export default function CrmPage() {
   const [activeLead, setActiveLead] = useState(null);
   const [stagesEditorOpen, setStagesEditorOpen] = useState(false);
   const [draggingLead, setDraggingLead] = useState(null);
-  const [filters, setFilters] = useState({ search: '', stageId: '', assigneeId: '', scores: [] });
+  const [filters, setFilters] = useState({ search: '', stageId: '', assigneeId: '', scores: [], channel: 'all' });
   // Tab activo en vista mobile (1 etapa a la vez)
   const [mobileStageId, setMobileStageId] = useState(null);
   // Quick filters chip activo: '' | 'mine' | 'stale' | 'closing'
@@ -141,6 +141,8 @@ export default function CrmPage() {
       if (filters.stageId && l.stage_id !== filters.stageId) return false;
       if (filters.assigneeId && l.owner_id !== filters.assigneeId && l.setter_id !== filters.assigneeId) return false;
       if (filters.scores?.length && !filters.scores.includes(l.score)) return false;
+      if (filters.channel === 'whatsapp' && !l.phone) return false;
+      if (filters.channel === 'instagram' && (l.phone || !l.instagram)) return false;
       if (quickFilter === 'mine' && l.owner_id !== me && l.setter_id !== me) return false;
       if (quickFilter === 'stale') {
         const updated = l.updated_at ? new Date(l.updated_at).getTime() : 0;
@@ -153,7 +155,8 @@ export default function CrmPage() {
         const hay = (l.full_name || '').toLowerCase().includes(q)
                  || (l.company_multinivel || '').toLowerCase().includes(q)
                  || (l.email || '').toLowerCase().includes(q)
-                 || (l.phone || '').toLowerCase().includes(q);
+                 || (l.phone || '').toLowerCase().includes(q)
+                 || (l.instagram || '').toLowerCase().includes(q);
         if (!hay) return false;
       }
       return true;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2, ArrowRightLeft, Instagram } from 'lucide-react';
 
 // LeadCard · diseño Korex hi-fi.
 // - Toda la card es draggable (no hay handle lateral).
@@ -57,7 +57,9 @@ export default function LeadCard({
   };
 
   const setScore = (n) => onPatch?.({ score: lead.score === n ? null : n });
+  // WhatsApp tiene prioridad: si hay telefono usamos WhatsApp; si solo hay IG, IG.
   const waUrl = whatsappUrl(lead.phone);
+  const igUrl = waUrl ? null : instagramUrl(lead.instagram);
 
   // Importante: NO usamos transform de Tailwind (hover translate) porque
   // dnd-kit pone su propio transform inline y se pisarian.
@@ -189,6 +191,14 @@ export default function LeadCard({
               <MessageCircle size={13} />
             </a>
           )}
+          {igUrl && (
+            <a href={igUrl} target="_blank" rel="noreferrer" title={`Instagram: ${lead.instagram}`}
+               onClick={(e) => e.stopPropagation()}
+               onPointerDown={(e) => e.stopPropagation()}
+               className="bg-pink-50 text-pink-600 hover:bg-pink-100 rounded-[7px] w-[26px] h-[26px] flex items-center justify-center transition-colors">
+              <Instagram size={13} />
+            </a>
+          )}
           <button onClick={(e) => { e.stopPropagation(); onDetail?.(); }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title="Detalle"
@@ -239,6 +249,15 @@ function whatsappUrl(phone) {
   const clean = String(phone).replace(/[^\d]/g, '');
   if (!clean) return null;
   return `https://wa.me/${clean}`;
+}
+
+function instagramUrl(ig) {
+  if (!ig) return null;
+  const v = String(ig).trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  const handle = v.replace(/^@/, '').replace(/^instagram\.com\//i, '');
+  return `https://instagram.com/${handle}`;
 }
 
 function fmtMoney(n, ccy = 'USD') {

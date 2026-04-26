@@ -25,6 +25,7 @@ function flattenLead(l) {
     last_name: c.last_name || '',
     phone: c.phone || '',
     email: c.email || '',
+    instagram: c.instagram || '',
     company_multinivel: c.company || '',
     contact_categories: c.categories || [],
   };
@@ -261,11 +262,12 @@ export function useCrm() {
       p_full_name: payload.full_name || '',
       p_phone: payload.phone || null,
       p_email: payload.email || null,
+      p_instagram: payload.instagram || null,
       p_default_category: 'prospect',
       p_source: 'manual',
     });
     if (rpcErr) { console.error(rpcErr); return { error: rpcErr.message }; }
-    if (!contactId) { return { error: 'Falta nombre, teléfono o email para crear el contacto.' }; }
+    if (!contactId) { return { error: 'Falta nombre, teléfono, email o Instagram para crear el contacto.' }; }
 
     // Setear empresa si vino y el contacto no la tenia.
     if (payload.company_multinivel) {

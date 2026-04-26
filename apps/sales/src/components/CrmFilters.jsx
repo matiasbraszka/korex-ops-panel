@@ -9,7 +9,8 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam, hid
   const activeCount =
     (filters.stageId ? 1 : 0) +
     (filters.assigneeId ? 1 : 0) +
-    (filters.scores?.length ? 1 : 0);
+    (filters.scores?.length ? 1 : 0) +
+    (filters.channel && filters.channel !== 'all' ? 1 : 0);
 
   const hasAny = !!(filters.search || activeCount > 0);
 
@@ -19,7 +20,7 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam, hid
     setFilters((f) => ({ ...f, scores: [...set] }));
   };
 
-  const clear = () => setFilters({ search: '', stageId: '', assigneeId: '', scores: [] });
+  const clear = () => setFilters({ search: '', stageId: '', assigneeId: '', scores: [], channel: 'all' });
 
   return (
     <div className={compact ? 'relative' : 'space-y-2'}>
@@ -75,6 +76,16 @@ export default function CrmFilters({ filters, setFilters, stages, salesTeam, hid
                     className={selectCls}>
               <option value="">Todos</option>
               {salesTeam.map((tm) => <option key={tm.user_id} value={tm.user_id}>{tm.name}</option>)}
+            </select>
+          </Field>
+
+          <Field label="Canal de contacto">
+            <select value={filters.channel || 'all'}
+                    onChange={(e) => setFilters((f) => ({ ...f, channel: e.target.value }))}
+                    className={selectCls}>
+              <option value="all">Todos</option>
+              <option value="whatsapp">WhatsApp (con teléfono)</option>
+              <option value="instagram">Instagram (sin teléfono)</option>
             </select>
           </Field>
 

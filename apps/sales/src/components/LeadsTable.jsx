@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Flame, MessageCircle, MoreHorizontal, Trash2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Flame, MessageCircle, MoreHorizontal, Trash2, ArrowRight, ChevronLeft, ChevronRight, Instagram } from 'lucide-react';
 
 // Tabla plana (sin agrupar por etapa). El estado del pipeline se ve y se
 // edita en una columna "Estado". Paginada de a 20 leads para no saturar.
@@ -134,6 +134,7 @@ function Row({ lead, stage, stages, salesTeam, owner, setter, canEditOwners, onP
   };
 
   const waUrl = whatsappUrl(lead.phone);
+  const igUrl = waUrl ? null : instagramUrl(lead.instagram);
   const stageColor = stage?.color || '#9CA3AF';
 
   return (
@@ -213,6 +214,13 @@ function Row({ lead, stage, stages, salesTeam, owner, setter, canEditOwners, onP
             <MessageCircle size={13} />
           </a>
         )}
+        {igUrl && (
+          <a href={igUrl} target="_blank" rel="noreferrer" title="Instagram"
+             onClick={(e) => e.stopPropagation()}
+             className="text-pink-600 hover:bg-pink-50 rounded p-1">
+            <Instagram size={13} />
+          </a>
+        )}
         <button onClick={(e) => { e.stopPropagation(); onDetail?.(); }} title="Detalle"
                 className="text-text3 hover:text-text bg-transparent border-0 p-1 cursor-pointer">
           <MoreHorizontal size={13} />
@@ -283,6 +291,15 @@ function whatsappUrl(phone) {
   const clean = String(phone).replace(/[^\d]/g, '');
   if (!clean) return null;
   return `https://wa.me/${clean}`;
+}
+
+function instagramUrl(ig) {
+  if (!ig) return null;
+  const v = String(ig).trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  const handle = v.replace(/^@/, '').replace(/^instagram\.com\//i, '');
+  return `https://instagram.com/${handle}`;
 }
 
 const inlineInput = 'w-full border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 text-[12px] outline-none bg-transparent';

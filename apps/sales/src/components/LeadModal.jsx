@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, MoreVertical, MessageCircle, ChevronRight, Phone, Mail, Flame, Play, Check } from 'lucide-react';
+import { ArrowLeft, MoreVertical, MessageCircle, ChevronRight, Phone, Mail, Flame, Play, Check, Instagram } from 'lucide-react';
 import { supabase } from '@korex/db';
 
 // LeadModal · diseño hi-fi Korex.
@@ -68,6 +68,7 @@ export default function LeadModal({
     proposal: form.proposal?.trim() || null,
     phone: form.phone?.trim() || null,
     email: form.email?.trim() || null,
+    instagram: form.instagram?.trim() || null,
     notes: form.notes?.trim() || null,
     stage_id: form.stage_id || null,
     pipeline_id: form.pipeline_id || null,
@@ -329,6 +330,8 @@ function DetallePane({ form, patchField, stages, salesTeam, pipelines = [], canE
         <div className="space-y-1">
           <RowField icon={Phone} value={form.phone || ''} placeholder="Teléfono"
                     onChange={(v) => patchField('phone', v)} />
+          <RowField icon={Instagram} value={form.instagram || ''} placeholder="@usuario o link de Instagram"
+                    onChange={(v) => patchField('instagram', v)} />
           <RowField icon={Mail} value={form.email || ''} placeholder="correo@ejemplo.com"
                     onChange={(v) => patchField('email', v)} />
         </div>
@@ -543,6 +546,7 @@ function emptyForm(stages, currentUserId) {
     proposal: '',
     phone: '',
     email: '',
+    instagram: '',
     notes: '',
     stage_id: stages?.[0]?.id || '',
     owner_id: currentUserId || null,
