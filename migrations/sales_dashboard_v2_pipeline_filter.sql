@@ -106,6 +106,7 @@ begin
     from public.sales_pipeline_stages s
     left join leads_open l on l.stage_id = s.id
     join pipeline_max_pos pmp on pmp.pipeline_id = s.pipeline_id
+    group by s.id, s.name, s.color, s.position, s.pipeline_id, pmp.max_pos
   ),
   funnel_specific as (
     -- Cuando hay pipeline filtrado: devolvemos las etapas reales de ese pipeline.
