@@ -10,11 +10,23 @@ export function useSalesResources() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error: e } = await supabase
-      .from('sales_resources')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (e) setError(e.message); else setItems(data || []);
+    const [{ data, error: e }, { data: tmData }] = await Promise.all([
+      supabase
+        .from('sales_resources')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('team_members')
+        .select('user_id, name, initials, color, avatar_url')
+        .not('user_id', 'is', null),
+    ]);
+    if (e) {
+      setError(e.message);
+    } else {
+      const tmById = Object.fromEntries((tmData || []).map((t) => [t.user_id, t]));
+      const enriched = (data || []).map((r) => ({ ...r, creator: tmById[r.created_by] || null }));
+      setItems(enriched);
+    }
     setLoading(false);
   }, []);
 
@@ -45,8 +57,18 @@ export function useSalesResources() {
       .select()
       .single();
     if (e) { console.error(e); return { error: e.message }; }
-    setItems((prev) => [data, ...prev]);
-    return { data };
+    // Enriquecer con datos del creador (el trigger setea created_by/is_shared)
+    let enriched = data;
+    if (data?.created_by) {
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select('user_id, name, initials, color, avatar_url')
+        .eq('user_id', data.created_by)
+        .maybeSingle();
+      enriched = { ...data, creator: tm || null };
+    }
+    setItems((prev) => [enriched, ...prev]);
+    return { data: enriched };
   }, []);
 
   const update = useCallback(async (item, patch) => {

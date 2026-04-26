@@ -58,7 +58,6 @@ export default function LeadCard({
 
   const setScore = (n) => onPatch?.({ score: lead.score === n ? null : n });
   const waUrl = whatsappUrl(lead.phone);
-  const showAmount = Number(lead.estimated_value) > 0;
 
   // Importante: NO usamos transform de Tailwind (hover translate) porque
   // dnd-kit pone su propio transform inline y se pisarian.
@@ -125,11 +124,6 @@ export default function LeadCard({
             placeholder="Empresa multinivel"
             className="flex-1 min-w-0 text-[11px] text-text2 border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent"
           />
-          {showAmount && (
-            <span className="text-[11px] font-semibold text-text tabular-nums shrink-0">
-              {fmtMoney(lead.estimated_value, lead.estimated_currency)}
-            </span>
-          )}
         </div>
 
         {/* Fila 3: proximo paso (highlight azul) */}
@@ -158,18 +152,18 @@ export default function LeadCard({
                             onChange={(uid) => onPatch?.({ setter_id: uid || null })} />
           </span>
           <div className="flex-1" />
-          {!showAmount && (
-            <input
-              type="number" min="0" step="0.01"
-              value={estimated}
-              onChange={(e) => setEstimated(e.target.value)}
-              onFocus={() => { focusedRef.current = 'estimated'; }}
-              onBlur={() => { focusedRef.current = null; persist('estimated_value', estimated, lead.estimated_value); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              placeholder="$"
-              className="w-12 text-[10px] text-text3 border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent text-right"
-            />
-          )}
+          {/* Monto USD: siempre editable inline (antes quedaba solo lectura) */}
+          <input
+            type="number" min="0" step="0.01"
+            value={estimated}
+            onChange={(e) => setEstimated(e.target.value)}
+            onFocus={() => { focusedRef.current = 'estimated'; }}
+            onBlur={() => { focusedRef.current = null; persist('estimated_value', estimated, lead.estimated_value); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            placeholder="$"
+            title="Monto estimado USD"
+            className="w-16 text-[11px] font-semibold text-text border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent text-right tabular-nums"
+          />
           {lead.origin === 'llamada_auto' && (
             <span className="text-[8px] bg-blue-bg text-blue px-1 py-0.5 rounded font-semibold uppercase tracking-wider">auto</span>
           )}

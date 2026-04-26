@@ -393,7 +393,7 @@ export default function CrmPage() {
           stages={stages}
           salesTeam={salesTeam}
           ownersByUserId={ownersByUserId}
-          canEditOwners={isAdmin}
+          canEditOwners={true}
           onPatchLead={updateLead}
           onDeleteLead={(id) => handleDeleteWithConfirm(id)}
           onDetail={openEditLead}
@@ -413,7 +413,7 @@ export default function CrmPage() {
                     leads={leadsByStage[stage.id] || []}
                     ownersByUserId={ownersByUserId}
                     salesTeam={salesTeam}
-                    canEditOwners={isAdmin}
+                    canEditOwners={true}
                     onCardDetail={openEditLead}
                     onPatchLead={updateLead}
                     onDeleteLead={handleDeleteWithConfirm}
@@ -475,7 +475,7 @@ export default function CrmPage() {
                         owner={ownersByUserId?.[lead.owner_id]}
                         setter={ownersByUserId?.[lead.setter_id]}
                         salesTeam={salesTeam}
-                        canEditOwners={isAdmin}
+                        canEditOwners={true}
                         onDetail={() => openEditLead(lead)}
                         onPatch={(patch) => updateLead(lead.id, patch)}
                         onDelete={() => handleDeleteWithConfirm(lead.id)}
@@ -503,7 +503,7 @@ export default function CrmPage() {
         lead={activeLead}
         stages={stages}
         salesTeam={salesTeam}
-        canEditOwners={isAdmin}
+        canEditOwners={true}
         currentUserId={me}
         onCreate={handleCreateLead}
         onUpdate={updateLead}

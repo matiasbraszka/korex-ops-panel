@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Plus, MessageCircle, Sparkles, Folder, ExternalLink, Trash2, Copy, Check, X, SlidersHorizontal } from 'lucide-react';
+import { Search, Plus, MessageCircle, Sparkles, Folder, ExternalLink, Trash2, Copy, Check, X, SlidersHorizontal, Lock, Globe } from 'lucide-react';
 import { useSalesResources } from '../hooks/useSalesResources.js';
 import { useConfirm, useToast } from '../components/ConfirmDialog.jsx';
 
@@ -614,6 +614,7 @@ function MensajeCard({ item, allTags, onUpdate, onDelete }) {
 
       <div className="mt-2.5 pt-2.5 border-t border-border">
         <TagEditor tags={item.tags || []} allTags={allTags} onChange={(tags) => onUpdate(item, { tags })} />
+        <ByLine item={item} />
       </div>
     </div>
   );
@@ -663,6 +664,7 @@ function ObjecionCard({ item, allTags, onUpdate, onDelete }) {
 
       <div className="mt-2.5 pt-2.5 border-t border-border">
         <TagEditor tags={item.tags || []} allTags={allTags} onChange={(tags) => onUpdate(item, { tags })} />
+        <ByLine item={item} />
       </div>
     </div>
   );
@@ -737,6 +739,7 @@ function RecursoCard({ item, type, allTags, onUpdate, onDelete, showToast }) {
 
       <div className="mt-2 pt-2 border-t border-border">
         <TagEditor tags={item.tags || []} allTags={allTags} onChange={(tags) => onUpdate(item, { tags })} />
+        <ByLine item={item} />
       </div>
 
       {item.url && (
@@ -744,6 +747,38 @@ function RecursoCard({ item, type, allTags, onUpdate, onDelete, showToast }) {
           <ExternalLink size={9} /> Click en la tarjeta para abrir
         </div>
       )}
+    </div>
+  );
+}
+
+// Pie de cada card: muestra quien lo creo y si es privado o de equipo.
+function ByLine({ item }) {
+  const c = item?.creator;
+  const isShared = !!item?.is_shared;
+  return (
+    <div className="flex items-center gap-2 mt-2 text-[10px] text-text3">
+      {c ? (
+        c.avatar_url ? (
+          <img src={c.avatar_url} alt={c.name}
+               className="w-4 h-4 rounded-full object-cover" />
+        ) : (
+          <span className="w-4 h-4 rounded-full inline-flex items-center justify-center font-bold text-[7px]"
+                style={{ background: (c.color || '#5B7CF5') + '24', color: c.color || '#5B7CF5' }}>
+            {c.initials || (c.name || '·').slice(0, 2).toUpperCase()}
+          </span>
+        )
+      ) : (
+        <span className="w-4 h-4 rounded-full bg-surface2 border border-dashed border-border" />
+      )}
+      <span className="truncate">{c?.name || 'Sin autor'}</span>
+      <span className="flex-1" />
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
+            style={{
+              background: isShared ? '#ECFDF5' : '#FEF3C7',
+              color: isShared ? '#16A34A' : '#B45309',
+            }}>
+        {isShared ? <><Globe size={9} /> Equipo</> : <><Lock size={9} /> Privado</>}
+      </span>
     </div>
   );
 }
