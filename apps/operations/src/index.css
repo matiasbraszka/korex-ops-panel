@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../../sales/src/**/*.{js,jsx,ts,tsx}";
 
 @theme {
   --color-bg: #F7F8FA;
