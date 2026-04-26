@@ -83,11 +83,13 @@ export default function PipelineSwitcher({
               );
             })}
           </div>
-          <button type="button"
-                  onClick={() => { setOpen(false); onNew?.(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-[12.5px] font-semibold text-blue hover:bg-blue-bg border-t border-border bg-transparent cursor-pointer">
-            <Plus size={13} /> Nuevo CRM
-          </button>
+          {isAdmin && (
+            <button type="button"
+                    onClick={() => { setOpen(false); onNew?.(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-[12.5px] font-semibold text-blue hover:bg-blue-bg border-t border-border bg-transparent cursor-pointer">
+              <Plus size={13} /> Nuevo CRM
+            </button>
+          )}
         </div>
       )}
     </div>
