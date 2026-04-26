@@ -159,7 +159,9 @@ export default function DashboardFilters({
 
       <PipelineFilter pipelineId={pipelineId} onPipeline={setPipelineId} pipelines={pipelines} />
 
-      <VendorFilter vendor={vendor} onVendor={setVendor} sellers={sellers} />
+      {/* El filtro de vendedor solo aparece para admins. Los vendedores ven
+          su propio dashboard y la RPC server-side lo enforce. */}
+      {isAdmin && <VendorFilter vendor={vendor} onVendor={setVendor} sellers={sellers} />}
 
       <div className="inline-flex bg-surface2 rounded-lg p-0.5 gap-0.5">
         <button onClick={() => setRange('month')}
