@@ -1,12 +1,9 @@
 -- sales_dashboard_v7_attribute_to_setter
 --
--- Cambia la atribucion de la tabla "Metricas por vendedor": todas las
--- metricas (contactos, propuestas, cerrados, ingresos, pipeline, llamadas)
--- se atribuyen al SETTER del lead. Si no hay setter cargado, fallback al
--- owner para no perder datos.
---
--- Esto refleja mejor el trabajo real: el setter es quien genera y mueve
--- los contactos. El owner queda como concepto secundario.
+-- Atribuye la tabla "Metricas por vendedor" al setter del lead (con fallback
+-- al owner si no hay setter cargado). Listamos columnas explicitas en cada
+-- CTE para evitar ambiguedad de "owner_id" entre la columna calculada y la
+-- original.
 
 drop function if exists public.sales_dashboard_metrics(text, uuid);
 
@@ -46,18 +43,21 @@ begin
       and pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
   ),
-  -- Helper: en cada subquery, el "vendedor" se calcula como
-  -- coalesce(setter_id, owner_id) y se aliasea como owner_id por compat
-  -- con el frontend (que usa owner_id como key).
   leads_in as (
-    select coalesce(setter_id, owner_id) as owner_id, *
+    select coalesce(setter_id, owner_id) as owner_id,
+           id, pipeline_id, stage_id, contact_id,
+           proposal, client_id, estimated_value, dias_de_cierre,
+           score, closed_at, created_at, updated_at
     from public.sales_leads
     where pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
       and created_at >= range_start
   ),
   leads_closed as (
-    select coalesce(setter_id, owner_id) as owner_id, *
+    select coalesce(setter_id, owner_id) as owner_id,
+           id, pipeline_id, stage_id, contact_id,
+           proposal, client_id, estimated_value, dias_de_cierre,
+           score, closed_at, created_at
     from public.sales_leads
     where pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
@@ -65,7 +65,8 @@ begin
       and closed_at >= range_start
   ),
   leads_closed_prev as (
-    select coalesce(setter_id, owner_id) as owner_id, *
+    select coalesce(setter_id, owner_id) as owner_id,
+           estimated_value
     from public.sales_leads
     where pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
@@ -74,7 +75,8 @@ begin
       and closed_at >= prev_start and closed_at < prev_end
   ),
   leads_open as (
-    select coalesce(setter_id, owner_id) as owner_id, *
+    select coalesce(setter_id, owner_id) as owner_id,
+           id, pipeline_id, stage_id, estimated_value, score
     from public.sales_leads
     where pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
@@ -82,14 +84,16 @@ begin
       and (stage_id is null or stage_id not in (select id from discarded_stages))
   ),
   leads_funnel as (
-    select * from public.sales_leads
+    select id, stage_id, estimated_value
+    from public.sales_leads
     where pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
       and (stage_id is null or stage_id not in (select id from discarded_stages))
       and (closed_at is null or closed_at >= range_start)
   ),
   leads_prev as (
-    select coalesce(setter_id, owner_id) as owner_id, *
+    select coalesce(setter_id, owner_id) as owner_id,
+           proposal
     from public.sales_leads
     where pipeline_id = any(visible)
       and (p_pipeline_id is null or pipeline_id = p_pipeline_id)
@@ -143,7 +147,6 @@ begin
       ) cp using (owner_id)
   ),
   per_owner_calls as (
-    -- Las llamadas tambien se atribuyen al setter del lead (con fallback a owner)
     select coalesce(l.setter_id, l.owner_id) as owner_id,
            count(distinct ll.id)::int as calls
     from public.llamadas ll
