@@ -1,0 +1,3 @@
+-- v8: atribucion estricta por setter, sin fallback a owner.
+-- Si un lead no tiene setter cargado, NO se cuenta en la tabla por vendedor.
+-- (Ver el archivo aplicado en SQL editor para el SQL completo.)
