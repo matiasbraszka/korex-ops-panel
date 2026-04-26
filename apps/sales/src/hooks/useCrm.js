@@ -211,12 +211,12 @@ export function useCrm() {
   }, [loadPipelines, pipelineId, setPipelineId]);
 
   // ── Stages CRUD ──
-  const addStage = useCallback(async (name, color = '#5B7CF5') => {
+  const addStage = useCallback(async (name, color = '#5B7CF5', bucket = 'en_proceso') => {
     if (!pipelineId) return;
     const position = stages.length;
     const { data, error: e } = await supabase
       .from('sales_pipeline_stages')
-      .insert({ pipeline_id: pipelineId, name, color, position })
+      .insert({ pipeline_id: pipelineId, name, color, position, bucket })
       .select().single();
     if (e) { console.error(e); return; }
     setStages((prev) => [...prev, data]);
