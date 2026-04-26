@@ -92,10 +92,11 @@ function pctChange(curr, prev) {
 export default function DashboardPage() {
   const [vendor, setVendor] = useState('all');
   const [range, setRange] = useState('month');
+  const [pipelineFilter, setPipelineFilter] = useState(null); // null = todos
   const [targetsOpen, setTargetsOpen] = useState(false);
 
-  const { data, loading, error, reload } = useDashboard(range);
-  const { sellers, salesTeam } = useCrm();
+  const { data, loading, error, reload } = useDashboard(range, pipelineFilter);
+  const { sellers, salesTeam, pipelines } = useCrm();
   const isAdmin = useIsAdmin();
 
   // salesTeam = vendedores + admins. Es el universo permitido para aparecer
@@ -120,6 +121,8 @@ export default function DashboardPage() {
       <DashboardFilters
         vendor={vendor} setVendor={setVendor}
         range={range} setRange={setRange}
+        pipelineId={pipelineFilter} setPipelineId={setPipelineFilter}
+        pipelines={pipelines}
         sellers={sellers} isAdmin={isAdmin}
         onEditTargets={() => setTargetsOpen(true)}
         generatedAt={data?.generated_at}
