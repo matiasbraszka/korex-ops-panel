@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, Target, DollarSign, Sparkles } from 'lucide-react';
+import { Users, Phone, DollarSign, Sparkles } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { useDashboard } from '../hooks/useDashboard.js';
 import { useCrm } from '../hooks/useCrm.js';
@@ -9,7 +9,7 @@ import HeatChart from '../components/dashboard/HeatChart.jsx';
 import VendorsTable from '../components/dashboard/VendorsTable.jsx';
 import DashboardFilters from '../components/dashboard/DashboardFilters.jsx';
 import TargetsModal from '../components/dashboard/TargetsModal.jsx';
-import { fmtMoney, fmtInt, stageProb } from '../components/dashboard/format.js';
+import { fmtMoney, fmtInt } from '../components/dashboard/format.js';
 
 // Suma in-memory `per_owner` y derivados, opcionalmente filtrando por vendor.
 function aggregateView(data, sellers, vendor) {
@@ -92,10 +92,11 @@ function pctChange(curr, prev) {
 export default function DashboardPage() {
   const [vendor, setVendor] = useState('all');
   const [range, setRange] = useState('month');
+  const [pipelineFilter, setPipelineFilter] = useState(null); // null = todos
   const [targetsOpen, setTargetsOpen] = useState(false);
 
-  const { data, loading, error, reload } = useDashboard(range);
-  const { sellers, salesTeam } = useCrm();
+  const { data, loading, error, reload } = useDashboard(range, pipelineFilter);
+  const { sellers, salesTeam, pipelines } = useCrm();
   const isAdmin = useIsAdmin();
 
   // salesTeam = vendedores + admins. Es el universo permitido para aparecer
@@ -107,10 +108,6 @@ export default function DashboardPage() {
   const convRate = kpis.proposals > 0 ? kpis.won / kpis.proposals : 0;
   const convRatePrev = kpis.proposals_prev > 0 ? kpis.won_prev / kpis.proposals_prev : 0;
 
-  // Pipeline ponderado: sum(stage.amount * prob) sobre el funnel.
-  const pipelineTotal = funnel.reduce((a, s) => a + Number(s.amount || 0), 0);
-  const weighted = funnel.reduce((a, s, i) => a + Number(s.amount || 0) * stageProb(s.position ?? i, funnel.length), 0);
-
   // % del objetivo: revenue acumulado vs sum(targets) del set visible.
   const totalTarget = vendorRows.reduce((a, r) => a + Number(r.target || 0), 0);
   const objetivoPct = totalTarget > 0 ? Math.round((kpis.revenue / totalTarget) * 100) : null;
@@ -120,6 +117,8 @@ export default function DashboardPage() {
       <DashboardFilters
         vendor={vendor} setVendor={setVendor}
         range={range} setRange={setRange}
+        pipelineId={pipelineFilter} setPipelineId={setPipelineFilter}
+        pipelines={pipelines}
         sellers={sellers} isAdmin={isAdmin}
         onEditTargets={() => setTargetsOpen(true)}
         generatedAt={data?.generated_at}
@@ -148,10 +147,10 @@ export default function DashboardPage() {
               spark={sparks.contacts}
             />
             <KpiCard
-              icon={Target} tone="purple"
-              label="Proyección ponderada"
-              value={fmtMoney(weighted)}
-              sub={`pipeline ${fmtMoney(pipelineTotal)} × prob.`}
+              icon={Phone} tone="purple"
+              label="Llamadas"
+              value={fmtInt(kpis.calls)}
+              sub={range === 'max' ? 'todas las llamadas' : 'mes en curso'}
             />
             <KpiCard
               icon={DollarSign} tone="green"

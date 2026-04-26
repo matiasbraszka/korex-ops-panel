@@ -1,5 +1,5 @@
 import { Flame } from 'lucide-react';
-import { fmtMoney, scoreProb } from './format.js';
+import { fmtMoney } from './format.js';
 
 const META = [
   { score: 3, label: 'Caliente', color: '#EF4444' },
@@ -8,7 +8,6 @@ const META = [
   { score: 0, label: 'Sin score', color: '#D1D5DB' },
 ];
 
-// Iconito de score: N llamas pintadas + (3-N) llamas grises.
 function ScoreFlames({ n, color }) {
   return (
     <span className="inline-flex items-center gap-px">
@@ -22,18 +21,16 @@ function ScoreFlames({ n, color }) {
   );
 }
 
+// Donut + lista de score. Solo conteos y montos reales — sin probabilidades.
 export default function HeatChart({ heat = [] }) {
   const byScore = Object.fromEntries(heat.map((h) => [h.score, h]));
   const items = META.map((m) => {
     const row = byScore[m.score] || { cnt: 0, amount: 0 };
-    return { ...m, cnt: Number(row.cnt) || 0, amount: Number(row.amount) || 0, prob: scoreProb(m.score) };
+    return { ...m, cnt: Number(row.cnt) || 0, amount: Number(row.amount) || 0 };
   });
   const total = items.reduce((a, b) => a + b.cnt, 0) || 0;
   const totalAmount = items.reduce((a, b) => a + b.amount, 0);
-  const totalWeighted = items.reduce((a, b) => a + b.amount * b.prob, 0);
-  const tasaGlobal = totalAmount > 0 ? totalWeighted / totalAmount : 0;
 
-  // Donut
   const r = 56, c = 2 * Math.PI * r, gap = 2;
   let offset = 0;
   const segs = items.filter((h) => h.cnt > 0).map((h) => {
@@ -46,7 +43,7 @@ export default function HeatChart({ heat = [] }) {
   return (
     <div className="bg-white border border-border rounded-xl">
       <div className="px-3.5 pt-3 pb-2.5 border-b border-border">
-        <div className="text-[13px] font-bold text-text">Proyección por calentura</div>
+        <div className="text-[13px] font-bold text-text">Calentura de leads</div>
         <div className="text-[10.5px] text-text3 mt-0.5">Score del lead — caliente, tibio, frío</div>
       </div>
       <div className="px-3.5 py-3">
@@ -70,50 +67,32 @@ export default function HeatChart({ heat = [] }) {
             </div>
           </div>
           <div className="flex-1 flex flex-col gap-1.5 w-full min-w-0">
-            {items.filter((h) => h.score > 0 || h.cnt > 0).map((h) => {
-              const weighted = Math.round(h.amount * h.prob);
-              return (
-                <div key={h.score} className="bg-white border border-border rounded-md px-2 py-1.5">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <ScoreFlames n={h.score} color={h.color} />
-                    <span className="text-[11.5px] font-bold">{h.label}</span>
-                    <span className="text-[9px] font-bold tabular-nums px-1 py-px rounded bg-surface2 text-text3">
-                      ×{Math.round(h.prob * 100)}%
-                    </span>
-                    <span className="flex-1" />
-                    <span className="text-[10px] text-text3 font-semibold tabular-nums whitespace-nowrap">
-                      {h.cnt} · {fmtMoney(h.amount)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-[4px] bg-surface2 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full"
-                           style={{ width: ((h.cnt / Math.max(total, 1)) * 100) + '%', background: h.color }} />
-                    </div>
-                    <span className="text-[10px] font-bold tabular-nums whitespace-nowrap"
-                          style={{ color: h.color }}>
-                      → {fmtMoney(weighted)} esp.
-                    </span>
-                  </div>
+            {items.filter((h) => h.score > 0 || h.cnt > 0).map((h) => (
+              <div key={h.score} className="bg-white border border-border rounded-md px-2 py-1.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <ScoreFlames n={h.score} color={h.color} />
+                  <span className="text-[11.5px] font-bold">{h.label}</span>
+                  <span className="flex-1" />
+                  <span className="text-[10px] text-text3 font-semibold tabular-nums whitespace-nowrap">
+                    {h.cnt} · {fmtMoney(h.amount)}
+                  </span>
                 </div>
-              );
-            })}
+                <div className="h-[4px] bg-surface2 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full"
+                       style={{ width: ((h.cnt / Math.max(total, 1)) * 100) + '%', background: h.color }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="mt-2.5 pt-2.5 border-t border-border flex items-center justify-between gap-2">
+        <div className="mt-2.5 pt-2.5 border-t border-border grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Leads activos</div>
+            <div className="text-[14px] font-bold tabular-nums mt-0.5">{total}</div>
+          </div>
           <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Pipeline total</div>
-            <div className="text-[14px] font-bold tabular-nums mt-0.5">{fmtMoney(totalAmount)}</div>
-          </div>
-          <div className="h-[30px] w-px bg-border" />
-          <div>
-            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Cierre esperado</div>
-            <div className="text-[14px] font-bold tabular-nums mt-0.5 text-blue">{fmtMoney(totalWeighted)}</div>
-          </div>
-          <div className="h-[30px] w-px bg-border" />
-          <div>
-            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Tasa global</div>
-            <div className="text-[14px] font-bold tabular-nums mt-0.5">{Math.round(tasaGlobal * 100)}%</div>
+            <div className="text-[14px] font-bold tabular-nums mt-0.5 text-blue">{fmtMoney(totalAmount)}</div>
           </div>
         </div>
       </div>

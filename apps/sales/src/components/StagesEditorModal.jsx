@@ -3,9 +3,21 @@ import { Trash2, Plus } from 'lucide-react';
 
 const DEFAULT_COLORS = ['#8B5CF6', '#5B7CF5', '#EAB308', '#22C55E', '#9CA3AF', '#EF4444', '#06B6D4', '#EC4899'];
 
+// Fases universales del dashboard. Cada etapa de cada pipeline tiene que
+// pertenecer a una de estas 4 categorias para que el dashboard "Todos los CRMs"
+// pueda agrupar correctamente.
+const BUCKETS = [
+  { id: 'inicial',     label: 'Inicial',     color: '#9CA3AF' },
+  { id: 'en_proceso',  label: 'En proceso',  color: '#EAB308' },
+  { id: 'por_cerrar',  label: 'Por cerrar',  color: '#F97316' },
+  { id: 'cerrados',    label: 'Cerrados',    color: '#22C55E' },
+  { id: 'descartados', label: 'Descartados', color: '#EF4444' },
+];
+
 export default function StagesEditorModal({ open, onClose, stages, onAdd, onUpdate, onDelete, onReorder }) {
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(DEFAULT_COLORS[0]);
+  const [newBucket, setNewBucket] = useState('en_proceso');
 
   if (!open) return null;
 
@@ -19,9 +31,10 @@ export default function StagesEditorModal({ open, onClose, stages, onAdd, onUpda
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
-    await onAdd(newName.trim(), newColor);
+    await onAdd(newName.trim(), newColor, newBucket);
     setNewName('');
     setNewColor(DEFAULT_COLORS[0]);
+    setNewBucket('en_proceso');
   };
 
   return (
@@ -32,6 +45,9 @@ export default function StagesEditorModal({ open, onClose, stages, onAdd, onUpda
           <p className="text-xs text-text3 mt-1">Agregá, renombrá, reordená o eliminá las etapas del pipeline.</p>
         </div>
         <div className="p-5 space-y-2">
+          <div className="text-[10.5px] text-text3 mb-1">
+            Cada etapa pertenece a una <b>fase universal</b> que el dashboard usa para sumar todos los CRMs.
+          </div>
           {stages.map((s, idx) => (
             <div key={s.id} className="flex items-center gap-2 py-2 border border-border rounded-md px-3">
               <div className="flex flex-col gap-0.5">
@@ -44,6 +60,14 @@ export default function StagesEditorModal({ open, onClose, stages, onAdd, onUpda
                      className="w-7 h-7 rounded cursor-pointer border-0" />
               <input value={s.name} onChange={(e) => onUpdate(s.id, { name: e.target.value })}
                      className="flex-1 bg-transparent outline-none text-[13px] py-1" />
+              <select value={s.bucket || 'en_proceso'}
+                      onChange={(e) => onUpdate(s.id, { bucket: e.target.value })}
+                      title="Fase universal del dashboard"
+                      className="text-[11px] border border-border rounded px-1.5 py-1 bg-white outline-none cursor-pointer">
+                {BUCKETS.map((b) => (
+                  <option key={b.id} value={b.id}>{b.label}</option>
+                ))}
+              </select>
               <button type="button" onClick={() => onDelete(s.id)}
                       className="text-text3 hover:text-red p-1">
                 <Trash2 size={14} />
@@ -53,12 +77,18 @@ export default function StagesEditorModal({ open, onClose, stages, onAdd, onUpda
         </div>
         <div className="p-5 border-t border-border space-y-2">
           <label className="block text-xs font-semibold text-text2 mb-1">Nueva etapa</label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input type="color" value={newColor} onChange={(e) => setNewColor(e.target.value)}
                    className="w-8 h-8 rounded cursor-pointer border-0" />
             <input value={newName} onChange={(e) => setNewName(e.target.value)}
                    placeholder="Nombre de la etapa"
-                   className="flex-1 bg-bg border border-border rounded-md py-[9px] px-3 text-[13px] outline-none focus:border-blue" />
+                   className="flex-1 min-w-[140px] bg-bg border border-border rounded-md py-[9px] px-3 text-[13px] outline-none focus:border-blue" />
+            <select value={newBucket} onChange={(e) => setNewBucket(e.target.value)}
+                    className="text-[12px] border border-border rounded-md py-2 px-2 bg-white outline-none cursor-pointer">
+              {BUCKETS.map((b) => (
+                <option key={b.id} value={b.id}>Fase: {b.label}</option>
+              ))}
+            </select>
             <button type="button" onClick={handleAdd}
                     className="py-2 px-3 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark flex items-center gap-1">
               <Plus size={14} /> Agregar

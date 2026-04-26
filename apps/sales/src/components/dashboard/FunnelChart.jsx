@@ -1,81 +1,57 @@
-import { fmtMoney, stageProb } from './format.js';
+import { fmtMoney } from './format.js';
 
-// Funnel hi-fi: barra horizontal con dos capas (total + ponderado), pill de
-// probabilidad y label "ponderado" inline a la derecha. Footer 3 cols con
-// totales: leads / pipeline / ponderado.
+// Funnel: barra horizontal por etapa con su monto y count reales.
+// Sin probabilidad ponderada — los multiplicadores no estan en la base.
 export default function FunnelChart({ funnel = [] }) {
-  const total = funnel.length;
-  const enriched = funnel.map((p, i) => ({
-    ...p,
-    prob: stageProb(p.position ?? i, total),
-  }));
-
-  const totalCount = enriched.reduce((a, b) => a + Number(b.cnt || 0), 0);
-  const totalAmount = enriched.reduce((a, b) => a + Number(b.amount || 0), 0);
-  const totalWeighted = enriched.reduce((a, b) => a + Number(b.amount || 0) * b.prob, 0);
-
+  const totalCount = funnel.reduce((a, b) => a + Number(b.cnt || 0), 0);
+  const totalAmount = funnel.reduce((a, b) => a + Number(b.amount || 0), 0);
   const useAmount = totalAmount > 0;
   const max = useAmount
-    ? Math.max(...enriched.map((p) => Number(p.amount) || 0), 1)
-    : Math.max(...enriched.map((p) => Number(p.cnt) || 0), 1);
+    ? Math.max(...funnel.map((p) => Number(p.amount) || 0), 1)
+    : Math.max(...funnel.map((p) => Number(p.cnt) || 0), 1);
 
   return (
     <div className="bg-white border border-border rounded-xl">
       <div className="px-3.5 pt-3 pb-2.5 border-b border-border">
         <div className="text-[13px] font-bold text-text">Pipeline por etapa</div>
-        <div className="text-[10.5px] text-text3 mt-0.5">Cantidad y monto proyectado · todo el equipo</div>
+        <div className="text-[10.5px] text-text3 mt-0.5">Cantidad y monto por etapa</div>
       </div>
       <div className="px-3.5 py-3">
-        {enriched.length === 0 ? (
+        {funnel.length === 0 ? (
           <div className="text-[12px] text-text3 text-center py-4">Sin etapas para mostrar.</div>
         ) : (
           <div className="flex flex-col gap-1.5">
-            {enriched.map((p) => {
+            {funnel.map((p) => {
               const basis = useAmount ? Number(p.amount || 0) : Number(p.cnt || 0);
               const pct = (basis / max) * 100;
               const color = p.color || '#5B7CF5';
-              const weighted = Math.round(Number(p.amount || 0) * p.prob);
               return (
                 <div key={p.name}>
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
                     <span className="text-[12px] font-semibold flex-1 truncate">{p.name}</span>
                     <span className="text-[10.5px] text-text3 tabular-nums">{p.cnt}</span>
-                    <span className="text-[9.5px] text-text3 font-bold tabular-nums px-1.5 py-px rounded bg-surface2">
-                      ×{Math.round(p.prob * 100)}%
-                    </span>
                     <span className="text-[11.5px] font-bold tabular-nums min-w-[58px] text-right">
                       {fmtMoney(p.amount)}
                     </span>
                   </div>
                   <div className="relative h-[12px] bg-surface2 rounded overflow-hidden">
                     <div className="absolute inset-y-0 left-0 rounded transition-[width] duration-500 ease-out"
-                         style={{ width: Math.max(pct, p.cnt > 0 ? 4 : 0) + '%', background: color, opacity: 0.22 }} />
-                    <div className="absolute inset-y-0 left-0 rounded transition-[width] duration-500 ease-out"
-                         style={{ width: Math.max(pct * p.prob, 0) + '%', background: color }} />
-                    {weighted > 0 && (
-                      <div className="absolute right-1.5 inset-y-0 flex items-center text-[9px] font-bold text-text3 tabular-nums">
-                        ponderado {fmtMoney(weighted)}
-                      </div>
-                    )}
+                         style={{ width: Math.max(pct, p.cnt > 0 ? 4 : 0) + '%', background: color }} />
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-        <div className="mt-2.5 pt-2.5 border-t border-border grid grid-cols-3 gap-2">
+        <div className="mt-2.5 pt-2.5 border-t border-border grid grid-cols-2 gap-2">
           <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Leads totales</div>
             <div className="text-[14px] font-bold tabular-nums mt-0.5">{totalCount}</div>
           </div>
           <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Pipeline total</div>
-            <div className="text-[14px] font-bold tabular-nums mt-0.5">{fmtMoney(totalAmount)}</div>
-          </div>
-          <div>
-            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Ponderado</div>
-            <div className="text-[14px] font-bold tabular-nums mt-0.5 text-blue">{fmtMoney(totalWeighted)}</div>
+            <div className="text-[14px] font-bold tabular-nums mt-0.5 text-blue">{fmtMoney(totalAmount)}</div>
           </div>
         </div>
       </div>
