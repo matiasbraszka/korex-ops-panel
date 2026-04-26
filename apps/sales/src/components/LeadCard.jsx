@@ -166,9 +166,6 @@ export default function LeadCard({
             title="Monto estimado USD"
             className="w-16 text-[11px] font-semibold text-text border border-transparent hover:border-border focus:border-blue rounded px-1 py-0.5 outline-none bg-transparent text-right tabular-nums"
           />
-          {lead.origin === 'llamada_auto' && (
-            <span className="text-[8px] bg-blue-bg text-blue px-1 py-0.5 rounded font-semibold uppercase tracking-wider">auto</span>
-          )}
           {lead.closed_at && (
             <span className="text-[8px] bg-green-50 text-green-700 px-1 py-0.5 rounded font-semibold uppercase tracking-wider">cerrado</span>
           )}
