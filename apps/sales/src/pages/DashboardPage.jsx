@@ -56,7 +56,7 @@ function aggregateView(data, sellers, vendor) {
       revenue: Number(po.revenue || 0),
       pipeline: Number(po.pipeline || 0),
       avg_deal: Number(po.avg_deal || 0),
-      convRate: proposals > 0 ? won / proposals : 0,
+      convRate: Number(po.contacts || 0) > 0 ? won / Number(po.contacts || 0) : 0,
       target: Number(targets[uid] || 0),
       contacts_prev: Number(prev.contacts_prev || 0),
       won_prev: Number(prev.won_prev || 0),
@@ -95,7 +95,7 @@ export default function DashboardPage() {
   const [pipelineFilter, setPipelineFilter] = useState(null); // null = todos
   const [targetsOpen, setTargetsOpen] = useState(false);
 
-  const { data, loading, error, reload } = useDashboard(range, pipelineFilter);
+  const { data, loading, error, reload } = useDashboard(range, pipelineFilter, vendor === 'all' ? null : vendor);
   const { sellers, salesTeam, pipelines } = useCrm();
   const isAdmin = useIsAdmin();
 
@@ -105,8 +105,10 @@ export default function DashboardPage() {
   const view = useMemo(() => aggregateView(data, salesTeam, vendor), [data, salesTeam, vendor]);
   const { kpis, sparks, vendorRows, funnel, heat } = view;
 
-  const convRate = kpis.proposals > 0 ? kpis.won / kpis.proposals : 0;
-  const convRatePrev = kpis.proposals_prev > 0 ? kpis.won_prev / kpis.proposals_prev : 0;
+  // Tasa de cierre = cerrados / contactos del periodo. (Antes era won/proposals
+  // pero requeria que el campo proposal estuviera lleno, lo cual casi nunca pasa.)
+  const convRate = kpis.contacts > 0 ? kpis.won / kpis.contacts : 0;
+  const convRatePrev = kpis.contacts_prev > 0 ? kpis.won_prev / kpis.contacts_prev : 0;
 
   // % del objetivo: revenue acumulado vs sum(targets) del set visible.
   const totalTarget = vendorRows.reduce((a, r) => a + Number(r.target || 0), 0);
@@ -166,7 +168,7 @@ export default function DashboardPage() {
               value={(convRate * 100).toFixed(1) + '%'}
               delta={range === 'month' && convRatePrev > 0 ? Math.round((convRate - convRatePrev) * 100 * 10) / 10 : null}
               deltaSuffix="pp"
-              sub="propuestas → ganados"
+              sub="cerrados / contactos"
             />
           </div>
 
