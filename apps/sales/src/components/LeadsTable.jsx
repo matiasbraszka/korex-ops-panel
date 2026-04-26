@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Flame, MessageCircle, MoreHorizontal, Trash2, ArrowRight, ChevronLeft, ChevronRight, Instagram } from 'lucide-react';
+import { Flame, MessageCircle, MoreHorizontal, Trash2, ArrowRight, ChevronLeft, ChevronRight, AtSign } from 'lucide-react';
 
 // Tabla plana (sin agrupar por etapa). El estado del pipeline se ve y se
 // edita en una columna "Estado". Paginada de a 20 leads para no saturar.
@@ -215,10 +215,10 @@ function Row({ lead, stage, stages, salesTeam, owner, setter, canEditOwners, onP
           </a>
         )}
         {igUrl && (
-          <a href={igUrl} target="_blank" rel="noreferrer" title="Instagram"
+          <a href={igUrl} target="_blank" rel="noreferrer" title="AtSign"
              onClick={(e) => e.stopPropagation()}
              className="text-pink-600 hover:bg-pink-50 rounded p-1">
-            <Instagram size={13} />
+            <AtSign size={13} />
           </a>
         )}
         <button onClick={(e) => { e.stopPropagation(); onDetail?.(); }} title="Detalle"

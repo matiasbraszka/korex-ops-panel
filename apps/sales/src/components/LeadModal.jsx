@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, MoreVertical, MessageCircle, ChevronRight, Phone, Mail, Flame, Play, Check, Instagram } from 'lucide-react';
+import { ArrowLeft, MoreVertical, MessageCircle, ChevronRight, Phone, Mail, Flame, Play, Check, AtSign } from 'lucide-react';
 import { supabase } from '@korex/db';
 
 // LeadModal · diseño hi-fi Korex.
@@ -330,7 +330,7 @@ function DetallePane({ form, patchField, stages, salesTeam, pipelines = [], canE
         <div className="space-y-1">
           <RowField icon={Phone} value={form.phone || ''} placeholder="Teléfono"
                     onChange={(v) => patchField('phone', v)} />
-          <RowField icon={Instagram} value={form.instagram || ''} placeholder="@usuario o link de Instagram"
+          <RowField icon={AtSign} value={form.instagram || ''} placeholder="@usuario o link de AtSign"
                     onChange={(v) => patchField('instagram', v)} />
           <RowField icon={Mail} value={form.email || ''} placeholder="correo@ejemplo.com"
                     onChange={(v) => patchField('email', v)} />

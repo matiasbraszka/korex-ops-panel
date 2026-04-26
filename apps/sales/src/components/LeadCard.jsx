@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2, ArrowRightLeft, Instagram } from 'lucide-react';
+import { Flame, MessageCircle, MoreHorizontal, ArrowRight, Trash2, ArrowRightLeft, AtSign } from 'lucide-react';
 
 // LeadCard · diseño Korex hi-fi.
 // - Toda la card es draggable (no hay handle lateral).
@@ -192,11 +192,11 @@ export default function LeadCard({
             </a>
           )}
           {igUrl && (
-            <a href={igUrl} target="_blank" rel="noreferrer" title={`Instagram: ${lead.instagram}`}
+            <a href={igUrl} target="_blank" rel="noreferrer" title={`AtSign: ${lead.instagram}`}
                onClick={(e) => e.stopPropagation()}
                onPointerDown={(e) => e.stopPropagation()}
                className="bg-pink-50 text-pink-600 hover:bg-pink-100 rounded-[7px] w-[26px] h-[26px] flex items-center justify-center transition-colors">
-              <Instagram size={13} />
+              <AtSign size={13} />
             </a>
           )}
           <button onClick={(e) => { e.stopPropagation(); onDetail?.(); }}
