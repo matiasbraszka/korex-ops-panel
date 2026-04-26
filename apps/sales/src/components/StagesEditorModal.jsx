@@ -7,10 +7,11 @@ const DEFAULT_COLORS = ['#8B5CF6', '#5B7CF5', '#EAB308', '#22C55E', '#9CA3AF', '
 // pertenecer a una de estas 4 categorias para que el dashboard "Todos los CRMs"
 // pueda agrupar correctamente.
 const BUCKETS = [
-  { id: 'inicial',    label: 'Inicial',    color: '#9CA3AF' },
-  { id: 'en_proceso', label: 'En proceso', color: '#EAB308' },
-  { id: 'por_cerrar', label: 'Por cerrar', color: '#F97316' },
-  { id: 'cerrados',   label: 'Cerrados',   color: '#22C55E' },
+  { id: 'inicial',     label: 'Inicial',     color: '#9CA3AF' },
+  { id: 'en_proceso',  label: 'En proceso',  color: '#EAB308' },
+  { id: 'por_cerrar',  label: 'Por cerrar',  color: '#F97316' },
+  { id: 'cerrados',    label: 'Cerrados',    color: '#22C55E' },
+  { id: 'descartados', label: 'Descartados', color: '#EF4444' },
 ];
 
 export default function StagesEditorModal({ open, onClose, stages, onAdd, onUpdate, onDelete, onReorder }) {
