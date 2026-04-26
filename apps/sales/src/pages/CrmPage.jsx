@@ -502,6 +502,8 @@ export default function CrmPage() {
         onClose={() => setLeadModalOpen(false)}
         lead={activeLead}
         stages={stages}
+        pipelines={pipelines}
+        currentPipelineId={pipelineId}
         salesTeam={salesTeam}
         canEditOwners={true}
         currentUserId={me}

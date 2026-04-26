@@ -323,6 +323,24 @@ export function useCrm() {
       }
     }
 
+    // Si cambia el pipeline_id, el stage_id actual ya no es valido. Buscamos
+    // la primera etapa del pipeline destino y la asignamos. Si la nueva etapa
+    // no se puede determinar, dejamos stage_id en null (la columna lo permite).
+    if (leadPatch.pipeline_id && leadPatch.pipeline_id !== lead.pipeline_id) {
+      const { data: targetStages } = await supabase
+        .from('sales_pipeline_stages')
+        .select('id')
+        .eq('pipeline_id', leadPatch.pipeline_id)
+        .order('position')
+        .limit(1);
+      leadPatch.stage_id = targetStages?.[0]?.id || null;
+      // Si el lead se mueve fuera del pipeline activo, sacarlo del state local
+      // para que desaparezca del kanban/tabla actual sin tener que recargar.
+      if (leadPatch.pipeline_id !== pipelineId) {
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+      }
+    }
+
     setLeads((prev) => prev.map((l) => {
       if (l.id !== id) return l;
       const newContact = { ...(l.contact || {}), ...contactPatch };

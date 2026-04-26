@@ -10,6 +10,7 @@ import { supabase } from '@korex/db';
 // - CTA: convertir a cliente cuando esta cerrado, sino footer eliminar/guardar
 export default function LeadModal({
   open, onClose, lead, stages, salesTeam = [],
+  pipelines = [], currentPipelineId,
   canEditOwners, currentUserId,
   onCreate, onUpdate, onDelete, onConvertToClient,
 }) {
@@ -25,6 +26,14 @@ export default function LeadModal({
     else setForm({ ...emptyForm(stages, currentUserId), ...(lead || {}) });
     setTab('detalle');
   }, [open, lead, stages, currentUserId]);
+
+  // Cerrar con Escape (importante en desktop donde el backdrop ya no cierra)
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   useEffect(() => {
     if (!open || !lead?.id) { setCalls([]); return; }
@@ -61,6 +70,7 @@ export default function LeadModal({
     email: form.email?.trim() || null,
     notes: form.notes?.trim() || null,
     stage_id: form.stage_id || null,
+    pipeline_id: form.pipeline_id || null,
     next_step: form.next_step?.trim() || null,
     score: form.score ?? null,
     estimated_value: form.estimated_value === '' || form.estimated_value == null ? null : Number(form.estimated_value),
@@ -163,6 +173,7 @@ export default function LeadModal({
             <DetallePane
               form={form} setForm={setForm} patchField={patchField}
               stages={stages} salesTeam={salesTeam}
+              pipelines={pipelines}
               canEditOwners={canEditOwners} isEdit={isEdit}
               stage={stage} owner={owner} setter={setter}
               isClosed={isClosed}
@@ -241,9 +252,24 @@ function TabBtn({ active, onClick, badge, children }) {
   );
 }
 
-function DetallePane({ form, patchField, stages, salesTeam, canEditOwners, isEdit, stage, owner, setter, isClosed }) {
+function DetallePane({ form, patchField, stages, salesTeam, pipelines = [], canEditOwners, isEdit, stage, owner, setter, isClosed }) {
+  // Cambiar de pipeline: al hacerlo, reseteamos stage_id porque las etapas
+  // pertenecen al pipeline actual y no van a existir en el nuevo.
+  const handlePipelineChange = (newPipelineId) => {
+    if (!newPipelineId || newPipelineId === form.pipeline_id) return;
+    patchField('pipeline_id', newPipelineId);
+    patchField('stage_id', null);
+  };
+
   return (
     <div className="px-4 pt-4 pb-4 space-y-3.5">
+      {/* CRM (pipeline) — solo en modo edicion y si hay >1 pipeline visible */}
+      {isEdit && pipelines.length > 1 && (
+        <Field label="CRM">
+          <SelectBox value={form.pipeline_id || ''} onChange={handlePipelineChange}
+                     options={pipelines.map((p) => ({ value: p.id, label: p.name }))} />
+        </Field>
+      )}
       {/* Etapa */}
       <Field label="Etapa">
         <SelectBox value={form.stage_id || ''} onChange={(v) => patchField('stage_id', v)}

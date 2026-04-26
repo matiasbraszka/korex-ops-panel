@@ -182,6 +182,10 @@ body {
   .lead-modal-backdrop {
     position: absolute;
     background: transparent;
+    /* En desktop el backdrop no debe interceptar clicks: el modal se cierra
+       solo con el botón ← o con Escape. Antes, al hacer click en cualquier
+       parte del CRM (especialmente en la tabla larga), cerraba el detalle. */
+    pointer-events: none;
   }
 }
 
