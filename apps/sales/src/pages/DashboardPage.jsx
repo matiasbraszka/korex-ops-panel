@@ -171,8 +171,8 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Funnel + Heat — siempre lado a lado en desktop/tablet */}
-          <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-3.5 max-md:gap-3">
+          {/* Funnel + Heat — lado a lado desde sm (640px) para evitar scroll */}
+          <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr] gap-3.5 max-sm:gap-3">
             <FunnelChart funnel={funnel} />
             <HeatChart heat={heat} />
           </div>
