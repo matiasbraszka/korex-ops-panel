@@ -63,7 +63,7 @@ export default function HeatChart({ heat = [] }) {
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <div className="text-[8.5px] font-bold uppercase tracking-wider text-text3">Leads</div>
               <div className="text-[20px] font-bold tabular-nums leading-none">{total}</div>
-              <div className="text-[9px] text-text3 mt-0.5">activos</div>
+              <div className="text-[9px] text-text3 mt-0.5">totales</div>
             </div>
           </div>
           <div className="flex-1 flex flex-col gap-1.5 w-full min-w-0">
@@ -87,7 +87,7 @@ export default function HeatChart({ heat = [] }) {
         </div>
         <div className="mt-2.5 pt-2.5 border-t border-border grid grid-cols-2 gap-2">
           <div>
-            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Leads activos</div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider text-text3">Leads totales</div>
             <div className="text-[14px] font-bold tabular-nums mt-0.5">{total}</div>
           </div>
           <div>
