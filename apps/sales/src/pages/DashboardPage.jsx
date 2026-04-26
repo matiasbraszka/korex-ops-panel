@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, Phone, DollarSign, Sparkles } from 'lucide-react';
+import { Users, Target, DollarSign, Sparkles } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { useDashboard } from '../hooks/useDashboard.js';
 import { useCrm } from '../hooks/useCrm.js';
@@ -9,7 +9,7 @@ import HeatChart from '../components/dashboard/HeatChart.jsx';
 import VendorsTable from '../components/dashboard/VendorsTable.jsx';
 import DashboardFilters from '../components/dashboard/DashboardFilters.jsx';
 import TargetsModal from '../components/dashboard/TargetsModal.jsx';
-import { fmtMoney, fmtInt } from '../components/dashboard/format.js';
+import { fmtMoney, fmtInt, stageProb } from '../components/dashboard/format.js';
 
 // Suma in-memory `per_owner` y derivados, opcionalmente filtrando por vendor.
 function aggregateView(data, sellers, vendor) {
@@ -107,6 +107,14 @@ export default function DashboardPage() {
   const convRate = kpis.proposals > 0 ? kpis.won / kpis.proposals : 0;
   const convRatePrev = kpis.proposals_prev > 0 ? kpis.won_prev / kpis.proposals_prev : 0;
 
+  // Pipeline ponderado: sum(stage.amount * prob) sobre el funnel.
+  const pipelineTotal = funnel.reduce((a, s) => a + Number(s.amount || 0), 0);
+  const weighted = funnel.reduce((a, s, i) => a + Number(s.amount || 0) * stageProb(s.position ?? i, funnel.length), 0);
+
+  // % del objetivo: revenue acumulado vs sum(targets) del set visible.
+  const totalTarget = vendorRows.reduce((a, r) => a + Number(r.target || 0), 0);
+  const objetivoPct = totalTarget > 0 ? Math.round((kpis.revenue / totalTarget) * 100) : null;
+
   return (
     <div className="flex flex-col gap-3.5 max-md:gap-3 pb-4">
       <DashboardFilters
@@ -140,10 +148,10 @@ export default function DashboardPage() {
               spark={sparks.contacts}
             />
             <KpiCard
-              icon={Phone} tone="purple"
-              label="Llamadas"
-              value={fmtInt(kpis.calls)}
-              sub={range === 'max' ? 'todas las llamadas' : 'mes en curso'}
+              icon={Target} tone="purple"
+              label="Proyección ponderada"
+              value={fmtMoney(weighted)}
+              sub={`pipeline ${fmtMoney(pipelineTotal)} × prob.`}
             />
             <KpiCard
               icon={DollarSign} tone="green"
@@ -151,7 +159,7 @@ export default function DashboardPage() {
               value={fmtMoney(kpis.revenue)}
               delta={range === 'month' ? pctChange(kpis.revenue, kpis.revenue_prev) : null}
               deltaSuffix="%"
-              sub={`${kpis.won} cierre${kpis.won === 1 ? '' : 's'}`}
+              sub={objetivoPct != null ? `${objetivoPct}% del objetivo` : `${kpis.won} cierre${kpis.won === 1 ? '' : 's'}`}
             />
             <KpiCard
               icon={Sparkles} tone="orange"

@@ -25,3 +25,21 @@ export function initials(name) {
   if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
   return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
+
+// Probabilidad de cierre por etapa segun su posicion. No tenemos columna en la
+// base — usamos heuristica lineal: primera etapa 10%, ultima 100%, lineal en el
+// medio. Heuristica matchea aproximadamente las {new:.10, call:.25, prop:.45,
+// neg:.70, won:1.00} del diseno hi-fi cuando hay 5 etapas.
+export function stageProb(position, totalStages) {
+  if (!totalStages || totalStages <= 1) return 1;
+  const t = position / (totalStages - 1);
+  return Math.round((0.10 + (0.90 * t)) * 100) / 100;
+}
+
+// Probabilidad de cierre por score (calentura). Igual al diseno hi-fi.
+export function scoreProb(score) {
+  if (score === 3) return 0.62;
+  if (score === 2) return 0.32;
+  if (score === 1) return 0.08;
+  return 0.05;
+}
