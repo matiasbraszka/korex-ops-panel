@@ -9,7 +9,7 @@ import { supabase } from '@korex/db';
 // - Llamadas: cards de cada llamada con resumen + boton ver grabacion
 // - CTA: convertir a cliente cuando esta cerrado, sino footer eliminar/guardar
 export default function LeadModal({
-  open, onClose, lead, stages, salesTeam = [],
+  open, onClose, lead, stages, allStages = [], salesTeam = [],
   pipelines = [], currentPipelineId,
   canEditOwners, currentUserId,
   onCreate, onUpdate, onDelete, onConvertToClient,
@@ -20,12 +20,18 @@ export default function LeadModal({
   const [converting, setConverting] = useState(false);
   const [tab, setTab] = useState('detalle');
 
+  // Cargar el lead en el form SOLO cuando se abre el modal o cambia el lead
+  // (por id). NO depender de `stages` ni de la referencia `lead` completa: si
+  // dependiera, cualquier rerender del padre o cambio de stages reseteaba el
+  // form y se perdian los cambios pendientes (ej. cambiar pipeline antes de
+  // guardar).
   useEffect(() => {
     if (!open) return;
-    if (lead && lead.id) setForm({ ...emptyForm(stages, currentUserId), ...lead });
+    if (lead && lead.id) setForm({ ...emptyForm(stages, currentUserId), ...lead, __originalPipelineId: lead.pipeline_id || null });
     else setForm({ ...emptyForm(stages, currentUserId), ...(lead || {}) });
     setTab('detalle');
-  }, [open, lead, stages, currentUserId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, lead?.id]);
 
   // Cerrar con Escape (importante en desktop donde el backdrop ya no cierra)
   useEffect(() => {
@@ -53,7 +59,19 @@ export default function LeadModal({
   if (!open) return null;
   const isEdit = !!lead?.id;
   const isClosed = !!form.closed_at;
-  const stage = stages.find((s) => s.id === form.stage_id);
+  // Stages efectivas: si el form tiene un pipeline_id distinto al actual del
+  // CrmPage (porque el usuario lo cambio en el modal), usamos las stages del
+  // pipeline destino que estan en allStages. Si coincide o no hay allStages,
+  // caemos a las stages del CrmPage.
+  const effectiveStages = (() => {
+    const fpid = form.pipeline_id || currentPipelineId;
+    if (allStages && allStages.length > 0 && fpid) {
+      const match = allStages.filter((s) => s.pipeline_id === fpid);
+      if (match.length > 0) return match;
+    }
+    return stages;
+  })();
+  const stage = effectiveStages.find((s) => s.id === form.stage_id);
   const owner  = salesTeam.find((tm) => tm.user_id === form.owner_id);
   const setter = salesTeam.find((tm) => tm.user_id === form.setter_id);
   const ownerColor = owner?.color || '#5B7CF5';
@@ -84,9 +102,21 @@ export default function LeadModal({
   const handleSave = async () => {
     if (!form.full_name?.trim()) { alert('El nombre es obligatorio.'); return; }
     const payload = buildPayload();
-    if (isEdit) await onUpdate(lead.id, payload);
-    else await onCreate({ ...payload, stage_id: payload.stage_id || stages[0]?.id });
-    onClose();
+    try {
+      if (isEdit) {
+        const result = await onUpdate(lead.id, payload);
+        if (result?.moved) {
+          const destName = pipelines.find((p) => p.id === result.toPipelineId)?.name;
+          alert(`Lead movido al CRM "${destName || 'destino'}". Cambia de CRM en el header para verlo allí.`);
+        }
+      } else {
+        await onCreate({ ...payload, stage_id: payload.stage_id || stages[0]?.id });
+      }
+      onClose();
+    } catch (e) {
+      console.error('[LeadModal] error al guardar', e);
+      alert(`No se pudo guardar el lead: ${e.message || e}`);
+    }
   };
 
   const handleDelete = async () => {
@@ -173,7 +203,7 @@ export default function LeadModal({
           {(!isEdit || tab === 'detalle') && (
             <DetallePane
               form={form} setForm={setForm} patchField={patchField}
-              stages={stages} salesTeam={salesTeam}
+              stages={effectiveStages} allStages={allStages} salesTeam={salesTeam}
               pipelines={pipelines}
               canEditOwners={canEditOwners} isEdit={isEdit}
               stage={stage} owner={owner} setter={setter}
@@ -253,24 +283,21 @@ function TabBtn({ active, onClick, badge, children }) {
   );
 }
 
-function DetallePane({ form, patchField, stages, salesTeam, pipelines = [], canEditOwners, isEdit, stage, owner, setter, isClosed }) {
-  // Cambiar de pipeline: al hacerlo, reseteamos stage_id porque las etapas
-  // pertenecen al pipeline actual y no van a existir en el nuevo.
+function DetallePane({ form, patchField, stages, allStages = [], salesTeam, pipelines = [], canEditOwners, isEdit, stage, owner, setter, isClosed }) {
+  // Cambiar de pipeline: al hacerlo, autoseleccionamos la primera stage del
+  // pipeline destino para que el lead siempre tenga una etapa valida y el
+  // dropdown se actualice de inmediato.
   const handlePipelineChange = (newPipelineId) => {
     if (!newPipelineId || newPipelineId === form.pipeline_id) return;
+    const destStages = (allStages || []).filter((s) => s.pipeline_id === newPipelineId)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const firstStageId = destStages[0]?.id || null;
     patchField('pipeline_id', newPipelineId);
-    patchField('stage_id', null);
+    patchField('stage_id', firstStageId);
   };
 
   return (
     <div className="px-4 pt-4 pb-4 space-y-3.5">
-      {/* CRM (pipeline) — solo en modo edicion y si hay >1 pipeline visible */}
-      {isEdit && pipelines.length > 1 && (
-        <Field label="CRM">
-          <SelectBox value={form.pipeline_id || ''} onChange={handlePipelineChange}
-                     options={pipelines.map((p) => ({ value: p.id, label: p.name }))} />
-        </Field>
-      )}
       {/* Etapa */}
       <Field label="Etapa">
         <SelectBox value={form.stage_id || ''} onChange={(v) => patchField('stage_id', v)}
@@ -389,6 +416,19 @@ function DetallePane({ form, patchField, stages, salesTeam, pipelines = [], canE
             </div>
           </Field>
         </div>
+      )}
+
+      {/* CRM (pipeline) — penultimo, antes de Notas. Solo en modo edicion. */}
+      {isEdit && pipelines.length > 1 && (
+        <Field label="Mover a otro CRM">
+          <SelectBox value={form.pipeline_id || ''} onChange={handlePipelineChange}
+                     options={pipelines.map((p) => ({ value: p.id, label: p.name }))} />
+          {form.__originalPipelineId && form.pipeline_id && form.pipeline_id !== form.__originalPipelineId && (
+            <div className="mt-1.5 text-[11px] text-orange-600 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
+              Pendiente: al guardar, el lead se moverá a este CRM.
+            </div>
+          )}
+        </Field>
       )}
 
       {/* Notas */}

@@ -22,7 +22,7 @@ export default function CrmPage() {
   const {
     pipelines, pipelineId, setPipelineId,
     createPipeline, updatePipeline, removePipeline, setPipelineMembers,
-    stages, leads, salesTeam, sellers, me, loading, error,
+    stages, allStages, leads, salesTeam, sellers, me, loading, error,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,
   } = useCrm();
@@ -505,6 +505,7 @@ export default function CrmPage() {
         onClose={() => setLeadModalOpen(false)}
         lead={activeLead}
         stages={stages}
+        allStages={allStages}
         pipelines={pipelines}
         currentPipelineId={pipelineId}
         salesTeam={salesTeam}

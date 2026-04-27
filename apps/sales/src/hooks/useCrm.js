@@ -38,6 +38,10 @@ export function useCrm() {
   const [pipelines, setPipelines] = useState([]);
   const [pipelineId, setPipelineIdState] = useState(null);
   const [stages, setStages] = useState([]);
+  // Stages de TODOS los pipelines a los que el usuario tiene acceso. Se usa
+  // cuando desde el LeadModal se cambia el lead a otro CRM: necesitamos saber
+  // las etapas del pipeline destino para poder elegir una.
+  const [allStages, setAllStages] = useState([]);
   const [leads, setLeads] = useState([]);
   const [salesTeam, setSalesTeam] = useState([]);
   // Solo personas con rol 'sales' (sin contar admins puros). Para asignar
@@ -119,6 +123,19 @@ export function useCrm() {
       const pid = found ? initial : (list[0]?.id || null);
       setPipelineIdState(pid);
       if (pid) await loadPipelineData(pid);
+      // 4) Cargar stages de TODOS los pipelines accesibles (para mover leads
+      //    entre CRMs desde el LeadModal). RLS garantiza que solo veo los mios.
+      if ((list || []).length > 0) {
+        const ids = list.map((p) => p.id);
+        const { data: allS } = await supabase
+          .from('sales_pipeline_stages')
+          .select('*')
+          .in('pipeline_id', ids)
+          .order('position');
+        setAllStages(allS || []);
+      } else {
+        setAllStages([]);
+      }
     } catch (e) {
       console.error('CRM bootstrap error', e);
       setError(e.message || 'Error cargando CRM');
@@ -325,42 +342,55 @@ export function useCrm() {
       }
     }
 
-    // Si cambia el pipeline_id, el stage_id actual ya no es valido. Buscamos
-    // la primera etapa del pipeline destino y la asignamos. Si la nueva etapa
-    // no se puede determinar, dejamos stage_id en null (la columna lo permite).
-    if (leadPatch.pipeline_id && leadPatch.pipeline_id !== lead.pipeline_id) {
-      const { data: targetStages } = await supabase
-        .from('sales_pipeline_stages')
-        .select('id')
-        .eq('pipeline_id', leadPatch.pipeline_id)
-        .order('position')
-        .limit(1);
-      leadPatch.stage_id = targetStages?.[0]?.id || null;
-      // Si el lead se mueve fuera del pipeline activo, sacarlo del state local
-      // para que desaparezca del kanban/tabla actual sin tener que recargar.
-      if (leadPatch.pipeline_id !== pipelineId) {
-        setLeads((prev) => prev.filter((l) => l.id !== id));
+    // Detectar si cambia de pipeline y manejar el reset de stage + el cleanup
+    // del state local del kanban actual.
+    const movingPipeline = !!leadPatch.pipeline_id && leadPatch.pipeline_id !== lead.pipeline_id;
+    if (movingPipeline) {
+      // Si el caller no nos paso stage_id, buscamos la primera del pipeline
+      // destino (fallback). Si nos lo pasaron (modal lo setea), respetarlo.
+      if (!leadPatch.stage_id) {
+        const { data: targetStages } = await supabase
+          .from('sales_pipeline_stages')
+          .select('id')
+          .eq('pipeline_id', leadPatch.pipeline_id)
+          .order('position')
+          .limit(1);
+        leadPatch.stage_id = targetStages?.[0]?.id || null;
       }
     }
 
-    setLeads((prev) => prev.map((l) => {
-      if (l.id !== id) return l;
-      const newContact = { ...(l.contact || {}), ...contactPatch };
-      return flattenLead({ ...l, ...leadPatch, contact: newContact });
-    }));
-
     const tasks = [];
     if (Object.keys(leadPatch).length > 0) {
-      tasks.push(supabase.from('sales_leads').update(leadPatch).eq('id', id));
+      tasks.push(supabase.from('sales_leads').update(leadPatch).eq('id', id).select().maybeSingle());
     }
     if (Object.keys(contactPatch).length > 0 && lead.contact_id) {
       tasks.push(supabase.from('contacts').update(contactPatch).eq('id', lead.contact_id));
     }
     const results = await Promise.all(tasks);
-    if (results.some((r) => r.error)) {
-      console.error('updateLead error', results);
+    const errors = results.filter((r) => r.error).map((r) => r.error);
+    if (errors.length > 0) {
+      console.error('updateLead error', errors);
+      // Recargar el pipeline activo para que el state quede consistente con DB.
       await loadPipelineData(pipelineId);
+      // Propagar el primer error para que el modal pueda mostrarlo.
+      throw new Error(errors[0]?.message || 'No se pudo guardar el lead');
     }
+
+    // Solo despues de que la DB confirmo el cambio, actualizamos state local.
+    if (movingPipeline) {
+      // Si el lead se movio fuera del pipeline activo, sacarlo del state local
+      // (kanban/tabla) para que desaparezca de la vista actual.
+      if (leadPatch.pipeline_id !== pipelineId) {
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+        return { moved: true, toPipelineId: leadPatch.pipeline_id };
+      }
+    }
+    setLeads((prev) => prev.map((l) => {
+      if (l.id !== id) return l;
+      const newContact = { ...(l.contact || {}), ...contactPatch };
+      return flattenLead({ ...l, ...leadPatch, contact: newContact });
+    }));
+    return { moved: false };
   }, [leads, loadPipelineData, pipelineId]);
 
   const deleteLead = useCallback(async (id) => {
@@ -387,7 +417,7 @@ export function useCrm() {
   return {
     pipelines, pipelineId, setPipelineId,
     createPipeline, renamePipeline, updatePipeline, removePipeline, setPipelineMembers,
-    stages, leads, salesTeam, sellers, me, loading, error,
+    stages, allStages, leads, salesTeam, sellers, me, loading, error,
     refresh: bootstrap,
     addStage, updateStage, deleteStage, reorderStages,
     createLead, updateLead, deleteLead, moveLead, convertLeadToClient,

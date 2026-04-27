@@ -39,6 +39,10 @@ export default function LlamadasPage() {
   const [saving, setSaving] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [editingCatId, setEditingCatId] = useState(null);
+  const [editingTituloId, setEditingTituloId] = useState(null);
+  const [tituloDraft, setTituloDraft] = useState('');
+  const [editingClientId, setEditingClientId] = useState(null);
+  const [clientSearch, setClientSearch] = useState('');
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
@@ -455,7 +459,31 @@ export default function LlamadasPage() {
 
                 <div className="flex-1 min-w-0">
                   {/* Title */}
-                  <div className="text-[13px] font-semibold text-gray-800 truncate">{l.titulo}</div>
+                  {canEdit && editingTituloId === l.id ? (
+                    <input
+                      type="text"
+                      value={tituloDraft}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setTituloDraft(e.target.value)}
+                      onBlur={() => {
+                        const t = tituloDraft.trim();
+                        if (t && t !== l.titulo) updateLlamada(l.id, { titulo: t });
+                        setEditingTituloId(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                        if (e.key === 'Escape') { setEditingTituloId(null); setTituloDraft(''); }
+                      }}
+                      className="w-full text-[13px] font-semibold text-gray-800 bg-white border border-blue-300 rounded px-1.5 py-0.5 outline-none focus:border-blue-500 font-sans"
+                    />
+                  ) : (
+                    <div
+                      className={`text-[13px] font-semibold text-gray-800 truncate ${canEdit ? 'cursor-text hover:bg-yellow-50 rounded px-1 -mx-1' : ''}`}
+                      onClick={canEdit ? (e) => { e.stopPropagation(); setTituloDraft(l.titulo || ''); setEditingTituloId(l.id); } : undefined}
+                      title={canEdit ? 'Click para editar título' : undefined}
+                    >{l.titulo}</div>
+                  )}
                   {/* Meta */}
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     {l.fecha && (
@@ -473,8 +501,42 @@ export default function LlamadasPage() {
                         <UsersIcon size={11} /> {participantes}
                       </span>
                     )}
-                    {clientName && (
-                      <span className="text-[11px] text-blue-500 font-medium">{clientName}</span>
+                    {canEdit && editingClientId === l.id ? (
+                      <div className="relative" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={clientSearch}
+                          autoFocus
+                          onChange={e => setClientSearch(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') { setEditingClientId(null); setClientSearch(''); }
+                          }}
+                          placeholder="Buscar cliente..."
+                          className="text-[11px] border border-blue-300 rounded py-0.5 px-1.5 outline-none focus:border-blue-500 font-sans w-[180px]"
+                        />
+                        <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-[220px] max-h-[260px] overflow-y-auto">
+                          <button
+                            onClick={() => { updateLlamada(l.id, { cliente_id: null }); setEditingClientId(null); setClientSearch(''); }}
+                            className="w-full text-left px-2 py-1.5 text-[11px] text-gray-500 italic hover:bg-gray-50 border-none bg-transparent cursor-pointer block"
+                          >Sin cliente asignado</button>
+                          {(clients || [])
+                            .filter(c => !clientSearch.trim() || (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()))
+                            .slice(0, 30)
+                            .map(c => (
+                              <button key={c.id}
+                                onClick={() => { updateLlamada(l.id, { cliente_id: c.id }); setEditingClientId(null); setClientSearch(''); }}
+                                className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-blue-50 border-none bg-transparent cursor-pointer block ${c.id === l.cliente_id ? 'text-blue-600 font-semibold bg-blue-50/40' : 'text-gray-700'}`}
+                              >{c.name}</button>
+                            ))
+                          }
+                        </div>
+                      </div>
+                    ) : (
+                      <span
+                        className={`text-[11px] font-medium ${clientName ? 'text-blue-500' : 'text-gray-300 italic'} ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
+                        onClick={canEdit ? (e) => { e.stopPropagation(); setEditingClientId(l.id); setClientSearch(''); } : undefined}
+                        title={canEdit ? 'Click para asignar/cambiar cliente' : undefined}
+                      >{clientName || '+ asignar cliente'}</span>
                     )}
                   </div>
                 </div>
@@ -495,9 +557,9 @@ export default function LlamadasPage() {
                   {canEdit && (
                     <button
                       onClick={e => { e.stopPropagation(); handleDelete(l.id); }}
-                      className="p-1.5 text-gray-300 hover:text-red-400 bg-transparent border-none cursor-pointer"
+                      className="p-1.5 text-gray-400 hover:text-white hover:bg-red-500 bg-transparent border-none cursor-pointer rounded-md transition-colors"
                       title="Eliminar llamada"
-                    ><Trash2 size={13} /></button>
+                    ><Trash2 size={14} /></button>
                   )}
                   {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
                 </div>
