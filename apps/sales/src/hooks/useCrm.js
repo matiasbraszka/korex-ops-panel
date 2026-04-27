@@ -7,7 +7,7 @@ import { supabase } from '@korex/db';
 //    company_multinivel) — los exponemos como virtuales sobre el lead y
 //    enrutamos los patches al recurso correcto.
 
-const CONTACT_FIELDS = new Set(['full_name', 'phone', 'email', 'company_multinivel', 'first_name', 'last_name']);
+const CONTACT_FIELDS = new Set(['full_name', 'phone', 'email', 'instagram', 'company_multinivel', 'first_name', 'last_name']);
 
 function fullName(c) {
   if (!c) return '';
