@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp } from 'lucide-react';
+import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp, RefreshCw } from 'lucide-react';
 import CallDetailExpanded from '../components/CallDetailExpanded';
 
 const CAT_CONFIG = {
@@ -43,6 +43,8 @@ export default function LlamadasPage() {
   const [tituloDraft, setTituloDraft] = useState('');
   const [editingClientId, setEditingClientId] = useState(null);
   const [clientSearch, setClientSearch] = useState('');
+  const [polling, setPolling] = useState(false);
+  const [pollMsg, setPollMsg] = useState('');
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
@@ -89,6 +91,24 @@ export default function LlamadasPage() {
     if (expandedId === id) setExpandedId(null);
   };
 
+  const handlePoll = async () => {
+    setPolling(true);
+    setPollMsg('');
+    try {
+      const res = await fetch('https://cgdwieoxjoexzlfbxrfc.supabase.co/functions/v1/fathom-webhook?poll=true');
+      const data = await res.json();
+      if (data.inserted > 0) {
+        setPollMsg(`${data.inserted} llamada${data.inserted !== 1 ? 's' : ''} nueva${data.inserted !== 1 ? 's' : ''} importada${data.inserted !== 1 ? 's' : ''} de Fathom. Se procesará${data.inserted !== 1 ? 'n' : ''} a las 4AM Madrid.`);
+      } else {
+        setPollMsg('No hay llamadas nuevas en Fathom.');
+      }
+      setTimeout(() => setPollMsg(''), 6000);
+    } catch (e) {
+      setPollMsg('Error al consultar Fathom: ' + (e.message || e));
+    }
+    setPolling(false);
+  };
+
   const handleAdd = async () => {
     if (!form.url.trim() || !form.categoria) return;
     setSaving(true);
@@ -115,14 +135,31 @@ export default function LlamadasPage() {
           </p>
         </div>
         {canEdit && (
-          <button
-            className="flex items-center gap-1.5 text-[12px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors"
-            onClick={() => setAdding(true)}
-          >
-            <Plus size={14} /> Agregar llamada
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="flex items-center gap-1.5 text-[12px] text-gray-600 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors disabled:opacity-50"
+              onClick={handlePoll}
+              disabled={polling}
+              title="Buscar llamadas nuevas en Fathom"
+            >
+              <RefreshCw size={14} className={polling ? 'animate-spin' : ''} /> {polling ? 'Buscando...' : 'Buscar nuevas'}
+            </button>
+            <button
+              className="flex items-center gap-1.5 text-[12px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors"
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={14} /> Agregar llamada
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Poll feedback */}
+      {pollMsg && (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <span className="text-[12px] text-blue-700 font-medium">{pollMsg}</span>
+        </div>
+      )}
 
       {/* Pending badge */}
       {pendingCallsCount > 0 && (
@@ -131,7 +168,7 @@ export default function LlamadasPage() {
           <span className="text-[12px] text-amber-700 font-medium">
             {pendingCallsCount} llamada{pendingCallsCount !== 1 ? 's' : ''} pendiente{pendingCallsCount !== 1 ? 's' : ''} de procesar
           </span>
-          <span className="text-[11px] text-amber-500">Se importan cada hora desde Fathom · Procesar con /procesa-llamadas</span>
+          <span className="text-[11px] text-amber-500">Procesamiento automático diario a las 4AM Madrid</span>
         </div>
       )}
 
