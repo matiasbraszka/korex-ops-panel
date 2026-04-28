@@ -7,6 +7,7 @@ import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 import { ResourcesPanel } from '@korex/ui';
+import { HistorialTab } from './historial/HistorialTab.jsx';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
@@ -1057,7 +1058,7 @@ export default function ClientDetail({ client: c }) {
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
           { key: 'recursos', label: 'Recursos', count: linksCount },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
-          { key: 'timeline', label: 'Timeline' },
+          { key: 'historial', label: 'Historial' },
         ];
         return (
           <>
@@ -1172,9 +1173,9 @@ export default function ClientDetail({ client: c }) {
               </div>
             )}
 
-            {activeTab === 'timeline' && (
-              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
-                <div className="py-12 text-center text-text3 text-xs">Timeline en construcción</div>
+            {activeTab === 'historial' && (
+              <div className="mb-4">
+                <HistorialTab cliente={c} />
               </div>
             )}
           </>
