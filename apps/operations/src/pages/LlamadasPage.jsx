@@ -91,22 +91,41 @@ export default function LlamadasPage() {
     if (expandedId === id) setExpandedId(null);
   };
 
-  const handlePoll = async () => {
+  const handleProcess = async () => {
     setPolling(true);
-    setPollMsg('');
+    setPollMsg('Procesando llamadas pendientes...');
     try {
-      const res = await fetch('https://cgdwieoxjoexzlfbxrfc.supabase.co/functions/v1/fathom-webhook?poll=true');
-      const data = await res.json();
-      if (data.inserted > 0) {
-        setPollMsg(`${data.inserted} llamada${data.inserted !== 1 ? 's' : ''} nueva${data.inserted !== 1 ? 's' : ''} importada${data.inserted !== 1 ? 's' : ''} de Fathom. Se procesará${data.inserted !== 1 ? 'n' : ''} a las 4AM Madrid.`);
-      } else {
-        setPollMsg('No hay llamadas nuevas en Fathom.');
+      // Procesa hasta 5 por invocación. Si quedan más, vuelve a invocar.
+      let totalProcessed = 0;
+      let totalErrors = 0;
+      let remaining = pendingCallsCount;
+      let runs = 0;
+      const MAX_RUNS = 5;
+      while (remaining > 0 && runs < MAX_RUNS) {
+        const res = await fetch('https://cgdwieoxjoexzlfbxrfc.supabase.co/functions/v1/procesar-pendientes', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+          setPollMsg('Error: ' + data.error);
+          setPolling(false);
+          return;
+        }
+        totalProcessed += data.processed || 0;
+        totalErrors += data.errors || 0;
+        remaining = data.remaining || 0;
+        runs++;
+        setPollMsg(`Procesadas ${totalProcessed}, quedan ${remaining}...`);
+        if ((data.processed || 0) === 0) break; // nada se procesó, salir
       }
-      setTimeout(() => setPollMsg(''), 6000);
+      const msg = totalProcessed > 0
+        ? `${totalProcessed} llamada${totalProcessed !== 1 ? 's' : ''} procesada${totalProcessed !== 1 ? 's' : ''}.${totalErrors > 0 ? ` ${totalErrors} error${totalErrors !== 1 ? 'es' : ''}.` : ''}${remaining > 0 ? ` Quedan ${remaining} pendientes.` : ''}`
+        : 'No hay llamadas para procesar.';
+      setPollMsg(msg);
+      // Recargar llamadas
+      setTimeout(() => { window.location.reload(); }, 2000);
     } catch (e) {
-      setPollMsg('Error al consultar Fathom: ' + (e.message || e));
+      setPollMsg('Error: ' + (e.message || e));
+      setPolling(false);
     }
-    setPolling(false);
   };
 
   const handleAdd = async () => {
@@ -136,14 +155,16 @@ export default function LlamadasPage() {
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
-            <button
-              className="flex items-center gap-1.5 text-[12px] text-gray-600 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors disabled:opacity-50"
-              onClick={handlePoll}
-              disabled={polling}
-              title="Buscar llamadas nuevas en Fathom"
-            >
-              <RefreshCw size={14} className={polling ? 'animate-spin' : ''} /> {polling ? 'Buscando...' : 'Buscar nuevas'}
-            </button>
+            {pendingCallsCount > 0 && (
+              <button
+                className="flex items-center gap-1.5 text-[12px] text-white bg-amber-500 hover:bg-amber-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors disabled:opacity-50"
+                onClick={handleProcess}
+                disabled={polling}
+                title="Procesar llamadas pendientes con IA"
+              >
+                <RefreshCw size={14} className={polling ? 'animate-spin' : ''} /> {polling ? 'Procesando...' : `Procesar ${pendingCallsCount} pendiente${pendingCallsCount !== 1 ? 's' : ''}`}
+              </button>
+            )}
             <button
               className="flex items-center gap-1.5 text-[12px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors"
               onClick={() => setAdding(true)}
