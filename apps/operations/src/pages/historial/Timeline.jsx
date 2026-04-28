@@ -1,6 +1,7 @@
 import { useState, Fragment } from 'react';
-import { T, KOREX_FASES, EVENT_TYPES } from './tokens.js';
+import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
+import { useHistorialConfig } from './useHistorialConfig.js';
 import { EventCard, EventTypePill } from './EventCard.jsx';
 
 function KPICard({ label, value, sub, accent, alert = false, trend }) {
@@ -26,6 +27,7 @@ function KPICard({ label, value, sub, accent, alert = false, trend }) {
 
 function KPIStrip({ eventos, faseActual, diasProyecto }) {
   const vp = useViewport();
+  const { fases, fasesByN, total } = useHistorialConfig();
   const cols = vp.mobile ? 2 : (vp.tablet ? 3 : 5);
   const totalEventos = eventos.length;
   const entregables = eventos.filter(e => e.tipo === 'entregable').length;
@@ -33,22 +35,23 @@ function KPIStrip({ eventos, faseActual, diasProyecto }) {
   const horas = Math.round(tiempoTotal / 60 * 10) / 10;
   const bloqueos = eventos.filter(e => e.tipo === 'bloqueo' && e.estado === 'en-curso');
   const diasBloqueado = bloqueos.reduce((m, e) => Math.max(m, e.bloqueo?.diasBloqueo || 0), 0);
-  const fase = KOREX_FASES.find(f => f.n === faseActual) || KOREX_FASES[0];
+  const fase = fasesByN[faseActual] || fases[0] || { label: '—' };
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: vp.mobile ? 8 : 12, marginBottom: 18 }}>
       <KPICard label="Días activos" value={diasProyecto || 0} sub="desde firma" />
       <KPICard label="Eventos" value={totalEventos} sub={`${entregables} entregables`} />
       <KPICard label="Tiempo Korex" value={`${horas}h`} sub="acumulado" accent={T.blue} />
       <KPICard label="Bloqueos" value={bloqueos.length} sub={diasBloqueado ? `${diasBloqueado} días` : 'sin bloqueos'} alert={bloqueos.length > 0} />
-      <KPICard label="Fase actual" value={`${faseActual}/11`} sub={fase.label} accent={T.blue} />
+      <KPICard label="Fase actual" value={`${faseActual}/${total}`} sub={fase.label} accent={T.blue} />
     </div>
   );
 }
 
 function FaseStepper({ faseActual = 1 }) {
   const vp = useViewport();
+  const { fases, fasesByN, total } = useHistorialConfig();
   const compact = vp.w < 1100;
-  const fase = KOREX_FASES.find(f => f.n === faseActual) || KOREX_FASES[0];
+  const fase = fasesByN[faseActual] || fases[0] || { label: '—' };
   return (
     <div style={{
       background: '#fff', border: `1px solid ${T.border}`, borderRadius: 12,
@@ -58,7 +61,7 @@ function FaseStepper({ faseActual = 1 }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Fases del Método Korex</div>
         <div style={{ fontSize: 11, color: T.text3 }}>
-          Fase {faseActual}/11 · <span style={{ color: T.blue, fontWeight: 700 }}>{fase.label}</span>
+          Fase {faseActual}/{total} · <span style={{ color: T.blue, fontWeight: 700 }}>{fase.label}</span>
         </div>
       </div>
       <div style={{
@@ -68,7 +71,7 @@ function FaseStepper({ faseActual = 1 }) {
         paddingBottom: compact ? 4 : 0,
         scrollbarWidth: 'thin',
       }}>
-        {KOREX_FASES.map((f, i) => {
+        {fases.map((f, i) => {
           const done = f.n < faseActual;
           const current = f.n === faseActual;
           return (
@@ -90,7 +93,7 @@ function FaseStepper({ faseActual = 1 }) {
                   letterSpacing: current ? '0.02em' : '0',
                 }}>{f.short}</div>
               </div>
-              {i < KOREX_FASES.length - 1 && (
+              {i < fases.length - 1 && (
                 <div style={{
                   flex: compact ? '0 0 16px' : 1, height: 2,
                   background: f.n < faseActual ? T.blue : T.border,
@@ -138,7 +141,7 @@ function BlockerBanner({ eventos }) {
   );
 }
 
-export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento }) {
+export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento }) {
   const vp = useViewport();
   const [filtro, setFiltro] = useState('todos');
   const lista = filtro === 'todos' ? eventos : eventos.filter(e => e.tipo === filtro);
@@ -250,7 +253,7 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
                 </div>
               )}
               <div style={{ position: 'relative', marginBottom: 10 }}>
-                <EventCard event={ev} />
+                <EventCard event={ev} onDelete={onDeleteEvento} />
               </div>
             </Fragment>
           );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { T, KOREX_FASES, EVENT_TYPES } from './tokens.js';
+import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
+import { useHistorialConfig } from './useHistorialConfig.js';
 
 function Label({ children }) {
   return <div style={{ fontSize: 11, fontWeight: 700, color: T.text3, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>{children}</div>;
@@ -38,7 +39,8 @@ const horaAhora = () => {
 
 export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseActualCliente = 1 }) {
   const vp = useViewport();
-  const [tipo, setTipo] = useState('entregable');
+  const { fases, tipos } = useHistorialConfig();
+  const [tipo, setTipo] = useState(tipos[0]?.key || 'entregable');
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [fase, setFase] = useState(faseActualCliente);
@@ -51,7 +53,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
   const [autor, setAutor] = useState('');
 
   const reset = () => {
-    setTipo('entregable'); setTitulo(''); setDescripcion('');
+    setTipo(tipos[0]?.key || 'entregable'); setTitulo(''); setDescripcion('');
     setFase(faseActualCliente); setTiempo(15); setResponsable('Korex');
     setIncluirResumen(true); setBloqueoCategoria('Cliente');
     setBloqueoEsperando(''); setBloqueoDias(0); setAutor('');
@@ -124,10 +126,10 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
         <div style={{ flex: 1, overflowY: 'auto', padding: vp.mobile ? '16px' : '20px 22px' }}>
           <Label>Tipo</Label>
           <div style={{ display: 'grid', gridTemplateColumns: vp.mobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6, marginBottom: 18 }}>
-            {Object.entries(EVENT_TYPES).map(([k, v]) => {
-              const active = tipo === k;
+            {tipos.map(v => {
+              const active = tipo === v.key;
               return (
-                <button key={k} onClick={() => setTipo(k)} style={{
+                <button key={v.key} onClick={() => setTipo(v.key)} style={{
                   background: active ? v.bg : '#fff',
                   border: `1px solid ${active ? v.color : T.border}`,
                   borderRadius: 10, padding: '10px 8px',
@@ -162,7 +164,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
             <div>
               <Label>Fase</Label>
               <Select value={fase} onChange={v => setFase(+v)}>
-                {KOREX_FASES.map(f => <option key={f.n} value={f.n}>{f.n}. {f.label}</option>)}
+                {fases.map(f => <option key={f.n} value={f.n}>{f.n}. {f.label}</option>)}
               </Select>
             </div>
             <div>

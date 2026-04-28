@@ -1,8 +1,10 @@
-import { T, KOREX_FASES, EVENT_TYPES } from './tokens.js';
+import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
+import { useHistorialConfig } from './useHistorialConfig.js';
 
 export function EventTypePill({ tipo }) {
-  const t = EVENT_TYPES[tipo];
+  const { tiposByKey } = useHistorialConfig();
+  const t = tiposByKey[tipo];
   if (!t) return null;
   return (
     <span style={{
@@ -19,11 +21,12 @@ export function EventTypePill({ tipo }) {
   );
 }
 
-export function EventCard({ event, showFase = true, onClick }) {
+export function EventCard({ event, showFase = true, onClick, onDelete }) {
   const vp = useViewport();
+  const { tiposByKey, fasesByN } = useHistorialConfig();
   const isBloqueo = event.tipo === 'bloqueo';
-  const t = EVENT_TYPES[event.tipo] || EVENT_TYPES.entregable;
-  const fase = KOREX_FASES.find(f => f.n === event.fase);
+  const t = tiposByKey[event.tipo] || tiposByKey.entregable || { color: T.blue, bg: T.blueBg, label: event.tipo, dot: '•' };
+  const fase = fasesByN[event.fase];
   return (
     <div onClick={onClick} style={{
       background: '#fff',
@@ -39,14 +42,31 @@ export function EventCard({ event, showFase = true, onClick }) {
     onMouseEnter={e => { if (!vp.mobile) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(10,22,40,.06)'; } }}
     onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 2px rgba(10,22,40,.03)'; }}
     >
-      {isBloqueo && event.bloqueo?.diasBloqueo > 0 && (
-        <div style={{
-          position: 'absolute', top: 12, right: 12,
-          background: T.red, color: '#fff',
-          padding: '3px 10px', borderRadius: 999,
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
-        }}>{event.bloqueo.diasBloqueo}d</div>
-      )}
+      <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
+        {isBloqueo && event.bloqueo?.diasBloqueo > 0 && (
+          <div style={{
+            background: T.red, color: '#fff',
+            padding: '3px 10px', borderRadius: 999,
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
+          }}>{event.bloqueo.diasBloqueo}d</div>
+        )}
+        {onDelete && (
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(event); }}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              width: 28, height: 28, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: T.text3, fontSize: 14, padding: 0,
+              transition: 'all 0.12s',
+            }}
+            onMouseEnter={ev => { ev.currentTarget.style.background = T.redBg; ev.currentTarget.style.color = T.red; }}
+            onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent'; ev.currentTarget.style.color = T.text3; }}
+            title="Eliminar evento"
+            aria-label="Eliminar evento"
+          >🗑</button>
+        )}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         <EventTypePill tipo={event.tipo} />
         {showFase && fase && (
@@ -59,7 +79,9 @@ export function EventCard({ event, showFase = true, onClick }) {
       </div>
       <div style={{
         fontSize: vp.mobile ? 13 : 14, fontWeight: 600, color: T.text,
-        marginBottom: 6, paddingRight: isBloqueo ? 50 : 0, letterSpacing: '-0.005em',
+        marginBottom: 6,
+        paddingRight: (isBloqueo && event.bloqueo?.diasBloqueo > 0 ? 80 : 36),
+        letterSpacing: '-0.005em',
         lineHeight: 1.35,
       }}>{event.titulo}</div>
       {event.descripcion && (

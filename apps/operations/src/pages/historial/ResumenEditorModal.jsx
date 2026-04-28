@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { T, EVENT_TYPES } from './tokens.js';
+import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
+import { useHistorialConfig } from './useHistorialConfig.js';
 import { EventTypePill } from './EventCard.jsx';
+import { sendResumenEmail } from './api.js';
 
 const isoDaysAgo = (n) => {
   const d = new Date(); d.setDate(d.getDate() - n);
@@ -50,7 +52,11 @@ function PlainInput({ value, onChange }) {
 
 export function ResumenEditorModal({ open, onClose, eventos, cliente }) {
   const vp = useViewport();
+  const { tiposByKey } = useHistorialConfig();
   const [tab, setTab] = useState('rango');
+  const [enviando, setEnviando] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState('');
+  const [resultado, setResultado] = useState(null); // { destinatario_efectivo, test_mode }
 
   const [desde, setDesde] = useState(isoDaysAgo(7));
   const [hasta, setHasta] = useState(isoToday());
@@ -227,7 +233,7 @@ export function ResumenEditorModal({ open, onClose, eventos, cliente }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {eventosRango.map(ev => {
-          const t = EVENT_TYPES[ev.tipo] || EVENT_TYPES.entregable;
+          const t = tiposByKey[ev.tipo] || tiposByKey.entregable || { color: T.blue, borderLight: T.borderLight };
           const inc = incluidos[ev.id] ?? true;
           return (
             <label key={ev.id} style={{
@@ -367,11 +373,34 @@ export function ResumenEditorModal({ open, onClose, eventos, cliente }) {
     );
   }
 
-  const handleEnviar = () => {
-    // TODO backend: llamar endpoint de envío de email (ej. Edge Function Supabase + Resend).
-    // Por ahora, muestra el feedback visual y cierra.
-    setEnviado(true);
-    setTimeout(() => { setEnviado(false); onClose && onClose(); }, 1400);
+  const handleEnviar = async () => {
+    if (!destinatario.trim()) {
+      setErrorEnvio('Falta el email del destinatario.');
+      return;
+    }
+    setErrorEnvio('');
+    setEnviando(true);
+    const res = await sendResumenEmail({
+      cliente_id: cliente?.id,
+      destinatario_real: destinatario.trim(),
+      asunto,
+      cuerpo,
+    });
+    setEnviando(false);
+    if (res?.ok) {
+      setEnviado(true);
+      setResultado({
+        destinatario_efectivo: res.destinatario_efectivo,
+        test_mode: res.test_mode,
+      });
+      setTimeout(() => {
+        setEnviado(false);
+        setResultado(null);
+        onClose && onClose();
+      }, 2400);
+    } else {
+      setErrorEnvio(res?.error || 'Error al enviar. Probá de nuevo.');
+    }
   };
 
   return (
@@ -425,8 +454,19 @@ export function ResumenEditorModal({ open, onClose, eventos, cliente }) {
           justifyContent: 'space-between',
           flexShrink: 0, gap: 10, background: '#fff',
         }}>
-          <div style={{ fontSize: 12, color: T.text3, textAlign: vp.mobile ? 'center' : 'left' }}>
-            <b style={{ color: T.text2 }}>{incluidosLista.length}</b> evento{incluidosLista.length !== 1 ? 's' : ''} en el email · {desde} → {hasta}
+          <div style={{ fontSize: 12, textAlign: vp.mobile ? 'center' : 'left' }}>
+            {errorEnvio ? (
+              <span style={{ color: T.red, fontWeight: 600 }}>⚠ {errorEnvio}</span>
+            ) : resultado ? (
+              <span style={{ color: T.green, fontWeight: 600 }}>
+                ✓ Enviado a {resultado.destinatario_efectivo}
+                {resultado.test_mode ? ' (modo test)' : ''}
+              </span>
+            ) : (
+              <span style={{ color: T.text3 }}>
+                <b style={{ color: T.text2 }}>{incluidosLista.length}</b> evento{incluidosLista.length !== 1 ? 's' : ''} en el email · {desde} → {hasta}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {!vp.mobile && <button onClick={onClose} style={footerBtnGhost}>Cancelar</button>}
@@ -436,17 +476,18 @@ export function ResumenEditorModal({ open, onClose, eventos, cliente }) {
               borderRadius: 10, padding: vp.mobile ? '12px 14px' : '10px 18px',
               fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
             }}>{vp.mobile ? 'Borrador' : 'Guardar borrador'}</button>
-            <button onClick={handleEnviar} style={{
+            <button onClick={handleEnviar} disabled={enviando || enviado} style={{
               flex: vp.mobile ? 2 : 'none',
-              background: enviado ? T.green : T.blue,
+              background: enviado ? T.green : (enviando ? T.borderLight : T.blue),
               border: 'none', color: '#fff', borderRadius: 10,
               padding: vp.mobile ? '12px 16px' : '10px 22px',
               fontSize: 13, fontWeight: 700,
-              cursor: 'pointer', fontFamily: 'inherit',
+              cursor: enviando ? 'wait' : (enviado ? 'default' : 'pointer'),
+              fontFamily: 'inherit',
               boxShadow: enviado ? `0 2px 6px ${T.green}50` : `0 2px 6px ${T.blue}50`,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               minHeight: 44,
-            }}>{enviado ? '✓ Enviado' : (vp.mobile ? 'Enviar →' : 'Enviar email →')}</button>
+            }}>{enviando ? 'Enviando…' : (enviado ? '✓ Enviado' : (vp.mobile ? 'Enviar →' : 'Enviar email →'))}</button>
           </div>
         </div>
       </div>
