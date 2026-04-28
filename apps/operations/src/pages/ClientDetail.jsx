@@ -40,6 +40,7 @@ export default function ClientDetail({ client: c }) {
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [deleteClientModal, setDeleteClientModal] = useState(false);
   const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
+  const [activeTab, setActiveTab] = useState('llamadas');
 
   const dropdownRefs = useRef({});
 
@@ -956,20 +957,6 @@ export default function ClientDetail({ client: c }) {
 
   const sentEmoji = { positive: '\uD83D\uDE0A', neutral: '\uD83D\uDE10', negative: '\uD83D\uDE1F' };
 
-  // Merge brain points into history
-  const brainPoints = [];
-  (c.feedback || []).forEach(f => {
-    if (f.keypoints) f.keypoints.split('\n').filter(k => k.trim()).forEach(k => brainPoints.push({ text: k.trim(), source: 'Llamada ' + fmtDate(f.date), type: 'call' }));
-  });
-  (c.clientFeedbacks || []).forEach((f, fi) => {
-    const nf = normalizeFeedback(f, fi);
-    nf.items.forEach(item => {
-      brainPoints.push({ text: item.text, source: (SOURCE_LABELS[nf.source] || nf.source) + ' ' + fmtDate(nf.date || ''), type: 'request' });
-    });
-  });
-  if (bn) brainPoints.push({ text: bn, source: 'Auto-detectado', type: 'bottleneck' });
-  if (c.notes) brainPoints.push({ text: c.notes, source: 'Notas generales', type: 'note' });
-  const typeIcons = { call: '\uD83C\uDFA7', complaint: '\u26A0\uFE0F', problem: '\u26A0\uFE0F', suggestion: '\uD83D\uDCA1', request: '\uD83D\uDCCC', bottleneck: '\u26D4', note: '\uD83D\uDCDD', step: '\uD83D\uDEE4\uFE0F' };
 
   // Total roadmap tasks for progress display
   const totalRoadmap = useNewSystem ? roadmapTasks.length : c.steps.length;
@@ -1061,151 +1048,138 @@ export default function ClientDetail({ client: c }) {
         <span className="text-2xl">{'\u2192'}</span>
       </button>
 
-      {/* Row 1: Links + Publicidad (2-col, balanced) */}
-      <div className="grid gap-4 md:grid-cols-2 mb-4">
-        <ResourcesPanel
-          title="Links y recursos"
-          links={c.links || []}
-          allowedCategories={CLIENT_RESOURCE_CATEGORIES}
-          onAdd={(link) => updateClient(c.id, { links: [...(c.links || []), link] })}
-          onUpdate={(prevLink, patch) => {
-            const newLinks = (c.links || []).map((l, i) =>
-              i === prevLink.originalIdx ? { ...l, ...patch } : l,
-            );
-            updateClient(c.id, { links: newLinks });
-          }}
-          onDelete={(prevLink) => {
-            const newLinks = (c.links || []).filter((_, i) => i !== prevLink.originalIdx);
-            updateClient(c.id, { links: newLinks });
-          }}
-        />
+      {(() => {
+        const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id);
+        const linksCount = (c.links || []).length;
+        const hasAds = c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna');
+        const adsActive = c.metaMetrics?.adsActive;
+        const tabs = [
+          { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
+          { key: 'recursos', label: 'Recursos', count: linksCount },
+          { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
+          { key: 'timeline', label: 'Timeline' },
+        ];
+        return (
+          <>
+            <div className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+              {tabs.map(t => {
+                const isActive = activeTab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setActiveTab(t.key)}
+                    className={`px-4 py-2 text-[13px] font-semibold cursor-pointer border-b-2 transition-colors bg-transparent font-sans whitespace-nowrap ${isActive ? 'border-blue text-blue' : 'border-transparent text-text2 hover:text-text'}`}
+                  >
+                    {t.label}
+                    {typeof t.count === 'number' && t.count > 0 && (
+                      <span className="ml-1.5 text-[10px] text-text3 font-normal">{t.count}</span>
+                    )}
+                    {t.badge && (
+                      <span className={`ml-1.5 inline-flex items-center py-[2px] px-1.5 rounded-xl text-[9px] font-bold ${t.badge === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{t.badge === 'activa' ? '● activa' : '○ inactiva'}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* Publicidad (Meta Ads) */}
-        {c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna') && (() => {
-            const m = c.metaMetrics || {};
-            const isActive = m.adsActive;
-            const curr = m.currency || 'USD';
-            const cs = curr === 'EUR' ? '\u20AC' : curr === 'MXN' ? 'MX$' : '$';
-            return (
-              <div className="bg-white border border-border rounded-xl overflow-hidden mb-3">
-                <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center justify-between">
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#FFF7ED', color: '#F97316' }}>{'\uD83D\uDCE3'}</span>
-                    Publicidad
-                  </span>
-                  <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold ml-auto ${isActive ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{isActive ? '\u25CF Activa' : '\u25CB Inactiva'}</span>
-                </div>
-                <div className="py-3 px-4">
-                  {isActive && m.totalSpend7d ? (
-                    <>
-                      <div className="grid grid-cols-3 gap-2 mb-2">
-                        <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inv. 7d</div></div>
-                        <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight text-blue">{m.totalConversions7d || 0}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">Leads 7d</div></div>
-                        <div className="text-center py-2 px-1 bg-surface2 rounded-md"><div className="text-base font-extrabold tracking-tight" style={{ color: m.avgCpl7d > 15 ? 'var(--color-red)' : 'var(--color-green)' }}>{cs}{m.avgCpl7d?.toFixed(2) || '\u2014'}</div><div className="text-[9px] text-text3 uppercase tracking-[0.5px] mt-0.5">CPL prom.</div></div>
-                      </div>
-                      <div className="flex justify-between items-center text-[11px] text-text2 py-1 border-b border-border"><span>Gasto ayer</span><strong>{cs}{m.spendYesterday?.toFixed(2) || '0'}</strong></div>
-                      <div className="flex justify-between items-center text-[11px] text-text2 py-1 border-b border-border"><span>Leads ayer</span><strong className="text-blue">{m.conversionsYesterday || 0}</strong></div>
-                      <div className="flex justify-between items-center text-[11px] text-text2 py-1 border-b border-border"><span>Impresiones 7d</span><strong>{(m.impressions7d || 0).toLocaleString()}</strong></div>
-                      <div className="flex justify-between items-center text-[11px] text-text2 py-1"><span>CTR</span><strong>{m.ctr7d?.toFixed(2) || '\u2014'}%</strong></div>
-                      {m.conversionEvent && <div className="mt-1.5"><span className="text-[9px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">Evento: {m.conversionEvent}</span></div>}
-                      <div className="mt-1.5 text-[9px] text-text3">Actualizado: {m.lastUpdated || '\u2014'}</div>
-                    </>
-                  ) : (
-                    m.pauseReason ? <div className="text-[11px] text-red py-2">{'\u26A0'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-3.5">Sin datos de publicidad recientes</div>
-                  )}
-                  <div className="mt-2.5 border-t border-border pt-2">
-                    <div className="text-[10px] font-semibold text-text3 mb-1">Cuentas vinculadas</div>
-                    {c.metaAds.filter(a => a.status !== 'interna').map((a, ai) => (
-                      <div key={ai} className="text-[11px] py-[3px] flex justify-between items-center">
-                        <span>{a.name}</span>
-                        <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[8px] font-bold ${a.status === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{a.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-      </div>
-      {/* End Row 1 */}
-
-      {/* Row 2: Llamadas + Client Feedback */}
-      <div className="grid gap-4 md:grid-cols-2 mb-4">
-          {/* Llamadas del cliente */}
-          {(() => {
-            const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id);
-            return (
-              <div className="bg-white border border-border rounded-xl overflow-hidden">
-                <div className="py-3 px-4 border-b border-border text-[13px] font-bold flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#EFF6FF', color: '#3B82F6' }}>{'\uD83D\uDCDE'}</span>
-                  Llamadas
-                  {clientLlamadas.length > 0 && <span className="text-[10px] text-gray-400 font-normal">{clientLlamadas.length}</span>}
-                </div>
-                <div className="py-1">
-                  {clientLlamadas.length === 0 ? (
-                    <div className="text-center text-text3 text-xs py-3.5">Sin llamadas registradas</div>
-                  ) : (
-                    clientLlamadas.map(l => (
-                      <div key={l.id} className="px-4 py-2.5 border-b border-border last:border-b-0">
+            {activeTab === 'llamadas' && (
+              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
+                {clientLlamadas.length === 0 ? (
+                  <div className="text-center text-text3 text-xs py-12">Sin llamadas registradas</div>
+                ) : (
+                  <div className="py-1">
+                    {clientLlamadas.map(l => (
+                      <div key={l.id} className="px-4 py-3 border-b border-border last:border-b-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[12px] font-semibold text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
-                          {l.fecha && <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
+                          <span className="text-[13px] font-semibold text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
+                          {l.fecha && <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
                           {l.recording_url && (
                             <a href={l.recording_url} target="_blank" rel="noreferrer"
-                              className="text-[10px] text-blue no-underline shrink-0 hover:underline">{'\uD83C\uDFAC'} Ver</a>
+                              className="text-[11px] text-blue no-underline shrink-0 hover:underline">{'🎬'} Ver</a>
                           )}
                         </div>
                         {l.resumen && (
-                          <div className="text-[11px] text-text3 mt-1 leading-relaxed line-clamp-2">{l.resumen}</div>
+                          <div className="text-[12px] text-text3 mt-1 leading-relaxed">{l.resumen}</div>
                         )}
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-
-
-      </div>
-      {/* End Row 2 */}
-
-      {/* Historial del cliente (merged with brain points) — full width at bottom */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
-            <div className="py-3 px-4 border-b border-border text-[13px] font-bold">
-              <span className="inline-flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md flex items-center justify-center text-[13px]" style={{ background: '#F3F4F6', color: '#6B7280' }}>{'\uD83D\uDCDC'}</span>
-                Historial del cliente
-              </span>
-            </div>
-            <div className="py-3 px-4">
-              {/* Brain points section */}
-              {brainPoints.length > 0 && (
-                <div className="mb-3 pb-3 border-b border-border">
-                  <div className="text-[10px] font-semibold text-text3 uppercase tracking-wide mb-1.5">Puntos clave</div>
-                  {brainPoints.map((bp, i) => (
-                    <div key={'bp-' + i} className="flex gap-2 py-[4px] text-xs leading-relaxed">
-                      <span className="shrink-0">{typeIcons[bp.type] || '\u2022'}</span>
-                      <div><div>{bp.text}</div><div className="text-[9px] text-text3 mt-[1px]">{bp.source}</div></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* History entries */}
-              {!c.history.length && !brainPoints.length ? (
-                <div className="text-center text-text3 text-xs py-3.5">Sin historial</div>
-              ) : (
-                [...c.history].reverse().map((h, i) => (
-                  <div key={i} className="flex gap-2 py-[5px]">
-                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: h.color }} />
-                    <div><div className="text-xs leading-relaxed">{h.text}</div><div className="text-[10px] text-text3 mt-[1px]">{fmtDate(h.date)}</div></div>
+                    ))}
                   </div>
-                ))
-              )}
-            </div>
-      </div>
-      {/* End Historial */}
+                )}
+              </div>
+            )}
+
+            {activeTab === 'recursos' && (
+              <div className="mb-4">
+                <ResourcesPanel
+                  title="Links y recursos"
+                  links={c.links || []}
+                  allowedCategories={CLIENT_RESOURCE_CATEGORIES}
+                  onAdd={(link) => updateClient(c.id, { links: [...(c.links || []), link] })}
+                  onUpdate={(prevLink, patch) => {
+                    const newLinks = (c.links || []).map((l, i) =>
+                      i === prevLink.originalIdx ? { ...l, ...patch } : l,
+                    );
+                    updateClient(c.id, { links: newLinks });
+                  }}
+                  onDelete={(prevLink) => {
+                    const newLinks = (c.links || []).filter((_, i) => i !== prevLink.originalIdx);
+                    updateClient(c.id, { links: newLinks });
+                  }}
+                />
+              </div>
+            )}
+
+            {activeTab === 'publicidad' && (
+              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
+                {!hasAds ? (
+                  <div className="text-center text-text3 text-xs py-12">Sin cuentas de publicidad vinculadas</div>
+                ) : (() => {
+                  const m = c.metaMetrics || {};
+                  const isActive = m.adsActive;
+                  const curr = m.currency || 'USD';
+                  const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
+                  return (
+                    <div className="py-4 px-5">
+                      {isActive && m.totalSpend7d ? (
+                        <>
+                          <div className="grid grid-cols-3 gap-3 mb-3">
+                            <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inv. 7d</div></div>
+                            <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight text-blue">{m.totalConversions7d || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Leads 7d</div></div>
+                            <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight" style={{ color: m.avgCpl7d > 15 ? 'var(--color-red)' : 'var(--color-green)' }}>{cs}{m.avgCpl7d?.toFixed(2) || '—'}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">CPL prom.</div></div>
+                          </div>
+                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Gasto ayer</span><strong>{cs}{m.spendYesterday?.toFixed(2) || '0'}</strong></div>
+                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Leads ayer</span><strong className="text-blue">{m.conversionsYesterday || 0}</strong></div>
+                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Impresiones 7d</span><strong>{(m.impressions7d || 0).toLocaleString()}</strong></div>
+                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5"><span>CTR</span><strong>{m.ctr7d?.toFixed(2) || '—'}%</strong></div>
+                          {m.conversionEvent && <div className="mt-2"><span className="text-[10px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">Evento: {m.conversionEvent}</span></div>}
+                          <div className="mt-2 text-[10px] text-text3">Actualizado: {m.lastUpdated || '—'}</div>
+                        </>
+                      ) : (
+                        m.pauseReason ? <div className="text-[12px] text-red py-3">{'⚠'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-6">Sin datos de publicidad recientes</div>
+                      )}
+                      <div className="mt-3 border-t border-border pt-3">
+                        <div className="text-[11px] font-semibold text-text3 mb-1.5">Cuentas vinculadas</div>
+                        {c.metaAds.filter(a => a.status !== 'interna').map((a, ai) => (
+                          <div key={ai} className="text-[12px] py-1 flex justify-between items-center">
+                            <span>{a.name}</span>
+                            <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold ${a.status === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{a.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {activeTab === 'timeline' && (
+              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
+                <div className="py-12 text-center text-text3 text-xs">Timeline en construcción</div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Edit Client Modal */}
       <Modal
