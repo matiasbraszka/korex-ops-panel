@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp, RefreshCw } from 'lucide-react';
+import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp } from 'lucide-react';
 import CallDetailExpanded from '../components/CallDetailExpanded';
 
 const CAT_CONFIG = {
@@ -43,8 +43,6 @@ export default function LlamadasPage() {
   const [tituloDraft, setTituloDraft] = useState('');
   const [editingClientId, setEditingClientId] = useState(null);
   const [clientSearch, setClientSearch] = useState('');
-  const [polling, setPolling] = useState(false);
-  const [pollMsg, setPollMsg] = useState('');
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
@@ -91,43 +89,6 @@ export default function LlamadasPage() {
     if (expandedId === id) setExpandedId(null);
   };
 
-  const handleProcess = async () => {
-    setPolling(true);
-    setPollMsg('Procesando llamadas pendientes...');
-    try {
-      // Procesa hasta 5 por invocación. Si quedan más, vuelve a invocar.
-      let totalProcessed = 0;
-      let totalErrors = 0;
-      let remaining = pendingCallsCount;
-      let runs = 0;
-      const MAX_RUNS = 5;
-      while (remaining > 0 && runs < MAX_RUNS) {
-        const res = await fetch('https://cgdwieoxjoexzlfbxrfc.supabase.co/functions/v1/procesar-pendientes', { method: 'POST' });
-        const data = await res.json();
-        if (data.error) {
-          setPollMsg('Error: ' + data.error);
-          setPolling(false);
-          return;
-        }
-        totalProcessed += data.processed || 0;
-        totalErrors += data.errors || 0;
-        remaining = data.remaining || 0;
-        runs++;
-        setPollMsg(`Procesadas ${totalProcessed}, quedan ${remaining}...`);
-        if ((data.processed || 0) === 0) break; // nada se procesó, salir
-      }
-      const msg = totalProcessed > 0
-        ? `${totalProcessed} llamada${totalProcessed !== 1 ? 's' : ''} procesada${totalProcessed !== 1 ? 's' : ''}.${totalErrors > 0 ? ` ${totalErrors} error${totalErrors !== 1 ? 'es' : ''}.` : ''}${remaining > 0 ? ` Quedan ${remaining} pendientes.` : ''}`
-        : 'No hay llamadas para procesar.';
-      setPollMsg(msg);
-      // Recargar llamadas
-      setTimeout(() => { window.location.reload(); }, 2000);
-    } catch (e) {
-      setPollMsg('Error: ' + (e.message || e));
-      setPolling(false);
-    }
-  };
-
   const handleAdd = async () => {
     if (!form.url.trim() || !form.categoria) return;
     setSaving(true);
@@ -154,33 +115,14 @@ export default function LlamadasPage() {
           </p>
         </div>
         {canEdit && (
-          <div className="flex items-center gap-2">
-            {pendingCallsCount > 0 && (
-              <button
-                className="flex items-center gap-1.5 text-[12px] text-white bg-amber-500 hover:bg-amber-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors disabled:opacity-50"
-                onClick={handleProcess}
-                disabled={polling}
-                title="Procesar llamadas pendientes con IA"
-              >
-                <RefreshCw size={14} className={polling ? 'animate-spin' : ''} /> {polling ? 'Procesando...' : `Procesar ${pendingCallsCount} pendiente${pendingCallsCount !== 1 ? 's' : ''}`}
-              </button>
-            )}
-            <button
-              className="flex items-center gap-1.5 text-[12px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors"
-              onClick={() => setAdding(true)}
-            >
-              <Plus size={14} /> Agregar llamada
-            </button>
-          </div>
+          <button
+            className="flex items-center gap-1.5 text-[12px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-2 px-3 cursor-pointer font-sans font-semibold transition-colors"
+            onClick={() => setAdding(true)}
+          >
+            <Plus size={14} /> Agregar llamada
+          </button>
         )}
       </div>
-
-      {/* Poll feedback */}
-      {pollMsg && (
-        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-          <span className="text-[12px] text-blue-700 font-medium">{pollMsg}</span>
-        </div>
-      )}
 
       {/* Pending badge */}
       {pendingCallsCount > 0 && (
