@@ -91,13 +91,31 @@ export async function deleteEvento(eventoId) {
   return true;
 }
 
-export async function updateEvento(eventoId, patch) {
+// Actualiza un evento existente. Acepta el shape de frontend (con bloqueo nested)
+// y lo mappea a row de DB. Devuelve el evento actualizado o null.
+export async function updateEvento(eventoId, evento, clienteId) {
   if (!eventoId) return null;
-  await sbFetch(`${TABLE}?id=eq.${encodeURIComponent(eventoId)}`, {
+  const row = eventoToRow(evento, clienteId || evento.cliente_id);
+  // No tiene sentido reescribir cliente_id en un PATCH
+  delete row.cliente_id;
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(eventoId)}`;
+  const session = (await supabase.auth.getSession()).data.session;
+  const res = await fetch(url, {
     method: 'PATCH',
-    body: JSON.stringify(patch),
+    headers: {
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(row),
   });
-  return true;
+  if (!res.ok) {
+    console.warn('updateEvento error', res.status, await res.text());
+    return null;
+  }
+  const data = await res.json();
+  return rowToEvento(Array.isArray(data) ? data[0] : data);
 }
 
 export async function sendResumenEmail({ cliente_id, destinatario_real, asunto, cuerpo }) {

@@ -55,7 +55,7 @@ function AuthorChip({ autorUser, autor }) {
   return null;
 }
 
-export function EventCard({ event, showFase = true, onClick, onDelete }) {
+export function EventCard({ event, showFase = true, onClick, onDelete, onEdit }) {
   const vp = useViewport();
   const { tiposByKey, fasesById } = useHistorialConfig();
   const isBloqueo = event.tipo === 'bloqueo';
@@ -85,6 +85,22 @@ export function EventCard({ event, showFase = true, onClick, onDelete }) {
             padding: '3px 10px', borderRadius: 999,
             fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
           }}>{event.bloqueo.diasBloqueo}d</div>
+        )}
+        {onEdit && (
+          <button
+            onClick={e => { e.stopPropagation(); onEdit(event); }}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              width: 28, height: 28, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: T.text3, fontSize: 13, padding: 0,
+              transition: 'all 0.12s',
+            }}
+            onMouseEnter={ev => { ev.currentTarget.style.background = T.blueBg; ev.currentTarget.style.color = T.blue; }}
+            onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent'; ev.currentTarget.style.color = T.text3; }}
+            title="Editar evento"
+            aria-label="Editar evento"
+          >✎</button>
         )}
         {onDelete && (
           <button
@@ -116,7 +132,7 @@ export function EventCard({ event, showFase = true, onClick, onDelete }) {
       <div style={{
         fontSize: vp.mobile ? 13 : 14, fontWeight: 600, color: T.text,
         marginBottom: 6,
-        paddingRight: (isBloqueo && event.bloqueo?.diasBloqueo > 0 ? 80 : 36),
+        paddingRight: (isBloqueo && event.bloqueo?.diasBloqueo > 0 ? 110 : 70),
         letterSpacing: '-0.005em',
         lineHeight: 1.35,
       }}>{event.titulo}</div>

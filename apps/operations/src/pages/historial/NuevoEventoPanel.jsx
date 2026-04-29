@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
 import { useHistorialConfig } from './useHistorialConfig.js';
@@ -37,9 +37,11 @@ const horaAhora = () => {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseActualClienteId, currentUser }) {
+export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseActualClienteId, currentUser, eventoExistente }) {
   const vp = useViewport();
   const { fases, tipos } = useHistorialConfig();
+  const isEdit = !!eventoExistente;
+
   const [tipo, setTipo] = useState(tipos[0]?.key || 'entregable');
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -53,13 +55,31 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
   const [links, setLinks] = useState([]); // [{ url, title }]
   const [linkDraft, setLinkDraft] = useState('');
 
-  const reset = () => {
-    setTipo(tipos[0]?.key || 'entregable'); setTitulo(''); setDescripcion('');
-    setFase(faseActualClienteId || fases[0]?.id || ''); setTiempo(15); setResponsable('Korex');
-    setIncluirResumen(true); setBloqueoCategoria('Cliente');
-    setBloqueoEsperando(''); setBloqueoDias(0);
-    setLinks([]); setLinkDraft('');
-  };
+  // Cuando cambia el evento a editar (o se abre para crear), pre-cargar / resetear.
+  useEffect(() => {
+    if (!open) return;
+    if (eventoExistente) {
+      setTipo(eventoExistente.tipo || tipos[0]?.key || 'entregable');
+      setTitulo(eventoExistente.titulo || '');
+      setDescripcion(eventoExistente.descripcion || '');
+      setFase(eventoExistente.fase || faseActualClienteId || fases[0]?.id || '');
+      setTiempo(Number(eventoExistente.tiempo) || 0);
+      setResponsable(eventoExistente.responsable || 'Korex');
+      setIncluirResumen(eventoExistente.incluirResumen !== false);
+      setBloqueoCategoria(eventoExistente.bloqueo?.categoria || 'Cliente');
+      setBloqueoEsperando(eventoExistente.bloqueo?.esperando || '');
+      setBloqueoDias(eventoExistente.bloqueo?.diasBloqueo || 0);
+      setLinks(Array.isArray(eventoExistente.links) ? eventoExistente.links : []);
+      setLinkDraft('');
+    } else {
+      setTipo(tipos[0]?.key || 'entregable'); setTitulo(''); setDescripcion('');
+      setFase(faseActualClienteId || fases[0]?.id || ''); setTiempo(15); setResponsable('Korex');
+      setIncluirResumen(true); setBloqueoCategoria('Cliente');
+      setBloqueoEsperando(''); setBloqueoDias(0);
+      setLinks([]); setLinkDraft('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, eventoExistente?.id]);
 
   const addLink = () => {
     const url = linkDraft.trim();
@@ -72,22 +92,40 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
 
   const handleSave = () => {
     if (!titulo.trim()) return;
-    const evento = {
+    const baseEvento = {
       tipo, titulo: titulo.trim(), descripcion: descripcion.trim(),
       fase, tiempo: Number(tiempo) || 0, responsable,
-      autor: currentUser?.name || '',
-      autorUser: currentUser ? {
-        id: currentUser.id,
-        name: currentUser.name,
-        avatar_url: currentUser.avatar || '',
-        color: currentUser.color || '#5B7CF5',
-        initials: currentUser.initials || '',
-      } : null,
-      fecha: today(), hora: horaAhora(),
       estado: tipo === 'bloqueo' ? 'en-curso' : 'completado',
       links,
       incluirResumen,
     };
+    let evento;
+    if (isEdit) {
+      // En modo edición: conserva id, fecha/hora original y autor original.
+      evento = {
+        ...baseEvento,
+        id: eventoExistente.id,
+        fecha: eventoExistente.fecha,
+        hora: eventoExistente.hora,
+        autor: eventoExistente.autor,
+        autorUser: eventoExistente.autorUser,
+      };
+    } else {
+      // En modo creación: setea autor desde currentUser y fecha/hora actual.
+      evento = {
+        ...baseEvento,
+        autor: currentUser?.name || '',
+        autorUser: currentUser ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          avatar_url: currentUser.avatar || '',
+          color: currentUser.color || '#5B7CF5',
+          initials: currentUser.initials || '',
+        } : null,
+        fecha: today(),
+        hora: horaAhora(),
+      };
+    }
     if (tipo === 'bloqueo') {
       evento.bloqueo = {
         categoria: bloqueoCategoria,
@@ -96,7 +134,6 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
       };
     }
     onSave && onSave(evento);
-    reset();
     onClose && onClose();
   };
 
@@ -123,14 +160,14 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: T.text3, textTransform: 'uppercase' }}>
-              Cargar evento
+              {isEdit ? 'Editar evento' : 'Cargar evento'}
             </div>
             <div style={{
               fontSize: vp.mobile ? 16 : 18, fontWeight: 700, color: T.text,
               marginTop: 2, letterSpacing: '-0.01em',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
-              Nuevo evento{clienteNombre ? ` · ${vp.mobile ? clienteNombre.split(' ')[0] : clienteNombre}` : ''}
+              {isEdit ? 'Editar evento' : 'Nuevo evento'}{clienteNombre ? ` · ${vp.mobile ? clienteNombre.split(' ')[0] : clienteNombre}` : ''}
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -142,31 +179,42 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: vp.mobile ? '16px' : '20px 22px' }}>
-          {/* Mostrar quién está creando el evento */}
-          {currentUser && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 10px', background: T.bg, border: `1px solid ${T.border}`,
-              borderRadius: 8, marginBottom: 16,
-            }}>
-              {currentUser.avatar ? (
-                <img src={currentUser.avatar} alt={currentUser.name}
-                  style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: (currentUser.color || '#5B7CF5') + '20',
-                  color: currentUser.color || '#5B7CF5',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 9, fontWeight: 700,
-                }}>{currentUser.initials}</span>
-              )}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 11, color: T.text3 }}>Lo registra</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</div>
+          {/* Mostrar quién creó / está creando el evento */}
+          {(() => {
+            const display = isEdit
+              ? (eventoExistente?.autorUser || (eventoExistente?.autor ? { name: eventoExistente.autor } : null))
+              : (currentUser ? { ...currentUser, avatar_url: currentUser.avatar } : null);
+            if (!display) return null;
+            const initials = display.initials
+              || (display.name?.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase() || '?');
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 10px', background: T.bg, border: `1px solid ${T.border}`,
+                borderRadius: 8, marginBottom: 16,
+              }}>
+                {display.avatar_url ? (
+                  <img src={display.avatar_url} alt={display.name || ''}
+                    style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{
+                    width: 24, height: 24, borderRadius: '50%',
+                    background: (display.color || '#5B7CF5') + '20',
+                    color: display.color || '#5B7CF5',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 9, fontWeight: 700,
+                  }}>{initials}</span>
+                )}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 11, color: T.text3 }}>{isEdit ? 'Creado por' : 'Lo registra'}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{display.name}</div>
+                  {isEdit && eventoExistente?.fecha && (
+                    <div style={{ fontSize: 10, color: T.text3, marginTop: 1 }}>{eventoExistente.fecha}{eventoExistente.hora ? ` · ${eventoExistente.hora}` : ''}</div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <Label>Tipo</Label>
           <div style={{ display: 'grid', gridTemplateColumns: vp.mobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6, marginBottom: 18 }}>
@@ -324,7 +372,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
             borderRadius: 10, padding: '12px',
             fontSize: 13, fontWeight: 700, cursor: titulo.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
             boxShadow: titulo.trim() ? '0 2px 6px rgba(91,124,245,0.3)' : 'none', minHeight: 44,
-          }}>Guardar evento</button>
+          }}>{isEdit ? 'Guardar cambios' : 'Guardar evento'}</button>
         </div>
       </div>
     </>

@@ -142,7 +142,7 @@ function BlockerBanner({ eventos }) {
   );
 }
 
-export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento }) {
+export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento, onEditEvento }) {
   const vp = useViewport();
   const [filtro, setFiltro] = useState('todos');
   const lista = filtro === 'todos' ? eventos : eventos.filter(e => e.tipo === filtro);
@@ -267,7 +267,7 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
                 </div>
               )}
               <div style={{ position: 'relative', marginBottom: 10 }}>
-                <EventCard event={ev} onDelete={onDeleteEvento} />
+                <EventCard event={ev} onDelete={onDeleteEvento} onEdit={onEditEvento} />
               </div>
             </Fragment>
           );
