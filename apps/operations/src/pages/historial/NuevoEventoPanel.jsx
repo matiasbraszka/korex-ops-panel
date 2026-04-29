@@ -6,9 +6,9 @@ import { useHistorialConfig } from './useHistorialConfig.js';
 function Label({ children }) {
   return <div style={{ fontSize: 11, fontWeight: 700, color: T.text3, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>{children}</div>;
 }
-function Input({ value, onChange, placeholder, compact }) {
+function Input({ value, onChange, placeholder, compact, type = 'text' }) {
   return (
-    <input value={value || ''} onChange={e => onChange && onChange(e.target.value)} placeholder={placeholder}
+    <input type={type} value={value || ''} onChange={e => onChange && onChange(e.target.value)} placeholder={placeholder}
       style={{
         width: '100%', background: '#fff', border: `1px solid ${T.border}`,
         borderRadius: 8, padding: compact ? '8px 10px' : '10px 12px',
@@ -37,37 +37,55 @@ const horaAhora = () => {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseActualCliente = 1 }) {
+export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseActualClienteId, currentUser }) {
   const vp = useViewport();
   const { fases, tipos } = useHistorialConfig();
   const [tipo, setTipo] = useState(tipos[0]?.key || 'entregable');
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [fase, setFase] = useState(faseActualCliente);
+  const [fase, setFase] = useState(faseActualClienteId || fases[0]?.id || '');
   const [tiempo, setTiempo] = useState(15);
   const [responsable, setResponsable] = useState('Korex');
   const [incluirResumen, setIncluirResumen] = useState(true);
   const [bloqueoCategoria, setBloqueoCategoria] = useState('Cliente');
   const [bloqueoEsperando, setBloqueoEsperando] = useState('');
   const [bloqueoDias, setBloqueoDias] = useState(0);
-  const [autor, setAutor] = useState('');
+  const [links, setLinks] = useState([]); // [{ url, title }]
+  const [linkDraft, setLinkDraft] = useState('');
 
   const reset = () => {
     setTipo(tipos[0]?.key || 'entregable'); setTitulo(''); setDescripcion('');
-    setFase(faseActualCliente); setTiempo(15); setResponsable('Korex');
+    setFase(faseActualClienteId || fases[0]?.id || ''); setTiempo(15); setResponsable('Korex');
     setIncluirResumen(true); setBloqueoCategoria('Cliente');
-    setBloqueoEsperando(''); setBloqueoDias(0); setAutor('');
+    setBloqueoEsperando(''); setBloqueoDias(0);
+    setLinks([]); setLinkDraft('');
   };
+
+  const addLink = () => {
+    const url = linkDraft.trim();
+    if (!url) return;
+    const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    setLinks(prev => [...prev, { url: normalized }]);
+    setLinkDraft('');
+  };
+  const removeLink = (i) => setLinks(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSave = () => {
     if (!titulo.trim()) return;
     const evento = {
       tipo, titulo: titulo.trim(), descripcion: descripcion.trim(),
-      fase: Number(fase), tiempo: Number(tiempo) || 0, responsable,
-      autor: autor.trim() || 'Equipo Korex',
+      fase, tiempo: Number(tiempo) || 0, responsable,
+      autor: currentUser?.name || '',
+      autorUser: currentUser ? {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatar_url: currentUser.avatar || '',
+        color: currentUser.color || '#5B7CF5',
+        initials: currentUser.initials || '',
+      } : null,
       fecha: today(), hora: horaAhora(),
       estado: tipo === 'bloqueo' ? 'en-curso' : 'completado',
-      adjuntos: 0,
+      links,
       incluirResumen,
     };
     if (tipo === 'bloqueo') {
@@ -124,6 +142,32 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: vp.mobile ? '16px' : '20px 22px' }}>
+          {/* Mostrar quién está creando el evento */}
+          {currentUser && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 10px', background: T.bg, border: `1px solid ${T.border}`,
+              borderRadius: 8, marginBottom: 16,
+            }}>
+              {currentUser.avatar ? (
+                <img src={currentUser.avatar} alt={currentUser.name}
+                  style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  background: (currentUser.color || '#5B7CF5') + '20',
+                  color: currentUser.color || '#5B7CF5',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 9, fontWeight: 700,
+                }}>{currentUser.initials}</span>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 11, color: T.text3 }}>Lo registra</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</div>
+              </div>
+            </div>
+          )}
+
           <Label>Tipo</Label>
           <div style={{ display: 'grid', gridTemplateColumns: vp.mobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6, marginBottom: 18 }}>
             {tipos.map(v => {
@@ -163,8 +207,8 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
             <div>
               <Label>Fase</Label>
-              <Select value={fase} onChange={v => setFase(+v)}>
-                {fases.map(f => <option key={f.n} value={f.n}>{f.n}. {f.label}</option>)}
+              <Select value={fase} onChange={setFase}>
+                {fases.map(f => <option key={f.id} value={f.id}>{f.n}. {f.label}</option>)}
               </Select>
             </div>
             <div>
@@ -190,8 +234,46 @@ export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseAct
             ))}
           </div>
 
-          <Label>Autor (quién registra)</Label>
-          <Input value={autor} onChange={setAutor} placeholder="Tu nombre o equipo" />
+          <Label>Links / adjuntos</Label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <input
+              value={linkDraft}
+              onChange={e => setLinkDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } }}
+              placeholder="Pegá un link (Loom, Figma, Drive, Notion…)"
+              style={{
+                flex: 1, background: '#fff', border: `1px solid ${T.border}`,
+                borderRadius: 8, padding: '9px 11px', fontSize: 13, fontFamily: 'inherit',
+                color: T.text, outline: 'none',
+              }}
+              onFocus={e => e.target.style.borderColor = T.blue}
+              onBlur={e => e.target.style.borderColor = T.border}
+            />
+            <button onClick={addLink} disabled={!linkDraft.trim()} style={{
+              background: linkDraft.trim() ? T.blue : T.borderLight, border: 'none', color: '#fff',
+              borderRadius: 8, padding: '0 14px', fontSize: 12, fontWeight: 700,
+              cursor: linkDraft.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', minWidth: 64,
+            }}>Agregar</button>
+          </div>
+          {links.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 16 }}>
+              {links.map((l, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: T.blueBg, color: T.blue,
+                  border: `1px solid ${T.blue}25`, borderRadius: 8,
+                  padding: '6px 10px', fontSize: 11, fontWeight: 600,
+                }}>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🔗 {l.url}</span>
+                  <button onClick={() => removeLink(i)} style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: T.blue, fontSize: 14, padding: 0, lineHeight: 1, opacity: 0.6,
+                  }} aria-label="Quitar link">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {links.length === 0 && <div style={{ marginBottom: 16 }} />}
 
           {tipo === 'bloqueo' && (
             <div style={{

@@ -21,12 +21,48 @@ export function EventTypePill({ tipo }) {
   );
 }
 
+function AuthorChip({ autorUser, autor }) {
+  // Avatar pequeñito + nombre. Si no hay autorUser estructurado, fallback a texto.
+  if (autorUser && (autorUser.name || autorUser.avatar_url)) {
+    const initials = autorUser.initials
+      || (autorUser.name?.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase() || '?');
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        {autorUser.avatar_url ? (
+          <img src={autorUser.avatar_url} alt={autorUser.name || ''}
+            style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <span style={{
+            width: 18, height: 18, borderRadius: '50%',
+            background: (autorUser.color || '#5B7CF5') + '20',
+            color: autorUser.color || '#5B7CF5',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 8, fontWeight: 700, letterSpacing: '0.03em',
+          }}>{initials}</span>
+        )}
+        <b style={{ color: T.text2, fontWeight: 600 }}>{autorUser.name}</b>
+      </span>
+    );
+  }
+  if (autor) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: T.text3 }} />
+        <b style={{ color: T.text2, fontWeight: 600 }}>{autor}</b>
+      </span>
+    );
+  }
+  return null;
+}
+
 export function EventCard({ event, showFase = true, onClick, onDelete }) {
   const vp = useViewport();
-  const { tiposByKey, fasesByN } = useHistorialConfig();
+  const { tiposByKey, fasesById } = useHistorialConfig();
   const isBloqueo = event.tipo === 'bloqueo';
   const t = tiposByKey[event.tipo] || tiposByKey.entregable || { color: T.blue, bg: T.blueBg, label: event.tipo, dot: '•' };
-  const fase = fasesByN[event.fase];
+  const fase = fasesById[event.fase];
+  const links = Array.isArray(event.links) ? event.links : [];
+
   return (
     <div onClick={onClick} style={{
       background: '#fff',
@@ -71,7 +107,7 @@ export function EventCard({ event, showFase = true, onClick, onDelete }) {
         <EventTypePill tipo={event.tipo} />
         {showFase && fase && (
           <span style={{ fontSize: 10, color: T.text3, fontWeight: 600 }}>
-            FASE {event.fase}{!vp.mobile && ` · ${fase.short.toUpperCase()}`}
+            FASE {fase.n}{!vp.mobile && ` · ${fase.short.toUpperCase()}`}
           </span>
         )}
         <span style={{ fontSize: 10, color: T.text3 }}>·</span>
@@ -89,25 +125,32 @@ export function EventCard({ event, showFase = true, onClick, onDelete }) {
           {event.descripcion}
         </div>
       )}
+      {links.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {links.map((l, i) => (
+            <a key={i} href={l.url} target="_blank" rel="noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                fontSize: 11, color: T.blue, textDecoration: 'none',
+                background: T.blueBg, padding: '4px 9px', borderRadius: 999,
+                border: `1px solid ${T.blue}25`, fontWeight: 600,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+              🔗 {l.title || l.url.replace(/^https?:\/\//, '').split('/')[0]}
+            </a>
+          ))}
+        </div>
+      )}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: T.text3,
         flexWrap: 'wrap',
       }}>
-        {event.autor && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: T.text3 }} />
-            <b style={{ color: T.text2, fontWeight: 600 }}>{event.autor}</b>
-          </span>
-        )}
+        <AuthorChip autorUser={event.autorUser} autor={event.autor} />
         {event.responsable && (
           <span>· espera: <span style={{ color: event.responsable === 'Cliente' ? T.orange : T.text2, fontWeight: 600 }}>{event.responsable}</span></span>
         )}
-        {typeof event.tiempo === 'number' && <span>· {event.tiempo}min</span>}
-        {event.adjuntos > 0 && (
-          <span style={{ marginLeft: vp.mobile ? 0 : 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: T.blue, fontWeight: 600 }}>
-            📎 {event.adjuntos}
-          </span>
-        )}
+        {typeof event.tiempo === 'number' && event.tiempo > 0 && <span>· {event.tiempo}min</span>}
       </div>
     </div>
   );

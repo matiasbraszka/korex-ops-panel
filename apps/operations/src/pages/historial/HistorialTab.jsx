@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Timeline, FabAdd } from './Timeline.jsx';
+import { Timeline } from './Timeline.jsx';
 import { NuevoEventoPanel } from './NuevoEventoPanel.jsx';
 import { ResumenEditorModal } from './ResumenEditorModal.jsx';
 import { listEventos, createEvento, deleteEvento } from './api.js';
-import { useHistorialConfig, mapFaseLegacyToNum } from './useHistorialConfig.js';
+import { useHistorialConfig, getClienteFaseId } from './useHistorialConfig.js';
+import { useApp } from '../../context/AppContext';
 import Modal from '../../components/Modal';
 import { T } from './tokens.js';
 
@@ -16,12 +17,13 @@ function diasDesdeFecha(iso) {
 }
 
 export function HistorialTab({ cliente }) {
-  const { total } = useHistorialConfig();
+  const { fases } = useHistorialConfig();
+  const { currentUser } = useApp();
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
   const [showResumen, setShowResumen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null); // evento a eliminar
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const refresh = useCallback(async () => {
     if (!cliente?.id) return;
@@ -33,9 +35,9 @@ export function HistorialTab({ cliente }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const faseActual = useMemo(
-    () => mapFaseLegacyToNum(cliente?.faseNum || cliente?.phase || cliente?.fase, total),
-    [cliente, total]
+  const faseActualId = useMemo(
+    () => getClienteFaseId(cliente, fases),
+    [cliente, fases]
   );
   const diasProyecto = useMemo(
     () => diasDesdeFecha(cliente?.startDate),
@@ -44,18 +46,11 @@ export function HistorialTab({ cliente }) {
 
   const handleSaveEvento = async (evento) => {
     const nuevo = await createEvento(cliente.id, evento);
-    if (nuevo) {
-      // Optimistic: agrego el nuevo al frente y refresco después
-      setEventos(prev => [nuevo, ...prev]);
-    } else {
-      // Fallback: refrescar de DB
-      refresh();
-    }
+    if (nuevo) setEventos(prev => [nuevo, ...prev]);
+    else refresh();
   };
 
-  const handleDeleteEvento = (evento) => {
-    setConfirmDelete(evento);
-  };
+  const handleDeleteEvento = (evento) => setConfirmDelete(evento);
 
   const confirmarEliminar = async () => {
     if (!confirmDelete?.id) { setConfirmDelete(null); return; }
@@ -76,20 +71,20 @@ export function HistorialTab({ cliente }) {
       ) : (
         <Timeline
           eventos={eventos}
-          faseActual={faseActual}
+          faseActual={faseActualId}
           diasProyecto={diasProyecto}
           onGenerarResumen={() => setShowResumen(true)}
           onNuevoEvento={() => setShowPanel(true)}
           onDeleteEvento={handleDeleteEvento}
         />
       )}
-      <FabAdd onClick={() => setShowPanel(true)} />
       <NuevoEventoPanel
         open={showPanel}
         onClose={() => setShowPanel(false)}
         onSave={handleSaveEvento}
         clienteNombre={cliente?.name}
-        faseActualCliente={faseActual}
+        faseActualClienteId={faseActualId}
+        currentUser={currentUser}
       />
       <ResumenEditorModal
         open={showResumen}

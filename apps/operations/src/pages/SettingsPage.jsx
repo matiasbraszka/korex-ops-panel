@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, History, Sparkles, Mail } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
 import TeamUsersEditor from '../components/settings/TeamUsersEditor';
-import HistorialFasesEditor from '../components/settings/HistorialFasesEditor';
 import HistorialTiposEditor from '../components/settings/HistorialTiposEditor';
 import HistorialEmailEditor from '../components/settings/HistorialEmailEditor';
 
@@ -13,7 +12,6 @@ const TABS = [
   { id: 'template',      label: 'Plantilla de Roadmap',  Icon: LayoutGrid },
   { id: 'services',      label: 'Servicios',             Icon: Briefcase },
   { id: 'priorities',    label: 'Prioridades',           Icon: Tag },
-  { id: 'hist-fases',    label: 'Fases del Historial',   Icon: History },
   { id: 'hist-tipos',    label: 'Tipos de evento',       Icon: Sparkles },
   { id: 'hist-email',    label: 'Email del Historial',   Icon: Mail },
 ];
@@ -53,7 +51,6 @@ export default function SettingsPage() {
         {tab === 'template'    && <TemplateEditor />}
         {tab === 'services'    && <ServicesEditor />}
         {tab === 'priorities'  && <PrioritiesEditor />}
-        {tab === 'hist-fases'  && <HistorialFasesEditor />}
         {tab === 'hist-tipos'  && <HistorialTiposEditor />}
         {tab === 'hist-email'  && <HistorialEmailEditor />}
       </div>

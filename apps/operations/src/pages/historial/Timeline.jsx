@@ -27,7 +27,7 @@ function KPICard({ label, value, sub, accent, alert = false, trend }) {
 
 function KPIStrip({ eventos, faseActual, diasProyecto }) {
   const vp = useViewport();
-  const { fases, fasesByN, total } = useHistorialConfig();
+  const { fases, fasesById, total } = useHistorialConfig();
   const cols = vp.mobile ? 2 : (vp.tablet ? 3 : 5);
   const totalEventos = eventos.length;
   const entregables = eventos.filter(e => e.tipo === 'entregable').length;
@@ -35,23 +35,24 @@ function KPIStrip({ eventos, faseActual, diasProyecto }) {
   const horas = Math.round(tiempoTotal / 60 * 10) / 10;
   const bloqueos = eventos.filter(e => e.tipo === 'bloqueo' && e.estado === 'en-curso');
   const diasBloqueado = bloqueos.reduce((m, e) => Math.max(m, e.bloqueo?.diasBloqueo || 0), 0);
-  const fase = fasesByN[faseActual] || fases[0] || { label: '—' };
+  const fase = fasesById[faseActual] || fases[0] || { label: '—', n: 1 };
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: vp.mobile ? 8 : 12, marginBottom: 18 }}>
       <KPICard label="Días activos" value={diasProyecto || 0} sub="desde firma" />
       <KPICard label="Eventos" value={totalEventos} sub={`${entregables} entregables`} />
       <KPICard label="Tiempo Korex" value={`${horas}h`} sub="acumulado" accent={T.blue} />
       <KPICard label="Bloqueos" value={bloqueos.length} sub={diasBloqueado ? `${diasBloqueado} días` : 'sin bloqueos'} alert={bloqueos.length > 0} />
-      <KPICard label="Fase actual" value={`${faseActual}/${total}`} sub={fase.label} accent={T.blue} />
+      <KPICard label="Fase actual" value={`${fase.n}/${total}`} sub={fase.label} accent={T.blue} />
     </div>
   );
 }
 
-function FaseStepper({ faseActual = 1 }) {
+function FaseStepper({ faseActual }) {
   const vp = useViewport();
-  const { fases, fasesByN, total } = useHistorialConfig();
+  const { fases, fasesById, total } = useHistorialConfig();
   const compact = vp.w < 1100;
-  const fase = fasesByN[faseActual] || fases[0] || { label: '—' };
+  const fase = fasesById[faseActual] || fases[0] || { label: '—', n: 1 };
+  const faseActualN = fase.n;
   return (
     <div style={{
       background: '#fff', border: `1px solid ${T.border}`, borderRadius: 12,
@@ -61,7 +62,7 @@ function FaseStepper({ faseActual = 1 }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Fases del Método Korex</div>
         <div style={{ fontSize: 11, color: T.text3 }}>
-          Fase {faseActual}/{total} · <span style={{ color: T.blue, fontWeight: 700 }}>{fase.label}</span>
+          Fase {faseActualN}/{total} · <span style={{ color: T.blue, fontWeight: 700 }}>{fase.label}</span>
         </div>
       </div>
       <div style={{
@@ -72,10 +73,10 @@ function FaseStepper({ faseActual = 1 }) {
         scrollbarWidth: 'thin',
       }}>
         {fases.map((f, i) => {
-          const done = f.n < faseActual;
-          const current = f.n === faseActual;
+          const done = f.n < faseActualN;
+          const current = f.n === faseActualN;
           return (
-            <Fragment key={f.n}>
+            <Fragment key={f.id}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '0 0 auto', minWidth: compact ? 56 : 'auto' }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: '50%',
@@ -96,7 +97,7 @@ function FaseStepper({ faseActual = 1 }) {
               {i < fases.length - 1 && (
                 <div style={{
                   flex: compact ? '0 0 16px' : 1, height: 2,
-                  background: f.n < faseActual ? T.blue : T.border,
+                  background: f.n < faseActualN ? T.blue : T.border,
                   marginBottom: 18, minWidth: 8, borderRadius: 1,
                 }} />
               )}
@@ -157,7 +158,7 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
   ];
 
   return (
-    <div style={{ paddingBottom: vp.mobile ? 110 : 120 }}>
+    <div style={{ paddingBottom: vp.mobile ? 110 : 24 }}>
       <KPIStrip eventos={eventos} faseActual={faseActual} diasProyecto={diasProyecto} />
       <FaseStepper faseActual={faseActual} />
       <BlockerBanner eventos={eventos} />
@@ -198,16 +199,29 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
             );
           })}
         </div>
-        {!vp.mobile && (
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button onClick={onGenerarResumen} style={{
-              background: '#fff', border: `1px solid ${T.blue}`, color: T.blue,
-              borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-              display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 36,
-            }}>✉ Generar resumen semanal</button>
-          </div>
-        )}
+        <div style={{
+          marginLeft: vp.mobile ? 0 : 'auto',
+          display: 'flex', gap: 8,
+          flexDirection: vp.mobile ? 'column' : 'row',
+        }}>
+          <button onClick={onNuevoEvento} style={{
+            background: T.blue, border: 'none', color: '#fff',
+            borderRadius: 8, padding: vp.mobile ? '10px 14px' : '7px 14px',
+            fontSize: 12, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            minHeight: vp.mobile ? 44 : 36,
+            boxShadow: `0 2px 6px ${T.blue}40`,
+          }}>+ Nuevo evento</button>
+          <button onClick={onGenerarResumen} style={{
+            background: '#fff', border: `1px solid ${T.blue}`, color: T.blue,
+            borderRadius: 8, padding: vp.mobile ? '10px 14px' : '7px 14px',
+            fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            minHeight: vp.mobile ? 44 : 36,
+          }}>✉ Generar resumen semanal</button>
+        </div>
       </div>
 
       <div style={{ position: 'relative', paddingLeft: vp.mobile ? 28 : 36 }}>
@@ -263,57 +277,22 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
       <div style={{
         marginTop: 22, padding: vp.mobile ? '14px 16px' : '14px 18px',
         background: '#fff', border: `1px solid ${T.border}`, borderRadius: 10,
-        display: 'flex',
-        flexDirection: vp.mobile ? 'column' : 'row',
-        justifyContent: 'space-between',
-        alignItems: vp.mobile ? 'stretch' : 'center',
-        gap: vp.mobile ? 12 : 0,
+        display: 'flex', gap: 24, alignItems: 'baseline',
         boxShadow: '0 1px 2px rgba(10,22,40,.04)',
       }}>
-        <div style={{ display: 'flex', gap: 24, alignItems: 'baseline' }}>
-          <div>
-            <div style={{ fontSize: 10, color: T.text3, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Total visible</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{lista.length} eventos</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: T.text3, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tiempo Korex</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: T.blue }}>{horas}h <span style={{ fontSize: 12, color: T.text3, fontWeight: 500 }}>· {tiempoVisible} min</span></div>
-          </div>
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Total visible</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: T.text }}>{lista.length} eventos</div>
         </div>
-        <button onClick={onGenerarResumen} style={{
-          background: T.blue, border: 'none', color: '#fff',
-          borderRadius: 8, padding: '11px 18px', fontSize: 13, fontWeight: 700,
-          cursor: 'pointer', fontFamily: 'inherit',
-          width: vp.mobile ? '100%' : 'auto', minHeight: 44,
-        }}>{vp.mobile ? '✉ Resumen semanal →' : 'Generar resumen semanal →'}</button>
+        <div>
+          <div style={{ fontSize: 10, color: T.text3, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tiempo Korex</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: T.blue }}>{horas}h <span style={{ fontSize: 12, color: T.text3, fontWeight: 500 }}>· {tiempoVisible} min</span></div>
+        </div>
       </div>
     </div>
   );
 }
 
-export function FabAdd({ onClick }) {
-  const vp = useViewport();
-  return (
-    <button onClick={onClick} style={{
-      position: 'fixed',
-      right: vp.mobile ? 16 : 28,
-      bottom: vp.mobile ? 16 : 28,
-      background: T.blue, color: '#fff', border: 'none',
-      borderRadius: 999,
-      padding: vp.mobile ? '12px 16px' : '14px 20px',
-      fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-      cursor: 'pointer',
-      boxShadow: '0 8px 24px rgba(91,124,245,0.4), 0 2px 6px rgba(91,124,245,0.2)',
-      display: 'flex', alignItems: 'center', gap: 7,
-      zIndex: 20, transition: 'transform 0.12s', minHeight: 44,
-    }}
-    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'}
-    onMouseLeave={e => e.currentTarget.style.transform = ''}
-    >
-      <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 400 }}>+</span>
-      {vp.mobile ? 'Evento' : 'Nuevo evento'}
-    </button>
-  );
-}
+// FabAdd se removió: el botón "+ Nuevo evento" ahora vive en el toolbar superior.
 
 export { EventTypePill };

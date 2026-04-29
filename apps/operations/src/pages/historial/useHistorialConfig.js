@@ -1,51 +1,73 @@
-// Hook que expone la configuración del Historial (fases + tipos de evento)
-// leída desde app_settings (vía AppContext). Cae a defaults defensivos si la
-// migración aún no se corrió.
+// Hook que expone la configuración del Historial.
+// Las FASES son las mismas que las del Roadmap (app_settings.roadmap_template.phases) — un solo set de verdad.
+// Los TIPOS de evento siguen viviendo en app_settings.historial_event_types (configurables aparte).
 import { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { DEFAULT_FASES, DEFAULT_EVENT_TYPES } from './tokens.js';
+import { DEFAULT_EVENT_TYPES } from './tokens.js';
+
+const FALLBACK_ROADMAP_PHASES = [
+  { id: 'pre-onboarding',  label: 'Pre-Onboarding',  color: '#8B5CF6', order: 0 },
+  { id: 'onboarding',      label: 'Onboarding',      color: '#5B7CF5', order: 1 },
+  { id: 'primera-entrega', label: 'Primera Entrega', color: '#EAB308', order: 2 },
+  { id: 'lanzamiento',     label: 'Lanzamiento',     color: '#22C55E', order: 3 },
+  { id: 'auditoria',       label: 'Auditoría',       color: '#06B6D4', order: 4 },
+];
+
+function shortFromLabel(label = '') {
+  // Toma las 1-2 primeras palabras significativas, máx 8 chars
+  const words = label.split(/\s+/).filter(Boolean);
+  if (!words.length) return '';
+  if (words[0].length <= 8) return words[0];
+  return words[0].slice(0, 8);
+}
 
 export function useHistorialConfig() {
   const { appSettings } = useApp();
 
   return useMemo(() => {
-    const fasesRaw = Array.isArray(appSettings?.historial_fases) && appSettings.historial_fases.length
-      ? appSettings.historial_fases
-      : DEFAULT_FASES;
+    const roadmapPhases = Array.isArray(appSettings?.roadmap_template?.phases) && appSettings.roadmap_template.phases.length
+      ? appSettings.roadmap_template.phases
+      : FALLBACK_ROADMAP_PHASES;
+
+    const fases = [...roadmapPhases]
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map((p, i) => ({
+        id: p.id,
+        n: i + 1,
+        short: shortFromLabel(p.label || p.id),
+        label: p.label || p.id,
+        color: p.color || '#5B7CF5',
+      }));
+
+    const fasesById = Object.fromEntries(fases.map(f => [f.id, f]));
+    const fasesByN  = Object.fromEntries(fases.map(f => [f.n, f]));
+    const total = fases.length;
+
     const tiposRaw = Array.isArray(appSettings?.historial_event_types) && appSettings.historial_event_types.length
       ? appSettings.historial_event_types
       : DEFAULT_EVENT_TYPES;
-
-    // Ordeno fases por número, garantizo campos mínimos.
-    const fases = [...fasesRaw]
-      .map((f, i) => ({ n: Number(f.n) || (i + 1), short: f.short || '', label: f.label || '', color: f.color || '#5B7CF5' }))
-      .sort((a, b) => a.n - b.n);
-
     const tipos = tiposRaw.map(t => ({
       key: t.key, label: t.label || t.key,
       color: t.color || '#5B7CF5', bg: t.bg || '#EEF2FF', dot: t.dot || '•',
     }));
     const tiposByKey = Object.fromEntries(tipos.map(t => [t.key, t]));
 
-    const total = fases.length;
-    const fasesByN = Object.fromEntries(fases.map(f => [f.n, f]));
-
-    return { fases, fasesByN, total, tipos, tiposByKey };
-  }, [appSettings?.historial_fases, appSettings?.historial_event_types]);
+    return { fases, fasesById, fasesByN, total, tipos, tiposByKey };
+  }, [appSettings?.roadmap_template, appSettings?.historial_event_types]);
 }
 
-// Mapea la fase legacy del cliente (string como 'pre-onboarding', etc.) al
-// número 1..N del Historial. Convención mantenida desde la implementación
-// frontend inicial.
-export function mapFaseLegacyToNum(faseLegacy, total = 11) {
-  const map = {
-    'pre-onboarding': 1,
-    'onboarding': 2,
-    'primera-entrega': 5,
-    'lanzamiento': 8,
-    'auditoria': 10,
-    'escalado': 11,
-  };
-  if (typeof faseLegacy === 'number') return Math.max(1, Math.min(total, faseLegacy));
-  return map[faseLegacy] || 1;
+// Devuelve el id de la fase del Roadmap correspondiente al cliente.
+// Si el cliente ya tiene un id de fase (cliente.phase = 'primera-entrega'), lo usa directo.
+// Si tiene un número, lo mapea por orden.
+// Si no tiene nada, devuelve la primera fase.
+export function getClienteFaseId(cliente, fases) {
+  if (!fases?.length) return null;
+  const valid = new Set(fases.map(f => f.id));
+  if (typeof cliente?.phase === 'string' && valid.has(cliente.phase)) return cliente.phase;
+  if (typeof cliente?.fase === 'string' && valid.has(cliente.fase)) return cliente.fase;
+  if (typeof cliente?.faseNum === 'number') {
+    const f = fases.find(p => p.n === cliente.faseNum);
+    if (f) return f.id;
+  }
+  return fases[0].id;
 }
