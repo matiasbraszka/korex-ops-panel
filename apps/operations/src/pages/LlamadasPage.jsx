@@ -91,6 +91,7 @@ export default function LlamadasPage() {
 
   const handleAdd = async () => {
     if (!form.url.trim() || !form.categoria) return;
+    if (source === 'loom' && !form.transcript.trim()) return;
     setSaving(true);
     try {
       await addLlamadaInbox(form);
@@ -349,13 +350,34 @@ export default function LlamadasPage() {
                   className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400" />
               </div>
 
+              {/* Transcripción (obligatoria para Loom — el webhook no la trae) */}
+              {source === 'loom' && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                    Transcripción <span className="text-purple-700">(obligatoria para Loom)</span>
+                  </label>
+                  <textarea
+                    value={form.transcript}
+                    onChange={e => setForm(f => ({ ...f, transcript: e.target.value }))}
+                    placeholder="Abrí el video en Loom → Transcript → Show all → copiá todo y pegá acá. Loom no expone el transcript en el webhook, por eso hay que pegarlo a mano."
+                    rows={8}
+                    className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[12px] font-mono outline-none focus:border-purple-400 resize-y"
+                  />
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    {form.transcript.trim()
+                      ? `${form.transcript.length.toLocaleString('es-AR')} caracteres pegados`
+                      : 'Sin transcripción — la llamada quedará bloqueada hasta que la pegues'}
+                  </div>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex items-center gap-2 pt-2 justify-end">
                 <button onClick={() => { setAdding(false); setForm({ ...EMPTY_FORM }); }}
                   className="py-2 px-4 bg-transparent border border-gray-200 text-gray-600 text-[13px] rounded-lg cursor-pointer font-sans hover:bg-gray-50">
                   Cancelar
                 </button>
-                <button onClick={handleAdd} disabled={!form.url.trim() || !form.categoria || saving}
+                <button onClick={handleAdd} disabled={!form.url.trim() || !form.categoria || (source === 'loom' && !form.transcript.trim()) || saving}
                   className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40">
                   {saving ? 'Guardando...' : 'Agregar'}
                 </button>
