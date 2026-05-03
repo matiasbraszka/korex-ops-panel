@@ -189,10 +189,11 @@ export default function ClientsPage() {
                   <span className="text-[10px] text-text3 font-semibold">{pct}%</span>
                 </div>
               </div>
-              <div className="max-md:hidden">
+              <div className="max-md:hidden min-w-0 overflow-hidden">
                 <span
-                  className="inline-block text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 whitespace-nowrap"
+                  className="inline-block max-w-full truncate align-middle text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5"
                   style={{ background: phaseColor + '15', color: phaseColor }}
+                  title={phaseLabel}
                 >{phaseLabel}</span>
               </div>
               <div className="text-center max-md:hidden">
