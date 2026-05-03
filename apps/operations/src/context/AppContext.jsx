@@ -57,8 +57,8 @@ export function AppProvider({ children }) {
   const [taskProposals, setTaskProposals] = useState([]);
   const [dashboardAlerts, setDashboardAlerts] = useState([]);
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [hideCompletedTasks, setHideCompletedTasks] = useState(false);
-  const [hideBlockedTasks, setHideBlockedTasks] = useState(false);
+  const [hideCompletedTasks, setHideCompletedTasks] = useState(true);
+  const [hideBlockedTasks, setHideBlockedTasks] = useState(true);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [syncStatus, setSyncStatus] = useState('ok');
   // Settings panel state (cargado desde Supabase)

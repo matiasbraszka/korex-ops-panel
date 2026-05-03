@@ -305,7 +305,7 @@ export default function LlamadasPage() {
               </div>
 
               {/* Cliente (si categoria es cliente o ventas) */}
-              {(form.categoria === 'cliente' || form.categoria === 'ventas' || form.categoria === 'consultoria') && (
+              {(form.categoria === 'cliente' || form.categoria === 'ventas') && (
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-500 mb-1">Cliente</label>
                   <select value={form.clienteId} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value }))}
@@ -464,7 +464,14 @@ export default function LlamadasPage() {
                   <div className="flex flex-col gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
                     {Object.entries(CAT_CONFIG).map(([key, cfg]) => (
                       <button key={key}
-                        onClick={() => { updateLlamada(l.id, { categoria: key }); setEditingCatId(null); }}
+                        onClick={() => {
+                          const allowsClient = key === 'cliente' || key === 'ventas';
+                          const updates = { categoria: key };
+                          // Si la nueva categoría no permite cliente, limpiar cliente_id (regla: solo cliente/ventas se asignan a clientes)
+                          if (!allowsClient && l.cliente_id) updates.cliente_id = null;
+                          updateLlamada(l.id, updates);
+                          setEditingCatId(null);
+                        }}
                         className={`text-[9px] font-bold rounded-full px-2 py-0.5 border-none cursor-pointer font-sans uppercase tracking-wide transition-colors ${key === l.categoria ? 'ring-1 ring-offset-1 ring-gray-400' : 'opacity-70 hover:opacity-100'}`}
                         style={{ background: cfg.bg, color: cfg.text }}
                       >{cfg.label}</button>
@@ -523,42 +530,45 @@ export default function LlamadasPage() {
                         <UsersIcon size={11} /> {participantes}
                       </span>
                     )}
-                    {canEdit && editingClientId === l.id ? (
-                      <div className="relative" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={clientSearch}
-                          autoFocus
-                          onChange={e => setClientSearch(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Escape') { setEditingClientId(null); setClientSearch(''); }
-                          }}
-                          placeholder="Buscar cliente..."
-                          className="text-[11px] border border-blue-300 rounded py-0.5 px-1.5 outline-none focus:border-blue-500 font-sans w-[180px]"
-                        />
-                        <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-[220px] max-h-[260px] overflow-y-auto">
-                          <button
-                            onClick={() => { updateLlamada(l.id, { cliente_id: null }); setEditingClientId(null); setClientSearch(''); }}
-                            className="w-full text-left px-2 py-1.5 text-[11px] text-gray-500 italic hover:bg-gray-50 border-none bg-transparent cursor-pointer block"
-                          >Sin cliente asignado</button>
-                          {(clients || [])
-                            .filter(c => !clientSearch.trim() || (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()))
-                            .slice(0, 30)
-                            .map(c => (
-                              <button key={c.id}
-                                onClick={() => { updateLlamada(l.id, { cliente_id: c.id }); setEditingClientId(null); setClientSearch(''); }}
-                                className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-blue-50 border-none bg-transparent cursor-pointer block ${c.id === l.cliente_id ? 'text-blue-600 font-semibold bg-blue-50/40' : 'text-gray-700'}`}
-                              >{c.name}</button>
-                            ))
-                          }
+                    {/* Cliente — solo para llamadas con categoría cliente o ventas */}
+                    {(l.categoria === 'cliente' || l.categoria === 'ventas') && (
+                      canEdit && editingClientId === l.id ? (
+                        <div className="relative" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            value={clientSearch}
+                            autoFocus
+                            onChange={e => setClientSearch(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Escape') { setEditingClientId(null); setClientSearch(''); }
+                            }}
+                            placeholder="Buscar cliente..."
+                            className="text-[11px] border border-blue-300 rounded py-0.5 px-1.5 outline-none focus:border-blue-500 font-sans w-[180px]"
+                          />
+                          <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-[220px] max-h-[260px] overflow-y-auto">
+                            <button
+                              onClick={() => { updateLlamada(l.id, { cliente_id: null }); setEditingClientId(null); setClientSearch(''); }}
+                              className="w-full text-left px-2 py-1.5 text-[11px] text-gray-500 italic hover:bg-gray-50 border-none bg-transparent cursor-pointer block"
+                            >Sin cliente asignado</button>
+                            {(clients || [])
+                              .filter(c => !clientSearch.trim() || (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()))
+                              .slice(0, 30)
+                              .map(c => (
+                                <button key={c.id}
+                                  onClick={() => { updateLlamada(l.id, { cliente_id: c.id }); setEditingClientId(null); setClientSearch(''); }}
+                                  className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-blue-50 border-none bg-transparent cursor-pointer block ${c.id === l.cliente_id ? 'text-blue-600 font-semibold bg-blue-50/40' : 'text-gray-700'}`}
+                                >{c.name}</button>
+                              ))
+                            }
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <span
-                        className={`text-[11px] font-medium ${clientName ? 'text-blue-500' : 'text-gray-300 italic'} ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
-                        onClick={canEdit ? (e) => { e.stopPropagation(); setEditingClientId(l.id); setClientSearch(''); } : undefined}
-                        title={canEdit ? 'Click para asignar/cambiar cliente' : undefined}
-                      >{clientName || '+ asignar cliente'}</span>
+                      ) : (
+                        <span
+                          className={`text-[11px] font-medium ${clientName ? 'text-blue-500' : 'text-gray-300 italic'} ${canEdit ? 'cursor-pointer hover:underline' : ''}`}
+                          onClick={canEdit ? (e) => { e.stopPropagation(); setEditingClientId(l.id); setClientSearch(''); } : undefined}
+                          title={canEdit ? 'Click para asignar/cambiar cliente' : undefined}
+                        >{clientName || '+ asignar cliente'}</span>
+                      )
                     )}
                   </div>
                 </div>

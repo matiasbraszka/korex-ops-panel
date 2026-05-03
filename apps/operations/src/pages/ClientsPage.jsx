@@ -181,11 +181,6 @@ export default function ClientsPage() {
                 <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
                   <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span> {adsBadge}
                 </div>
-                {bottleneck ? (
-                  <div className="text-[10px] text-red font-medium mt-[3px] flex items-center gap-[3px]">{'\u26A1'} <span className="truncate">{bottleneck}</span></div>
-                ) : (
-                  <div className="text-[10px] text-green mt-0.5">Sin bloqueos</div>
-                )}
                 {c.metaMetrics && c.metaMetrics.adsActive && (
                   <div className="text-[9px] text-text3 mt-[1px]">
                     CPL: {c.metaMetrics.currency === 'EUR' ? '\u20AC' : '$'}{c.metaMetrics.avgCpl7d?.toFixed(2) || '\u2014'} {'\u00B7'} {c.metaMetrics.totalConversions7d || 0} leads 7d
