@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Users, Megaphone, MessageSquare, FileText } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { PRIO_CLIENT, PHASES } from '../utils/constants';
-import { initials, progress, currentTask, getBottleneck, daysAgo, fmtDate, clientPill } from '../utils/helpers';
+import { PRIO_CLIENT } from '../utils/constants';
+import { initials, progress, currentTask, getAllPhases, daysAgo, fmtDate, clientPill } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
 import PublicidadPage from './PublicidadPage';
@@ -139,14 +139,14 @@ export default function ClientsPage() {
         const cur = currentTask(c, tasks);
         const pct = progress(c, tasks);
         const days = daysAgo(c.startDate);
-        const bottleneck = getBottleneck(c, tasks);
         const pill = clientPill(c, tasks);
 
-        const adsBadge = c.metaMetrics && c.metaMetrics.adsActive
-          ? <span className="inline-flex items-center gap-[3px] text-[9px] font-semibold py-[1px] px-1.5 rounded-lg whitespace-nowrap bg-green-bg text-[#16A34A]">{'\u25CF'} Ads</span>
-          : (c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna')
-            ? <span className="inline-flex items-center gap-[3px] text-[9px] font-semibold py-[1px] px-1.5 rounded-lg whitespace-nowrap bg-surface2 text-text3">{'\u25CB'} Ads</span>
-            : null);
+        // Fase activa actual: la primera fase no completada (o "Lanzado" si todas est\u00E1n done).
+        const allPhases = getAllPhases(c);
+        const phaseKey = cur?.phase;
+        const phaseCfg = phaseKey ? allPhases[phaseKey] : null;
+        const phaseLabel = phaseCfg?.label || 'Lanzado';
+        const phaseColor = phaseCfg?.color || '#9CA3AF';
 
         let prioLabel = null;
         if (p !== lastPrio) {
@@ -179,13 +179,8 @@ export default function ClientsPage() {
               )}
               <div className="min-w-0">
                 <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
-                  <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span> {adsBadge}
+                  <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span>
                 </div>
-                {c.metaMetrics && c.metaMetrics.adsActive && (
-                  <div className="text-[9px] text-text3 mt-[1px]">
-                    CPL: {c.metaMetrics.currency === 'EUR' ? '\u20AC' : '$'}{c.metaMetrics.avgCpl7d?.toFixed(2) || '\u2014'} {'\u00B7'} {c.metaMetrics.totalConversions7d || 0} leads 7d
-                  </div>
-                )}
                 {/* Mobile-only: progress + pill inline */}
                 <div className="hidden max-md:flex items-center gap-2 mt-1.5">
                   <div className="flex-1 h-1 bg-surface3 rounded-sm overflow-hidden max-w-[80px]">
@@ -194,7 +189,12 @@ export default function ClientsPage() {
                   <span className="text-[10px] text-text3 font-semibold">{pct}%</span>
                 </div>
               </div>
-              <div className="text-[11px] text-text2 max-md:hidden">{cur ? PHASES[cur.phase]?.label : 'Lanzado'}</div>
+              <div className="max-md:hidden">
+                <span
+                  className="inline-block text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 whitespace-nowrap"
+                  style={{ background: phaseColor + '15', color: phaseColor }}
+                >{phaseLabel}</span>
+              </div>
               <div className="text-center max-md:hidden">
                 <strong className="text-[15px]">{days}</strong>
                 <div className="text-[9px] text-text3">días</div>
