@@ -126,9 +126,21 @@ export default function SearchBar() {
       setView('clients');
       navigate('/operations/clients');
     } else if (item.type === 'task') {
-      setTaskClientFilter(item.data.clientId);
+      const t = item.data;
+      // 1) Filtrar la lista por el cliente al que pertenece la tarea
+      setTaskClientFilter(t.clientId || 'all');
+      // 2) Guardar el id de la tarea para resaltar + forzar vista 'lista'
+      try {
+        localStorage.setItem('tareas_highlight_task', t.id);
+        localStorage.setItem('tareas_current_view', 'lista');
+      } catch {}
       setView('tasks');
       navigate('/operations/tasks');
+      // 3) Si TareasPage/TasksPage ya están montadas, avisarles para que
+      //    cambien a 'lista', re-lean localStorage y hagan scroll + highlight.
+      try {
+        window.dispatchEvent(new CustomEvent('tareas:gotoTask', { detail: { taskId: t.id, clientId: t.clientId } }));
+      } catch {}
     } else if (item.type === 'phase') {
       // Filtrar clientes activos por fase actual
       setPhase(item.data.id);

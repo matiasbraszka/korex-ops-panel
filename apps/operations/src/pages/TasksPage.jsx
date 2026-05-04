@@ -26,23 +26,26 @@ export default function TasksPage({ embedded = false }) {
   const [dragOverHalf, setDragOverHalf] = useState(null); // 'top' | 'bottom'
   const dragGroupRef = useRef(null); // status group of dragged task
 
-  // Highlight task (when coming from Timeline click)
+  // Highlight task (cuando viene de Timeline o del SearchBar global)
   const [highlightTaskId, setHighlightTaskId] = useState(null);
   useEffect(() => {
-    try {
-      const hid = localStorage.getItem('tareas_highlight_task');
-      if (hid) {
+    const trigger = () => {
+      try {
+        const hid = localStorage.getItem('tareas_highlight_task');
+        if (!hid) return;
         setHighlightTaskId(hid);
         localStorage.removeItem('tareas_highlight_task');
-        // Scroll to task after mount
+        // Scroll to task después de pintar
         setTimeout(() => {
           const el = document.getElementById('task-row-' + hid);
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 200);
-        // Clear highlight after 3 seconds
         setTimeout(() => setHighlightTaskId(null), 3000);
-      }
-    } catch {}
+      } catch {}
+    };
+    trigger(); // primera carga
+    window.addEventListener('tareas:gotoTask', trigger);
+    return () => window.removeEventListener('tareas:gotoTask', trigger);
   }, []);
 
   // Dependency checking (FIX 5)

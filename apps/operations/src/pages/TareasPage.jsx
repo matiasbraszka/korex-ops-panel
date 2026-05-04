@@ -25,6 +25,14 @@ export default function TareasPage() {
     try { localStorage.setItem(VIEW_KEY, view); } catch {}
   }, [view]);
 
+  // Si llega un evento de "ir a tarea" (desde el SearchBar global), forzar vista 'lista'.
+  // TasksPage por su lado escucha el mismo evento para hacer scroll + highlight.
+  useEffect(() => {
+    const handler = () => setView('lista');
+    window.addEventListener('tareas:gotoTask', handler);
+    return () => window.removeEventListener('tareas:gotoTask', handler);
+  }, []);
+
   // Called from TimelineView when user clicks a task title.
   // Switches to Lista view with the task's client pre-filtered,
   // and stores the task id so ListaView can highlight/scroll to it.
