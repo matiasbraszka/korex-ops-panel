@@ -197,11 +197,18 @@ function InformesView({ openCreateInforme }) {
                       );
                     })()}
                   </div>
-                  {/* Preview: primer avance */}
+                  {/* Preview: si hay múltiples avances, mostrar cantidad + primer texto.
+                      Si hay uno solo, mostrar el texto. Antes mostraba solo el primero
+                      sin indicar que había más → daba la falsa impresión de que se había
+                      cargado uno solo. */}
                   <div className="text-[12px] text-gray-600 mt-1 truncate">
+                    {items.length > 1 && (
+                      <span className="font-semibold text-gray-800 mr-1">{items.length} avances ·</span>
+                    )}
                     {items.length > 0 ? (items[0].text || '—') : (r.progress_today || '—')}
                   </div>
-                  {/* Chips de cliente */}
+                  {/* Chips de cliente — render TODOS, con fallback si el cliente fue
+                      eliminado/archivado para no esconder avances. */}
                   <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                     {items.map((p, i) => {
                       if (p.client_id === null) {
@@ -212,10 +219,10 @@ function InformesView({ openCreateInforme }) {
                         );
                       }
                       const c = clientById[p.client_id];
-                      if (!c) return null;
+                      const label = c?.name || 'Cliente eliminado';
                       return (
-                        <span key={p.client_id} className="text-[10px] text-blue-600 bg-blue-50 rounded-full px-1.5 py-0.5 font-medium">
-                          {c.name}
+                        <span key={p.client_id || ('u_' + i)} className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${c ? 'text-blue-600 bg-blue-50' : 'text-gray-500 bg-gray-100 italic'}`}>
+                          {label}
                         </span>
                       );
                     })}
