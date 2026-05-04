@@ -268,7 +268,7 @@ function MainLayout() {
     { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
-    { id: 'equipo',    label: 'Pulso del equipo', Icon: Sparkles,    path: '/operations/equipo' },
+    { id: 'equipo',    label: 'Accountability',  Icon: Sparkles,    path: '/operations/equipo' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
@@ -307,7 +307,7 @@ function MainLayout() {
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
     llamadas: ['Llamadas', 'Registro de llamadas procesadas por IA'],
-    equipo: ['Pulso del equipo', 'Informes diarios y semanales, bloqueos e ideas'],
+    equipo: ['Accountability', 'Informes diarios y semanales, bloqueos e ideas'],
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],

@@ -528,7 +528,7 @@ export default function EquipoPage() {
       {/* Header */}
       <div>
         <h1 className="text-[20px] font-bold text-gray-800 flex items-center gap-2">
-          <Sparkles size={20} className="text-amber-500" /> Pulso del equipo
+          <Sparkles size={20} className="text-amber-500" /> Accountability
         </h1>
         <p className="text-xs text-gray-400 mt-0.5">
           Informes diarios y semanales, bloqueos abiertos e ideas para mejorar el negocio.
