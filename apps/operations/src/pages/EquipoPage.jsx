@@ -186,6 +186,16 @@ function InformesView({ openCreateInforme }) {
                         <AlertCircle size={10} /> {blockers.length} bloqueo{blockers.length !== 1 ? 's' : ''}
                       </span>
                     )}
+                    {(() => {
+                      const total = items.reduce((acc, p) => acc + (parseInt(p.minutes, 10) || 0), 0);
+                      if (!total) return null;
+                      const label = total < 60 ? `${total} min` : `${Math.floor(total / 60)}h${total % 60 ? ` ${total % 60}m` : ''}`;
+                      return (
+                        <span className="text-[9px] font-semibold rounded-full px-2 py-0.5 bg-gray-100 text-gray-600 inline-flex items-center gap-1">
+                          ⏱ {label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   {/* Preview: primer avance */}
                   <div className="text-[12px] text-gray-600 mt-1 truncate">
@@ -232,23 +242,48 @@ function InformesView({ openCreateInforme }) {
               {expanded && (
                 <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/30 space-y-3">
                   {/* Avances por cliente (formato nuevo) */}
-                  {items.length > 0 && (
-                    <div className="space-y-2">
-                      {items.map((p, i) => {
-                        const isInternal = p.client_id === null;
-                        const c = isInternal ? null : clientById[p.client_id];
-                        const label = isInternal ? 'Korex – Interno' : (c?.name || 'Cliente desconocido');
-                        return (
-                          <div key={i} className="bg-white border border-gray-100 rounded-md p-2.5">
-                            <div className={`text-[10px] font-bold uppercase tracking-wide mb-1 ${isInternal ? 'text-purple-700' : 'text-blue-700'}`}>
-                              {label}
+                  {items.length > 0 && (() => {
+                    const fmtMin = (m) => {
+                      const n = parseInt(m, 10) || 0;
+                      if (!n) return null;
+                      if (n < 60) return `${n} min`;
+                      const h = Math.floor(n / 60);
+                      const r = n % 60;
+                      return r === 0 ? `${h}h` : `${h}h ${r}m`;
+                    };
+                    const total = items.reduce((acc, p) => acc + (parseInt(p.minutes, 10) || 0), 0);
+                    return (
+                      <div className="space-y-2">
+                        {items.map((p, i) => {
+                          const isInternal = p.client_id === null;
+                          const c = isInternal ? null : clientById[p.client_id];
+                          const label = isInternal ? 'Korex – Interno' : (c?.name || 'Cliente desconocido');
+                          const minLabel = fmtMin(p.minutes);
+                          return (
+                            <div key={i} className="bg-white border border-gray-100 rounded-md p-2.5">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <div className={`text-[10px] font-bold uppercase tracking-wide ${isInternal ? 'text-purple-700' : 'text-blue-700'}`}>
+                                  {label}
+                                </div>
+                                {minLabel && (
+                                  <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                    ⏱ {minLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{p.text || '—'}</div>
                             </div>
-                            <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{p.text || '—'}</div>
+                          );
+                        })}
+                        {total > 0 && (
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Tiempo total</span>
+                            <span className="text-[12px] font-bold text-gray-700">{fmtMin(total)}</span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Fallback legacy: si no hay progress_by_client pero sí progress_today, mostrarlo */}
                   {items.length === 0 && r.progress_today && (

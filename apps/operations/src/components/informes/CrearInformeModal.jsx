@@ -83,7 +83,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     setProgressItems(prev => {
       const exists = prev.find(i => i.key === key);
       if (exists) return prev.filter(i => i.key !== key);
-      return [...prev, { key, label, text: '' }];
+      return [...prev, { key, label, text: '', minutes: '' }];
     });
   };
 
@@ -95,6 +95,21 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     setProgressItems(prev => prev.map(i => i.key === key ? { ...i, text } : i));
   };
 
+  // Solo permitir dígitos. Vacío también está OK durante la edición.
+  const updateItemMinutes = (key, raw) => {
+    const onlyDigits = (raw || '').replace(/[^0-9]/g, '');
+    setProgressItems(prev => prev.map(i => i.key === key ? { ...i, minutes: onlyDigits } : i));
+  };
+
+  const totalMinutes = progressItems.reduce((acc, i) => acc + (parseInt(i.minutes, 10) || 0), 0);
+  const fmtMinutes = (m) => {
+    if (!m) return '0 min';
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return r === 0 ? `${h}h` : `${h}h ${r}m`;
+  };
+
   const filteredPickerClients = useMemo(() => {
     const q = pickerSearch.trim().toLowerCase();
     if (!q) return activeClients;
@@ -104,8 +119,9 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
   const isValid = () => {
     if (!currentUser?.id) return false;
     if (progressItems.length === 0) return false;
-    // Cada item debe tener texto
+    // Cada item debe tener texto y minutos > 0 (los minutos van a tabla de DB para análisis)
     if (progressItems.some(i => !i.text.trim())) return false;
+    if (progressItems.some(i => !i.minutes || parseInt(i.minutes, 10) <= 0)) return false;
     if (type === 'daily' && !nextDay.trim()) return false;
     if (hasBlocker && (!blockerDesc.trim() || !blockerImprovement.trim())) return false;
     return true;
@@ -119,6 +135,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       const progressByClient = progressItems.map(i => ({
         client_id: i.key === INTERNAL_KEY ? null : i.key,
         text: i.text.trim(),
+        minutes: parseInt(i.minutes, 10) || 0,
       }));
       const clientIds = progressByClient.filter(p => p.client_id).map(p => p.client_id);
       const workedInternal = progressByClient.some(p => p.client_id === null);
@@ -334,9 +351,31 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                     rows={2}
                     className="w-full border border-gray-200 rounded-md py-1.5 px-2 text-[13px] font-sans outline-none focus:border-blue-400 resize-y bg-white"
                   />
+                  {/* Minutos invertidos en este avance */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-[11px] font-semibold text-gray-600">Tiempo invertido:</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={item.minutes}
+                      onChange={e => updateItemMinutes(item.key, e.target.value)}
+                      placeholder="ej: 45"
+                      className="w-20 border border-gray-200 rounded-md py-1 px-2 text-[13px] font-sans outline-none focus:border-blue-400 bg-white text-right"
+                    />
+                    <span className="text-[11px] text-gray-500">
+                      min{item.minutes && parseInt(item.minutes, 10) >= 60 ? ` · ${fmtMinutes(parseInt(item.minutes, 10))}` : ''}
+                    </span>
+                  </div>
                 </div>
               );
             })}
+            {/* Total */}
+            {totalMinutes > 0 && (
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <span className="text-[11px] text-gray-500">Total del informe:</span>
+                <span className="text-[12px] font-semibold text-gray-700">{fmtMinutes(totalMinutes)}</span>
+              </div>
+            )}
           </div>
         )}
 
