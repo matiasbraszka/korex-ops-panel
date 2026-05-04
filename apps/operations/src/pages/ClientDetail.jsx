@@ -1046,7 +1046,11 @@ export default function ClientDetail({ client: c }) {
       </button>
 
       {(() => {
-        const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id);
+        // En el detalle del cliente solo mostramos llamadas con categoria='cliente'.
+        // Las consultorias/entrenamientos que hicimos PARA su equipo se vinculan al
+        // cliente en DB (queda el rastro), pero no aparecen acá para no ensuciar el
+        // historial 1-a-1 con el cliente.
+        const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id && l.categoria === 'cliente');
         const linksCount = (c.links || []).length;
         const hasAds = c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna');
         const adsActive = c.metaMetrics?.adsActive;
