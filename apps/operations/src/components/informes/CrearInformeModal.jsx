@@ -22,11 +22,12 @@ function fmtDateLabel(dateStr) {
 const INTERNAL_KEY = '__internal__';
 const INTERNAL_LABEL = 'Korex – Interno';
 
-export default function CrearInformeModal({ open, onClose, defaultType = 'daily' }) {
-  const { clients, currentUser, addTeamReport } = useApp();
+export default function CrearInformeModal({ open, onClose, defaultType = 'daily', editingReport = null }) {
+  const { clients, currentUser, addTeamReport, updateTeamReport } = useApp();
+  const isEditing = !!editingReport;
   const [type, setType] = useState(defaultType);
   const [reportDate, setReportDate] = useState(today());
-  // progressItems: [{ key: client_id | INTERNAL_KEY, label: nombre, text: 'qué avanzó' }]
+  // progressItems: [{ key: client_id | INTERNAL_KEY, label: nombre, text: 'qué avanzó', minutes: '' }]
   const [progressItems, setProgressItems] = useState([]);
   const [nextDay, setNextDay] = useState('');
   const [hasBlocker, setHasBlocker] = useState(false);
@@ -38,9 +39,35 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
   const [error, setError] = useState('');
   const pickerRef = useRef(null);
 
-  // Reset al abrir
+  // Reset / prefill al abrir
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (editingReport) {
+      // Modo edición: precargar el form con los datos del informe existente
+      setType(editingReport.report_type || defaultType);
+      setReportDate(editingReport.report_date || today());
+      const items = Array.isArray(editingReport.progress_by_client) ? editingReport.progress_by_client : [];
+      const prefilled = items.map(p => {
+        const isInternal = !p.client_id;
+        if (isInternal) {
+          return { key: INTERNAL_KEY, label: INTERNAL_LABEL, text: p.text || '', minutes: p.minutes != null ? String(p.minutes) : '' };
+        }
+        const c = (clients || []).find(x => x.id === p.client_id);
+        return {
+          key: p.client_id,
+          label: c?.name || 'Cliente eliminado',
+          text: p.text || '',
+          minutes: p.minutes != null ? String(p.minutes) : '',
+        };
+      });
+      setProgressItems(prefilled);
+      setNextDay(editingReport.next_day || '');
+      // Bloqueos no se editan acá (tabla aparte). Si existen quedan tal cual.
+      setHasBlocker(false);
+      setBlockerDesc('');
+      setBlockerImprovement('');
+    } else {
+      // Modo creación: form en blanco
       setType(defaultType);
       setReportDate(defaultType === 'weekly' ? mondayOf(today()) : today());
       setProgressItems([]);
@@ -48,11 +75,11 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       setHasBlocker(false);
       setBlockerDesc('');
       setBlockerImprovement('');
-      setShowClientPicker(false);
-      setPickerSearch('');
-      setError('');
     }
-  }, [open, defaultType]);
+    setShowClientPicker(false);
+    setPickerSearch('');
+    setError('');
+  }, [open, defaultType, editingReport, clients]);
 
   // Cuando cambia el tipo, ajustar la fecha
   useEffect(() => {
@@ -140,6 +167,18 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       const clientIds = progressByClient.filter(p => p.client_id).map(p => p.client_id);
       const workedInternal = progressByClient.some(p => p.client_id === null);
 
+      if (isEditing) {
+        // PATCH solo de los campos editables. user_id/report_type/report_date no se cambian.
+        await updateTeamReport(editingReport.id, {
+          client_ids: clientIds,
+          worked_internal: workedInternal,
+          progress_by_client: progressByClient,
+          next_day: type === 'daily' ? nextDay.trim() : '',
+        });
+        onClose();
+        return;
+      }
+
       const payload = {
         user_id: currentUser.id,
         report_type: type,
@@ -172,9 +211,12 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     setSaving(false);
   };
 
-  const headerLabel = type === 'daily'
-    ? `Informe diario · ${fmtDateLabel(reportDate)}`
-    : `Informe semanal · semana del ${fmtDateLabel(reportDate)}`;
+  const baseLabel = type === 'daily'
+    ? `informe diario · ${fmtDateLabel(reportDate)}`
+    : `informe semanal · semana del ${fmtDateLabel(reportDate)}`;
+  const headerLabel = isEditing
+    ? 'Editar ' + baseLabel
+    : baseLabel.charAt(0).toUpperCase() + baseLabel.slice(1);
 
   return (
     <Modal
@@ -195,40 +237,45 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
             onClick={handleSubmit}
             disabled={!isValid() || saving}
             className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40"
-          >{saving ? 'Guardando...' : 'Guardar ✓'}</button>
+          >{saving ? 'Guardando...' : (isEditing ? 'Guardar cambios ✓' : 'Guardar ✓')}</button>
         </>
       }
     >
       <div className="space-y-4">
-        {/* Tipo */}
-        <div className="flex gap-1.5">
-          {[
-            { key: 'daily', label: 'Diario' },
-            { key: 'weekly', label: 'Semanal' },
-          ].map(t => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setType(t.key)}
-              className={`text-[12px] font-semibold px-3 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
-                type === t.key ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-              }`}
-            >{t.label}</button>
-          ))}
-        </div>
+        {/* Tipo (no editable cuando se edita un informe existente) */}
+        {!isEditing && (
+          <div className="flex gap-1.5">
+            {[
+              { key: 'daily', label: 'Diario' },
+              { key: 'weekly', label: 'Semanal' },
+            ].map(t => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setType(t.key)}
+                className={`text-[12px] font-semibold px-3 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
+                  type === t.key ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                }`}
+              >{t.label}</button>
+            ))}
+          </div>
+        )}
 
-        {/* Fecha */}
-        <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-            {type === 'daily' ? 'Fecha del informe' : 'Lunes de la semana'}
-          </label>
-          <input
-            type="date"
-            value={reportDate}
-            onChange={e => setReportDate(type === 'weekly' ? mondayOf(e.target.value) : e.target.value)}
-            className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400"
-          />
-        </div>
+        {/* Fecha (no editable cuando se edita; cambiar fecha + tipo rompería el unique
+            constraint de "un informe por persona/día/tipo") */}
+        {!isEditing && (
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+              {type === 'daily' ? 'Fecha del informe' : 'Lunes de la semana'}
+            </label>
+            <input
+              type="date"
+              value={reportDate}
+              onChange={e => setReportDate(type === 'weekly' ? mondayOf(e.target.value) : e.target.value)}
+              className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400"
+            />
+          </div>
+        )}
 
         {/* Selector de clientes */}
         <div>
@@ -393,26 +440,29 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           </div>
         )}
 
-        {/* Bloqueo (switch) */}
-        <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">¿Tuviste algún bloqueo?</label>
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => setHasBlocker(false)}
-              className={`text-[12px] font-semibold px-4 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
-                !hasBlocker ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
-              }`}
-            >NO</button>
-            <button
-              type="button"
-              onClick={() => setHasBlocker(true)}
-              className={`text-[12px] font-semibold px-4 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
-                hasBlocker ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-200 hover:border-red-300'
-              }`}
-            >SÍ</button>
+        {/* Bloqueo (switch) — solo cuando se crea un informe nuevo. Los bloqueos
+            se editan/resuelven desde el tab "Bloqueos" porque viven en otra tabla. */}
+        {!isEditing && (
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">¿Tuviste algún bloqueo?</label>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setHasBlocker(false)}
+                className={`text-[12px] font-semibold px-4 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
+                  !hasBlocker ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+                }`}
+              >NO</button>
+              <button
+                type="button"
+                onClick={() => setHasBlocker(true)}
+                className={`text-[12px] font-semibold px-4 py-1.5 rounded-full border cursor-pointer font-sans transition-colors ${
+                  hasBlocker ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-600 border-gray-200 hover:border-red-300'
+                }`}
+              >SÍ</button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Mini-sección de bloqueo */}
         {hasBlocker && (

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText } from 'lucide-react';
+import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TeamAvatar from '../components/TeamAvatar';
 import CrearInformeModal from '../components/informes/CrearInformeModal';
@@ -50,7 +50,7 @@ const IDEA_STATUSES = {
 const IDEA_STATUS_KEYS = ['pending', 'in-progress', 'future', 'implemented', 'discarded'];
 
 // ── sub-vista: Informes ───────────────────────────────────────────────────
-function InformesView({ openCreateInforme }) {
+function InformesView({ openCreateInforme, openEditInforme }) {
   const { teamReports, teamBlockers, teamMembers, clients, currentUser, deleteTeamReport } = useApp();
   const [reportType, setReportType] = useState('daily'); // daily | weekly
   const [userFilter, setUserFilter] = useState('all');
@@ -99,6 +99,8 @@ function InformesView({ openCreateInforme }) {
 
   const canDelete = (report) =>
     currentUser?.id === report.user_id || currentUser?.isAdmin || currentUser?.role === 'COO';
+  // Mismo criterio que canDelete: el dueño del informe o un admin/COO.
+  const canEdit = canDelete;
 
   return (
     <div className="space-y-3">
@@ -235,6 +237,13 @@ function InformesView({ openCreateInforme }) {
                   >
                     cargado {fmtRelative(r.created_at)}
                   </span>
+                  {canEdit(r) && (
+                    <button
+                      onClick={e => { e.stopPropagation(); openEditInforme(r); }}
+                      className="p-1.5 text-gray-400 hover:text-white hover:bg-blue-500 bg-transparent border-none cursor-pointer rounded-md transition-colors"
+                      title="Editar"
+                    ><Pencil size={14} /></button>
+                  )}
                   {canDelete(r) && (
                     <button
                       onClick={e => { e.stopPropagation(); handleDelete(r.id); }}
@@ -542,12 +551,25 @@ export default function EquipoPage() {
   const [tab, setTab] = useState('informes'); // informes | bloqueos | ideas
   const [creatingInforme, setCreatingInforme] = useState(false);
   const [createInformeType, setCreateInformeType] = useState('daily');
+  const [editingInforme, setEditingInforme] = useState(null);
   const [creatingIdea, setCreatingIdea] = useState(false);
   const [editingIdea, setEditingIdea] = useState(null);
 
   const openCreateInforme = (type = 'daily') => {
+    setEditingInforme(null);
     setCreateInformeType(type);
     setCreatingInforme(true);
+  };
+
+  const openEditInforme = (report) => {
+    setEditingInforme(report);
+    setCreateInformeType(report.report_type || 'daily');
+    setCreatingInforme(true);
+  };
+
+  const closeInforme = () => {
+    setCreatingInforme(false);
+    setEditingInforme(null);
   };
 
   const openCreateIdea = () => {
@@ -598,15 +620,16 @@ export default function EquipoPage() {
       </div>
 
       {/* Body por tab */}
-      {tab === 'informes' && <InformesView openCreateInforme={openCreateInforme} />}
+      {tab === 'informes' && <InformesView openCreateInforme={openCreateInforme} openEditInforme={openEditInforme} />}
       {tab === 'bloqueos' && <BloqueosList />}
       {tab === 'ideas' && <IdeasView openCreateIdea={openCreateIdea} openEditIdea={openEditIdea} />}
 
       {/* Modales globales */}
       <CrearInformeModal
         open={creatingInforme}
-        onClose={() => setCreatingInforme(false)}
+        onClose={closeInforme}
         defaultType={createInformeType}
+        editingReport={editingInforme}
       />
       <CrearIdeaModal
         open={creatingIdea}

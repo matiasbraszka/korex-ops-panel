@@ -19,7 +19,10 @@ export const supabase = envMissing
 // cuando hay sesión (para que RLS vea auth.uid() correctamente); cae a
 // la anon key solamente si no hay sesión.
 export async function sbFetch(path, opts = {}) {
-  const { headers: extraH, ...restOpts } = opts;
+  // throwOnError: si el request falla (status no-2xx), tira un Error con
+  // el body de la respuesta. Por default sigue siendo "log + return null"
+  // para mantener el comportamiento histórico de los callers existentes.
+  const { headers: extraH, throwOnError, ...restOpts } = opts;
   const { data: { session } } = await supabase.auth.getSession();
   const bearer = session?.access_token || SUPABASE_ANON_KEY;
   const headers = {
@@ -31,7 +34,14 @@ export async function sbFetch(path, opts = {}) {
   };
   const r = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers, ...restOpts });
   if (!r.ok && r.status !== 406) {
-    console.warn('SB error:', r.status, await r.text());
+    const body = await r.text();
+    console.warn('SB error:', r.status, body);
+    if (throwOnError) {
+      const err = new Error(`HTTP ${r.status}: ${body}`);
+      err.status = r.status;
+      err.body = body;
+      throw err;
+    }
     return null;
   }
   if (restOpts.method === 'PATCH' || restOpts.method === 'DELETE' || restOpts.method === 'POST') {

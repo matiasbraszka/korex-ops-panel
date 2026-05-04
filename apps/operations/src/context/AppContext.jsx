@@ -544,6 +544,10 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── CRUD: team_reports + team_blockers (informes del equipo) ──
+  // Importante: pasamos throwOnError:true a sbFetch para que cualquier
+  // fallo del INSERT/PATCH llegue al modal. Antes el fetch tragaba errores
+  // (e.g. unique violation por intentar dos informes del mismo día) y el
+  // panel mostraba la fila en estado local que luego desaparecía al recargar.
   const addTeamReport = useCallback(async (data) => {
     const id = 'tr_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
     const row = {
@@ -562,6 +566,7 @@ export function AppProvider({ children }) {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify(row),
+      throwOnError: true,
     });
     setTeamReports(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
 
@@ -581,6 +586,7 @@ export function AppProvider({ children }) {
         method: 'POST',
         headers: { 'Prefer': 'return=minimal' },
         body: JSON.stringify(blockerRow),
+        throwOnError: true,
       });
       setTeamBlockers(prev => [{ ...blockerRow, created_at: new Date().toISOString() }, ...prev]);
     }
@@ -592,6 +598,7 @@ export function AppProvider({ children }) {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify(fields),
+      throwOnError: true,
     });
     setTeamReports(prev => prev.map(r => r.id === id ? { ...r, ...fields, updated_at: new Date().toISOString() } : r));
   }, []);
