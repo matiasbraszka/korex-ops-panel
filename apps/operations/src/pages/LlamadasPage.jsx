@@ -453,7 +453,12 @@ export default function LlamadasPage() {
           const participantes = Array.isArray(l.participantes) ? l.participantes.join(', ') : '';
 
           return (
-            <div key={l.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div
+              key={l.id}
+              // overflow-hidden solo si NO se está editando el cliente: si está editando, el
+              // dropdown de búsqueda de cliente queda recortado por los bordes redondeados.
+              className={`bg-white border border-gray-200 rounded-xl ${editingClientId === l.id ? '' : 'overflow-hidden'}`}
+            >
               {/* Card header */}
               <div
                 className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
