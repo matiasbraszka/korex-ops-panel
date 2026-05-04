@@ -72,6 +72,11 @@ export function AppProvider({ children }) {
   const [llamadas, setLlamadas] = useState([]);
   // Llamadas pendientes de procesar (inbox)
   const [pendingCallsCount, setPendingCallsCount] = useState(0);
+  // Informes diarios/semanales del equipo (v13)
+  const [teamReports, setTeamReports] = useState([]);
+  const [teamBlockers, setTeamBlockers] = useState([]);
+  // Cajón de ideas (v13)
+  const [ideas, setIdeas] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -538,6 +543,123 @@ export function AppProvider({ children }) {
     setLoomVideos(prev => prev.filter(v => v.id !== id));
   }, []);
 
+  // ── CRUD: team_reports + team_blockers (informes del equipo) ──
+  const addTeamReport = useCallback(async (data) => {
+    const id = 'tr_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      user_id: data.user_id,
+      report_type: data.report_type, // 'daily' | 'weekly'
+      report_date: data.report_date, // YYYY-MM-DD
+      client_ids: data.client_ids || [],
+      worked_internal: !!data.worked_internal,
+      progress_today: data.progress_today || '',
+      next_day: data.next_day || '',
+      weekly_data: data.weekly_data || {},
+    };
+    await sbFetch('team_reports', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+    });
+    setTeamReports(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
+
+    // Si vino bloqueo, lo persisto en team_blockers
+    if (data.blocker && data.blocker.description && data.blocker.needs) {
+      const blockerId = 'bl_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+      const blockerRow = {
+        id: blockerId,
+        report_id: id,
+        user_id: data.user_id,
+        description: data.blocker.description,
+        client_id: data.blocker.client_id || null,
+        needs: data.blocker.needs,
+        resolved: false,
+      };
+      await sbFetch('team_blockers', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify(blockerRow),
+      });
+      setTeamBlockers(prev => [{ ...blockerRow, created_at: new Date().toISOString() }, ...prev]);
+    }
+    return row;
+  }, []);
+
+  const updateTeamReport = useCallback(async (id, fields) => {
+    await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(fields),
+    });
+    setTeamReports(prev => prev.map(r => r.id === id ? { ...r, ...fields, updated_at: new Date().toISOString() } : r));
+  }, []);
+
+  const deleteTeamReport = useCallback(async (id) => {
+    await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setTeamReports(prev => prev.filter(r => r.id !== id));
+    // Los bloqueos vinculados se borran por CASCADE en DB; reflejamos local
+    setTeamBlockers(prev => prev.filter(b => b.report_id !== id));
+  }, []);
+
+  const resolveBlocker = useCallback(async (blockerId) => {
+    const now = new Date().toISOString();
+    const resolvedBy = currentUser?.id || null;
+    await sbFetch('team_blockers?id=eq.' + encodeURIComponent(blockerId), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ resolved: true, resolved_at: now, resolved_by: resolvedBy }),
+    });
+    setTeamBlockers(prev => prev.map(b => b.id === blockerId
+      ? { ...b, resolved: true, resolved_at: now, resolved_by: resolvedBy }
+      : b));
+  }, [currentUser]);
+
+  const unresolveBlocker = useCallback(async (blockerId) => {
+    await sbFetch('team_blockers?id=eq.' + encodeURIComponent(blockerId), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ resolved: false, resolved_at: null, resolved_by: null }),
+    });
+    setTeamBlockers(prev => prev.map(b => b.id === blockerId
+      ? { ...b, resolved: false, resolved_at: null, resolved_by: null }
+      : b));
+  }, []);
+
+  // ── CRUD: ideas (cajón de ideas) ──
+  const addIdea = useCallback(async (data) => {
+    const id = 'idea_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      title: data.title,
+      description: data.description || '',
+      department: data.department,
+      status: data.status || 'pending',
+      author_id: data.author_id,
+    };
+    await sbFetch('ideas', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+    });
+    setIdeas(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
+    return row;
+  }, []);
+
+  const updateIdea = useCallback(async (id, fields) => {
+    await sbFetch('ideas?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(fields),
+    });
+    setIdeas(prev => prev.map(i => i.id === id ? { ...i, ...fields, updated_at: new Date().toISOString() } : i));
+  }, []);
+
+  const deleteIdea = useCallback(async (id) => {
+    await sbFetch('ideas?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setIdeas(prev => prev.filter(i => i.id !== id));
+  }, []);
+
   // ── CRUD: llamadas ──
   const updateLlamada = useCallback(async (id, fields) => {
     await sbFetch('llamadas?id=eq.' + encodeURIComponent(id), {
@@ -644,6 +766,32 @@ export function AppProvider({ children }) {
       try {
         const pending = await sbFetch('llamadas_inbox?processed=eq.false&select=id', { headers: { 'Prefer': 'return=representation' } });
         if (pending && Array.isArray(pending)) setPendingCallsCount(pending.length);
+      } catch (e) { /* silent */ }
+
+      // Informes del equipo (últimos 60 días)
+      try {
+        const sinceDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const reports = await sbFetch(
+          'team_reports?select=*&order=report_date.desc&report_date=gte.' + sinceDate,
+          { headers: { 'Prefer': 'return=representation' } }
+        );
+        if (reports && Array.isArray(reports)) setTeamReports(reports);
+      } catch (e) { /* silent */ }
+
+      // Bloqueos: todos los abiertos + últimos 30 días resueltos
+      try {
+        const sinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const blockers = await sbFetch(
+          'team_blockers?select=*&order=created_at.desc&or=(resolved.eq.false,resolved_at.gte.' + sinceDate + ')',
+          { headers: { 'Prefer': 'return=representation' } }
+        );
+        if (blockers && Array.isArray(blockers)) setTeamBlockers(blockers);
+      } catch (e) { /* silent */ }
+
+      // Cajón de ideas
+      try {
+        const allIdeas = await sbFetch('ideas?select=*&order=created_at.desc', { headers: { 'Prefer': 'return=representation' } });
+        if (allIdeas && Array.isArray(allIdeas)) setIdeas(allIdeas);
       } catch (e) { /* silent */ }
 
       if (sbClients && sbClients.length > 0) {
@@ -955,6 +1103,19 @@ export function AppProvider({ children }) {
     deleteLlamada,
     addLlamadaInbox,
     pendingCallsCount,
+    // Informes del equipo (v13)
+    teamReports,
+    teamBlockers,
+    addTeamReport,
+    updateTeamReport,
+    deleteTeamReport,
+    resolveBlocker,
+    unresolveBlocker,
+    // Cajón de ideas (v13)
+    ideas,
+    addIdea,
+    updateIdea,
+    deleteIdea,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];

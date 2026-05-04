@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, FileText, Lightbulb } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -12,6 +12,8 @@ import FeedbackPage from './pages/FeedbackPage';
 import SettingsPage from './pages/SettingsPage';
 import VideosPage from './pages/VideosPage';
 import LlamadasPage from './pages/LlamadasPage';
+import InformesPage from './pages/InformesPage';
+import IdeasPage from './pages/IdeasPage';
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
@@ -267,6 +269,8 @@ function MainLayout() {
     { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
+    { id: 'informes',  label: 'Informes',      Icon: FileText,       path: '/operations/informes' },
+    { id: 'ideas',     label: 'Ideas',         Icon: Lightbulb,      path: '/operations/ideas' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
@@ -305,6 +309,8 @@ function MainLayout() {
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
     llamadas: ['Llamadas', 'Registro de llamadas procesadas por IA'],
+    informes: ['Informes', 'Informes diarios y semanales del equipo'],
+    ideas: ['Ideas', 'Cajón de ideas del equipo por departamento'],
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
@@ -333,6 +339,8 @@ function MainLayout() {
       <Route path="/operations/clients" element={<ClientsPage />} />
       <Route path="/operations/tasks" element={<TareasPage />} />
       <Route path="/operations/llamadas" element={<LlamadasPage />} />
+      <Route path="/operations/informes" element={<InformesPage />} />
+      <Route path="/operations/ideas" element={<IdeasPage />} />
       <Route path="/operations/videos" element={<VideosPage />} />
       <Route path="/operations/publicidad" element={<PublicidadPage />} />
       <Route path="/operations/feedback" element={<FeedbackPage />} />
