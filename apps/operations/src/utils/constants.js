@@ -44,13 +44,14 @@ export const PRIO_CLIENT = {
 export const TASK_STATUS = {
   backlog:       { label: 'BACKLOG',      color: '#9CA3AF', bg: '#F3F4F6',  icon: '\u25CB' },
   'in-progress': { label: 'EN PROGRESO',  color: '#5B7CF5', bg: '#EEF2FF',  icon: '\u25C9' },
-  'en-revision': { label: 'EN REVISIÓN',  color: '#EAB308', bg: '#FEFCE8',  icon: '\u25C8' },
+  'en-revision': { label: 'EN REVISIÓN',  color: '#EAB308', bg: '#FEFCE8',  icon: '\u25C8', pausesTimer: true },
+  paused:        { label: 'PAUSADA',      color: '#A855F7', bg: '#F5F3FF',  icon: '\u23F8', pausesTimer: true },
   done:          { label: 'COMPLETADA',   color: '#22C55E', bg: '#ECFDF5',  icon: '\u2713' },
-  blocked:       { label: 'BLOQUEADA',    color: '#EF4444', bg: '#FEF2F2',  icon: '\u2715' },
+  blocked:       { label: 'BLOQUEADA',    color: '#EF4444', bg: '#FEF2F2',  icon: '\u2715', pausesTimer: true },
   retrasadas:    { label: 'RETRASADA',    color: '#EF4444', bg: '#FEF2F2',  icon: '\u2298' },
 };
 
-export const TASK_STATUS_ORDER = ['backlog', 'in-progress', 'en-revision', 'done', 'blocked', 'retrasadas'];
+export const TASK_STATUS_ORDER = ['backlog', 'in-progress', 'en-revision', 'paused', 'done', 'blocked', 'retrasadas'];
 
 export const TEAM = [
   { id: 'josem',     name: 'Jose Martin',          role: 'CMO',              color: '#EAB308', initials: 'JM', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },

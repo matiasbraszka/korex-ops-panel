@@ -1,4 +1,4 @@
-import { PROCESS_STEPS, DEFAULT_TASKS_TEMPLATE, PHASES } from './constants';
+import { PROCESS_STEPS, DEFAULT_TASKS_TEMPLATE, PHASES, TASK_STATUS } from './constants';
 
 export function today() {
   // Fecha local en formato YYYY-MM-DD (no UTC). toISOString devuelve UTC
@@ -386,9 +386,15 @@ export function effectiveTime(task, client) {
 
 /**
  * Check if a task's timer should be running.
+ * - 'done' nunca corre (está congelado por completedDate).
+ * - Cualquier estado con `pausesTimer: true` en TASK_STATUS pausa el contador
+ *   (hoy: en-revision, paused, blocked).
+ * - Si tiene dependencias sin terminar, tampoco corre.
  */
 export function isTimerRunning(task, allClientTasks) {
-  if (task.status === 'done' || task.status === 'blocked') return false;
+  if (task.status === 'done') return false;
+  const cfg = TASK_STATUS[task.status];
+  if (cfg && cfg.pausesTimer) return false;
   if (task.dependsOn && task.dependsOn.length > 0) {
     const hasUnmet = task.dependsOn.some(depId => {
       const dep = allClientTasks.find(t => t.id === depId || t.templateId === depId);
