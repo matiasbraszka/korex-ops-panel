@@ -231,7 +231,7 @@ function InformesView({ openCreateInforme }) {
 
               {expanded && (
                 <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/30 space-y-3">
-                  {/* Avances por cliente */}
+                  {/* Avances por cliente (formato nuevo) */}
                   {items.length > 0 && (
                     <div className="space-y-2">
                       {items.map((p, i) => {
@@ -247,6 +247,14 @@ function InformesView({ openCreateInforme }) {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* Fallback legacy: si no hay progress_by_client pero sí progress_today, mostrarlo */}
+                  {items.length === 0 && r.progress_today && (
+                    <div>
+                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Qué avanzó</div>
+                      <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{r.progress_today}</div>
                     </div>
                   )}
 

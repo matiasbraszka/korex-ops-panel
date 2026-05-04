@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { X, ChevronDown, Search, Plus } from 'lucide-react';
+import { X, ChevronDown, Search } from 'lucide-react';
 import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
 import { today } from '../../utils/helpers';
