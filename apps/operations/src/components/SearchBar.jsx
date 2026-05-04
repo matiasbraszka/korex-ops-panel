@@ -3,7 +3,7 @@ import { Search, X, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { PHASES } from '../utils/constants';
-import { currentTask } from '../utils/helpers';
+import { currentTask, isTaskEnabled } from '../utils/helpers';
 
 /**
  * Buscador global. Busca:
@@ -82,20 +82,35 @@ export default function SearchBar() {
     return counts;
   }, [clients, tasks]);
 
+  // Estados de tarea que NO se consideran "activas" (las ocultamos del buscador):
+  // - 'done' / 'blocked' / 'retrasadas' por status explícito
+  // - Tareas no habilitadas por dependencias pendientes (isTaskEnabled === false)
+  const INACTIVE_STATUSES = new Set(['done', 'blocked', 'retrasadas']);
+
   const results = useMemo(() => {
     if (!query.trim()) return { clients: [], tasks: [], phases: [] };
     const q = query.toLowerCase();
     const matches = (s) => (s || '').toLowerCase().includes(q);
+
+    const matchedTasks = (tasks || [])
+      .filter(t => matches(t.title) || matches(t.notes) || matches(t.description) || matches(t.assignee))
+      // Solo tareas activas: ni done/blocked/retrasadas, ni bloqueadas por dependencias
+      .filter(t => !INACTIVE_STATUSES.has(t.status) && isTaskEnabled(t, tasks))
+      .slice(0, 6);
+
+    // Solo fases que tienen al menos un cliente activo en ellas (no fases vacías)
+    const matchedPhases = allPhases
+      .filter(p => matches(p.label) && (clientsByPhase[p.id] || 0) > 0)
+      .slice(0, 5);
+
     return {
       clients: (clients || [])
         .filter(c => matches(c.name) || matches(c.company) || matches(c.service) || matches(c.slackChannel))
         .slice(0, 5),
-      tasks: (tasks || [])
-        .filter(t => matches(t.title) || matches(t.notes) || matches(t.description) || matches(t.assignee))
-        .slice(0, 6),
-      phases: allPhases.filter(p => matches(p.label)).slice(0, 5),
+      tasks: matchedTasks,
+      phases: matchedPhases,
     };
-  }, [query, clients, tasks, allPhases]);
+  }, [query, clients, tasks, allPhases, clientsByPhase]);
 
   const allResults = [
     ...results.phases.map(p => ({ type: 'phase', data: p })),
@@ -211,7 +226,7 @@ export default function SearchBar() {
                     <div className="min-w-0 flex-1">
                       <div className="font-semibold truncate">{p.label}</div>
                       <div className="text-[10px] text-gray-400">
-                        {count === 0 ? 'Sin clientes activos' : `${count} cliente${count !== 1 ? 's' : ''} en esta fase`}
+                        {count} cliente{count !== 1 ? 's' : ''} activo{count !== 1 ? 's' : ''} en esta fase
                       </div>
                     </div>
                   </button>
