@@ -14,11 +14,17 @@ function fmtRelative(dateStr) {
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 }
 
+function fmtAbsolute(dateStr) {
+  if (!dateStr) return '';
+  try {
+    return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: '2-digit' });
+  } catch { return ''; }
+}
+
 export default function BloqueosList() {
-  const { teamBlockers, teamMembers, clients, resolveBlocker, unresolveBlocker } = useApp();
+  const { teamBlockers, teamMembers, resolveBlocker, unresolveBlocker } = useApp();
   const [statusFilter, setStatusFilter] = useState('open'); // open | resolved | all
   const [userFilter, setUserFilter] = useState('all');
-  const [clientFilter, setClientFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -26,10 +32,6 @@ export default function BloqueosList() {
     if (statusFilter === 'open') list = list.filter(b => !b.resolved);
     if (statusFilter === 'resolved') list = list.filter(b => b.resolved);
     if (userFilter !== 'all') list = list.filter(b => b.user_id === userFilter);
-    if (clientFilter !== 'all') {
-      if (clientFilter === '__none__') list = list.filter(b => !b.client_id);
-      else list = list.filter(b => b.client_id === clientFilter);
-    }
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(b =>
@@ -38,19 +40,13 @@ export default function BloqueosList() {
       );
     }
     return list;
-  }, [teamBlockers, statusFilter, userFilter, clientFilter, search]);
+  }, [teamBlockers, statusFilter, userFilter, search]);
 
   const memberById = useMemo(() => {
     const map = {};
     (teamMembers || []).forEach(m => { map[m.id] = m; });
     return map;
   }, [teamMembers]);
-
-  const clientById = useMemo(() => {
-    const map = {};
-    (clients || []).forEach(c => { map[c.id] = c; });
-    return map;
-  }, [clients]);
 
   const usersWithBlockers = useMemo(() => {
     const set = new Set((teamBlockers || []).map(b => b.user_id));
@@ -91,18 +87,6 @@ export default function BloqueosList() {
           </select>
         )}
 
-        <select
-          value={clientFilter}
-          onChange={e => setClientFilter(e.target.value)}
-          className="text-[11px] border border-gray-200 rounded-lg py-1.5 px-2.5 font-sans outline-none focus:border-blue-400 bg-white text-gray-700"
-        >
-          <option value="all">Todos los clientes</option>
-          <option value="__none__">Sin cliente / interno</option>
-          {(clients || []).filter(c => c.status === 'active').map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-
         <div className="relative ml-auto">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -132,7 +116,6 @@ export default function BloqueosList() {
       <div className="space-y-2">
         {filtered.map(b => {
           const author = memberById[b.user_id];
-          const client = b.client_id ? clientById[b.client_id] : null;
           return (
             <div
               key={b.id}
@@ -159,7 +142,7 @@ export default function BloqueosList() {
                     {b.description}
                   </div>
                   <div className="text-[12px] text-gray-600 mt-1">
-                    <span className="font-semibold">Necesita: </span>{b.needs}
+                    <span className="font-semibold">Propuesta de mejora: </span>{b.needs}
                   </div>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     {author && (
@@ -168,17 +151,9 @@ export default function BloqueosList() {
                         {author.name}
                       </span>
                     )}
-                    {client && (
-                      <span className="text-[10px] text-blue-600 bg-blue-50 rounded-full px-1.5 py-0.5 font-medium">
-                        {client.name}
-                      </span>
-                    )}
-                    {!client && b.client_id === null && (
-                      <span className="text-[10px] text-purple-600 bg-purple-50 rounded-full px-1.5 py-0.5 font-medium">
-                        Korex – Interno
-                      </span>
-                    )}
-                    <span className="text-[10px] text-gray-400">{fmtRelative(b.created_at)}</span>
+                    <span className="text-[10px] text-gray-400" title={fmtAbsolute(b.created_at)}>
+                      cargado {fmtRelative(b.created_at)}
+                    </span>
                     {b.resolved && b.resolved_at && (
                       <span className="text-[10px] text-green-600">
                         ✓ resuelto {fmtRelative(b.resolved_at)}

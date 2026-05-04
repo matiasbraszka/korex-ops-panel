@@ -555,6 +555,7 @@ export function AppProvider({ children }) {
       worked_internal: !!data.worked_internal,
       progress_today: data.progress_today || '',
       next_day: data.next_day || '',
+      progress_by_client: data.progress_by_client || [],
       weekly_data: data.weekly_data || {},
     };
     await sbFetch('team_reports', {
