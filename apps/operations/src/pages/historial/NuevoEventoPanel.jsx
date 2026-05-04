@@ -37,9 +37,9 @@ const horaAhora = () => {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-export function NuevoEventoPanel({ open, onClose, onSave, clienteNombre, faseActualClienteId, currentUser, eventoExistente }) {
+export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre, faseActualClienteId, currentUser, eventoExistente }) {
   const vp = useViewport();
-  const { fases, tipos } = useHistorialConfig();
+  const { fases, tipos } = useHistorialConfig(cliente);
   const isEdit = !!eventoExistente;
 
   const [tipo, setTipo] = useState(tipos[0]?.key || 'entregable');

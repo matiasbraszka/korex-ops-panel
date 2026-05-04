@@ -55,9 +55,9 @@ function AuthorChip({ autorUser, autor }) {
   return null;
 }
 
-export function EventCard({ event, showFase = true, onClick, onDelete, onEdit }) {
+export function EventCard({ cliente, event, showFase = true, onClick, onDelete, onEdit }) {
   const vp = useViewport();
-  const { tiposByKey, fasesById } = useHistorialConfig();
+  const { tiposByKey, fasesById } = useHistorialConfig(cliente);
   const isBloqueo = event.tipo === 'bloqueo';
   const t = tiposByKey[event.tipo] || tiposByKey.entregable || { color: T.blue, bg: T.blueBg, label: event.tipo, dot: '•' };
   const fase = fasesById[event.fase];

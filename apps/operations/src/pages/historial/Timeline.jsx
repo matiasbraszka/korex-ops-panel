@@ -25,9 +25,9 @@ function KPICard({ label, value, sub, accent, alert = false, trend }) {
   );
 }
 
-function KPIStrip({ eventos, faseActual, diasProyecto }) {
+function KPIStrip({ cliente, eventos, faseActual, diasProyecto }) {
   const vp = useViewport();
-  const { fases, fasesById, total } = useHistorialConfig();
+  const { fases, fasesById, total } = useHistorialConfig(cliente);
   const cols = vp.mobile ? 2 : (vp.tablet ? 3 : 5);
   const totalEventos = eventos.length;
   const entregables = eventos.filter(e => e.tipo === 'entregable').length;
@@ -47,9 +47,9 @@ function KPIStrip({ eventos, faseActual, diasProyecto }) {
   );
 }
 
-function FaseStepper({ faseActual }) {
+function FaseStepper({ cliente, faseActual }) {
   const vp = useViewport();
-  const { fases, fasesById, total } = useHistorialConfig();
+  const { fases, fasesById, total } = useHistorialConfig(cliente);
   const compact = vp.w < 1100;
   const fase = fasesById[faseActual] || fases[0] || { label: '—', n: 1 };
   const faseActualN = fase.n;
@@ -142,7 +142,7 @@ function BlockerBanner({ eventos }) {
   );
 }
 
-export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento, onEditEvento }) {
+export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento, onEditEvento }) {
   const vp = useViewport();
   const [filtro, setFiltro] = useState('todos');
   const lista = filtro === 'todos' ? eventos : eventos.filter(e => e.tipo === filtro);
@@ -159,8 +159,8 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
 
   return (
     <div style={{ paddingBottom: vp.mobile ? 110 : 24 }}>
-      <KPIStrip eventos={eventos} faseActual={faseActual} diasProyecto={diasProyecto} />
-      <FaseStepper faseActual={faseActual} />
+      <KPIStrip cliente={cliente} eventos={eventos} faseActual={faseActual} diasProyecto={diasProyecto} />
+      <FaseStepper cliente={cliente} faseActual={faseActual} />
       <BlockerBanner eventos={eventos} />
 
       <div style={{
@@ -267,7 +267,7 @@ export function Timeline({ eventos, faseActual, diasProyecto, onGenerarResumen, 
                 </div>
               )}
               <div style={{ position: 'relative', marginBottom: 10 }}>
-                <EventCard event={ev} onDelete={onDeleteEvento} onEdit={onEditEvento} />
+                <EventCard cliente={cliente} event={ev} onDelete={onDeleteEvento} onEdit={onEditEvento} />
               </div>
             </Fragment>
           );

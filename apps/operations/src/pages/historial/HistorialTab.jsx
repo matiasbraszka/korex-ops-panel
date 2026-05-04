@@ -17,7 +17,7 @@ function diasDesdeFecha(iso) {
 }
 
 export function HistorialTab({ cliente }) {
-  const { fases } = useHistorialConfig();
+  const { fases } = useHistorialConfig(cliente);
   const { currentUser } = useApp();
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -87,6 +87,7 @@ export function HistorialTab({ cliente }) {
         }}>Cargando historial…</div>
       ) : (
         <Timeline
+          cliente={cliente}
           eventos={eventos}
           faseActual={faseActualId}
           diasProyecto={diasProyecto}
@@ -100,6 +101,7 @@ export function HistorialTab({ cliente }) {
         open={showPanel}
         onClose={closePanel}
         onSave={handleSaveEvento}
+        cliente={cliente}
         clienteNombre={cliente?.name}
         faseActualClienteId={faseActualId}
         currentUser={currentUser}

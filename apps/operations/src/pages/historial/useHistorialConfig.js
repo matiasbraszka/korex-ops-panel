@@ -21,7 +21,7 @@ function shortFromLabel(label = '') {
   return words[0].slice(0, 8);
 }
 
-export function useHistorialConfig() {
+export function useHistorialConfig(cliente) {
   const { appSettings } = useApp();
 
   return useMemo(() => {
@@ -29,7 +29,26 @@ export function useHistorialConfig() {
       ? appSettings.roadmap_template.phases
       : FALLBACK_ROADMAP_PHASES;
 
-    const fases = [...roadmapPhases]
+    // Aplicar phaseNameOverrides del cliente (renombre de fases default)
+    const overrides = cliente?.phaseNameOverrides || {};
+    const defaults = roadmapPhases.map(p => ({
+      ...p,
+      label: overrides[p.id] || p.label,
+    }));
+
+    // Append fases custom del cliente al final (las que el user agregó para este cliente)
+    const customPhases = Array.isArray(cliente?.customPhases) ? cliente.customPhases : [];
+    const customResolved = customPhases.map((p, i) => ({
+      id: p.id,
+      label: p.label,
+      color: p.color || '#5B7CF5',
+      // siempre van después de las default
+      order: 1000 + (p.order ?? i),
+    }));
+
+    const merged = [...defaults, ...customResolved];
+
+    const fases = merged
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .map((p, i) => ({
         id: p.id,
@@ -53,7 +72,7 @@ export function useHistorialConfig() {
     const tiposByKey = Object.fromEntries(tipos.map(t => [t.key, t]));
 
     return { fases, fasesById, fasesByN, total, tipos, tiposByKey };
-  }, [appSettings?.roadmap_template, appSettings?.historial_event_types]);
+  }, [appSettings?.roadmap_template, appSettings?.historial_event_types, cliente?.customPhases, cliente?.phaseNameOverrides]);
 }
 
 // Devuelve el id de la fase del Roadmap correspondiente al cliente.
