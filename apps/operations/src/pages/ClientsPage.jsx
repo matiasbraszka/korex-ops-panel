@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, Megaphone, MessageSquare, FileText } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { PRIO_CLIENT } from '../utils/constants';
+import { PRIO_CLIENT, PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, fmtDate, clientPill } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
@@ -14,7 +14,7 @@ const CLIENTS_TAB_KEY = 'clientes_current_tab';
 const VALID_TABS = ['lista', 'publicidad'];
 
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel, phase, setPhase } = useApp();
 
   const [tab, setTab] = useState(() => {
     try {
@@ -78,6 +78,23 @@ export default function ClientsPage() {
   if (filter === 'new')         cls = cls.filter(c => (c.priority || 5) === 5);
   if (filter === 'descartados') cls = cls.filter(c => (c.priority || 5) === 6);
 
+  // Filtro por fase actual (set desde el buscador global). 'all' = sin filtro.
+  if (phase && phase !== 'all') cls = cls.filter(c => currentTask(c, tasks)?.phase === phase);
+
+  // Resolver label/color de la fase activa para el pill
+  let phaseInfo = null;
+  if (phase && phase !== 'all') {
+    if (PHASES[phase]) {
+      phaseInfo = { label: PHASES[phase].label, color: PHASES[phase].color };
+    } else {
+      // Buscar en customPhases de cualquier cliente
+      for (const c of clients) {
+        const p = (c.customPhases || []).find(x => x.id === phase);
+        if (p) { phaseInfo = { label: p.label, color: p.color }; break; }
+      }
+    }
+  }
+
   let lastPrio = null;
 
   return (
@@ -128,6 +145,22 @@ export default function ClientsPage() {
           </button>
         ))}
       </div>
+
+      {/* Pill de filtro por fase (activado desde el buscador global) */}
+      {phaseInfo && (
+        <div className="mb-3 -mt-1 flex items-center gap-2">
+          <span className="text-[11px] text-text3">Filtrando por fase:</span>
+          <button
+            onClick={() => setPhase('all')}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 cursor-pointer border-none font-sans hover:opacity-90 transition-opacity"
+            style={{ background: phaseInfo.color + '20', color: phaseInfo.color }}
+            title="Quitar filtro"
+          >
+            {phaseInfo.label}
+            <span className="text-[14px] leading-none">×</span>
+          </button>
+        </div>
+      )}
 
       {/* Client list */}
       {!cls.length && (

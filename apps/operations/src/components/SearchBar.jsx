@@ -1,14 +1,24 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, Layers } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { PHASES } from '../utils/constants';
+import { currentTask } from '../utils/helpers';
 
 /**
- * Buscador global. Busca clientes (por nombre / empresa) y tareas (por titulo).
- * Cmd+K (o Ctrl+K) lo abre desde cualquier pagina.
- * Click en un resultado navega al cliente o a la seccion de tareas del cliente.
+ * Buscador global. Busca:
+ *  - Clientes (por nombre / empresa / servicio / canal de Slack)
+ *  - Tareas (por título / notas / descripción / asignee)
+ *  - Fases (por label, default + customPhases de cualquier cliente)
+ *
+ * Cmd+K (o Ctrl+K) lo abre desde cualquier página.
+ * - Click en cliente → abre el detalle del cliente
+ * - Click en tarea → filtra tareas por cliente y va a Tareas
+ * - Click en fase → filtra clientes por fase actual y va a Clientes
  */
 export default function SearchBar() {
-  const { clients, tasks, setView, setSelectedId, setTaskClientFilter } = useApp();
+  const { clients, tasks, setView, setSelectedId, setTaskClientFilter, setPhase } = useApp();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
@@ -46,20 +56,52 @@ export default function SearchBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const results = useMemo(() => {
-    if (!query.trim()) return { clients: [], tasks: [] };
-    const q = query.toLowerCase();
-    return {
-      clients: clients
-        .filter(c => c.name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q))
-        .slice(0, 5),
-      tasks: tasks
-        .filter(t => t.title?.toLowerCase().includes(q))
-        .slice(0, 5),
-    };
-  }, [query, clients, tasks]);
+  // Catálogo de fases combinado: default PHASES + customPhases de todos los clientes (dedup por id)
+  const allPhases = useMemo(() => {
+    const map = {};
+    Object.entries(PHASES).forEach(([id, v]) => {
+      map[id] = { id, label: v.label, color: v.color };
+    });
+    (clients || []).forEach(c => {
+      (c.customPhases || []).forEach(p => {
+        if (!map[p.id]) map[p.id] = { id: p.id, label: p.label, color: p.color };
+      });
+    });
+    return Object.values(map);
+  }, [clients]);
 
-  const allResults = [...results.clients.map(c => ({ type: 'client', data: c })), ...results.tasks.map(t => ({ type: 'task', data: t }))];
+  // Cuántos clientes activos están en cada fase ahora mismo (para mostrar contador)
+  const clientsByPhase = useMemo(() => {
+    const counts = {};
+    (clients || []).forEach(c => {
+      if (c.status !== 'active') return;
+      const ph = currentTask(c, tasks)?.phase;
+      if (!ph) return;
+      counts[ph] = (counts[ph] || 0) + 1;
+    });
+    return counts;
+  }, [clients, tasks]);
+
+  const results = useMemo(() => {
+    if (!query.trim()) return { clients: [], tasks: [], phases: [] };
+    const q = query.toLowerCase();
+    const matches = (s) => (s || '').toLowerCase().includes(q);
+    return {
+      clients: (clients || [])
+        .filter(c => matches(c.name) || matches(c.company) || matches(c.service) || matches(c.slackChannel))
+        .slice(0, 5),
+      tasks: (tasks || [])
+        .filter(t => matches(t.title) || matches(t.notes) || matches(t.description) || matches(t.assignee))
+        .slice(0, 6),
+      phases: allPhases.filter(p => matches(p.label)).slice(0, 5),
+    };
+  }, [query, clients, tasks, allPhases]);
+
+  const allResults = [
+    ...results.phases.map(p => ({ type: 'phase', data: p })),
+    ...results.clients.map(c => ({ type: 'client', data: c })),
+    ...results.tasks.map(t => ({ type: 'task', data: t })),
+  ];
   const hasResults = allResults.length > 0;
   const showDropdown = open && query.trim().length > 0;
 
@@ -67,9 +109,17 @@ export default function SearchBar() {
     if (item.type === 'client') {
       setSelectedId(item.data.id);
       setView('clients');
-    } else {
+      navigate('/operations/clients');
+    } else if (item.type === 'task') {
       setTaskClientFilter(item.data.clientId);
       setView('tasks');
+      navigate('/operations/tasks');
+    } else if (item.type === 'phase') {
+      // Filtrar clientes activos por fase actual
+      setPhase(item.data.id);
+      setSelectedId(null);
+      setView('clients');
+      navigate('/operations/clients');
     }
     setOpen(false);
     setQuery('');
@@ -93,9 +143,9 @@ export default function SearchBar() {
   // Reset highlight on query change
   useEffect(() => { setHighlightIdx(0); }, [query]);
 
-  // Lookup client name for task results
+  // Lookup helpers
   const clientName = (clientId) => {
-    const c = clients.find(x => x.id === clientId);
+    const c = (clients || []).find(x => x.id === clientId);
     return c ? c.name : '';
   };
 
@@ -111,12 +161,12 @@ export default function SearchBar() {
           onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder="Buscar..."
+          placeholder="Buscar clientes, tareas o fases…"
           className={`bg-transparent border-none outline-none text-[12px] font-sans text-gray-800 flex-1 min-w-0 ${open ? '' : 'max-md:hidden'}`}
         />
         {!open && (
           <span className="text-[10px] text-gray-400 bg-gray-100 border border-gray-200 rounded px-1 py-[1px] font-mono shrink-0 max-md:hidden">
-            {navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}K
+            {navigator.platform?.includes('Mac') ? '⌘' : 'Ctrl'}K
           </span>
         )}
         {open && query && (
@@ -132,16 +182,50 @@ export default function SearchBar() {
 
       {/* Results dropdown */}
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-[400px] overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-[440px] overflow-y-auto">
           {!hasResults && (
             <div className="text-xs text-gray-400 text-center py-6">Sin resultados para "{query}"</div>
           )}
 
-          {results.clients.length > 0 && (
+          {/* Fases */}
+          {results.phases.length > 0 && (
             <div>
+              <div className="text-[10px] font-semibold text-gray-400 uppercase px-3 pt-2.5 pb-1">Fases</div>
+              {results.phases.map((p, i) => {
+                const globalIdx = i;
+                const count = clientsByPhase[p.id] || 0;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`w-full text-left flex items-center gap-2.5 py-2 px-3 text-[12px] cursor-pointer border-none font-sans transition-colors ${highlightIdx === globalIdx ? 'bg-blue-50 text-blue-700' : 'bg-transparent text-gray-800 hover:bg-gray-50'}`}
+                    onClick={() => handleSelect({ type: 'phase', data: p })}
+                    onMouseEnter={() => setHighlightIdx(globalIdx)}
+                  >
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: (p.color || '#6B7280') + '20', color: p.color || '#6B7280' }}
+                    >
+                      <Layers size={12} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold truncate">{p.label}</div>
+                      <div className="text-[10px] text-gray-400">
+                        {count === 0 ? 'Sin clientes activos' : `${count} cliente${count !== 1 ? 's' : ''} en esta fase`}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Clientes */}
+          {results.clients.length > 0 && (
+            <div className={results.phases.length > 0 ? 'border-t border-gray-100' : ''}>
               <div className="text-[10px] font-semibold text-gray-400 uppercase px-3 pt-2.5 pb-1">Clientes</div>
               {results.clients.map((c, i) => {
-                const globalIdx = i;
+                const globalIdx = results.phases.length + i;
                 return (
                   <button
                     key={c.id}
@@ -159,7 +243,11 @@ export default function SearchBar() {
                     )}
                     <div className="min-w-0">
                       <div className="font-semibold truncate">{c.name}</div>
-                      {c.company && <div className="text-[10px] text-gray-400 truncate">{c.company}</div>}
+                      {(c.company || c.service) && (
+                        <div className="text-[10px] text-gray-400 truncate">
+                          {c.company}{c.company && c.service ? ' · ' : ''}{c.service}
+                        </div>
+                      )}
                     </div>
                   </button>
                 );
@@ -167,11 +255,12 @@ export default function SearchBar() {
             </div>
           )}
 
+          {/* Tareas */}
           {results.tasks.length > 0 && (
-            <div className={results.clients.length > 0 ? 'border-t border-gray-100' : ''}>
+            <div className={(results.phases.length + results.clients.length) > 0 ? 'border-t border-gray-100' : ''}>
               <div className="text-[10px] font-semibold text-gray-400 uppercase px-3 pt-2.5 pb-1">Tareas</div>
               {results.tasks.map((t, i) => {
-                const globalIdx = results.clients.length + i;
+                const globalIdx = results.phases.length + results.clients.length + i;
                 return (
                   <button
                     key={t.id}
@@ -180,10 +269,12 @@ export default function SearchBar() {
                     onClick={() => handleSelect({ type: 'task', data: t })}
                     onMouseEnter={() => setHighlightIdx(globalIdx)}
                   >
-                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 text-[11px] bg-gray-100 shrink-0">{'\uD83D\uDDD2'}</span>
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 text-[11px] bg-gray-100 shrink-0">{'🗒'}</span>
                     <div className="min-w-0">
                       <div className="font-medium truncate">{t.title}</div>
-                      <div className="text-[10px] text-gray-400 truncate">{clientName(t.clientId)}</div>
+                      <div className="text-[10px] text-gray-400 truncate">
+                        {clientName(t.clientId)}{t.assignee ? ` · ${t.assignee}` : ''}
+                      </div>
                     </div>
                   </button>
                 );
