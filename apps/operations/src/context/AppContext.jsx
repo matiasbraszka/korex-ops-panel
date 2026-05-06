@@ -740,13 +740,17 @@ export function AppProvider({ children }) {
   // ── Load from Supabase ──
   const loadFromSupabase = useCallback(async () => {
     try {
+      // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
+      // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,meta_metrics';
+      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
-        sbFetch('clients?select=*&order=priority.asc', { headers: { 'Prefer': 'return=representation' } }),
-        sbFetch('tasks?select=*&order=created_at.asc', { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch(`clients?select=${CLIENT_COLS}&order=priority.asc`, { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch(`tasks?select=${TASK_COLS}&order=created_at.asc&limit=2000`, { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('briefings?id=eq.latest&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('report_feedback?select=*&order=created_at.desc&limit=20', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('task_proposals?select=*&order=created_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } }),
-        sbFetch('dashboard_alerts?select=*&dismissed=eq.false&order=days_old.desc', { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch('dashboard_alerts?select=*&dismissed=eq.false&order=days_old.desc&limit=100', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('app_settings?key=eq.global&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('team_members?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } }),
       ]);
@@ -766,7 +770,7 @@ export function AppProvider({ children }) {
 
       // Cargar llamadas procesadas
       try {
-        const calls = await sbFetch('llamadas?select=*&order=fecha.desc.nullslast', { headers: { 'Prefer': 'return=representation' } }).then(r => Array.isArray(r) ? r.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)) : r);
+        const calls = await sbFetch('llamadas?select=*&order=fecha.desc.nullslast&limit=300', { headers: { 'Prefer': 'return=representation' } }).then(r => Array.isArray(r) ? r.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)) : r);
         if (calls && Array.isArray(calls)) setLlamadas(calls);
       } catch (e) { /* silent */ }
 
@@ -798,7 +802,7 @@ export function AppProvider({ children }) {
 
       // Cajón de ideas
       try {
-        const allIdeas = await sbFetch('ideas?select=*&order=created_at.desc', { headers: { 'Prefer': 'return=representation' } });
+        const allIdeas = await sbFetch('ideas?select=*&order=created_at.desc&limit=200', { headers: { 'Prefer': 'return=representation' } });
         if (allIdeas && Array.isArray(allIdeas)) setIdeas(allIdeas);
       } catch (e) { /* silent */ }
 

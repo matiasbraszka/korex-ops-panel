@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Phone, ExternalLink, ChevronDown, ChevronUp, Clock, Users as UsersIcon, Calendar, Search, Trash2, Plus, Loader, TrendingUp } from 'lucide-react';
 import CallDetailExpanded from '../components/CallDetailExpanded';
@@ -43,45 +43,78 @@ export default function LlamadasPage() {
   const [tituloDraft, setTituloDraft] = useState('');
   const [editingClientId, setEditingClientId] = useState(null);
   const [clientSearch, setClientSearch] = useState('');
+  // Paginación incremental — empezamos mostrando 30 y crecemos al hacer click en "Cargar más".
+  // Reduce drásticamente el DOM cuando hay 200+ llamadas.
+  const PAGE = 30;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  // Reset al cambiar filtros para que el "cargar más" siempre arranque desde arriba
+  useEffect(() => { setVisibleCount(PAGE); }, [catFilter, clientFilter, search]);
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
   const source = detectSource(form.url);
 
-  // Filter
-  let filtered = [...(llamadas || [])];
-  if (catFilter !== 'all') filtered = filtered.filter(l => l.categoria === catFilter);
-  if (clientFilter !== 'all') filtered = filtered.filter(l => l.cliente_id === clientFilter);
-  if (search.trim()) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(l => (l.titulo || '').toLowerCase().includes(q) || (l.resumen || '').toLowerCase().includes(q));
-  }
+  // Lookup O(1) por cliente — evita .find() dentro de cada .map()
+  const clientMap = useMemo(() => {
+    const map = {};
+    (clients || []).forEach(c => { map[c.id] = c; });
+    return map;
+  }, [clients]);
 
-  // Aggregate insights from filtered calls
-  const allFeedback = filtered.flatMap(l =>
-    (l.feedback || []).map(fb => ({ ...fb, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha }))
-  );
-  const allProblemas = filtered.flatMap(l =>
-    (l.problemas_detectados || []).map(p => {
-      const text = typeof p === 'string' ? p : p?.text || '';
-      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
-    })
-  );
-  const allObjeciones = filtered.flatMap(l =>
-    (l.objeciones || []).map(o => {
-      const text = typeof o === 'string' ? o : o?.text || '';
-      return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
-    })
-  );
-  const quejas = allFeedback.filter(fb => fb.tipo === 'queja');
-  const mejoras = allFeedback.filter(fb => fb.tipo === 'mejora' || !fb.tipo);
-  const hasInsights = allFeedback.length > 0 || allProblemas.length > 0 || allObjeciones.length > 0;
+  // Filter (memoizado, recalcula solo al cambiar fuente o filtros)
+  const filtered = useMemo(() => {
+    let out = llamadas || [];
+    if (catFilter !== 'all') out = out.filter(l => l.categoria === catFilter);
+    if (clientFilter !== 'all') out = out.filter(l => l.cliente_id === clientFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      out = out.filter(l => (l.titulo || '').toLowerCase().includes(q) || (l.resumen || '').toLowerCase().includes(q));
+    }
+    return out;
+  }, [llamadas, catFilter, clientFilter, search]);
+
+  // Aggregate insights from filtered calls — solo se calcula cuando el panel está abierto
+  const insights = useMemo(() => {
+    if (!showInsights) return { allFeedback: [], allProblemas: [], allObjeciones: [], quejas: [], mejoras: [], hasInsights: false };
+    const allFeedback = filtered.flatMap(l =>
+      (l.feedback || []).map(fb => ({ ...fb, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha }))
+    );
+    const allProblemas = filtered.flatMap(l =>
+      (l.problemas_detectados || []).map(p => {
+        const text = typeof p === 'string' ? p : p?.text || '';
+        return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
+      })
+    );
+    const allObjeciones = filtered.flatMap(l =>
+      (l.objeciones || []).map(o => {
+        const text = typeof o === 'string' ? o : o?.text || '';
+        return { text, llamadaTitulo: l.titulo, clienteId: l.cliente_id, fecha: l.fecha };
+      })
+    );
+    return {
+      allFeedback,
+      allProblemas,
+      allObjeciones,
+      quejas: allFeedback.filter(fb => fb.tipo === 'queja'),
+      mejoras: allFeedback.filter(fb => fb.tipo === 'mejora' || !fb.tipo),
+      hasInsights: allFeedback.length > 0 || allProblemas.length > 0 || allObjeciones.length > 0,
+    };
+  }, [filtered, showInsights]);
+
+  // Conteo barato para mostrar el badge "hay insights" sin agregar todo
+  const hasAnyInsight = useMemo(() =>
+    (llamadas || []).some(l => (l.feedback || []).length || (l.problemas_detectados || []).length || (l.objeciones || []).length),
+  [llamadas]);
+  const { allFeedback, allProblemas, allObjeciones, quejas, mejoras } = insights;
+  const hasInsights = showInsights ? insights.hasInsights : hasAnyInsight;
 
   // Clients that have calls (for filter dropdown)
-  const clientsWithCalls = [...new Set((llamadas || []).map(l => l.cliente_id).filter(Boolean))];
-  const clientOptions = clientsWithCalls.map(id => {
-    const c = clients?.find(cl => cl.id === id);
-    return { id, name: c?.name || id };
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  const clientOptions = useMemo(() => {
+    const ids = new Set();
+    (llamadas || []).forEach(l => { if (l.cliente_id) ids.add(l.cliente_id); });
+    return [...ids]
+      .map(id => ({ id, name: clientMap[id]?.name || id }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [llamadas, clientMap]);
 
   const handleDelete = async (id) => {
     if (!confirm('Eliminar esta llamada?')) return;
@@ -164,7 +197,7 @@ export default function LlamadasPage() {
                   </div>
                   <div className="space-y-1">
                     {quejas.map((fb, i) => {
-                      const clientName = fb.clienteId ? clients?.find(c => c.id === fb.clienteId)?.name : null;
+                      const clientName = fb.clienteId ? clientMap[fb.clienteId]?.name : null;
                       const areaCfg = fb.area === 'marketing' ? { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' }
                         : fb.area === 'producto' ? { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' }
                         : { bg: '#F0FDF4', text: '#166534', label: 'Empresa' };
@@ -195,7 +228,7 @@ export default function LlamadasPage() {
                   </div>
                   <div className="space-y-1">
                     {mejoras.map((fb, i) => {
-                      const clientName = fb.clienteId ? clients?.find(c => c.id === fb.clienteId)?.name : null;
+                      const clientName = fb.clienteId ? clientMap[fb.clienteId]?.name : null;
                       const areaCfg = fb.area === 'marketing' ? { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' }
                         : fb.area === 'producto' ? { bg: '#FDF4FF', text: '#7E22CE', label: 'Producto' }
                         : { bg: '#F0FDF4', text: '#166534', label: 'Empresa' };
@@ -226,7 +259,7 @@ export default function LlamadasPage() {
                   </div>
                   <div className="space-y-1">
                     {allProblemas.map((p, i) => {
-                      const clientName = p.clienteId ? clients?.find(c => c.id === p.clienteId)?.name : null;
+                      const clientName = p.clienteId ? clientMap[p.clienteId]?.name : null;
                       return (
                         <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50">
                           <span className="text-[11px] text-red-400 mt-0.5 shrink-0">•</span>
@@ -446,10 +479,10 @@ export default function LlamadasPage() {
 
       {/* Call cards */}
       <div className="space-y-2">
-        {filtered.map(l => {
+        {filtered.slice(0, visibleCount).map(l => {
           const expanded = expandedId === l.id;
           const cat = CAT_CONFIG[l.categoria] || CAT_CONFIG.equipo;
-          const clientName = l.cliente_id ? clients?.find(c => c.id === l.cliente_id)?.name : null;
+          const clientName = l.cliente_id ? clientMap[l.cliente_id]?.name : null;
           const participantes = Array.isArray(l.participantes) ? l.participantes.join(', ') : '';
 
           return (
@@ -618,6 +651,14 @@ export default function LlamadasPage() {
             </div>
           );
         })}
+        {filtered.length > visibleCount && (
+          <button
+            onClick={() => setVisibleCount(v => v + PAGE)}
+            className="w-full py-2.5 text-[12px] font-semibold text-blue-600 bg-white hover:bg-blue-50 border border-gray-200 rounded-xl cursor-pointer font-sans transition-colors"
+          >
+            Cargar más ({filtered.length - visibleCount} restantes)
+          </button>
+        )}
       </div>
     </div>
   );

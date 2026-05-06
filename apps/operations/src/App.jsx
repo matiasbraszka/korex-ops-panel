@@ -4,15 +4,17 @@ import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, Ch
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
+// ClientsPage queda eager (es la ruta default — evita un flash de Suspense al login).
+// El resto se baja en su propio chunk solo si el usuario entra a esa pestaña.
 import ClientsPage from './pages/ClientsPage';
-import TareasPage from './pages/TareasPage';
-import PublicidadPage from './pages/PublicidadPage';
-import DashboardPage from './pages/DashboardPage';
-import FeedbackPage from './pages/FeedbackPage';
-import SettingsPage from './pages/SettingsPage';
-import VideosPage from './pages/VideosPage';
-import LlamadasPage from './pages/LlamadasPage';
-import EquipoPage from './pages/EquipoPage';
+const TareasPage = lazy(() => import('./pages/TareasPage'));
+const PublicidadPage = lazy(() => import('./pages/PublicidadPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const VideosPage = lazy(() => import('./pages/VideosPage'));
+const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
+const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import { today } from './utils/helpers';
@@ -330,6 +332,7 @@ function MainLayout() {
   // Rutas del modulo Operaciones bajo el prefix /operations. El shell a
   // futuro (Fase 1+) va a agregar mas prefixes como /sales.
   const routes = (
+    <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
     <Routes>
       <Route path="/" element={<Navigate to="/operations/clients" replace />} />
       <Route path="/operations" element={<Navigate to="/operations/clients" replace />} />
@@ -365,6 +368,7 @@ function MainLayout() {
       />
       <Route path="*" element={<div className="text-text3 text-center py-20">Vista no encontrada</div>} />
     </Routes>
+    </Suspense>
   );
 
   return (
