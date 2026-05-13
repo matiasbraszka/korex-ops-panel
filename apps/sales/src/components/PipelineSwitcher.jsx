@@ -28,7 +28,7 @@ export default function PipelineSwitcher({
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen(!open)}
               className="flex items-center gap-1.5 py-1 px-2 -ml-1 rounded-md hover:bg-surface2 transition-colors group">
-        <span className="text-[17px] font-bold leading-tight">{active?.name || 'CRM'}</span>
+        <span className="text-[17px] font-bold leading-tight">{active?.name || 'Sin CRM asignado'}</span>
         <ChevronDown size={14} className="text-text3 group-hover:text-text2 transition-colors mt-0.5" />
       </button>
 

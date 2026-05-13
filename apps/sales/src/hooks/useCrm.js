@@ -112,15 +112,26 @@ export function useCrm() {
     setLoading(true);
     setError(null);
     try {
-      // 1) Asegurar al menos un pipeline (legacy: crea el global compartido)
-      try { await supabase.rpc('ensure_sales_pipeline'); } catch (e) { console.warn('ensure_sales_pipeline:', e.message); }
-      // 2) Listar pipelines visibles + cargar equipo en paralelo
+      // 1) Listar pipelines visibles + cargar equipo en paralelo.
+      //    Nota: NO llamamos a ensure_sales_pipeline. Esa RPC creaba el
+      //    pipeline "global compartido" legacy y hacia que cualquier usuario
+      //    nuevo viera un CRM ajeno (ej: Bogard) como default. Si hace falta
+      //    un CRM, el admin lo crea explicitamente desde el switcher.
       const [list] = await Promise.all([loadPipelines(), loadTeamAndUser()]);
-      // 3) Elegir pipeline activo: ultimo en LS si visible, sino el primero
+      // 2) Elegir pipeline activo. Solo auto-seleccionamos un CRM si el user
+      //    es owner o member explicito. Si la RPC devuelve un CRM por RLS
+      //    amplio (legacy is_shared, etc) y el user no es dueño ni miembro,
+      //    dejamos pipelineId=null para mostrar "Sin CRM asignado".
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const myId = authUser?.id || null;
+      const ownedOrMember = (p) => (
+        p.owner_id === myId || (Array.isArray(p.member_ids) && p.member_ids.includes(myId))
+      );
+      const pickable = (list || []).filter(ownedOrMember);
       let initial = null;
       try { initial = localStorage.getItem(LS_KEY); } catch {}
-      const found = initial && list.find((p) => p.id === initial);
-      const pid = found ? initial : (list[0]?.id || null);
+      const found = initial && pickable.find((p) => p.id === initial);
+      const pid = found ? initial : (pickable[0]?.id || null);
       setPipelineIdState(pid);
       if (pid) await loadPipelineData(pid);
       // 4) Cargar stages de TODOS los pipelines accesibles (para mover leads

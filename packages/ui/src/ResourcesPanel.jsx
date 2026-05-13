@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 // Componente reutilizable de recursos / links categorizados.
 // Usa el mismo diseño que ya tenemos en la ficha del cliente, extraido a
@@ -98,7 +99,7 @@ export default function ResourcesPanel({
                   <div className="space-y-0.5">
                     {grouped[cat].map((link) => (
                       <div key={link.originalIdx}
-                           className="group/link flex items-center gap-2.5 py-1.5 px-2.5 rounded-md hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-colors">
+                           className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-md hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-colors">
                         <span className="text-sm shrink-0">{catInfo.icon}</span>
                         <a href={link.url} target="_blank" rel="noreferrer"
                            className="flex-1 min-w-0 text-[12px] text-gray-800 hover:text-blue-600 no-underline font-sans font-medium truncate">
@@ -106,13 +107,18 @@ export default function ResourcesPanel({
                         </a>
                         <button onClick={() => openEdit(link)}
                                 title="Editar"
-                                className="text-[10px] text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans">
-                          ✏️
+                                aria-label="Editar recurso"
+                                className="shrink-0 text-text3 hover:text-blue hover:bg-blue-bg2 bg-transparent border-none cursor-pointer p-1.5 rounded transition-colors flex items-center justify-center">
+                          <Pencil size={13} />
                         </button>
-                        <button onClick={() => onDelete?.(link)}
+                        <button onClick={() => {
+                                  const label = link.label || link.url;
+                                  if (window.confirm(`¿Eliminar "${label}"? No se puede deshacer.`)) onDelete?.(link);
+                                }}
                                 title="Eliminar"
-                                className="text-[10px] text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer py-1 px-1.5 rounded opacity-0 group-hover/link:opacity-100 transition-opacity font-sans">
-                          ✕
+                                aria-label="Eliminar recurso"
+                                className="shrink-0 text-text3 hover:text-red hover:bg-red-bg bg-transparent border-none cursor-pointer p-1.5 rounded transition-colors flex items-center justify-center">
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     ))}

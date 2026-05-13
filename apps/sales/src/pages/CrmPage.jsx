@@ -380,7 +380,22 @@ export default function CrmPage() {
           dentro de este wrapper, asi NO tapa el topbar (buscador, columnas, etc).
           min-h asegura que el modal tenga espacio aunque el contenido sea chico. */}
       <div className="relative min-h-[calc(100vh-240px)]">
-      {stages.length === 0 ? (
+      {!pipelineId ? (
+        <div className="rounded-lg border border-border bg-white p-8 text-center">
+          <p className="text-sm text-text2 mb-1 font-semibold">Sin CRM asignado</p>
+          <p className="text-[12px] text-text3 mb-4">
+            Todavía no tenés ningún CRM propio. {isAdmin
+              ? 'Creá uno desde el botón "Nuevo CRM".'
+              : 'Pedile a un admin que cree uno y te asigne como miembro.'}
+          </p>
+          {isAdmin && (
+            <button onClick={openNewPipeline}
+                    className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark">
+              + Nuevo CRM
+            </button>
+          )}
+        </div>
+      ) : stages.length === 0 ? (
         <div className="rounded-lg border border-border bg-white p-8 text-center">
           <p className="text-sm text-text2 mb-4">El pipeline no tiene columnas. Pedile al admin que las configure.</p>
           {isAdmin && (

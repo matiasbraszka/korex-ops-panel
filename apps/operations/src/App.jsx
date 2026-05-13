@@ -329,30 +329,43 @@ function MainLayout() {
     setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
   };
 
+  // Fallback al primer area accesible. Asi un user sin Operaciones que cae en
+  // / o /operations/* termina en su area real (Ventas) en vez de ver un
+  // ClientsPage sin permisos.
+  const homePath = canAccessOperations
+    ? '/operations/clients'
+    : (canAccessSales ? '/sales/dashboard' : '/operations/clients');
+  // Guard: si el user NO tiene acceso a operaciones, redirigimos cualquier
+  // /operations/* a su home. Antes solo se gateaba el sidebar y la ruta de
+  // /admin/settings — las rutas /operations/* quedaban abiertas y un vendedor
+  // que llegaba con una URL de operaciones (link compartido o caché) veia
+  // momentaneamente el modulo Clientes/Tareas hasta refrescar.
+  const opsGuarded = (node) => (canAccessOperations ? node : <Navigate to={homePath} replace />);
+
   // Rutas del modulo Operaciones bajo el prefix /operations. El shell a
   // futuro (Fase 1+) va a agregar mas prefixes como /sales.
   const routes = (
     <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
     <Routes>
-      <Route path="/" element={<Navigate to="/operations/clients" replace />} />
-      <Route path="/operations" element={<Navigate to="/operations/clients" replace />} />
-      <Route path="/operations/clients" element={<ClientsPage />} />
-      <Route path="/operations/tasks" element={<TareasPage />} />
-      <Route path="/operations/llamadas" element={<LlamadasPage />} />
-      <Route path="/operations/equipo" element={<EquipoPage />} />
+      <Route path="/" element={<Navigate to={homePath} replace />} />
+      <Route path="/operations" element={<Navigate to={homePath} replace />} />
+      <Route path="/operations/clients" element={opsGuarded(<ClientsPage />)} />
+      <Route path="/operations/tasks" element={opsGuarded(<TareasPage />)} />
+      <Route path="/operations/llamadas" element={opsGuarded(<LlamadasPage />)} />
+      <Route path="/operations/equipo" element={opsGuarded(<EquipoPage />)} />
       {/* Compat: rutas viejas → /operations/equipo */}
       <Route path="/operations/informes" element={<Navigate to="/operations/equipo" replace />} />
       <Route path="/operations/ideas" element={<Navigate to="/operations/equipo" replace />} />
-      <Route path="/operations/videos" element={<VideosPage />} />
-      <Route path="/operations/publicidad" element={<PublicidadPage />} />
-      <Route path="/operations/feedback" element={<FeedbackPage />} />
-      <Route path="/operations/dashboard" element={<DashboardPage />} />
+      <Route path="/operations/videos" element={opsGuarded(<VideosPage />)} />
+      <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
+      <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
+      <Route path="/operations/dashboard" element={opsGuarded(<DashboardPage />)} />
       {/* Compat: rutas viejas redirigen a /admin/settings. */}
       <Route path="/operations/settings" element={<Navigate to="/admin/settings" replace />} />
       <Route path="/admin/users" element={<Navigate to="/admin/settings" replace />} />
       <Route
         path="/admin/settings"
-        element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to="/operations/clients" replace />}
+        element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to={homePath} replace />}
       />
       <Route
         path="/sales/*"
@@ -362,7 +375,7 @@ function MainLayout() {
               <SalesRoutes />
             </Suspense>
           ) : (
-            <Navigate to="/operations/clients" replace />
+            <Navigate to={homePath} replace />
           )
         }
       />
