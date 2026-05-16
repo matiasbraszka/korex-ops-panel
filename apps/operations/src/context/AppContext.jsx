@@ -116,6 +116,7 @@ export function AppProvider({ children }) {
         step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
         phase_deadlines: c.phaseDeadlines || {},
         links: c.links || [],
+        pending_resources: c.pendingResources || [],
         meta_metrics: c.metaMetrics || null
       })
     });
@@ -163,6 +164,7 @@ export function AppProvider({ children }) {
         step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
         phase_deadlines: c.phaseDeadlines || {},
         links: c.links || [],
+        pending_resources: c.pendingResources || [],
         meta_metrics: c.metaMetrics || null
       }));
       for (let i = 0; i < clientRows.length; i += 10) {
@@ -219,7 +221,12 @@ export function AppProvider({ children }) {
 
   // ── CRUD: Clients ──
   const createClient = useCallback((name, company, service, start, pm, extraFields = {}) => {
-    const c = mkClient(name, company, service, start, pm, clientsRef.current.length, extraFields);
+    // Inyectamos la plantilla configurada de "recursos pendientes" desde
+    // app_settings — asi el cliente nuevo arranca con el checklist listo.
+    const c = mkClient(name, company, service, start, pm, clientsRef.current.length, {
+      ...extraFields,
+      pendingResourcesTemplate: appSettings?.pending_resources_template,
+    });
     const newClients = [...clientsRef.current, c];
     const injected = injectMetaMetrics(newClients);
     setClients(injected);
@@ -742,7 +749,7 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,meta_metrics';
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics';
       const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=priority.asc`, { headers: { 'Prefer': 'return=representation' } }),
@@ -819,6 +826,7 @@ export function AppProvider({ children }) {
           stepNameOverrides: c.step_name_overrides || {}, phaseNameOverrides: c.phase_name_overrides || {},
           phaseDeadlines: c.phase_deadlines || {},
           links: c.links || [],
+          pendingResources: c.pending_resources || [],
           metaMetrics: c.meta_metrics || null
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({

@@ -6,14 +6,15 @@ import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
-import { ResourcesPanel } from '@korex/ui';
+import { ResourcesPanel, PendingResourcesPanel } from '@korex/ui';
+import { buildInitialPendingResources } from '../utils/helpers';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings } = useApp();
   const TEAM = teamMembers || [];
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -1052,11 +1053,14 @@ export default function ClientDetail({ client: c }) {
         // historial 1-a-1 con el cliente.
         const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id && l.categoria === 'cliente');
         const linksCount = (c.links || []).length;
+        const pendingResources = c.pendingResources || [];
+        const pendingResourcesCount = pendingResources.filter(it => !it.done).length;
+        const recursosCount = linksCount + pendingResourcesCount;
         const hasAds = c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna');
         const adsActive = c.metaMetrics?.adsActive;
         const tabs = [
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
-          { key: 'recursos', label: 'Recursos', count: linksCount },
+          { key: 'recursos', label: 'Recursos', count: recursosCount },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'historial', label: 'Historial' },
         ];
@@ -1109,26 +1113,57 @@ export default function ClientDetail({ client: c }) {
               </div>
             )}
 
-            {activeTab === 'recursos' && (
-              <div className="mb-4">
-                <ResourcesPanel
-                  title="Links y recursos"
-                  links={c.links || []}
-                  allowedCategories={CLIENT_RESOURCE_CATEGORIES}
-                  onAdd={(link) => updateClient(c.id, { links: [...(c.links || []), link] })}
-                  onUpdate={(prevLink, patch) => {
-                    const newLinks = (c.links || []).map((l, i) =>
-                      i === prevLink.originalIdx ? { ...l, ...patch } : l,
-                    );
-                    updateClient(c.id, { links: newLinks });
-                  }}
-                  onDelete={(prevLink) => {
-                    const newLinks = (c.links || []).filter((_, i) => i !== prevLink.originalIdx);
-                    updateClient(c.id, { links: newLinks });
-                  }}
-                />
-              </div>
-            )}
+            {activeTab === 'recursos' && (() => {
+              // Si el cliente todavia no tiene pendingResources (creado antes
+              // de esta feature), inicializar desde la plantilla configurada
+              // o el fallback hardcodeado. Solo se "siembra" en memoria — al
+              // primer toggle/edit se persiste a Supabase.
+              const items = (c.pendingResources && c.pendingResources.length > 0)
+                ? c.pendingResources
+                : buildInitialPendingResources(appSettings?.pending_resources_template);
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-start">
+                  <ResourcesPanel
+                    title="Links y recursos"
+                    links={c.links || []}
+                    allowedCategories={CLIENT_RESOURCE_CATEGORIES}
+                    onAdd={(link) => updateClient(c.id, { links: [...(c.links || []), link] })}
+                    onUpdate={(prevLink, patch) => {
+                      const newLinks = (c.links || []).map((l, i) =>
+                        i === prevLink.originalIdx ? { ...l, ...patch } : l,
+                      );
+                      updateClient(c.id, { links: newLinks });
+                    }}
+                    onDelete={(prevLink) => {
+                      const newLinks = (c.links || []).filter((_, i) => i !== prevLink.originalIdx);
+                      updateClient(c.id, { links: newLinks });
+                    }}
+                  />
+                  <PendingResourcesPanel
+                    items={items}
+                    onToggle={(id) => {
+                      const next = items.map((it) => it.id === id ? { ...it, done: !it.done } : it);
+                      updateClient(c.id, { pendingResources: next });
+                    }}
+                    onAdd={({ label, description }) => {
+                      const newItem = {
+                        id: 'pr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                        label, description, done: false,
+                      };
+                      updateClient(c.id, { pendingResources: [...items, newItem] });
+                    }}
+                    onUpdate={(id, patch) => {
+                      const next = items.map((it) => it.id === id ? { ...it, ...patch } : it);
+                      updateClient(c.id, { pendingResources: next });
+                    }}
+                    onDelete={(id) => {
+                      const next = items.filter((it) => it.id !== id);
+                      updateClient(c.id, { pendingResources: next });
+                    }}
+                  />
+                </div>
+              );
+            })()}
 
             {activeTab === 'publicidad' && (
               <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">

@@ -286,7 +286,38 @@ export function clientPill(c, tasks) {
   return { text: 'Pendiente', pillClass: 'pill-gray' };
 }
 
-export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl } = {}) {
+// Lista por defecto de "recursos pendientes" que el cliente nos debe enviar al
+// arrancar. Sirve como fallback cuando el admin todavia no configuro la
+// plantilla en Configuracion. Cada item: { id, label, description }.
+export const DEFAULT_PENDING_RESOURCES = [
+  { id: 'logo',          label: 'Logo en alta resolución',                                 description: 'Versión vectorial (.svg/.ai) o PNG transparente 2000px+.' },
+  { id: 'palette',       label: 'Paleta de colores',                                       description: 'Si no tenés definida, decinos qué colores te gustan o representan tu marca.' },
+  { id: 'typography',    label: 'Tipografía',                                              description: 'Fuente que usás en tu marca o referencias visuales que te gusten.' },
+  { id: 'pro-photos',    label: 'Imágenes profesionales tuyas',                            description: 'Fotos de retrato, en cámara o producción profesional.' },
+  { id: 'lifestyle',     label: 'Imágenes de estilo de vida, viajes, con la familia',     description: 'Fotos reales que muestren tu día a día, lugares y entorno.' },
+  { id: 'corporate',     label: 'Imágenes y videos corporativos',                          description: 'Eventos, escenarios, premios, material general de autoridad.' },
+  { id: 'testimonials',  label: 'Grabación horizontal de mínimo 3 testimonios',            description: 'Para la landing page (producto y/o oportunidad). Horizontales, buena luz y audio.' },
+  { id: 'presentations', label: 'Presentaciones grabadas en YouTube u otra plataforma',    description: 'Charlas, masterclasses o talks tuyos disponibles online.' },
+  { id: 'pdf-company',   label: 'PDF de la empresa, plan de compensación e info corporativa', description: 'Material oficial del producto u oportunidad que representás.' },
+  { id: 'competitors',   label: 'Lista de competidores o referentes',                      description: 'Cuentas, marcas o personas que admires o que sigan tu mismo público.' },
+  { id: 'meta-session',  label: 'Agendar sesión para configurar Meta de FB/IG',           description: 'Coordinar llamada con nuestro equipo para dejar el Business Manager listo.' },
+];
+
+// Crea los "recursos pendientes" iniciales para un cliente nuevo a partir de
+// la plantilla configurada (app_settings.pending_resources_template). Si no
+// hay plantilla, usa DEFAULT_PENDING_RESOURCES. Cada item arranca con
+// done=false y un uid unico para que sea editable/borrable de forma estable.
+export function buildInitialPendingResources(template) {
+  const base = Array.isArray(template) && template.length > 0 ? template : DEFAULT_PENDING_RESOURCES;
+  return base.map((it, i) => ({
+    id: 'pr_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 6),
+    label: it.label || '',
+    description: it.description || '',
+    done: false,
+  }));
+}
+
+export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate } = {}) {
   return {
     id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     name, company, service, startDate: start, pm,
@@ -298,6 +329,8 @@ export function mkClient(name, company, service, start, pm, clientCount = 0, { p
     stepNameOverrides: {}, phaseNameOverrides: {},
     steps: PROCESS_STEPS.map((ps, idx) => ({ status: 'pending', startDate: '', endDate: '', responsible: '', notes: '', dependsOn: ps.dependsOn ? [...ps.dependsOn] : [] })),
     feedback: [],
+    links: [],
+    pendingResources: buildInitialPendingResources(pendingResourcesTemplate),
     history: [{ text: 'Cliente creado', date: start || today(), color: '#5B7CF5' }]
   };
 }
