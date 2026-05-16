@@ -84,11 +84,7 @@ export default function PendingResourcesPanel({
               const done = !!it.done;
               return (
                 <div key={it.id}
-                     className={`group flex items-start gap-2.5 py-2 px-2.5 rounded-md border transition-colors ${
-                       done
-                         ? 'bg-green-50/40 border-green-100'
-                         : 'bg-white border-border hover:bg-surface2/50'
-                     }`}>
+                     className="group flex items-start gap-2.5 py-2 px-2.5 rounded-md border border-border bg-white hover:bg-surface2/50 transition-colors">
                   <button onClick={() => onToggle?.(it.id)}
                           title={done ? 'Marcar como pendiente' : 'Marcar como recibido'}
                           aria-label={done ? 'Marcar como pendiente' : 'Marcar como recibido'}
@@ -99,15 +95,11 @@ export default function PendingResourcesPanel({
                     }
                   </button>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[12.5px] font-semibold leading-tight ${
-                      done ? 'text-text3 line-through' : 'text-text'
-                    }`}>
+                    <div className={`text-[12.5px] font-semibold leading-tight text-text ${done ? 'line-through' : ''}`}>
                       {it.label || <span className="italic text-text3">Sin título</span>}
                     </div>
                     {it.description && (
-                      <div className={`text-[11px] mt-0.5 leading-relaxed ${
-                        done ? 'text-text3/70' : 'text-text3'
-                      }`}>
+                      <div className={`text-[11px] mt-0.5 leading-relaxed text-text3 ${done ? 'line-through' : ''}`}>
                         {it.description}
                       </div>
                     )}
