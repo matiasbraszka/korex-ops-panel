@@ -1,17 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function Modal({ open, onClose, title, children, footer, maxWidth = 480 }) {
+export default function Modal({ open, onClose, title, children, footer, maxWidth = 480, dismissOnOverlay = true, dismissOnEscape = true }) {
   const overlayRef = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !dismissOnEscape) return;
     const handler = (e) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, onClose, dismissOnEscape]);
 
   if (!open) return null;
 
@@ -20,7 +20,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
       ref={overlayRef}
       className="fixed inset-0 z-[200] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      onClick={(e) => { if (dismissOnOverlay && e.target === overlayRef.current) onClose(); }}
     >
       <div
         className="bg-white border border-border rounded-xl w-full max-h-[90vh] overflow-y-auto mx-3"

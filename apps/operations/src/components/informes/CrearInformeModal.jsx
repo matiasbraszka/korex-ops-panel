@@ -39,9 +39,37 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
   const [error, setError] = useState('');
   const pickerRef = useRef(null);
 
+  // Clave del borrador en localStorage. Distinta para creacion vs edicion
+  // (al editar prefiere los datos del informe real, no un borrador viejo).
+  const draftKey = useMemo(() => {
+    if (!currentUser?.id) return null;
+    if (editingReport) return null; // no autosave al editar
+    return `informe_draft__${currentUser.id}__${defaultType}`;
+  }, [currentUser?.id, defaultType, editingReport]);
+
   // Reset / prefill al abrir
   useEffect(() => {
     if (!open) return;
+    // Modo creacion: si hay borrador guardado, lo restauramos antes de empezar
+    if (!editingReport && draftKey) {
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const d = JSON.parse(raw);
+          setType(d.type || defaultType);
+          setReportDate(d.reportDate || (defaultType === 'weekly' ? mondayOf(today()) : today()));
+          setProgressItems(Array.isArray(d.progressItems) ? d.progressItems : []);
+          setNextDay(d.nextDay || '');
+          setHasBlocker(!!d.hasBlocker);
+          setBlockerDesc(d.blockerDesc || '');
+          setBlockerImprovement(d.blockerImprovement || '');
+          setShowClientPicker(false);
+          setPickerSearch('');
+          setError('');
+          return; // listo: el resto del effect no aplica
+        }
+      } catch (e) { /* ignore */ }
+    }
     if (editingReport) {
       // Modo edición: precargar el form con los datos del informe existente
       setType(editingReport.report_type || defaultType);
@@ -86,6 +114,21 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     if (type === 'weekly') setReportDate(prev => mondayOf(prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
+
+  // Autosave del borrador a localStorage en cada cambio (solo creacion).
+  // Se borra explicitamente cuando el guardado en DB sale bien.
+  useEffect(() => {
+    if (!open || !draftKey || editingReport) return;
+    const hasContent =
+      progressItems.length > 0 || nextDay.trim() || blockerDesc.trim() || blockerImprovement.trim();
+    if (!hasContent) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({
+        type, reportDate, progressItems, nextDay, hasBlocker, blockerDesc, blockerImprovement,
+        savedAt: new Date().toISOString(),
+      }));
+    } catch (e) { /* quota / private mode — ignorar */ }
+  }, [open, draftKey, editingReport, type, reportDate, progressItems, nextDay, hasBlocker, blockerDesc, blockerImprovement]);
 
   // Cerrar picker al click afuera
   useEffect(() => {
@@ -199,6 +242,8 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
         };
       }
       await addTeamReport(payload);
+      // Guardado exitoso: limpiar el borrador para que la proxima apertura sea limpia.
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       onClose();
     } catch (e) {
       const msg = (e?.message || '').toLowerCase();
@@ -224,6 +269,8 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       onClose={saving ? () => {} : onClose}
       title={headerLabel}
       maxWidth={580}
+      dismissOnOverlay={false}
+      dismissOnEscape={false}
       footer={
         <>
           <button
