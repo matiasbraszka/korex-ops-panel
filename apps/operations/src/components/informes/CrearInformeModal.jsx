@@ -197,10 +197,23 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     return true;
   };
 
+  // Wrapper de timeout: si la peticion al backend tarda mas de N segundos,
+  // tiramos un error visible en vez de dejar el boton clavado en "Guardando...".
+  // Antes este era el bug que reportaban algunos usuarios.
+  const withTimeout = (promise, ms = 20000) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error('La petición tardó demasiado. Revisá tu conexión y volvé a intentar.')),
+        ms,
+      )),
+    ]);
+
   const handleSubmit = async () => {
     if (!isValid()) return;
     setSaving(true);
     setError('');
+    let savedOk = false;
     try {
       const progressByClient = progressItems.map(i => ({
         client_id: i.key === INTERNAL_KEY ? null : i.key,
@@ -212,13 +225,13 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
 
       if (isEditing) {
         // PATCH solo de los campos editables. user_id/report_type/report_date no se cambian.
-        await updateTeamReport(editingReport.id, {
+        await withTimeout(updateTeamReport(editingReport.id, {
           client_ids: clientIds,
           worked_internal: workedInternal,
           progress_by_client: progressByClient,
           next_day: type === 'daily' ? nextDay.trim() : '',
-        });
-        onClose();
+        }));
+        savedOk = true;
         return;
       }
 
@@ -241,19 +254,24 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           needs: blockerImprovement.trim(), // se reusa la columna `needs` con el nuevo significado "Propuesta de mejora"
         };
       }
-      await addTeamReport(payload);
+      await withTimeout(addTeamReport(payload));
+      savedOk = true;
       // Guardado exitoso: limpiar el borrador para que la proxima apertura sea limpia.
       if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
-      onClose();
     } catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (msg.includes('23505') || msg.includes('unique')) {
         setError('Ya tenés un informe ' + (type === 'daily' ? 'diario' : 'semanal') + ' para esa fecha. Editalo en lugar de duplicarlo.');
+      } else if (msg.includes('tardó demasiado') || msg.includes('timeout')) {
+        setError('La petición tardó demasiado. Tu informe quedó guardado como borrador — revisá la conexión y volvé a intentar.');
       } else {
         setError('Error al guardar: ' + (e?.message || e));
       }
+    } finally {
+      // SIEMPRE liberamos el boton. Si salio bien, ademas cerramos el modal.
+      setSaving(false);
+      if (savedOk) onClose();
     }
-    setSaving(false);
   };
 
   const baseLabel = type === 'daily'
