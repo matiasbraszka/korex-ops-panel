@@ -439,7 +439,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               anchorRef={movePhaseRef}
               items={Object.entries(allPh).map(([k, v]) => ({ label: v.label, icon: '\u25CF', iconColor: v.color, onClick: () => updateTask(t.id, { phase: k, isRoadmapTask: true }) }))}
             />
-            <AddToWeeklyButton taskId={t.id} />
+            <AddToWeeklyButton task={t} />
             <button
               className="text-[11px] w-5 h-5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500 flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); if (confirm('Eliminar esta tarea?')) deleteTask(t.id); }}

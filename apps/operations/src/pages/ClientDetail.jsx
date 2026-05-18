@@ -1058,10 +1058,12 @@ export default function ClientDetail({ client: c }) {
         const recursosCount = linksCount + pendingResourcesCount;
         const hasAds = c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna');
         const adsActive = c.metaMetrics?.adsActive;
+        // Publicidad oculta temporalmente — descomentar la linea de abajo
+        // cuando se decida volver a usar el modulo.
         const tabs = [
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
           { key: 'recursos', label: 'Recursos', count: recursosCount },
-          { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
+          // { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'historial', label: 'Historial' },
         ];
         return (
@@ -1104,7 +1106,7 @@ export default function ClientDetail({ client: c }) {
                           )}
                         </div>
                         {l.resumen && (
-                          <div className="text-[12px] text-text3 mt-1 leading-relaxed">{l.resumen}</div>
+                          <div className="text-[12px] text-text3 mt-1 leading-snug line-clamp-2">{l.resumen}</div>
                         )}
                       </div>
                     ))}

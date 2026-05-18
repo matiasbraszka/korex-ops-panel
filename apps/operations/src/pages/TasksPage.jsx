@@ -432,7 +432,7 @@ export default function TasksPage({ embedded = false }) {
 
           {/* Mi Semana + Delete */}
           <div className="flex items-center justify-end gap-0.5">
-            <AddToWeeklyButton taskId={t.id} />
+            <AddToWeeklyButton task={t} />
             <button className="bg-transparent border-none text-text3 cursor-pointer text-sm py-[2px] rounded opacity-0 group-hover:opacity-100 transition-opacity hover:text-red" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
           </div>
         </div>
@@ -586,7 +586,7 @@ export default function TasksPage({ embedded = false }) {
                   >
                     {isExpanded ? '\u25B2' : '\u25BC'}
                   </button>
-                  <AddToWeeklyButton taskId={t.id} />
+                  <AddToWeeklyButton task={t} />
                   <button className="bg-transparent border-none text-text3 cursor-pointer text-sm p-1" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
                 </div>
               </div>

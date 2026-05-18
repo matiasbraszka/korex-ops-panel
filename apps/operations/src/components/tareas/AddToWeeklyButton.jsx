@@ -1,22 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
-import { CalendarPlus, Check } from 'lucide-react';
+import { ListTodo, Check } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { today } from '../../utils/helpers';
 
-// Boton que agrega una tarea al "to-do list personal" (Mi Semana) en el dia que
-// el usuario elija. Se monta sobre cualquier task row (lista/roadmap).
+// Boton "Agregar a mi To-Do": agrega una tarea a la planificacion personal
+// del usuario (tabla weekly_todos) en el dia que elija.
+//
+// Solo se renderiza si la tarea esta asignada al usuario actual; para los
+// demas miembros no aparece (no tiene sentido planificarse una tarea ajena).
 //
 // Comportamiento:
-//  - Hover/click muestra un popover con accesos rapidos (Hoy, Mañana, Lun
-//    proximo, etc) + un date picker manual.
-//  - Al elegir fecha, llama addWeeklyTodo y muestra checkmark verde 1.5s.
-//  - Si la tarea ya esta en algun dia del usuario, el icono se pinta azul
-//    para indicar "ya en tu semana".
+//  - Click muestra popover con accesos rapidos (Hoy, Mañana, Lunes proximo)
+//    + date picker manual.
+//  - Al elegir fecha llama addWeeklyTodo y muestra check verde 1.5s.
+//  - Si ya esta en algun dia del usuario, el icono se pinta azul y aparece
+//    la opcion "Quitar de mi To-Do".
 //
 // Props:
-//   - taskId: id de la tarea
-//   - size: tamaño del icono (default 13)
-//   - className: clases extra del wrapper
+//   - task: objeto tarea completo (necesitamos assignee para gate)
+//   - size, className: opcionales
 
 const pad = (n) => String(n).padStart(2, '0');
 const fmtIso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -35,8 +37,31 @@ function buildQuickDates() {
   ];
 }
 
-export default function AddToWeeklyButton({ taskId, size = 13, className = '' }) {
-  const { currentUser, weeklyTodos, addWeeklyTodo, removeWeeklyTodo } = useApp();
+export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 14, className = '' }) {
+  const { currentUser, weeklyTodos, addWeeklyTodo, removeWeeklyTodo, teamMembers } = useApp();
+  // Backwards compat: si el caller paso taskId suelto en vez del task entero,
+  // no podemos chequear assignee — en ese caso mostramos el boton de todas
+  // formas (defensivo). El gate solo aplica cuando viene `task` completo.
+  const taskId = task?.id || legacyTaskId;
+  const assignee = task?.assignee;
+
+  // ── Gate: solo render si la tarea esta asignada a mi ──
+  // assignee es un string separado por comas: "Matias, Bogard". Lo comparamos
+  // contra mi name, primer nombre, y el name de mi team_member (en caso de
+  // que difiera ligeramente del profile name).
+  const isAssignedToMe = (() => {
+    if (!task) return true; // sin task obj no podemos gate-ar; permitir
+    if (!assignee) return false;
+    if (!currentUser?.name) return false;
+    const parts = assignee.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const myNames = [currentUser.name.toLowerCase()];
+    const firstName = currentUser.name.split(' ')[0]?.toLowerCase();
+    if (firstName) myNames.push(firstName);
+    const myMember = (teamMembers || []).find((m) => m.id === currentUser.id);
+    if (myMember?.name) myNames.push(myMember.name.toLowerCase());
+    return parts.some((p) => myNames.includes(p));
+  })();
+
   const [open, setOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [customDate, setCustomDate] = useState(today());
@@ -72,13 +97,16 @@ export default function AddToWeeklyButton({ taskId, size = 13, className = '' })
     setOpen(false);
   };
 
+  // Gate: si no es mi tarea, no rendereamos el boton.
+  if (!isAssignedToMe) return null;
+
   const quick = buildQuickDates();
 
   return (
     <div ref={ref} className={`relative inline-block ${className}`} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        title={alreadyIn ? 'Ya está en tu semana — elegí otro día o quitala' : 'Agregar a Mi Semana'}
+        title={alreadyIn ? 'Ya está en tu To-Do — elegí otro día o quitala' : 'Agregar a mi To-Do'}
         onClick={() => setOpen((v) => !v)}
         className={`flex items-center justify-center w-6 h-6 rounded bg-transparent border-none cursor-pointer transition-colors ${
           justAdded
@@ -88,16 +116,16 @@ export default function AddToWeeklyButton({ taskId, size = 13, className = '' })
               : 'text-text3 hover:text-blue hover:bg-blue-50'
         }`}
       >
-        {justAdded ? <Check size={size} strokeWidth={2.5} /> : <CalendarPlus size={size} strokeWidth={alreadyIn ? 2.25 : 1.75} />}
+        {justAdded ? <Check size={size} strokeWidth={2.5} /> : <ListTodo size={size} strokeWidth={alreadyIn ? 2.25 : 1.75} />}
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-border rounded-lg shadow-xl min-w-[200px] overflow-hidden">
           <div className="px-3 py-2 border-b border-border bg-surface2/50">
-            <div className="text-[10.5px] font-bold uppercase tracking-wider text-text3">Agregar a Mi Semana</div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wider text-text3">Agregar a mi To-Do</div>
             {alreadyIn && (
               <div className="text-[10px] text-blue-600 mt-0.5">
-                Ya en tu semana ({myExisting.length} {myExisting.length === 1 ? 'día' : 'días'})
+                Ya en tu To-Do ({myExisting.length} {myExisting.length === 1 ? 'día' : 'días'})
               </div>
             )}
           </div>
@@ -139,7 +167,7 @@ export default function AddToWeeklyButton({ taskId, size = 13, className = '' })
               onClick={handleRemoveAll}
               className="w-full text-[11px] py-1.5 px-3 text-red-500 hover:bg-red-50 cursor-pointer bg-transparent border-0 border-t border-border font-sans"
             >
-              Quitar de Mi Semana
+              Quitar de mi To-Do
             </button>
           )}
         </div>
