@@ -65,14 +65,46 @@ export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 1
   const [open, setOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [customDate, setCustomDate] = useState(today());
+  const [popPos, setPopPos] = useState(null);
   const ref = useRef(null);
+  const triggerRef = useRef(null);
 
   useEffect(() => {
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && ref.current.contains(e.target)) return;
+      // El popover esta en portal/fixed; ignoramos clicks dentro de el via data-attr
+      if (e.target.closest && e.target.closest('[data-todo-popover]')) return;
+      setOpen(false);
     };
     if (open) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Reposicionar el popover (fixed) cuando se abre o cambia el viewport.
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      const popW = 220;
+      const popH = 220; // estimado
+      const margin = 6;
+      // Por defecto: a la derecha del boton, justo debajo
+      let left = r.right - popW;
+      if (left < 8) left = 8;
+      if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+      // Si no entra abajo, abrir hacia arriba
+      let top = r.bottom + margin;
+      if (top + popH > window.innerHeight - 8) top = Math.max(8, r.top - popH - margin);
+      setPopPos({ left, top, width: popW });
+    };
+    reposition();
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
   }, [open]);
 
   // ¿La tarea ya está en mi semana? Lo usamos para pintar el icono distinto.
@@ -105,6 +137,7 @@ export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 1
   return (
     <div ref={ref} className={`relative inline-block ${className}`} onClick={(e) => e.stopPropagation()}>
       <button
+        ref={triggerRef}
         type="button"
         title={alreadyIn ? 'Ya está en tu To-Do — elegí otro día o quitala' : 'Agregar a mi To-Do'}
         onClick={() => setOpen((v) => !v)}
@@ -119,8 +152,12 @@ export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 1
         {justAdded ? <Check size={size} strokeWidth={2.5} /> : <ListTodo size={size} strokeWidth={alreadyIn ? 2.25 : 1.75} />}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-border rounded-lg shadow-xl min-w-[200px] overflow-hidden">
+      {open && popPos && (
+        <div
+          data-todo-popover
+          style={{ position: 'fixed', left: popPos.left, top: popPos.top, width: popPos.width, zIndex: 1000 }}
+          className="bg-white border border-border rounded-lg shadow-xl overflow-hidden"
+        >
           <div className="px-3 py-2 border-b border-border bg-surface2/50">
             <div className="text-[10.5px] font-bold uppercase tracking-wider text-text3">Agregar a mi To-Do</div>
             {alreadyIn && (
