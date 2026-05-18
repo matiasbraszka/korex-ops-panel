@@ -326,7 +326,7 @@ export default function WeeklyTodoView() {
     startAutoScroll(e);
   };
 
-  const handleCardDrop = async (e, targetTodoId, dateStr) => {
+  const handleCardDrop = (e, targetTodoId, dateStr) => {
     e.preventDefault();
     e.stopPropagation();
     if (!dragId || dragId === targetTodoId) { setDragId(null); setDragOverDay(null); setDragOverIdx(null); return; }
@@ -334,26 +334,25 @@ export default function WeeklyTodoView() {
     const todo = weeklyTodos.find(t => t.id === dragId);
     if (!todo) { setDragId(null); return; }
 
-    // Mover al dia del target + reordenar
+    // Reorden local optimista. Calculamos el nuevo array final del dia y solo
+    // disparamos PATCH para los items cuyo (date,position) cambio. Los PATCHs
+    // van en paralelo (no await en serie) — antes esto producia el efecto
+    // "escalera" porque la UI esperaba 1 round-trip por item.
     const dayTodos = [...(todosByDate[dateStr] || [])];
-    // Quitar el dragged del array si ya estaba en este dia
     const filtered = dayTodos.filter(t => t.id !== dragId);
-    // Insertar antes del target
     const targetIdx = filtered.findIndex(t => t.id === targetTodoId);
     const insertIdx = targetIdx >= 0 ? targetIdx : filtered.length;
     filtered.splice(insertIdx, 0, { ...todo, date: dateStr });
 
-    // Persistir cambio de dia + posiciones
-    for (let i = 0; i < filtered.length; i++) {
-      const wt = filtered[i];
-      const changes = {};
-      if (wt.id === dragId && wt.date !== dateStr) changes.date = dateStr;
-      if (wt.position !== i) changes.position = i;
-      if (wt.id === dragId) changes.date = dateStr;
-      if (Object.keys(changes).length > 0 || wt.id === dragId) {
-        await updateWeeklyTodo(wt.id, { date: dateStr, position: i });
+    // Disparar updates en paralelo. updateWeeklyTodo ya hace state update
+    // optimista, asi que el reordenamiento visual es instantaneo.
+    filtered.forEach((wt, i) => {
+      const dateChanged = wt.id === dragId && wt.date !== dateStr;
+      const posChanged = wt.position !== i;
+      if (dateChanged || posChanged) {
+        updateWeeklyTodo(wt.id, { date: dateStr, position: i });
       }
-    }
+    });
 
     setDragId(null);
     setDragOverDay(null);

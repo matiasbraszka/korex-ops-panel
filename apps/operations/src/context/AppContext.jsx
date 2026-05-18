@@ -724,17 +724,19 @@ export function AppProvider({ children }) {
     if (fields.note_text !== undefined) dbFields.note_text = fields.note_text;
     if (fields.note_description !== undefined) dbFields.note_description = fields.note_description;
     if (fields.note_client_id !== undefined) dbFields.note_client_id = fields.note_client_id;
-    await sbFetch('weekly_todos?id=eq.' + encodeURIComponent(todoId), {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify(dbFields)
-    });
     const localFields = { ...fields };
     if (fields.note_done !== undefined) localFields.noteDone = fields.note_done;
     if (fields.note_text !== undefined) localFields.noteText = fields.note_text;
     if (fields.note_description !== undefined) localFields.noteDescription = fields.note_description;
     if (fields.note_client_id !== undefined) localFields.noteClientId = fields.note_client_id;
+    // 1) Update local state INMEDIATAMENTE (optimista). Sin esperar al PATCH.
     setWeeklyTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...localFields } : t));
+    // 2) PATCH en background. Devuelve una promesa por si el caller la quiere awaitear.
+    return sbFetch('weekly_todos?id=eq.' + encodeURIComponent(todoId), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(dbFields)
+    }).catch(e => console.warn('updateWeeklyTodo DB error', e));
   }, []);
 
   // ── Normalize client priority (new 6-level scale) ──
