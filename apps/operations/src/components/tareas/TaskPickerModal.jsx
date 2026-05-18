@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
-import { today, fmtDate, daysBetween } from '../../utils/helpers';
+import { today, fmtDate, daysBetween, getAllPhases } from '../../utils/helpers';
 import Modal from '../Modal';
 import { Plus } from 'lucide-react';
 
@@ -17,12 +17,13 @@ const FILTERS = [
  * Tareas agrupadas por cliente, ordenadas por prioridad del cliente (mas urgente primero).
  */
 export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskIds = new Set(), date }) {
-  const { tasks, clients, currentUser, getPriorityLabel, createTask } = useApp();
+  const { tasks, clients, currentUser, getPriorityLabel, createTask, updateTask } = useApp();
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('todas');
   const [createMode, setCreateMode] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskClientId, setNewTaskClientId] = useState('');
+  const [newTaskPhase, setNewTaskPhase] = useState(''); // '' = sin fase
   const [creating, setCreating] = useState(false);
 
   const nowStr = today();
@@ -121,7 +122,17 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     setCreateMode(false);
     setNewTaskTitle('');
     setNewTaskClientId('');
+    setNewTaskPhase('');
   };
+
+  // Fases disponibles del cliente seleccionado (globales + custom).
+  const phasesForNewClient = useMemo(() => {
+    if (!newTaskClientId) return [];
+    const c = clients.find(cc => cc.id === newTaskClientId);
+    if (!c) return [];
+    const map = getAllPhases(c);
+    return Object.entries(map).map(([id, v]) => ({ id, label: v.label, color: v.color }));
+  }, [newTaskClientId, clients]);
 
   const activeClients = useMemo(
     () => (clients || []).filter(c => c.status === 'active').sort((a, b) => a.name.localeCompare(b.name)),
@@ -135,10 +146,17 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     // Asignada al usuario actual asi tambien aparece como suya en el sistema
     const assignee = currentUser?.name || '';
     const t = createTask(title, newTaskClientId, assignee, 'normal', 'backlog', '', null);
+    // Si el usuario eligio una fase, la aplicamos. Si NO eligio ('Sin fase')
+    // dejamos el default que pone createTask. Marcamos isRoadmapTask=true asi
+    // aparece en el Roadmap del cliente bajo la fase elegida.
+    if (t?.id && newTaskPhase) {
+      updateTask(t.id, { phase: newTaskPhase, isRoadmapTask: true });
+    }
     setCreating(false);
     setCreateMode(false);
     setNewTaskTitle('');
     setNewTaskClientId('');
+    setNewTaskPhase('');
     if (t?.id) onSelect(t.id);
   };
 
@@ -166,13 +184,13 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && newTaskTitle.trim() && newTaskClientId) handleCreateTask();
-                if (e.key === 'Escape') { setCreateMode(false); setNewTaskTitle(''); setNewTaskClientId(''); }
+                if (e.key === 'Escape') { setCreateMode(false); setNewTaskTitle(''); setNewTaskClientId(''); setNewTaskPhase(''); }
               }}
               className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white"
             />
             <select
               value={newTaskClientId}
-              onChange={(e) => setNewTaskClientId(e.target.value)}
+              onChange={(e) => { setNewTaskClientId(e.target.value); setNewTaskPhase(''); }}
               className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white"
             >
               <option value="">Elegir cliente...</option>
@@ -180,10 +198,23 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            {/* Selector de fase: aparece solo cuando hay cliente elegido */}
+            {newTaskClientId && phasesForNewClient.length > 0 && (
+              <select
+                value={newTaskPhase}
+                onChange={(e) => setNewTaskPhase(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white"
+              >
+                <option value="">Sin fase</option>
+                {phasesForNewClient.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => { setCreateMode(false); setNewTaskTitle(''); setNewTaskClientId(''); }}
+                onClick={() => { setCreateMode(false); setNewTaskTitle(''); setNewTaskClientId(''); setNewTaskPhase(''); }}
                 className="py-1.5 px-3 bg-transparent border border-gray-200 text-gray-600 text-[12px] rounded-lg cursor-pointer font-sans hover:bg-gray-50"
               >Cancelar</button>
               <button

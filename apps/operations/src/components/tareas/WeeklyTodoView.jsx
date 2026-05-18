@@ -554,7 +554,7 @@ export default function WeeklyTodoView() {
                               }))}
                           />
 
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditNote(wt)} title="Click para editar">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
                             <div className={`text-[12px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {task.title}
                             </div>
@@ -563,7 +563,7 @@ export default function WeeklyTodoView() {
 
                           <button
                             className="bg-transparent border-none text-gray-300 hover:text-blue-500 cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            onClick={(e) => { e.stopPropagation(); openEditNote(wt); }}
+                            onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
                             title="Editar"
                           >
                             <Pencil size={11} />
@@ -755,7 +755,7 @@ export default function WeeklyTodoView() {
                           }))}
                       />
 
-                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditNote(wt)} title="Click para editar">
+                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(wt)} title="Click para editar">
                         <div className={`text-[14px] font-medium leading-snug ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                           {task.title}
                         </div>
@@ -770,7 +770,7 @@ export default function WeeklyTodoView() {
 
                       <button
                         className="bg-transparent border-none text-gray-300 hover:text-blue-500 cursor-pointer p-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onClick={(e) => { e.stopPropagation(); openEditNote(wt); }}
+                        onClick={(e) => { e.stopPropagation(); openEditor(wt); }}
                         title="Editar"
                       >
                         <Pencil size={12} />
