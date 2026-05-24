@@ -197,6 +197,24 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     return true;
   };
 
+  // Si la validacion falla, devolvemos una lista legible de QUE falta —
+  // antes el boton quedaba mudo y el usuario pensaba que estaba "colgado".
+  const getValidationIssues = () => {
+    const issues = [];
+    if (!currentUser?.id) { issues.push('No hay usuario logueado'); return issues; }
+    if (progressItems.length === 0) { issues.push('Agregá al menos un cliente o "Korex – Interno" para reportar avance.'); return issues; }
+    const sinTexto = progressItems.filter(i => !i.text.trim()).map(i => i.label);
+    if (sinTexto.length) issues.push(`Falta describir el avance en: ${sinTexto.join(', ')}.`);
+    const sinMinutos = progressItems.filter(i => !i.minutes || parseInt(i.minutes, 10) <= 0).map(i => i.label);
+    if (sinMinutos.length) issues.push(`Falta poner los minutos invertidos en: ${sinMinutos.join(', ')}.`);
+    if (type === 'daily' && !nextDay.trim()) issues.push('Falta completar "Qué vas a hacer mañana".');
+    if (hasBlocker) {
+      if (!blockerDesc.trim()) issues.push('Falta describir el bloqueo.');
+      if (!blockerImprovement.trim()) issues.push('Falta la propuesta de mejora del bloqueo.');
+    }
+    return issues;
+  };
+
   // Wrapper de timeout: si la peticion al backend tarda mas de N segundos,
   // tiramos un error visible en vez de dejar el boton clavado en "Guardando...".
   // Antes este era el bug que reportaban algunos usuarios.
@@ -210,7 +228,13 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     ]);
 
   const handleSubmit = async () => {
-    if (!isValid()) return;
+    if (!isValid()) {
+      // Mostrar al usuario QUE le esta faltando — el bug era que el boton
+      // quedaba disabled sin explicar nada y parecia "colgado guardando".
+      const issues = getValidationIssues();
+      setError('No se puede guardar todavía:\n• ' + issues.join('\n• '));
+      return;
+    }
     setSaving(true);
     setError('');
     let savedOk = false;
@@ -300,7 +324,8 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!isValid() || saving}
+            disabled={saving}
+            title={!isValid() && !saving ? 'Hay datos faltantes — clic para ver qué' : undefined}
             className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-semibold rounded-lg border-none cursor-pointer font-sans disabled:opacity-40"
           >{saving ? 'Guardando...' : (isEditing ? 'Guardar cambios ✓' : 'Guardar ✓')}</button>
         </>
@@ -463,21 +488,33 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                     rows={2}
                     className="w-full border border-gray-200 rounded-md py-1.5 px-2 text-[13px] font-sans outline-none focus:border-blue-400 resize-y bg-white"
                   />
-                  {/* Minutos invertidos en este avance */}
-                  <div className="mt-2 flex items-center gap-2">
-                    <label className="text-[11px] font-semibold text-gray-600">Tiempo invertido:</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={item.minutes}
-                      onChange={e => updateItemMinutes(item.key, e.target.value)}
-                      placeholder="ej: 45"
-                      className="w-20 border border-gray-200 rounded-md py-1 px-2 text-[13px] font-sans outline-none focus:border-blue-400 bg-white text-right"
-                    />
-                    <span className="text-[11px] text-gray-500">
-                      min{item.minutes && parseInt(item.minutes, 10) >= 60 ? ` · ${fmtMinutes(parseInt(item.minutes, 10))}` : ''}
-                    </span>
-                  </div>
+                  {/* Minutos invertidos en este avance — borde rojo si falta */}
+                  {(() => {
+                    const minutesEmpty = !item.minutes || parseInt(item.minutes, 10) <= 0;
+                    return (
+                      <div className="mt-2 flex items-center gap-2">
+                        <label className={`text-[11px] font-semibold ${minutesEmpty ? 'text-red-500' : 'text-gray-600'}`}>
+                          Tiempo invertido <span className="text-red-500">*</span>:
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={item.minutes}
+                          onChange={e => updateItemMinutes(item.key, e.target.value)}
+                          placeholder="ej: 45"
+                          className={`w-20 border rounded-md py-1 px-2 text-[13px] font-sans outline-none focus:border-blue-400 bg-white text-right ${
+                            minutesEmpty ? 'border-red-300 bg-red-50/40' : 'border-gray-200'
+                          }`}
+                        />
+                        <span className="text-[11px] text-gray-500">
+                          min{item.minutes && parseInt(item.minutes, 10) >= 60 ? ` · ${fmtMinutes(parseInt(item.minutes, 10))}` : ''}
+                        </span>
+                        {minutesEmpty && (
+                          <span className="text-[10px] text-red-500 font-medium">Obligatorio</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -556,7 +593,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-[12px] rounded-md py-2 px-3">{error}</div>
+          <div className="bg-red-50 border border-red-200 text-red-700 text-[12px] rounded-md py-2 px-3 whitespace-pre-line">{error}</div>
         )}
       </div>
     </Modal>
