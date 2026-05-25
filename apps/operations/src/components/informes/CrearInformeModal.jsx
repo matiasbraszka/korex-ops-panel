@@ -356,14 +356,56 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
         {!isEditing && (
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              {type === 'daily' ? 'Fecha del informe' : 'Lunes de la semana'}
+              {type === 'daily' ? 'Fecha del informe' : 'Semana del informe (siempre arranca un lunes)'}
             </label>
-            <input
-              type="date"
-              value={reportDate}
-              onChange={e => setReportDate(type === 'weekly' ? mondayOf(e.target.value) : e.target.value)}
-              className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400"
-            />
+            {type === 'weekly' ? (
+              (() => {
+                // Lista de Lunes seleccionables: 12 semanas atras + 2 hacia adelante.
+                const todayMon = mondayOf(today());
+                const opts = [];
+                for (let i = -2; i <= 12; i++) {
+                  const [y, m, d] = todayMon.split('-').map(Number);
+                  const dt = new Date(y, m - 1, d);
+                  dt.setDate(dt.getDate() - i * 7);
+                  const pad = (n) => String(n).padStart(2, '0');
+                  const iso = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+                  // Calcular fin de semana (domingo)
+                  const dt2 = new Date(dt); dt2.setDate(dt2.getDate() + 6);
+                  const monthName = dt.toLocaleDateString('es-AR', { month: 'short' });
+                  const sameMonth = dt.getMonth() === dt2.getMonth();
+                  const label = sameMonth
+                    ? `Semana del ${dt.getDate()} al ${dt2.getDate()} de ${monthName} ${dt.getFullYear()}`
+                    : `Semana del ${dt.getDate()} ${dt.toLocaleDateString('es-AR', { month: 'short' })} al ${dt2.getDate()} ${dt2.toLocaleDateString('es-AR', { month: 'short' })} ${dt2.getFullYear()}`;
+                  opts.push({ value: iso, label, isCurrent: iso === todayMon });
+                }
+                // Si reportDate no coincide con ningun lunes (ej: arrastrado de un draft),
+                // forzamos al lunes mas cercano para que el select tenga match.
+                const currentIso = mondayOf(reportDate);
+                if (!opts.some(o => o.value === currentIso)) {
+                  opts.unshift({ value: currentIso, label: 'Semana del ' + fmtDateLabel(currentIso), isCurrent: false });
+                }
+                return (
+                  <select
+                    value={currentIso}
+                    onChange={e => setReportDate(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white cursor-pointer"
+                  >
+                    {opts.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{o.isCurrent ? ' · esta semana' : ''}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()
+            ) : (
+              <input
+                type="date"
+                value={reportDate}
+                onChange={e => setReportDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400"
+              />
+            )}
           </div>
         )}
 
