@@ -158,8 +158,12 @@ export function getStepNameForClient(c, stepIdx) {
 export function getAllPhases(c) {
   const merged = {};
   Object.entries(PHASES).forEach(([k, v]) => {
+    const override = c && c.phaseNameOverrides && c.phaseNameOverrides[k];
+    // Sentinel "__HIDDEN__" = el cliente oculto esa fase global. La omitimos
+    // del mapa para que no aparezca en pickers/dropdowns en ningun lado.
+    if (override === '__HIDDEN__') return;
     merged[k] = {
-      label: (c && c.phaseNameOverrides && c.phaseNameOverrides[k]) || v.label,
+      label: override || v.label,
       color: v.color
     };
   });

@@ -123,6 +123,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     const phaseEnd = allDone && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : null;
     return { phaseKey, phInfo, phaseTasks, totalCount, doneCount, allDone, phaseStart, phaseEnd };
   }).filter(g => {
+      // Fases ocultadas por el usuario (sentinel "__HIDDEN__" en phaseNameOverrides):
+      // se quitan completamente del roadmap.
+      if ((c.phaseNameOverrides || {})[g.phaseKey] === '__HIDDEN__') return false;
+
       // Las fases custom del cliente siempre se muestran — aunque esten vacias o
       // haya filtros activos. Es la unica forma de poder llenarlas recien creadas.
       const isCustomPhase = g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey);
@@ -617,15 +621,16 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                 );
               })()}
               {/* Eliminar fase — solo para fases custom de este cliente */}
-              {(c.customPhases || []).some(cp => cp.id === phaseKey) && (
+              {phaseKey !== '_unphased' && (
                 <button
                   className="ml-auto text-[10px] text-gray-400 bg-transparent border-none cursor-pointer font-sans py-0.5 px-1.5 rounded hover:text-red-500 hover:bg-red-50 opacity-0 group-hover/phase:opacity-100 transition-opacity"
                   onClick={(e) => {
                     e.stopPropagation();
                     const tasksInPhase = clientTasks.filter(t => (t.phase || '_unphased') === phaseKey);
-                    setDeletePhaseConfirm({ phaseKey, label: phInfo.label, color: phInfo.color, taskCount: tasksInPhase.length });
+                    const isCustom = (c.customPhases || []).some(cp => cp.id === phaseKey);
+                    setDeletePhaseConfirm({ phaseKey, label: phInfo.label, color: phInfo.color, taskCount: tasksInPhase.length, isCustom });
                   }}
-                  title="Eliminar fase"
+                  title="Eliminar fase de este cliente"
                 >{'\uD83D\uDDD1'} Eliminar</button>
               )}
             </div>
@@ -816,8 +821,15 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                   const pk = deletePhaseConfirm.phaseKey;
                   const tasksInPhase = clientTasks.filter(t => (t.phase || '_unphased') === pk);
                   tasksInPhase.forEach(t => deleteTask(t.id));
-                  const newCustomPhases = (c.customPhases || []).filter(cp => cp.id !== pk);
-                  updateClient(c.id, { customPhases: newCustomPhases });
+                  if (deletePhaseConfirm.isCustom) {
+                    // Fase custom: borrar de la lista del cliente.
+                    const newCustomPhases = (c.customPhases || []).filter(cp => cp.id !== pk);
+                    updateClient(c.id, { customPhases: newCustomPhases });
+                  } else {
+                    // Fase global: ocultarla solo para este cliente via sentinel.
+                    const newOverrides = { ...(c.phaseNameOverrides || {}), [pk]: '__HIDDEN__' };
+                    updateClient(c.id, { phaseNameOverrides: newOverrides });
+                  }
                   setDeletePhaseConfirm(null);
                 }}
               >{deletePhaseConfirm.taskCount > 0 ? `S\u00ED, eliminar fase y sus ${deletePhaseConfirm.taskCount} tareas` : 'S\u00ED, eliminar fase'}</button>
