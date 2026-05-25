@@ -268,6 +268,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     else if (blocked) { statusIcon = '\uD83D\uDD12'; statusColor = '#9CA3AF'; }
     else if (t.status === 'in-progress') { statusIcon = '\u25CF'; statusColor = '#5B7CF5'; }
     else if (t.status === 'en-revision') { statusIcon = '\u25C8'; statusColor = '#EAB308'; }
+    else if (t.status === 'paused') { statusIcon = '\u23F8'; statusColor = '#A855F7'; }
     else { statusIcon = '\u25CB'; statusColor = '#9CA3AF'; }
 
     const rowBg = t.status === 'in-progress' ? 'bg-blue-50/40' : '';
