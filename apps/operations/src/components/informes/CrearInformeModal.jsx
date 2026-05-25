@@ -360,10 +360,12 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
             </label>
             {type === 'weekly' ? (
               (() => {
-                // Lista de Lunes seleccionables: 12 semanas atras + 2 hacia adelante.
+                // Lista de Lunes seleccionables: esta semana + 12 semanas atras.
+                // No mostramos semanas futuras: un informe semanal se carga sobre
+                // una semana que ya pasaste o esta en curso.
                 const todayMon = mondayOf(today());
                 const opts = [];
-                for (let i = -2; i <= 12; i++) {
+                for (let i = 0; i <= 12; i++) {
                   const [y, m, d] = todayMon.split('-').map(Number);
                   const dt = new Date(y, m - 1, d);
                   dt.setDate(dt.getDate() - i * 7);
