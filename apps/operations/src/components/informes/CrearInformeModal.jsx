@@ -248,13 +248,21 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       const workedInternal = progressByClient.some(p => p.client_id === null);
 
       if (isEditing) {
-        // PATCH solo de los campos editables. user_id/report_type/report_date no se cambian.
-        await withTimeout(updateTeamReport(editingReport.id, {
+        // PATCH de los campos editables. Si el usuario cambio la fecha (cargo
+        // por error en otro dia), tambien la actualizamos. La constraint
+        // (user_id, report_type, report_date) tira unique-violation si ya
+        // hay otro informe en esa fecha — el catch lo muestra al usuario.
+        const patch = {
           client_ids: clientIds,
           worked_internal: workedInternal,
           progress_by_client: progressByClient,
           next_day: type === 'daily' ? nextDay.trim() : '',
-        }));
+        };
+        const newDate = type === 'weekly' ? mondayOf(reportDate) : reportDate;
+        if (newDate && newDate !== editingReport.report_date) {
+          patch.report_date = newDate;
+        }
+        await withTimeout(updateTeamReport(editingReport.id, patch));
         savedOk = true;
         return;
       }
@@ -351,13 +359,13 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           </div>
         )}
 
-        {/* Fecha (no editable cuando se edita; cambiar fecha + tipo rompería el unique
-            constraint de "un informe por persona/día/tipo") */}
-        {!isEditing && (
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-              {type === 'daily' ? 'Fecha del informe' : 'Semana del informe (siempre arranca un lunes)'}
-            </label>
+        {/* Fecha — editable tambien en modo edicion. Si la nueva fecha colisiona
+            con otro informe del mismo tipo, el backend devuelve unique-violation
+            y se muestra el error al usuario. */}
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+            {type === 'daily' ? 'Fecha del informe' : 'Semana del informe (siempre arranca un lunes)'}
+          </label>
             {type === 'weekly' ? (
               (() => {
                 // Lista de Lunes seleccionables: esta semana + 12 semanas atras.
@@ -407,9 +415,8 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                 onChange={e => setReportDate(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400"
               />
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Selector de clientes */}
         <div>
