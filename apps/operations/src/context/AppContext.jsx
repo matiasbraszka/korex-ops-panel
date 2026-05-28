@@ -77,6 +77,8 @@ export function AppProvider({ children }) {
   const [teamBlockers, setTeamBlockers] = useState([]);
   // Cajón de ideas (v13)
   const [ideas, setIdeas] = useState([]);
+  // Notas del equipo (v15) — apuntes ricos compartibles con personas selectivas
+  const [notas, setNotas] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -675,6 +677,47 @@ export function AppProvider({ children }) {
     setIdeas(prev => prev.filter(i => i.id !== id));
   }, []);
 
+  // ── CRUD: notas ──
+  // Tabla `notas` (notas_v1.sql). Mismo patron que ideas: optimistic UI +
+  // POST/PATCH/DELETE contra Supabase. Toda la sanitizacion del body_html
+  // ocurre en el frontend (DOMPurify) antes de llegar aca.
+  const addNota = useCallback(async (data) => {
+    const id = 'nota_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      title: data.title,
+      body_html: data.body_html || '',
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      author_id: data.author_id,
+      assignee_id: data.assignee_id || null,
+      share_with_ids: Array.isArray(data.share_with_ids) ? data.share_with_ids : [],
+      pinned: !!data.pinned,
+    };
+    await sbFetch('notas', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+      throwOnError: true,
+    });
+    setNotas(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
+    return row;
+  }, []);
+
+  const updateNota = useCallback(async (id, fields) => {
+    await sbFetch('notas?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(fields),
+      throwOnError: true,
+    });
+    setNotas(prev => prev.map(n => n.id === id ? { ...n, ...fields, updated_at: new Date().toISOString() } : n));
+  }, []);
+
+  const deleteNota = useCallback(async (id) => {
+    await sbFetch('notas?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setNotas(prev => prev.filter(n => n.id !== id));
+  }, []);
+
   // ── CRUD: llamadas ──
   const updateLlamada = useCallback(async (id, fields) => {
     await sbFetch('llamadas?id=eq.' + encodeURIComponent(id), {
@@ -814,6 +857,15 @@ export function AppProvider({ children }) {
         const allIdeas = await sbFetch('ideas?select=*&order=created_at.desc&limit=200', { headers: { 'Prefer': 'return=representation' } });
         if (allIdeas && Array.isArray(allIdeas)) setIdeas(allIdeas);
       } catch (e) { /* silent */ }
+
+      // Notas del equipo (v15). Cargar todas las visibles; filtrado por
+      // visibilidad ocurre en el frontend (NotasView). Log explicito de
+      // errores para evitar el silent-fail historico que dificultaba
+      // diagnosticar problemas de RLS.
+      try {
+        const allNotas = await sbFetch('notas?select=*&order=updated_at.desc&limit=500', { headers: { 'Prefer': 'return=representation' } });
+        if (allNotas && Array.isArray(allNotas)) setNotas(allNotas);
+      } catch (e) { console.warn('loadNotas error', e); }
 
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
@@ -1138,6 +1190,10 @@ export function AppProvider({ children }) {
     addIdea,
     updateIdea,
     deleteIdea,
+    notas,
+    addNota,
+    updateNota,
+    deleteNota,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];

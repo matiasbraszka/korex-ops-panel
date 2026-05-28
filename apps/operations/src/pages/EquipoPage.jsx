@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil } from 'lucide-react';
+import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, UserCheck, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TeamAvatar from '../components/TeamAvatar';
 import CrearInformeModal from '../components/informes/CrearInformeModal';
 import BloqueosList from '../components/informes/BloqueosList';
 import CrearIdeaModal from '../components/ideas/CrearIdeaModal';
+import CrearNotaModal from '../components/notas/CrearNotaModal';
+import { sanitizeNoteHtml, htmlToPlainText } from '../components/notas/sanitize';
 
 // ── helpers de fecha ──────────────────────────────────────────────────────
 function fmtReportDate(dateStr) {
@@ -546,14 +548,284 @@ function IdeasView({ openCreateIdea, openEditIdea }) {
   );
 }
 
+// ── sub-vista: Notas ──────────────────────────────────────────────────────
+function NotasView({ openCreateNota, openEditNota }) {
+  const { notas, teamMembers, currentUser, updateNota, deleteNota } = useApp();
+  const [search, setSearch] = useState('');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [scopeFilter, setScopeFilter] = useState('all');     // all | mine | assigned | shared
+  const [sortMode, setSortMode] = useState('updated');       // updated | created | title
+  const [expandedId, setExpandedId] = useState(null);
+
+  const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
+  const meId = currentUser?.id;
+
+  const memberById = useMemo(() => {
+    const map = {};
+    (teamMembers || []).forEach(m => { map[m.id] = m; });
+    return map;
+  }, [teamMembers]);
+
+  // Visibilidad: yo veo notas si soy admin, autor, asignado, o estoy en share_with_ids.
+  const visibles = useMemo(() => {
+    return (notas || []).filter(n => {
+      if (isAdmin) return true;
+      if (!meId) return false;
+      if (n.author_id === meId) return true;
+      if (n.assignee_id === meId) return true;
+      if (Array.isArray(n.share_with_ids) && n.share_with_ids.includes(meId)) return true;
+      return false;
+    });
+  }, [notas, isAdmin, meId]);
+
+  const allTags = useMemo(() => {
+    const set = new Set();
+    visibles.forEach(n => (n.tags || []).forEach(t => set.add(t)));
+    return Array.from(set).sort();
+  }, [visibles]);
+
+  const filtered = useMemo(() => {
+    let list = [...visibles];
+    if (tagFilter !== 'all') list = list.filter(n => (n.tags || []).includes(tagFilter));
+    if (scopeFilter === 'mine')     list = list.filter(n => n.author_id === meId);
+    if (scopeFilter === 'assigned') list = list.filter(n => n.assignee_id === meId);
+    if (scopeFilter === 'shared')   list = list.filter(n => Array.isArray(n.share_with_ids) && n.share_with_ids.includes(meId));
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(n =>
+        (n.title || '').toLowerCase().includes(q) ||
+        htmlToPlainText(n.body_html || '').toLowerCase().includes(q) ||
+        (n.tags || []).some(t => t.toLowerCase().includes(q))
+      );
+    }
+    // Sort: pinned siempre arriba, despues por el modo elegido.
+    list.sort((a, b) => {
+      if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+      if (sortMode === 'title') return (a.title || '').localeCompare(b.title || '');
+      if (sortMode === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
+    });
+    return list;
+  }, [visibles, tagFilter, scopeFilter, search, sortMode, meId]);
+
+  const canEditOrDelete = (n) => isAdmin || n.author_id === meId;
+
+  const togglePin = (n) => updateNota(n.id, { pinned: !n.pinned });
+
+  const handleDelete = async (n) => {
+    if (!confirm(`¿Eliminar la nota "${n.title}"?`)) return;
+    await deleteNota(n.id);
+    if (expandedId === n.id) setExpandedId(null);
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Filtros */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
+          {[
+            { key: 'all',      label: 'Todas',       Icon: StickyNote },
+            { key: 'mine',     label: 'Mías',        Icon: UserCheck },
+            { key: 'assigned', label: 'Asignadas a mí', Icon: UserCheck },
+            { key: 'shared',   label: 'Compartidas', Icon: Users },
+          ].map(s => (
+            <button
+              key={s.key}
+              onClick={() => setScopeFilter(s.key)}
+              className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border-none cursor-pointer font-sans transition-colors flex items-center gap-1 ${
+                scopeFilter === s.key ? 'bg-blue-500 text-white' : 'bg-transparent text-gray-500 hover:bg-gray-100'
+              }`}
+            ><s.Icon size={11} /> {s.label}</button>
+          ))}
+        </div>
+
+        {allTags.length > 0 && (
+          <select
+            value={tagFilter}
+            onChange={e => setTagFilter(e.target.value)}
+            className="text-[11px] border border-gray-200 rounded-lg py-1.5 px-2.5 font-sans outline-none focus:border-blue-400 bg-white text-gray-700"
+          >
+            <option value="all">Todos los tags</option>
+            {allTags.map(t => <option key={t} value={t}>#{t}</option>)}
+          </select>
+        )}
+
+        <select
+          value={sortMode}
+          onChange={e => setSortMode(e.target.value)}
+          className="text-[11px] border border-gray-200 rounded-lg py-1.5 px-2.5 font-sans outline-none focus:border-blue-400 bg-white text-gray-700"
+          title="Ordenar"
+        >
+          <option value="updated">Última edición</option>
+          <option value="created">Creación</option>
+          <option value="title">Título A-Z</option>
+        </select>
+
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar título, contenido o tag…"
+            className="text-[11px] border border-gray-200 rounded-lg py-1.5 pl-7 pr-3 font-sans outline-none focus:border-blue-400 bg-white text-gray-700 w-[220px]"
+          />
+        </div>
+
+        <button
+          onClick={() => openCreateNota()}
+          className="ml-auto flex items-center gap-1.5 text-[11px] text-white bg-blue-500 hover:bg-blue-600 border-none rounded-lg py-1.5 px-2.5 cursor-pointer font-sans font-semibold transition-colors"
+        ><Plus size={12} /> Nueva nota</button>
+      </div>
+
+      {/* Empty */}
+      {filtered.length === 0 && (
+        <div className="text-center py-12 bg-white border border-gray-200 rounded-xl">
+          <StickyNote size={32} className="text-gray-300 mx-auto mb-2" />
+          <div className="text-[13px] text-gray-500 font-medium">
+            {(visibles || []).length === 0 ? 'Sin notas todavía.' : 'Sin resultados para estos filtros.'}
+          </div>
+          {(visibles || []).length === 0 && (
+            <div className="text-[11px] text-gray-400 mt-1">Creá la primera nota y compartila con quien quieras.</div>
+          )}
+        </div>
+      )}
+
+      {/* Lista */}
+      <div className="space-y-2">
+        {filtered.map(n => {
+          const author = memberById[n.author_id];
+          const assignee = n.assignee_id ? memberById[n.assignee_id] : null;
+          const shared = (n.share_with_ids || []).map(id => memberById[id]).filter(Boolean);
+          const expanded = expandedId === n.id;
+          const isMine = n.author_id === meId;
+
+          return (
+            <div key={n.id} className={`bg-white border rounded-xl overflow-hidden transition-colors ${n.pinned ? 'border-amber-200 ring-1 ring-amber-100' : 'border-gray-200'}`}>
+              <div
+                className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                onClick={() => setExpandedId(expanded ? null : n.id)}
+              >
+                <div className="shrink-0 mt-0.5">
+                  {n.pinned
+                    ? <Pin size={14} className="text-amber-500" fill="currentColor" />
+                    : <StickyNote size={14} className="text-gray-400" />
+                  }
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-gray-800 truncate">{n.title}</div>
+                  {!expanded && n.body_html && (
+                    <div className="text-[12px] text-gray-500 mt-0.5 truncate">{htmlToPlainText(n.body_html).slice(0, 140)}</div>
+                  )}
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {(n.tags || []).map(t => (
+                      <span key={t} className="text-[10px] bg-blue-50 text-blue-700 font-semibold rounded-full px-1.5 py-0.5">#{t}</span>
+                    ))}
+                    {author && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+                        <TeamAvatar member={{ ...author, avatar: author.avatar_url || author.avatar }} size={14} />
+                        {author.name.split(' ')[0]}
+                      </span>
+                    )}
+                    {assignee && assignee.id !== author?.id && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500" title={`Asignada a ${assignee.name}`}>
+                        <UserCheck size={11} className="text-blue-500" />
+                        → {assignee.name.split(' ')[0]}
+                      </span>
+                    )}
+                    {shared.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-400" title={shared.map(s => s.name).join(', ')}>
+                        <Users size={11} /> {shared.length}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400" title={fmtAbsolute(n.updated_at)}>
+                      editada {fmtRelative(n.updated_at)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="shrink-0 flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                  {canEditOrDelete(n) && (
+                    <button
+                      onClick={() => togglePin(n)}
+                      className={`p-1.5 bg-transparent border-none cursor-pointer rounded-md transition-colors ${n.pinned ? 'text-amber-500 hover:bg-amber-50' : 'text-gray-300 hover:text-amber-500 hover:bg-amber-50'}`}
+                      title={n.pinned ? 'Desfijar' : 'Fijar arriba'}
+                    >{n.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>
+                  )}
+                  {canEditOrDelete(n) && (
+                    <button
+                      onClick={() => openEditNota(n)}
+                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 bg-transparent border-none cursor-pointer rounded-md transition-colors"
+                      title="Editar"
+                    ><Pencil size={13} /></button>
+                  )}
+                  {canEditOrDelete(n) && (
+                    <button
+                      onClick={() => handleDelete(n)}
+                      className="p-1.5 text-gray-400 hover:text-white hover:bg-red-500 bg-transparent border-none cursor-pointer rounded-md transition-colors"
+                      title="Eliminar"
+                    ><Trash2 size={13} /></button>
+                  )}
+                  {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                </div>
+              </div>
+
+              {expanded && (
+                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/30">
+                  {n.body_html ? (
+                    <div
+                      className="rte-content text-[13px] text-gray-700 leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(n.body_html) }}
+                    />
+                  ) : (
+                    <div className="text-[12px] text-gray-400 italic">Sin contenido.</div>
+                  )}
+                  {(shared.length > 0 || assignee) && (
+                    <div className="mt-3 pt-2 border-t border-gray-100 flex items-center gap-3 flex-wrap text-[10.5px] text-gray-500">
+                      {assignee && (
+                        <span className="inline-flex items-center gap-1">
+                          <UserCheck size={11} className="text-blue-500" /> Asignada a <strong className="text-gray-700">{assignee.name}</strong>
+                        </span>
+                      )}
+                      {shared.length > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Users size={11} /> Compartida con: {shared.map(s => s.name.split(' ')[0]).join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Estilos para que el HTML guardado se vea formateado dentro de la card */}
+      <style>{`
+        .rte-content h2 { font-size: 15px; font-weight: 700; margin: 8px 0 4px; color: #111827; }
+        .rte-content h3 { font-size: 13px; font-weight: 700; margin: 6px 0 3px; color: #1F2937; }
+        .rte-content p  { margin: 4px 0; }
+        .rte-content ul, .rte-content ol { padding-left: 22px; margin: 6px 0; }
+        .rte-content li { margin: 2px 0; }
+        .rte-content a  { color: #3B82F6; text-decoration: underline; }
+        .rte-content u  { text-decoration: underline; }
+      `}</style>
+    </div>
+  );
+}
+
 // ── EquipoPage ────────────────────────────────────────────────────────────
 export default function EquipoPage() {
-  const [tab, setTab] = useState('informes'); // informes | bloqueos | ideas
+  const [tab, setTab] = useState('informes'); // informes | bloqueos | ideas | notas
   const [creatingInforme, setCreatingInforme] = useState(false);
   const [createInformeType, setCreateInformeType] = useState('daily');
   const [editingInforme, setEditingInforme] = useState(null);
   const [creatingIdea, setCreatingIdea] = useState(false);
   const [editingIdea, setEditingIdea] = useState(null);
+  const [creatingNota, setCreatingNota] = useState(false);
+  const [editingNota, setEditingNota] = useState(null);
 
   const openCreateInforme = (type = 'daily') => {
     setEditingInforme(null);
@@ -587,6 +859,21 @@ export default function EquipoPage() {
     setEditingIdea(null);
   };
 
+  const openCreateNota = () => {
+    setEditingNota(null);
+    setCreatingNota(true);
+  };
+
+  const openEditNota = (nota) => {
+    setEditingNota(nota);
+    setCreatingNota(true);
+  };
+
+  const closeNota = () => {
+    setCreatingNota(false);
+    setEditingNota(null);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -605,6 +892,7 @@ export default function EquipoPage() {
           { key: 'informes', label: 'Informes', Icon: FileText },
           { key: 'bloqueos', label: 'Bloqueos', Icon: AlertCircle },
           { key: 'ideas',    label: 'Ideas',    Icon: Lightbulb },
+          { key: 'notas',    label: 'Notas',    Icon: StickyNote },
         ].map(t => {
           const Icon = t.Icon;
           return (
@@ -623,6 +911,7 @@ export default function EquipoPage() {
       {tab === 'informes' && <InformesView openCreateInforme={openCreateInforme} openEditInforme={openEditInforme} />}
       {tab === 'bloqueos' && <BloqueosList />}
       {tab === 'ideas' && <IdeasView openCreateIdea={openCreateIdea} openEditIdea={openEditIdea} />}
+      {tab === 'notas' && <NotasView openCreateNota={openCreateNota} openEditNota={openEditNota} />}
 
       {/* Modales globales */}
       <CrearInformeModal
@@ -635,6 +924,11 @@ export default function EquipoPage() {
         open={creatingIdea}
         onClose={closeIdea}
         idea={editingIdea}
+      />
+      <CrearNotaModal
+        open={creatingNota}
+        onClose={closeNota}
+        note={editingNota}
       />
     </div>
   );
