@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Check } from 'lucide-react';
 import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
 import RichTextEditor from './RichTextEditor';
 import TagInput from './TagInput';
 import SharePicker from './SharePicker';
 import { sanitizeNoteHtml } from './sanitize';
+import { NOTE_COLORS, NOTE_COLOR_KEYS, getNoteColor } from './colors';
 
 // Modal de crear/editar nota. Mismo patron que CrearInformeModal/CrearIdeaModal:
 // - dismissOnOverlay/Escape: false (no se cierra por accidente).
-// - Validacion explicita con mensajes claros (no boton silent disabled).
+// - Validacion explicita (no boton silent disabled).
 
 export default function CrearNotaModal({ open, onClose, note = null }) {
   const { currentUser, teamMembers, notas, addNota, updateNota } = useApp();
@@ -17,8 +19,8 @@ export default function CrearNotaModal({ open, onClose, note = null }) {
   const [title, setTitle] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
   const [tags, setTags] = useState([]);
-  const [assigneeId, setAssigneeId] = useState('');
   const [shareWithIds, setShareWithIds] = useState([]);
+  const [color, setColor] = useState('white');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,8 +29,8 @@ export default function CrearNotaModal({ open, onClose, note = null }) {
     setTitle(note?.title || '');
     setBodyHtml(note?.body_html || '');
     setTags(Array.isArray(note?.tags) ? note.tags : []);
-    setAssigneeId(note?.assignee_id || '');
     setShareWithIds(Array.isArray(note?.share_with_ids) ? note.share_with_ids : []);
+    setColor(note?.color || 'white');
     setError('');
   }, [open, note]);
 
@@ -55,17 +57,18 @@ export default function CrearNotaModal({ open, onClose, note = null }) {
           title: title.trim(),
           body_html: cleanBody,
           tags,
-          assignee_id: assigneeId || null,
           share_with_ids: shareWithIds,
+          color,
         });
       } else {
         await addNota({
           title: title.trim(),
           body_html: cleanBody,
           tags,
-          assignee_id: assigneeId || null,
           share_with_ids: shareWithIds,
           author_id: currentUser.id,
+          color,
+          _allNotas: notas || [],
         });
       }
       onClose();
@@ -122,39 +125,46 @@ export default function CrearNotaModal({ open, onClose, note = null }) {
         </div>
 
         <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">Color</label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {NOTE_COLOR_KEYS.map(k => {
+              const c = getNoteColor(k);
+              const selected = color === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setColor(k)}
+                  title={c.label}
+                  className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${selected ? 'scale-110 shadow-md' : 'hover:scale-105'}`}
+                  style={{ background: c.bg, borderColor: selected ? c.dot : c.border }}
+                >
+                  {selected && <Check size={12} style={{ color: c.dot }} strokeWidth={3} />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">Tags (categorías libres)</label>
           <TagInput tags={tags} onChange={setTags} suggestions={knownTags} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Asignar a (opcional)</label>
-            <select
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400 bg-white cursor-pointer"
-            >
-              <option value="">Sin asignar</option>
-              {(teamMembers || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Compartir con</label>
-            <SharePicker
-              selectedIds={shareWithIds}
-              onChange={setShareWithIds}
-              teamMembers={teamMembers || []}
-              excludeIds={authorId ? [authorId] : []}
-              placeholder="Solo yo (privada)"
-            />
-          </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">Compartir con</label>
+          <SharePicker
+            selectedIds={shareWithIds}
+            onChange={setShareWithIds}
+            teamMembers={teamMembers || []}
+            excludeIds={authorId ? [authorId] : []}
+            placeholder="Solo yo (privada)"
+          />
         </div>
 
         <div className="text-[10.5px] text-gray-400 leading-relaxed">
-          La nota la ven: vos, las personas con las que la compartas, el asignado (si elegís uno) y los admins.
-          El contenido se limpia automáticamente antes de guardar (no se aceptan scripts ni HTML peligroso).
+          La nota la ven: vos, las personas con las que la compartas y los admins.
+          El contenido se limpia automáticamente antes de guardar.
         </div>
 
         {error && (

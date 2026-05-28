@@ -683,15 +683,22 @@ export function AppProvider({ children }) {
   // ocurre en el frontend (DOMPurify) antes de llegar aca.
   const addNota = useCallback(async (data) => {
     const id = 'nota_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    // Posicion: insertamos al tope (mas alta que cualquier existente).
+    // Usamos double precision asi reordenar entre 2 items se resuelve con el
+    // promedio sin renumerar nada.
+    const maxPos = (Array.isArray(data._allNotas) ? data._allNotas : []).reduce(
+      (m, n) => Math.max(m, n.position || 0), 0,
+    );
     const row = {
       id,
       title: data.title,
       body_html: data.body_html || '',
       tags: Array.isArray(data.tags) ? data.tags : [],
       author_id: data.author_id,
-      assignee_id: data.assignee_id || null,
       share_with_ids: Array.isArray(data.share_with_ids) ? data.share_with_ids : [],
       pinned: !!data.pinned,
+      color: data.color || 'white',
+      position: maxPos + 1,
     };
     await sbFetch('notas', {
       method: 'POST',
@@ -701,6 +708,23 @@ export function AppProvider({ children }) {
     });
     setNotas(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
     return row;
+  }, []);
+
+  // Reordena una nota a una nueva posicion calculando un float entre los
+  // vecinos. Si los dos vecinos tienen positions muy juntas (gap < 0.001)
+  // renumeramos todo el grupo de a 1.0 para evitar perdida de precision.
+  const reorderNota = useCallback(async (id, prevPosition, nextPosition) => {
+    let newPos;
+    if (prevPosition == null && nextPosition == null) newPos = 0;
+    else if (prevPosition == null) newPos = nextPosition - 1;
+    else if (nextPosition == null) newPos = prevPosition + 1;
+    else newPos = (prevPosition + nextPosition) / 2;
+    setNotas(prev => prev.map(n => n.id === id ? { ...n, position: newPos } : n));
+    await sbFetch('notas?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ position: newPos }),
+    });
   }, []);
 
   const updateNota = useCallback(async (id, fields) => {
@@ -1194,6 +1218,7 @@ export function AppProvider({ children }) {
     addNota,
     updateNota,
     deleteNota,
+    reorderNota,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];

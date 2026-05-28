@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, UserCheck, Users } from 'lucide-react';
+import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, Users, GripVertical } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TeamAvatar from '../components/TeamAvatar';
 import CrearInformeModal from '../components/informes/CrearInformeModal';
@@ -7,6 +7,7 @@ import BloqueosList from '../components/informes/BloqueosList';
 import CrearIdeaModal from '../components/ideas/CrearIdeaModal';
 import CrearNotaModal from '../components/notas/CrearNotaModal';
 import { sanitizeNoteHtml, htmlToPlainText } from '../components/notas/sanitize';
+import { getNoteColor } from '../components/notas/colors';
 
 // ── helpers de fecha ──────────────────────────────────────────────────────
 function fmtReportDate(dateStr) {
@@ -550,12 +551,15 @@ function IdeasView({ openCreateIdea, openEditIdea }) {
 
 // ── sub-vista: Notas ──────────────────────────────────────────────────────
 function NotasView({ openCreateNota, openEditNota }) {
-  const { notas, teamMembers, currentUser, updateNota, deleteNota } = useApp();
+  const { notas, teamMembers, currentUser, updateNota, deleteNota, reorderNota } = useApp();
   const [search, setSearch] = useState('');
   const [tagFilter, setTagFilter] = useState('all');
-  const [scopeFilter, setScopeFilter] = useState('all');     // all | mine | assigned | shared
-  const [sortMode, setSortMode] = useState('updated');       // updated | created | title
+  const [scopeFilter, setScopeFilter] = useState('all');     // all | mine | shared
+  const [sortMode, setSortMode] = useState('manual');        // manual | updated | created | title
   const [expandedId, setExpandedId] = useState(null);
+  // Drag&drop manual entre cards (solo cuando sortMode === 'manual').
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
   const meId = currentUser?.id;
@@ -566,13 +570,12 @@ function NotasView({ openCreateNota, openEditNota }) {
     return map;
   }, [teamMembers]);
 
-  // Visibilidad: yo veo notas si soy admin, autor, asignado, o estoy en share_with_ids.
+  // Visibilidad: admin, autor o presente en share_with_ids.
   const visibles = useMemo(() => {
     return (notas || []).filter(n => {
       if (isAdmin) return true;
       if (!meId) return false;
       if (n.author_id === meId) return true;
-      if (n.assignee_id === meId) return true;
       if (Array.isArray(n.share_with_ids) && n.share_with_ids.includes(meId)) return true;
       return false;
     });
@@ -588,7 +591,6 @@ function NotasView({ openCreateNota, openEditNota }) {
     let list = [...visibles];
     if (tagFilter !== 'all') list = list.filter(n => (n.tags || []).includes(tagFilter));
     if (scopeFilter === 'mine')     list = list.filter(n => n.author_id === meId);
-    if (scopeFilter === 'assigned') list = list.filter(n => n.assignee_id === meId);
     if (scopeFilter === 'shared')   list = list.filter(n => Array.isArray(n.share_with_ids) && n.share_with_ids.includes(meId));
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -598,18 +600,21 @@ function NotasView({ openCreateNota, openEditNota }) {
         (n.tags || []).some(t => t.toLowerCase().includes(q))
       );
     }
-    // Sort: pinned siempre arriba, despues por el modo elegido.
+    // Sort: pinned siempre arriba, despues por modo.
     list.sort((a, b) => {
       if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
       if (sortMode === 'title') return (a.title || '').localeCompare(b.title || '');
       if (sortMode === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      if (sortMode === 'updated') return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
+      // manual: position DESC (mas reciente arriba). Si empate, updated_at DESC.
+      const pa = a.position ?? 0; const pb = b.position ?? 0;
+      if (pa !== pb) return pb - pa;
       return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
     });
     return list;
   }, [visibles, tagFilter, scopeFilter, search, sortMode, meId]);
 
   const canEditOrDelete = (n) => isAdmin || n.author_id === meId;
-
   const togglePin = (n) => updateNota(n.id, { pinned: !n.pinned });
 
   const handleDelete = async (n) => {
@@ -618,16 +623,62 @@ function NotasView({ openCreateNota, openEditNota }) {
     if (expandedId === n.id) setExpandedId(null);
   };
 
+  // ── Drag & drop ──────────────────────────────────────────────────────────
+  // Solo activo si estamos en modo manual y la nota arrastrada es propia
+  // (o el usuario es admin). Calculamos la nueva posicion entre los vecinos
+  // del target en la lista actual ya ordenada (filtered).
+  const dragEnabled = sortMode === 'manual';
+
+  const handleDragStart = (e, n) => {
+    if (!dragEnabled) return;
+    if (!canEditOrDelete(n)) { e.preventDefault(); return; }
+    setDragId(n.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', n.id);
+  };
+  const handleDragOver = (e, n) => {
+    if (!dragEnabled || !dragId || dragId === n.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(n.id);
+  };
+  const handleDragLeave = (n) => {
+    if (dragOverId === n.id) setDragOverId(null);
+  };
+  const handleDragEnd = () => {
+    setDragId(null);
+    setDragOverId(null);
+  };
+  const handleDrop = async (e, targetNote) => {
+    if (!dragEnabled || !dragId || dragId === targetNote.id) { handleDragEnd(); return; }
+    e.preventDefault();
+    const draggedNote = filtered.find(n => n.id === dragId);
+    const targetIdx = filtered.findIndex(n => n.id === targetNote.id);
+    if (!draggedNote || targetIdx < 0) { handleDragEnd(); return; }
+
+    // Insertar ARRIBA del target. Position usa orden DESC, asi que arriba =
+    // mayor position. El nuevo position se calcula entre el target y el item
+    // INMEDIATAMENTE ANTERIOR (mas arriba que el target) en filtered.
+    const aboveIdx = targetIdx - 1;
+    const aboveNote = aboveIdx >= 0 ? filtered[aboveIdx] : null;
+    // Si el aboveNote es el dragged mismo, usar el anterior aun mas arriba.
+    const above = aboveNote && aboveNote.id !== dragId ? aboveNote : (aboveIdx - 1 >= 0 ? filtered[aboveIdx - 1] : null);
+    const target = targetNote;
+    const prevPos = target.position ?? 0;
+    const nextPos = above ? (above.position ?? 0) : null;
+    await reorderNota(dragId, prevPos, nextPos);
+    handleDragEnd();
+  };
+
   return (
     <div className="space-y-3">
       {/* Filtros */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
           {[
-            { key: 'all',      label: 'Todas',       Icon: StickyNote },
-            { key: 'mine',     label: 'Mías',        Icon: UserCheck },
-            { key: 'assigned', label: 'Asignadas a mí', Icon: UserCheck },
-            { key: 'shared',   label: 'Compartidas', Icon: Users },
+            { key: 'all',     label: 'Todas',       Icon: StickyNote },
+            { key: 'mine',    label: 'Mías',        Icon: Users },
+            { key: 'shared',  label: 'Compartidas', Icon: Users },
           ].map(s => (
             <button
               key={s.key}
@@ -656,6 +707,7 @@ function NotasView({ openCreateNota, openEditNota }) {
           className="text-[11px] border border-gray-200 rounded-lg py-1.5 px-2.5 font-sans outline-none focus:border-blue-400 bg-white text-gray-700"
           title="Ordenar"
         >
+          <option value="manual">Orden manual (arrastrar)</option>
           <option value="updated">Última edición</option>
           <option value="created">Creación</option>
           <option value="title">Título A-Z</option>
@@ -695,51 +747,69 @@ function NotasView({ openCreateNota, openEditNota }) {
       <div className="space-y-2">
         {filtered.map(n => {
           const author = memberById[n.author_id];
-          const assignee = n.assignee_id ? memberById[n.assignee_id] : null;
           const shared = (n.share_with_ids || []).map(id => memberById[id]).filter(Boolean);
           const expanded = expandedId === n.id;
-          const isMine = n.author_id === meId;
+          const color = getNoteColor(n.color);
+          const isDragging = dragId === n.id;
+          const isDragOver = dragOverId === n.id && dragId !== n.id;
+          const dragHandleVisible = dragEnabled && canEditOrDelete(n);
 
           return (
-            <div key={n.id} className={`bg-white border rounded-xl overflow-hidden transition-colors ${n.pinned ? 'border-amber-200 ring-1 ring-amber-100' : 'border-gray-200'}`}>
+            <div
+              key={n.id}
+              draggable={dragHandleVisible}
+              onDragStart={(e) => handleDragStart(e, n)}
+              onDragOver={(e) => handleDragOver(e, n)}
+              onDragLeave={() => handleDragLeave(n)}
+              onDragEnd={handleDragEnd}
+              onDrop={(e) => handleDrop(e, n)}
+              className={`group/note border rounded-xl overflow-hidden transition-all ${
+                isDragging ? 'opacity-40 scale-[0.99]' : ''
+              } ${isDragOver ? 'ring-2 ring-blue-300 -translate-y-px' : ''} ${
+                n.pinned ? 'ring-1 ring-amber-200 shadow-sm' : ''
+              }`}
+              style={{ background: color.bg, borderColor: n.pinned ? '#FDE68A' : color.border }}
+            >
               <div
-                className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                className="flex items-start gap-2 px-4 py-3 cursor-pointer hover:bg-black/[0.02] transition-colors"
                 onClick={() => setExpandedId(expanded ? null : n.id)}
               >
+                {dragHandleVisible && (
+                  <div
+                    className="shrink-0 mt-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 opacity-0 group-hover/note:opacity-100 transition-opacity"
+                    title="Arrastrá para reordenar"
+                    onClick={(e) => e.stopPropagation()}
+                  ><GripVertical size={14} /></div>
+                )}
+
                 <div className="shrink-0 mt-0.5">
                   {n.pinned
                     ? <Pin size={14} className="text-amber-500" fill="currentColor" />
-                    : <StickyNote size={14} className="text-gray-400" />
+                    : <span className="block w-2 h-2 rounded-full" style={{ background: color.dot }} />
                   }
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-semibold text-gray-800 truncate">{n.title}</div>
                   {!expanded && n.body_html && (
-                    <div className="text-[12px] text-gray-500 mt-0.5 truncate">{htmlToPlainText(n.body_html).slice(0, 140)}</div>
+                    <div className="text-[12px] text-gray-700/80 mt-0.5 truncate">{htmlToPlainText(n.body_html).slice(0, 140)}</div>
                   )}
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     {(n.tags || []).map(t => (
-                      <span key={t} className="text-[10px] bg-blue-50 text-blue-700 font-semibold rounded-full px-1.5 py-0.5">#{t}</span>
+                      <span key={t} className="text-[10px] bg-white/60 text-gray-700 font-semibold rounded-full px-1.5 py-0.5 border border-white/80">#{t}</span>
                     ))}
                     {author && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-600">
                         <TeamAvatar member={{ ...author, avatar: author.avatar_url || author.avatar }} size={14} />
                         {author.name.split(' ')[0]}
                       </span>
                     )}
-                    {assignee && assignee.id !== author?.id && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500" title={`Asignada a ${assignee.name}`}>
-                        <UserCheck size={11} className="text-blue-500" />
-                        → {assignee.name.split(' ')[0]}
-                      </span>
-                    )}
                     {shared.length > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-400" title={shared.map(s => s.name).join(', ')}>
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500" title={shared.map(s => s.name).join(', ')}>
                         <Users size={11} /> {shared.length}
                       </span>
                     )}
-                    <span className="text-[10px] text-gray-400" title={fmtAbsolute(n.updated_at)}>
+                    <span className="text-[10px] text-gray-500" title={fmtAbsolute(n.updated_at)}>
                       editada {fmtRelative(n.updated_at)}
                     </span>
                   </div>
@@ -749,14 +819,14 @@ function NotasView({ openCreateNota, openEditNota }) {
                   {canEditOrDelete(n) && (
                     <button
                       onClick={() => togglePin(n)}
-                      className={`p-1.5 bg-transparent border-none cursor-pointer rounded-md transition-colors ${n.pinned ? 'text-amber-500 hover:bg-amber-50' : 'text-gray-300 hover:text-amber-500 hover:bg-amber-50'}`}
+                      className={`p-1.5 bg-transparent border-none cursor-pointer rounded-md transition-colors ${n.pinned ? 'text-amber-500 hover:bg-amber-50' : 'text-gray-400 hover:text-amber-500 hover:bg-amber-50'}`}
                       title={n.pinned ? 'Desfijar' : 'Fijar arriba'}
                     >{n.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>
                   )}
                   {canEditOrDelete(n) && (
                     <button
                       onClick={() => openEditNota(n)}
-                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 bg-transparent border-none cursor-pointer rounded-md transition-colors"
+                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 bg-transparent border-none cursor-pointer rounded-md transition-colors"
                       title="Editar"
                     ><Pencil size={13} /></button>
                   )}
@@ -772,27 +842,20 @@ function NotasView({ openCreateNota, openEditNota }) {
               </div>
 
               {expanded && (
-                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/30">
+                <div className="border-t px-4 py-3 bg-white/40" style={{ borderColor: color.border }}>
                   {n.body_html ? (
                     <div
-                      className="rte-content text-[13px] text-gray-700 leading-relaxed"
+                      className="rte-content text-[13px] text-gray-800 leading-relaxed"
                       dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(n.body_html) }}
                     />
                   ) : (
-                    <div className="text-[12px] text-gray-400 italic">Sin contenido.</div>
+                    <div className="text-[12px] text-gray-500 italic">Sin contenido.</div>
                   )}
-                  {(shared.length > 0 || assignee) && (
-                    <div className="mt-3 pt-2 border-t border-gray-100 flex items-center gap-3 flex-wrap text-[10.5px] text-gray-500">
-                      {assignee && (
-                        <span className="inline-flex items-center gap-1">
-                          <UserCheck size={11} className="text-blue-500" /> Asignada a <strong className="text-gray-700">{assignee.name}</strong>
-                        </span>
-                      )}
-                      {shared.length > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <Users size={11} /> Compartida con: {shared.map(s => s.name.split(' ')[0]).join(', ')}
-                        </span>
-                      )}
+                  {shared.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-white/60 flex items-center gap-3 flex-wrap text-[10.5px] text-gray-600">
+                      <span className="inline-flex items-center gap-1">
+                        <Users size={11} /> Compartida con: {shared.map(s => s.name.split(' ')[0]).join(', ')}
+                      </span>
                     </div>
                   )}
                 </div>
