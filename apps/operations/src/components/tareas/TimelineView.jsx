@@ -566,7 +566,7 @@ export default function TimelineView({ onGoToTaskList }) {
                             const isAssigning = assigningTaskDate === task.id;
 
                             return (
-                              <div key={task.id} className={`flex items-start py-1 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/40 ${isBlocked ? 'bg-red-50/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : 'Click en el texto para abrir en Lista'}>
+                              <div key={task.id} className={`group flex items-start py-1 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/40 ${isBlocked ? 'bg-red-50/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : 'Click en el texto para abrir en Lista'}>
                                 <div className="shrink-0 pr-2 flex items-start gap-1 pl-5" style={{ width: labelWidth }}>
                                   <span className="text-[9px] shrink-0 mt-0.5" style={{ color: taskColor }}>
                                     {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u25CB'}

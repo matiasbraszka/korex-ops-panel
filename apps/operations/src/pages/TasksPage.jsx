@@ -271,8 +271,8 @@ export default function TasksPage({ embedded = false }) {
         {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
         <div
-          className={`hidden md:grid gap-3 py-2.5 px-4 items-center text-xs transition-colors hover:bg-[#F7F9FC] min-h-[42px] group border-t border-[#F1F3F6] ${blocked ? 'opacity-60' : ''}`}
-          style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 60px 36px' }}
+          className={`hidden md:grid gap-3 py-[7px] px-4 items-center text-xs transition-colors hover:bg-[#F7F9FC] group border-t border-[#F1F3F6] ${blocked ? 'opacity-60' : ''}`}
+          style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 110px' }}
           onDragOver={(e) => handleDragOver(e, t, sortedGroup)}
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
           onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
@@ -422,13 +422,13 @@ export default function TasksPage({ embedded = false }) {
               updateTask(t.id, { assignee: updated.join(', ') });
             };
             return (
-              <>
+              <div className="flex items-center justify-end gap-1 min-w-0">
                 <div
                   ref={el => assigneeRef.current = el}
                   className="cursor-pointer relative"
                   onClick={(e) => { e.stopPropagation(); setOpenDropdown('assignee-' + t.id); }}
                 >
-                  <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-surface2">
+                  <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-[#F0F2F5]">
                     {assigneeMembers.length > 0 ? (
                       <div className="flex items-center">
                         {assigneeMembers.slice(0, 2).map((am, ai) => (
@@ -438,7 +438,7 @@ export default function TasksPage({ embedded = false }) {
                           <span className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border-2 border-white" style={{ marginLeft: '-6px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
                         )}
                       </div>
-                    ) : <span className="text-text3">+ Asignar</span>}
+                    ) : <span className="text-[#9CA3AF] text-[10.5px]">+ Asignar</span>}
                   </div>
                 </div>
                 <Dropdown
@@ -459,15 +459,18 @@ export default function TasksPage({ embedded = false }) {
                     })
                   ]}
                 />
-              </>
+                {/* Acciones \u2014 Mi Semana + Delete, visibles solo en hover */}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <AddToWeeklyButton task={t} />
+                  <button
+                    className="w-6 h-6 rounded-md bg-transparent border-none text-[#9CA3AF] hover:bg-[#FEF2F2] hover:text-[#EF4444] cursor-pointer flex items-center justify-center transition-colors text-[12px]"
+                    onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}
+                    title="Eliminar"
+                  >{'\u2715'}</button>
+                </div>
+              </div>
             );
           })()}
-
-          {/* Mi Semana + Delete */}
-          <div className="flex items-center justify-end gap-0.5">
-            <AddToWeeklyButton task={t} />
-            <button className="bg-transparent border-none text-text3 cursor-pointer text-sm py-[2px] rounded opacity-0 group-hover:opacity-100 transition-opacity hover:text-red" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>{'\uD83D\uDDD1'}</button>
-          </div>
         </div>
 
         {/* Mobile card — uses separate refs (mob-*) so they don't overwrite desktop refs */}
@@ -771,7 +774,7 @@ export default function TasksPage({ embedded = false }) {
                     <>
                       <div
                         className="hidden md:grid gap-3 py-2 px-4 text-[10px] font-bold tracking-wider uppercase text-[#B6BCC4] border-b border-[#EEF0F3]"
-                        style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 60px 36px' }}
+                        style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 110px' }}
                       >
                         <span /><span />
                         <span>Tarea</span>
@@ -779,7 +782,6 @@ export default function TasksPage({ embedded = false }) {
                         <span className="text-right">Entrega</span>
                         <span className="flex justify-center"><MessageSquare size={11} /></span>
                         <span className="text-right">Equipo</span>
-                        <span />
                       </div>
                       {sorted.map(t => renderTaskRow(t, { sortedGroup: sorted }))}
                     </>
@@ -864,7 +866,7 @@ export default function TasksPage({ embedded = false }) {
                 {/* Column header \u2014 solo desktop. Mismo grid que las filas. */}
                 <div
                   className="hidden md:grid gap-3 py-2 px-4 text-[10px] font-bold tracking-wider uppercase text-[#B6BCC4] border-b border-[#EEF0F3]"
-                  style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 60px 36px' }}
+                  style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 110px' }}
                 >
                   <span />
                   <span />
@@ -873,7 +875,6 @@ export default function TasksPage({ embedded = false }) {
                   <span className="text-right">Entrega</span>
                   <span className="flex justify-center"><MessageSquare size={11} /></span>
                   <span className="text-right">Equipo</span>
-                  <span />
                 </div>
                 {sortedTasks.map(t => renderTaskRow(t, { sortedGroup: sortedTasks }))}
 
