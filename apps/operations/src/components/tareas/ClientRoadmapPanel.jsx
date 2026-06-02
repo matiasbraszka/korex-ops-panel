@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Link2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
@@ -327,9 +327,9 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           <div className="flex items-center gap-1.5 min-w-0">
             {(t.dependsOn && t.dependsOn.length > 0) && (
               <span
-                className="shrink-0 text-[9px] text-[#9CA3AF] inline-flex items-center gap-0.5"
+                className="shrink-0 text-[9.5px] text-[#9CA3AF] inline-flex items-center gap-0.5"
                 title={`${t.dependsOn.length} dependencia(s)`}
-              >\uD83D\uDD17{t.dependsOn.length}</span>
+              ><Link2 size={9} />{t.dependsOn.length}</span>
             )}
             {t.isClientTask && (
               <span className="shrink-0 w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" title="Tarea del cliente">C</span>
