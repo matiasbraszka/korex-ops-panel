@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { MessageSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
@@ -16,8 +17,15 @@ export default function TimelineView({ onGoToTaskList }) {
     hideCompletedTasks,
     hideBlockedTasks,
     teamMembers,
+    taskComments,
+    openTaskComments,
   } = useApp();
   const TEAM = teamMembers || [];
+  const commentCountsByTask = useMemo(() => {
+    const map = {};
+    (taskComments || []).forEach(c => { map[c.task_id] = (map[c.task_id] || 0) + 1; });
+    return map;
+  }, [taskComments]);
 
   const [assigningDeadline, setAssigningDeadline] = useState(null);
   const [expandedPhases, setExpandedPhases] = useState({});
@@ -482,6 +490,26 @@ export default function TimelineView({ onGoToTaskList }) {
                                       ) : (
                                         <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
                                       )}
+                                      {/* Badge de comentarios \u2014 abre el panel lateral */}
+                                      {(() => {
+                                        const cnt = commentCountsByTask[task.id] || 0;
+                                        if (cnt === 0) {
+                                          return (
+                                            <button
+                                              className="shrink-0 w-[20px] h-[18px] rounded bg-transparent text-[#9CA3AF] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] border-none cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                              onClick={(e) => { e.stopPropagation(); openTaskComments(task.id); }}
+                                              title="Comentar"
+                                            ><MessageSquare size={10} /></button>
+                                          );
+                                        }
+                                        return (
+                                          <button
+                                            className="shrink-0 inline-flex items-center gap-0.5 h-[18px] px-1.5 rounded-md bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer text-[9px] font-semibold transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); openTaskComments(task.id); }}
+                                            title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                                          ><MessageSquare size={9} />{cnt}</button>
+                                        );
+                                      })()}
                                     </span>
                                   )}
                                 </div>

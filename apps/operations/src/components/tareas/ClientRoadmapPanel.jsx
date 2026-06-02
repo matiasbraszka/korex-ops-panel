@@ -122,7 +122,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     const allPhaseTasks = clientTasks.filter(t => resolvePhase(t) === phaseKey);
     const totalCount = allPhaseTasks.length;
     const doneCount = allPhaseTasks.filter(t => t.status === 'done').length;
-    const allDone = totalCount > 0 && doneCount === totalCount;
+    // Una fase se considera "completada" si todas sus tareas estan hechas O
+    // si no tiene tareas (no queda nada por hacer ahi). Cuando esta activo el
+    // filtro "ocultar completadas" estas fases tampoco aparecen.
+    const allDone = totalCount === 0 || doneCount === totalCount;
     // phaseStart = startedDate mas temprano entre las tareas de la fase
     const startedDates = allPhaseTasks.map(t => t.startedDate).filter(Boolean);
     const phaseStart = startedDates.length > 0 ? startedDates.sort()[0] : null;
@@ -135,18 +138,24 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
       // se quitan completamente del roadmap.
       if ((c.phaseNameOverrides || {})[g.phaseKey] === '__HIDDEN__') return false;
 
-      // Las fases custom del cliente siempre se muestran — aunque esten vacias o
-      // haya filtros activos. Es la unica forma de poder llenarlas recien creadas.
       const isCustomPhase = g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey);
+
+      // Si el filtro "ocultar completadas" esta activo, una fase completa
+      // (todas hechas o sin tareas pendientes) tampoco aparece — vale tambien
+      // para fases custom. Es lo que pidio Matias para mantener el roadmap
+      // enfocado en lo que falta.
+      if (hideCompleted && g.allDone) return false;
+
+      // Las fases custom del cliente siempre se muestran (aunque esten vacias)
+      // si no hay filtro de completadas activo — es la unica forma de poder
+      // llenarlas recien creadas.
       if (isCustomPhase) return true;
 
-      // Si hay algun filtro activo (assignee, hide completed, hide blocked, due range),
+      // Si hay algun filtro activo (assignee, hide blocked, due range),
       // ocultar fases cuyas tareas filtradas (phaseTasks) son 0 — no relleno vacio.
       const anyFilterActive = assigneeFilter !== 'all' || hideCompleted || hideBlocked || (dueFilter && dueFilter !== 'all');
       if (anyFilterActive) {
-        // Con filtro: solo mostrar fases con al menos 1 tarea visible
         if (g.phaseTasks.length === 0) {
-          // Excepcion: si tiene deadline de fase en rango de dueFilter, mostrar (sin tareas pero con deadline relevante)
           if (dueFilter && dueFilter !== 'all') {
             const phDeadline = (c.phaseDeadlines || {})[g.phaseKey];
             if (phDeadline && isInDueRange(phDeadline, dueFilter)) return true;
