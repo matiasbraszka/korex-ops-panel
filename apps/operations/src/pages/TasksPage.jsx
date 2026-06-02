@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS } from '../utils/constants';
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange } from '../utils/helpers';
-import { GripVertical, MessageSquare } from 'lucide-react';
+import { GripVertical, MessageSquare, Link2, Calendar, AlertTriangle } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
@@ -271,8 +271,8 @@ export default function TasksPage({ embedded = false }) {
         {isDragOver && dragOverHalf === 'top' && <div className="drag-indicator" />}
         {/* Desktop row */}
         <div
-          className={`hidden md:grid gap-2 py-2 px-4 items-start text-xs transition-colors hover:bg-blue-bg2 min-h-[38px] group ${blocked ? 'opacity-60' : ''}`}
-          style={{ gridTemplateColumns: '20px 28px 1fr 110px 50px 30px' }}
+          className={`hidden md:grid gap-3 py-2.5 px-4 items-center text-xs transition-colors hover:bg-[#F7F9FC] min-h-[42px] group border-t border-[#F1F3F6] ${blocked ? 'opacity-60' : ''}`}
+          style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 92px' }}
           onDragOver={(e) => handleDragOver(e, t, sortedGroup)}
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
           onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
@@ -303,77 +303,42 @@ export default function TasksPage({ embedded = false }) {
             items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
-          {/* Title row: titulo wrappea + badges agrupados a la derecha */}
-          <div className="min-w-0 flex flex-col gap-0.5">
-            <div className="flex items-start gap-1.5 min-w-0">
-              {blocked && <span className="shrink-0 mt-[1px]" title="Bloqueada por dependencias">{'\uD83D\uDD12'}</span>}
-              {editingTaskId === t.id ? (
-                <input
-                  className="border border-blue rounded py-[2px] px-1.5 text-xs font-sans outline-none flex-1 min-w-0 bg-white"
-                  value={editTitleVal}
-                  onChange={(e) => setEditTitleVal(e.target.value)}
-                  onBlur={() => saveEditTitle(t.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTaskId(null); }}
-                  onClick={(e) => e.stopPropagation()}
-                  autoFocus
-                />
-              ) : (
-                <span
-                  className="cursor-text py-[2px] px-1 rounded flex-1 min-w-0 break-words hover:bg-surface2 leading-tight"
-                  onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
-                >
-                  {t.title}
-                </span>
-              )}
-              {/* Badges: cada uno con shrink-0, agrupados en su propio contenedor */}
-              <div className="flex items-center gap-1.5 shrink-0 mt-[1px]">
-                {(() => {
-                  const clientTasks = tasks.filter(ct => ct.clientId === t.clientId);
-                  const elapsed = getElapsedDays(t, clientTasks);
-                  if (elapsed <= 0) return null;
-                  const est = getEstimatedDays(t);
-                  const color = est ? (elapsed >= est * 2 ? '#EF4444' : elapsed > est ? '#F97316' : '#22C55E') : '#5B7CF5';
-                  const bg = est ? (elapsed >= est * 2 ? '#FEF2F2' : elapsed > est ? '#FFF7ED' : '#ECFDF5') : '#EEF2FF';
-                  return (
-                    <span className="inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-semibold" style={{ color, background: bg }}>
-                      {'\u23F1'} {elapsed}d{est !== null ? ` / ${est}d` : ''}
-                    </span>
-                  );
-                })()}
-                {t.dueDate && (
-                  <span className={`inline-flex items-center py-[1px] px-1.5 rounded text-[9px] font-medium ${isOverdue ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50'}`}>
-                    {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
-                  </span>
-                )}
-                {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue" title="Tiene descripci\u00f3n" />}
-                {(() => {
-                  const cnt = commentCountsByTask[t.id] || 0;
-                  if (cnt === 0) {
-                    return (
-                      <button
-                        className="bg-transparent border-none text-[#9CA3AF] cursor-pointer text-[11px] py-[2px] px-1.5 rounded-lg hover:text-[#5B7CF5] hover:bg-[#EEF2FF] opacity-0 group-hover:opacity-100 flex items-center transition-colors"
-                        onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
-                        title="Comentar"
-                      ><MessageSquare size={12} /></button>
-                    );
-                  }
-                  return (
-                    <button
-                      className="text-[11.5px] h-[24px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-sans font-semibold flex items-center gap-1 transition-colors"
-                      onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
-                      title={`${cnt} comentario${cnt !== 1 ? 's' : ''} — abrir panel`}
-                    >
-                      <MessageSquare size={11} />{cnt}
-                    </button>
-                  );
-                })()}
-                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
-                <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
-              </div>
-            </div>
-            {blocked && blockingNames.length > 0 && (
-              <div className="text-[10px] text-red-500 pl-1 leading-tight">Bloqueada por: {blockingNames.join(', ')}</div>
+          {/* Title — limpio, una sola linea + iconos hover */}
+          <div className="min-w-0 flex items-center gap-1.5" onClick={(e)=>e.stopPropagation()}>
+            {blocked && <span className="shrink-0 text-[10px]" title="Bloqueada por dependencias">🔒</span>}
+            {hasDesc && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[#5B7CF5]" title="Tiene descripción" />}
+            {(t.dependsOn && t.dependsOn.length > 0) && (
+              <span className="shrink-0 text-[9.5px] text-[#9CA3AF] inline-flex items-center gap-0.5" title={`${t.dependsOn.length} dependencia(s)`}>
+                <Link2 size={9} />{t.dependsOn.length}
+              </span>
             )}
+            {editingTaskId === t.id ? (
+              <input
+                className="border border-[#5B7CF5] rounded py-[2px] px-1.5 text-[13px] font-sans outline-none flex-1 min-w-0 bg-white"
+                value={editTitleVal}
+                onChange={(e) => setEditTitleVal(e.target.value)}
+                onBlur={() => saveEditTitle(t.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingTaskId(null); }}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+              />
+            ) : (
+              <span
+                className="cursor-text py-[2px] px-1 rounded flex-1 min-w-0 truncate text-[13px] text-[#1A1D26] font-medium hover:bg-[#F0F2F5] leading-tight"
+                onClick={(e) => { e.stopPropagation(); startEditTitle(t.id); }}
+                title={t.title}
+              >{t.title}</span>
+            )}
+            <button
+              className="shrink-0 w-6 h-6 rounded-lg bg-transparent text-[#9CA3AF] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border-none"
+              onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
+              title="Editar dependencias"
+            ><Link2 size={11} /></button>
+            <button
+              className="shrink-0 w-6 h-6 rounded-lg bg-transparent text-[#9CA3AF] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] cursor-pointer flex items-center justify-center border-none text-[10px]"
+              onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] })); }}
+              title={isExpanded ? 'Colapsar' : 'Expandir'}
+            >{isExpanded ? '▲' : '▼'}</button>
           </div>
 
           {/* Step */}
@@ -403,6 +368,48 @@ export default function TasksPage({ embedded = false }) {
             minWidth={220}
             maxHeight={300}
           />
+
+          {/* ENTREGA — chip de fecha de entrega */}
+          <div className="flex items-center justify-end min-w-0" onClick={(e) => e.stopPropagation()}>
+            {t.dueDate ? (
+              <span
+                className={`inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${
+                  isOverdue ? 'bg-[#FEF2F2] text-[#DC4B43]' : 'bg-[#F0F2F5] text-[#6B7280]'
+                }`}
+                title={`Vence: ${t.dueDate}`}
+              >
+                {isOverdue ? <AlertTriangle size={9} /> : <Calendar size={9} />}
+                {fmtDate(t.dueDate)}
+              </span>
+            ) : (
+              <span className="text-[10.5px] text-[#B6BCC4] italic opacity-0 group-hover:opacity-100 transition-opacity">sin fecha</span>
+            )}
+          </div>
+
+          {/* COMENTARIOS — abre panel lateral */}
+          <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const cnt = commentCountsByTask[t.id] || 0;
+              if (cnt === 0) {
+                return (
+                  <button
+                    className="w-[30px] h-[26px] rounded-lg bg-transparent text-[#9CA3AF] border-none cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-[#EEF2FF] hover:text-[#5B7CF5] flex items-center justify-center transition-colors"
+                    onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
+                    title="Comentar"
+                  ><MessageSquare size={13} /></button>
+                );
+              }
+              return (
+                <button
+                  className="text-[11.5px] h-[26px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-semibold flex items-center gap-1 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
+                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                >
+                  <MessageSquare size={11} />{cnt}
+                </button>
+              );
+            })()}
+          </div>
 
           {/* Assignee */}
           {(() => {
@@ -760,7 +767,22 @@ export default function TasksPage({ embedded = false }) {
                     if (ga !== gb) return ga - gb;
                     return (a.position ?? 0) - (b.position ?? 0);
                   });
-                  return sorted.map(t => renderTaskRow(t, { sortedGroup: sorted }));
+                  return (
+                    <>
+                      <div
+                        className="hidden md:grid gap-3 py-2 px-4 text-[10px] font-bold tracking-wider uppercase text-[#B6BCC4] border-b border-[#EEF0F3]"
+                        style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 92px' }}
+                      >
+                        <span /><span />
+                        <span>Tarea</span>
+                        <span>Fase</span>
+                        <span className="text-right">Entrega</span>
+                        <span className="text-center">💬</span>
+                        <span className="text-right">Equipo</span>
+                      </div>
+                      {sorted.map(t => renderTaskRow(t, { sortedGroup: sorted }))}
+                    </>
+                  );
                 })()
               ) : (
                 <div className="text-center text-slate-400 text-xs py-4">Sin tareas internas</div>
@@ -826,17 +848,31 @@ export default function TasksPage({ embedded = false }) {
         const taskCount = g.tasks.filter(t => t.status !== 'done').length;
 
         return (
-          <div key={g.client.id} className="mb-1.5 bg-white border border-border rounded-xl overflow-visible">
+          <div key={g.client.id} className="mb-3 bg-white border border-[#E2E5EB] rounded-2xl overflow-visible">
             <div
-              className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold cursor-pointer select-none border-b border-border bg-surface2 hover:bg-surface3"
+              className="flex items-center gap-2.5 py-3 px-4 text-[13.5px] font-bold cursor-pointer select-none border-b border-[#EEF0F3] bg-[#FAFBFC] hover:bg-[#F4F6F9]"
               onClick={() => setCollapsedGroups(prev => ({ ...prev, [g.client.id]: !prev[g.client.id] }))}
             >
-              <span className={`text-xs text-text3 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
-              <span>{g.client.name}</span>
-              <span className="bg-surface3 text-text2 text-[11px] font-semibold py-[1px] px-2 rounded-xl">{taskCount}</span>
+              <span className={`text-xs text-[#9CA3AF] transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
+              <TeamAvatar member={{ name: g.client.name, color: g.client.color, avatar_url: g.client.avatarUrl, initials: (g.client.name||'').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase() }} size={26} />
+              <span className="text-[#1A1D26]">{g.client.name}</span>
+              <span className="bg-[#F0F2F5] text-[#6B7280] text-[11px] font-semibold py-[2px] px-2 rounded-full">{taskCount} pendiente{taskCount !== 1 ? 's' : ''}</span>
             </div>
             {!collapsed && (
               <div>
+                {/* Column header \u2014 solo desktop. Mismo grid que las filas. */}
+                <div
+                  className="hidden md:grid gap-3 py-2 px-4 text-[10px] font-bold tracking-wider uppercase text-[#B6BCC4] border-b border-[#EEF0F3]"
+                  style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 92px' }}
+                >
+                  <span />
+                  <span />
+                  <span>Tarea</span>
+                  <span>Fase</span>
+                  <span className="text-right">Entrega</span>
+                  <span className="text-center">\uD83D\uDCAC</span>
+                  <span className="text-right">Equipo</span>
+                </div>
                 {sortedTasks.map(t => renderTaskRow(t, { sortedGroup: sortedTasks }))}
 
                 {/* Inline new task */}
