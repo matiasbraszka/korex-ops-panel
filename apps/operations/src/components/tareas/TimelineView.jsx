@@ -349,22 +349,24 @@ export default function TimelineView({ onGoToTaskList }) {
           </div>
 
           {/* Barra de ayuda con los gestos del timeline (solo desktop) */}
-          <div className="hidden md:flex items-center gap-4 flex-wrap text-[11.5px] text-[#6B7280] bg-[#F7F8FA] border border-[#EEF0F3] rounded-lg px-3 py-2 mb-3">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-6 h-2 rounded-sm bg-[#5B7CF5] opacity-40" />
-              <span><b className="text-[#3F4653] font-semibold">Arrastrar</b> barra para mover fechas</span>
+          <div className="hidden md:flex items-center gap-5 flex-wrap text-[11.5px] text-[#6B7280] bg-white border border-[#EEF0F3] rounded-xl px-4 py-2.5 mb-3 shadow-sm">
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-block w-7 h-2.5 rounded-md bg-[#5B7CF5] opacity-50" />
+              <span><b className="text-[#3F4653] font-semibold">Arrastrar</b> la barra para mover</span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-4 h-3 text-[10px] text-[#3F4653] font-bold">\u2194</span>
-              <span><b className="text-[#3F4653] font-semibold">Tirar de los bordes</b> para resizear</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center justify-center font-bold text-[#3F4653]">\u21c4</span>
+              <span><b className="text-[#3F4653] font-semibold">Bordes</b> para resizear</span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rotate-45 bg-[#5B7CF5]" />
-              <span>Diamante de fase: <b className="text-[#3F4653] font-semibold">arrastrar</b> o <b className="text-[#3F4653] font-semibold">doble click</b></span>
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rotate-45 bg-[#5B7CF5]" />
+              <span>Diamante: <b className="text-[#3F4653] font-semibold">arrastrar</b> \u00b7 <b className="text-[#3F4653] font-semibold">2\u00d7 click</b> editar</span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <MessageSquare size={11} className="text-[#4A67D8]" />
-              <span>Comentar</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#EEF2FF] text-[#4A67D8]">
+                <MessageSquare size={11} />
+              </span>
+              <span>Comentar tarea</span>
             </span>
           </div>
 
@@ -378,15 +380,15 @@ export default function TimelineView({ onGoToTaskList }) {
                 {/* Week header */}
                 <div className="flex" style={{ marginLeft: labelWidth }}>
                   {weekColumns.map((w, i) => (
-                    <div key={i} className={`shrink-0 border-b pb-1 ${w.hasToday ? 'border-b-2 border-red-500 bg-red-50/40' : 'border-gray-200'}`} style={{ width: weekWidth }}>
-                      <div className="text-center">
-                        <div className="text-[9px] font-semibold text-gray-500 capitalize">{w.monthLabel}</div>
-                        <div className={`text-[10px] leading-none ${w.hasToday ? 'font-bold text-red-600' : 'text-gray-400'}`}>{w.startNum + '\u2013' + w.endNum}</div>
+                    <div key={i} className={`shrink-0 border-b pb-1.5 ${w.hasToday ? 'border-b-2 border-[#EF4444] bg-[#FEF4F3]' : 'border-[#E2E5EB]'}`} style={{ width: weekWidth }}>
+                      <div className="text-center pt-1">
+                        <div className={`text-[10px] font-bold uppercase tracking-wide ${w.hasToday ? 'text-[#EF4444]' : 'text-[#6B7280]'}`}>{w.monthLabel}</div>
+                        <div className={`text-[11px] leading-none mt-0.5 ${w.hasToday ? 'font-bold text-[#EF4444]' : 'text-[#9CA3AF]'}`}>{w.startNum + '\u2013' + w.endNum}</div>
                       </div>
                       {/* D\u00edas individuales: el dia de hoy se distingue solo por color */}
-                      <div className="flex mt-0.5">
+                      <div className="flex mt-1">
                         {w.days.map((d, di) => (
-                          <div key={di} className={`flex-1 text-[7px] text-center leading-none ${d.isToday ? 'font-bold text-red-600' : 'text-gray-300'}`}>
+                          <div key={di} className={`flex-1 text-[8px] text-center leading-none ${d.isToday ? 'font-bold text-[#EF4444]' : 'text-[#B6BCC4]'}`}>
                             {d.num}
                           </div>
                         ))}
@@ -424,12 +426,12 @@ export default function TimelineView({ onGoToTaskList }) {
                 }).map(({ client: cl, phases }) => {
                   const cIsKorex = isKorexClient(cl);
                   return (
-                  <div key={cl.id} className={`border-b last:border-b-0 ${cIsKorex ? 'border-slate-200 bg-slate-50/50' : 'border-gray-100'}`}>
-                    <div className="flex items-center" style={{ height: 24 }}>
-                      <div className="shrink-0 pr-2 flex items-center gap-1" style={{ width: labelWidth }}>
-                        {cIsKorex && <span className="text-[10px]" title="Empresa Korex">{'\uD83C\uDFE2'}</span>}
-                        <div className={`text-[11px] font-bold leading-tight truncate ${cIsKorex ? 'text-slate-800' : 'text-gray-800'}`}>{cl.name}</div>
-                        {cIsKorex && <span className="text-[8px] font-bold px-1 py-[1px] rounded bg-slate-700 text-white shrink-0">INTERNO</span>}
+                  <div key={cl.id} className={`border-b last:border-b-0 ${cIsKorex ? 'border-[#E2E5EB] bg-[#FBFBFC]' : 'border-[#EEF0F3]'}`}>
+                    <div className="flex items-center bg-[#FAFBFC] border-b border-[#EEF0F3]" style={{ height: 32 }}>
+                      <div className="shrink-0 pr-3 pl-3 flex items-center gap-2" style={{ width: labelWidth }}>
+                        {cIsKorex && <span className="text-[12px]" title="Empresa Korex">{'\uD83C\uDFE2'}</span>}
+                        <div className={`text-[12.5px] font-bold leading-tight truncate ${cIsKorex ? 'text-[#1A1D26]' : 'text-[#1A1D26]'}`}>{cl.name}</div>
+                        {cIsKorex && <span className="text-[9px] font-bold tracking-wide uppercase px-1.5 py-[2px] rounded bg-[#2B3242] text-white shrink-0">INTERNO</span>}
                       </div>
                     </div>
                     {phases.map((ph) => {
@@ -448,13 +450,13 @@ export default function TimelineView({ onGoToTaskList }) {
 
                       return (
                         <div key={ph.phaseKey}>
-                          <div className={`flex items-start py-1 ${hasTasks ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
-                            <div className="shrink-0 pr-2 flex items-start gap-1 pt-0.5" style={{ width: labelWidth }}>
-                              {hasTasks && <span className={`text-[8px] text-gray-400 transition-transform mt-0.5 ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
-                              <div className="text-[10px] leading-snug flex items-start gap-1 flex-1 min-w-0" style={{ color }}>
-                                <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ background: color }} />
-                                <span>{ph.phInfo.label}</span>
-                                <span className="text-gray-400 text-[9px] shrink-0">({ph.progress}%)</span>
+                          <div className={`flex items-center py-2 border-b border-[#F1F3F6] ${hasTasks ? 'cursor-pointer hover:bg-[#F7F9FC]' : ''}`} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
+                            <div className="shrink-0 pr-3 pl-3 flex items-center gap-1.5" style={{ width: labelWidth }}>
+                              {hasTasks && <span className={`text-[10px] text-[#B6BCC4] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
+                              <div className="text-[12px] leading-snug flex items-center gap-1.5 flex-1 min-w-0 font-semibold" style={{ color }}>
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                                <span className="truncate">{ph.phInfo.label}</span>
+                                <span className="text-[#9CA3AF] text-[10.5px] shrink-0 font-medium">{ph.progress}%</span>
                               </div>
                               {editingPhaseDeadline === expandKey ? (
                                 <span className="inline-flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -476,30 +478,35 @@ export default function TimelineView({ onGoToTaskList }) {
                                 </span>
                               ) : (
                                 <button
-                                  className={`text-[9px] shrink-0 font-sans hover:underline ${ph.isOverdue ? 'text-red-500' : 'text-gray-400'}`}
+                                  className={`text-[10.5px] font-semibold shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors ${
+                                    ph.isOverdue
+                                      ? 'bg-[#FEF2F2] text-[#DC4B43] hover:bg-[#FECACA]'
+                                      : 'bg-[#F0F2F5] text-[#6B7280] hover:bg-[#E8EBF0]'
+                                  }`}
                                   onClick={(e) => { e.stopPropagation(); setEditingPhaseDeadline(expandKey); }}
+                                  title="Click para editar deadline de la fase"
                                 >
-                                  {fmtDate(ph.deadline)}
+                                  {ph.isOverdue ? '⚠' : '📅'} {fmtDate(ph.deadline)}
                                 </button>
                               )}
                             </div>
-                            <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 28 }}>
+                            <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 32 }}>
                               {weekColumns.map((w, i) => (
-                                <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-red-50/30' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f0f0f0' }} />
+                                <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-[#FEF4F3]' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #EEF0F3' }} />
                               ))}
                               {/* Barra completa: oculta si la fase esta bloqueada (solo se muestra el diamante) */}
                               {!ph.phaseBlocked && (
-                                <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 18, top: 5 }}>
-                                  <div className="w-full h-full rounded-sm relative overflow-hidden" style={{ background: color + '20' }}>
-                                    <div className="h-full rounded-sm" style={{ width: `${ph.progress}%`, background: color, opacity: 0.5 }} />
-                                    <span className="absolute inset-0 flex items-center px-1 gap-0.5">
-                                      <span className="flex -space-x-1 shrink-0">
+                                <div className="absolute flex items-center z-[1]" style={{ left: barLeft, width: barW, height: 20, top: 6 }}>
+                                  <div className="w-full h-full rounded-md relative overflow-hidden" style={{ background: color + '22' }}>
+                                    <div className="h-full rounded-md" style={{ width: `${ph.progress}%`, background: color, opacity: 0.55 }} />
+                                    <span className="absolute inset-0 flex items-center px-2 gap-1">
+                                      <span className="flex -space-x-1.5 shrink-0">
                                         {phaseMembers.slice(0, 4).map(m => (
-                                          <TeamAvatar key={m.id} member={m} size={14} className="ring-1 ring-white" />
+                                          <TeamAvatar key={m.id} member={m} size={16} className="ring-2 ring-white" />
                                         ))}
-                                        {phaseMembers.length > 4 && <span className="text-[7px] font-bold ml-0.5" style={{ color }}>+{phaseMembers.length - 4}</span>}
+                                        {phaseMembers.length > 4 && <span className="text-[8px] font-bold ml-1" style={{ color }}>+{phaseMembers.length - 4}</span>}
                                       </span>
-                                      <span className="text-[8px] font-bold ml-auto" style={{ color }}>{ph.progress}%</span>
+                                      <span className="text-[9.5px] font-bold ml-auto" style={{ color }}>{ph.progress}%</span>
                                     </span>
                                   </div>
                                 </div>
@@ -518,14 +525,14 @@ export default function TimelineView({ onGoToTaskList }) {
                                 return (
                                   <div
                                     className={`absolute z-[3] group select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                                    style={{ left: visualLeft, top: 7, padding: 2 }}
+                                    style={{ left: visualLeft, top: 9, padding: 2 }}
                                     onPointerDown={(e) => startPhaseDeadlineDrag(e, cl.id, ph.phaseKey, ph.deadline)}
                                     onDoubleClick={(e) => { e.stopPropagation(); setEditingPhaseDeadline(expandKey); }}
                                     title={`Deadline: ${ph.deadline} · arrastrar para mover · doble click para editar`}
                                   >
-                                    <div className={`w-2.5 h-2.5 rotate-45 transition-transform ${isDragging ? 'scale-150' : 'group-hover:scale-150'}`} style={{ background: color, border: `1px solid ${color}` }} />
+                                    <div className={`w-3 h-3 rotate-45 transition-transform ${isDragging ? 'scale-150' : 'group-hover:scale-150'}`} style={{ background: color, border: `1px solid ${color}` }} />
                                     {isDragging && (
-                                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500 text-white whitespace-nowrap">
+                                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#5B7CF5] text-white whitespace-nowrap">
                                         {addDaysISO(ph.deadline, dragPreview.deltaDays).slice(5)}
                                       </span>
                                     )}
@@ -566,13 +573,20 @@ export default function TimelineView({ onGoToTaskList }) {
                             const isAssigning = assigningTaskDate === task.id;
 
                             return (
-                              <div key={task.id} className={`group flex items-start py-1 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/40 ${isBlocked ? 'bg-red-50/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : 'Click en el texto para abrir en Lista'}>
-                                <div className="shrink-0 pr-2 flex items-start gap-1 pl-5" style={{ width: labelWidth }}>
-                                  <span className="text-[9px] shrink-0 mt-0.5" style={{ color: taskColor }}>
-                                    {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u25CB'}
+                              <div key={task.id} className={`group flex items-center py-1.5 border-b border-[#F1F3F6] last:border-b-0 hover:bg-[#F7F9FC] ${isBlocked ? 'bg-[#FEF2F2]/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : 'Click en el texto para abrir en Lista'}>
+                                <div className="shrink-0 pr-3 flex items-center gap-1.5 pl-9" style={{ width: labelWidth }}>
+                                  <span
+                                    className="text-[10px] shrink-0 w-[14px] h-[14px] rounded-full flex items-center justify-center"
+                                    style={{
+                                      color: taskColor,
+                                      background: taskColor + '15',
+                                      border: `1.4px solid ${taskColor}`,
+                                    }}
+                                  >
+                                    {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u00B7'}
                                   </span>
                                   <span
-                                    className={`text-[9px] leading-snug cursor-pointer hover:underline ${task.status === 'done' ? 'line-through text-gray-400' : isBlocked ? 'text-red-600 font-semibold' : 'text-gray-600'}`}
+                                    className={`text-[11.5px] leading-snug cursor-pointer truncate flex-1 min-w-0 hover:underline ${task.status === 'done' ? 'line-through text-[#B6BCC4]' : isBlocked ? 'text-[#DC4B43] font-semibold' : 'text-[#3F4653]'}`}
                                     onClick={(e) => { e.stopPropagation(); onGoToTaskList && onGoToTaskList(cl.id, task.id); }}
                                   >
                                     {task.title}
@@ -619,13 +633,22 @@ export default function TimelineView({ onGoToTaskList }) {
                                       ) : null}
                                       {hasDue ? (
                                         <button
-                                          className="text-[9px] shrink-0 font-sans text-gray-400 hover:text-blue-500 hover:underline"
+                                          className={`text-[10.5px] font-semibold shrink-0 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 transition-colors ${
+                                            isOverdue && !isDone
+                                              ? 'bg-[#FEF2F2] text-[#DC4B43] hover:bg-[#FECACA]'
+                                              : 'bg-[#F0F2F5] text-[#6B7280] hover:bg-[#E8EBF0]'
+                                          }`}
                                           onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                          title="Editar fecha de entrega"
                                         >
                                           {fmtDate(task.dueDate)}
                                         </button>
                                       ) : (
-                                        <button className="text-[8px] text-blue-400 hover:text-blue-600 shrink-0 font-sans" onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}>{'\uD83D\uDCC5'}</button>
+                                        <button
+                                          className="text-[10.5px] font-semibold shrink-0 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 bg-transparent text-[#9CA3AF] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] border border-dashed border-[#E2E5EB] transition-colors"
+                                          onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
+                                          title="Asignar fecha de entrega"
+                                        >+ fecha</button>
                                       )}
                                       {/* Badge de comentarios \u2014 abre el panel lateral */}
                                       {(() => {
@@ -633,26 +656,26 @@ export default function TimelineView({ onGoToTaskList }) {
                                         if (cnt === 0) {
                                           return (
                                             <button
-                                              className="shrink-0 w-[20px] h-[18px] rounded bg-transparent text-[#9CA3AF] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] border-none cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                              className="shrink-0 w-6 h-6 rounded-md bg-transparent text-[#B6BCC4] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] border-none cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                               onClick={(e) => { e.stopPropagation(); openTaskComments(task.id); }}
                                               title="Comentar"
-                                            ><MessageSquare size={10} /></button>
+                                            ><MessageSquare size={11} /></button>
                                           );
                                         }
                                         return (
                                           <button
-                                            className="shrink-0 inline-flex items-center gap-0.5 h-[18px] px-1.5 rounded-md bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer text-[9px] font-semibold transition-colors"
+                                            className="shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer text-[10px] font-semibold transition-colors"
                                             onClick={(e) => { e.stopPropagation(); openTaskComments(task.id); }}
                                             title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
-                                          ><MessageSquare size={9} />{cnt}</button>
+                                          ><MessageSquare size={10} />{cnt}</button>
                                         );
                                       })()}
                                     </span>
                                   )}
                                 </div>
-                                <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 22 }}>
+                                <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 26 }}>
                                   {weekColumns.map((w, i) => (
-                                    <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-red-50/20' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f8f8f8' }} />
+                                    <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-[#FEF4F3]/60' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #F1F3F6' }} />
                                   ))}
                                   {/* Caso normal: barra de inicio a entrega \u2014 arrastrable */}
                                   {canShowBar && (() => {
@@ -667,33 +690,33 @@ export default function TimelineView({ onGoToTaskList }) {
                                     }
                                     return (
                                       <div
-                                        className={`absolute z-[1] flex items-center px-0.5 gap-0.5 select-none ${isDragging ? 'cursor-grabbing ring-2 ring-blue-400' : 'cursor-grab'} ${!isDragging && (isDone ? '' : isOverdue ? 'ring-1 ring-red-300' : '')}`}
-                                        style={{ left: visualLeft, width: visualWidth, height: 14, top: 4 }}
+                                        className={`absolute z-[1] flex items-center px-1.5 gap-1 select-none rounded-md ${isDragging ? 'cursor-grabbing ring-2 ring-[#5B7CF5]' : 'cursor-grab'} ${!isDragging && (isDone ? '' : isOverdue ? 'ring-1 ring-[#FCA5A5]' : '')}`}
+                                        style={{ left: visualLeft, width: visualWidth, height: 18, top: 4 }}
                                         onPointerDown={(e) => startTaskDrag(e, task, 'move')}
                                         title={`Arrastr\u00e1 para mover \u00b7 tir\u00e1 de los bordes para resizear \u00b7 ${fmtDate(task.startedDate)} \u2192 ${fmtDate(task.dueDate)}${estimatedD !== null ? ' \u00b7 ' + estimatedD + 'd estimados' : ''}`}
                                       >
-                                        <div className="absolute inset-0 rounded-sm" style={{ background: taskColor, opacity: 0.25 }} />
+                                        <div className="absolute inset-0 rounded-md" style={{ background: taskColor, opacity: 0.3 }} />
                                         {/* Handle izquierdo */}
                                         <div
-                                          className="absolute left-0 top-0 bottom-0 z-[2] cursor-ew-resize hover:bg-white/40"
-                                          style={{ width: 6 }}
+                                          className="absolute left-0 top-0 bottom-0 z-[2] cursor-ew-resize hover:bg-white/50 rounded-l-md"
+                                          style={{ width: 8 }}
                                           onPointerDown={(e) => startTaskDrag(e, task, 'left')}
                                           title="Cambiar fecha de inicio"
                                         />
                                         {/* Handle derecho */}
                                         <div
-                                          className="absolute right-0 top-0 bottom-0 z-[2] cursor-ew-resize hover:bg-white/40"
-                                          style={{ width: 6 }}
+                                          className="absolute right-0 top-0 bottom-0 z-[2] cursor-ew-resize hover:bg-white/50 rounded-r-md"
+                                          style={{ width: 8 }}
                                           onPointerDown={(e) => startTaskDrag(e, task, 'right')}
                                           title="Cambiar fecha de entrega"
                                         />
-                                        <span className="flex -space-x-1 shrink-0 relative z-[1]">
+                                        <span className="flex -space-x-1.5 shrink-0 relative z-[1]">
                                           {taskMembers.slice(0, 3).map(m => (
-                                            <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white" />
+                                            <TeamAvatar key={m.id} member={m} size={14} className="ring-2 ring-white" />
                                           ))}
                                         </span>
                                         {isDragging && (
-                                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500 text-white whitespace-nowrap z-[3]">
+                                          <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#5B7CF5] text-white whitespace-nowrap z-[3] shadow-sm">
                                             {dragPreview.mode === 'move' && `${addDaysISO(task.startedDate, dragPreview.deltaDays).slice(5)} \u2192 ${addDaysISO(task.dueDate, dragPreview.deltaDays).slice(5)}`}
                                             {dragPreview.mode === 'left'  && `inicio: ${addDaysISO(task.startedDate, dragPreview.deltaDays).slice(5)}`}
                                             {dragPreview.mode === 'right' && `entrega: ${addDaysISO(task.dueDate, dragPreview.deltaDays).slice(5)}`}
