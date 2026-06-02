@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
@@ -32,6 +32,16 @@ export default function TimelineView({ onGoToTaskList }) {
   const [assigningTaskDate, setAssigningTaskDate] = useState(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
   const [editingPhaseDeadline, setEditingPhaseDeadline] = useState(null);
+
+  // ── Drag de barras del Gantt (mover / resize) ───────────────────────────
+  // dragState (ref): { taskId, mode: 'move'|'left'|'right', startX,
+  //                    originalStart, originalEnd }. Vive en ref para no
+  //                    re-renderizar en cada pointermove.
+  // dragPreview (state): { taskId, deltaDays, mode } — solo para repintar
+  //                    la barra y los labels mientras se arrastra. Al soltar
+  //                    se persisten las fechas y se limpia.
+  const dragRef = useRef(null);
+  const [dragPreview, setDragPreview] = useState(null);
 
   const now = today();
 
@@ -185,6 +195,99 @@ export default function TimelineView({ onGoToTaskList }) {
   // Posicion del centro de la celda de HOY (para la linea vertical)
   const todayCenterPx = dateToPx(now) + dayPx / 2;
 
+  // ── Helpers de drag ─────────────────────────────────────────────────────
+  // pxToISO(px) - convierte un offset en pixeles dentro del track de timeline
+  // al ISO YYYY-MM-DD correspondiente (snap por dia).
+  const addDaysISO = (iso, n) => {
+    const d = parseLocalDate(iso);
+    d.setDate(d.getDate() + n);
+    const pad = (x) => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  // Inicia drag de una barra de tarea. mode: 'move' | 'left' | 'right'.
+  const startTaskDrag = (e, task, mode) => {
+    if (!task.startedDate || !task.dueDate) return; // solo barras "normales"
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = {
+      taskId: task.id,
+      mode,
+      startX: e.clientX,
+      originalStart: task.startedDate,
+      originalEnd: task.dueDate,
+    };
+    setDragPreview({ taskId: task.id, deltaDays: 0, mode });
+  };
+
+  useEffect(() => {
+    if (!dragPreview) return;
+    const handleMove = (e) => {
+      if (!dragRef.current) return;
+      const deltaPx = e.clientX - dragRef.current.startX;
+      const deltaDays = Math.round(deltaPx / dayPx);
+      setDragPreview(prev => prev && prev.deltaDays !== deltaDays
+        ? { ...prev, deltaDays }
+        : prev);
+    };
+    const handleUp = () => {
+      const drag = dragRef.current;
+      const preview = dragPreview;
+      dragRef.current = null;
+      setDragPreview(null);
+      if (!drag || !preview || preview.deltaDays === 0) return;
+      const d = preview.deltaDays;
+      const patch = {};
+      if (drag.mode === 'move') {
+        patch.startedDate = addDaysISO(drag.originalStart, d);
+        patch.dueDate = addDaysISO(drag.originalEnd, d);
+      } else if (drag.mode === 'left') {
+        const newStart = addDaysISO(drag.originalStart, d);
+        // no permitir que start pase la due
+        if (newStart > drag.originalEnd) return;
+        patch.startedDate = newStart;
+      } else if (drag.mode === 'right') {
+        const newEnd = addDaysISO(drag.originalEnd, d);
+        if (newEnd < drag.originalStart) return;
+        patch.dueDate = newEnd;
+      } else if (drag.mode === 'phase-deadline') {
+        // Cambiar deadline de fase (clientId + phaseKey vienen en drag.extra).
+        if (drag.extra) {
+          const c = clients.find(x => x.id === drag.extra.clientId);
+          if (!c) return;
+          const newDeadlines = { ...(c.phaseDeadlines || {}) };
+          newDeadlines[drag.extra.phaseKey] = addDaysISO(drag.originalEnd, d);
+          updateClient(drag.extra.clientId, { phaseDeadlines: newDeadlines });
+        }
+        return;
+      }
+      if (Object.keys(patch).length > 0) updateTask(drag.taskId, patch);
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [dragPreview, dayPx, clients, updateClient, updateTask]);
+
+  // Inicia drag del diamante de deadline de fase. Cuando se suelta, persiste
+  // el nuevo deadline en client.phaseDeadlines[phaseKey].
+  const startPhaseDeadlineDrag = (e, clientId, phaseKey, currentDeadline) => {
+    if (!currentDeadline) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = {
+      taskId: `phase_${clientId}_${phaseKey}`,
+      mode: 'phase-deadline',
+      startX: e.clientX,
+      originalStart: currentDeadline,
+      originalEnd: currentDeadline,
+      extra: { clientId, phaseKey },
+    };
+    setDragPreview({ taskId: `phase_${clientId}_${phaseKey}`, deltaDays: 0, mode: 'phase-deadline' });
+  };
+
   const resolveMembers = (assigneeStr) => {
     if (!assigneeStr) return [];
     const names = assigneeStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -243,6 +346,26 @@ export default function TimelineView({ onGoToTaskList }) {
           {/* Hint for mobile horizontal scroll */}
           <div className="md:hidden text-[10px] text-gray-400 mb-2 flex items-center gap-1">
             {'\u2190'} Desliz\u00e1 horizontalmente para ver m\u00e1s semanas {'\u2192'}
+          </div>
+
+          {/* Barra de ayuda con los gestos del timeline (solo desktop) */}
+          <div className="hidden md:flex items-center gap-4 flex-wrap text-[11.5px] text-[#6B7280] bg-[#F7F8FA] border border-[#EEF0F3] rounded-lg px-3 py-2 mb-3">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-6 h-2 rounded-sm bg-[#5B7CF5] opacity-40" />
+              <span><b className="text-[#3F4653] font-semibold">Arrastrar</b> barra para mover fechas</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-4 h-3 text-[10px] text-[#3F4653] font-bold">\u2194</span>
+              <span><b className="text-[#3F4653] font-semibold">Tirar de los bordes</b> para resizear</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rotate-45 bg-[#5B7CF5]" />
+              <span>Diamante de fase: <b className="text-[#3F4653] font-semibold">arrastrar</b> o <b className="text-[#3F4653] font-semibold">doble click</b></span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <MessageSquare size={11} className="text-[#4A67D8]" />
+              <span>Comentar</span>
+            </span>
           </div>
 
           {/* Gantt — week columns, scrollable on all viewports */}
@@ -387,14 +510,28 @@ export default function TimelineView({ onGoToTaskList }) {
                                   <span className="text-[11px] text-gray-400" title="Fase bloqueada">{'\uD83D\uDD12'}</span>
                                 </div>
                               )}
-                              <div
-                                className="absolute z-[3] cursor-pointer group"
-                                style={{ left: dateToPx(ph.deadline) - 6, top: 7, padding: 2 }}
-                                onClick={(e) => { e.stopPropagation(); setEditingPhaseDeadline(expandKey); }}
-                                title={`Deadline: ${ph.deadline}`}
-                              >
-                                <div className="w-2.5 h-2.5 rotate-45 group-hover:scale-150 transition-transform" style={{ background: color, border: `1px solid ${color}` }} />
-                              </div>
+                              {(() => {
+                                const dragKey = `phase_${cl.id}_${ph.phaseKey}`;
+                                const isDragging = dragPreview && dragPreview.taskId === dragKey;
+                                const dPx = isDragging ? dragPreview.deltaDays * dayPx : 0;
+                                const visualLeft = dateToPx(ph.deadline) - 6 + dPx;
+                                return (
+                                  <div
+                                    className={`absolute z-[3] group select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                                    style={{ left: visualLeft, top: 7, padding: 2 }}
+                                    onPointerDown={(e) => startPhaseDeadlineDrag(e, cl.id, ph.phaseKey, ph.deadline)}
+                                    onDoubleClick={(e) => { e.stopPropagation(); setEditingPhaseDeadline(expandKey); }}
+                                    title={`Deadline: ${ph.deadline} · arrastrar para mover · doble click para editar`}
+                                  >
+                                    <div className={`w-2.5 h-2.5 rotate-45 transition-transform ${isDragging ? 'scale-150' : 'group-hover:scale-150'}`} style={{ background: color, border: `1px solid ${color}` }} />
+                                    {isDragging && (
+                                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500 text-white whitespace-nowrap">
+                                        {addDaysISO(ph.deadline, dragPreview.deltaDays).slice(5)}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                               {/* Etiqueta dia-semana junto al diamante (ej: "Mar 13") */}
                               <div
                                 className="absolute z-[2] text-[9px] font-semibold pointer-events-none whitespace-nowrap"
@@ -517,22 +654,54 @@ export default function TimelineView({ onGoToTaskList }) {
                                   {weekColumns.map((w, i) => (
                                     <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-red-50/20' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #f8f8f8' }} />
                                   ))}
-                                  {/* Caso normal: barra de inicio a entrega */}
-                                  {canShowBar && (
-                                    <div
-                                      className={`absolute z-[1] cursor-pointer flex items-center px-0.5 gap-0.5 ${isDone ? '' : isOverdue ? 'ring-1 ring-red-300' : ''}`}
-                                      style={{ left: barLeftPx, width: barW, height: 14, top: 4 }}
-                                      onClick={(e) => { e.stopPropagation(); setAssigningTaskDate(task.id); }}
-                                      title={`Habilitada ${fmtDate(task.startedDate)} \u2192 ${isDone ? 'Hecha ' + fmtDate(barEndDate) : 'Entrega ' + fmtDate(task.dueDate)}${estimatedD !== null ? ' \u00b7 ' + estimatedD + 'd estimados' : ''}`}
-                                    >
-                                      <div className="absolute inset-0 rounded-sm" style={{ background: taskColor, opacity: 0.25 }} />
-                                      <span className="flex -space-x-1 shrink-0 relative z-[1]">
-                                        {taskMembers.slice(0, 3).map(m => (
-                                          <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white" />
-                                        ))}
-                                      </span>
-                                    </div>
-                                  )}
+                                  {/* Caso normal: barra de inicio a entrega \u2014 arrastrable */}
+                                  {canShowBar && (() => {
+                                    const isDragging = dragPreview && dragPreview.taskId === task.id;
+                                    const dPx = isDragging ? dragPreview.deltaDays * dayPx : 0;
+                                    let visualLeft = barLeftPx;
+                                    let visualWidth = barW;
+                                    if (isDragging) {
+                                      if (dragPreview.mode === 'move')  visualLeft  = barLeftPx + dPx;
+                                      if (dragPreview.mode === 'left')  { visualLeft = barLeftPx + dPx; visualWidth = Math.max(dayPx, barW - dPx); }
+                                      if (dragPreview.mode === 'right') visualWidth = Math.max(dayPx, barW + dPx);
+                                    }
+                                    return (
+                                      <div
+                                        className={`absolute z-[1] flex items-center px-0.5 gap-0.5 select-none ${isDragging ? 'cursor-grabbing ring-2 ring-blue-400' : 'cursor-grab'} ${!isDragging && (isDone ? '' : isOverdue ? 'ring-1 ring-red-300' : '')}`}
+                                        style={{ left: visualLeft, width: visualWidth, height: 14, top: 4 }}
+                                        onPointerDown={(e) => startTaskDrag(e, task, 'move')}
+                                        title={`Arrastr\u00e1 para mover \u00b7 tir\u00e1 de los bordes para resizear \u00b7 ${fmtDate(task.startedDate)} \u2192 ${fmtDate(task.dueDate)}${estimatedD !== null ? ' \u00b7 ' + estimatedD + 'd estimados' : ''}`}
+                                      >
+                                        <div className="absolute inset-0 rounded-sm" style={{ background: taskColor, opacity: 0.25 }} />
+                                        {/* Handle izquierdo */}
+                                        <div
+                                          className="absolute left-0 top-0 bottom-0 z-[2] cursor-ew-resize hover:bg-white/40"
+                                          style={{ width: 6 }}
+                                          onPointerDown={(e) => startTaskDrag(e, task, 'left')}
+                                          title="Cambiar fecha de inicio"
+                                        />
+                                        {/* Handle derecho */}
+                                        <div
+                                          className="absolute right-0 top-0 bottom-0 z-[2] cursor-ew-resize hover:bg-white/40"
+                                          style={{ width: 6 }}
+                                          onPointerDown={(e) => startTaskDrag(e, task, 'right')}
+                                          title="Cambiar fecha de entrega"
+                                        />
+                                        <span className="flex -space-x-1 shrink-0 relative z-[1]">
+                                          {taskMembers.slice(0, 3).map(m => (
+                                            <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white" />
+                                          ))}
+                                        </span>
+                                        {isDragging && (
+                                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500 text-white whitespace-nowrap z-[3]">
+                                            {dragPreview.mode === 'move' && `${addDaysISO(task.startedDate, dragPreview.deltaDays).slice(5)} \u2192 ${addDaysISO(task.dueDate, dragPreview.deltaDays).slice(5)}`}
+                                            {dragPreview.mode === 'left'  && `inicio: ${addDaysISO(task.startedDate, dragPreview.deltaDays).slice(5)}`}
+                                            {dragPreview.mode === 'right' && `entrega: ${addDaysISO(task.dueDate, dragPreview.deltaDays).slice(5)}`}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   {/* Diamante de fecha de entrega (siempre si hasDue y no done) */}
                                   {hasDue && !isDone && (
                                     <div
