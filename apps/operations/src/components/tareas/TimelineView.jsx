@@ -174,7 +174,7 @@ export default function TimelineView({ onGoToTaskList }) {
     weekColumns.push({ startIso, endIso, startNum, endNum, monthLabel, hasToday, days });
   }
   const weekWidth = 100;
-  const labelWidth = 240;
+  const labelWidth = 300;
   const totalTimelineStart = weekColumns[0].startIso;
   const totalTimelineEnd = weekColumns[weekColumns.length - 1].endIso;
   const totalDays = Math.round((new Date(totalTimelineEnd) - new Date(totalTimelineStart)) / 864e5);
@@ -450,13 +450,13 @@ export default function TimelineView({ onGoToTaskList }) {
 
                       return (
                         <div key={ph.phaseKey}>
-                          <div className={`flex items-center py-2 border-b border-[#F1F3F6] ${hasTasks ? 'cursor-pointer hover:bg-[#F7F9FC]' : ''}`} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
-                            <div className="shrink-0 pr-3 pl-3 flex items-center gap-1.5" style={{ width: labelWidth }}>
-                              {hasTasks && <span className={`text-[10px] text-[#B6BCC4] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
-                              <div className="text-[12px] leading-snug flex items-center gap-1.5 flex-1 min-w-0 font-semibold" style={{ color }}>
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                                <span className="truncate">{ph.phInfo.label}</span>
-                                <span className="text-[#9CA3AF] text-[10.5px] shrink-0 font-medium">{ph.progress}%</span>
+                          <div className={`flex items-start py-2 border-b border-[#F1F3F6] ${hasTasks ? 'cursor-pointer hover:bg-[#F7F9FC]' : ''}`} onClick={() => hasTasks && togglePhaseExpand(cl.id, ph.phaseKey)}>
+                            <div className="shrink-0 pr-3 pl-3 flex items-start gap-1.5 pt-1" style={{ width: labelWidth }}>
+                              {hasTasks && <span className={`text-[10px] text-[#B6BCC4] transition-transform mt-1 ${isExpanded ? 'rotate-90' : ''}`}>{'\u25B6'}</span>}
+                              <div className="text-[12px] leading-snug flex items-start gap-1.5 flex-1 min-w-0 font-semibold" style={{ color }}>
+                                <span className="w-2 h-2 rounded-full shrink-0 mt-1" style={{ background: color }} />
+                                <span className="leading-snug" title={ph.phInfo.label}>{ph.phInfo.label}</span>
+                                <span className="text-[#9CA3AF] text-[10.5px] shrink-0 font-medium mt-0.5">{ph.progress}%</span>
                               </div>
                               {editingPhaseDeadline === expandKey ? (
                                 <span className="inline-flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
