@@ -654,7 +654,9 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                 }
                 return <span className="text-[10px] text-blue-500 font-semibold" title="Dias transcurridos">{'\u23F1'} {elapsed}d</span>;
               })()}
-              {allDone && <span className="text-green-500 text-sm">{'\u2713'}</span>}
+              {/* Solo mostrar el \u2713 verde si REALMENTE habia tareas y todas
+                  estan hechas (no si la fase esta vacia). */}
+              {allDone && totalCount > 0 && <span className="text-green-500 text-sm">{'\u2713'}</span>}
               {phaseKey !== '_unphased' && (() => {
                 const deadline = (c.phaseDeadlines || {})[phaseKey];
                 const deadlineOverdue = deadline && !allDone && deadline < now;

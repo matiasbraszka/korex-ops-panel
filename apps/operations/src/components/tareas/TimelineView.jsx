@@ -220,48 +220,47 @@ export default function TimelineView({ onGoToTaskList }) {
     setDragPreview({ taskId: task.id, deltaDays: 0, mode });
   };
 
+  // Listeners de drag adjuntados UNA sola vez. Toda la state del drag vive
+  // en dragRef para que estos handlers no necesiten ser recreados en cada
+  // pointermove (asi evitamos remove/add de listeners por evento y eventuales
+  // pointerup perdidos en la transicion).
   useEffect(() => {
-    if (!dragPreview) return;
     const handleMove = (e) => {
-      if (!dragRef.current) return;
-      const deltaPx = e.clientX - dragRef.current.startX;
+      const drag = dragRef.current;
+      if (!drag) return;
+      const deltaPx = e.clientX - drag.startX;
       const deltaDays = Math.round(deltaPx / dayPx);
-      setDragPreview(prev => prev && prev.deltaDays !== deltaDays
-        ? { ...prev, deltaDays }
-        : prev);
+      if (drag.lastDeltaDays === deltaDays) return;
+      drag.lastDeltaDays = deltaDays;
+      setDragPreview(prev => prev ? { ...prev, deltaDays } : prev);
     };
     const handleUp = () => {
       const drag = dragRef.current;
-      const preview = dragPreview;
       dragRef.current = null;
       setDragPreview(null);
-      if (!drag || !preview || preview.deltaDays === 0) return;
-      const d = preview.deltaDays;
-      const patch = {};
+      if (!drag) return;
+      const d = drag.lastDeltaDays || 0;
+      if (d === 0) return;
       if (drag.mode === 'move') {
-        patch.startedDate = addDaysISO(drag.originalStart, d);
-        patch.dueDate = addDaysISO(drag.originalEnd, d);
+        updateTask(drag.taskId, {
+          startedDate: addDaysISO(drag.originalStart, d),
+          dueDate: addDaysISO(drag.originalEnd, d),
+        });
       } else if (drag.mode === 'left') {
         const newStart = addDaysISO(drag.originalStart, d);
-        // no permitir que start pase la due
         if (newStart > drag.originalEnd) return;
-        patch.startedDate = newStart;
+        updateTask(drag.taskId, { startedDate: newStart });
       } else if (drag.mode === 'right') {
         const newEnd = addDaysISO(drag.originalEnd, d);
         if (newEnd < drag.originalStart) return;
-        patch.dueDate = newEnd;
-      } else if (drag.mode === 'phase-deadline') {
-        // Cambiar deadline de fase (clientId + phaseKey vienen en drag.extra).
-        if (drag.extra) {
-          const c = clients.find(x => x.id === drag.extra.clientId);
-          if (!c) return;
-          const newDeadlines = { ...(c.phaseDeadlines || {}) };
-          newDeadlines[drag.extra.phaseKey] = addDaysISO(drag.originalEnd, d);
-          updateClient(drag.extra.clientId, { phaseDeadlines: newDeadlines });
-        }
-        return;
+        updateTask(drag.taskId, { dueDate: newEnd });
+      } else if (drag.mode === 'phase-deadline' && drag.extra) {
+        const c = clients.find(x => x.id === drag.extra.clientId);
+        if (!c) return;
+        const newDeadlines = { ...(c.phaseDeadlines || {}) };
+        newDeadlines[drag.extra.phaseKey] = addDaysISO(drag.originalEnd, d);
+        updateClient(drag.extra.clientId, { phaseDeadlines: newDeadlines });
       }
-      if (Object.keys(patch).length > 0) updateTask(drag.taskId, patch);
     };
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
@@ -269,7 +268,8 @@ export default function TimelineView({ onGoToTaskList }) {
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
     };
-  }, [dragPreview, dayPx, clients, updateClient, updateTask]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Inicia drag del diamante de deadline de fase. Cuando se suelta, persiste
   // el nuevo deadline en client.phaseDeadlines[phaseKey].

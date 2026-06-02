@@ -272,7 +272,7 @@ export default function TasksPage({ embedded = false }) {
         {/* Desktop row */}
         <div
           className={`hidden md:grid gap-3 py-2.5 px-4 items-center text-xs transition-colors hover:bg-[#F7F9FC] min-h-[42px] group border-t border-[#F1F3F6] ${blocked ? 'opacity-60' : ''}`}
-          style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 92px' }}
+          style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 60px 36px' }}
           onDragOver={(e) => handleDragOver(e, t, sortedGroup)}
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
           onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
@@ -771,14 +771,15 @@ export default function TasksPage({ embedded = false }) {
                     <>
                       <div
                         className="hidden md:grid gap-3 py-2 px-4 text-[10px] font-bold tracking-wider uppercase text-[#B6BCC4] border-b border-[#EEF0F3]"
-                        style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 92px' }}
+                        style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 60px 36px' }}
                       >
                         <span /><span />
                         <span>Tarea</span>
                         <span>Fase</span>
                         <span className="text-right">Entrega</span>
-                        <span className="text-center">💬</span>
+                        <span className="flex justify-center"><MessageSquare size={11} /></span>
                         <span className="text-right">Equipo</span>
+                        <span />
                       </div>
                       {sorted.map(t => renderTaskRow(t, { sortedGroup: sorted }))}
                     </>
@@ -863,15 +864,16 @@ export default function TasksPage({ embedded = false }) {
                 {/* Column header \u2014 solo desktop. Mismo grid que las filas. */}
                 <div
                   className="hidden md:grid gap-3 py-2 px-4 text-[10px] font-bold tracking-wider uppercase text-[#B6BCC4] border-b border-[#EEF0F3]"
-                  style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 92px' }}
+                  style={{ gridTemplateColumns: '16px 18px minmax(0,1fr) 130px 88px 48px 60px 36px' }}
                 >
                   <span />
                   <span />
                   <span>Tarea</span>
                   <span>Fase</span>
                   <span className="text-right">Entrega</span>
-                  <span className="text-center">\uD83D\uDCAC</span>
+                  <span className="flex justify-center"><MessageSquare size={11} /></span>
                   <span className="text-right">Equipo</span>
+                  <span />
                 </div>
                 {sortedTasks.map(t => renderTaskRow(t, { sortedGroup: sortedTasks }))}
 

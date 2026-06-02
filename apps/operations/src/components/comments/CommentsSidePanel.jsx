@@ -45,6 +45,9 @@ export default function CommentsSidePanel() {
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // Si hay valor, el composer envia como respuesta a ese comentario raiz
+  // (parent_id = replyTo). Si es null, el comentario es raiz.
+  const [replyTo, setReplyTo] = useState(null);
   // Mantener la tarea visible durante el slide-out aunque ya se cierre.
   const lastTaskRef = useRef(null);
   const taRef = useRef(null);
@@ -96,6 +99,7 @@ export default function CommentsSidePanel() {
   // Reset draft cuando cambia la tarea + manejar Escape global.
   useEffect(() => {
     setDraft('');
+    setReplyTo(null);
   }, [openCommentTaskId]);
 
   useEffect(() => {
@@ -129,16 +133,27 @@ export default function CommentsSidePanel() {
     try {
       await addTaskComment({
         task_id: shownTask.id,
-        parent_id: null,
+        // Si estamos respondiendo, parent_id apunta al comentario raiz.
+        parent_id: replyTo || null,
         body: draft,
         author_id: currentUser.id,
       });
       setDraft('');
+      setReplyTo(null);
     } catch (e) {
       alert('No se pudo guardar el comentario. Reintentá.');
     } finally {
       setSending(false);
     }
+  };
+
+  // Click en "Responder" en un comentario raiz: setea el destino + mete un
+  // @Nombre en el draft + foco al composer.
+  const startReply = (rootId, rootAuthorId) => {
+    setReplyTo(rootId);
+    const name = memberById[rootAuthorId]?.name?.split(' ')[0] || '';
+    setDraft(prev => (prev && !prev.startsWith('@')) ? prev : (name ? `@${name} ` : ''));
+    setTimeout(() => taRef.current?.focus(), 0);
   };
 
   const handleKeyDown = (e) => {
@@ -250,12 +265,7 @@ export default function CommentsSidePanel() {
                           canReply
                           canEdit={root.author_id === currentUser?.id}
                           canDelete={root.author_id === currentUser?.id || isAdmin}
-                          onReply={() => {
-                            // pre-rellena el composer con un @prefijo simple
-                            const name = memberById[root.author_id]?.name?.split(' ')[0] || '';
-                            setDraft(prev => prev ? prev : (name ? `@${name} ` : ''));
-                            taRef.current?.focus();
-                          }}
+                          onReply={() => startReply(root.id, root.author_id)}
                           onUpdate={async (id, body) => { await updateTaskComment(id, { body }); }}
                           onDelete={async (id) => { await deleteTaskComment(id); }}
                         />
@@ -280,6 +290,21 @@ export default function CommentsSidePanel() {
 
             {/* Composer */}
             <div className="border-t border-[#EEF0F3] px-[18px] py-3.5">
+              {replyTo && (() => {
+                const target = myComments.find(c => c.id === replyTo);
+                const author = target ? memberById[target.author_id] : null;
+                return (
+                  <div className="flex items-center justify-between bg-[#EEF2FF] text-[#4A67D8] text-[11px] font-semibold rounded-md px-2.5 py-1 mb-2">
+                    <span className="truncate">Respondiendo a {author?.name || 'comentario'}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setReplyTo(null); setDraft(''); }}
+                      className="ml-2 text-[#4A67D8] hover:text-[#1A1D26] bg-transparent border-none cursor-pointer flex items-center justify-center"
+                      title="Cancelar respuesta"
+                    ><X size={12} /></button>
+                  </div>
+                );
+              })()}
               <div className="flex items-end gap-2.5">
                 {currentUser && (
                   <TeamAvatar
