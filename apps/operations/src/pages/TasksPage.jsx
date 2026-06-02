@@ -1,15 +1,21 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS } from '../utils/constants';
 import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange } from '../utils/helpers';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, MessageSquare } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 import AddToWeeklyButton from '../components/tareas/AddToWeeklyButton';
+import TaskCommentsPanel from '../components/comments/TaskCommentsPanel';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments } = useApp();
+  const commentCountsByTask = useMemo(() => {
+    const map = {};
+    (taskComments || []).forEach(c => { map[c.task_id] = (map[c.task_id] || 0) + 1; });
+    return map;
+  }, [taskComments]);
   const TEAM = teamMembers || [];
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -341,6 +347,27 @@ export default function TasksPage({ embedded = false }) {
                   </span>
                 )}
                 {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue" title="Tiene descripci\u00f3n" />}
+                {(() => {
+                  const cnt = commentCountsByTask[t.id] || 0;
+                  if (cnt === 0) {
+                    return (
+                      <button
+                        className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100 flex items-center"
+                        onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
+                        title="Comentar"
+                      ><MessageSquare size={11} /></button>
+                    );
+                  }
+                  return (
+                    <button
+                      className="text-[10px] h-5 rounded px-1.5 hover:bg-blue-100 text-blue-600 bg-blue-50 border border-blue-200 cursor-pointer font-sans font-semibold flex items-center gap-1"
+                      onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
+                      title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                    >
+                      <MessageSquare size={10} />{cnt}
+                    </button>
+                  );
+                })()}
                 <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }} title="Dependencias">{'\uD83D\uDD17'}</button>
                 <button className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg" onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}>{isExpanded ? '\u25B2' : '\u25BC'}</button>
               </div>
@@ -637,6 +664,10 @@ export default function TasksPage({ embedded = false }) {
               <div className="md:hidden flex gap-1.5 w-full mt-1">
                 <button className="py-1 px-2 rounded text-[10px] bg-blue-bg text-blue border-none cursor-pointer font-sans" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}>{'\uD83D\uDD17'} Dependencias</button>
               </div>
+            </div>
+            {/* Comentarios \u2014 mismo componente que en el roadmap */}
+            <div onClick={(e) => e.stopPropagation()}>
+              <TaskCommentsPanel taskId={t.id} />
             </div>
           </div>
         )}

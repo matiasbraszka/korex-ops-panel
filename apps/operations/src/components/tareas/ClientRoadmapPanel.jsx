@@ -288,7 +288,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
       <div key={t.id} className={`group ${blocked ? 'opacity-60' : ''} ${rdIsDragging ? 'drag-ghost' : ''}`}>
         {rdIsDragOver && rdDragOverHalf === 'top' && <div className="drag-indicator" />}
         <div
-          className={`hover:bg-gray-50 cursor-pointer ${rowBg} grid grid-cols-[18px_22px_14px_1fr_70px_70px_56px] items-center gap-2 py-2 px-3`}
+          className={`hover:bg-gray-50 cursor-pointer ${rowBg} grid grid-cols-[18px_22px_14px_1fr_70px_70px_92px] items-center gap-2 py-2 px-3`}
           onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           onDragOver={(e) => rdHandleDragOver(e, t)}
           onDrop={(e) => rdHandleDrop(e, t, sortedGroup)}
@@ -433,15 +433,15 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           </div>
 
           {/* Col 6: Actions */}
-          <div className="flex items-center justify-end gap-0.5 min-w-0">
-            {/* Badge con cantidad de comentarios. Click abre/cierra el panel
-                expandido de la tarea para que se vea la zona de comentarios. */}
+          <div className="flex items-center justify-end gap-1 min-w-0">
+            {/* Badge con cantidad de comentarios. Click expande la tarea
+                para que la zona de comentarios sea visible. */}
             {(() => {
               const cnt = commentCountsByTask[t.id] || 0;
               if (cnt === 0) {
                 return (
                   <button
-                    className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center"
+                    className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center mr-0.5"
                     onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
                     title="Comentar"
                   ><MessageSquare size={11} /></button>
@@ -449,7 +449,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               }
               return (
                 <button
-                  className="text-[10px] h-5 rounded px-1.5 hover:bg-blue-100 text-blue-600 bg-blue-50 border-none cursor-pointer font-sans font-semibold flex items-center gap-0.5"
+                  className="text-[10px] h-5 rounded px-1.5 hover:bg-blue-100 text-blue-600 bg-blue-50 border border-blue-200 cursor-pointer font-sans font-semibold flex items-center gap-1 mr-0.5"
                   onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
                   title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
                 >
