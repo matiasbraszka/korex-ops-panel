@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
+import { MessageSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
@@ -6,6 +7,7 @@ import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
 import AddToWeeklyButton from './AddToWeeklyButton';
+import TaskCommentsPanel from '../comments/TaskCommentsPanel';
 
 /**
  * Panel completo de roadmap para un cliente. Replica el comportamiento del roadmap
@@ -16,8 +18,15 @@ import AddToWeeklyButton from './AddToWeeklyButton';
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
 export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
-  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers } = useApp();
+  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments } = useApp();
   const TEAM = teamMembers || [];
+
+  // Conteo de comentarios por tarea para el badge del row.
+  const commentCountsByTask = useMemo(() => {
+    const map = {};
+    (taskComments || []).forEach(c => { map[c.task_id] = (map[c.task_id] || 0) + 1; });
+    return map;
+  }, [taskComments]);
 
   // Estado local al panel (cada cliente tiene su propio estado de UI)
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -425,6 +434,29 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
 
           {/* Col 6: Actions */}
           <div className="flex items-center justify-end gap-0.5 min-w-0">
+            {/* Badge con cantidad de comentarios. Click abre/cierra el panel
+                expandido de la tarea para que se vea la zona de comentarios. */}
+            {(() => {
+              const cnt = commentCountsByTask[t.id] || 0;
+              if (cnt === 0) {
+                return (
+                  <button
+                    className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center"
+                    onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
+                    title="Comentar"
+                  ><MessageSquare size={11} /></button>
+                );
+              }
+              return (
+                <button
+                  className="text-[10px] h-5 rounded px-1.5 hover:bg-blue-100 text-blue-600 bg-blue-50 border-none cursor-pointer font-sans font-semibold flex items-center gap-0.5"
+                  onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
+                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                >
+                  <MessageSquare size={10} />{cnt}
+                </button>
+              );
+            })()}
             <button
               className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
@@ -485,6 +517,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                 className="text-[10px] py-[3px] px-2 rounded bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer font-sans ml-auto border-none"
                 onClick={(e) => { e.stopPropagation(); if (confirm('Eliminar esta tarea?')) deleteTask(t.id); }}
               >Eliminar</button>
+            </div>
+            {/* Comentarios de la tarea (hilos de 1 nivel) */}
+            <div onClick={(e) => e.stopPropagation()}>
+              <TaskCommentsPanel taskId={t.id} />
             </div>
           </div>
         )}

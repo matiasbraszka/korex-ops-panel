@@ -79,6 +79,8 @@ export function AppProvider({ children }) {
   const [ideas, setIdeas] = useState([]);
   // Notas del equipo (v15) — apuntes ricos compartibles con personas selectivas
   const [notas, setNotas] = useState([]);
+  // Comentarios sobre tareas (v16) — hilos de 1 nivel (parent_id)
+  const [taskComments, setTaskComments] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -677,6 +679,53 @@ export function AppProvider({ children }) {
     setIdeas(prev => prev.filter(i => i.id !== id));
   }, []);
 
+  // ── CRUD: task_comments ──
+  // Comentarios en tareas. Hilos de 1 nivel: parent_id NULL = raiz; si tiene
+  // valor referencia al comentario padre. Cascade en DB borra hijos al borrar
+  // padre y borra todo al borrar la tarea.
+  const addTaskComment = useCallback(async (data) => {
+    const id = 'tc_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      task_id: data.task_id,
+      parent_id: data.parent_id || null,
+      author_id: data.author_id,
+      body: String(data.body || '').trim(),
+      edited: false,
+    };
+    await sbFetch('task_comments', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+      throwOnError: true,
+    });
+    const nowIso = new Date().toISOString();
+    setTaskComments(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
+    return id;
+  }, []);
+
+  const updateTaskComment = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    if (patch.body !== undefined) patch.body = String(patch.body).trim();
+    patch.edited = true;
+    await sbFetch('task_comments?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+      throwOnError: true,
+    });
+    setTaskComments(prev => prev.map(c => c.id === id
+      ? { ...c, ...patch, updated_at: new Date().toISOString() }
+      : c));
+  }, []);
+
+  const deleteTaskComment = useCallback(async (id) => {
+    await sbFetch('task_comments?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    // Borramos local: el comentario + sus respuestas (la DB cascadea, pero
+    // limpiamos el estado optimista para no esperar al siguiente refresh).
+    setTaskComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
+  }, []);
+
   // ── CRUD: notas ──
   // Tabla `notas` (notas_v1.sql). Mismo patron que ideas: optimistic UI +
   // POST/PATCH/DELETE contra Supabase. Toda la sanitizacion del body_html
@@ -890,6 +939,13 @@ export function AppProvider({ children }) {
         const allNotas = await sbFetch('notas?select=*&order=updated_at.desc&limit=500', { headers: { 'Prefer': 'return=representation' } });
         if (allNotas && Array.isArray(allNotas)) setNotas(allNotas);
       } catch (e) { console.warn('loadNotas error', e); }
+
+      // Comentarios de tareas. Orden ascendente para que al armar hilos en el
+      // frontend ya vengan en el orden cronologico correcto.
+      try {
+        const allComments = await sbFetch('task_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allComments && Array.isArray(allComments)) setTaskComments(allComments);
+      } catch (e) { console.warn('loadTaskComments error', e); }
 
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
@@ -1219,6 +1275,10 @@ export function AppProvider({ children }) {
     updateNota,
     deleteNota,
     reorderNota,
+    taskComments,
+    addTaskComment,
+    updateTaskComment,
+    deleteTaskComment,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
