@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, MoveHorizontal } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
@@ -355,12 +355,12 @@ export default function TimelineView({ onGoToTaskList }) {
               <span><b className="text-[#3F4653] font-semibold">Arrastrar</b> la barra para mover</span>
             </span>
             <span className="inline-flex items-center gap-2">
-              <span className="inline-flex items-center justify-center font-bold text-[#3F4653]">\u21c4</span>
+              <MoveHorizontal size={14} className="text-[#3F4653]" />
               <span><b className="text-[#3F4653] font-semibold">Bordes</b> para resizear</span>
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="inline-block w-3 h-3 rotate-45 bg-[#5B7CF5]" />
-              <span>Diamante: <b className="text-[#3F4653] font-semibold">arrastrar</b> \u00b7 <b className="text-[#3F4653] font-semibold">2\u00d7 click</b> editar</span>
+              <span>Diamante: <b className="text-[#3F4653] font-semibold">arrastrar</b> o <b className="text-[#3F4653] font-semibold">doble click</b></span>
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#EEF2FF] text-[#4A67D8]">
