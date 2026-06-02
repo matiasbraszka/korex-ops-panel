@@ -8,6 +8,7 @@ import CrearIdeaModal from '../components/ideas/CrearIdeaModal';
 import CrearNotaModal from '../components/notas/CrearNotaModal';
 import { sanitizeNoteHtml, htmlToPlainText } from '../components/notas/sanitize';
 import { getNoteColor } from '../components/notas/colors';
+import { getBullets } from '../utils/helpers';
 
 // ── helpers de fecha ──────────────────────────────────────────────────────
 function fmtReportDate(dateStr) {
@@ -290,7 +291,60 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{p.text || '—'}</div>
+                              {(() => {
+                                const bullets = getBullets(p);
+                                const entregables = bullets.filter(b => b.category === 'entregable');
+                                const avances = bullets.filter(b => b.category === 'avance');
+                                const sinCat = bullets.filter(b => !b.category);
+                                // Si todos los bullets vienen sin categoria, mostrar
+                                // como antes (texto plano) para no romper visualmente
+                                // informes viejos.
+                                if (entregables.length === 0 && avances.length === 0) {
+                                  return (
+                                    <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{p.text || '—'}</div>
+                                  );
+                                }
+                                return (
+                                  <div className="space-y-1.5">
+                                    {entregables.length > 0 && (
+                                      <div>
+                                        <div className="text-[9.5px] font-bold text-green-700 uppercase tracking-wide mb-0.5">Entregables</div>
+                                        <ul className="text-[13px] text-gray-700 space-y-0.5">
+                                          {entregables.map((b, idx) => (
+                                            <li key={'e_' + idx} className="flex gap-1.5">
+                                              <span className="text-green-600 shrink-0">✓</span>
+                                              <span>{b.text}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                    {avances.length > 0 && (
+                                      <div>
+                                        <div className="text-[9.5px] font-bold text-blue-700 uppercase tracking-wide mb-0.5">Avances</div>
+                                        <ul className="text-[13px] text-gray-700 space-y-0.5">
+                                          {avances.map((b, idx) => (
+                                            <li key={'a_' + idx} className="flex gap-1.5">
+                                              <span className="text-blue-600 shrink-0">•</span>
+                                              <span>{b.text}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                    {sinCat.length > 0 && (
+                                      <ul className="text-[13px] text-gray-600 space-y-0.5">
+                                        {sinCat.map((b, idx) => (
+                                          <li key={'s_' + idx} className="flex gap-1.5">
+                                            <span className="text-gray-400 shrink-0">-</span>
+                                            <span>{b.text}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })}
@@ -570,16 +624,16 @@ function NotasView({ openCreateNota, openEditNota }) {
     return map;
   }, [teamMembers]);
 
-  // Visibilidad: admin, autor o presente en share_with_ids.
+  // Visibilidad: autor o presente en share_with_ids. Los admins NO ven notas
+  // privadas de otros — las notas son personales por diseño.
   const visibles = useMemo(() => {
     return (notas || []).filter(n => {
-      if (isAdmin) return true;
       if (!meId) return false;
       if (n.author_id === meId) return true;
       if (Array.isArray(n.share_with_ids) && n.share_with_ids.includes(meId)) return true;
       return false;
     });
-  }, [notas, isAdmin, meId]);
+  }, [notas, meId]);
 
   const allTags = useMemo(() => {
     const set = new Set();
@@ -614,7 +668,7 @@ function NotasView({ openCreateNota, openEditNota }) {
     return list;
   }, [visibles, tagFilter, scopeFilter, search, sortMode, meId]);
 
-  const canEditOrDelete = (n) => isAdmin || n.author_id === meId;
+  const canEditOrDelete = (n) => n.author_id === meId;
   const togglePin = (n) => updateNota(n.id, { pinned: !n.pinned });
 
   const handleDelete = async (n) => {

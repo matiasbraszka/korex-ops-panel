@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, FileText } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -7,6 +7,7 @@ import TeamUsersEditor from '../components/settings/TeamUsersEditor';
 import HistorialTiposEditor from '../components/settings/HistorialTiposEditor';
 import HistorialEmailEditor from '../components/settings/HistorialEmailEditor';
 import PendingResourcesTemplateEditor from '../components/settings/PendingResourcesTemplateEditor';
+import InformesFlagsEditor from '../components/settings/InformesFlagsEditor';
 
 const TABS = [
   { id: 'team',          label: 'Equipo y usuarios',     Icon: Users },
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'pending-res',   label: 'Recursos pendientes',   Icon: CheckSquare },
   { id: 'services',      label: 'Servicios',             Icon: Briefcase },
   { id: 'priorities',    label: 'Prioridades',           Icon: Tag },
+  { id: 'informes',      label: 'Informes',              Icon: FileText },
   { id: 'hist-tipos',    label: 'Tipos de evento',       Icon: Sparkles },
   { id: 'hist-email',    label: 'Email del Historial',   Icon: Mail },
 ];
@@ -54,6 +56,7 @@ export default function SettingsPage() {
         {tab === 'pending-res' && <PendingResourcesTemplateEditor />}
         {tab === 'services'    && <ServicesEditor />}
         {tab === 'priorities'  && <PrioritiesEditor />}
+        {tab === 'informes'    && <InformesFlagsEditor />}
         {tab === 'hist-tipos'  && <HistorialTiposEditor />}
         {tab === 'hist-email'  && <HistorialEmailEditor />}
       </div>

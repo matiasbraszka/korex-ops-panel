@@ -1,17 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { X, ChevronDown, Search } from 'lucide-react';
+import { X, ChevronDown, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
-import { today } from '../../utils/helpers';
-
-// Lunes (ISO) de la fecha pasada → string YYYY-MM-DD
-function mondayOf(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
+import { today, mondayOf, weekDatesOf, getBullets, serializeBullets } from '../../utils/helpers';
+import BulletRows from './BulletRows';
 
 function fmtDateLabel(dateStr) {
   try {
@@ -23,8 +15,13 @@ const INTERNAL_KEY = '__internal__';
 const INTERNAL_LABEL = 'Korex – Interno';
 
 export default function CrearInformeModal({ open, onClose, defaultType = 'daily', editingReport = null }) {
-  const { clients, currentUser, addTeamReport, updateTeamReport } = useApp();
+  const { clients, currentUser, addTeamReport, updateTeamReport, appSettings, teamReports } = useApp();
   const isEditing = !!editingReport;
+  // Feature flag global: cuando esta ON, cada bullet de un cliente se carga
+  // como una fila aparte con categoria (entregable | avance) y el semanal
+  // se autocompleta desde los diarios de la semana. Cuando esta OFF el modal
+  // funciona como antes (textarea libre + sin auto-fill).
+  const bulletsEnabled = !!appSettings?.informes_bullets_enabled;
   const [type, setType] = useState(defaultType);
   const [reportDate, setReportDate] = useState(today());
   // progressItems: [{ key: client_id | INTERNAL_KEY, label: nombre, text: 'qué avanzó', minutes: '' }]
@@ -66,6 +63,9 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           setShowClientPicker(false);
           setPickerSearch('');
           setError('');
+          // El draft viene con datos del usuario, marcamos touched para no pisar.
+          userTouchedRef.current = true;
+          autoFillSourceMondayRef.current = null;
           return; // listo: el resto del effect no aplica
         }
       } catch (e) { /* ignore */ }
@@ -77,18 +77,25 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       const items = Array.isArray(editingReport.progress_by_client) ? editingReport.progress_by_client : [];
       const prefilled = items.map(p => {
         const isInternal = !p.client_id;
-        if (isInternal) {
-          return { key: INTERNAL_KEY, label: INTERNAL_LABEL, text: p.text || '', minutes: p.minutes != null ? String(p.minutes) : '' };
-        }
-        const c = (clients || []).find(x => x.id === p.client_id);
-        return {
-          key: p.client_id,
-          label: c?.name || 'Cliente eliminado',
+        const c = isInternal ? null : (clients || []).find(x => x.id === p.client_id);
+        const base = {
+          key: isInternal ? INTERNAL_KEY : p.client_id,
+          label: isInternal ? INTERNAL_LABEL : (c?.name || 'Cliente eliminado'),
           text: p.text || '',
           minutes: p.minutes != null ? String(p.minutes) : '',
         };
+        if (bulletsEnabled) {
+          // Si el informe original ya tenia bullets categorizados los usamos.
+          // Si no, parseamos el text y dejamos los bullets sin categoria
+          // (el usuario los puede clasificar al editar).
+          base.bullets = getBullets(p);
+        }
+        return base;
       });
       setProgressItems(prefilled);
+      // En edicion no auto-rellenamos ni marcamos touched.
+      userTouchedRef.current = true;
+      autoFillSourceMondayRef.current = null;
       setNextDay(editingReport.next_day || '');
       // Bloqueos no se editan acá (tabla aparte). Si existen quedan tal cual.
       setHasBlocker(false);
@@ -103,6 +110,9 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       setHasBlocker(false);
       setBlockerDesc('');
       setBlockerImprovement('');
+      // Form vacio: habilitamos el auto-fill semanal.
+      userTouchedRef.current = false;
+      autoFillSourceMondayRef.current = null;
     }
     setShowClientPicker(false);
     setPickerSearch('');
@@ -147,29 +157,154 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     [clients]
   );
 
+  // ── Soporte de semanal asistido (solo flag ON) ────────────────────────────
+  const meId = currentUser?.id;
+  const weekMonday = (type === 'weekly' && reportDate) ? mondayOf(reportDate) : null;
+  const weekDates = useMemo(() => weekMonday ? weekDatesOf(weekMonday) : [], [weekMonday]);
+
+  // Mapa fecha → informe diario del usuario para la semana elegida.
+  const dailiesByDate = useMemo(() => {
+    if (!weekMonday || !meId) return {};
+    const map = {};
+    (teamReports || []).forEach(r => {
+      if (r.user_id === meId && r.report_type === 'daily' && weekDates.includes(r.report_date)) {
+        map[r.report_date] = r;
+      }
+    });
+    return map;
+  }, [teamReports, meId, weekMonday, weekDates]);
+
+  // Faltantes Lun-Vie (los 5 primeros de weekDates).
+  const missingWeekdays = useMemo(
+    () => (weekDates.slice(0, 5) || []).filter(d => !dailiesByDate[d]),
+    [weekDates, dailiesByDate],
+  );
+  const isWeekComplete = weekMonday && missingWeekdays.length === 0;
+
+  // Clientes indexados por id para resolver labels en la agregacion.
+  const clientsById = useMemo(() => {
+    const map = {};
+    (clients || []).forEach(c => { map[c.id] = c; });
+    return map;
+  }, [clients]);
+
+  // Etiqueta corta para los chips del banner ("Lun 25 may").
+  const fmtDayChip = (iso) => {
+    try {
+      const dt = new Date(iso + 'T12:00:00');
+      const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      return `${dias[dt.getDay()]} ${dt.getDate()} ${meses[dt.getMonth()]}`;
+    } catch { return iso; }
+  };
+
+  // Refs para no pisar la edicion del usuario al auto-rellenar el semanal.
+  const autoFillSourceMondayRef = useRef(null);
+  const userTouchedRef = useRef(false);
+
   const selectedKeys = useMemo(() => new Set(progressItems.map(i => i.key)), [progressItems]);
 
   const toggleClient = (key, label) => {
+    userTouchedRef.current = true;
     setProgressItems(prev => {
       const exists = prev.find(i => i.key === key);
       if (exists) return prev.filter(i => i.key !== key);
-      return [...prev, { key, label, text: '', minutes: '' }];
+      const base = { key, label, text: '', minutes: '' };
+      if (bulletsEnabled) base.bullets = [];
+      return [...prev, base];
     });
   };
 
   const removeItem = (key) => {
+    userTouchedRef.current = true;
     setProgressItems(prev => prev.filter(i => i.key !== key));
   };
 
   const updateItemText = (key, text) => {
+    userTouchedRef.current = true;
     setProgressItems(prev => prev.map(i => i.key === key ? { ...i, text } : i));
+  };
+
+  // Actualizar bullets de un item (solo flag ON). Mantenemos `text`
+  // serializado por compat con renderers viejos.
+  const updateItemBullets = (key, bullets) => {
+    userTouchedRef.current = true;
+    setProgressItems(prev => prev.map(i => i.key === key
+      ? { ...i, bullets, text: serializeBullets(bullets) }
+      : i));
   };
 
   // Solo permitir dígitos. Vacío también está OK durante la edición.
   const updateItemMinutes = (key, raw) => {
+    userTouchedRef.current = true;
     const onlyDigits = (raw || '').replace(/[^0-9]/g, '');
     setProgressItems(prev => prev.map(i => i.key === key ? { ...i, minutes: onlyDigits } : i));
   };
+
+  // Agregar agrupando por cliente + ordenando bullets por categoria
+  // (entregable → avance → sin categoria). Solo se usa en modo semanal
+  // cuando los 5 diarios estan cargados y el flag esta ON.
+  const aggregateDailiesToWeekly = () => {
+    const dailies = weekDates.map(d => dailiesByDate[d]).filter(Boolean);
+    const byClient = new Map();
+    dailies
+      .sort((a, b) => a.report_date.localeCompare(b.report_date))
+      .forEach(d => {
+        (d.progress_by_client || []).forEach(p => {
+          const key = p.client_id || INTERNAL_KEY;
+          const label = p.client_id
+            ? (clientsById[p.client_id]?.name || 'Cliente eliminado')
+            : INTERNAL_LABEL;
+          const bullets = getBullets(p);
+          const prev = byClient.get(key) || { label, bullets: [], minutes: 0 };
+          prev.bullets.push(...bullets);
+          prev.minutes += parseInt(p.minutes, 10) || 0;
+          byClient.set(key, prev);
+        });
+      });
+
+    return Array.from(byClient.entries()).map(([key, v]) => {
+      const sortedBullets = [
+        ...v.bullets.filter(b => b.category === 'entregable'),
+        ...v.bullets.filter(b => b.category === 'avance'),
+        ...v.bullets.filter(b => !b.category),
+      ];
+      return {
+        key,
+        label: v.label,
+        bullets: sortedBullets,
+        text: serializeBullets(sortedBullets),
+        minutes: String(v.minutes),
+      };
+    });
+  };
+
+  // Auto-rellenar el form del semanal al elegir una semana con los 5 diarios
+  // completos. Solo se dispara una vez por semana (autoFillSourceMondayRef)
+  // y nunca pisa lo que el usuario haya tocado a mano.
+  useEffect(() => {
+    if (!open) return;
+    if (!bulletsEnabled) return;
+    if (isEditing) return;
+    if (type !== 'weekly') return;
+    if (!isWeekComplete) return;
+    if (autoFillSourceMondayRef.current === weekMonday) return; // ya rellenado para esta semana
+    if (userTouchedRef.current && autoFillSourceMondayRef.current != null) return;
+
+    const next = aggregateDailiesToWeekly();
+    if (next.length === 0) return;
+    setProgressItems(next);
+    autoFillSourceMondayRef.current = weekMonday;
+    userTouchedRef.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, bulletsEnabled, isEditing, type, isWeekComplete, weekMonday]);
+
+  // Si el usuario cambia de semana, permitimos un nuevo auto-fill.
+  useEffect(() => {
+    if (autoFillSourceMondayRef.current && autoFillSourceMondayRef.current !== weekMonday) {
+      userTouchedRef.current = false;
+    }
+  }, [weekMonday]);
 
   const totalMinutes = progressItems.reduce((acc, i) => acc + (parseInt(i.minutes, 10) || 0), 0);
   const fmtMinutes = (m) => {
@@ -189,11 +324,24 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
   const isValid = () => {
     if (!currentUser?.id) return false;
     if (progressItems.length === 0) return false;
-    // Cada item debe tener texto y minutos > 0 (los minutos van a tabla de DB para análisis)
-    if (progressItems.some(i => !i.text.trim())) return false;
+    if (bulletsEnabled) {
+      // Modo bullets: cada item debe tener al menos un bullet con texto,
+      // y los bullets con texto deben tener categoria (al crear un informe).
+      const someEmpty = progressItems.some(i => !Array.isArray(i.bullets) || !i.bullets.some(b => (b.text || '').trim()));
+      if (someEmpty) return false;
+      if (!isEditing) {
+        const allCategorized = progressItems.every(i => (i.bullets || []).filter(b => (b.text || '').trim()).every(b => b.category === 'entregable' || b.category === 'avance'));
+        if (!allCategorized) return false;
+      }
+    } else {
+      // Modo legacy: textarea libre.
+      if (progressItems.some(i => !i.text.trim())) return false;
+    }
     if (progressItems.some(i => !i.minutes || parseInt(i.minutes, 10) <= 0)) return false;
     if (type === 'daily' && !nextDay.trim()) return false;
     if (hasBlocker && (!blockerDesc.trim() || !blockerImprovement.trim())) return false;
+    // Bloqueo de semanal sin diarios completos (solo modo flag + creacion).
+    if (bulletsEnabled && !isEditing && type === 'weekly' && missingWeekdays.length > 0) return false;
     return true;
   };
 
@@ -203,14 +351,26 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     const issues = [];
     if (!currentUser?.id) { issues.push('No hay usuario logueado'); return issues; }
     if (progressItems.length === 0) { issues.push('Agregá al menos un cliente o "Korex – Interno" para reportar avance.'); return issues; }
-    const sinTexto = progressItems.filter(i => !i.text.trim()).map(i => i.label);
-    if (sinTexto.length) issues.push(`Falta describir el avance en: ${sinTexto.join(', ')}.`);
+    if (bulletsEnabled) {
+      const sinBullets = progressItems.filter(i => !Array.isArray(i.bullets) || !i.bullets.some(b => (b.text || '').trim())).map(i => i.label);
+      if (sinBullets.length) issues.push(`Falta cargar bullets en: ${sinBullets.join(', ')}.`);
+      if (!isEditing) {
+        const sinCategoria = progressItems.filter(i => (i.bullets || []).some(b => (b.text || '').trim() && b.category !== 'entregable' && b.category !== 'avance')).map(i => i.label);
+        if (sinCategoria.length) issues.push(`Marcá Entregable o Avance en cada bullet de: ${sinCategoria.join(', ')}.`);
+      }
+    } else {
+      const sinTexto = progressItems.filter(i => !i.text.trim()).map(i => i.label);
+      if (sinTexto.length) issues.push(`Falta describir el avance en: ${sinTexto.join(', ')}.`);
+    }
     const sinMinutos = progressItems.filter(i => !i.minutes || parseInt(i.minutes, 10) <= 0).map(i => i.label);
     if (sinMinutos.length) issues.push(`Falta poner los minutos invertidos en: ${sinMinutos.join(', ')}.`);
     if (type === 'daily' && !nextDay.trim()) issues.push('Falta completar "Qué vas a hacer mañana".');
     if (hasBlocker) {
       if (!blockerDesc.trim()) issues.push('Falta describir el bloqueo.');
       if (!blockerImprovement.trim()) issues.push('Falta la propuesta de mejora del bloqueo.');
+    }
+    if (bulletsEnabled && !isEditing && type === 'weekly' && missingWeekdays.length > 0) {
+      issues.push('Faltan informes diarios de la semana: ' + missingWeekdays.map(fmtDayChip).join(', ') + '. Cargalos primero.');
     }
     return issues;
   };
@@ -239,11 +399,23 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     setError('');
     let savedOk = false;
     try {
-      const progressByClient = progressItems.map(i => ({
-        client_id: i.key === INTERNAL_KEY ? null : i.key,
-        text: i.text.trim(),
-        minutes: parseInt(i.minutes, 10) || 0,
-      }));
+      const progressByClient = progressItems.map(i => {
+        const base = {
+          client_id: i.key === INTERNAL_KEY ? null : i.key,
+          minutes: parseInt(i.minutes, 10) || 0,
+        };
+        if (bulletsEnabled && Array.isArray(i.bullets)) {
+          // Filtrar bullets vacios y guardar bullets + text derivado por compat.
+          const cleaned = i.bullets
+            .map(b => ({ text: String(b?.text || '').trim(), category: b?.category || null }))
+            .filter(b => b.text);
+          base.bullets = cleaned;
+          base.text = serializeBullets(cleaned);
+        } else {
+          base.text = (i.text || '').trim();
+        }
+        return base;
+      });
       const clientIds = progressByClient.filter(p => p.client_id).map(p => p.client_id);
       const workedInternal = progressByClient.some(p => p.client_id === null);
 
@@ -418,6 +590,36 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           )}
         </div>
 
+        {/* Banner del semanal asistido — solo flag ON + weekly + creacion */}
+        {bulletsEnabled && type === 'weekly' && !isEditing && weekMonday && (
+          isWeekComplete ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-[12px] text-green-800 flex items-start gap-2">
+              <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-green-600" />
+              <div>
+                <div className="font-semibold">Tenés los 5 diarios cargados de esta semana.</div>
+                <div className="text-green-700">El informe semanal se generó automáticamente desde tus diarios — revisalo y editá antes de guardar.</div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-red-600" />
+                <div className="flex-1">
+                  <div className="font-semibold">Te faltan informes diarios de esta semana.</div>
+                  <div className="text-red-700 mt-0.5">Cargá esos primero para poder generar el semanal.</div>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {missingWeekdays.map(d => (
+                      <span key={d} className="bg-white border border-red-200 text-red-700 text-[10.5px] font-semibold rounded-full px-2 py-0.5">
+                        {fmtDayChip(d)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        )}
+
         {/* Selector de clientes */}
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">
@@ -530,15 +732,22 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                   <label className="block text-[11px] font-semibold text-gray-600 mb-1">
                     ¿Qué avanzaste con {item.label}?
                   </label>
-                  <textarea
-                    value={item.text}
-                    onChange={e => updateItemText(item.key, e.target.value)}
-                    placeholder={isInternal
-                      ? 'Ej: Avancé el rediseño del panel de operaciones'
-                      : 'Ej: Entregué los guiones y dejé la landing lista para revisión'}
-                    rows={2}
-                    className="w-full border border-gray-200 rounded-md py-1.5 px-2 text-[13px] font-sans outline-none focus:border-blue-400 resize-y bg-white"
-                  />
+                  {bulletsEnabled ? (
+                    <BulletRows
+                      bullets={Array.isArray(item.bullets) ? item.bullets : []}
+                      onChange={(next) => updateItemBullets(item.key, next)}
+                    />
+                  ) : (
+                    <textarea
+                      value={item.text}
+                      onChange={e => updateItemText(item.key, e.target.value)}
+                      placeholder={isInternal
+                        ? 'Ej: Avancé el rediseño del panel de operaciones'
+                        : 'Ej: Entregué los guiones y dejé la landing lista para revisión'}
+                      rows={2}
+                      className="w-full border border-gray-200 rounded-md py-1.5 px-2 text-[13px] font-sans outline-none focus:border-blue-400 resize-y bg-white"
+                    />
+                  )}
                   {/* Minutos invertidos en este avance — borde rojo si falta */}
                   {(() => {
                     const minutesEmpty = !item.minutes || parseInt(item.minutes, 10) <= 0;

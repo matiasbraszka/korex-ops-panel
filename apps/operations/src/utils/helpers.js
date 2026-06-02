@@ -25,6 +25,65 @@ export function daysAgo(d) {
   return d ? daysBetween(d, today()) : 0;
 }
 
+// ── Helpers de fecha para informes semanales ──────────────────────────────
+// Lunes ISO de la fecha pasada → YYYY-MM-DD (semana arranca en lunes).
+// Reusado por CrearInformeModal y por las validaciones del flujo de informes.
+export function mondayOf(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const day = dt.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  dt.setDate(dt.getDate() + diff);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+// Devuelve los 7 ISO de la semana cuya raiz es `monday` (Lun → Dom).
+export function weekDatesOf(monday) {
+  const [y, m, d] = monday.split('-').map(Number);
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + i);
+    const pad = (n) => String(n).padStart(2, '0');
+    out.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`);
+  }
+  return out;
+}
+
+// ── Bullets categorizados para informes (entregable / avance) ──────────────
+// getBullets(progressByClientItem) → siempre devuelve [{ text, category }].
+// Si el item tiene `bullets`, los devuelve tal cual.
+// Si solo tiene `text` (formato viejo), parsea cada linea como bullet sin
+// categoria (category=null). Esto da retrocompatibilidad total: informes
+// viejos se siguen mostrando como antes y se pueden migrar editandolos.
+export function getBullets(item) {
+  if (!item) return [];
+  if (Array.isArray(item.bullets) && item.bullets.length > 0) {
+    return item.bullets.map(b => ({
+      text: String(b?.text || '').trim(),
+      category: b?.category === 'entregable' || b?.category === 'avance' ? b.category : null,
+    })).filter(b => b.text);
+  }
+  return String(item.text || '')
+    .split('\n')
+    .map(l => l.replace(/^[\s\-•·*]+/, '').trim())
+    .filter(Boolean)
+    .map(text => ({ text, category: null }));
+}
+
+// Convierte un array de bullets [{text, category}] en el `text` legacy que
+// algunos renderers viejos esperan. Se sigue escribiendo en cada save para
+// que un informe del flujo nuevo se pueda leer aunque alguien apague el flag.
+export function serializeBullets(bullets) {
+  if (!Array.isArray(bullets)) return '';
+  return bullets
+    .map(b => String(b?.text || '').trim())
+    .filter(Boolean)
+    .map(t => `- ${t}`)
+    .join('\n');
+}
+
 export function fmtDate(d) {
   if (!d) return '\u2014';
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
