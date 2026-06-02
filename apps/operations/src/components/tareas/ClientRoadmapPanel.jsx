@@ -7,7 +7,6 @@ import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
 import AddToWeeklyButton from './AddToWeeklyButton';
-import TaskCommentsPanel from '../comments/TaskCommentsPanel';
 
 /**
  * Panel completo de roadmap para un cliente. Replica el comportamiento del roadmap
@@ -18,7 +17,7 @@ import TaskCommentsPanel from '../comments/TaskCommentsPanel';
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
 export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
-  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments } = useApp();
+  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments } = useApp();
   const TEAM = teamMembers || [];
 
   // Conteo de comentarios por tarea para el badge del row.
@@ -434,26 +433,25 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
 
           {/* Col 6: Actions */}
           <div className="flex items-center justify-end gap-1 min-w-0">
-            {/* Badge con cantidad de comentarios. Click expande la tarea
-                para que la zona de comentarios sea visible. */}
+            {/* Badge de comentarios — abre el panel lateral de actividad. */}
             {(() => {
               const cnt = commentCountsByTask[t.id] || 0;
               if (cnt === 0) {
                 return (
                   <button
-                    className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center mr-0.5"
-                    onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
+                    className="text-[11px] w-7 h-[26px] rounded-lg bg-transparent text-[#9CA3AF] border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:bg-[#EEF2FF] hover:text-[#5B7CF5] flex items-center justify-center mr-1 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
                     title="Comentar"
-                  ><MessageSquare size={11} /></button>
+                  ><MessageSquare size={13} /></button>
                 );
               }
               return (
                 <button
-                  className="text-[10px] h-5 rounded px-1.5 hover:bg-blue-100 text-blue-600 bg-blue-50 border border-blue-200 cursor-pointer font-sans font-semibold flex items-center gap-1 mr-0.5"
-                  onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
-                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                  className="text-[11.5px] h-[26px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-sans font-semibold flex items-center gap-1 mr-1 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
+                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''} — abrir panel`}
                 >
-                  <MessageSquare size={10} />{cnt}
+                  <MessageSquare size={11} />{cnt}
                 </button>
               );
             })()}
@@ -517,10 +515,6 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                 className="text-[10px] py-[3px] px-2 rounded bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer font-sans ml-auto border-none"
                 onClick={(e) => { e.stopPropagation(); if (confirm('Eliminar esta tarea?')) deleteTask(t.id); }}
               >Eliminar</button>
-            </div>
-            {/* Comentarios de la tarea (hilos de 1 nivel) */}
-            <div onClick={(e) => e.stopPropagation()}>
-              <TaskCommentsPanel taskId={t.id} />
             </div>
           </div>
         )}

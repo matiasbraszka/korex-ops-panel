@@ -81,6 +81,8 @@ export function AppProvider({ children }) {
   const [notas, setNotas] = useState([]);
   // Comentarios sobre tareas (v16) — hilos de 1 nivel (parent_id)
   const [taskComments, setTaskComments] = useState([]);
+  // Panel lateral de actividad/comentarios: id de la tarea abierta o null.
+  const [openCommentTaskId, setOpenCommentTaskId] = useState(null);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -1279,6 +1281,9 @@ export function AppProvider({ children }) {
     addTaskComment,
     updateTaskComment,
     deleteTaskComment,
+    openCommentTaskId,
+    openTaskComments: (id) => setOpenCommentTaskId(id),
+    closeTaskComments: () => setOpenCommentTaskId(null),
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];

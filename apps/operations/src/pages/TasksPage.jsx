@@ -7,10 +7,9 @@ import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
 import TeamAvatar from '../components/TeamAvatar';
 import AddToWeeklyButton from '../components/tareas/AddToWeeklyButton';
-import TaskCommentsPanel from '../components/comments/TaskCommentsPanel';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments } = useApp();
   const commentCountsByTask = useMemo(() => {
     const map = {};
     (taskComments || []).forEach(c => { map[c.task_id] = (map[c.task_id] || 0) + 1; });
@@ -352,19 +351,19 @@ export default function TasksPage({ embedded = false }) {
                   if (cnt === 0) {
                     return (
                       <button
-                        className="bg-transparent border-none text-text3 cursor-pointer text-[11px] py-[2px] px-1 rounded hover:text-blue hover:bg-blue-bg opacity-0 group-hover:opacity-100 flex items-center"
-                        onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
+                        className="bg-transparent border-none text-[#9CA3AF] cursor-pointer text-[11px] py-[2px] px-1.5 rounded-lg hover:text-[#5B7CF5] hover:bg-[#EEF2FF] opacity-0 group-hover:opacity-100 flex items-center transition-colors"
+                        onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
                         title="Comentar"
-                      ><MessageSquare size={11} /></button>
+                      ><MessageSquare size={12} /></button>
                     );
                   }
                   return (
                     <button
-                      className="text-[10px] h-5 rounded px-1.5 hover:bg-blue-100 text-blue-600 bg-blue-50 border border-blue-200 cursor-pointer font-sans font-semibold flex items-center gap-1"
-                      onClick={(e) => { e.stopPropagation(); setExpandedTasks(prev => ({ ...prev, [t.id]: true })); }}
-                      title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                      className="text-[11.5px] h-[24px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-sans font-semibold flex items-center gap-1 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
+                      title={`${cnt} comentario${cnt !== 1 ? 's' : ''} — abrir panel`}
                     >
-                      <MessageSquare size={10} />{cnt}
+                      <MessageSquare size={11} />{cnt}
                     </button>
                   );
                 })()}
@@ -664,10 +663,6 @@ export default function TasksPage({ embedded = false }) {
               <div className="md:hidden flex gap-1.5 w-full mt-1">
                 <button className="py-1 px-2 rounded text-[10px] bg-blue-bg text-blue border-none cursor-pointer font-sans" onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}>{'\uD83D\uDD17'} Dependencias</button>
               </div>
-            </div>
-            {/* Comentarios \u2014 mismo componente que en el roadmap */}
-            <div onClick={(e) => e.stopPropagation()}>
-              <TaskCommentsPanel taskId={t.id} />
             </div>
           </div>
         )}

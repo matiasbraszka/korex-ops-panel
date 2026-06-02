@@ -17,6 +17,7 @@ const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
+import CommentsSidePanel from './components/comments/CommentsSidePanel';
 import { today } from './utils/helpers';
 
 // Lazy-load del modulo Ventas: el chunk se baja solo si el usuario entra.
@@ -692,6 +693,9 @@ function MainLayout() {
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] cursor-pointer" value={ncForm.service} onChange={e => setNcForm(f => ({ ...f, service: e.target.value }))}>{services.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="URL de la foto (opcional)" value={ncForm.avatarUrl} onChange={e => setNcForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
       </Modal>
+      {/* Panel lateral de comentarios — accesible globalmente desde cualquier
+          vista de tareas (Roadmap, Lista, Timeline). */}
+      <CommentsSidePanel />
     </div>
   );
 }
