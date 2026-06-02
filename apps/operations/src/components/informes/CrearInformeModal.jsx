@@ -117,9 +117,21 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     setError('');
   }, [open, defaultType, editingReport, clients]);
 
-  // Cuando cambia el tipo, ajustar la fecha
+  // Cuando cambia el tipo, ajustar la fecha + limpiar items del tipo anterior.
+  // Sin este reset, los bullets agregados del semanal (auto-fill) quedaban
+  // pegados al volver al diario; el ref de auto-fill tambien queda sucio,
+  // asi que lo reseteamos para que la proxima vez se vuelva a disparar.
+  const prevTypeRef = useRef(type);
   useEffect(() => {
+    if (prevTypeRef.current === type) return;
+    prevTypeRef.current = type;
+    if (isEditing) return; // en edicion no queremos vaciar nada
     if (type === 'weekly') setReportDate(prev => mondayOf(prev));
+    else setReportDate(today());
+    setProgressItems([]);
+    setNextDay('');
+    autoFillSourceMondayRef.current = null;
+    userTouchedRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
