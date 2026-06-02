@@ -279,7 +279,9 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
     else if (t.status === 'paused') { statusIcon = '\u23F8'; statusColor = '#A855F7'; }
     else { statusIcon = '\u25CB'; statusColor = '#9CA3AF'; }
 
-    const rowBg = t.status === 'in-progress' ? 'bg-blue-50/40' : '';
+    // El handoff pide quitar el tinte de fondo de "en progreso" — el estado
+    // se reconoce por el icono de status, no por el color de la fila.
+    const rowBg = '';
     const rdIsDragOver = rdDragOverId === t.id && rdDragId !== t.id;
     const rdIsDragging = rdDragId === t.id;
 
@@ -287,7 +289,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
       <div key={t.id} className={`group ${blocked ? 'opacity-60' : ''} ${rdIsDragging ? 'drag-ghost' : ''}`}>
         {rdIsDragOver && rdDragOverHalf === 'top' && <div className="drag-indicator" />}
         <div
-          className={`hover:bg-gray-50 cursor-pointer ${rowBg} grid grid-cols-[18px_22px_14px_1fr_70px_70px_92px] items-center gap-2 py-2 px-3`}
+          className={`hover:bg-[#F7F9FC] cursor-pointer ${rowBg} grid grid-cols-[16px_20px_minmax(0,1fr)_88px_72px_58px_48px_76px] items-center gap-3 py-[11px] px-3 border-t border-[#F1F3F6]`}
           onClick={() => setExpandedTasks(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
           onDragOver={(e) => rdHandleDragOver(e, t)}
           onDrop={(e) => rdHandleDrop(e, t, sortedGroup)}
@@ -319,14 +321,23 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
             items={Object.entries(TASK_STATUS).filter(([k]) => k !== 'blocked' && k !== 'retrasadas').map(([k, v]) => ({ label: v.label, icon: v.icon, iconColor: v.color, onClick: () => updateTask(t.id, { status: k }) }))}
           />
 
-          {/* Col 2: Tree connector */}
-          <span className="text-gray-300 text-[11px] text-center select-none">{isLast ? '\u2514' : '\u251C'}</span>
-
-          {/* Col 3: Title */}
+          {/* Col 3: Title \u2014 limpio. Indicadores secundarios (deps, isClientTask)
+              quedan a la izquierda del titulo como dots discretos. La fecha de
+              entrega tiene su propio carril (Col 5). */}
           <div className="flex items-center gap-1.5 min-w-0">
+            {(t.dependsOn && t.dependsOn.length > 0) && (
+              <span
+                className="shrink-0 text-[9px] text-[#9CA3AF] inline-flex items-center gap-0.5"
+                title={`${t.dependsOn.length} dependencia(s)`}
+              >\uD83D\uDD17{t.dependsOn.length}</span>
+            )}
+            {t.isClientTask && (
+              <span className="shrink-0 w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" title="Tarea del cliente">C</span>
+            )}
+            {hasDesc && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[#5B7CF5]" title="Tiene descripci\u00f3n" />}
             {editingTitle === t.id ? (
               <input
-                className="w-full border border-blue-400 rounded py-0.5 px-1.5 text-[13px] font-sans outline-none"
+                className="flex-1 min-w-0 border border-[#5B7CF5] rounded py-0.5 px-1.5 text-[13.5px] font-sans outline-none"
                 value={editTitleValue}
                 onChange={(e) => setEditTitleValue(e.target.value)}
                 onBlur={() => { updateTask(t.id, { title: editTitleValue.trim() || t.title }); setEditingTitle(null); }}
@@ -336,27 +347,66 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               />
             ) : (
               <span
-                className={`flex-1 min-w-0 text-[13px] leading-snug break-words ${isDone ? 'text-gray-400 line-through' : blocked ? 'text-red-600' : 'text-gray-800'} ${t.isClientTask ? 'font-semibold' : 'font-medium'}`}
+                className={`flex-1 min-w-0 text-[13.5px] leading-snug break-words font-medium ${isDone ? 'text-[#B6BCC4] line-through' : blocked ? 'text-[#DC4B43]' : 'text-[#1A1D26]'}`}
                 onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(t.id); setEditTitleValue(t.title); }}
                 title="Doble click para renombrar"
               >
                 {t.title}
               </span>
             )}
-            <div className="flex items-center gap-1 shrink-0">
-              {t.isClientTask && (
-                <span className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-orange-400" title="Tarea del cliente">C</span>
-              )}
-              {hasDesc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="Tiene descripci\u00f3n" />}
-              {(t.dependsOn && t.dependsOn.length > 0) && (
-                <span className="text-[9px] text-gray-400" title={`${t.dependsOn.length} dependencia(s)`}>{'\uD83D\uDD17'}{t.dependsOn.length}</span>
-              )}
-              {t.dueDate && (
-                <span className={`text-[9px] font-medium whitespace-nowrap ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} title={`Vence: ${t.dueDate}`}>
-                  {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
-                </span>
-              )}
-            </div>
+          </div>
+
+          {/* Col 4: Time chip \u2014 Xd/Yd con tono segun progreso */}
+          <div className="flex items-center justify-end min-w-0" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              if (isDone && elapsed > 0) {
+                return (
+                  <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2 py-0.5 bg-[#ECFDF5] text-[#1E9E54] whitespace-nowrap">
+                    \u2713 {elapsed}d
+                  </span>
+                );
+              }
+              if (estimated !== null && elapsed > 0) {
+                const tone =
+                  elapsed >= estimated * 2 ? 'bg-[#FEF2F2] text-[#DC4B43]' :
+                  elapsed > estimated      ? 'bg-[#FEF7E6] text-[#B7791F]' :
+                                              'bg-[#ECFDF5] text-[#1E9E54]';
+                return (
+                  <span className={`inline-flex items-center text-[11px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${tone}`}>
+                    {elapsed}d <span className="opacity-50 font-normal mx-1">/</span> {estimated}d
+                  </span>
+                );
+              }
+              if (estimated !== null) {
+                return (
+                  <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2 py-0.5 bg-[#F0F2F5] text-[#6B7280] whitespace-nowrap">
+                    {estimated}d est.
+                  </span>
+                );
+              }
+              if (elapsed > 0) {
+                return (
+                  <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2 py-0.5 bg-[#EEF2FF] text-[#4A67D8] whitespace-nowrap">
+                    {elapsed}d
+                  </span>
+                );
+              }
+              return null;
+            })()}
+          </div>
+
+          {/* Col 5: Date chip \u2014 entrega */}
+          <div className="flex items-center justify-end min-w-0" onClick={(e) => e.stopPropagation()}>
+            {t.dueDate && (
+              <span
+                className={`inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${
+                  isOverdue ? 'bg-[#FEF2F2] text-[#DC4B43]' : 'bg-[#F0F2F5] text-[#6B7280]'
+                }`}
+                title={`Vence: ${t.dueDate}`}
+              >
+                {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
+              </span>
+            )}
           </div>
 
           {/* Col 4: Assignees */}
@@ -412,34 +462,15 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
             );
           })()}
 
-          {/* Col 5: Time display */}
-          <div style={{ textAlign: 'right', minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-            {estimated !== null ? (
-              <span className="text-[10px]">
-                {elapsed > 0 ? (
-                  <span className="font-semibold" style={{ color: elapsed >= estimated * 2 ? '#EF4444' : elapsed > estimated ? '#F97316' : '#22C55E' }}>
-                    {'\u23F1'} {elapsed}d <span className="text-gray-300 font-normal">/ {estimated}d</span>
-                  </span>
-                ) : (
-                  <span className="text-gray-400">{estimated}d est.</span>
-                )}
-              </span>
-            ) : elapsed > 0 ? (
-              <span className="text-[10px] text-blue-500 font-semibold">{'\u23F1'} {elapsed}d</span>
-            ) : (
-              <span className="text-[10px] text-gray-300 opacity-0 group-hover:opacity-100">sin fecha</span>
-            )}
-          </div>
-
-          {/* Col 6: Actions */}
-          <div className="flex items-center justify-end gap-1 min-w-0">
-            {/* Badge de comentarios — abre el panel lateral de actividad. */}
+          {/* Col 7: Comments badge — abre el panel lateral. Col 5 (time display)
+              vieja eliminada — el tiempo ahora vive en su propio chip en Col 4. */}
+          <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             {(() => {
               const cnt = commentCountsByTask[t.id] || 0;
               if (cnt === 0) {
                 return (
                   <button
-                    className="text-[11px] w-7 h-[26px] rounded-lg bg-transparent text-[#9CA3AF] border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:bg-[#EEF2FF] hover:text-[#5B7CF5] flex items-center justify-center mr-1 transition-colors"
+                    className="w-[30px] h-[26px] rounded-lg bg-transparent text-[#9CA3AF] border-none cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-[#EEF2FF] hover:text-[#5B7CF5] flex items-center justify-center transition-colors"
                     onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
                     title="Comentar"
                   ><MessageSquare size={13} /></button>
@@ -447,22 +478,26 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               }
               return (
                 <button
-                  className="text-[11.5px] h-[26px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-sans font-semibold flex items-center gap-1 mr-1 transition-colors"
+                  className="text-[11.5px] h-[26px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-semibold flex items-center gap-1 transition-colors"
                   onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
-                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''} — abrir panel`}
+                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
                 >
                   <MessageSquare size={11} />{cnt}
                 </button>
               );
             })()}
+          </div>
+
+          {/* Col 8: Actions hover — visibles solo al pasar el mouse */}
+          <div className="flex items-center justify-end gap-0.5 min-w-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
-              className="text-[11px] w-5 h-5 rounded hover:bg-gray-200 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-blue-500 flex items-center justify-center"
+              className="text-[11px] w-5 h-5 rounded hover:bg-[#EEF2FF] text-[#9CA3AF] bg-transparent border-none cursor-pointer font-sans hover:text-[#5B7CF5] flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); setDepsModal(t.id); }}
               title="Dependencias"
             >{'\uD83D\uDD17'}</button>
             <div
               ref={el => movePhaseRef.current = el}
-              className="w-5 h-5 cursor-pointer opacity-0 group-hover:opacity-100 rounded hover:bg-gray-200 flex items-center justify-center"
+              className="w-5 h-5 cursor-pointer rounded-lg hover:bg-[#EEF2FF] flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-movephase-' + t.id); }}
               title="Mover a otra fase"
             >
@@ -476,7 +511,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
             />
             <AddToWeeklyButton task={t} />
             <button
-              className="text-[11px] w-5 h-5 rounded hover:bg-red-50 text-gray-400 bg-transparent border-none cursor-pointer font-sans opacity-0 group-hover:opacity-100 hover:text-red-500 flex items-center justify-center"
+              className="text-[11px] w-5 h-5 rounded hover:bg-[#FEF2F2] text-[#9CA3AF] bg-transparent border-none cursor-pointer font-sans hover:text-[#EF4444] flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); if (confirm('Eliminar esta tarea?')) deleteTask(t.id); }}
               title="Eliminar"
             >{'\u2715'}</button>
