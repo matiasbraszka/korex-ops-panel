@@ -17,11 +17,9 @@ const INTERNAL_LABEL = 'Korex – Interno';
 export default function CrearInformeModal({ open, onClose, defaultType = 'daily', editingReport = null }) {
   const { clients, currentUser, addTeamReport, updateTeamReport, appSettings, teamReports } = useApp();
   const isEditing = !!editingReport;
-  // Feature flag global: cuando esta ON, cada bullet de un cliente se carga
-  // como una fila aparte con categoria (entregable | avance) y el semanal
-  // se autocompleta desde los diarios de la semana. Cuando esta OFF el modal
-  // funciona como antes (textarea libre + sin auto-fill).
-  const bulletsEnabled = !!appSettings?.informes_bullets_enabled;
+  // Bullets categorizados + auto-fill semanal son ahora el flujo unico.
+  // El render legacy (textarea libre) queda solo en el codigo como rama
+  // muerta — la entrada `if (true)` siempre se toma.
   const [type, setType] = useState(defaultType);
   const [reportDate, setReportDate] = useState(today());
   // progressItems: [{ key: client_id | INTERNAL_KEY, label: nombre, text: 'qué avanzó', minutes: '' }]
@@ -84,7 +82,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           text: p.text || '',
           minutes: p.minutes != null ? String(p.minutes) : '',
         };
-        if (bulletsEnabled) {
+        if (true) {
           // Si el informe original ya tenia bullets categorizados los usamos.
           // Si no, parseamos el text y dejamos los bullets sin categoria
           // (el usuario los puede clasificar al editar).
@@ -210,7 +208,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       const exists = prev.find(i => i.key === key);
       if (exists) return prev.filter(i => i.key !== key);
       const base = { key, label, text: '', minutes: '' };
-      if (bulletsEnabled) base.bullets = [];
+      if (true) base.bullets = [];
       return [...prev, base];
     });
   };
@@ -284,7 +282,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
   // y nunca pisa lo que el usuario haya tocado a mano.
   useEffect(() => {
     if (!open) return;
-    if (!bulletsEnabled) return;
+    if (!true) return;
     if (isEditing) return;
     if (type !== 'weekly') return;
     if (!isWeekComplete) return;
@@ -297,7 +295,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     autoFillSourceMondayRef.current = weekMonday;
     userTouchedRef.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, bulletsEnabled, isEditing, type, isWeekComplete, weekMonday]);
+  }, [open, true, isEditing, type, isWeekComplete, weekMonday]);
 
   // Si el usuario cambia de semana, permitimos un nuevo auto-fill.
   useEffect(() => {
@@ -324,7 +322,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
   const isValid = () => {
     if (!currentUser?.id) return false;
     if (progressItems.length === 0) return false;
-    if (bulletsEnabled) {
+    if (true) {
       // Modo bullets: cada item debe tener al menos un bullet con texto,
       // y los bullets con texto deben tener categoria (al crear un informe).
       const someEmpty = progressItems.some(i => !Array.isArray(i.bullets) || !i.bullets.some(b => (b.text || '').trim()));
@@ -341,7 +339,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     if (type === 'daily' && !nextDay.trim()) return false;
     if (hasBlocker && (!blockerDesc.trim() || !blockerImprovement.trim())) return false;
     // Bloqueo de semanal sin diarios completos (solo modo flag + creacion).
-    if (bulletsEnabled && !isEditing && type === 'weekly' && missingWeekdays.length > 0) return false;
+    if (true && !isEditing && type === 'weekly' && missingWeekdays.length > 0) return false;
     return true;
   };
 
@@ -351,7 +349,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     const issues = [];
     if (!currentUser?.id) { issues.push('No hay usuario logueado'); return issues; }
     if (progressItems.length === 0) { issues.push('Agregá al menos un cliente o "Korex – Interno" para reportar avance.'); return issues; }
-    if (bulletsEnabled) {
+    if (true) {
       const sinBullets = progressItems.filter(i => !Array.isArray(i.bullets) || !i.bullets.some(b => (b.text || '').trim())).map(i => i.label);
       if (sinBullets.length) issues.push(`Falta cargar bullets en: ${sinBullets.join(', ')}.`);
       if (!isEditing) {
@@ -369,7 +367,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       if (!blockerDesc.trim()) issues.push('Falta describir el bloqueo.');
       if (!blockerImprovement.trim()) issues.push('Falta la propuesta de mejora del bloqueo.');
     }
-    if (bulletsEnabled && !isEditing && type === 'weekly' && missingWeekdays.length > 0) {
+    if (true && !isEditing && type === 'weekly' && missingWeekdays.length > 0) {
       issues.push('Faltan informes diarios de la semana: ' + missingWeekdays.map(fmtDayChip).join(', ') + '. Cargalos primero.');
     }
     return issues;
@@ -404,7 +402,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           client_id: i.key === INTERNAL_KEY ? null : i.key,
           minutes: parseInt(i.minutes, 10) || 0,
         };
-        if (bulletsEnabled && Array.isArray(i.bullets)) {
+        if (true && Array.isArray(i.bullets)) {
           // Filtrar bullets vacios y guardar bullets + text derivado por compat.
           const cleaned = i.bullets
             .map(b => ({ text: String(b?.text || '').trim(), category: b?.category || null }))
@@ -591,7 +589,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
         </div>
 
         {/* Banner del semanal asistido — solo flag ON + weekly + creacion */}
-        {bulletsEnabled && type === 'weekly' && !isEditing && weekMonday && (
+        {true && type === 'weekly' && !isEditing && weekMonday && (
           isWeekComplete ? (
             <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-[12px] text-green-800 flex items-start gap-2">
               <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-green-600" />
@@ -732,7 +730,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                   <label className="block text-[11px] font-semibold text-gray-600 mb-1">
                     ¿Qué avanzaste con {item.label}?
                   </label>
-                  {bulletsEnabled ? (
+                  {true ? (
                     <BulletRows
                       bullets={Array.isArray(item.bullets) ? item.bullets : []}
                       onChange={(next) => updateItemBullets(item.key, next)}
