@@ -8,6 +8,7 @@ import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
+import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
@@ -41,7 +42,7 @@ export default function ClientDetail({ client: c }) {
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [deleteClientModal, setDeleteClientModal] = useState(false);
   const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
-  const [activeTab, setActiveTab] = useState('llamadas');
+  const [activeTab, setActiveTab] = useState('resumen');
 
   const dropdownRefs = useRef({});
 
@@ -966,84 +967,78 @@ export default function ClientDetail({ client: c }) {
   return (
     <div>
       <button className="inline-flex items-center gap-1.5 text-text2 text-[13px] cursor-pointer mb-4 py-1.5 px-2.5 rounded-md bg-transparent border-none font-sans hover:text-blue hover:bg-blue-bg" onClick={() => setSelectedId(null)}>
-        &larr; Volver
+        <ArrowLeft size={14} /> Clientes
       </button>
 
-      {/* Hero */}
-      <div className="bg-white border border-border rounded-xl p-6 mb-5 max-md:p-4 max-md:rounded-xl max-md:mb-3">
+      {/* Header card */}
+      <div className="bg-white border border-[#E2E5EB] rounded-xl px-5 py-[18px] mb-4 shadow-sm max-md:p-4">
         <div className="flex items-start gap-4 max-md:gap-3">
           {c.avatarUrl ? (
-            <img src={c.avatarUrl} alt={c.name} className="w-[52px] h-[52px] rounded-full object-cover shrink-0 max-md:w-[40px] max-md:h-[40px]" />
+            <img src={c.avatarUrl} alt={c.name} className="w-14 h-14 rounded-full object-cover shrink-0 max-md:w-12 max-md:h-12" />
           ) : (
-            <div className="w-[52px] h-[52px] rounded-full flex items-center justify-center font-extrabold text-xl shrink-0 max-md:w-[40px] max-md:h-[40px] max-md:text-base" style={{ background: c.color + '15', color: c.color }}>{initials(c.name)}</div>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-[15px] shrink-0 max-md:w-12 max-md:h-12" style={{ background: c.color + '20', color: c.color }}>{initials(c.name)}</div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="text-xl font-extrabold tracking-tight max-md:text-[17px]">{c.name}</div>
+              <div className="text-[21px] font-bold tracking-tight leading-tight max-md:text-[18px]" style={{ color: '#1A1D26' }}>{c.name}</div>
               <span
                 ref={el => getDropdownRef('client-prio').current = el}
-                className="inline-flex items-center gap-1 py-[3px] px-2.5 rounded-full text-[10px] font-semibold cursor-pointer hover:opacity-80"
-                style={{ background: pcfg.color + '12', color: pcfg.color }}
+                className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold cursor-pointer hover:opacity-80"
+                style={{ background: pcfg.color + '15', color: pcfg.color }}
                 onClick={() => setOpenDropdown('client-prio')}
               >{pcfg.label}</span>
               <Dropdown
                 open={openDropdown === 'client-prio'}
                 onClose={() => setOpenDropdown(null)}
                 anchorRef={getDropdownRef('client-prio')}
-                items={Object.entries(getAllPriorityLabels()).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '\u25CF', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
+                items={Object.entries(getAllPriorityLabels()).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '●', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
               />
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>
-            <div className="text-[13px] text-text2 mt-0.5 max-md:text-[12px]">{c.company}</div>
-            <div className="flex gap-4 mt-2.5 flex-wrap max-md:gap-2 max-md:mt-2">
-              <span className="text-xs text-text2 flex items-center gap-1 max-md:text-[11px]">{'\uD83D\uDCE6'} {c.service || '\u2014'}</span>
-              <span className="text-xs text-text2 flex items-center gap-1 max-md:text-[11px]">
-                {'\uD83D\uDCC5'}{' '}
+            <div className="text-[13px] font-medium mt-0.5 max-md:text-[12px]" style={{ color: '#6B7280' }}>{c.company}</div>
+            <div className="flex items-center gap-2 mt-2.5 flex-wrap text-[12px] max-md:gap-1.5 max-md:mt-2 max-md:text-[11px]" style={{ color: '#6B7280' }}>
+              <span className="inline-flex items-center gap-1.5"><Inbox size={14} className="text-[#9CA3AF]" />{c.service || '—'}</span>
+              <span className="text-[#D0D5DD]">{'·'}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar size={14} className="text-[#9CA3AF]" />
+                Ingreso{' '}
                 {editingStartDate ? (
                   <input type="date" className="border border-blue rounded py-[2px] px-1.5 text-xs font-sans outline-none" defaultValue={c.startDate || ''} autoFocus onBlur={(e) => handleInlineStartDate(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} />
                 ) : (
                   <span className="cursor-pointer py-[1px] px-1 rounded hover:bg-surface2" onClick={() => setEditingStartDate(true)}>{fmtDate(c.startDate)}</span>
-                )}{' '}
-                {'\u00B7'} Día {days}
+                )}
+                <span className="text-[#D0D5DD] mx-1">{'·'}</span> Día {days}
               </span>
-              {ct > 0 && <span className="text-xs text-blue flex items-center gap-1 max-md:text-[11px]">{'\uD83D\uDDD2'} {ct} tareas</span>}
+              {ct > 0 && (
+                <>
+                  <span className="text-[#D0D5DD]">{'·'}</span>
+                  <span className="inline-flex items-center gap-1.5 text-blue"><User size={14} />{ct} tareas pendientes</span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex gap-2 ml-auto shrink-0">
-            <button className="py-1.5 px-2.5 rounded-md border border-border bg-white text-text2 text-xs cursor-pointer font-sans hover:bg-surface2 hover:text-text max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={openEditModal}>Editar</button>
+            <button className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border border-[#E2E5EB] bg-white text-text2 text-xs font-medium cursor-pointer font-sans hover:bg-surface2 hover:text-text max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={openEditModal}><Pencil size={13} /> Editar</button>
             {canDeleteClient && (
               <button
-                className="py-1.5 px-2.5 rounded-md border border-red-200 bg-white text-red-500 text-xs cursor-pointer font-sans hover:bg-red-50 hover:border-red-300 max-md:py-1 max-md:px-2 max-md:text-[11px]"
+                className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border border-red-200 bg-white text-red-500 text-xs font-medium cursor-pointer font-sans hover:bg-red-50 hover:border-red-300 max-md:py-1 max-md:px-2 max-md:text-[11px]"
                 onClick={() => { setDeleteClientConfirmName(''); setDeleteClientModal(true); }}
                 title="Eliminar cliente y todas sus tareas"
-              >Eliminar</button>
+              ><Trash2 size={13} /> Eliminar</button>
             )}
           </div>
         </div>
 
-        <div className="mt-4">
-          <div className="flex justify-between text-[11px] text-text2"><span>Progreso</span><span>{pct}% {'\u00B7'} {doneRoadmap}/{totalRoadmap}</span></div>
-          <div className="h-[5px] bg-surface3 rounded overflow-hidden mt-1.5">
-            <div className="h-full rounded bg-blue" style={{ width: pct + '%' }} />
+        <div className="mt-[18px]">
+          <div className="flex justify-between text-[11px] font-medium" style={{ color: '#6B7280' }}>
+            <span>Progreso del proyecto</span>
+            <span><b className="font-bold" style={{ color: '#1A1D26' }}>{pct}%</b> {'·'} {doneRoadmap}/{totalRoadmap} tareas</span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden mt-1.5" style={{ background: '#F0F2F5' }}>
+            <div className="h-full rounded-full transition-all" style={{ width: pct + '%', background: '#5B7CF5' }} />
           </div>
         </div>
       </div>
-
-      {/* Ver roadmap — CTA full width */}
-      <button
-        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-5 mb-4 flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md font-sans cursor-pointer border-none max-md:p-4"
-        onClick={() => {
-          setTaskClientFilter(c.id);
-          setView('tasks');
-        }}
-      >
-        <div className="text-left">
-          <div className="text-[11px] uppercase tracking-wider opacity-80 font-semibold">Roadmap, Timeline y Tareas</div>
-          <div className="text-[16px] font-bold mt-0.5">Ver roadmap completo</div>
-          <div className="text-[11px] opacity-80 mt-0.5">{pct}% completado &middot; {doneRoadmap}/{totalRoadmap} tareas</div>
-        </div>
-        <span className="text-2xl">{'\u2192'}</span>
-      </button>
 
       {(() => {
         // En el detalle del cliente solo mostramos llamadas con categoria='cliente'.
@@ -1059,34 +1054,178 @@ export default function ClientDetail({ client: c }) {
         const adsActive = c.metaMetrics?.adsActive;
         // Publicidad oculta temporalmente — descomentar la linea de abajo
         // cuando se decida volver a usar el modulo.
+        const visualesDone = (c.visualResources || []).filter(v => v.ok).length;
+        const visualesTotal = (c.visualResources || []).length;
+        const strategiesCount = (c.strategies || []).length;
+        const invoicesCount = (c.invoices || []).length;
+        // Tareas asignadas al cliente (assignee contiene "cliente")
+        const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
+          { key: 'resumen', label: 'Resumen' },
+          { key: 'trabajo', label: 'Trabajo', count: strategiesCount },
+          { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
+          { key: 'facturacion', label: 'Facturación', count: invoicesCount },
+          { key: 'recursos', label: 'Recursos', count: recursosCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
+          { key: 'roadmap', label: 'Roadmap' },
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
-          { key: 'recursos', label: 'Recursos', count: recursosCount },
-          // { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'historial', label: 'Historial' },
         ];
         return (
           <>
-            <div className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+            <div className="flex gap-1 border-b border-[#E2E5EB] mb-4 overflow-x-auto">
               {tabs.map(t => {
                 const isActive = activeTab === t.key;
                 return (
                   <button
                     key={t.key}
                     onClick={() => setActiveTab(t.key)}
-                    className={`px-4 py-2 text-[13px] font-semibold cursor-pointer border-b-2 transition-colors bg-transparent font-sans whitespace-nowrap ${isActive ? 'border-blue text-blue' : 'border-transparent text-text2 hover:text-text'}`}
+                    className={`px-3.5 py-2 text-[13px] cursor-pointer border-b-2 transition-colors bg-transparent font-sans whitespace-nowrap inline-flex items-center gap-1.5 ${isActive ? 'border-blue text-blue font-semibold' : 'border-transparent text-text2 font-medium hover:text-text'}`}
+                    style={{ marginBottom: '-1px' }}
                   >
                     {t.label}
                     {typeof t.count === 'number' && t.count > 0 && (
-                      <span className="ml-1.5 text-[10px] text-text3 font-normal">{t.count}</span>
+                      <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold ${isActive ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>{t.count}</span>
+                    )}
+                    {t.sub && (
+                      <span className={`inline-flex items-center px-1.5 h-[18px] rounded-full text-[10px] font-semibold ${isActive ? 'bg-blue-bg text-blue' : 'bg-surface2 text-text3'}`}>{t.sub}</span>
                     )}
                     {t.badge && (
-                      <span className={`ml-1.5 inline-flex items-center py-[2px] px-1.5 rounded-xl text-[9px] font-bold ${t.badge === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{t.badge === 'activa' ? '● activa' : '○ inactiva'}</span>
+                      <span className={`inline-flex items-center py-[2px] px-1.5 rounded-full text-[9px] font-bold ${t.badge === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{t.badge === 'activa' ? '● activa' : '○ inactiva'}</span>
                     )}
                   </button>
                 );
               })}
             </div>
+
+            {activeTab === 'resumen' && (() => {
+              const m = c.metaMetrics || {};
+              const curr = m.currency || 'USD';
+              const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
+              const credLinks = (c.links || []).filter(l => /korex|comision|panel/i.test((l.label || '') + ' ' + (l.url || '')) && l.url);
+              const fileLinks = (c.links || []).filter(l => !credLinks.includes(l));
+              const sevFor = d => d >= 10 ? 'red' : d >= 5 ? 'orange' : 'gray';
+              return (
+                <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr' }}>
+                  {/* Hero: Lo que necesitamos de ti */}
+                  <div className="rounded-xl border p-[18px] shadow-sm" style={{ borderColor: '#DCE3FB', background: 'linear-gradient(135deg, #F5F7FF 0%, #FFFFFF 60%)' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}><Inbox size={16} className="text-blue" /> Lo que necesitamos de ti</div>
+                      <button className="text-[11.5px] text-blue font-medium hover:underline bg-transparent border-none cursor-pointer" onClick={() => setActiveTab('roadmap')}>Ver todas</button>
+                    </div>
+                    {clientPendingTasks.length === 0 ? (
+                      <div className="text-center text-text3 text-[12px] py-4">No hay tareas pendientes asignadas al cliente</div>
+                    ) : (
+                      <ul className="list-none p-0 m-0">
+                        {clientPendingTasks.slice(0, 6).map(t => {
+                          const d = t.dueDate ? daysAgo(t.dueDate) : (t.createdAt ? daysAgo(t.createdAt) : 0);
+                          const wait = Math.max(0, d);
+                          const sev = sevFor(wait);
+                          const sevColors = { red: { bg: '#FEF2F2', fg: '#EF4444' }, orange: { bg: '#FFF7ED', fg: '#F97316' }, gray: { bg: '#F0F2F5', fg: '#6B7280' } };
+                          const sc = sevColors[sev];
+                          return (
+                            <li key={t.id} className="flex items-center gap-3 py-2.5 border-b border-[#F0F2F5] last:border-b-0">
+                              <span className="w-[14px] h-[14px] rounded-full border-2 shrink-0" style={{ borderColor: sc.fg }} />
+                              <span className="flex-1 text-[13px] font-medium" style={{ color: '#1A1D26' }}>{t.title}</span>
+                              <span className="inline-flex items-center py-[3px] px-2 rounded-full text-[10px] font-bold" style={{ background: sc.bg, color: sc.fg }}>{wait}{wait === 1 ? ' día' : ' días'}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Snapshot 4 columnas */}
+                  <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                    {[
+                      { icon: CreditCard, h: 'Facturación', v: c.billingAmount ? `${cs}${c.billingAmount}` : '—', line: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin datos', lk: 'Ver facturas', tab: 'facturacion' },
+                      { icon: Megaphone, h: 'Publicidad · 7d', v: m.totalSpend7d ? `${cs}${(m.totalSpend7d).toFixed(0)}` : '—', line: m.totalConversions7d ? `${m.totalConversions7d} leads · CPL ${cs}${m.avgCpl7d?.toFixed(2) || '—'}` : (m.pauseReason || 'sin actividad'), lk: 'Ver detalle', tab: 'publicidad' },
+                      { icon: ImageIcon, h: 'Recursos visuales', v: visualesTotal ? `${visualesDone}/${visualesTotal}` : '—', line: visualesTotal ? `${visualesTotal - visualesDone} pendientes` : 'sin datos', lk: 'Ver checklist', tab: 'recursos' },
+                      { icon: Layers, h: 'Estrategias', v: strategiesCount || '—', line: strategiesCount ? `${strategiesCount} activa(s)` : 'sin estrategias', lk: 'Abrir Trabajo', tab: 'trabajo' },
+                    ].map((s, i) => {
+                      const Icon = s.icon;
+                      return (
+                        <div key={i} className="p-4 flex flex-col" style={{ borderLeft: i === 0 ? 'none' : '1px solid #E2E5EB' }}>
+                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}><Icon size={13} /> {s.h}</div>
+                          <div className="text-[20px] font-bold leading-tight" style={{ color: '#1A1D26' }}>{s.v}</div>
+                          <div className="text-[11.5px] mt-1 mb-3 flex-1" style={{ color: '#6B7280' }}>{s.line}</div>
+                          <button className="text-[11.5px] text-blue font-medium hover:underline inline-flex items-center gap-0.5 bg-transparent border-none cursor-pointer self-start p-0" onClick={() => setActiveTab(s.tab)}>{s.lk} <ChevronRight size={13} /></button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Access row: credenciales + archivos */}
+                  <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px] grid gap-5" style={{ gridTemplateColumns: '1.2fr 1fr' }}>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider mb-2.5" style={{ color: '#9CA3AF' }}>Accesos</div>
+                      {credLinks.length === 0 ? (
+                        <div className="text-[12px] text-text3 italic">Sin accesos cargados</div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {credLinks.map((a, i) => (
+                            <a key={i} href={a.url} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 p-2.5 rounded-lg border border-[#E2E5EB] no-underline hover:border-blue hover:bg-blue-bg2 transition-colors group">
+                              <span className="w-7 h-7 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Key size={15} className="text-blue" /></span>
+                              <span className="flex-1 min-w-0">
+                                <b className="text-[12.5px] font-semibold block" style={{ color: '#1A1D26' }}>{a.label}</b>
+                                <i className="not-italic text-[10.5px] block truncate" style={{ color: '#9CA3AF' }}>{a.url}</i>
+                              </span>
+                              <span className="text-[11px] font-medium text-blue inline-flex items-center gap-0.5">Entrar <ExternalLink size={11} /></span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider mb-2.5" style={{ color: '#9CA3AF' }}>Archivos</div>
+                      {fileLinks.length === 0 ? (
+                        <div className="text-[12px] text-text3 italic">Sin archivos cargados</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-x-1.5 gap-y-1 text-[12px]" style={{ color: '#6B7280' }}>
+                          {fileLinks.map((f, i) => (
+                            <span key={i} className="inline-flex items-center">
+                              <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 no-underline hover:text-blue" style={{ color: '#6B7280' }}>
+                                <Folder size={13} className="text-[#9CA3AF]" />{f.label}
+                              </a>
+                              {i < fileLinks.length - 1 && <span className="mx-1.5 text-[#D0D5DD]">·</span>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {activeTab === 'trabajo' && (
+              <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-8 mb-4 text-center">
+                <Layers size={28} className="mx-auto text-text3 mb-2" />
+                <div className="text-[14px] font-semibold mb-1" style={{ color: '#1A1D26' }}>Trabajo por estrategia — Próximamente</div>
+                <div className="text-[12px] text-text2 max-w-md mx-auto">Fase 2: matriz de estrategias con páginas (Testing / Producción), versiones, Drive y documentos. Requiere nuevas tablas en Supabase.</div>
+              </div>
+            )}
+
+            {activeTab === 'facturacion' && (
+              <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-8 mb-4 text-center">
+                <CreditCard size={28} className="mx-auto text-text3 mb-2" />
+                <div className="text-[14px] font-semibold mb-1" style={{ color: '#1A1D26' }}>Facturación — Próximamente</div>
+                <div className="text-[12px] text-text2 max-w-md mx-auto">Fase 3: importe, cuotas, próximo cobro, método de pago + historial de facturas con PDFs. Requiere tabla `invoices` en Supabase.</div>
+              </div>
+            )}
+
+            {activeTab === 'roadmap' && (
+              <button
+                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-5 mb-4 flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md font-sans cursor-pointer border-none max-md:p-4"
+                onClick={() => { setTaskClientFilter(c.id); setView('tasks'); }}
+              >
+                <div className="text-left">
+                  <div className="text-[11px] uppercase tracking-wider opacity-80 font-semibold">Roadmap, Timeline y Tareas</div>
+                  <div className="text-[16px] font-bold mt-0.5">Ver roadmap completo</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">{pct}% completado · {doneRoadmap}/{totalRoadmap} tareas</div>
+                </div>
+                <span className="text-2xl">→</span>
+              </button>
+            )}
 
             {activeTab === 'llamadas' && (
               <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
