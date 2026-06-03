@@ -1052,10 +1052,9 @@ export default function ClientDetail({ client: c }) {
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
           { key: 'resumen', label: 'Resumen' },
-          { key: 'trabajo', label: 'Trabajo', count: strategiesCount },
+          { key: 'trabajo', label: 'Trabajo y recursos', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
-          { key: 'recursos', label: 'Recursos', count: recursosCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'roadmap', label: 'Roadmap' },
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
         ];
@@ -1128,7 +1127,7 @@ export default function ClientDetail({ client: c }) {
                     {[
                       { icon: CreditCard, h: 'Facturación', v: c.billingAmount != null ? `${({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR']}${Number(c.billingAmount).toLocaleString()}` : '—', line: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : (invoicesCount ? `${invoicesCount} factura(s)` : 'sin datos'), lk: 'Ver facturas', tab: 'facturacion' },
                       { icon: Megaphone, h: 'Publicidad · 7d', v: m.totalSpend7d ? `${cs}${(m.totalSpend7d).toFixed(0)}` : '—', line: m.totalConversions7d ? `${m.totalConversions7d} leads · CPL ${cs}${m.avgCpl7d?.toFixed(2) || '—'}` : (m.pauseReason || 'sin actividad'), lk: 'Ver detalle', tab: 'publicidad' },
-                      { icon: ImageIcon, h: 'Recursos visuales', v: visualesTotal ? `${visualesDone}/${visualesTotal}` : '—', line: visualesTotal ? `${visualesTotal - visualesDone} pendientes` : 'sin datos', lk: 'Ver checklist', tab: 'recursos' },
+                      { icon: ImageIcon, h: 'Recursos visuales', v: visualesTotal ? `${visualesDone}/${visualesTotal}` : '—', line: visualesTotal ? `${visualesTotal - visualesDone} pendientes` : 'sin datos', lk: 'Ver checklist', tab: 'trabajo' },
                       { icon: Layers, h: 'Estrategias', v: strategiesCount || '—', line: strategiesCount ? `${strategiesCount} activa(s)` : 'sin estrategias', lk: 'Abrir Trabajo', tab: 'trabajo' },
                     ].map((s, i) => {
                       const Icon = s.icon;
@@ -1186,7 +1185,17 @@ export default function ClientDetail({ client: c }) {
               );
             })()}
 
-            {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
+            {activeTab === 'trabajo' && (
+              <>
+                <VisualResourcesTab client={c} />
+                <div className="mt-2 mb-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>
+                  <span className="h-px w-8" style={{ background: '#E2E5EB' }} />
+                  Estrategias
+                  <span className="h-px flex-1" style={{ background: '#E2E5EB', minWidth: '100px' }} />
+                </div>
+                <StrategyMatrix clientId={c.id} />
+              </>
+            )}
 
             {activeTab === 'facturacion' && <BillingTab client={c} />}
 
@@ -1230,7 +1239,6 @@ export default function ClientDetail({ client: c }) {
               </div>
             )}
 
-            {activeTab === 'recursos' && <VisualResourcesTab client={c} />}
 
             {activeTab === 'publicidad' && (
               <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
