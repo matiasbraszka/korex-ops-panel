@@ -46,7 +46,7 @@ export default function ClientDetail({ client: c }) {
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [deleteClientModal, setDeleteClientModal] = useState(false);
   const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
-  const [activeTab, setActiveTab] = useState('trabajo');
+  const [activeTab, setActiveTab] = useState('resumen');
 
   const dropdownRefs = useRef({});
 
@@ -1053,10 +1053,11 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
+          { key: 'resumen', label: 'Resumen' },
           { key: 'trabajo', label: 'Trabajo', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
-          { key: 'roadmap', label: 'Roadmap', count: totalRoadmap - doneRoadmap },
+          { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
         ];
         return (
@@ -1192,18 +1193,18 @@ export default function ClientDetail({ client: c }) {
 
             {activeTab === 'roadmap' && (
               <div className="mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>Tareas pendientes</div>
-                    <div className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>{pct}% completado · {doneRoadmap}/{totalRoadmap}</div>
-                  </div>
+                <div className="flex items-center justify-between mb-3 gap-3">
                   <button
-                    className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[12px] font-medium cursor-pointer hover:border-blue hover:text-blue"
+                    className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[12px] font-medium cursor-pointer hover:border-blue hover:text-blue shrink-0"
                     style={{ color: '#6B7280' }}
                     onClick={() => { setTaskClientFilter(c.id); setView('tasks'); }}
                   >
-                    Vista completa <ChevronRight size={13} />
+                    Ir a tareas <ChevronRight size={13} />
                   </button>
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>Tareas pendientes</div>
+                    <div className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>{pct}% completado · {doneRoadmap}/{totalRoadmap}</div>
+                  </div>
                 </div>
                 <ClientRoadmapPanel client={c} hideCompleted={true} />
               </div>
