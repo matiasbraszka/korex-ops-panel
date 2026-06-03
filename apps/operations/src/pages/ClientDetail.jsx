@@ -11,7 +11,6 @@ import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
 import BillingTab from '../components/clientes/BillingTab';
-import VisualResourcesTab from '../components/clientes/VisualResourcesTab';
 import EditClientModal from '../components/clientes/EditClientModal';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
@@ -1042,17 +1041,19 @@ export default function ClientDetail({ client: c }) {
         const adsActive = c.metaMetrics?.adsActive;
         // Publicidad oculta temporalmente — descomentar la linea de abajo
         // cuando se decida volver a usar el modulo.
-        const visualesArr = c.visualResources && c.visualResources.length > 0 ? c.visualResources : [];
+        const myStrategies = (strategies || []).filter(s => s.client_id === c.id);
+        const strategiesCount = myStrategies.length;
+        // Recursos visuales: suma de todas las estrategias del cliente
+        const visualesArr = myStrategies.flatMap(s => Array.isArray(s.visual_resources) ? s.visual_resources : []);
         const visualesDone = visualesArr.filter(v => v.ok).length;
         const visualesTotal = visualesArr.length;
-        const strategiesCount = (strategies || []).filter(s => s.client_id === c.id).length;
         const clientInvoices = (invoices || []).filter(i => i.client_id === c.id);
         const invoicesCount = clientInvoices.length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
           { key: 'resumen', label: 'Resumen' },
-          { key: 'trabajo', label: 'Trabajo y recursos', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
+          { key: 'trabajo', label: 'Trabajo', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
           { key: 'roadmap', label: 'Roadmap' },
@@ -1185,17 +1186,7 @@ export default function ClientDetail({ client: c }) {
               );
             })()}
 
-            {activeTab === 'trabajo' && (
-              <>
-                <VisualResourcesTab client={c} />
-                <div className="mt-2 mb-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>
-                  <span className="h-px w-8" style={{ background: '#E2E5EB' }} />
-                  Estrategias
-                  <span className="h-px flex-1" style={{ background: '#E2E5EB', minWidth: '100px' }} />
-                </div>
-                <StrategyMatrix clientId={c.id} />
-              </>
-            )}
+            {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
 
             {activeTab === 'facturacion' && <BillingTab client={c} />}
 

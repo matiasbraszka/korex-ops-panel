@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil } from 'lucide-react';
+import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon } from 'lucide-react';
 
 const STATUS_STYLES = {
   activa: { bg: '#ECFDF5', fg: '#16A34A', label: 'Activa' },
@@ -52,6 +52,82 @@ function PageRow({ p, onUpdate, onDelete }) {
         <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setEditing(true)} title="Editar"><Pencil size={11} /></button>
         <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar esta página?')) onDelete(p.id); }} title="Eliminar"><Trash2 size={11} /></button>
       </div>
+    </div>
+  );
+}
+
+function VisualChecklist({ strategy, onUpdate }) {
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const items = Array.isArray(strategy.visual_resources) ? strategy.visual_resources : [];
+  const done = items.filter(i => i.ok).length;
+
+  const toggle = (idx) => {
+    const next = items.map((it, i) => i === idx ? { ...it, ok: !it.ok } : it);
+    onUpdate(strategy.id, { visual_resources: next });
+  };
+  const removeItem = (idx) => {
+    onUpdate(strategy.id, { visual_resources: items.filter((_, i) => i !== idx) });
+  };
+  const addItem = () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    onUpdate(strategy.id, { visual_resources: [...items, { label, ok: false }] });
+    setNewLabel('');
+    setAdding(false);
+  };
+
+  return (
+    <div className="border-t border-[#F0F2F5] py-3 px-3" style={{ background: '#FAFBFC' }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>
+          <ImageIcon size={12} /> Recursos necesarios
+        </div>
+        {items.length > 0 && (
+          <span className="text-[10.5px] font-semibold py-[2px] px-1.5 rounded-full" style={{ background: '#F0F2F5', color: '#6B7280' }}>{done} / {items.length}</span>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <div className="text-[11.5px] mb-2 italic" style={{ color: '#9CA3AF' }}>
+          Aún no agregaste recursos para esta estrategia. Ejemplos: logo, fotos de producto, vídeos testimonio.
+        </div>
+      ) : (
+        <ul className="list-none p-0 m-0 grid gap-1" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+          {items.map((it, i) => (
+            <li key={i} className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-white group">
+              <button
+                className={`w-[18px] h-[18px] rounded inline-flex items-center justify-center shrink-0 cursor-pointer border-2`}
+                style={it.ok ? { background: '#ECFDF5', borderColor: '#16A34A' } : { background: '#FFFFFF', borderColor: '#D0D5DD' }}
+                onClick={() => toggle(i)}
+                title={it.ok ? 'Marcar como faltante' : 'Marcar como disponible'}
+              >
+                {it.ok && <Check size={11} strokeWidth={3} className="text-[#16A34A]" />}
+              </button>
+              <span className={`flex-1 text-[12px] ${it.ok ? 'font-semibold' : 'font-medium'}`} style={{ color: it.ok ? '#1A1D26' : '#6B7280' }}>{it.label}</span>
+              <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 opacity-0 group-hover:opacity-100 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center transition-opacity" onClick={() => removeItem(i)} title="Quitar"><X size={10} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding ? (
+        <div className="flex gap-1.5 mt-2">
+          <input
+            type="text"
+            value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addItem(); if (e.key === 'Escape') setAdding(false); }}
+            placeholder="Ej. Logo, fotos producto, vídeo VSL…"
+            className="flex-1 text-[12px] py-1.5 px-2.5 rounded-md border border-[#E2E5EB] outline-none focus:border-blue"
+            autoFocus
+          />
+          <button className="text-[11px] py-1 px-2.5 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={addItem}>Agregar</button>
+          <button className="text-[11px] py-1 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setAdding(false)}>×</button>
+        </div>
+      ) : (
+        <button className="mt-2 inline-flex items-center gap-1 text-[11px] py-1 px-2 rounded-md text-blue font-medium cursor-pointer bg-transparent border-none hover:bg-blue-bg" onClick={() => setAdding(true)}>
+          <Plus size={11} /> Agregar recurso
+        </button>
+      )}
     </div>
   );
 }
@@ -155,6 +231,8 @@ function StrategyCard({ s, pages }) {
           updateStrategy(s.id, { docs: [...(s.docs || []), { label, url }] });
         }}><Plus size={11} /> Doc</button>
       </div>
+
+      <VisualChecklist strategy={s} onUpdate={updateStrategy} />
     </div>
   );
 }
