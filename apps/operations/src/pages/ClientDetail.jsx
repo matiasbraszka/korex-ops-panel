@@ -12,6 +12,7 @@ import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileT
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
 import BillingTab from '../components/clientes/BillingTab';
 import EditClientModal from '../components/clientes/EditClientModal';
+import ClientRoadmapPanel from '../components/tareas/ClientRoadmapPanel';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
@@ -45,7 +46,7 @@ export default function ClientDetail({ client: c }) {
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [deleteClientModal, setDeleteClientModal] = useState(false);
   const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
-  const [activeTab, setActiveTab] = useState('resumen');
+  const [activeTab, setActiveTab] = useState('trabajo');
 
   const dropdownRefs = useRef({});
 
@@ -1052,11 +1053,10 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
-          { key: 'resumen', label: 'Resumen' },
           { key: 'trabajo', label: 'Trabajo', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
-          { key: 'roadmap', label: 'Roadmap' },
+          { key: 'roadmap', label: 'Roadmap', count: totalRoadmap - doneRoadmap },
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
         ];
         return (
@@ -1191,17 +1191,22 @@ export default function ClientDetail({ client: c }) {
             {activeTab === 'facturacion' && <BillingTab client={c} />}
 
             {activeTab === 'roadmap' && (
-              <button
-                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-5 mb-4 flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md font-sans cursor-pointer border-none max-md:p-4"
-                onClick={() => { setTaskClientFilter(c.id); setView('tasks'); }}
-              >
-                <div className="text-left">
-                  <div className="text-[11px] uppercase tracking-wider opacity-80 font-semibold">Roadmap, Timeline y Tareas</div>
-                  <div className="text-[16px] font-bold mt-0.5">Ver roadmap completo</div>
-                  <div className="text-[11px] opacity-80 mt-0.5">{pct}% completado · {doneRoadmap}/{totalRoadmap} tareas</div>
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>Tareas pendientes</div>
+                    <div className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>{pct}% completado · {doneRoadmap}/{totalRoadmap}</div>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[12px] font-medium cursor-pointer hover:border-blue hover:text-blue"
+                    style={{ color: '#6B7280' }}
+                    onClick={() => { setTaskClientFilter(c.id); setView('tasks'); }}
+                  >
+                    Vista completa <ChevronRight size={13} />
+                  </button>
                 </div>
-                <span className="text-2xl">→</span>
-              </button>
+                <ClientRoadmapPanel client={c} hideCompleted={true} />
+              </div>
             )}
 
             {activeTab === 'llamadas' && (
