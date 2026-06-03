@@ -18,7 +18,7 @@ const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings, strategies, invoices } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings, strategies, strategyPages, invoices } = useApp();
   const TEAM = teamMembers || [];
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -1091,96 +1091,43 @@ export default function ClientDetail({ client: c }) {
               const m = c.metaMetrics || {};
               const curr = m.currency || 'USD';
               const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
-              const credLinks = (c.links || []).filter(l => /korex|comision|panel/i.test((l.label || '') + ' ' + (l.url || '')) && l.url);
-              const fileLinks = (c.links || []).filter(l => !credLinks.includes(l));
-              const sevFor = d => d >= 10 ? 'red' : d >= 5 ? 'orange' : 'gray';
+              const billCurr = ({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR'];
+              const billLabel = { al_dia: { fg: '#16A34A', t: 'Al día' }, pendiente: { fg: '#CA8A04', t: 'Pendiente' }, impago: { fg: '#EF4444', t: 'Impago' } }[c.billingStatus || 'al_dia'];
+              const pendingCount = totalRoadmap - doneRoadmap;
+              // Páginas activas (con URL en testing o prod) entre todas las estrategias del cliente
+              const myPages = myStrategies.flatMap(s => (strategyPages || []).filter(p => p.strategy_id === s.id));
+              const pagesActive = myPages.filter(p => p.testing_url || p.prod_url).length;
+              // Tareas vencidas
+              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today()).length;
+              const tiles = [
+                { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${pct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
+                { icon: Layers, label: 'Estrategias', value: strategiesCount, sub: pagesActive ? `${pagesActive} página(s) activa(s)` : 'sin páginas activas', color: '#1A1D26', tab: 'trabajo' },
+                { icon: CreditCard, label: 'Importe / ciclo', value: c.billingAmount != null ? `${billCurr}${Number(c.billingAmount).toLocaleString()}` : '—', sub: billLabel.t, color: billLabel.fg, tab: 'facturacion' },
+                { icon: FileText, label: 'Facturas', value: invoicesCount, sub: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin próximo cobro', color: '#1A1D26', tab: 'facturacion' },
+                { icon: Megaphone, label: 'Inversión 7d', value: m.totalSpend7d ? `${cs}${m.totalSpend7d.toFixed(0)}` : '—', sub: m.totalConversions7d ? `${m.totalConversions7d} leads` : (m.pauseReason || 'sin actividad'), color: '#1A1D26', tab: 'publicidad' },
+                { icon: Megaphone, label: 'CPL 7d', value: m.avgCpl7d ? `${cs}${m.avgCpl7d.toFixed(2)}` : '—', sub: m.ctr7d ? `CTR ${m.ctr7d.toFixed(2)}%` : '—', color: m.avgCpl7d && m.avgCpl7d > 15 ? '#EF4444' : '#16A34A', tab: 'publicidad' },
+                { icon: Clock, label: 'Días con Korex', value: days, sub: c.startDate ? `desde ${fmtDate(c.startDate)}` : '—', color: '#1A1D26' },
+                { icon: User, label: 'Llamadas', value: clientLlamadas.length, sub: clientLlamadas.length ? `última: ${clientLlamadas[0]?.fecha ? fmtDate(clientLlamadas[0].fecha.split('T')[0]) : '—'}` : 'sin registros', color: '#1A1D26', tab: 'llamadas' },
+              ];
               return (
-                <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr' }}>
-                  {/* Hero: Lo que necesitamos de ti */}
-                  <div className="rounded-xl border p-[18px] shadow-sm" style={{ borderColor: '#DCE3FB', background: 'linear-gradient(135deg, #F5F7FF 0%, #FFFFFF 60%)' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}><Inbox size={16} className="text-blue" /> Lo que necesitamos de ti</div>
-                      <button className="text-[11.5px] text-blue font-medium hover:underline bg-transparent border-none cursor-pointer" onClick={() => setActiveTab('roadmap')}>Ver todas</button>
-                    </div>
-                    {clientPendingTasks.length === 0 ? (
-                      <div className="text-center text-text3 text-[12px] py-4">No hay tareas pendientes asignadas al cliente</div>
-                    ) : (
-                      <ul className="list-none p-0 m-0">
-                        {clientPendingTasks.slice(0, 6).map(t => {
-                          const d = t.dueDate ? daysAgo(t.dueDate) : (t.createdAt ? daysAgo(t.createdAt) : 0);
-                          const wait = Math.max(0, d);
-                          const sev = sevFor(wait);
-                          const sevColors = { red: { bg: '#FEF2F2', fg: '#EF4444' }, orange: { bg: '#FFF7ED', fg: '#F97316' }, gray: { bg: '#F0F2F5', fg: '#6B7280' } };
-                          const sc = sevColors[sev];
-                          return (
-                            <li key={t.id} className="flex items-center gap-3 py-2.5 border-b border-[#F0F2F5] last:border-b-0">
-                              <span className="w-[14px] h-[14px] rounded-full border-2 shrink-0" style={{ borderColor: sc.fg }} />
-                              <span className="flex-1 text-[13px] font-medium" style={{ color: '#1A1D26' }}>{t.title}</span>
-                              <span className="inline-flex items-center py-[3px] px-2 rounded-full text-[10px] font-bold" style={{ background: sc.bg, color: sc.fg }}>{wait}{wait === 1 ? ' día' : ' días'}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-
-                  {/* Snapshot 4 columnas */}
-                  <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                    {[
-                      { icon: CreditCard, h: 'Facturación', v: c.billingAmount != null ? `${({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR']}${Number(c.billingAmount).toLocaleString()}` : '—', line: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : (invoicesCount ? `${invoicesCount} factura(s)` : 'sin datos'), lk: 'Ver facturas', tab: 'facturacion' },
-                      { icon: Megaphone, h: 'Publicidad · 7d', v: m.totalSpend7d ? `${cs}${(m.totalSpend7d).toFixed(0)}` : '—', line: m.totalConversions7d ? `${m.totalConversions7d} leads · CPL ${cs}${m.avgCpl7d?.toFixed(2) || '—'}` : (m.pauseReason || 'sin actividad'), lk: 'Ver detalle', tab: 'publicidad' },
-                      { icon: Layers, h: 'Estrategias', v: strategiesCount || '—', line: strategiesCount ? `${strategiesCount} activa(s)` : 'sin estrategias', lk: 'Abrir Trabajo', tab: 'trabajo' },
-                    ].map((s, i) => {
-                      const Icon = s.icon;
+                <div className="mb-4">
+                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                    {tiles.map((t, i) => {
+                      const Icon = t.icon;
+                      const clickable = !!t.tab;
                       return (
-                        <div key={i} className="p-4 flex flex-col" style={{ borderLeft: i === 0 ? 'none' : '1px solid #E2E5EB' }}>
-                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}><Icon size={13} /> {s.h}</div>
-                          <div className="text-[20px] font-bold leading-tight" style={{ color: '#1A1D26' }}>{s.v}</div>
-                          <div className="text-[11.5px] mt-1 mb-3 flex-1" style={{ color: '#6B7280' }}>{s.line}</div>
-                          <button className="text-[11.5px] text-blue font-medium hover:underline inline-flex items-center gap-0.5 bg-transparent border-none cursor-pointer self-start p-0" onClick={() => setActiveTab(s.tab)}>{s.lk} <ChevronRight size={13} /></button>
+                        <div key={i}
+                          className={`bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-4 flex flex-col transition-all ${clickable ? 'cursor-pointer hover:border-[#D0D5DD] hover:shadow-md' : ''}`}
+                          onClick={clickable ? () => setActiveTab(t.tab) : undefined}
+                        >
+                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
+                            <Icon size={12} /> {t.label}
+                          </div>
+                          <div className="text-[26px] font-bold leading-none mb-1.5" style={{ color: t.color }}>{t.value}</div>
+                          <div className="text-[11px] mt-auto" style={{ color: '#6B7280' }}>{t.sub}</div>
                         </div>
                       );
                     })}
-                  </div>
-
-                  {/* Access row: credenciales + archivos */}
-                  <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px] grid gap-5" style={{ gridTemplateColumns: '1.2fr 1fr' }}>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider mb-2.5" style={{ color: '#9CA3AF' }}>Accesos</div>
-                      {credLinks.length === 0 ? (
-                        <div className="text-[12px] text-text3 italic">Sin accesos cargados</div>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          {credLinks.map((a, i) => (
-                            <a key={i} href={a.url} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 p-2.5 rounded-lg border border-[#E2E5EB] no-underline hover:border-blue hover:bg-blue-bg2 transition-colors group">
-                              <span className="w-7 h-7 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Key size={15} className="text-blue" /></span>
-                              <span className="flex-1 min-w-0">
-                                <b className="text-[12.5px] font-semibold block" style={{ color: '#1A1D26' }}>{a.label}</b>
-                                <i className="not-italic text-[10.5px] block truncate" style={{ color: '#9CA3AF' }}>{a.url}</i>
-                              </span>
-                              <span className="text-[11px] font-medium text-blue inline-flex items-center gap-0.5">Entrar <ExternalLink size={11} /></span>
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider mb-2.5" style={{ color: '#9CA3AF' }}>Archivos</div>
-                      {fileLinks.length === 0 ? (
-                        <div className="text-[12px] text-text3 italic">Sin archivos cargados</div>
-                      ) : (
-                        <div className="flex flex-wrap gap-x-1.5 gap-y-1 text-[12px]" style={{ color: '#6B7280' }}>
-                          {fileLinks.map((f, i) => (
-                            <span key={i} className="inline-flex items-center">
-                              <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 no-underline hover:text-blue" style={{ color: '#6B7280' }}>
-                                <Folder size={13} className="text-[#9CA3AF]" />{f.label}
-                              </a>
-                              {i < fileLinks.length - 1 && <span className="mx-1.5 text-[#D0D5DD]">·</span>}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               );

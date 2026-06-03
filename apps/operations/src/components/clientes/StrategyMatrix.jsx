@@ -78,10 +78,10 @@ function VisualChecklist({ strategy, onUpdate }) {
   };
 
   return (
-    <div className="border-t border-[#F0F2F5] py-3 px-3" style={{ background: '#FAFBFC' }}>
+    <div className="p-3">
       <div className="flex items-center justify-between mb-2">
-        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>
-          <ImageIcon size={12} /> Recursos necesarios
+        <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>
+          <ImageIcon size={11} /> Recursos necesarios
         </div>
         {items.length > 0 && (
           <span className="text-[10.5px] font-semibold py-[2px] px-1.5 rounded-full" style={{ background: '#F0F2F5', color: '#6B7280' }}>{done} / {items.length}</span>
@@ -89,10 +89,10 @@ function VisualChecklist({ strategy, onUpdate }) {
       </div>
       {items.length === 0 ? (
         <div className="text-[11.5px] mb-2 italic" style={{ color: '#9CA3AF' }}>
-          Aún no agregaste recursos para esta estrategia. Ejemplos: logo, fotos de producto, vídeos testimonio.
+          Sin recursos cargados. Ejemplos: logo, fotos, vídeo VSL.
         </div>
       ) : (
-        <ul className="list-none p-0 m-0 grid gap-1" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        <ul className="list-none p-0 m-0 flex flex-col gap-0.5 mb-2">
           {items.map((it, i) => (
             <li key={i} className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-white group">
               <button
@@ -103,29 +103,29 @@ function VisualChecklist({ strategy, onUpdate }) {
               >
                 {it.ok && <Check size={11} strokeWidth={3} className="text-[#16A34A]" />}
               </button>
-              <span className={`flex-1 text-[12px] ${it.ok ? 'font-semibold' : 'font-medium'}`} style={{ color: it.ok ? '#1A1D26' : '#6B7280' }}>{it.label}</span>
-              <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 opacity-0 group-hover:opacity-100 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center transition-opacity" onClick={() => removeItem(i)} title="Quitar"><X size={10} /></button>
+              <span className={`flex-1 text-[12px] truncate ${it.ok ? 'font-semibold' : 'font-medium'}`} style={{ color: it.ok ? '#1A1D26' : '#6B7280' }}>{it.label}</span>
+              <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 opacity-0 group-hover:opacity-100 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center transition-opacity shrink-0" onClick={() => removeItem(i)} title="Quitar"><X size={10} /></button>
             </li>
           ))}
         </ul>
       )}
       {adding ? (
-        <div className="flex gap-1.5 mt-2">
+        <div className="flex gap-1">
           <input
             type="text"
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') addItem(); if (e.key === 'Escape') setAdding(false); }}
-            placeholder="Ej. Logo, fotos producto, vídeo VSL…"
-            className="flex-1 text-[12px] py-1.5 px-2.5 rounded-md border border-[#E2E5EB] outline-none focus:border-blue"
+            placeholder="Ej. Logo, foto producto…"
+            className="flex-1 min-w-0 text-[12px] py-1.5 px-2 rounded-md border border-[#E2E5EB] outline-none focus:border-blue"
             autoFocus
           />
-          <button className="text-[11px] py-1 px-2.5 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={addItem}>Agregar</button>
+          <button className="text-[11px] py-1 px-2 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={addItem}>OK</button>
           <button className="text-[11px] py-1 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setAdding(false)}>×</button>
         </div>
       ) : (
-        <button className="mt-2 inline-flex items-center gap-1 text-[11px] py-1 px-2 rounded-md text-blue font-medium cursor-pointer bg-transparent border-none hover:bg-blue-bg" onClick={() => setAdding(true)}>
-          <Plus size={11} /> Agregar recurso
+        <button className="inline-flex items-center gap-1 text-[11px] py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent self-start" onClick={() => setAdding(true)}>
+          <Plus size={11} /> Recurso
         </button>
       )}
     </div>
@@ -206,58 +206,82 @@ function StrategyCard({ s, pages }) {
         )}
       </div>
 
-      {/* Footer: drive + docs */}
-      <div className="flex flex-wrap items-center gap-1.5 py-2.5 px-3 border-t border-[#F0F2F5]" style={{ background: '#FAFBFC' }}>
-        {s.drive_url ? (
-          <a href={s.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue group/lk" style={{ color: '#6B7280' }}>
-            <Folder size={12} /> Drive · {s.name}
-            <button className="opacity-0 group-hover/lk:opacity-100 w-3.5 h-3.5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm('¿Quitar el Drive de esta estrategia?')) updateStrategy(s.id, { drive_url: null }); }} title="Quitar"><X size={9} /></button>
-          </a>
-        ) : (
-          <button className="inline-flex items-center gap-1.5 text-[11.5px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
-            const u = window.prompt('URL del Drive de esta estrategia:');
-            if (u) updateStrategy(s.id, { drive_url: u });
-          }}><Folder size={12} /> + Drive</button>
-        )}
-        {(s.docs || []).map((d, di) => (
-          <a key={di} href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue group/lk" style={{ color: '#6B7280' }}>
-            <FileText size={12} /> {d.label}
-            <button className="opacity-0 group-hover/lk:opacity-100 w-3.5 h-3.5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={9} /></button>
-          </a>
-        ))}
-        <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
-          const label = window.prompt('Nombre del documento (ej. Guion VSL, Copy de anuncios):');
-          if (!label) return;
-          const url = window.prompt('URL del documento:');
-          if (!url) return;
-          updateStrategy(s.id, { docs: [...(s.docs || []), { label, url }] });
-        }}><Plus size={11} /> Doc</button>
-      </div>
+      {/* Footer: 3 columnas — Archivos / Accesos / Recursos necesarios */}
+      <div className="grid border-t border-[#F0F2F5]" style={{ background: '#FAFBFC', gridTemplateColumns: '1fr 1fr 1fr' }}>
+        {/* Archivos: Drive + docs */}
+        <div className="p-3 border-r border-[#F0F2F5]">
+          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
+            <Folder size={11} /> Archivos
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {s.drive_url && (
+              <a href={s.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[12px] no-underline py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:bg-blue-bg2 group/lk" style={{ color: '#1A1D26' }}>
+                <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Folder size={12} className="text-blue" /></span>
+                <span className="flex-1 truncate font-medium">Drive de la estrategia</span>
+                <ExternalLink size={11} className="opacity-50 shrink-0" />
+                <button className="opacity-0 group-hover/lk:opacity-100 w-4 h-4 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm('¿Quitar el Drive?')) updateStrategy(s.id, { drive_url: null }); }} title="Quitar"><X size={10} /></button>
+              </a>
+            )}
+            {(s.docs || []).map((d, di) => (
+              <a key={di} href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[12px] no-underline py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:bg-blue-bg2 group/lk" style={{ color: '#1A1D26' }}>
+                <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#F5F3FF' }}><FileText size={12} className="text-purple" /></span>
+                <span className="flex-1 truncate font-medium">{d.label}</span>
+                <ExternalLink size={11} className="opacity-50 shrink-0" />
+                <button className="opacity-0 group-hover/lk:opacity-100 w-4 h-4 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={10} /></button>
+              </a>
+            ))}
+            <div className="flex gap-1">
+              {!s.drive_url && (
+                <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
+                  const u = window.prompt('URL del Drive de esta estrategia:');
+                  if (u) updateStrategy(s.id, { drive_url: u });
+                }}><Plus size={11} /> Drive</button>
+              )}
+              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
+                const label = window.prompt('Nombre del documento (ej. Guion VSL, Copy de anuncios):');
+                if (!label) return;
+                const url = window.prompt('URL del documento:');
+                if (!url) return;
+                updateStrategy(s.id, { docs: [...(s.docs || []), { label, url }] });
+              }}><Plus size={11} /> Doc</button>
+            </div>
+          </div>
+        </div>
 
-      {/* Accesos: credenciales y URLs de login */}
-      <div className="flex flex-wrap items-center gap-1.5 py-2.5 px-3 border-t border-[#F0F2F5]" style={{ background: '#FAFBFC' }}>
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mr-1" style={{ color: '#9CA3AF' }}><Key size={11} /> Accesos</span>
-        {(s.accesos || []).length === 0 && (
-          <span className="text-[11px] italic" style={{ color: '#9CA3AF' }}>Sin accesos cargados</span>
-        )}
-        {(s.accesos || []).map((a, ai) => (
-          <a key={ai} href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue group/ac" style={{ color: '#6B7280' }} title={a.username ? `Usuario: ${a.username}` : ''}>
-            <Key size={11} className="text-blue" /> {a.label}
-            <ExternalLink size={10} className="opacity-50" />
-            <button className="opacity-0 group-hover/ac:opacity-100 w-3.5 h-3.5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar acceso "${a.label}"?`)) updateStrategy(s.id, { accesos: (s.accesos || []).filter((_, i) => i !== ai) }); }} title="Quitar"><X size={9} /></button>
-          </a>
-        ))}
-        <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
-          const label = window.prompt('Nombre del acceso (ej. Panel de comisiones, Sistema Korex):');
-          if (!label) return;
-          const url = window.prompt('URL de login:');
-          if (!url) return;
-          const username = window.prompt('Usuario (opcional, déjalo en blanco si no aplica):') || '';
-          updateStrategy(s.id, { accesos: [...(s.accesos || []), { label, url, username }] });
-        }}><Plus size={11} /> Acceso</button>
-      </div>
+        {/* Accesos */}
+        <div className="p-3 border-r border-[#F0F2F5]">
+          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
+            <Key size={11} /> Accesos
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {(s.accesos || []).length === 0 && (
+              <span className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin accesos cargados</span>
+            )}
+            {(s.accesos || []).map((a, ai) => (
+              <a key={ai} href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[12px] no-underline py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:bg-blue-bg2 group/ac" style={{ color: '#1A1D26' }} title={a.username ? `Usuario: ${a.username}` : ''}>
+                <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Key size={12} className="text-blue" /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate font-medium">{a.label}</span>
+                  {a.username && <span className="block text-[10px] truncate" style={{ color: '#9CA3AF' }}>@{a.username}</span>}
+                </span>
+                <ExternalLink size={11} className="opacity-50 shrink-0" />
+                <button className="opacity-0 group-hover/ac:opacity-100 w-4 h-4 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar acceso "${a.label}"?`)) updateStrategy(s.id, { accesos: (s.accesos || []).filter((_, i) => i !== ai) }); }} title="Quitar"><X size={10} /></button>
+              </a>
+            ))}
+            <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue self-start" onClick={() => {
+              const label = window.prompt('Nombre del acceso (ej. Panel de comisiones, Sistema Korex):');
+              if (!label) return;
+              const url = window.prompt('URL de login:');
+              if (!url) return;
+              const username = window.prompt('Usuario (opcional, déjalo en blanco si no aplica):') || '';
+              updateStrategy(s.id, { accesos: [...(s.accesos || []), { label, url, username }] });
+            }}><Plus size={11} /> Acceso</button>
+          </div>
+        </div>
 
-      <VisualChecklist strategy={s} onUpdate={updateStrategy} />
+        {/* Recursos necesarios (checklist) */}
+        <VisualChecklist strategy={s} onUpdate={updateStrategy} />
+      </div>
     </div>
   );
 }
