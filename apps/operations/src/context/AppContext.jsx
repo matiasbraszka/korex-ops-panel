@@ -83,6 +83,7 @@ export function AppProvider({ children }) {
   const [taskComments, setTaskComments] = useState([]);
   const [strategies, setStrategies] = useState([]);
   const [strategyPages, setStrategyPages] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   // Panel lateral de actividad/comentarios: id de la tarea abierta o null.
   const [openCommentTaskId, setOpenCommentTaskId] = useState(null);
 
@@ -125,7 +126,14 @@ export function AppProvider({ children }) {
         phase_deadlines: c.phaseDeadlines || {},
         links: c.links || [],
         pending_resources: c.pendingResources || [],
-        meta_metrics: c.metaMetrics || null
+        meta_metrics: c.metaMetrics || null,
+        billing_amount: c.billingAmount ?? null,
+        billing_currency: c.billingCurrency || 'EUR',
+        billing_cycle: c.billingCycle || 'mensual',
+        billing_installments: c.billingInstallments ?? 1,
+        next_charge_date: c.nextChargeDate || null,
+        payment_method: c.paymentMethod || null,
+        billing_status: c.billingStatus || 'al_dia',
       })
     });
   }, []);
@@ -173,7 +181,14 @@ export function AppProvider({ children }) {
         phase_deadlines: c.phaseDeadlines || {},
         links: c.links || [],
         pending_resources: c.pendingResources || [],
-        meta_metrics: c.metaMetrics || null
+        meta_metrics: c.metaMetrics || null,
+        billing_amount: c.billingAmount ?? null,
+        billing_currency: c.billingCurrency || 'EUR',
+        billing_cycle: c.billingCycle || 'mensual',
+        billing_installments: c.billingInstallments ?? 1,
+        next_charge_date: c.nextChargeDate || null,
+        payment_method: c.paymentMethod || null,
+        billing_status: c.billingStatus || 'al_dia',
       }));
       for (let i = 0; i < clientRows.length; i += 10) {
         const batch = clientRows.slice(i, i + 10);
@@ -767,6 +782,52 @@ export function AppProvider({ children }) {
     setStrategyPages(prev => prev.filter(p => p.id !== id));
   }, []);
 
+  // ── CRUD: invoices ──
+  // Historial de facturas emitidas a cada cliente. Cascade en DB borra todas
+  // las facturas al borrar el cliente.
+  const addInvoice = useCallback(async (data) => {
+    const id = 'inv_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      client_id: data.client_id,
+      number: String(data.number || '').trim(),
+      issue_date: data.issue_date,
+      amount: Number(data.amount || 0),
+      currency: data.currency || 'EUR',
+      concept: data.concept || null,
+      status: data.status || 'pendiente',
+      payment_method: data.payment_method || null,
+      pdf_url: data.pdf_url || null,
+    };
+    await sbFetch('invoices', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+      throwOnError: true,
+    });
+    const nowIso = new Date().toISOString();
+    setInvoices(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
+    return id;
+  }, []);
+
+  const updateInvoice = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    await sbFetch('invoices?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+      throwOnError: true,
+    });
+    setInvoices(prev => prev.map(i => i.id === id
+      ? { ...i, ...patch, updated_at: new Date().toISOString() }
+      : i));
+  }, []);
+
+  const deleteInvoice = useCallback(async (id) => {
+    await sbFetch('invoices?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setInvoices(prev => prev.filter(i => i.id !== id));
+  }, []);
+
   // ── CRUD: task_comments ──
   // Comentarios en tareas. Hilos de 1 nivel: parent_id NULL = raiz; si tiene
   // valor referencia al comentario padre. Cascade en DB borra hijos al borrar
@@ -955,7 +1016,7 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics';
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status';
       const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=priority.asc`, { headers: { 'Prefer': 'return=representation' } }),
@@ -1043,6 +1104,12 @@ export function AppProvider({ children }) {
         if (allStratPages && Array.isArray(allStratPages)) setStrategyPages(allStratPages);
       } catch (e) { console.warn('loadStrategies error', e); }
 
+      // Facturas por cliente (Fase 3 ficha cliente)
+      try {
+        const allInvoices = await sbFetch('invoices?select=*&order=issue_date.desc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allInvoices && Array.isArray(allInvoices)) setInvoices(allInvoices);
+      } catch (e) { console.warn('loadInvoices error', e); }
+
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
           id: c.id, name: c.name, company: c.company, service: c.service,
@@ -1057,7 +1124,14 @@ export function AppProvider({ children }) {
           phaseDeadlines: c.phase_deadlines || {},
           links: c.links || [],
           pendingResources: c.pending_resources || [],
-          metaMetrics: c.meta_metrics || null
+          metaMetrics: c.meta_metrics || null,
+          billingAmount: c.billing_amount != null ? Number(c.billing_amount) : null,
+          billingCurrency: c.billing_currency || 'EUR',
+          billingCycle: c.billing_cycle || 'mensual',
+          billingInstallments: c.billing_installments || 1,
+          nextChargeDate: c.next_charge_date || null,
+          paymentMethod: c.payment_method || '',
+          billingStatus: c.billing_status || 'al_dia',
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
@@ -1386,6 +1460,10 @@ export function AppProvider({ children }) {
     addStrategyPage,
     updateStrategyPage,
     deleteStrategyPage,
+    invoices,
+    addInvoice,
+    updateInvoice,
+    deleteInvoice,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];

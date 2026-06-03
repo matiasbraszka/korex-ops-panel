@@ -10,12 +10,13 @@ import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
+import BillingTab from '../components/clientes/BillingTab';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings, strategies } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings, strategies, invoices } = useApp();
   const TEAM = teamMembers || [];
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -1058,7 +1059,8 @@ export default function ClientDetail({ client: c }) {
         const visualesDone = (c.visualResources || []).filter(v => v.ok).length;
         const visualesTotal = (c.visualResources || []).length;
         const strategiesCount = (strategies || []).filter(s => s.client_id === c.id).length;
-        const invoicesCount = (c.invoices || []).length;
+        const clientInvoices = (invoices || []).filter(i => i.client_id === c.id);
+        const invoicesCount = clientInvoices.length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
@@ -1138,7 +1140,7 @@ export default function ClientDetail({ client: c }) {
                   {/* Snapshot 4 columnas */}
                   <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                     {[
-                      { icon: CreditCard, h: 'Facturación', v: c.billingAmount ? `${cs}${c.billingAmount}` : '—', line: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin datos', lk: 'Ver facturas', tab: 'facturacion' },
+                      { icon: CreditCard, h: 'Facturación', v: c.billingAmount != null ? `${({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR']}${Number(c.billingAmount).toLocaleString()}` : '—', line: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : (invoicesCount ? `${invoicesCount} factura(s)` : 'sin datos'), lk: 'Ver facturas', tab: 'facturacion' },
                       { icon: Megaphone, h: 'Publicidad · 7d', v: m.totalSpend7d ? `${cs}${(m.totalSpend7d).toFixed(0)}` : '—', line: m.totalConversions7d ? `${m.totalConversions7d} leads · CPL ${cs}${m.avgCpl7d?.toFixed(2) || '—'}` : (m.pauseReason || 'sin actividad'), lk: 'Ver detalle', tab: 'publicidad' },
                       { icon: ImageIcon, h: 'Recursos visuales', v: visualesTotal ? `${visualesDone}/${visualesTotal}` : '—', line: visualesTotal ? `${visualesTotal - visualesDone} pendientes` : 'sin datos', lk: 'Ver checklist', tab: 'recursos' },
                       { icon: Layers, h: 'Estrategias', v: strategiesCount || '—', line: strategiesCount ? `${strategiesCount} activa(s)` : 'sin estrategias', lk: 'Abrir Trabajo', tab: 'trabajo' },
@@ -1200,13 +1202,7 @@ export default function ClientDetail({ client: c }) {
 
             {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
 
-            {activeTab === 'facturacion' && (
-              <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-8 mb-4 text-center">
-                <CreditCard size={28} className="mx-auto text-text3 mb-2" />
-                <div className="text-[14px] font-semibold mb-1" style={{ color: '#1A1D26' }}>Facturación — Próximamente</div>
-                <div className="text-[12px] text-text2 max-w-md mx-auto">Fase 3: importe, cuotas, próximo cobro, método de pago + historial de facturas con PDFs. Requiere tabla `invoices` en Supabase.</div>
-              </div>
-            )}
+            {activeTab === 'facturacion' && <BillingTab client={c} />}
 
             {activeTab === 'roadmap' && (
               <button
