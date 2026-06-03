@@ -9,12 +9,13 @@ import TeamAvatar from '../components/TeamAvatar';
 import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
+import StrategyMatrix from '../components/clientes/StrategyMatrix';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, createTask, updateTask, deleteTask, reorderTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, appSettings, strategies } = useApp();
   const TEAM = teamMembers || [];
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -1056,7 +1057,7 @@ export default function ClientDetail({ client: c }) {
         // cuando se decida volver a usar el modulo.
         const visualesDone = (c.visualResources || []).filter(v => v.ok).length;
         const visualesTotal = (c.visualResources || []).length;
-        const strategiesCount = (c.strategies || []).length;
+        const strategiesCount = (strategies || []).filter(s => s.client_id === c.id).length;
         const invoicesCount = (c.invoices || []).length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
@@ -1197,13 +1198,7 @@ export default function ClientDetail({ client: c }) {
               );
             })()}
 
-            {activeTab === 'trabajo' && (
-              <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-8 mb-4 text-center">
-                <Layers size={28} className="mx-auto text-text3 mb-2" />
-                <div className="text-[14px] font-semibold mb-1" style={{ color: '#1A1D26' }}>Trabajo por estrategia — Próximamente</div>
-                <div className="text-[12px] text-text2 max-w-md mx-auto">Fase 2: matriz de estrategias con páginas (Testing / Producción), versiones, Drive y documentos. Requiere nuevas tablas en Supabase.</div>
-              </div>
-            )}
+            {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
 
             {activeTab === 'facturacion' && (
               <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-8 mb-4 text-center">

@@ -81,6 +81,8 @@ export function AppProvider({ children }) {
   const [notas, setNotas] = useState([]);
   // Comentarios sobre tareas (v16) — hilos de 1 nivel (parent_id)
   const [taskComments, setTaskComments] = useState([]);
+  const [strategies, setStrategies] = useState([]);
+  const [strategyPages, setStrategyPages] = useState([]);
   // Panel lateral de actividad/comentarios: id de la tarea abierta o null.
   const [openCommentTaskId, setOpenCommentTaskId] = useState(null);
 
@@ -681,6 +683,90 @@ export function AppProvider({ children }) {
     setIdeas(prev => prev.filter(i => i.id !== id));
   }, []);
 
+  // ── CRUD: strategies + strategy_pages ──
+  // Cada cliente puede tener varias estrategias (embudo de ventas). Cada
+  // estrategia agrupa paginas (VSL, Landing, etc) con URLs de testing y
+  // produccion. Cascade en DB borra paginas al borrar estrategia y borra
+  // todo al borrar el cliente.
+  const addStrategy = useCallback(async (data) => {
+    const id = 'strat_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      client_id: data.client_id,
+      position: data.position || 0,
+      name: String(data.name || 'Nueva estrategia').trim(),
+      status: data.status || 'borrador',
+      version: data.version || 'v1',
+      drive_url: data.drive_url || null,
+      docs: Array.isArray(data.docs) ? data.docs : [],
+    };
+    await sbFetch('strategies', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+      throwOnError: true,
+    });
+    const nowIso = new Date().toISOString();
+    setStrategies(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
+    return id;
+  }, []);
+
+  const updateStrategy = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    await sbFetch('strategies?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+      throwOnError: true,
+    });
+    setStrategies(prev => prev.map(s => s.id === id
+      ? { ...s, ...patch, updated_at: new Date().toISOString() }
+      : s));
+  }, []);
+
+  const deleteStrategy = useCallback(async (id) => {
+    await sbFetch('strategies?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setStrategies(prev => prev.filter(s => s.id !== id));
+    setStrategyPages(prev => prev.filter(p => p.strategy_id !== id));
+  }, []);
+
+  const addStrategyPage = useCallback(async (data) => {
+    const id = 'spg_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      strategy_id: data.strategy_id,
+      position: data.position || 0,
+      name: String(data.name || 'Nueva página').trim(),
+      testing_url: data.testing_url || null,
+      prod_url: data.prod_url || null,
+      is_live: !!data.is_live,
+    };
+    await sbFetch('strategy_pages', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+      throwOnError: true,
+    });
+    setStrategyPages(prev => [...prev, { ...row, created_at: new Date().toISOString() }]);
+    return id;
+  }, []);
+
+  const updateStrategyPage = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    await sbFetch('strategy_pages?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+      throwOnError: true,
+    });
+    setStrategyPages(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+  }, []);
+
+  const deleteStrategyPage = useCallback(async (id) => {
+    await sbFetch('strategy_pages?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setStrategyPages(prev => prev.filter(p => p.id !== id));
+  }, []);
+
   // ── CRUD: task_comments ──
   // Comentarios en tareas. Hilos de 1 nivel: parent_id NULL = raiz; si tiene
   // valor referencia al comentario padre. Cascade en DB borra hijos al borrar
@@ -948,6 +1034,14 @@ export function AppProvider({ children }) {
         const allComments = await sbFetch('task_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allComments && Array.isArray(allComments)) setTaskComments(allComments);
       } catch (e) { console.warn('loadTaskComments error', e); }
+
+      // Estrategias y paginas por cliente (Fase 2 ficha cliente)
+      try {
+        const allStrats = await sbFetch('strategies?select=*&order=position.asc&limit=500', { headers: { 'Prefer': 'return=representation' } });
+        if (allStrats && Array.isArray(allStrats)) setStrategies(allStrats);
+        const allStratPages = await sbFetch('strategy_pages?select=*&order=position.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allStratPages && Array.isArray(allStratPages)) setStrategyPages(allStratPages);
+      } catch (e) { console.warn('loadStrategies error', e); }
 
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
@@ -1284,6 +1378,14 @@ export function AppProvider({ children }) {
     openCommentTaskId,
     openTaskComments: (id) => setOpenCommentTaskId(id),
     closeTaskComments: () => setOpenCommentTaskId(null),
+    strategies,
+    strategyPages,
+    addStrategy,
+    updateStrategy,
+    deleteStrategy,
+    addStrategyPage,
+    updateStrategyPage,
+    deleteStrategyPage,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];
