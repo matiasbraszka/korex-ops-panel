@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon } from 'lucide-react';
+import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon, Key } from 'lucide-react';
 
 const STATUS_STYLES = {
   activa: { bg: '#ECFDF5', fg: '#16A34A', label: 'Activa' },
@@ -209,8 +209,9 @@ function StrategyCard({ s, pages }) {
       {/* Footer: drive + docs */}
       <div className="flex flex-wrap items-center gap-1.5 py-2.5 px-3 border-t border-[#F0F2F5]" style={{ background: '#FAFBFC' }}>
         {s.drive_url ? (
-          <a href={s.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue" style={{ color: '#6B7280' }}>
+          <a href={s.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue group/lk" style={{ color: '#6B7280' }}>
             <Folder size={12} /> Drive · {s.name}
+            <button className="opacity-0 group-hover/lk:opacity-100 w-3.5 h-3.5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm('¿Quitar el Drive de esta estrategia?')) updateStrategy(s.id, { drive_url: null }); }} title="Quitar"><X size={9} /></button>
           </a>
         ) : (
           <button className="inline-flex items-center gap-1.5 text-[11.5px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
@@ -219,8 +220,9 @@ function StrategyCard({ s, pages }) {
           }}><Folder size={12} /> + Drive</button>
         )}
         {(s.docs || []).map((d, di) => (
-          <a key={di} href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue" style={{ color: '#6B7280' }}>
+          <a key={di} href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue group/lk" style={{ color: '#6B7280' }}>
             <FileText size={12} /> {d.label}
+            <button className="opacity-0 group-hover/lk:opacity-100 w-3.5 h-3.5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={9} /></button>
           </a>
         ))}
         <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
@@ -230,6 +232,29 @@ function StrategyCard({ s, pages }) {
           if (!url) return;
           updateStrategy(s.id, { docs: [...(s.docs || []), { label, url }] });
         }}><Plus size={11} /> Doc</button>
+      </div>
+
+      {/* Accesos: credenciales y URLs de login */}
+      <div className="flex flex-wrap items-center gap-1.5 py-2.5 px-3 border-t border-[#F0F2F5]" style={{ background: '#FAFBFC' }}>
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mr-1" style={{ color: '#9CA3AF' }}><Key size={11} /> Accesos</span>
+        {(s.accesos || []).length === 0 && (
+          <span className="text-[11px] italic" style={{ color: '#9CA3AF' }}>Sin accesos cargados</span>
+        )}
+        {(s.accesos || []).map((a, ai) => (
+          <a key={ai} href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11.5px] no-underline py-1 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:text-blue group/ac" style={{ color: '#6B7280' }} title={a.username ? `Usuario: ${a.username}` : ''}>
+            <Key size={11} className="text-blue" /> {a.label}
+            <ExternalLink size={10} className="opacity-50" />
+            <button className="opacity-0 group-hover/ac:opacity-100 w-3.5 h-3.5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar acceso "${a.label}"?`)) updateStrategy(s.id, { accesos: (s.accesos || []).filter((_, i) => i !== ai) }); }} title="Quitar"><X size={9} /></button>
+          </a>
+        ))}
+        <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
+          const label = window.prompt('Nombre del acceso (ej. Panel de comisiones, Sistema Korex):');
+          if (!label) return;
+          const url = window.prompt('URL de login:');
+          if (!url) return;
+          const username = window.prompt('Usuario (opcional, déjalo en blanco si no aplica):') || '';
+          updateStrategy(s.id, { accesos: [...(s.accesos || []), { label, url, username }] });
+        }}><Plus size={11} /> Acceso</button>
       </div>
 
       <VisualChecklist strategy={s} onUpdate={updateStrategy} />

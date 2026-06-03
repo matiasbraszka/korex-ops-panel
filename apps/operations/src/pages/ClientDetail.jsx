@@ -1125,11 +1125,10 @@ export default function ClientDetail({ client: c }) {
                   </div>
 
                   {/* Snapshot 4 columnas */}
-                  <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                  <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                     {[
                       { icon: CreditCard, h: 'Facturación', v: c.billingAmount != null ? `${({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR']}${Number(c.billingAmount).toLocaleString()}` : '—', line: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : (invoicesCount ? `${invoicesCount} factura(s)` : 'sin datos'), lk: 'Ver facturas', tab: 'facturacion' },
                       { icon: Megaphone, h: 'Publicidad · 7d', v: m.totalSpend7d ? `${cs}${(m.totalSpend7d).toFixed(0)}` : '—', line: m.totalConversions7d ? `${m.totalConversions7d} leads · CPL ${cs}${m.avgCpl7d?.toFixed(2) || '—'}` : (m.pauseReason || 'sin actividad'), lk: 'Ver detalle', tab: 'publicidad' },
-                      { icon: ImageIcon, h: 'Recursos visuales', v: visualesTotal ? `${visualesDone}/${visualesTotal}` : '—', line: visualesTotal ? `${visualesTotal - visualesDone} pendientes` : 'sin datos', lk: 'Ver checklist', tab: 'trabajo' },
                       { icon: Layers, h: 'Estrategias', v: strategiesCount || '—', line: strategiesCount ? `${strategiesCount} activa(s)` : 'sin estrategias', lk: 'Abrir Trabajo', tab: 'trabajo' },
                     ].map((s, i) => {
                       const Icon = s.icon;
