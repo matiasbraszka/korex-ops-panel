@@ -1,6 +1,157 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon, Key } from 'lucide-react';
+import Modal from '../Modal';
+import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon, Key, Copy, Eye, EyeOff, Mail } from 'lucide-react';
+
+const inputClass = 'text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue focus:ring focus:ring-blue-bg bg-white w-full';
+
+function CopyButton({ value, title = 'Copiar' }) {
+  const [copied, setCopied] = useState(false);
+  const copy = (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue transition-colors shrink-0"
+      title={copied ? 'Copiado!' : title}
+    >
+      {copied ? <Check size={12} className="text-[#16A34A]" strokeWidth={3} /> : <Copy size={12} />}
+    </button>
+  );
+}
+
+function CopyableRow({ icon: Icon, label, value, masked }) {
+  const [show, setShow] = useState(false);
+  if (!value) return null;
+  const display = masked ? (show ? value : '•'.repeat(Math.min(10, value.length))) : value;
+  return (
+    <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-white border border-[#F0F2F5] group/cp">
+      <Icon size={11} className="text-text3 shrink-0" />
+      <span className="text-[10px] uppercase font-bold tracking-wider shrink-0" style={{ color: '#9CA3AF' }}>{label}</span>
+      <span className="flex-1 text-[12px] font-mono truncate" style={{ color: '#1A1D26' }} title={value}>{display}</span>
+      {masked && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setShow(s => !s); }}
+          className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue transition-colors shrink-0"
+          title={show ? 'Ocultar' : 'Mostrar'}
+        >
+          {show ? <EyeOff size={12} /> : <Eye size={12} />}
+        </button>
+      )}
+      <CopyButton value={value} />
+    </div>
+  );
+}
+
+function AccessFormModal({ open, onClose, initial, onSave }) {
+  const isEdit = !!initial;
+  const [form, setForm] = useState({ label: '', url: '', email: '', password: '', notes: '' });
+  // Reset form when modal opens
+  if (open && form._k !== (initial?.label || 'new')) {
+    setForm({
+      label: initial?.label || '',
+      url: initial?.url || '',
+      email: initial?.email || initial?.username || '',
+      password: initial?.password || '',
+      notes: initial?.notes || '',
+      _k: initial?.label || 'new',
+    });
+  }
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const save = () => {
+    if (!form.label.trim()) return;
+    onSave({
+      label: form.label.trim(),
+      url: form.url.trim(),
+      email: form.email.trim(),
+      password: form.password,
+      notes: form.notes.trim(),
+    });
+    onClose();
+  };
+  return (
+    <Modal open={open} onClose={onClose} title={isEdit ? `Editar acceso · ${initial?.label}` : 'Nuevo acceso'} maxWidth={500}
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.label.trim()} onClick={save}>{isEdit ? 'Guardar' : 'Agregar acceso'}</button>
+        </div>
+      }
+    >
+      <div className="grid gap-3 p-1">
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Nombre del acceso *</label>
+          <input type="text" value={form.label} onChange={e => set('label', e.target.value)} className={inputClass} placeholder="Sistema Korex, Panel de comisiones…" autoFocus />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>URL de login</label>
+          <input type="url" value={form.url} onChange={e => set('url', e.target.value)} className={inputClass} placeholder="https://app.tucliente.com/login" />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Email / Usuario</label>
+          <input type="text" value={form.email} onChange={e => set('email', e.target.value)} className={inputClass} placeholder="usuario@dominio.com" />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Contraseña</label>
+          <input type="text" value={form.password} onChange={e => set('password', e.target.value)} className={inputClass + ' font-mono'} placeholder="••••••••" />
+          <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>La contraseña se almacena tal cual. Visible solo para el equipo.</span>
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Notas (opcional)</label>
+          <textarea value={form.notes} onChange={e => set('notes', e.target.value)} className={inputClass + ' resize-y min-h-[60px]'} placeholder="2FA por SMS, pin de seguridad, etc." />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function LinkFormModal({ open, onClose, kind, initial, onSave }) {
+  // kind: 'drive' | 'doc'
+  const isEdit = !!initial;
+  const [form, setForm] = useState({ label: '', url: '' });
+  if (open && form._k !== (initial?.url || 'new-' + kind)) {
+    setForm({ label: initial?.label || (kind === 'drive' ? 'Drive de la estrategia' : ''), url: initial?.url || '', _k: initial?.url || 'new-' + kind });
+  }
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const save = () => {
+    if (!form.url.trim()) return;
+    onSave({ label: form.label.trim() || (kind === 'drive' ? 'Drive' : 'Documento'), url: form.url.trim() });
+    onClose();
+  };
+  const title = kind === 'drive'
+    ? (isEdit ? 'Editar carpeta Drive' : 'Nueva carpeta Drive')
+    : (isEdit ? `Editar documento · ${initial?.label}` : 'Nuevo documento');
+  return (
+    <Modal open={open} onClose={onClose} title={title} maxWidth={500}
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.url.trim()} onClick={save}>{isEdit ? 'Guardar' : 'Agregar'}</button>
+        </div>
+      }
+    >
+      <div className="grid gap-3 p-1">
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Nombre</label>
+          <input type="text" value={form.label} onChange={e => set('label', e.target.value)} className={inputClass} placeholder={kind === 'drive' ? 'Drive de la estrategia' : 'Guion VSL, Copy de anuncios…'} autoFocus />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>URL *</label>
+          <input type="url" value={form.url} onChange={e => set('url', e.target.value)} className={inputClass} placeholder="https://..." />
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 const STATUS_STYLES = {
   activa: { bg: '#ECFDF5', fg: '#16A34A', label: 'Activa' },
@@ -139,6 +290,11 @@ function StrategyCard({ s, pages }) {
   const [adding, setAdding] = useState(false);
   const [newPageName, setNewPageName] = useState('');
   const [statusOpen, setStatusOpen] = useState(false);
+  // Modales para archivos/accesos
+  const [linkModal, setLinkModal] = useState(null); // { kind: 'drive' | 'doc', initial, index }
+  const [accessModal, setAccessModal] = useState(null); // { initial, index } or { initial: null } para nuevo
+  // Expand/collapse de accesos individuales
+  const [expandedAccess, setExpandedAccess] = useState({});
   const myPages = pages.filter(p => p.strategy_id === s.id).sort((a, b) => (a.position || 0) - (b.position || 0));
   const st = STATUS_STYLES[s.status] || STATUS_STYLES.borrador;
 
@@ -215,35 +371,28 @@ function StrategyCard({ s, pages }) {
           </div>
           <div className="flex flex-col gap-1.5">
             {s.drive_url && (
-              <a href={s.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[12px] no-underline py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:bg-blue-bg2 group/lk" style={{ color: '#1A1D26' }}>
+              <div className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
                 <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Folder size={12} className="text-blue" /></span>
-                <span className="flex-1 truncate font-medium">Drive de la estrategia</span>
-                <ExternalLink size={11} className="opacity-50 shrink-0" />
-                <button className="opacity-0 group-hover/lk:opacity-100 w-4 h-4 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm('¿Quitar el Drive?')) updateStrategy(s.id, { drive_url: null }); }} title="Quitar"><X size={10} /></button>
-              </a>
+                <a href={s.drive_url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>Drive de la estrategia</a>
+                <CopyButton value={s.drive_url} title="Copiar URL" />
+                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ kind: 'drive', initial: { label: 'Drive', url: s.drive_url } })} title="Editar"><Pencil size={11} /></button>
+                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Quitar el Drive?')) updateStrategy(s.id, { drive_url: null }); }} title="Quitar"><X size={11} /></button>
+              </div>
             )}
             {(s.docs || []).map((d, di) => (
-              <a key={di} href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[12px] no-underline py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:bg-blue-bg2 group/lk" style={{ color: '#1A1D26' }}>
+              <div key={di} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
                 <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#F5F3FF' }}><FileText size={12} className="text-purple" /></span>
-                <span className="flex-1 truncate font-medium">{d.label}</span>
-                <ExternalLink size={11} className="opacity-50 shrink-0" />
-                <button className="opacity-0 group-hover/lk:opacity-100 w-4 h-4 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={10} /></button>
-              </a>
+                <a href={d.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{d.label}</a>
+                <CopyButton value={d.url} title="Copiar URL" />
+                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ kind: 'doc', initial: d, index: di })} title="Editar"><Pencil size={11} /></button>
+                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={11} /></button>
+              </div>
             ))}
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {!s.drive_url && (
-                <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
-                  const u = window.prompt('URL del Drive de esta estrategia:');
-                  if (u) updateStrategy(s.id, { drive_url: u });
-                }}><Plus size={11} /> Drive</button>
+                <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'drive', initial: null })}><Plus size={11} /> Drive</button>
               )}
-              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => {
-                const label = window.prompt('Nombre del documento (ej. Guion VSL, Copy de anuncios):');
-                if (!label) return;
-                const url = window.prompt('URL del documento:');
-                if (!url) return;
-                updateStrategy(s.id, { docs: [...(s.docs || []), { label, url }] });
-              }}><Plus size={11} /> Doc</button>
+              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'doc', initial: null })}><Plus size={11} /> Documento</button>
             </div>
           </div>
         </div>
@@ -257,31 +406,80 @@ function StrategyCard({ s, pages }) {
             {(s.accesos || []).length === 0 && (
               <span className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin accesos cargados</span>
             )}
-            {(s.accesos || []).map((a, ai) => (
-              <a key={ai} href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[12px] no-underline py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] hover:border-blue hover:bg-blue-bg2 group/ac" style={{ color: '#1A1D26' }} title={a.username ? `Usuario: ${a.username}` : ''}>
-                <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Key size={12} className="text-blue" /></span>
-                <span className="flex-1 min-w-0">
-                  <span className="block truncate font-medium">{a.label}</span>
-                  {a.username && <span className="block text-[10px] truncate" style={{ color: '#9CA3AF' }}>@{a.username}</span>}
-                </span>
-                <ExternalLink size={11} className="opacity-50 shrink-0" />
-                <button className="opacity-0 group-hover/ac:opacity-100 w-4 h-4 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center" onClick={(e) => { e.preventDefault(); if (window.confirm(`¿Quitar acceso "${a.label}"?`)) updateStrategy(s.id, { accesos: (s.accesos || []).filter((_, i) => i !== ai) }); }} title="Quitar"><X size={10} /></button>
-              </a>
-            ))}
-            <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue self-start" onClick={() => {
-              const label = window.prompt('Nombre del acceso (ej. Panel de comisiones, Sistema Korex):');
-              if (!label) return;
-              const url = window.prompt('URL de login:');
-              if (!url) return;
-              const username = window.prompt('Usuario (opcional, déjalo en blanco si no aplica):') || '';
-              updateStrategy(s.id, { accesos: [...(s.accesos || []), { label, url, username }] });
-            }}><Plus size={11} /> Acceso</button>
+            {(s.accesos || []).map((a, ai) => {
+              const isExp = !!expandedAccess[ai];
+              return (
+                <div key={ai} className="rounded-md bg-white border border-[#E2E5EB] overflow-hidden group/ac">
+                  <div className="flex items-center gap-2 text-[12px] py-1.5 px-2" style={{ color: '#1A1D26' }}>
+                    <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Key size={12} className="text-blue" /></span>
+                    <button
+                      className="flex-1 min-w-0 text-left bg-transparent border-none cursor-pointer p-0"
+                      onClick={() => setExpandedAccess(prev => ({ ...prev, [ai]: !prev[ai] }))}
+                      title={isExp ? 'Ocultar detalles' : 'Mostrar detalles'}
+                    >
+                      <span className="block truncate font-medium" style={{ color: '#1A1D26' }}>{a.label}</span>
+                      {a.email && !isExp && <span className="block text-[10px] truncate" style={{ color: '#9CA3AF' }}>{a.email}</span>}
+                    </button>
+                    {a.url && (
+                      <a href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent text-text3 hover:bg-blue-bg hover:text-blue shrink-0 no-underline" title="Abrir login"><ExternalLink size={12} /></a>
+                    )}
+                    <button className="opacity-0 group-hover/ac:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setAccessModal({ initial: a, index: ai })} title="Editar"><Pencil size={11} /></button>
+                    <button className="opacity-0 group-hover/ac:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar acceso "${a.label}"?`)) updateStrategy(s.id, { accesos: (s.accesos || []).filter((_, i) => i !== ai) }); }} title="Quitar"><X size={11} /></button>
+                  </div>
+                  {isExp && (
+                    <div className="border-t border-[#F0F2F5] p-1.5 flex flex-col gap-1" style={{ background: '#FAFBFC' }}>
+                      <CopyableRow icon={Mail} label="Email" value={a.email || a.username} />
+                      <CopyableRow icon={Key} label="Pass" value={a.password} masked />
+                      {a.notes && (
+                        <div className="text-[11px] py-1 px-2 rounded-md italic" style={{ color: '#6B7280' }}>{a.notes}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue self-start" onClick={() => setAccessModal({ initial: null })}>
+              <Plus size={11} /> Acceso
+            </button>
           </div>
         </div>
 
         {/* Recursos necesarios (checklist) */}
         <VisualChecklist strategy={s} onUpdate={updateStrategy} />
       </div>
+
+      {/* Modales */}
+      {linkModal && (
+        <LinkFormModal
+          open={!!linkModal}
+          onClose={() => setLinkModal(null)}
+          kind={linkModal.kind}
+          initial={linkModal.initial}
+          onSave={(data) => {
+            if (linkModal.kind === 'drive') {
+              updateStrategy(s.id, { drive_url: data.url });
+            } else {
+              const docs = [...(s.docs || [])];
+              if (linkModal.index != null) docs[linkModal.index] = data;
+              else docs.push(data);
+              updateStrategy(s.id, { docs });
+            }
+          }}
+        />
+      )}
+      {accessModal && (
+        <AccessFormModal
+          open={!!accessModal}
+          onClose={() => setAccessModal(null)}
+          initial={accessModal.initial}
+          onSave={(data) => {
+            const accesos = [...(s.accesos || [])];
+            if (accessModal.index != null) accesos[accessModal.index] = data;
+            else accesos.push(data);
+            updateStrategy(s.id, { accesos });
+          }}
+        />
+      )}
     </div>
   );
 }
