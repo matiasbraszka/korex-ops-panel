@@ -414,7 +414,11 @@ export default function TasksPage({ embedded = false }) {
           {/* Assignee */}
           {(() => {
             const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+            const hasClient = assigneeNames.some(n => n.toLowerCase() === 'cliente');
             const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
+            const taskClient = clients.find(cl => cl.id === t.clientId);
+            const clientColor = taskClient?.color || '#5B7CF5';
+            const clientName = taskClient?.name || 'Cliente';
             const toggleAssignee = (memberName) => {
               const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
               const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
@@ -429,11 +433,18 @@ export default function TasksPage({ embedded = false }) {
                   onClick={(e) => { e.stopPropagation(); setOpenDropdown('assignee-' + t.id); }}
                 >
                   <div className="flex items-center gap-1 py-[2px] px-1.5 rounded text-[11px] text-text2 hover:bg-[#F0F2F5]">
-                    {assigneeMembers.length > 0 ? (
+                    {(assigneeMembers.length > 0 || hasClient) ? (
                       <div className="flex items-center">
                         {assigneeMembers.slice(0, 2).map((am, ai) => (
                           <TeamAvatar key={am.id} member={am} size={20} className="border-2 border-white" style={{ marginLeft: ai > 0 ? '-6px' : '0', zIndex: 2 - ai }} />
                         ))}
+                        {hasClient && (
+                          <span
+                            title={`Asignada al cliente: ${clientName}`}
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-white"
+                            style={{ background: clientColor + '22', color: clientColor, marginLeft: assigneeMembers.length > 0 ? '-6px' : '0', zIndex: 3 }}
+                          >{clientName[0]?.toUpperCase() || 'C'}</span>
+                        )}
                         {assigneeMembers.length > 2 && (
                           <span className="w-[20px] h-[20px] rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border-2 border-white" style={{ marginLeft: '-6px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
                         )}
@@ -449,6 +460,15 @@ export default function TasksPage({ embedded = false }) {
                   searchable
                   items={[
                     { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                    {
+                      label: `Cliente (${clientName})`,
+                      node: <div className="flex items-center gap-2 w-full">
+                        <input type="checkbox" checked={hasClient} readOnly className="pointer-events-none" />
+                        <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: clientColor + '22', color: clientColor }}>{clientName[0]?.toUpperCase() || 'C'}</span>
+                        <span>Cliente <span className="text-[10px] text-gray-500">({clientName})</span></span>
+                      </div>,
+                      onClick: () => toggleAssignee('Cliente'),
+                    },
                     ...TEAM.map(m => {
                       const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                       return {
@@ -556,8 +576,12 @@ export default function TasksPage({ embedded = false }) {
                     })()}
                     {(() => {
                       const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const hasClient = assigneeNames.some(n => n.toLowerCase() === 'cliente');
                       const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
-                      if (assigneeMembers.length === 0) {
+                      const taskClient = clients.find(cl => cl.id === t.clientId);
+                      const clientColor = taskClient?.color || '#5B7CF5';
+                      const clientName = taskClient?.name || 'Cliente';
+                      if (assigneeMembers.length === 0 && !hasClient) {
                         return (
                           <span
                             ref={el => mobAssigneeRef.current = el}
@@ -577,11 +601,22 @@ export default function TasksPage({ embedded = false }) {
                           {assigneeMembers.slice(0, 2).map((am, ai) => (
                             <TeamAvatar key={am.id} member={am} size={18} className="border border-white" style={{ marginLeft: ai > 0 ? '-4px' : '0', zIndex: 2 - ai }} />
                           ))}
+                          {hasClient && (
+                            <span
+                              title={`Asignada al cliente: ${clientName}`}
+                              className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[8px] font-bold border border-white"
+                              style={{ background: clientColor + '22', color: clientColor, marginLeft: assigneeMembers.length > 0 ? '-4px' : '0', zIndex: 3 }}
+                            >{clientName[0]?.toUpperCase() || 'C'}</span>
+                          )}
                         </div>
                       );
                     })()}
                     {(() => {
                       const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const hasClient = assigneeNames.some(n => n.toLowerCase() === 'cliente');
+                      const taskClient = clients.find(cl => cl.id === t.clientId);
+                      const clientColor = taskClient?.color || '#5B7CF5';
+                      const clientName = taskClient?.name || 'Cliente';
                       const toggleAssignee = (memberName) => {
                         const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
                         const exists = current.some(n => n.toLowerCase() === memberName.toLowerCase());
@@ -597,6 +632,15 @@ export default function TasksPage({ embedded = false }) {
                           searchable
                           items={[
                             { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                            {
+                              label: `Cliente (${clientName})`,
+                              node: <div className="flex items-center gap-2 w-full">
+                                <input type="checkbox" checked={hasClient} readOnly className="pointer-events-none" />
+                                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: clientColor + '22', color: clientColor }}>{clientName[0]?.toUpperCase() || 'C'}</span>
+                                <span>Cliente <span className="text-[10px] text-gray-500">({clientName})</span></span>
+                              </div>,
+                              onClick: () => toggleAssignee('Cliente'),
+                            },
                             ...TEAM.map(m => {
                               const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                               return {

@@ -421,6 +421,7 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
           {/* Col 4: Assignees */}
           {(() => {
             const assigneeNames = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
+            const hasClient = assigneeNames.some(n => n.toLowerCase() === 'cliente');
             const assigneeMembers = assigneeNames.map(name => TEAM.find(m => m.name.toLowerCase() === name.toLowerCase() || m.id === name)).filter(Boolean);
             const toggleAssignee = (memberName) => {
               const current = t.assignee ? t.assignee.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -428,6 +429,13 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
               const updated = exists ? current.filter(n => n.toLowerCase() !== memberName.toLowerCase()) : [...current, memberName];
               updateTask(t.id, { assignee: updated.join(', ') });
             };
+            const ClientAvatar = () => (
+              <span
+                title={`Asignada al cliente: ${c.name}`}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-white"
+                style={{ background: (c.color || '#5B7CF5') + '22', color: c.color || '#5B7CF5', marginLeft: assigneeMembers.length > 0 ? '-8px' : '0', zIndex: 3 }}
+              >{c.name?.[0]?.toUpperCase() || 'C'}</span>
+            );
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0 }}>
                 <div
@@ -436,11 +444,12 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                   style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}
                   onClick={(e) => { e.stopPropagation(); setOpenDropdown('rd-assignee-' + t.id); }}
                 >
-                  {assigneeMembers.length > 0 ? (
+                  {(assigneeMembers.length > 0 || hasClient) ? (
                     <div className="flex items-center" style={{ direction: 'ltr' }}>
                       {assigneeMembers.slice(0, 2).map((am, ai) => (
                         <TeamAvatar key={am.id} member={am} size={24} className="border-2 border-white" style={{ marginLeft: ai > 0 ? '-8px' : '0', zIndex: 2 - ai }} />
                       ))}
+                      {hasClient && <ClientAvatar />}
                       {assigneeMembers.length > 2 && (
                         <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold bg-gray-200 text-gray-600 border-2 border-white" style={{ marginLeft: '-8px', zIndex: 0 }}>+{assigneeMembers.length - 2}</span>
                       )}
@@ -457,6 +466,15 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                   searchable
                   items={[
                     { label: 'Sin asignar', onClick: () => { updateTask(t.id, { assignee: '' }); setOpenDropdown(null); } },
+                    {
+                      label: `Cliente (${c.name})`,
+                      node: <div className="flex items-center gap-2 w-full">
+                        <input type="checkbox" checked={hasClient} readOnly className="pointer-events-none" />
+                        <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: (c.color || '#5B7CF5') + '22', color: c.color || '#5B7CF5' }}>{c.name?.[0]?.toUpperCase() || 'C'}</span>
+                        <span>Cliente <span className="text-[10px] text-gray-500">({c.name})</span></span>
+                      </div>,
+                      onClick: () => toggleAssignee('Cliente'),
+                    },
                     ...TEAM.map(m => {
                       const isSelected = assigneeNames.some(n => n.toLowerCase() === m.name.toLowerCase());
                       return {
