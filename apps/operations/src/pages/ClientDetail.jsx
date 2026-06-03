@@ -11,6 +11,8 @@ import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
 import BillingTab from '../components/clientes/BillingTab';
+import VisualResourcesTab from '../components/clientes/VisualResourcesTab';
+import EditClientModal from '../components/clientes/EditClientModal';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
@@ -69,24 +71,8 @@ export default function ClientDetail({ client: c }) {
     return dropdownRefs.current[key];
   }, []);
 
-  // Edit client modal
-  const [editForm, setEditForm] = useState({});
-  const openEditModal = () => {
-    setEditForm({
-      name: c.name, company: c.company, service: c.service || '',
-      startDate: c.startDate || '', avatarUrl: c.avatarUrl || '', bottleneck: c.bottleneck || '',
-      status: c.status, notes: c.notes || '',
-    });
-    setEditModal(true);
-  };
-  const saveEdit = () => {
-    updateClient(c.id, {
-      name: editForm.name, company: editForm.company, service: editForm.service,
-      startDate: editForm.startDate, avatarUrl: editForm.avatarUrl, bottleneck: editForm.bottleneck,
-      status: editForm.status, notes: editForm.notes,
-    });
-    setEditModal(false);
-  };
+  // Edit client modal: form state vive dentro de EditClientModal
+  const openEditModal = () => setEditModal(true);
 
   // Feedback modal
   const [fbForm, setFbForm] = useState({ date: today(), sentiment: 'neutral', text: '', fathomLink: '', keypoints: '', transcription: '' });
@@ -1056,8 +1042,9 @@ export default function ClientDetail({ client: c }) {
         const adsActive = c.metaMetrics?.adsActive;
         // Publicidad oculta temporalmente — descomentar la linea de abajo
         // cuando se decida volver a usar el modulo.
-        const visualesDone = (c.visualResources || []).filter(v => v.ok).length;
-        const visualesTotal = (c.visualResources || []).length;
+        const visualesArr = c.visualResources && c.visualResources.length > 0 ? c.visualResources : [];
+        const visualesDone = visualesArr.filter(v => v.ok).length;
+        const visualesTotal = visualesArr.length;
         const strategiesCount = (strategies || []).filter(s => s.client_id === c.id).length;
         const clientInvoices = (invoices || []).filter(i => i.client_id === c.id);
         const invoicesCount = clientInvoices.length;
@@ -1244,26 +1231,7 @@ export default function ClientDetail({ client: c }) {
               </div>
             )}
 
-            {activeTab === 'recursos' && (
-              <div className="mb-4">
-                <ResourcesPanel
-                  title="Links y recursos"
-                  links={c.links || []}
-                  allowedCategories={CLIENT_RESOURCE_CATEGORIES}
-                  onAdd={(link) => updateClient(c.id, { links: [...(c.links || []), link] })}
-                  onUpdate={(prevLink, patch) => {
-                    const newLinks = (c.links || []).map((l, i) =>
-                      i === prevLink.originalIdx ? { ...l, ...patch } : l,
-                    );
-                    updateClient(c.id, { links: newLinks });
-                  }}
-                  onDelete={(prevLink) => {
-                    const newLinks = (c.links || []).filter((_, i) => i !== prevLink.originalIdx);
-                    updateClient(c.id, { links: newLinks });
-                  }}
-                />
-              </div>
-            )}
+            {activeTab === 'recursos' && <VisualResourcesTab client={c} />}
 
             {activeTab === 'publicidad' && (
               <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
@@ -1317,26 +1285,14 @@ export default function ClientDetail({ client: c }) {
         );
       })()}
 
-      {/* Edit Client Modal */}
-      <Modal
+      {/* Edit Client Modal — 5 secciones (Fase 4 handoff) */}
+      <EditClientModal
         open={editModal}
         onClose={() => setEditModal(false)}
-        title="Editar cliente"
-        footer={<>
-          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setEditModal(false)}>Cancelar</button>
-          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={saveEdit}>Guardar</button>
-        </>}
-      >
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.name || ''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Empresa</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.company || ''} onChange={e => setEditForm(f => ({ ...f, company: e.target.value }))} /></div>
-        </div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.service || ''} onChange={e => setEditForm(f => ({ ...f, service: e.target.value }))} /></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Fecha inicio</label><input type="date" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.startDate || ''} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} /></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil (URL)</label><input type="text" placeholder="https://..." className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.avatarUrl || ''} onChange={e => setEditForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Estado</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue" value={editForm.status || 'active'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}><option value="active">Activo</option><option value="paused">Pausado</option><option value="completed">Completado</option></select></div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Notas</label><textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue resize-y min-h-[80px] leading-relaxed" value={editForm.notes || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} /></div>
-      </Modal>
+        client={c}
+        updateClient={updateClient}
+        getAllPriorityLabels={getAllPriorityLabels}
+      />
 
       {/* Delete Phase Confirmation */}
       <Modal
