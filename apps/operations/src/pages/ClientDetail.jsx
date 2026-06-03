@@ -1058,7 +1058,6 @@ export default function ClientDetail({ client: c }) {
           { key: 'recursos', label: 'Recursos', count: recursosCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'roadmap', label: 'Roadmap' },
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
-          { key: 'historial', label: 'Historial' },
         ];
         return (
           <>
