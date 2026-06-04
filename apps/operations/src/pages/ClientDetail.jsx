@@ -12,6 +12,7 @@ import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileT
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
 import BillingTab from '../components/clientes/BillingTab';
 import EditClientModal from '../components/clientes/EditClientModal';
+import MetaAdAccountsManager from '../components/clientes/MetaAdAccountsManager';
 import ClientRoadmapPanel from '../components/tareas/ClientRoadmapPanel';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
@@ -1183,41 +1184,34 @@ export default function ClientDetail({ client: c }) {
 
 
             {activeTab === 'publicidad' && (
-              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
-                {!hasAds ? (
-                  <div className="text-center text-text3 text-xs py-12">Sin cuentas de publicidad vinculadas</div>
-                ) : (() => {
+              <div className="flex flex-col gap-4 mb-4">
+                <MetaAdAccountsManager client={c} updateClient={updateClient} />
+                {hasAds && (() => {
                   const m = c.metaMetrics || {};
                   const isActive = m.adsActive;
                   const curr = m.currency || 'USD';
                   const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
                   return (
-                    <div className="py-4 px-5">
-                      {isActive && m.totalSpend7d ? (
-                        <>
-                          <div className="grid grid-cols-3 gap-3 mb-3">
-                            <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inv. 7d</div></div>
-                            <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight text-blue">{m.totalConversions7d || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Leads 7d</div></div>
-                            <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight" style={{ color: m.avgCpl7d > 15 ? 'var(--color-red)' : 'var(--color-green)' }}>{cs}{m.avgCpl7d?.toFixed(2) || '—'}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">CPL prom.</div></div>
-                          </div>
-                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Gasto ayer</span><strong>{cs}{m.spendYesterday?.toFixed(2) || '0'}</strong></div>
-                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Leads ayer</span><strong className="text-blue">{m.conversionsYesterday || 0}</strong></div>
-                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Impresiones 7d</span><strong>{(m.impressions7d || 0).toLocaleString()}</strong></div>
-                          <div className="flex justify-between items-center text-[12px] text-text2 py-1.5"><span>CTR</span><strong>{m.ctr7d?.toFixed(2) || '—'}%</strong></div>
-                          {m.conversionEvent && <div className="mt-2"><span className="text-[10px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">Evento: {m.conversionEvent}</span></div>}
-                          <div className="mt-2 text-[10px] text-text3">Actualizado: {m.lastUpdated || '—'}</div>
-                        </>
-                      ) : (
-                        m.pauseReason ? <div className="text-[12px] text-red py-3">{'⚠'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-6">Sin datos de publicidad recientes</div>
-                      )}
-                      <div className="mt-3 border-t border-border pt-3">
-                        <div className="text-[11px] font-semibold text-text3 mb-1.5">Cuentas vinculadas</div>
-                        {c.metaAds.filter(a => a.status !== 'interna').map((a, ai) => (
-                          <div key={ai} className="text-[12px] py-1 flex justify-between items-center">
-                            <span>{a.name}</span>
-                            <span className={`inline-flex items-center gap-1 py-[2px] px-2 rounded-xl text-[9px] font-bold ${a.status === 'activa' ? 'bg-green-bg text-[#16A34A]' : 'bg-surface2 text-text3'}`}>{a.status}</span>
-                          </div>
-                        ))}
+                    <div className="bg-white border border-border rounded-xl overflow-hidden">
+                      <div className="py-3 px-4 border-b border-[#F0F2F5] font-bold text-[14px]" style={{ color: '#1A1D26' }}>Rendimiento últimos 7 días</div>
+                      <div className="py-4 px-5">
+                        {isActive && m.totalSpend7d ? (
+                          <>
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                              <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inv. 7d</div></div>
+                              <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight text-blue">{m.totalConversions7d || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Leads 7d</div></div>
+                              <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight" style={{ color: m.avgCpl7d > 15 ? 'var(--color-red)' : 'var(--color-green)' }}>{cs}{m.avgCpl7d?.toFixed(2) || '—'}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">CPL prom.</div></div>
+                            </div>
+                            <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Gasto ayer</span><strong>{cs}{m.spendYesterday?.toFixed(2) || '0'}</strong></div>
+                            <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Leads ayer</span><strong className="text-blue">{m.conversionsYesterday || 0}</strong></div>
+                            <div className="flex justify-between items-center text-[12px] text-text2 py-1.5 border-b border-border"><span>Impresiones 7d</span><strong>{(m.impressions7d || 0).toLocaleString()}</strong></div>
+                            <div className="flex justify-between items-center text-[12px] text-text2 py-1.5"><span>CTR</span><strong>{m.ctr7d?.toFixed(2) || '—'}%</strong></div>
+                            {m.conversionEvent && <div className="mt-2"><span className="text-[10px] bg-purple-bg text-purple py-[2px] px-1.5 rounded font-medium">Evento: {m.conversionEvent}</span></div>}
+                            <div className="mt-2 text-[10px] text-text3">Actualizado: {m.lastUpdated || '—'}</div>
+                          </>
+                        ) : (
+                          m.pauseReason ? <div className="text-[12px] text-red py-3">{'⚠'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-6">Sin datos de publicidad recientes</div>
+                        )}
                       </div>
                     </div>
                   );
