@@ -76,13 +76,25 @@ function CallBody({ llamada }) {
       {proximos.length > 0 && (
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Próximos pasos</div>
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {proximos.map((p, i) => (
-              <li key={i} style={{ fontSize: 12, color: T.text2, paddingLeft: 14, position: 'relative', lineHeight: 1.5 }}>
-                <span style={{ position: 'absolute', left: 0, color: T.blue }}>→</span>
-                {typeof p === 'string' ? p : (p.texto || p.label || JSON.stringify(p))}
-              </li>
-            ))}
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {proximos.map((p, i) => {
+              const accion = typeof p === 'string' ? p : (p.accion || p.texto || p.text || '');
+              const responsable = typeof p === 'object' ? (p.responsable || '') : '';
+              const plazo = typeof p === 'object' ? (p.plazo || '') : '';
+              if (!accion) return null;
+              return (
+                <li key={i} style={{ fontSize: 12, color: T.text2, paddingLeft: 14, position: 'relative', lineHeight: 1.45 }}>
+                  <span style={{ position: 'absolute', left: 0, color: T.blue }}>→</span>
+                  <span>{accion}</span>
+                  {(responsable || plazo) && (
+                    <span style={{ fontSize: 10, color: T.text3, marginLeft: 6 }}>
+                      {responsable && <span>· {responsable}</span>}
+                      {plazo && <span> · {plazo}</span>}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -90,12 +102,16 @@ function CallBody({ llamada }) {
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Problemas detectados</div>
           <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {problemas.map((p, i) => (
-              <li key={i} style={{ fontSize: 12, color: T.text2, paddingLeft: 14, position: 'relative', lineHeight: 1.5 }}>
-                <span style={{ position: 'absolute', left: 0, color: T.red }}>⚠</span>
-                {typeof p === 'string' ? p : (p.texto || p.label || JSON.stringify(p))}
-              </li>
-            ))}
+            {problemas.map((p, i) => {
+              const texto = typeof p === 'string' ? p : (p.text || p.texto || p.accion || '');
+              if (!texto) return null;
+              return (
+                <li key={i} style={{ fontSize: 12, color: T.text2, paddingLeft: 14, position: 'relative', lineHeight: 1.5 }}>
+                  <span style={{ position: 'absolute', left: 0, color: T.red }}>⚠</span>
+                  {texto}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
