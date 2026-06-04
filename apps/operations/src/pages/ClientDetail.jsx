@@ -1184,18 +1184,15 @@ export default function ClientDetail({ client: c }) {
 
 
             {activeTab === 'publicidad' && (
-              <div className="flex flex-col gap-4 mb-4">
-                <MetaAdAccountsManager client={c} updateClient={updateClient} />
-                {hasAds && (() => {
+              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
+                {(() => {
                   const m = c.metaMetrics || {};
                   const isActive = m.adsActive;
                   const curr = m.currency || 'USD';
                   const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
                   return (
-                    <div className="bg-white border border-border rounded-xl overflow-hidden">
-                      <div className="py-3 px-4 border-b border-[#F0F2F5] font-bold text-[14px]" style={{ color: '#1A1D26' }}>Rendimiento últimos 7 días</div>
-                      <div className="py-4 px-5">
-                        {isActive && m.totalSpend7d ? (
+                    <div className="py-4 px-5">
+                      {isActive && m.totalSpend7d ? (
                           <>
                             <div className="grid grid-cols-3 gap-3 mb-3">
                               <div className="text-center py-3 px-2 bg-surface2 rounded-md"><div className="text-lg font-extrabold tracking-tight">{cs}{m.totalSpend7d?.toFixed(0) || 0}</div><div className="text-[10px] text-text3 uppercase tracking-[0.5px] mt-0.5">Inv. 7d</div></div>
@@ -1210,9 +1207,9 @@ export default function ClientDetail({ client: c }) {
                             <div className="mt-2 text-[10px] text-text3">Actualizado: {m.lastUpdated || '—'}</div>
                           </>
                         ) : (
-                          m.pauseReason ? <div className="text-[12px] text-red py-3">{'⚠'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-6">Sin datos de publicidad recientes</div>
-                        )}
-                      </div>
+                        m.pauseReason ? <div className="text-[12px] text-red py-3">{'⚠'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-6" style={{ color: '#9CA3AF' }}>Sin datos de publicidad recientes</div>
+                      )}
+                      <MetaAdAccountsManager client={c} updateClient={updateClient} />
                     </div>
                   );
                 })()}
