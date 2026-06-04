@@ -776,6 +776,8 @@ export function AppProvider({ children }) {
       is_live: !!data.is_live,
       ads_url: data.ads_url || null,
       conversion_events: Array.isArray(data.conversion_events) ? data.conversion_events : [],
+      pixel_id: data.pixel_id || null,
+      clarity_id: data.clarity_id || null,
     };
     await sbFetch('strategy_pages', {
       method: 'POST',

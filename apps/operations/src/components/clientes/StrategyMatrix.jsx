@@ -171,12 +171,15 @@ function normalizeEvents(events) {
   return events.map(e => typeof e === 'string' ? { label: e, meta_name: '' } : { label: e?.label || '', meta_name: e?.meta_name || '' });
 }
 
-function EventMappingEditor({ events, onChange, compact = false }) {
-  const list = normalizeEvents(events);
+function TrackingEditor({ page, onPatch, compact = false }) {
+  const list = normalizeEvents(page.conversion_events);
   const [openModal, setOpenModal] = useState(false);
   const configured = list.filter(e => e.meta_name).length;
+  const hasPixel = !!page.pixel_id;
+  const hasClarity = !!page.clarity_id;
+  const hasAny = hasPixel || hasClarity || list.length > 0;
 
-  // Chip compacto cuando no hay foco (vista en la tabla)
+  // Vista compacta (en la tabla desktop o card mobile)
   if (compact) {
     return (
       <>
@@ -184,39 +187,59 @@ function EventMappingEditor({ events, onChange, compact = false }) {
           type="button"
           onClick={() => setOpenModal(true)}
           className="inline-flex flex-wrap items-center gap-1 text-left bg-transparent border-none cursor-pointer p-0 hover:opacity-80"
-          title="Configurar eventos de conversión"
+          title="Configurar tracking"
         >
-          {list.length === 0 ? (
+          {!hasAny ? (
             <span className="inline-flex items-center gap-1 text-[10.5px] py-[2px] px-2 rounded-full border border-dashed border-[#D0D5DD] text-text3">
               <Plus size={10} /> Configurar
             </span>
           ) : (
             <>
-              {list.slice(0, 3).map((ev, i) => (
+              {hasPixel && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium py-[2px] px-2 rounded-full" style={{ background: '#EEF2FF', color: '#5B7CF5' }}>Pixel</span>
+              )}
+              {hasClarity && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium py-[2px] px-2 rounded-full" style={{ background: '#ECFEFF', color: '#0891B2' }}>Clarity</span>
+              )}
+              {list.slice(0, 2).map((ev, i) => (
                 <span key={i} className="inline-flex items-center gap-1 text-[10px] font-medium py-[2px] px-2 rounded-full" style={{ background: ev.meta_name ? '#F5F3FF' : '#FEFCE8', color: ev.meta_name ? '#7C3AED' : '#CA8A04' }}>
                   {ev.label}
                   {ev.meta_name && <span className="font-mono opacity-70">·</span>}
-                  {ev.meta_name && <span className="font-mono">{ev.meta_name}</span>}
+                  {ev.meta_name && <span className="font-mono truncate max-w-[80px]">{ev.meta_name}</span>}
                 </span>
               ))}
-              {list.length > 3 && (
-                <span className="text-[10px] py-[2px] px-1.5 rounded-full" style={{ background: '#F0F2F5', color: '#6B7280' }}>+{list.length - 3}</span>
+              {list.length > 2 && (
+                <span className="text-[10px] py-[2px] px-1.5 rounded-full" style={{ background: '#F0F2F5', color: '#6B7280' }}>+{list.length - 2}</span>
               )}
             </>
           )}
         </button>
         {openModal && (
-          <EventMappingModal events={list} onClose={() => setOpenModal(false)} onChange={onChange} />
+          <TrackingModal page={page} onClose={() => setOpenModal(false)} onPatch={onPatch} />
         )}
       </>
     );
   }
 
-  // Vista expandida (form de edicion / mobile card)
+  // Vista expandida (form de edicion)
   return (
     <div className="flex flex-col gap-1">
-      {list.length === 0 && (
-        <span className="text-[11px] italic" style={{ color: '#9CA3AF' }}>Sin eventos configurados</span>
+      {!hasAny && (
+        <span className="text-[11px] italic" style={{ color: '#9CA3AF' }}>Sin tracking configurado</span>
+      )}
+      {hasPixel && (
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span className="font-medium shrink-0" style={{ color: '#1A1D26', minWidth: 90 }}>Pixel Meta</span>
+          <span style={{ color: '#9CA3AF' }}>→</span>
+          <span className="font-mono flex-1 truncate" style={{ color: '#5B7CF5' }}>{page.pixel_id}</span>
+        </div>
+      )}
+      {hasClarity && (
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span className="font-medium shrink-0" style={{ color: '#1A1D26', minWidth: 90 }}>Clarity</span>
+          <span style={{ color: '#9CA3AF' }}>→</span>
+          <span className="font-mono flex-1 truncate" style={{ color: '#0891B2' }}>{page.clarity_id}</span>
+        </div>
       )}
       {list.map((ev, i) => (
         <div key={i} className="flex items-center gap-1.5 text-[11px]">
@@ -226,18 +249,18 @@ function EventMappingEditor({ events, onChange, compact = false }) {
         </div>
       ))}
       <button type="button" onClick={() => setOpenModal(true)} className="self-start inline-flex items-center gap-1 text-[10.5px] py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent mt-1">
-        <Pencil size={10} /> {configured}/{list.length || 4} configurados
+        <Pencil size={10} /> Configurar tracking
       </button>
       {openModal && (
-        <EventMappingModal events={list} onClose={() => setOpenModal(false)} onChange={onChange} />
+        <TrackingModal page={page} onClose={() => setOpenModal(false)} onPatch={onPatch} />
       )}
     </div>
   );
 }
 
-function EventMappingModal({ events, onClose, onChange }) {
-  // Garantizamos las 4 filas preset + cualquier evento custom existente
-  const initial = (() => {
+function TrackingModal({ page, onClose, onPatch }) {
+  const initialEvents = (() => {
+    const events = normalizeEvents(page.conversion_events);
     const byLabel = new Map(events.map(e => [e.label, e.meta_name]));
     const rows = EVENT_PRESETS.map(label => ({ label, meta_name: byLabel.get(label) || '', preset: true }));
     events.forEach(e => {
@@ -247,23 +270,28 @@ function EventMappingModal({ events, onClose, onChange }) {
     });
     return rows;
   })();
-  const [rows, setRows] = useState(initial);
+  const [pixelId, setPixelId] = useState(page.pixel_id || '');
+  const [clarityId, setClarityId] = useState(page.clarity_id || '');
+  const [rows, setRows] = useState(initialEvents);
 
   const setRow = (i, patch) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r));
   const addCustom = () => setRows(rs => [...rs, { label: '', meta_name: '', preset: false }]);
   const removeRow = (i) => setRows(rs => rs.filter((_, j) => j !== i));
 
   const save = () => {
-    // Persistimos solo las filas con label; para presets sin meta_name guardamos igual (asi recuerda el slot vacio? No: limpiamos para no inflar la jsonb)
     const cleaned = rows
       .filter(r => r.label.trim() && (r.meta_name.trim() || !r.preset))
       .map(r => ({ label: r.label.trim(), meta_name: r.meta_name.trim() }));
-    onChange(cleaned);
+    onPatch({
+      pixel_id: pixelId.trim() || null,
+      clarity_id: clarityId.trim() || null,
+      conversion_events: cleaned,
+    });
     onClose();
   };
 
   return (
-    <Modal open={true} onClose={onClose} title="Eventos de conversión en Meta" maxWidth={560}
+    <Modal open={true} onClose={onClose} title="Configuración de tracking" maxWidth={580}
       footer={
         <div className="flex justify-end gap-2 w-full">
           <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
@@ -271,46 +299,71 @@ function EventMappingModal({ events, onClose, onChange }) {
         </div>
       }
     >
-      <div className="p-1">
-        <div className="text-[11.5px] mb-3 py-2 px-3 rounded-lg" style={{ background: '#FEFCE8', color: '#92400E' }}>
-          Para cada evento que querés trackear, pegá el <b>nombre exacto</b> con el que está configurado en Meta. Ej.: si "Visitas" en Meta aparece como <span className="font-mono bg-white px-1 rounded">eventos_pre-landing</span>, pegá eso.
-        </div>
-        <div className="hidden md:grid text-[10px] font-bold uppercase tracking-wider mb-1.5 px-2" style={{ gridTemplateColumns: '1fr 1.4fr 32px', color: '#9CA3AF', gap: 8 }}>
-          <div>Qué trackeamos</div>
-          <div>Nombre en Meta</div>
-          <div />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {rows.map((r, i) => (
-            <div key={i} className="grid items-center gap-2 p-1.5 rounded-lg" style={{ gridTemplateColumns: '1fr 1.4fr 32px', background: r.preset ? '#F7F9FC' : 'transparent', border: r.preset ? '1px solid #F0F2F5' : '1px dashed #E2E5EB' }}>
-              <input
-                type="text"
-                value={r.label}
-                onChange={e => setRow(i, { label: e.target.value })}
-                disabled={r.preset}
-                className={`text-[12.5px] py-1.5 px-2 rounded-md border outline-none ${r.preset ? 'bg-transparent border-transparent font-semibold' : 'bg-white border-[#E2E5EB] focus:border-blue'}`}
-                placeholder="Nombre interno"
-                style={{ color: '#1A1D26' }}
-              />
-              <input
-                type="text"
-                value={r.meta_name}
-                onChange={e => setRow(i, { meta_name: e.target.value })}
-                className="text-[12.5px] py-1.5 px-2 rounded-md border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono"
-                placeholder="ej. eventos_pre-landing"
-                style={{ color: '#7C3AED' }}
-              />
-              {r.preset ? (
-                <span />
-              ) : (
-                <button type="button" onClick={() => removeRow(i)} className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" title="Quitar"><Trash2 size={12} /></button>
-              )}
+      <div className="p-1 flex flex-col gap-5">
+        {/* Pixels */}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>Píxeles instalados</div>
+          <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="grid gap-1">
+              <label className="text-[11.5px] font-semibold inline-flex items-center gap-1.5" style={{ color: '#1A1D26' }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: '#5B7CF5' }} /> Pixel de Meta
+              </label>
+              <input type="text" value={pixelId} onChange={e => setPixelId(e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono" placeholder="123456789012345" />
+              <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Pixel ID del Business Manager</span>
             </div>
-          ))}
+            <div className="grid gap-1">
+              <label className="text-[11.5px] font-semibold inline-flex items-center gap-1.5" style={{ color: '#1A1D26' }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: '#0891B2' }} /> Microsoft Clarity
+              </label>
+              <input type="text" value={clarityId} onChange={e => setClarityId(e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono" placeholder="abc12defgh" />
+              <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Project ID de Clarity</span>
+            </div>
+          </div>
         </div>
-        <button type="button" onClick={addCustom} className="mt-3 inline-flex items-center gap-1 text-[11.5px] py-1.5 px-3 rounded-md border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent">
-          <Plus size={12} /> Agregar evento custom
-        </button>
+
+        {/* Eventos */}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>Eventos de conversión</div>
+          <div className="text-[11.5px] mb-3 py-2 px-3 rounded-lg" style={{ background: '#FEFCE8', color: '#92400E' }}>
+            Pegá el <b>nombre exacto</b> con el que está configurado cada evento en Meta. Ej.: si "Visitas" aparece como <span className="font-mono bg-white px-1 rounded">eventos_pre-landing</span>, pegá eso.
+          </div>
+          <div className="hidden md:grid text-[10px] font-bold uppercase tracking-wider mb-1.5 px-2" style={{ gridTemplateColumns: '1fr 1.4fr 32px', color: '#9CA3AF', gap: 8 }}>
+            <div>Qué trackeamos</div>
+            <div>Nombre en Meta</div>
+            <div />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {rows.map((r, i) => (
+              <div key={i} className="grid items-center gap-2 p-1.5 rounded-lg" style={{ gridTemplateColumns: '1fr 1.4fr 32px', background: r.preset ? '#F7F9FC' : 'transparent', border: r.preset ? '1px solid #F0F2F5' : '1px dashed #E2E5EB' }}>
+                <input
+                  type="text"
+                  value={r.label}
+                  onChange={e => setRow(i, { label: e.target.value })}
+                  disabled={r.preset}
+                  className={`text-[12.5px] py-1.5 px-2 rounded-md border outline-none ${r.preset ? 'bg-transparent border-transparent font-semibold' : 'bg-white border-[#E2E5EB] focus:border-blue'}`}
+                  placeholder="Nombre interno"
+                  style={{ color: '#1A1D26' }}
+                />
+                <input
+                  type="text"
+                  value={r.meta_name}
+                  onChange={e => setRow(i, { meta_name: e.target.value })}
+                  className="text-[12.5px] py-1.5 px-2 rounded-md border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono"
+                  placeholder="ej. eventos_pre-landing"
+                  style={{ color: '#7C3AED' }}
+                />
+                {r.preset ? (
+                  <span />
+                ) : (
+                  <button type="button" onClick={() => removeRow(i)} className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" title="Quitar"><Trash2 size={12} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addCustom} className="mt-3 inline-flex items-center gap-1 text-[11.5px] py-1.5 px-3 rounded-md border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent">
+            <Plus size={12} /> Agregar evento custom
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -343,7 +396,7 @@ function PageRow({ p, onUpdate, onDelete }) {
     setEditing(false);
   };
 
-  const updateEvents = (next) => onUpdate(p.id, { conversion_events: next });
+  const patchTracking = (patch) => onUpdate(p.id, patch);
 
   if (editing) {
     return (
@@ -357,7 +410,7 @@ function PageRow({ p, onUpdate, onDelete }) {
             <label className="inline-flex items-center gap-1 text-[10px] cursor-pointer shrink-0" title="Marcar como live"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> live</label>
           </div>
           <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
-          <EventMappingEditor events={p.conversion_events} onChange={updateEvents} compact />
+          <TrackingEditor page={p} onPatch={patchTracking} compact />
           <div className="flex gap-1 justify-end">
             <button className="text-[11px] py-1 px-2 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={save}>OK</button>
             <button className="text-[11px] py-1 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setEditing(false)}>×</button>
@@ -371,8 +424,8 @@ function PageRow({ p, onUpdate, onDelete }) {
           <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer self-start"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> Marcar como live</label>
           <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#9CA3AF' }}>Eventos de conversión</div>
-            <EventMappingEditor events={p.conversion_events} onChange={updateEvents} />
+            <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#9CA3AF' }}>Tracking</div>
+            <TrackingEditor page={p} onPatch={patchTracking} />
           </div>
           <div className="flex gap-1 pt-1">
             <button className="text-[12px] py-1.5 px-3 rounded bg-blue text-white font-medium cursor-pointer border-none flex-1" onClick={save}>Guardar</button>
@@ -393,7 +446,7 @@ function PageRow({ p, onUpdate, onDelete }) {
         <div><UrlPill url={p.testing_url} /></div>
         <div><UrlPill url={p.prod_url} isLive={p.is_live} /></div>
         <div><UrlPill url={p.ads_url} label="Meta" color="purple" /></div>
-        <div className="min-w-0"><EventMappingEditor events={p.conversion_events} onChange={updateEvents} compact /></div>
+        <div className="min-w-0"><TrackingEditor page={p} onPatch={patchTracking} compact /></div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
           <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setEditing(true)} title="Editar"><Pencil size={11} /></button>
           <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar esta página?')) onDelete(p.id); }} title="Eliminar"><Trash2 size={11} /></button>
@@ -421,8 +474,8 @@ function PageRow({ p, onUpdate, onDelete }) {
             <UrlPill url={p.ads_url} label="Meta" color="purple" />
           </div>
           <div>
-            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Eventos</div>
-            <EventMappingEditor events={p.conversion_events} onChange={updateEvents} compact />
+            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Tracking</div>
+            <TrackingEditor page={p} onPatch={patchTracking} compact />
           </div>
         </div>
       </div>
@@ -583,7 +636,7 @@ function StrategyCard({ s, pages }) {
           <div>Testing</div>
           <div>Producción</div>
           <div>Publicidad</div>
-          <div>Eventos de conversión</div>
+          <div>Tracking</div>
           <div />
         </div>
         {myPages.length === 0 ? (
