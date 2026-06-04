@@ -160,51 +160,171 @@ const STATUS_STYLES = {
   pausada: { bg: '#FEFCE8', fg: '#CA8A04', label: 'Pausada' },
 };
 
+const PAGE_GRID = '1.3fr 1fr 1fr 1fr 1.3fr 60px';
+const PAGE_GRID_COLS = 'gridTemplateColumns: \'1.3fr 1fr 1fr 1fr 1.3fr 60px\'';
+
+function EventChipEditor({ events, onChange }) {
+  const [adding, setAdding] = useState(false);
+  const [val, setVal] = useState('');
+  const SUGGESTIONS = ['Visitas', 'Registro lead', 'Thank you page', 'WhatsApp'];
+  const list = Array.isArray(events) ? events : [];
+  const add = (name) => {
+    const t = String(name || val).trim();
+    if (!t || list.includes(t)) { setAdding(false); setVal(''); return; }
+    onChange([...list, t]);
+    setVal(''); setAdding(false);
+  };
+  return (
+    <div className="flex flex-wrap gap-1 items-center">
+      {list.map((ev, i) => (
+        <span key={i} className="inline-flex items-center gap-1 text-[10.5px] font-medium py-[2px] pl-2 pr-1 rounded-full" style={{ background: '#F5F3FF', color: '#7C3AED' }}>
+          {ev}
+          <button type="button" className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center bg-transparent border-none cursor-pointer hover:bg-white" onClick={() => onChange(list.filter((_, j) => j !== i))} title="Quitar">
+            <X size={9} />
+          </button>
+        </span>
+      ))}
+      {adding ? (
+        <span className="inline-flex items-center gap-1">
+          <input
+            type="text" value={val} onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setAdding(false); setVal(''); } }}
+            onBlur={() => { if (val.trim()) add(); else setAdding(false); }}
+            autoFocus
+            placeholder="Evento"
+            className="text-[11px] py-[2px] px-1.5 rounded border border-blue outline-none w-[90px]"
+          />
+        </span>
+      ) : (
+        <div className="relative group/ev">
+          <button type="button" className="inline-flex items-center text-[10px] py-[2px] px-1.5 rounded-full border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent" onClick={() => setAdding(true)}>
+            <Plus size={10} />
+          </button>
+          {/* Quick-pick de sugerencias al hover (solo si quedan por agregar) */}
+          {SUGGESTIONS.filter(s => !list.includes(s)).length > 0 && (
+            <div className="absolute z-20 left-0 top-full mt-1 bg-white border border-[#E2E5EB] rounded-lg shadow-lg p-1 hidden group-hover/ev:flex flex-col min-w-[130px]">
+              {SUGGESTIONS.filter(s => !list.includes(s)).map(s => (
+                <button key={s} type="button" onClick={() => add(s)} className="text-left text-[11px] py-1 px-2 rounded hover:bg-blue-bg2 cursor-pointer border-none bg-transparent text-text2">{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UrlPill({ url, isLive, label, color = 'blue' }) {
+  if (!url) return <span className="text-[12px]" style={{ color: '#9CA3AF' }}>—</span>;
+  const bg = color === 'purple' ? '#F5F3FF' : '#EEF2FF';
+  const fg = color === 'purple' ? '#7C3AED' : '#5B7CF5';
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] no-underline py-1 px-2 rounded-md" style={{ background: bg, color: fg }}>
+      {label || 'Abrir'} <ExternalLink size={11} />
+      {isLive && <span className="ml-1 inline-flex items-center py-[1px] px-1.5 rounded-full text-[9px] font-bold bg-green-bg text-[#16A34A]">live</span>}
+    </a>
+  );
+}
+
 function PageRow({ p, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: p.name, testing_url: p.testing_url || '', prod_url: p.prod_url || '', is_live: p.is_live });
+  const [form, setForm] = useState({
+    name: p.name,
+    testing_url: p.testing_url || '',
+    prod_url: p.prod_url || '',
+    is_live: p.is_live,
+    ads_url: p.ads_url || '',
+  });
 
   const save = () => {
     onUpdate(p.id, form);
     setEditing(false);
   };
 
+  const updateEvents = (next) => onUpdate(p.id, { conversion_events: next });
+
   if (editing) {
     return (
-      <div className="grid items-center py-2 px-3 bg-blue-bg2 gap-2" style={{ gridTemplateColumns: '1.6fr 1fr 1fr 80px' }}>
-        <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="text-[12px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="Nombre página" />
-        <input type="text" value={form.testing_url} onChange={e => setForm({ ...form, testing_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL testing" />
-        <div className="flex items-center gap-1.5">
-          <input type="text" value={form.prod_url} onChange={e => setForm({ ...form, prod_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue flex-1" placeholder="URL producción" />
-          <label className="inline-flex items-center gap-1 text-[10px] cursor-pointer" title="Marcar como live"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> live</label>
+      <>
+        {/* Desktop: edicion inline en fila */}
+        <div className="hidden md:grid items-center py-2 px-3 bg-blue-bg2 gap-2" style={{ gridTemplateColumns: PAGE_GRID }}>
+          <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="text-[12px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="Nombre página" />
+          <input type="text" value={form.testing_url} onChange={e => setForm({ ...form, testing_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL testing" />
+          <div className="flex items-center gap-1.5">
+            <input type="text" value={form.prod_url} onChange={e => setForm({ ...form, prod_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue flex-1 min-w-0" placeholder="URL producción" />
+            <label className="inline-flex items-center gap-1 text-[10px] cursor-pointer shrink-0" title="Marcar como live"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> live</label>
+          </div>
+          <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
+          <EventChipEditor events={p.conversion_events} onChange={updateEvents} />
+          <div className="flex gap-1 justify-end">
+            <button className="text-[11px] py-1 px-2 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={save}>OK</button>
+            <button className="text-[11px] py-1 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setEditing(false)}>×</button>
+          </div>
         </div>
-        <div className="flex gap-1">
-          <button className="text-[11px] py-1 px-2 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={save}>OK</button>
-          <button className="text-[11px] py-1 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setEditing(false)}>×</button>
+        {/* Mobile: form apilado */}
+        <div className="md:hidden flex flex-col gap-2 py-3 px-3 bg-blue-bg2 border-b border-[#F0F2F5]">
+          <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="text-[12px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="Nombre página" />
+          <input type="text" value={form.testing_url} onChange={e => setForm({ ...form, testing_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL testing" />
+          <input type="text" value={form.prod_url} onChange={e => setForm({ ...form, prod_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL producción" />
+          <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer self-start"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> Marcar como live</label>
+          <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#9CA3AF' }}>Eventos de conversión</div>
+            <EventChipEditor events={p.conversion_events} onChange={updateEvents} />
+          </div>
+          <div className="flex gap-1 pt-1">
+            <button className="text-[12px] py-1.5 px-3 rounded bg-blue text-white font-medium cursor-pointer border-none flex-1" onClick={save}>Guardar</button>
+            <button className="text-[12px] py-1.5 px-3 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setEditing(false)}>Cancelar</button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  const cell = (url, isLive) => url ? (
-    <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] no-underline text-blue py-1 px-2 rounded-md bg-blue-bg hover:bg-[#DEE6FE]">
-      Abrir <ExternalLink size={11} />
-      {isLive && <span className="ml-1 inline-flex items-center py-[1px] px-1.5 rounded-full text-[9px] font-bold bg-green-bg text-[#16A34A]">live</span>}
-    </a>
-  ) : <span className="text-[12px]" style={{ color: '#9CA3AF' }}>—</span>;
-
   return (
-    <div className="grid items-center py-2 px-3 border-b border-[#F0F2F5] last:border-b-0 hover:bg-[#F7F9FC] group" style={{ gridTemplateColumns: '1.6fr 1fr 1fr 80px' }}>
-      <div className="flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: '#1A1D26' }}>
-        <FileText size={13} className="text-[#9CA3AF] shrink-0" />{p.name}
+    <>
+      {/* Desktop: tabla */}
+      <div className="hidden md:grid items-center py-2 px-3 border-b border-[#F0F2F5] last:border-b-0 hover:bg-[#F7F9FC] group gap-2" style={{ gridTemplateColumns: PAGE_GRID }}>
+        <div className="flex items-center gap-1.5 text-[12.5px] font-medium min-w-0" style={{ color: '#1A1D26' }}>
+          <FileText size={13} className="text-[#9CA3AF] shrink-0" /><span className="truncate">{p.name}</span>
+        </div>
+        <div><UrlPill url={p.testing_url} /></div>
+        <div><UrlPill url={p.prod_url} isLive={p.is_live} /></div>
+        <div><UrlPill url={p.ads_url} label="Meta" color="purple" /></div>
+        <div className="min-w-0"><EventChipEditor events={p.conversion_events} onChange={updateEvents} /></div>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+          <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setEditing(true)} title="Editar"><Pencil size={11} /></button>
+          <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar esta página?')) onDelete(p.id); }} title="Eliminar"><Trash2 size={11} /></button>
+        </div>
       </div>
-      <div>{cell(p.testing_url, false)}</div>
-      <div>{cell(p.prod_url, p.is_live)}</div>
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-        <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setEditing(true)} title="Editar"><Pencil size={11} /></button>
-        <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar esta página?')) onDelete(p.id); }} title="Eliminar"><Trash2 size={11} /></button>
+      {/* Mobile: card apilado */}
+      <div className="md:hidden py-3 px-3 border-b border-[#F0F2F5] last:border-b-0 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="text-[#9CA3AF] shrink-0" />
+          <span className="flex-1 truncate text-[13px] font-semibold" style={{ color: '#1A1D26' }}>{p.name}</span>
+          <button className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setEditing(true)} title="Editar"><Pencil size={12} /></button>
+          <button className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar esta página?')) onDelete(p.id); }} title="Eliminar"><Trash2 size={12} /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+          <div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Testing</div>
+            <UrlPill url={p.testing_url} />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Producción</div>
+            <UrlPill url={p.prod_url} isLive={p.is_live} />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Publicidad</div>
+            <UrlPill url={p.ads_url} label="Meta" color="purple" />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Eventos</div>
+            <EventChipEditor events={p.conversion_events} onChange={updateEvents} />
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -315,7 +435,7 @@ function StrategyCard({ s, pages }) {
   return (
     <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden mb-4">
       {/* Header */}
-      <div className="flex items-center gap-3 py-3 px-4 border-b border-[#F0F2F5]" style={{ background: '#F5F7FF' }}>
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 py-3 px-3 md:px-4 border-b border-[#F0F2F5]" style={{ background: '#F5F7FF' }}>
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[11px] font-bold text-white" style={{ background: '#1A1D26' }}>#{s.position + 1}</span>
         {editingName ? (
           <input type="text" value={nameValue} onChange={e => setNameValue(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setNameValue(s.name); setEditingName(false); } }} autoFocus className="text-[14px] font-bold py-0.5 px-1.5 border border-blue rounded outline-none flex-1" style={{ color: '#1A1D26' }} />
@@ -356,10 +476,12 @@ function StrategyCard({ s, pages }) {
 
       {/* Matriz */}
       <div>
-        <div className="grid items-center py-2 px-3 text-[10px] font-bold uppercase tracking-wider border-b border-[#F0F2F5]" style={{ gridTemplateColumns: '1.6fr 1fr 1fr 80px', color: '#9CA3AF' }}>
+        <div className="hidden md:grid items-center py-2 px-3 text-[10px] font-bold uppercase tracking-wider border-b border-[#F0F2F5] gap-2" style={{ gridTemplateColumns: PAGE_GRID, color: '#9CA3AF' }}>
           <div>Página</div>
           <div>Testing</div>
           <div>Producción</div>
+          <div>Publicidad</div>
+          <div>Eventos de conversión</div>
           <div />
         </div>
         {myPages.length === 0 ? (
@@ -380,10 +502,10 @@ function StrategyCard({ s, pages }) {
         )}
       </div>
 
-      {/* Footer: 3 columnas — Archivos / Accesos / Recursos necesarios */}
-      <div className="grid border-t border-[#F0F2F5]" style={{ background: '#FAFBFC', gridTemplateColumns: '1fr 1fr 1fr' }}>
+      {/* Footer: 3 columnas en desktop, apiladas en mobile */}
+      <div className="grid border-t border-[#F0F2F5] grid-cols-1 md:grid-cols-3" style={{ background: '#FAFBFC' }}>
         {/* Archivos: Drive + docs */}
-        <div className="p-3 border-r border-[#F0F2F5]">
+        <div className="p-3 border-b md:border-b-0 md:border-r border-[#F0F2F5]">
           <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
             <Folder size={11} /> Archivos
           </div>
@@ -416,7 +538,7 @@ function StrategyCard({ s, pages }) {
         </div>
 
         {/* Accesos */}
-        <div className="p-3 border-r border-[#F0F2F5]">
+        <div className="p-3 border-b md:border-b-0 md:border-r border-[#F0F2F5]">
           <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
             <Key size={11} /> Accesos
           </div>

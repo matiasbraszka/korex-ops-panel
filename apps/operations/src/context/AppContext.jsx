@@ -774,6 +774,8 @@ export function AppProvider({ children }) {
       testing_url: data.testing_url || null,
       prod_url: data.prod_url || null,
       is_live: !!data.is_live,
+      ads_url: data.ads_url || null,
+      conversion_events: Array.isArray(data.conversion_events) ? data.conversion_events : [],
     };
     await sbFetch('strategy_pages', {
       method: 'POST',
