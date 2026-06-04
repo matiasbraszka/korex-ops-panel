@@ -163,54 +163,156 @@ const STATUS_STYLES = {
 const PAGE_GRID = '1.3fr 1fr 1fr 1fr 1.3fr 60px';
 const PAGE_GRID_COLS = 'gridTemplateColumns: \'1.3fr 1fr 1fr 1fr 1.3fr 60px\'';
 
-function EventChipEditor({ events, onChange }) {
-  const [adding, setAdding] = useState(false);
-  const [val, setVal] = useState('');
-  const SUGGESTIONS = ['Visitas', 'Registro lead', 'Thank you page', 'WhatsApp'];
-  const list = Array.isArray(events) ? events : [];
-  const add = (name) => {
-    const t = String(name || val).trim();
-    if (!t || list.includes(t)) { setAdding(false); setVal(''); return; }
-    onChange([...list, t]);
-    setVal(''); setAdding(false);
-  };
-  return (
-    <div className="flex flex-wrap gap-1 items-center">
-      {list.map((ev, i) => (
-        <span key={i} className="inline-flex items-center gap-1 text-[10.5px] font-medium py-[2px] pl-2 pr-1 rounded-full" style={{ background: '#F5F3FF', color: '#7C3AED' }}>
-          {ev}
-          <button type="button" className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center bg-transparent border-none cursor-pointer hover:bg-white" onClick={() => onChange(list.filter((_, j) => j !== i))} title="Quitar">
-            <X size={9} />
-          </button>
-        </span>
-      ))}
-      {adding ? (
-        <span className="inline-flex items-center gap-1">
-          <input
-            type="text" value={val} onChange={e => setVal(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setAdding(false); setVal(''); } }}
-            onBlur={() => { if (val.trim()) add(); else setAdding(false); }}
-            autoFocus
-            placeholder="Evento"
-            className="text-[11px] py-[2px] px-1.5 rounded border border-blue outline-none w-[90px]"
-          />
-        </span>
-      ) : (
-        <div className="relative group/ev">
-          <button type="button" className="inline-flex items-center text-[10px] py-[2px] px-1.5 rounded-full border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent" onClick={() => setAdding(true)}>
-            <Plus size={10} />
-          </button>
-          {/* Quick-pick de sugerencias al hover (solo si quedan por agregar) */}
-          {SUGGESTIONS.filter(s => !list.includes(s)).length > 0 && (
-            <div className="absolute z-20 left-0 top-full mt-1 bg-white border border-[#E2E5EB] rounded-lg shadow-lg p-1 hidden group-hover/ev:flex flex-col min-w-[130px]">
-              {SUGGESTIONS.filter(s => !list.includes(s)).map(s => (
-                <button key={s} type="button" onClick={() => add(s)} className="text-left text-[11px] py-1 px-2 rounded hover:bg-blue-bg2 cursor-pointer border-none bg-transparent text-text2">{s}</button>
+const EVENT_PRESETS = ['Visitas', 'Registro lead', 'Thank you page', 'WhatsApp'];
+
+// Acepta legacy (array de strings) o nuevo (array de {label, meta_name})
+function normalizeEvents(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map(e => typeof e === 'string' ? { label: e, meta_name: '' } : { label: e?.label || '', meta_name: e?.meta_name || '' });
+}
+
+function EventMappingEditor({ events, onChange, compact = false }) {
+  const list = normalizeEvents(events);
+  const [openModal, setOpenModal] = useState(false);
+  const configured = list.filter(e => e.meta_name).length;
+
+  // Chip compacto cuando no hay foco (vista en la tabla)
+  if (compact) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpenModal(true)}
+          className="inline-flex flex-wrap items-center gap-1 text-left bg-transparent border-none cursor-pointer p-0 hover:opacity-80"
+          title="Configurar eventos de conversión"
+        >
+          {list.length === 0 ? (
+            <span className="inline-flex items-center gap-1 text-[10.5px] py-[2px] px-2 rounded-full border border-dashed border-[#D0D5DD] text-text3">
+              <Plus size={10} /> Configurar
+            </span>
+          ) : (
+            <>
+              {list.slice(0, 3).map((ev, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-[10px] font-medium py-[2px] px-2 rounded-full" style={{ background: ev.meta_name ? '#F5F3FF' : '#FEFCE8', color: ev.meta_name ? '#7C3AED' : '#CA8A04' }}>
+                  {ev.label}
+                  {ev.meta_name && <span className="font-mono opacity-70">·</span>}
+                  {ev.meta_name && <span className="font-mono">{ev.meta_name}</span>}
+                </span>
               ))}
-            </div>
+              {list.length > 3 && (
+                <span className="text-[10px] py-[2px] px-1.5 rounded-full" style={{ background: '#F0F2F5', color: '#6B7280' }}>+{list.length - 3}</span>
+              )}
+            </>
           )}
+        </button>
+        {openModal && (
+          <EventMappingModal events={list} onClose={() => setOpenModal(false)} onChange={onChange} />
+        )}
+      </>
+    );
+  }
+
+  // Vista expandida (form de edicion / mobile card)
+  return (
+    <div className="flex flex-col gap-1">
+      {list.length === 0 && (
+        <span className="text-[11px] italic" style={{ color: '#9CA3AF' }}>Sin eventos configurados</span>
+      )}
+      {list.map((ev, i) => (
+        <div key={i} className="flex items-center gap-1.5 text-[11px]">
+          <span className="font-medium shrink-0" style={{ color: '#1A1D26', minWidth: 90 }}>{ev.label}</span>
+          <span style={{ color: '#9CA3AF' }}>→</span>
+          <span className="font-mono flex-1 truncate" style={{ color: ev.meta_name ? '#7C3AED' : '#9CA3AF' }}>{ev.meta_name || 'sin configurar'}</span>
         </div>
+      ))}
+      <button type="button" onClick={() => setOpenModal(true)} className="self-start inline-flex items-center gap-1 text-[10.5px] py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent mt-1">
+        <Pencil size={10} /> {configured}/{list.length || 4} configurados
+      </button>
+      {openModal && (
+        <EventMappingModal events={list} onClose={() => setOpenModal(false)} onChange={onChange} />
       )}
     </div>
+  );
+}
+
+function EventMappingModal({ events, onClose, onChange }) {
+  // Garantizamos las 4 filas preset + cualquier evento custom existente
+  const initial = (() => {
+    const byLabel = new Map(events.map(e => [e.label, e.meta_name]));
+    const rows = EVENT_PRESETS.map(label => ({ label, meta_name: byLabel.get(label) || '', preset: true }));
+    events.forEach(e => {
+      if (!EVENT_PRESETS.includes(e.label) && e.label) {
+        rows.push({ label: e.label, meta_name: e.meta_name || '', preset: false });
+      }
+    });
+    return rows;
+  })();
+  const [rows, setRows] = useState(initial);
+
+  const setRow = (i, patch) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r));
+  const addCustom = () => setRows(rs => [...rs, { label: '', meta_name: '', preset: false }]);
+  const removeRow = (i) => setRows(rs => rs.filter((_, j) => j !== i));
+
+  const save = () => {
+    // Persistimos solo las filas con label; para presets sin meta_name guardamos igual (asi recuerda el slot vacio? No: limpiamos para no inflar la jsonb)
+    const cleaned = rows
+      .filter(r => r.label.trim() && (r.meta_name.trim() || !r.preset))
+      .map(r => ({ label: r.label.trim(), meta_name: r.meta_name.trim() }));
+    onChange(cleaned);
+    onClose();
+  };
+
+  return (
+    <Modal open={true} onClose={onClose} title="Eventos de conversión en Meta" maxWidth={560}
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark" onClick={save}>Guardar</button>
+        </div>
+      }
+    >
+      <div className="p-1">
+        <div className="text-[11.5px] mb-3 py-2 px-3 rounded-lg" style={{ background: '#FEFCE8', color: '#92400E' }}>
+          Para cada evento que querés trackear, pegá el <b>nombre exacto</b> con el que está configurado en Meta. Ej.: si "Visitas" en Meta aparece como <span className="font-mono bg-white px-1 rounded">eventos_pre-landing</span>, pegá eso.
+        </div>
+        <div className="hidden md:grid text-[10px] font-bold uppercase tracking-wider mb-1.5 px-2" style={{ gridTemplateColumns: '1fr 1.4fr 32px', color: '#9CA3AF', gap: 8 }}>
+          <div>Qué trackeamos</div>
+          <div>Nombre en Meta</div>
+          <div />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {rows.map((r, i) => (
+            <div key={i} className="grid items-center gap-2 p-1.5 rounded-lg" style={{ gridTemplateColumns: '1fr 1.4fr 32px', background: r.preset ? '#F7F9FC' : 'transparent', border: r.preset ? '1px solid #F0F2F5' : '1px dashed #E2E5EB' }}>
+              <input
+                type="text"
+                value={r.label}
+                onChange={e => setRow(i, { label: e.target.value })}
+                disabled={r.preset}
+                className={`text-[12.5px] py-1.5 px-2 rounded-md border outline-none ${r.preset ? 'bg-transparent border-transparent font-semibold' : 'bg-white border-[#E2E5EB] focus:border-blue'}`}
+                placeholder="Nombre interno"
+                style={{ color: '#1A1D26' }}
+              />
+              <input
+                type="text"
+                value={r.meta_name}
+                onChange={e => setRow(i, { meta_name: e.target.value })}
+                className="text-[12.5px] py-1.5 px-2 rounded-md border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono"
+                placeholder="ej. eventos_pre-landing"
+                style={{ color: '#7C3AED' }}
+              />
+              {r.preset ? (
+                <span />
+              ) : (
+                <button type="button" onClick={() => removeRow(i)} className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" title="Quitar"><Trash2 size={12} /></button>
+              )}
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addCustom} className="mt-3 inline-flex items-center gap-1 text-[11.5px] py-1.5 px-3 rounded-md border border-dashed border-[#D0D5DD] text-text3 hover:text-blue hover:border-blue cursor-pointer bg-transparent">
+          <Plus size={12} /> Agregar evento custom
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -255,7 +357,7 @@ function PageRow({ p, onUpdate, onDelete }) {
             <label className="inline-flex items-center gap-1 text-[10px] cursor-pointer shrink-0" title="Marcar como live"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> live</label>
           </div>
           <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
-          <EventChipEditor events={p.conversion_events} onChange={updateEvents} />
+          <EventMappingEditor events={p.conversion_events} onChange={updateEvents} compact />
           <div className="flex gap-1 justify-end">
             <button className="text-[11px] py-1 px-2 rounded bg-blue text-white font-medium cursor-pointer border-none" onClick={save}>OK</button>
             <button className="text-[11px] py-1 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none" onClick={() => setEditing(false)}>×</button>
@@ -270,7 +372,7 @@ function PageRow({ p, onUpdate, onDelete }) {
           <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#9CA3AF' }}>Eventos de conversión</div>
-            <EventChipEditor events={p.conversion_events} onChange={updateEvents} />
+            <EventMappingEditor events={p.conversion_events} onChange={updateEvents} />
           </div>
           <div className="flex gap-1 pt-1">
             <button className="text-[12px] py-1.5 px-3 rounded bg-blue text-white font-medium cursor-pointer border-none flex-1" onClick={save}>Guardar</button>
@@ -291,7 +393,7 @@ function PageRow({ p, onUpdate, onDelete }) {
         <div><UrlPill url={p.testing_url} /></div>
         <div><UrlPill url={p.prod_url} isLive={p.is_live} /></div>
         <div><UrlPill url={p.ads_url} label="Meta" color="purple" /></div>
-        <div className="min-w-0"><EventChipEditor events={p.conversion_events} onChange={updateEvents} /></div>
+        <div className="min-w-0"><EventMappingEditor events={p.conversion_events} onChange={updateEvents} compact /></div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
           <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setEditing(true)} title="Editar"><Pencil size={11} /></button>
           <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar esta página?')) onDelete(p.id); }} title="Eliminar"><Trash2 size={11} /></button>
@@ -320,7 +422,7 @@ function PageRow({ p, onUpdate, onDelete }) {
           </div>
           <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Eventos</div>
-            <EventChipEditor events={p.conversion_events} onChange={updateEvents} />
+            <EventMappingEditor events={p.conversion_events} onChange={updateEvents} compact />
           </div>
         </div>
       </div>
