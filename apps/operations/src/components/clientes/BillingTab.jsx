@@ -25,7 +25,7 @@ const INVOICE_KIND = {
 };
 
 function LegalCard({ c, onEdit }) {
-  const hasContract = !!(c.contractUrl || c.contractSignedDate || c.contractRenewalDate);
+  const hasContract = !!(c.contractUrl || c.contractSignedDate || c.contractRenewalDate || c.contractData);
   // Renewal warning: less than 30 days left
   let renewalWarn = null;
   if (c.contractRenewalDate) {
@@ -78,6 +78,12 @@ function LegalCard({ c, onEdit }) {
               <AlertTriangle size={12} /> {renewalWarn.text}
             </div>
           )}
+          {c.contractData && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: '#9CA3AF' }}>Datos para el contrato</div>
+              <pre className="text-[11.5px] font-mono whitespace-pre-wrap py-2 px-2.5 rounded-md border border-[#F0F2F5] m-0 leading-relaxed" style={{ background: '#FAFBFC', color: '#1A1D26' }}>{c.contractData}</pre>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -89,6 +95,7 @@ function LegalEditModal({ open, onClose, client, updateClient }) {
     contractUrl: client.contractUrl || '',
     contractSignedDate: client.contractSignedDate || '',
     contractRenewalDate: client.contractRenewalDate || '',
+    contractData: client.contractData || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const save = () => {
@@ -96,6 +103,7 @@ function LegalEditModal({ open, onClose, client, updateClient }) {
       contractUrl: form.contractUrl.trim() || null,
       contractSignedDate: form.contractSignedDate || null,
       contractRenewalDate: form.contractRenewalDate || null,
+      contractData: form.contractData.trim() || null,
     });
     onClose();
   };
@@ -124,6 +132,11 @@ function LegalEditModal({ open, onClose, client, updateClient }) {
             <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Fecha de renovación</label>
             <input type="date" value={form.contractRenewalDate} onChange={e => set('contractRenewalDate', e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white" />
           </div>
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Datos para el contrato</label>
+          <textarea value={form.contractData} onChange={e => set('contractData', e.target.value)} className="text-[12.5px] font-mono py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white resize-y min-h-[110px] leading-relaxed" placeholder={'Razón social: ...\nNIF / RFC / CUIT: ...\nDirección fiscal: ...\nRepresentante legal: ...'} />
+          <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Info que copiamos al armar el contrato.</span>
         </div>
       </div>
     </Modal>

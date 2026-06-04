@@ -1059,6 +1059,7 @@ export default function ClientDetail({ client: c }) {
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
           { key: 'llamadas', label: 'Llamadas', count: clientLlamadas.length },
+          { key: 'historial', label: 'Historial' },
         ];
         return (
           <>
