@@ -252,7 +252,7 @@ function MainLayout() {
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
     : ['Funnel completo + Ads'];
-  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '', tier: 'starter' });
+  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '', tier: 'starter', conector: '', closer: '', contractData: '' });
 
   // Contar videos no vistos para badge
   const seenKey = `loom_seen_${currentUser?.id || 'anon'}`;
@@ -326,9 +326,12 @@ function MainLayout() {
       slackChannel: ncForm.slackChannel.trim(),
       avatarUrl: ncForm.avatarUrl.trim(),
       tier: ncForm.tier || 'starter',
+      conector: ncForm.conector.trim(),
+      closer: ncForm.closer.trim(),
+      contractData: ncForm.contractData.trim(),
     });
     setNewClientModal(false);
-    setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '', tier: 'starter' });
+    setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '', tier: 'starter', conector: '', closer: '', contractData: '' });
   };
 
   // Fallback al primer area accesible. Asi un user sin Operaciones que cae en
@@ -708,6 +711,14 @@ function MainLayout() {
           </div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="URL de la foto (opcional)" value={ncForm.avatarUrl} onChange={e => setNcForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
+        <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Conector</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Quién conectó al cliente" value={ncForm.conector} onChange={e => setNcForm(f => ({ ...f, conector: e.target.value }))} /></div>
+          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Closer</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Quién cerró la venta" value={ncForm.closer} onChange={e => setNcForm(f => ({ ...f, closer: e.target.value }))} /></div>
+        </div>
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">Datos para el contrato</label>
+          <textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[12.5px] font-mono outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] resize-y min-h-[90px]" placeholder={'Razón social: ...\nNIF / RFC / CUIT: ...\nDirección fiscal: ...\nRepresentante legal: ...'} value={ncForm.contractData} onChange={e => setNcForm(f => ({ ...f, contractData: e.target.value }))} />
+        </div>
       </Modal>
       {/* Panel lateral de comentarios — accesible globalmente desde cualquier
           vista de tareas (Roadmap, Lista, Timeline). */}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Modal from '../Modal';
-import { User, Briefcase, CreditCard, Key, FileText } from 'lucide-react';
+import { User, Briefcase, CreditCard, Handshake, FileText, Scale } from 'lucide-react';
 
 const CYCLE_OPTIONS = [
   ['mensual', 'Mensual'], ['trimestral', 'Trimestral'], ['semestral', 'Semestral'],
@@ -68,6 +68,9 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
       nextChargeDate: client.nextChargeDate || '',
       paymentMethod: client.paymentMethod || '',
       billingStatus: client.billingStatus || 'al_dia',
+      conector: client.conector || '',
+      closer: client.closer || '',
+      contractData: client.contractData || '',
       notes: client.notes || '',
     });
   }, [open, client]);
@@ -99,6 +102,9 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
       nextChargeDate: form.nextChargeDate || null,
       paymentMethod: form.paymentMethod || null,
       billingStatus: form.billingStatus,
+      conector: form.conector.trim() || null,
+      closer: form.closer.trim() || null,
+      contractData: form.contractData.trim() || null,
       notes: form.notes,
     });
     onClose();
@@ -239,11 +245,21 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
           </div>
         </Section>
 
-        {/* 4. Accesos & credenciales */}
-        <Section icon={Key} title="Accesos y credenciales" desc="Sugerencia: cargá links sueltos (Drive, Korex, comisiones) desde el tab Recursos del cliente; este formulario sólo edita los datos del cliente.">
-          <div className="text-[12px] py-3 px-3.5 rounded-lg border border-[#E2E5EB] bg-[#FAFBFC]" style={{ color: '#6B7280' }}>
-            Los accesos individuales (URL + usuario + contraseña) se manejan desde el tab <b>Recursos</b> del cliente. Acá se editan sólo los datos generales del cliente.
+        {/* 4. Equipo asignado */}
+        <Section icon={Handshake} title="Equipo asignado" desc="Quién originó la oportunidad y quién cerró la venta">
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            <Field label="Conector" hint="Persona o partner que conectó al cliente con Korex">
+              <input type="text" value={form.conector || ''} onChange={e => set('conector', e.target.value)} className={inputClass} placeholder="Nombre del conector" />
+            </Field>
+            <Field label="Closer" hint="Persona que cerró la venta">
+              <input type="text" value={form.closer || ''} onChange={e => set('closer', e.target.value)} className={inputClass} placeholder="Nombre del closer" />
+            </Field>
           </div>
+        </Section>
+
+        {/* 5. Datos para el contrato */}
+        <Section icon={Scale} title="Datos para el contrato" desc="Razón social, NIF/RFC, dirección fiscal, etc. — info que copiamos al armar el contrato">
+          <textarea value={form.contractData || ''} onChange={e => set('contractData', e.target.value)} className={inputClass + ' w-full resize-y min-h-[110px] leading-relaxed font-mono text-[12.5px]'} placeholder={`Razón social: ...\nNIF / RFC / CUIT: ...\nDirección fiscal: ...\nRepresentante legal: ...`} />
         </Section>
 
         {/* 5. Notas internas */}
