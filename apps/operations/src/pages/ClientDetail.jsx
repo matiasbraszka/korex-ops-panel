@@ -46,7 +46,7 @@ export default function ClientDetail({ client: c }) {
   const [editingDeadline, setEditingDeadline] = useState(null);
   const [deleteClientModal, setDeleteClientModal] = useState(false);
   const [deleteClientConfirmName, setDeleteClientConfirmName] = useState('');
-  const [activeTab, setActiveTab] = useState('resumen');
+  const [activeTab, setActiveTab] = useState('trabajo');
 
   const dropdownRefs = useRef({});
 
@@ -1053,8 +1053,7 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const clientPendingTasks = tasks.filter(t => t.clientId === c.id && t.status !== 'done' && t.assignee && t.assignee.split(',').map(s => s.trim().toLowerCase()).includes('cliente'));
         const tabs = [
-          { key: 'resumen', label: 'Resumen' },
-          { key: 'trabajo', label: 'Trabajo', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
+          { key: 'trabajo', label: 'Recursos', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },

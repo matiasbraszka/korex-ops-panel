@@ -55,7 +55,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
       email: client.email || '',
       phone: client.phone || '',
       country: client.country || '',
-      timezone: client.timezone || '',
+      tier: client.tier || 'starter',
       avatarUrl: client.avatarUrl || '',
       service: client.service || '',
       startDate: client.startDate || '',
@@ -86,7 +86,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
       email: form.email.trim() || null,
       phone: form.phone.trim(),
       country: form.country.trim() || null,
-      timezone: form.timezone.trim() || null,
+      tier: form.tier || 'starter',
       avatarUrl: form.avatarUrl.trim(),
       service: form.service.trim(),
       startDate: form.startDate || null,
@@ -145,8 +145,19 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
             <Field label="País">
               <input type="text" value={form.country || ''} onChange={e => set('country', e.target.value)} className={inputClass} placeholder="España, México, Argentina…" />
             </Field>
-            <Field label="Zona horaria">
-              <input type="text" value={form.timezone || ''} onChange={e => set('timezone', e.target.value)} className={inputClass} placeholder="Europe/Madrid, America/Mexico_City…" />
+            <Field label="Nivel">
+              <div className="flex gap-2">
+                {[
+                  { k: 'starter', label: 'Starter', color: '#6B7280', bg: '#F3F4F6' },
+                  { k: 'partner', label: 'Partner', color: '#5B7CF5', bg: '#EEF2FF' },
+                ].map(opt => (
+                  <button key={opt.k} type="button"
+                    className={`flex-1 text-[11.5px] py-2 px-3 rounded-lg cursor-pointer font-semibold border ${form.tier === opt.k ? 'border-2' : 'bg-white'}`}
+                    style={form.tier === opt.k ? { borderColor: opt.color, background: opt.bg, color: opt.color } : { borderColor: '#E2E5EB', color: '#6B7280' }}
+                    onClick={() => set('tier', opt.k)}
+                  >{opt.label}</button>
+                ))}
+              </div>
             </Field>
             <Field label="Foto de perfil (URL)" hint="Pegá la URL de la imagen. Si está vacío, se usan las iniciales.">
               <input type="url" value={form.avatarUrl || ''} onChange={e => set('avatarUrl', e.target.value)} className={inputClass} placeholder="https://..." />

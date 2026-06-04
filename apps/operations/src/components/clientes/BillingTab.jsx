@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import Modal from '../Modal';
-import { CreditCard, FileText, ExternalLink, Plus, Pencil, Trash2, Scale, Calendar, AlertTriangle } from 'lucide-react';
+import { CreditCard, FileText, ExternalLink, Plus, Pencil, Trash2, Scale, Calendar, AlertTriangle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { fmtDate, today, daysBetween } from '../../utils/helpers';
 
 const CURR_SYMBOL = { USD: '$', EUR: '€', ARS: '$', MXN: 'MX$' };
@@ -18,7 +18,10 @@ const BILLING_STATUS = {
 const INVOICE_STATUS = {
   pagada:    { bg: '#ECFDF5', fg: '#16A34A', label: 'Pagada' },
   pendiente: { bg: '#FEFCE8', fg: '#CA8A04', label: 'Pendiente' },
-  vencida:   { bg: '#FEF2F2', fg: '#EF4444', label: 'Vencida' },
+};
+const INVOICE_KIND = {
+  ingreso: { bg: '#ECFDF5', fg: '#16A34A', label: 'Ingreso', icon: ArrowDownCircle },
+  egreso:  { bg: '#FEF2F2', fg: '#EF4444', label: 'Egreso',  icon: ArrowUpCircle },
 };
 
 function LegalCard({ c, onEdit }) {
@@ -162,16 +165,19 @@ function BillingSummary({ c, onEdit }) {
 
 function InvoiceItem({ inv, onEdit, onDelete }) {
   const st = INVOICE_STATUS[inv.status] || INVOICE_STATUS.pendiente;
+  const kind = INVOICE_KIND[inv.kind] || INVOICE_KIND.ingreso;
+  const KIcon = kind.icon;
   const sym = CURR_SYMBOL[inv.currency] || inv.currency;
   return (
     <div className="flex items-center gap-3 py-2.5 px-3 border-b border-[#F0F2F5] last:border-b-0 hover:bg-[#F7F9FC] group">
-      <span className="w-8 h-8 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#F0F2F5' }}>
-        <FileText size={14} className="text-text2" />
+      <span className="w-8 h-8 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: kind.bg }}>
+        <KIcon size={14} style={{ color: kind.fg }} />
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[12.5px] font-semibold truncate" style={{ color: '#1A1D26' }}>Factura #{inv.number}</div>
         <div className="text-[10.5px]" style={{ color: '#9CA3AF' }}>{fmtDate(inv.issue_date)} · {sym}{Number(inv.amount).toLocaleString()}{inv.concept ? ' · ' + inv.concept : ''}</div>
       </div>
+      <span className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold shrink-0" style={{ background: kind.bg, color: kind.fg }}>{kind.label}</span>
       <span className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold shrink-0" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
       {inv.pdf_url ? (
         <a href={inv.pdf_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-blue font-medium no-underline hover:underline shrink-0">PDF <ExternalLink size={11} /></a>
@@ -193,6 +199,7 @@ function InvoiceModal({ open, onClose, clientId, initial, addInvoice, updateInvo
     currency: initial.currency,
     concept: initial.concept || '',
     status: initial.status,
+    kind: initial.kind || 'ingreso',
     payment_method: initial.payment_method || '',
     pdf_url: initial.pdf_url || '',
   } : {
@@ -202,6 +209,7 @@ function InvoiceModal({ open, onClose, clientId, initial, addInvoice, updateInvo
     currency: defaultCurrency || 'EUR',
     concept: '',
     status: 'pendiente',
+    kind: 'ingreso',
     payment_method: '',
     pdf_url: '',
   });
@@ -221,6 +229,7 @@ function InvoiceModal({ open, onClose, clientId, initial, addInvoice, updateInvo
           currency: form.currency,
           concept: form.concept.trim() || null,
           status: form.status,
+          kind: form.kind,
           payment_method: form.payment_method.trim() || null,
           pdf_url: form.pdf_url.trim() || null,
         });
@@ -233,6 +242,7 @@ function InvoiceModal({ open, onClose, clientId, initial, addInvoice, updateInvo
           currency: form.currency,
           concept: form.concept.trim() || null,
           status: form.status,
+          kind: form.kind,
           payment_method: form.payment_method.trim() || null,
           pdf_url: form.pdf_url.trim() || null,
         });
@@ -272,6 +282,20 @@ function InvoiceModal({ open, onClose, clientId, initial, addInvoice, updateInvo
         <div className="grid gap-1">
           <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Concepto / Periodo</label>
           <input type="text" value={form.concept} onChange={e => set('concept', e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue" placeholder="Servicio de marketing — Mayo 2026" />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Tipo</label>
+          <div className="flex gap-1.5">
+            {Object.entries(INVOICE_KIND).map(([k, v]) => {
+              const KIcon = v.icon;
+              const active = form.kind === k;
+              return (
+                <button key={k} type="button" className={`text-[11.5px] py-1.5 px-3 rounded-lg border cursor-pointer font-medium inline-flex items-center gap-1.5 ${active ? 'border-2' : 'bg-white'}`} style={active ? { borderColor: v.fg, background: v.bg, color: v.fg } : { borderColor: '#E2E5EB', color: '#6B7280' }} onClick={() => set('kind', k)}>
+                  <KIcon size={12} /> {v.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="grid gap-1">
           <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Estado</label>

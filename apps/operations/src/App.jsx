@@ -252,7 +252,7 @@ function MainLayout() {
   const services = appSettings?.services && appSettings.services.length > 0
     ? appSettings.services
     : ['Funnel completo + Ads'];
-  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '' });
+  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '', tier: 'starter' });
 
   // Contar videos no vistos para badge
   const seenKey = `loom_seen_${currentUser?.id || 'anon'}`;
@@ -325,9 +325,10 @@ function MainLayout() {
       phone: ncForm.phone.trim(),
       slackChannel: ncForm.slackChannel.trim(),
       avatarUrl: ncForm.avatarUrl.trim(),
+      tier: ncForm.tier || 'starter',
     });
     setNewClientModal(false);
-    setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '' });
+    setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '', tier: 'starter' });
   };
 
   // Fallback al primer area accesible. Asi un user sin Operaciones que cae en
@@ -691,6 +692,21 @@ function MainLayout() {
           <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Canal de Slack</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="nombre-del-canal" value={ncForm.slackChannel} onChange={e => setNcForm(f => ({ ...f, slackChannel: e.target.value }))} /></div>
         </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] cursor-pointer" value={ncForm.service} onChange={e => setNcForm(f => ({ ...f, service: e.target.value }))}>{services.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+        <div className="mb-3.5">
+          <label className="block text-xs font-semibold text-text2 mb-[5px]">Nivel del cliente <span className="text-red">*</span></label>
+          <div className="flex gap-2">
+            {[
+              { k: 'starter', label: 'Starter', color: '#6B7280', bg: '#F3F4F6' },
+              { k: 'partner', label: 'Partner', color: '#5B7CF5', bg: '#EEF2FF' },
+            ].map(opt => (
+              <button key={opt.k} type="button"
+                className={`flex-1 py-2 px-3 rounded-md text-[12.5px] font-semibold cursor-pointer border ${ncForm.tier === opt.k ? 'border-2' : ''}`}
+                style={ncForm.tier === opt.k ? { borderColor: opt.color, background: opt.bg, color: opt.color } : { borderColor: '#E2E5EB', background: 'white', color: '#6B7280' }}
+                onClick={() => setNcForm(f => ({ ...f, tier: opt.k }))}
+              >{opt.label}</button>
+            ))}
+          </div>
+        </div>
         <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="URL de la foto (opcional)" value={ncForm.avatarUrl} onChange={e => setNcForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
       </Modal>
       {/* Panel lateral de comentarios — accesible globalmente desde cualquier

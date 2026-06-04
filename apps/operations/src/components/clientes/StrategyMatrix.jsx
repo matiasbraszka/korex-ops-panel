@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import Modal from '../Modal';
-import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon, Key, Copy, Eye, EyeOff, Mail } from 'lucide-react';
+import { ExternalLink, FileText, Folder, Plus, ChevronDown, Trash2, Pencil, Check, X, Image as ImageIcon, Key, Copy, Eye, EyeOff, Mail, Calendar } from 'lucide-react';
+import { fmtDate } from '../../utils/helpers';
 
 const inputClass = 'text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue focus:ring focus:ring-blue-bg bg-white w-full';
 
@@ -290,6 +291,7 @@ function StrategyCard({ s, pages }) {
   const [adding, setAdding] = useState(false);
   const [newPageName, setNewPageName] = useState('');
   const [statusOpen, setStatusOpen] = useState(false);
+  const [editingDate, setEditingDate] = useState(false);
   // Modales para archivos/accesos
   const [linkModal, setLinkModal] = useState(null); // { kind: 'drive' | 'doc', initial, index }
   const [accessModal, setAccessModal] = useState(null); // { initial, index } or { initial: null } para nuevo
@@ -333,6 +335,22 @@ function StrategyCard({ s, pages }) {
         <span className="inline-flex items-center gap-1 text-[11px] py-1 px-2 rounded-md bg-white border border-[#E2E5EB]" style={{ color: '#6B7280' }}>
           {s.version} · actual <ChevronDown size={11} />
         </span>
+        {editingDate ? (
+          <input type="date" autoFocus value={s.start_date || ''}
+            onChange={e => updateStrategy(s.id, { start_date: e.target.value || null })}
+            onBlur={() => setEditingDate(false)}
+            className="text-[11px] py-1 px-1.5 rounded-md border border-blue outline-none bg-white"
+          />
+        ) : (
+          <button
+            className="inline-flex items-center gap-1 text-[11px] py-1 px-2 rounded-md bg-white border border-[#E2E5EB] cursor-pointer hover:border-blue hover:text-blue"
+            style={{ color: '#6B7280' }}
+            onClick={() => setEditingDate(true)}
+            title="Fecha de inicio de la estrategia"
+          >
+            <Calendar size={11} /> {s.start_date ? fmtDate(s.start_date) : 'Fecha inicio'}
+          </button>
+        )}
         <button className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Borrar la estrategia "${s.name}" y todas sus páginas?`)) deleteStrategy(s.id); }} title="Eliminar estrategia"><Trash2 size={13} /></button>
       </div>
 
@@ -488,10 +506,11 @@ export default function StrategyMatrix({ clientId }) {
   const { strategies, strategyPages, addStrategy } = useApp();
   const myStrategies = strategies.filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0));
 
+  const today = new Date().toISOString().slice(0, 10);
   const newStrategy = () => {
     const name = window.prompt('Nombre de la nueva estrategia:');
     if (!name) return;
-    addStrategy({ client_id: clientId, name, position: myStrategies.length, status: 'borrador', version: 'v1' });
+    addStrategy({ client_id: clientId, name, position: myStrategies.length, status: 'borrador', version: 'v1', start_date: today });
   };
 
   return (

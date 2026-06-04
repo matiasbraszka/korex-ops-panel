@@ -380,12 +380,13 @@ export function buildInitialPendingResources(template) {
   }));
 }
 
-export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate } = {}) {
+export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier } = {}) {
   return {
     id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     name, company, service, startDate: start, pm,
     color: ['#5B7CF5', '#22C55E', '#EAB308', '#F97316', '#8B5CF6', '#06B6D4', '#EC4899'][clientCount % 7],
     status: 'active', priority: 5, bottleneck: '', notes: '',
+    tier: tier || 'starter',
     phone: phone || '', avatarUrl: avatarUrl || '',
     slackChannel: slackChannel || '', slackChannelId: '', metaAds: [], metaMetrics: null,
     customSteps: [], customPhases: [], clientFeedbacks: [],

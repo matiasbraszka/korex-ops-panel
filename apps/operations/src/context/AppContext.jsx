@@ -142,6 +142,7 @@ export function AppProvider({ children }) {
         contract_url: c.contractUrl || null,
         contract_signed_date: c.contractSignedDate || null,
         contract_renewal_date: c.contractRenewalDate || null,
+        tier: c.tier || null,
       })
     });
   }, []);
@@ -205,6 +206,7 @@ export function AppProvider({ children }) {
         contract_url: c.contractUrl || null,
         contract_signed_date: c.contractSignedDate || null,
         contract_renewal_date: c.contractRenewalDate || null,
+        tier: c.tier || null,
       }));
       for (let i = 0; i < clientRows.length; i += 10) {
         const batch = clientRows.slice(i, i + 10);
@@ -730,6 +732,7 @@ export function AppProvider({ children }) {
       version: data.version || 'v1',
       drive_url: data.drive_url || null,
       docs: Array.isArray(data.docs) ? data.docs : [],
+      start_date: data.start_date || null,
     };
     await sbFetch('strategies', {
       method: 'POST',
@@ -812,6 +815,7 @@ export function AppProvider({ children }) {
       currency: data.currency || 'EUR',
       concept: data.concept || null,
       status: data.status || 'pendiente',
+      kind: data.kind || 'ingreso',
       payment_method: data.payment_method || null,
       pdf_url: data.pdf_url || null,
     };
@@ -1032,7 +1036,7 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date';
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier';
       const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=priority.asc`, { headers: { 'Prefer': 'return=representation' } }),
@@ -1156,6 +1160,7 @@ export function AppProvider({ children }) {
           contractUrl: c.contract_url || '',
           contractSignedDate: c.contract_signed_date || null,
           contractRenewalDate: c.contract_renewal_date || null,
+          tier: c.tier || null,
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
