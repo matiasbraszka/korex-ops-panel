@@ -315,21 +315,22 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                   );
                                 }
                                 // Render de un bullet con badge de comentarios al final.
+                                // El badge se ve siempre (no solo en hover) asi el usuario lo descubre.
                                 const renderBullet = (b, key, marker, markerClass) => {
                                   const cnt = bulletCommentCounts[r.id + '::' + b.id] || 0;
                                   return (
-                                    <li key={key} className="group flex gap-1.5 items-start">
+                                    <li key={key} className="flex gap-1.5 items-start">
                                       <span className={`${markerClass} shrink-0`}>{marker}</span>
                                       <span className="flex-1 min-w-0">{b.text}</span>
                                       <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); openBulletComments(r.id, b.id); }}
-                                        className={`shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md border-none cursor-pointer text-[10px] font-semibold transition-opacity ${
+                                        className={`shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md border cursor-pointer text-[10px] font-semibold transition-colors ${
                                           cnt > 0
-                                            ? 'bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] opacity-100'
-                                            : 'bg-transparent text-[#B6BCC4] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] opacity-0 group-hover:opacity-100'
+                                            ? 'bg-[#EEF2FF] text-[#4A67D8] border-transparent hover:bg-[#DEE6FE]'
+                                            : 'bg-white text-[#9CA3AF] border-[#E2E5EB] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] hover:border-[#5B7CF5]'
                                         }`}
-                                        title={cnt > 0 ? `${cnt} comentario${cnt !== 1 ? 's' : ''}` : 'Comentar'}
+                                        title={cnt > 0 ? `${cnt} comentario${cnt !== 1 ? 's' : ''}` : 'Comentar este bullet'}
                                       >
                                         <MessageSquare size={cnt > 0 ? 10 : 11} />
                                         {cnt > 0 && cnt}
@@ -337,6 +338,19 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                     </li>
                                   );
                                 };
+                                // Si no hay bullets categorizados, renderizamos los sin-categoria
+                                // (que ya cubre el parseo legacy de p.text). Asi los informes viejos
+                                // tambien tienen botones de comentar.
+                                if (entregables.length === 0 && avances.length === 0) {
+                                  if (sinCat.length === 0) {
+                                    return <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{p.text || '—'}</div>;
+                                  }
+                                  return (
+                                    <ul className="text-[13px] text-gray-700 space-y-0.5">
+                                      {sinCat.map((b, idx) => renderBullet(b, 's_' + idx, '-', 'text-gray-400'))}
+                                    </ul>
+                                  );
+                                }
                                 return (
                                   <div className="space-y-1.5">
                                     {entregables.length > 0 && (
