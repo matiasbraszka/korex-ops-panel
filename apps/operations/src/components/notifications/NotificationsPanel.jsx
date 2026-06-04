@@ -34,7 +34,7 @@ export default function NotificationsPanel() {
     { key: 'unread',  label: 'Sin leer',  match: (n) => !n.read_at },
     { key: 'task_comment',  label: 'Comentarios',   match: (n) => n.type === 'task_comment' },
     { key: 'comment_reply', label: 'Respuestas',    match: (n) => n.type === 'comment_reply' },
-    { key: 'tasks',   label: 'Tareas nuevas', match: (n) => n.type === 'task_assigned' || n.type === 'task_description' },
+    { key: 'tasks',   label: 'Tareas',    match: (n) => n.type === 'task_assigned' || n.type === 'task_description' },
     { key: 'urgent',  label: 'Urgentes',  match: (n) => n.type === 'task_blocked' || n.type === 'task_overdue' },
   ];
 
@@ -158,7 +158,7 @@ export default function NotificationsPanel() {
         </div>
 
         {/* Filtros por categoría — badge = pendientes (sin leer) en esa categoría */}
-        <div className="flex items-center gap-1.5 px-[18px] py-2.5 border-b border-[#EEF0F3] overflow-x-auto scrollbar-hide">
+        <div className="flex flex-wrap items-center gap-1.5 px-[18px] py-2.5 border-b border-[#EEF0F3]">
           {FILTERS.map(f => {
             const active = filter === f.key;
             const count = unreadByFilter[f.key];
