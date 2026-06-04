@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import Modal from '../Modal';
-import { CreditCard, FileText, ExternalLink, Plus, Pencil, Trash2 } from 'lucide-react';
-import { fmtDate, today } from '../../utils/helpers';
+import { CreditCard, FileText, ExternalLink, Plus, Pencil, Trash2, Scale, Calendar, AlertTriangle } from 'lucide-react';
+import { fmtDate, today, daysBetween } from '../../utils/helpers';
 
 const CURR_SYMBOL = { USD: '$', EUR: '€', ARS: '$', MXN: 'MX$' };
 const CYCLE_OPTIONS = [
@@ -20,6 +20,112 @@ const INVOICE_STATUS = {
   pendiente: { bg: '#FEFCE8', fg: '#CA8A04', label: 'Pendiente' },
   vencida:   { bg: '#FEF2F2', fg: '#EF4444', label: 'Vencida' },
 };
+
+function LegalCard({ c, onEdit }) {
+  const hasContract = !!(c.contractUrl || c.contractSignedDate || c.contractRenewalDate);
+  // Renewal warning: less than 30 days left
+  let renewalWarn = null;
+  if (c.contractRenewalDate) {
+    const diff = daysBetween(today(), c.contractRenewalDate);
+    if (diff != null) {
+      if (diff < 0) renewalWarn = { color: '#EF4444', text: `Vencido hace ${-diff} día${diff === -1 ? '' : 's'}` };
+      else if (diff <= 30) renewalWarn = { color: '#F97316', text: `Renueva en ${diff} día${diff === 1 ? '' : 's'}` };
+      else renewalWarn = { color: '#16A34A', text: `Renueva en ${diff} días` };
+    }
+  }
+
+  return (
+    <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px]">
+      <div className="flex items-center justify-between mb-3">
+        <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}>
+          <Scale size={16} className="text-text2" /> Legal · Contrato
+        </div>
+        <button className="inline-flex items-center gap-1 text-[11.5px] py-1 px-2 rounded-md border border-[#E2E5EB] bg-white cursor-pointer hover:border-blue hover:text-blue" style={{ color: '#6B7280' }} onClick={onEdit}>
+          <Pencil size={11} /> Editar
+        </button>
+      </div>
+      {!hasContract ? (
+        <div className="text-center text-[12px] py-4" style={{ color: '#9CA3AF' }}>
+          Sin contrato cargado. Tocá <b>Editar</b> para agregar.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {c.contractUrl ? (
+            <a href={c.contractUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 py-2 px-2.5 rounded-lg border border-[#E2E5EB] no-underline hover:border-blue hover:bg-blue-bg2 transition-colors" style={{ color: '#1A1D26' }}>
+              <span className="w-8 h-8 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#F5F3FF' }}>
+                <FileText size={14} className="text-purple" />
+              </span>
+              <span className="flex-1 min-w-0">
+                <b className="text-[12.5px] font-semibold block">Contrato firmado</b>
+                <i className="not-italic text-[10.5px] block truncate" style={{ color: '#9CA3AF' }}>Abrir PDF</i>
+              </span>
+              <ExternalLink size={12} className="text-text3 shrink-0" />
+            </a>
+          ) : (
+            <div className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin PDF adjunto</div>
+          )}
+          <div className="grid gap-y-2 gap-x-3 text-[12.5px]" style={{ gridTemplateColumns: 'auto 1fr' }}>
+            <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: '#9CA3AF' }}><Calendar size={11} /> Firma</span>
+            <span className="text-right" style={{ color: '#1A1D26' }}>{c.contractSignedDate ? fmtDate(c.contractSignedDate) : '—'}</span>
+            <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: '#9CA3AF' }}><Calendar size={11} /> Renovación</span>
+            <span className="text-right" style={{ color: '#1A1D26' }}>{c.contractRenewalDate ? fmtDate(c.contractRenewalDate) : '—'}</span>
+          </div>
+          {renewalWarn && (
+            <div className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-md text-[11px] font-semibold" style={{ background: renewalWarn.color + '15', color: renewalWarn.color }}>
+              <AlertTriangle size={12} /> {renewalWarn.text}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LegalEditModal({ open, onClose, client, updateClient }) {
+  const [form, setForm] = useState({
+    contractUrl: client.contractUrl || '',
+    contractSignedDate: client.contractSignedDate || '',
+    contractRenewalDate: client.contractRenewalDate || '',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const save = () => {
+    updateClient(client.id, {
+      contractUrl: form.contractUrl.trim() || null,
+      contractSignedDate: form.contractSignedDate || null,
+      contractRenewalDate: form.contractRenewalDate || null,
+    });
+    onClose();
+  };
+  if (!open) return null;
+  return (
+    <Modal open={open} onClose={onClose} title="Editar contrato" maxWidth={500}
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
+          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark" onClick={save}>Guardar</button>
+        </div>
+      }
+    >
+      <div className="grid gap-3 p-1">
+        <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>URL del contrato (PDF)</label>
+          <input type="url" value={form.contractUrl} onChange={e => set('contractUrl', e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue focus:ring focus:ring-blue-bg bg-white" placeholder="https://drive.google.com/..." autoFocus />
+          <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Subí el PDF a Drive y pegá el link público o de la carpeta.</span>
+        </div>
+        <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="grid gap-1">
+            <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Fecha de firma</label>
+            <input type="date" value={form.contractSignedDate} onChange={e => set('contractSignedDate', e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white" />
+          </div>
+          <div className="grid gap-1">
+            <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Fecha de renovación</label>
+            <input type="date" value={form.contractRenewalDate} onChange={e => set('contractRenewalDate', e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white" />
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 function BillingSummary({ c, onEdit }) {
   const bs = BILLING_STATUS[c.billingStatus || 'al_dia'];
@@ -281,6 +387,7 @@ export default function BillingTab({ client }) {
   const { invoices, addInvoice, updateInvoice, deleteInvoice, updateClient } = useApp();
   const [invoiceModal, setInvoiceModal] = useState(null); // null | 'new' | invoice obj
   const [billingModal, setBillingModal] = useState(false);
+  const [legalModal, setLegalModal] = useState(false);
 
   const myInvoices = useMemo(
     () => invoices.filter(i => i.client_id === client.id).sort((a, b) => (b.issue_date || '').localeCompare(a.issue_date || '')),
@@ -289,7 +396,10 @@ export default function BillingTab({ client }) {
 
   return (
     <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '330px 1fr' }}>
-      <BillingSummary c={client} onEdit={() => setBillingModal(true)} />
+      <div className="flex flex-col gap-4">
+        <BillingSummary c={client} onEdit={() => setBillingModal(true)} />
+        <LegalCard c={client} onEdit={() => setLegalModal(true)} />
+      </div>
 
       <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden">
         <div className="flex items-center justify-between py-3 px-4 border-b border-[#F0F2F5]">
@@ -324,6 +434,9 @@ export default function BillingTab({ client }) {
       )}
       {billingModal && (
         <BillingEditModal open={billingModal} onClose={() => setBillingModal(false)} client={client} updateClient={updateClient} />
+      )}
+      {legalModal && (
+        <LegalEditModal open={legalModal} onClose={() => setLegalModal(false)} client={client} updateClient={updateClient} />
       )}
     </div>
   );
