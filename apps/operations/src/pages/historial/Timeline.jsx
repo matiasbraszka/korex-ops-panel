@@ -146,8 +146,8 @@ export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerar
   const vp = useViewport();
   const [filtro, setFiltro] = useState('todos');
   const lista = filtro === 'todos' ? eventos : eventos.filter(e => e.tipo === filtro);
-  // El tiempo Korex no cuenta llamadas (no son trabajo interno)
-  const tiempoVisible = lista.filter(e => !e.__synthetic).reduce((s, e) => s + (e.tiempo || 0), 0);
+  // El tiempo Korex suma tambien la duracion de las llamadas (cuentan como tiempo invertido).
+  const tiempoVisible = lista.reduce((s, e) => s + (e.tiempo || 0), 0);
   const horas = Math.round(tiempoVisible / 60 * 10) / 10;
 
   const filtros = [
