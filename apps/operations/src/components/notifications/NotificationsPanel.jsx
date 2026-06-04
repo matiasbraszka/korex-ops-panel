@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, CheckCheck, Bell } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
@@ -18,11 +18,40 @@ export default function NotificationsPanel() {
 
   const open = !!notifPanelOpen;
 
+  const [filter, setFilter] = useState('all');
+
   const memberById = useMemo(() => {
     const m = {};
     (teamMembers || []).forEach(t => { m[t.id] = t; });
     return m;
   }, [teamMembers]);
+
+  // Filtros del buzón. Cada uno define qué tipos incluye para "organizar lo
+  // pendiente". El badge de cada chip muestra cuántas SIN LEER hay en esa
+  // categoría.
+  const FILTERS = [
+    { key: 'all',     label: 'Todas',     match: () => true },
+    { key: 'unread',  label: 'Sin leer',  match: (n) => !n.read_at },
+    { key: 'task_comment',  label: 'Comentarios',   match: (n) => n.type === 'task_comment' },
+    { key: 'comment_reply', label: 'Respuestas',    match: (n) => n.type === 'comment_reply' },
+    { key: 'tasks',   label: 'Tareas nuevas', match: (n) => n.type === 'task_assigned' || n.type === 'task_description' },
+    { key: 'urgent',  label: 'Urgentes',  match: (n) => n.type === 'task_blocked' || n.type === 'task_overdue' },
+  ];
+
+  // Conteo de pendientes (no leídas) por categoría para los badges.
+  const unreadByFilter = useMemo(() => {
+    const counts = {};
+    FILTERS.forEach(f => {
+      counts[f.key] = (notifications || []).filter(n => !n.read_at && f.match(n)).length;
+    });
+    return counts;
+  }, [notifications]);
+
+  const activeMatch = (FILTERS.find(f => f.key === filter) || FILTERS[0]).match;
+  const filtered = useMemo(
+    () => (notifications || []).filter(activeMatch),
+    [notifications, filter],
+  );
 
   // Escape cierra.
   useEffect(() => {
@@ -35,7 +64,7 @@ export default function NotificationsPanel() {
   // Agrupar por día y, dentro del día, colapsar varias "tarea asignada" del
   // mismo cliente en un único ítem resumido.
   const days = useMemo(() => {
-    const sorted = [...(notifications || [])].sort(
+    const sorted = [...filtered].sort(
       (a, b) => (b.created_at || '').localeCompare(a.created_at || ''),
     );
     const order = [];
@@ -65,9 +94,10 @@ export default function NotificationsPanel() {
       display.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
       return { key, display };
     });
-  }, [notifications]);
+  }, [filtered]);
 
-  const isEmpty = (notifications || []).length === 0;
+  const isEmpty = filtered.length === 0;
+  const noneAtAll = (notifications || []).length === 0;
 
   const handleOpenTask = async (n) => {
     if (!n.read_at) await markNotificationRead(n.id);
@@ -127,13 +157,55 @@ export default function NotificationsPanel() {
           </div>
         </div>
 
+        {/* Filtros por categoría — badge = pendientes (sin leer) en esa categoría */}
+        <div className="flex items-center gap-1.5 px-[18px] py-2.5 border-b border-[#EEF0F3] overflow-x-auto scrollbar-hide">
+          {FILTERS.map(f => {
+            const active = filter === f.key;
+            const count = unreadByFilter[f.key];
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`shrink-0 inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-full px-2.5 py-1 border cursor-pointer transition-colors ${
+                  active
+                    ? 'bg-[#5B7CF5] border-[#5B7CF5] text-white'
+                    : 'bg-white border-[#E2E5EB] text-[#6B7280] hover:bg-[#F7F8FA]'
+                }`}
+              >
+                {f.label}
+                {count > 0 && (
+                  <span
+                    className={`min-w-[16px] h-[16px] px-1 rounded-full text-[9.5px] font-bold flex items-center justify-center ${
+                      active ? 'bg-white text-[#5B7CF5]' : 'bg-[#FEE2E2] text-[#DC4B43]'
+                    }`}
+                  >{count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-[18px] py-4">
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center text-center py-16 text-[#9CA3AF]">
               <Bell size={30} className="mb-3 opacity-40" />
-              <div className="text-[12.5px] italic">No tenés notificaciones todavía.</div>
-              <div className="text-[11px] mt-1">Acá vas a ver tareas asignadas, comentarios y avisos.</div>
+              {noneAtAll ? (
+                <>
+                  <div className="text-[12.5px] italic">No tenés notificaciones todavía.</div>
+                  <div className="text-[11px] mt-1">Acá vas a ver tareas asignadas, comentarios y avisos.</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[12.5px] italic">Nada en esta categoría.</div>
+                  <button
+                    type="button"
+                    onClick={() => setFilter('all')}
+                    className="text-[11px] mt-1.5 text-[#5B7CF5] hover:text-[#4A67D8] bg-transparent border-none cursor-pointer"
+                  >Ver todas</button>
+                </>
+              )}
             </div>
           ) : (
             days.map(({ key, display }) => (
