@@ -87,20 +87,28 @@ function AccountModal({ open, onClose, initial, onSave }) {
 
 export default function MetaAdAccountsManager({ client, updateClient }) {
   const accounts = Array.isArray(client.metaAds) ? client.metaAds : [];
+  // modal: null | { mode: 'new' } | { mode: 'edit', index, account }
   const [modal, setModal] = useState(null);
 
   const persist = (next) => updateClient(client.id, { metaAds: next });
   const handleSave = (data) => {
-    if (modal && modal !== 'new') {
-      persist(accounts.map(a => a.account_id === modal.account_id ? { ...a, ...data } : a));
+    if (modal?.mode === 'edit') {
+      // Match por indice — evita que dos cuentas con el mismo ID (o ambas vacias) se pisen.
+      // Antes de guardar, validamos que el nuevo ID no este duplicado con OTRAS cuentas.
+      if (data.account_id && accounts.some((a, i) => i !== modal.index && a.account_id === data.account_id)) {
+        alert('Ya existe otra cuenta con ese ID');
+        return;
+      }
+      persist(accounts.map((a, i) => i === modal.index ? { ...a, ...data } : a));
     } else {
-      if (accounts.some(a => a.account_id === data.account_id)) { alert('Ya existe una cuenta con ese ID'); return; }
+      if (data.account_id && accounts.some(a => a.account_id === data.account_id)) { alert('Ya existe una cuenta con ese ID'); return; }
       persist([...accounts, data]);
     }
   };
-  const handleDelete = (acc) => {
-    if (!window.confirm(`¿Quitar la cuenta "${acc.name}"?`)) return;
-    persist(accounts.filter(a => a.account_id !== acc.account_id));
+  const handleDelete = (index) => {
+    const acc = accounts[index];
+    if (!acc || !window.confirm(`¿Quitar la cuenta "${acc.name}"?`)) return;
+    persist(accounts.filter((_, i) => i !== index));
   };
 
   return (
@@ -110,7 +118,7 @@ export default function MetaAdAccountsManager({ client, updateClient }) {
           Cuentas publicitarias
           {accounts.length > 0 && <span className="text-text3">· {accounts.length}</span>}
         </div>
-        <button onClick={() => setModal('new')} className="inline-flex items-center gap-1 text-[10.5px] font-medium py-1 px-2 rounded-md text-text3 hover:text-blue hover:bg-blue-bg2 border-none cursor-pointer bg-transparent">
+        <button onClick={() => setModal({ mode: 'new' })} className="inline-flex items-center gap-1 text-[10.5px] font-medium py-1 px-2 rounded-md text-text3 hover:text-blue hover:bg-blue-bg2 border-none cursor-pointer bg-transparent">
           <Plus size={11} /> Agregar
         </button>
       </div>
@@ -122,21 +130,27 @@ export default function MetaAdAccountsManager({ client, updateClient }) {
             const st = STATUS_OPTIONS.find(s => s.k === a.status) || STATUS_OPTIONS[0];
             const cur = CURRENCY_OPTIONS.find(c => c.k === a.currency) || CURRENCY_OPTIONS[0];
             return (
-              <div key={a.account_id || i} className="group flex items-center gap-2 py-1.5 text-[11.5px] border-b border-[#F7F9FC] last:border-b-0">
+              <div key={i} className="group flex items-center gap-2 py-1.5 text-[11.5px] border-b border-[#F7F9FC] last:border-b-0">
                 <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: st.dot }} title={st.label} />
                 <span className="font-medium truncate shrink min-w-0" style={{ color: '#1A1D26' }}>{a.name}</span>
                 <span className="text-[10.5px] font-mono truncate shrink-0" style={{ color: '#9CA3AF' }} title={a.account_id}>{a.account_id}</span>
                 <CopyId value={a.account_id} />
                 <span className="text-[10.5px] font-semibold shrink-0 ml-auto" style={{ color: '#6B7280' }}>{cur.k}</span>
-                <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-blue inline-flex items-center justify-center opacity-0 group-hover:opacity-100 shrink-0" onClick={() => setModal(a)} title="Editar"><Pencil size={10} /></button>
-                <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 shrink-0" onClick={() => handleDelete(a)} title="Eliminar"><Trash2 size={10} /></button>
+                <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-blue inline-flex items-center justify-center opacity-0 group-hover:opacity-100 shrink-0" onClick={() => setModal({ mode: 'edit', index: i, account: a })} title="Editar"><Pencil size={10} /></button>
+                <button className="w-5 h-5 rounded bg-transparent border-none cursor-pointer text-text3 hover:text-red-500 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 shrink-0" onClick={() => handleDelete(i)} title="Eliminar"><Trash2 size={10} /></button>
               </div>
             );
           })}
         </div>
       )}
       {modal && (
-        <AccountModal open={!!modal} onClose={() => setModal(null)} initial={modal === 'new' ? null : modal} onSave={handleSave} />
+        <AccountModal
+          key={modal.mode === 'edit' ? `edit-${modal.index}` : 'new'}
+          open={!!modal}
+          onClose={() => setModal(null)}
+          initial={modal.mode === 'edit' ? modal.account : null}
+          onSave={handleSave}
+        />
       )}
     </div>
   );
