@@ -159,8 +159,7 @@ export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerar
 
   return (
     <div style={{ paddingBottom: vp.mobile ? 110 : 24 }}>
-      <KPIStrip cliente={cliente} eventos={eventos} faseActual={faseActual} diasProyecto={diasProyecto} />
-      <FaseStepper cliente={cliente} faseActual={faseActual} />
+      {/* KPIStrip y FaseStepper ocultos a pedido del cliente; mantenemos solo el feed de eventos abajo. */}
       <BlockerBanner eventos={eventos} />
 
       <div style={{
