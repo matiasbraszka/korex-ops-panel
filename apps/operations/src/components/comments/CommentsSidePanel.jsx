@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Send, MessageSquare, Calendar, AlertTriangle, Building2 } from 'lucide-react';
+import { X, Send, MessageSquare, Calendar, AlertTriangle, Building2, FileText } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
 import CommentItem from './CommentItem';
 import { TASK_STATUS } from '../../utils/constants';
+import { getBullets } from '../../utils/helpers';
 
 // CommentsSidePanel — panel lateral de actividad (comentarios + contexto
 // de la tarea). Se monta una sola vez al root de la app y abre/cierra via
-// openTaskComments(taskId) / closeTaskComments() en AppContext.
+// openTaskComments(taskId) / closeComments() en AppContext.
 //
 // Diseño: side drawer a la derecha de 408px con scrim + slide-in,
 // composer abajo con avatar + textarea + send circular.
@@ -40,28 +41,49 @@ export default function CommentsSidePanel() {
   const {
     currentUser, teamMembers, tasks, clients,
     taskComments, addTaskComment, updateTaskComment, deleteTaskComment,
-    openCommentTaskId, closeTaskComments,
+    bulletComments, addBulletComment, updateBulletComment, deleteBulletComment,
+    teamReports,
+    commentsTarget, closeComments,
   } = useApp();
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  // Si hay valor, el composer envia como respuesta a ese comentario raiz
-  // (parent_id = replyTo). Si es null, el comentario es raiz.
   const [replyTo, setReplyTo] = useState(null);
-  // Mantener la tarea visible durante el slide-out aunque ya se cierre.
-  const lastTaskRef = useRef(null);
+  // Mantener el target visible durante el slide-out aunque ya se cierre.
+  const lastTargetRef = useRef(null);
   const taRef = useRef(null);
 
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
-  const open = !!openCommentTaskId;
+  const open = !!commentsTarget;
+  if (commentsTarget) lastTargetRef.current = commentsTarget;
+  const shownTarget = commentsTarget || lastTargetRef.current;
+  const kind = shownTarget?.kind || 'task';
 
+  // ── Modo task ──
   const task = useMemo(
-    () => (tasks || []).find(t => t.id === openCommentTaskId) || null,
-    [tasks, openCommentTaskId],
+    () => kind === 'task' ? ((tasks || []).find(t => t.id === shownTarget?.taskId) || null) : null,
+    [tasks, shownTarget, kind],
   );
-  if (task) lastTaskRef.current = task;
-  const shownTask = task || lastTaskRef.current;
+  const shownTask = task;
   const shownClient = shownTask ? (clients || []).find(c => c.id === shownTask.clientId) : null;
+
+  // ── Modo bullet ──
+  const report = useMemo(
+    () => kind === 'bullet' ? ((teamReports || []).find(r => r.id === shownTarget?.reportId) || null) : null,
+    [teamReports, shownTarget, kind],
+  );
+  const bullet = useMemo(() => {
+    if (kind !== 'bullet' || !report) return null;
+    const pbc = Array.isArray(report.progress_by_client) ? report.progress_by_client : [];
+    for (const item of pbc) {
+      const bullets = getBullets(item);
+      const found = bullets.find(b => b.id === shownTarget?.bulletId);
+      if (found) return { ...found, clientId: item.client_id || null };
+    }
+    return null;
+  }, [report, shownTarget, kind]);
+  const bulletAuthor = report ? (teamMembers || []).find(m => m.id === report.user_id) : null;
+  const bulletClient = bullet?.clientId ? (clients || []).find(c => c.id === bullet.clientId) : null;
 
   const memberById = useMemo(() => {
     const m = {};
@@ -70,11 +92,17 @@ export default function CommentsSidePanel() {
   }, [teamMembers]);
 
   const myComments = useMemo(() => {
-    if (!shownTask) return [];
-    return (taskComments || [])
-      .filter(c => c.task_id === shownTask.id)
+    if (kind === 'task') {
+      if (!shownTask) return [];
+      return (taskComments || [])
+        .filter(c => c.task_id === shownTask.id)
+        .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    }
+    if (!shownTarget || kind !== 'bullet') return [];
+    return (bulletComments || [])
+      .filter(c => c.report_id === shownTarget.reportId && c.bullet_id === shownTarget.bulletId)
       .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
-  }, [taskComments, shownTask]);
+  }, [kind, taskComments, bulletComments, shownTask, shownTarget]);
 
   // Agrupar por dia (Hoy / Ayer / fecha) — solo raices; respuestas debajo.
   const groupedByDay = useMemo(() => {
@@ -96,18 +124,18 @@ export default function CommentsSidePanel() {
     return { order, byDay, repliesByParent };
   }, [myComments]);
 
-  // Reset draft cuando cambia la tarea + manejar Escape global.
+  // Reset draft cuando cambia el target + manejar Escape global.
   useEffect(() => {
     setDraft('');
     setReplyTo(null);
-  }, [openCommentTaskId]);
+  }, [commentsTarget?.taskId, commentsTarget?.reportId, commentsTarget?.bulletId]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => { if (e.key === 'Escape') closeTaskComments(); };
+    const handler = (e) => { if (e.key === 'Escape') closeComments(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, closeTaskComments]);
+  }, [open, closeComments]);
 
   // Autosize del textarea.
   useEffect(() => {
@@ -125,19 +153,29 @@ export default function CommentsSidePanel() {
     }
   }, [open]);
 
-  const canSubmit = !sending && draft.trim().length > 0 && currentUser?.id && shownTask;
+  const hasTarget = kind === 'task' ? !!shownTask : (!!report && !!bullet);
+  const canSubmit = !sending && draft.trim().length > 0 && currentUser?.id && hasTarget;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSending(true);
     try {
-      await addTaskComment({
-        task_id: shownTask.id,
-        // Si estamos respondiendo, parent_id apunta al comentario raiz.
-        parent_id: replyTo || null,
-        body: draft,
-        author_id: currentUser.id,
-      });
+      if (kind === 'task') {
+        await addTaskComment({
+          task_id: shownTask.id,
+          parent_id: replyTo || null,
+          body: draft,
+          author_id: currentUser.id,
+        });
+      } else {
+        await addBulletComment({
+          report_id: shownTarget.reportId,
+          bullet_id: shownTarget.bulletId,
+          parent_id: replyTo || null,
+          body: draft,
+          author_id: currentUser.id,
+        });
+      }
       setDraft('');
       setReplyTo(null);
     } catch (e) {
@@ -145,6 +183,15 @@ export default function CommentsSidePanel() {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleUpdate = async (id, body) => {
+    if (kind === 'task') await updateTaskComment(id, { body });
+    else await updateBulletComment(id, { body });
+  };
+  const handleDelete = async (id) => {
+    if (kind === 'task') await deleteTaskComment(id);
+    else await deleteBulletComment(id);
   };
 
   // Click en "Responder" en un comentario raiz: setea el destino + mete un
@@ -174,7 +221,7 @@ export default function CommentsSidePanel() {
       <div
         className={`fixed inset-0 z-[80] transition-opacity duration-200 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         style={{ background: 'rgba(20,24,32,.28)' }}
-        onClick={closeTaskComments}
+        onClick={closeComments}
       />
       <aside
         className="fixed top-0 right-0 bottom-0 z-[81] bg-white border-l border-[#E2E5EB] flex flex-col"
@@ -188,7 +235,7 @@ export default function CommentsSidePanel() {
         }}
         aria-hidden={!open}
       >
-        {shownTask && (
+        {hasTarget && (
           <>
             {/* Head */}
             <div className="px-[18px] py-4 border-b border-[#EEF0F3]">
@@ -202,45 +249,81 @@ export default function CommentsSidePanel() {
                 </div>
                 <button
                   type="button"
-                  onClick={closeTaskComments}
+                  onClick={closeComments}
                   className="w-7 h-7 rounded-lg bg-transparent border-none text-[#9CA3AF] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] cursor-pointer flex items-center justify-center transition-colors"
                   title="Cerrar (Esc)"
                 ><X size={16} /></button>
               </div>
-              {/* Contexto de la tarea */}
-              <div className="flex items-start gap-2.5 bg-[#F7F8FA] rounded-[11px] px-3 py-2.5">
-                {statusCfg && (
+              {/* Contexto del target (tarea o bullet) */}
+              {kind === 'task' && shownTask && (
+                <div className="flex items-start gap-2.5 bg-[#F7F8FA] rounded-[11px] px-3 py-2.5">
+                  {statusCfg && (
+                    <span
+                      className="shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[10px] font-bold mt-0.5"
+                      style={{
+                        background: (statusCfg.color || '#9CA3AF') + '15',
+                        color: statusCfg.color || '#9CA3AF',
+                        border: `1.6px solid ${statusCfg.color || '#9CA3AF'}`,
+                      }}
+                    >{statusCfg.icon || '○'}</span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-[#1A1D26] leading-snug break-words">
+                      {shownTask.title}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {shownClient && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B7280]">
+                          <Building2 size={10} />{shownClient.name}
+                        </span>
+                      )}
+                      {shownTask.dueDate && (() => {
+                        const overdue = shownTask.dueDate < new Date().toISOString().slice(0, 10) && shownTask.status !== 'done';
+                        return (
+                          <span className={`inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${overdue ? 'bg-[#FEF2F2] text-[#DC4B43]' : 'bg-[#F0F2F5] text-[#6B7280]'}`}>
+                            {overdue ? <AlertTriangle size={9} /> : <Calendar size={9} />}
+                            {new Date(shownTask.dueDate + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {kind === 'bullet' && bullet && report && (
+                <div className="flex items-start gap-2.5 bg-[#F7F8FA] rounded-[11px] px-3 py-2.5">
                   <span
                     className="shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[10px] font-bold mt-0.5"
                     style={{
-                      background: (statusCfg.color || '#9CA3AF') + '15',
-                      color: statusCfg.color || '#9CA3AF',
-                      border: `1.6px solid ${statusCfg.color || '#9CA3AF'}`,
+                      background: bullet.category === 'entregable' ? '#ECFDF5' : bullet.category === 'avance' ? '#EEF2FF' : '#F0F2F5',
+                      color: bullet.category === 'entregable' ? '#16A34A' : bullet.category === 'avance' ? '#5B7CF5' : '#6B7280',
+                      border: `1.6px solid ${bullet.category === 'entregable' ? '#16A34A' : bullet.category === 'avance' ? '#5B7CF5' : '#9CA3AF'}`,
                     }}
-                  >{statusCfg.icon || '○'}</span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12.5px] font-semibold text-[#1A1D26] leading-snug break-words">
-                    {shownTask.title}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    {shownClient && (
+                  >{bullet.category === 'entregable' ? '✓' : bullet.category === 'avance' ? '•' : '–'}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-[#1A1D26] leading-snug break-words">
+                      {bullet.text}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B7280]">
-                        <Building2 size={10} />{shownClient.name}
+                        <FileText size={10} />
+                        Informe de {bulletAuthor?.name || 'equipo'}
                       </span>
-                    )}
-                    {shownTask.dueDate && (() => {
-                      const overdue = shownTask.dueDate < new Date().toISOString().slice(0, 10) && shownTask.status !== 'done';
-                      return (
-                        <span className={`inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${overdue ? 'bg-[#FEF2F2] text-[#DC4B43]' : 'bg-[#F0F2F5] text-[#6B7280]'}`}>
-                          {overdue ? <AlertTriangle size={9} /> : <Calendar size={9} />}
-                          {new Date(shownTask.dueDate + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                      {bulletClient && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B7280]">
+                          <Building2 size={10} />{bulletClient.name}
                         </span>
-                      );
-                    })()}
+                      )}
+                      {report.report_date && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 bg-[#F0F2F5] text-[#6B7280]">
+                          <Calendar size={9} />
+                          {new Date(report.report_date + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Body — feed por día */}
@@ -266,8 +349,8 @@ export default function CommentsSidePanel() {
                           canEdit={root.author_id === currentUser?.id}
                           canDelete={root.author_id === currentUser?.id || isAdmin}
                           onReply={() => startReply(root.id, root.author_id)}
-                          onUpdate={async (id, body) => { await updateTaskComment(id, { body }); }}
-                          onDelete={async (id) => { await deleteTaskComment(id); }}
+                          onUpdate={async (id, body) => { await handleUpdate(id, body); }}
+                          onDelete={async (id) => { await handleDelete(id); }}
                         />
                         {(groupedByDay.repliesByParent[root.id] || []).map(rep => (
                           <CommentItem

@@ -57,19 +57,52 @@ export function weekDatesOf(monday) {
 // Si solo tiene `text` (formato viejo), parsea cada linea como bullet sin
 // categoria (category=null). Esto da retrocompatibilidad total: informes
 // viejos se siguen mostrando como antes y se pueden migrar editandolos.
+// fallbackBulletId — id deterministico de fallback para bullets sin id en runtime.
+// Es solo un puente: cuando un informe se reabra/guarda, ensureBulletIds asigna
+// los ids reales. Sirve para que el badge de comentarios no parpadee mientras
+// llega el siguiente save.
+function fallbackBulletId(item, idx, text) {
+  const seed = `${item?.client_id || ''}::${idx}::${text}`;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return 'bx_' + Math.abs(h).toString(36);
+}
+
 export function getBullets(item) {
   if (!item) return [];
   if (Array.isArray(item.bullets) && item.bullets.length > 0) {
-    return item.bullets.map(b => ({
-      text: String(b?.text || '').trim(),
-      category: b?.category === 'entregable' || b?.category === 'avance' ? b.category : null,
-    })).filter(b => b.text);
+    return item.bullets.map((b, i) => {
+      const text = String(b?.text || '').trim();
+      return {
+        text,
+        category: b?.category === 'entregable' || b?.category === 'avance' ? b.category : null,
+        id: b?.id || fallbackBulletId(item, i, text),
+      };
+    }).filter(b => b.text);
   }
   return String(item.text || '')
     .split('\n')
     .map(l => l.replace(/^[\s\-•·*]+/, '').trim())
     .filter(Boolean)
-    .map(text => ({ text, category: null }));
+    .map((text, i) => ({ text, category: null, id: fallbackBulletId(item, i, text) }));
+}
+
+// ensureBulletIds — recorre progress_by_client y rellena `id` en cualquier
+// bullet que no lo tenga, generando uno estable (b_<ts>_<rnd>). Llamar antes
+// de persistir (addTeamReport / updateTeamReport) para que los comentarios
+// puedan referenciar bullet_id de forma confiable.
+export function ensureBulletIds(progressByClient) {
+  if (!Array.isArray(progressByClient)) return progressByClient;
+  const ts = Math.floor(Date.now() / 1000);
+  const rnd = () => Math.random().toString(36).slice(2, 8);
+  return progressByClient.map(item => {
+    if (!item || !Array.isArray(item.bullets) || item.bullets.length === 0) return item;
+    const bullets = item.bullets.map(b => {
+      if (b && b.id) return b;
+      return { ...(b || {}), id: 'b_' + ts + '_' + rnd() };
+    });
+    return { ...item, bullets };
+  });
 }
 
 // Convierte un array de bullets [{text, category}] en el `text` legacy que

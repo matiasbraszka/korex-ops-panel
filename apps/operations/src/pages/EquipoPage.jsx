@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, Users, GripVertical } from 'lucide-react';
+import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, Users, GripVertical, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TeamAvatar from '../components/TeamAvatar';
 import CrearInformeModal from '../components/informes/CrearInformeModal';
@@ -55,10 +55,20 @@ const IDEA_STATUS_KEYS = ['pending', 'in-progress', 'future', 'implemented', 'di
 
 // ── sub-vista: Informes ───────────────────────────────────────────────────
 function InformesView({ openCreateInforme, openEditInforme }) {
-  const { teamReports, teamBlockers, teamMembers, clients, currentUser, deleteTeamReport } = useApp();
+  const { teamReports, teamBlockers, teamMembers, clients, currentUser, deleteTeamReport, bulletComments, openBulletComments } = useApp();
   const [reportType, setReportType] = useState('daily'); // daily | weekly
   const [userFilter, setUserFilter] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
+
+  // Conteo de comentarios por (report_id, bullet_id) — usado para pintar el badge.
+  const bulletCommentCounts = useMemo(() => {
+    const map = {};
+    (bulletComments || []).forEach(c => {
+      const key = c.report_id + '::' + c.bullet_id;
+      map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [bulletComments]);
 
   const memberById = useMemo(() => {
     const map = {};
@@ -304,18 +314,36 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                     <div className="text-[13px] text-gray-700 whitespace-pre-wrap">{p.text || '—'}</div>
                                   );
                                 }
+                                // Render de un bullet con badge de comentarios al final.
+                                const renderBullet = (b, key, marker, markerClass) => {
+                                  const cnt = bulletCommentCounts[r.id + '::' + b.id] || 0;
+                                  return (
+                                    <li key={key} className="group flex gap-1.5 items-start">
+                                      <span className={`${markerClass} shrink-0`}>{marker}</span>
+                                      <span className="flex-1 min-w-0">{b.text}</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); openBulletComments(r.id, b.id); }}
+                                        className={`shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md border-none cursor-pointer text-[10px] font-semibold transition-opacity ${
+                                          cnt > 0
+                                            ? 'bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] opacity-100'
+                                            : 'bg-transparent text-[#B6BCC4] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] opacity-0 group-hover:opacity-100'
+                                        }`}
+                                        title={cnt > 0 ? `${cnt} comentario${cnt !== 1 ? 's' : ''}` : 'Comentar'}
+                                      >
+                                        <MessageSquare size={cnt > 0 ? 10 : 11} />
+                                        {cnt > 0 && cnt}
+                                      </button>
+                                    </li>
+                                  );
+                                };
                                 return (
                                   <div className="space-y-1.5">
                                     {entregables.length > 0 && (
                                       <div>
                                         <div className="text-[9.5px] font-bold text-green-700 uppercase tracking-wide mb-0.5">Entregables</div>
                                         <ul className="text-[13px] text-gray-700 space-y-0.5">
-                                          {entregables.map((b, idx) => (
-                                            <li key={'e_' + idx} className="flex gap-1.5">
-                                              <span className="text-green-600 shrink-0">✓</span>
-                                              <span>{b.text}</span>
-                                            </li>
-                                          ))}
+                                          {entregables.map((b, idx) => renderBullet(b, 'e_' + idx, '✓', 'text-green-600'))}
                                         </ul>
                                       </div>
                                     )}
@@ -323,23 +351,13 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                       <div>
                                         <div className="text-[9.5px] font-bold text-blue-700 uppercase tracking-wide mb-0.5">Avances</div>
                                         <ul className="text-[13px] text-gray-700 space-y-0.5">
-                                          {avances.map((b, idx) => (
-                                            <li key={'a_' + idx} className="flex gap-1.5">
-                                              <span className="text-blue-600 shrink-0">•</span>
-                                              <span>{b.text}</span>
-                                            </li>
-                                          ))}
+                                          {avances.map((b, idx) => renderBullet(b, 'a_' + idx, '•', 'text-blue-600'))}
                                         </ul>
                                       </div>
                                     )}
                                     {sinCat.length > 0 && (
                                       <ul className="text-[13px] text-gray-600 space-y-0.5">
-                                        {sinCat.map((b, idx) => (
-                                          <li key={'s_' + idx} className="flex gap-1.5">
-                                            <span className="text-gray-400 shrink-0">-</span>
-                                            <span>{b.text}</span>
-                                          </li>
-                                        ))}
+                                        {sinCat.map((b, idx) => renderBullet(b, 's_' + idx, '-', 'text-gray-400'))}
                                       </ul>
                                     )}
                                   </div>

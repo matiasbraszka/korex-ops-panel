@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds } from '../utils/helpers';
 
 const AppContext = createContext(null);
 
@@ -84,8 +84,11 @@ export function AppProvider({ children }) {
   const [strategies, setStrategies] = useState([]);
   const [strategyPages, setStrategyPages] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  // Panel lateral de actividad/comentarios: id de la tarea abierta o null.
-  const [openCommentTaskId, setOpenCommentTaskId] = useState(null);
+  // Panel lateral de actividad/comentarios: target abierto o null.
+  // Forma: null | { kind: 'task', taskId } | { kind: 'bullet', reportId, bulletId }
+  const [commentsTarget, setCommentsTarget] = useState(null);
+  // Comentarios por bullet de informe (mirror del patron de task_comments)
+  const [bulletComments, setBulletComments] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -618,7 +621,7 @@ export function AppProvider({ children }) {
       worked_internal: !!data.worked_internal,
       progress_today: data.progress_today || '',
       next_day: data.next_day || '',
-      progress_by_client: data.progress_by_client || [],
+      progress_by_client: ensureBulletIds(data.progress_by_client || []),
       weekly_data: data.weekly_data || {},
     };
     await sbFetch('team_reports', {
@@ -653,13 +656,15 @@ export function AppProvider({ children }) {
   }, []);
 
   const updateTeamReport = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    if (patch.progress_by_client) patch.progress_by_client = ensureBulletIds(patch.progress_by_client);
     await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify(fields),
+      body: JSON.stringify(patch),
       throwOnError: true,
     });
-    setTeamReports(prev => prev.map(r => r.id === id ? { ...r, ...fields, updated_at: new Date().toISOString() } : r));
+    setTeamReports(prev => prev.map(r => r.id === id ? { ...r, ...patch, updated_at: new Date().toISOString() } : r));
   }, []);
 
   const deleteTeamReport = useCallback(async (id) => {
@@ -910,6 +915,51 @@ export function AppProvider({ children }) {
     setTaskComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
   }, []);
 
+  // ── CRUD: report_bullet_comments ──
+  // Mismo patron que task_comments pero apunta a un bullet dentro de un informe.
+  // bullet_id es un soft-link (no FK) contra el id que vive en progress_by_client.
+  const addBulletComment = useCallback(async (data) => {
+    const id = 'bc_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const row = {
+      id,
+      report_id: data.report_id,
+      bullet_id: data.bullet_id,
+      parent_id: data.parent_id || null,
+      author_id: data.author_id,
+      body: String(data.body || '').trim(),
+      edited: false,
+    };
+    await sbFetch('report_bullet_comments', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+      throwOnError: true,
+    });
+    const nowIso = new Date().toISOString();
+    setBulletComments(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
+    return id;
+  }, []);
+
+  const updateBulletComment = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    if (patch.body !== undefined) patch.body = String(patch.body).trim();
+    patch.edited = true;
+    await sbFetch('report_bullet_comments?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+      throwOnError: true,
+    });
+    setBulletComments(prev => prev.map(c => c.id === id
+      ? { ...c, ...patch, updated_at: new Date().toISOString() }
+      : c));
+  }, []);
+
+  const deleteBulletComment = useCallback(async (id) => {
+    await sbFetch('report_bullet_comments?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setBulletComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
+  }, []);
+
   // ── CRUD: notas ──
   // Tabla `notas` (notas_v1.sql). Mismo patron que ideas: optimistic UI +
   // POST/PATCH/DELETE contra Supabase. Toda la sanitizacion del body_html
@@ -1130,6 +1180,12 @@ export function AppProvider({ children }) {
         const allComments = await sbFetch('task_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allComments && Array.isArray(allComments)) setTaskComments(allComments);
       } catch (e) { console.warn('loadTaskComments error', e); }
+
+      // Comentarios por bullet de informe (mismo patron, tabla separada).
+      try {
+        const allBulletComments = await sbFetch('report_bullet_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allBulletComments && Array.isArray(allBulletComments)) setBulletComments(allBulletComments);
+      } catch (e) { console.warn('loadBulletComments error', e); }
 
       // Estrategias y paginas por cliente (Fase 2 ficha cliente)
       try {
@@ -1496,9 +1552,18 @@ export function AppProvider({ children }) {
     addTaskComment,
     updateTaskComment,
     deleteTaskComment,
-    openCommentTaskId,
-    openTaskComments: (id) => setOpenCommentTaskId(id),
-    closeTaskComments: () => setOpenCommentTaskId(null),
+    bulletComments,
+    addBulletComment,
+    updateBulletComment,
+    deleteBulletComment,
+    // Side panel de comentarios (generico para task o bullet).
+    commentsTarget,
+    openTaskComments: (taskId) => setCommentsTarget(taskId ? { kind: 'task', taskId } : null),
+    openBulletComments: (reportId, bulletId) => setCommentsTarget({ kind: 'bullet', reportId, bulletId }),
+    closeComments: () => setCommentsTarget(null),
+    // Alias legacy para compat con el panel actual (devuelve el taskId si esta abierto en modo task).
+    openCommentTaskId: commentsTarget?.kind === 'task' ? commentsTarget.taskId : null,
+    closeTaskComments: () => setCommentsTarget(null),
     strategies,
     strategyPages,
     addStrategy,
