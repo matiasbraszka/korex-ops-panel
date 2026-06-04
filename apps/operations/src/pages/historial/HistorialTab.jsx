@@ -16,9 +16,37 @@ function diasDesdeFecha(iso) {
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 }
 
+// Convierte una llamada del cliente en un "evento sintetico" para el timeline.
+// Se marca con __synthetic = true para que el card sepa que no se puede editar/borrar
+// (se manejan desde el tab Llamadas) y para esconderlo del resumen de tiempo Korex.
+function llamadaToEvento(l) {
+  const isoFecha = l.fecha ? new Date(l.fecha) : null;
+  const fechaStr = isoFecha && !isNaN(isoFecha.getTime())
+    ? isoFecha.toISOString().slice(0, 10)
+    : '';
+  const horaStr = isoFecha && !isNaN(isoFecha.getTime())
+    ? isoFecha.toISOString().slice(11, 16)
+    : '';
+  return {
+    id: 'call_' + l.id,
+    __synthetic: true,
+    __llamada: l,
+    tipo: 'llamada',
+    titulo: l.titulo || 'Llamada',
+    descripcion: l.resumen || '',
+    fecha: fechaStr,
+    hora: horaStr,
+    tiempo: l.duracion_min || 0,
+    responsable: '',
+    fase: null,
+    autor: '',
+    links: l.recording_url ? [{ url: l.recording_url, title: 'Grabación' }] : [],
+  };
+}
+
 export function HistorialTab({ cliente }) {
   const { fases } = useHistorialConfig(cliente);
-  const { currentUser } = useApp();
+  const { currentUser, llamadas } = useApp();
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -44,6 +72,15 @@ export function HistorialTab({ cliente }) {
     () => diasDesdeFecha(cliente?.startDate),
     [cliente?.startDate]
   );
+
+  // Mezclamos los eventos manuales con las llamadas del cliente (categoria='cliente')
+  // y ordenamos por fecha desc. Las llamadas se renderizan como cards colapsables.
+  const eventosConLlamadas = useMemo(() => {
+    const calls = (llamadas || [])
+      .filter(l => l.cliente_id === cliente?.id && l.categoria === 'cliente')
+      .map(llamadaToEvento);
+    return [...eventos, ...calls].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  }, [eventos, llamadas, cliente?.id]);
 
   const openNuevo = () => { setEditingEvento(null); setShowPanel(true); };
   const openEdit = (evento) => { setEditingEvento(evento); setShowPanel(true); };
@@ -88,13 +125,17 @@ export function HistorialTab({ cliente }) {
       ) : (
         <Timeline
           cliente={cliente}
-          eventos={eventos}
+          eventos={eventosConLlamadas}
           faseActual={faseActualId}
           diasProyecto={diasProyecto}
           onGenerarResumen={() => setShowResumen(true)}
           onNuevoEvento={openNuevo}
           onDeleteEvento={handleDeleteEvento}
           onEditEvento={openEdit}
+          onUpdateTiempo={async (id, mins) => {
+            setEventos(prev => prev.map(e => e.id === id ? { ...e, tiempo: mins } : e));
+            await updateEvento(id, { tiempo: mins }, cliente.id);
+          }}
         />
       )}
       <NuevoEventoPanel

@@ -29,12 +29,16 @@ export function useHistorialConfig(cliente) {
       ? appSettings.roadmap_template.phases
       : FALLBACK_ROADMAP_PHASES;
 
-    // Aplicar phaseNameOverrides del cliente (renombre de fases default)
+    // Aplicar phaseNameOverrides del cliente. El sentinel "__HIDDEN__" significa
+    // que ese cliente oculto esa fase del template global, asi que la quitamos
+    // del listado para que no aparezca en pickers ni timeline.
     const overrides = cliente?.phaseNameOverrides || {};
-    const defaults = roadmapPhases.map(p => ({
-      ...p,
-      label: overrides[p.id] || p.label,
-    }));
+    const defaults = roadmapPhases
+      .filter(p => overrides[p.id] !== '__HIDDEN__')
+      .map(p => ({
+        ...p,
+        label: overrides[p.id] || p.label,
+      }));
 
     // Append fases custom del cliente al final (las que el user agregó para este cliente)
     const customPhases = Array.isArray(cliente?.customPhases) ? cliente.customPhases : [];

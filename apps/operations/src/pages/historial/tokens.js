@@ -48,8 +48,7 @@ export const DEFAULT_EVENT_TYPES = [
   { key: 'entregable',   label: 'Entregable',   color: '#22C55E', bg: '#ECFDF5', dot: '◆' },
   { key: 'hito',         label: 'Hito',         color: '#5B7CF5', bg: '#EEF2FF', dot: '★' },
   { key: 'bloqueo',      label: 'Bloqueo',      color: '#EF4444', bg: '#FEF2F2', dot: '⚠' },
-  { key: 'comunicacion', label: 'Comunicación', color: '#8B5CF6', bg: '#F5F3FF', dot: '◌' },
   { key: 'decision',     label: 'Decisión',     color: '#F97316', bg: '#FFF7ED', dot: '▶' },
-  { key: 'validacion',   label: 'Validación',   color: '#EAB308', bg: '#FEFCE8', dot: '✓' },
   { key: 'metrica',      label: 'Métrica',      color: '#06B6D4', bg: '#ECFEFF', dot: '▲' },
+  { key: 'llamada',      label: 'Llamada',      color: '#0891B2', bg: '#ECFEFF', dot: '☎' },
 ];

@@ -142,11 +142,12 @@ function BlockerBanner({ eventos }) {
   );
 }
 
-export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento, onEditEvento }) {
+export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerarResumen, onNuevoEvento, onDeleteEvento, onEditEvento, onUpdateTiempo }) {
   const vp = useViewport();
   const [filtro, setFiltro] = useState('todos');
   const lista = filtro === 'todos' ? eventos : eventos.filter(e => e.tipo === filtro);
-  const tiempoVisible = lista.reduce((s, e) => s + (e.tiempo || 0), 0);
+  // El tiempo Korex no cuenta llamadas (no son trabajo interno)
+  const tiempoVisible = lista.filter(e => !e.__synthetic).reduce((s, e) => s + (e.tiempo || 0), 0);
   const horas = Math.round(tiempoVisible / 60 * 10) / 10;
 
   const filtros = [
@@ -155,6 +156,7 @@ export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerar
     { id: 'bloqueo', label: 'Bloqueos', count: eventos.filter(e => e.tipo === 'bloqueo').length },
     { id: 'decision', label: vp.mobile ? 'Decis.' : 'Decisiones', count: eventos.filter(e => e.tipo === 'decision').length },
     { id: 'metrica', label: vp.mobile ? 'Métric.' : 'Métricas', count: eventos.filter(e => e.tipo === 'metrica').length },
+    { id: 'llamada', label: vp.mobile ? 'Llam.' : 'Llamadas', count: eventos.filter(e => e.tipo === 'llamada').length },
   ];
 
   return (
@@ -266,7 +268,7 @@ export function Timeline({ cliente, eventos, faseActual, diasProyecto, onGenerar
                 </div>
               )}
               <div style={{ position: 'relative', marginBottom: 10 }}>
-                <EventCard cliente={cliente} event={ev} onDelete={onDeleteEvento} onEdit={onEditEvento} />
+                <EventCard cliente={cliente} event={ev} onDelete={onDeleteEvento} onEdit={onEditEvento} onUpdateTiempo={onUpdateTiempo} />
               </div>
             </Fragment>
           );

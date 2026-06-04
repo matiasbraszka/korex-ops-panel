@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
 import { useHistorialConfig } from './useHistorialConfig.js';
@@ -55,28 +56,112 @@ function AuthorChip({ autorUser, autor }) {
   return null;
 }
 
-export function EventCard({ cliente, event, showFase = true, onClick, onDelete, onEdit }) {
+function CallBody({ llamada }) {
+  const proximos = Array.isArray(llamada?.proximos_pasos) ? llamada.proximos_pasos : [];
+  const problemas = Array.isArray(llamada?.problemas_detectados) ? llamada.problemas_detectados : [];
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${T.border}` }}>
+      {llamada?.resumen && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Resumen</div>
+          <div style={{ fontSize: 12, color: T.text2, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{llamada.resumen}</div>
+        </div>
+      )}
+      {llamada?.notas_clave && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Notas clave</div>
+          <div style={{ fontSize: 12, color: T.text2, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{llamada.notas_clave}</div>
+        </div>
+      )}
+      {proximos.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Próximos pasos</div>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {proximos.map((p, i) => (
+              <li key={i} style={{ fontSize: 12, color: T.text2, paddingLeft: 14, position: 'relative', lineHeight: 1.5 }}>
+                <span style={{ position: 'absolute', left: 0, color: T.blue }}>→</span>
+                {typeof p === 'string' ? p : (p.texto || p.label || JSON.stringify(p))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {problemas.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Problemas detectados</div>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {problemas.map((p, i) => (
+              <li key={i} style={{ fontSize: 12, color: T.text2, paddingLeft: 14, position: 'relative', lineHeight: 1.5 }}>
+                <span style={{ position: 'absolute', left: 0, color: T.red }}>⚠</span>
+                {typeof p === 'string' ? p : (p.texto || p.label || JSON.stringify(p))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TiempoInline({ value, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(value || 0);
+  if (editing) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+        ·
+        <input
+          type="number" min={0} value={v}
+          autoFocus
+          onChange={e => setV(Number(e.target.value) || 0)}
+          onBlur={() => { onChange(v); setEditing(false); }}
+          onKeyDown={e => { if (e.key === 'Enter') { onChange(v); setEditing(false); } if (e.key === 'Escape') { setV(value || 0); setEditing(false); } }}
+          style={{ width: 50, fontSize: 11, padding: '1px 4px', border: `1px solid ${T.blue}`, borderRadius: 4, outline: 'none' }}
+        />
+        min
+      </span>
+    );
+  }
+  return (
+    <span
+      onClick={(e) => { e.stopPropagation(); setEditing(true); setV(value || 0); }}
+      style={{ cursor: 'pointer', borderBottom: '1px dashed transparent', transition: 'border-color 0.12s' }}
+      onMouseEnter={e => { e.currentTarget.style.borderBottomColor = T.text3; }}
+      onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+      title="Click para editar tiempo"
+    >
+      · {value || 0}min
+    </span>
+  );
+}
+
+export function EventCard({ cliente, event, showFase = true, onClick, onDelete, onEdit, onUpdateTiempo }) {
   const vp = useViewport();
   const { tiposByKey, fasesById } = useHistorialConfig(cliente);
   const isBloqueo = event.tipo === 'bloqueo';
+  const isLlamada = event.tipo === 'llamada' && event.__synthetic;
+  const [expanded, setExpanded] = useState(false);
   const t = tiposByKey[event.tipo] || tiposByKey.entregable || { color: T.blue, bg: T.blueBg, label: event.tipo, dot: '•' };
   const fase = fasesById[event.fase];
   const links = Array.isArray(event.links) ? event.links : [];
+  const canEditTiempo = !event.__synthetic && typeof onUpdateTiempo === 'function';
 
   return (
-    <div onClick={onClick} style={{
-      background: '#fff',
-      border: isBloqueo ? `1px solid ${T.red}` : `1px solid ${T.border}`,
-      borderLeft: isBloqueo ? `4px solid ${T.red}` : `4px solid ${t.color}`,
-      borderRadius: 10,
-      padding: vp.mobile ? '12px 14px' : '13px 16px',
-      position: 'relative',
-      cursor: onClick ? 'pointer' : 'default',
-      transition: 'all 0.12s',
-      boxShadow: '0 1px 2px rgba(10,22,40,.03)',
-    }}
-    onMouseEnter={e => { if (!vp.mobile) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(10,22,40,.06)'; } }}
-    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 2px rgba(10,22,40,.03)'; }}
+    <div
+      onClick={isLlamada ? () => setExpanded(x => !x) : onClick}
+      style={{
+        background: '#fff',
+        border: isBloqueo ? `1px solid ${T.red}` : `1px solid ${T.border}`,
+        borderLeft: isBloqueo ? `4px solid ${T.red}` : `4px solid ${t.color}`,
+        borderRadius: 10,
+        padding: vp.mobile ? '12px 14px' : '13px 16px',
+        position: 'relative',
+        cursor: (onClick || isLlamada) ? 'pointer' : 'default',
+        transition: 'all 0.12s',
+        boxShadow: '0 1px 2px rgba(10,22,40,.03)',
+      }}
+      onMouseEnter={e => { if (!vp.mobile) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(10,22,40,.06)'; } }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 2px rgba(10,22,40,.03)'; }}
     >
       <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
         {isBloqueo && event.bloqueo?.diasBloqueo > 0 && (
@@ -86,7 +171,10 @@ export function EventCard({ cliente, event, showFase = true, onClick, onDelete, 
             fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
           }}>{event.bloqueo.diasBloqueo}d</div>
         )}
-        {onEdit && (
+        {isLlamada && (
+          <span style={{ fontSize: 14, color: T.text3, transition: 'transform 0.15s', transform: expanded ? 'rotate(180deg)' : 'none', userSelect: 'none' }}>▾</span>
+        )}
+        {!isLlamada && onEdit && (
           <button
             onClick={e => { e.stopPropagation(); onEdit(event); }}
             style={{
@@ -102,7 +190,7 @@ export function EventCard({ cliente, event, showFase = true, onClick, onDelete, 
             aria-label="Editar evento"
           >✎</button>
         )}
-        {onDelete && (
+        {!isLlamada && onDelete && (
           <button
             onClick={e => { e.stopPropagation(); onDelete(event); }}
             style={{
@@ -162,12 +250,19 @@ export function EventCard({ cliente, event, showFase = true, onClick, onDelete, 
         display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: T.text3,
         flexWrap: 'wrap',
       }}>
-        <AuthorChip autorUser={event.autorUser} autor={event.autor} />
-        {event.responsable && (
+        {!isLlamada && <AuthorChip autorUser={event.autorUser} autor={event.autor} />}
+        {!isLlamada && event.responsable && (
           <span>· espera: <span style={{ color: event.responsable === 'Cliente' ? T.orange : T.text2, fontWeight: 600 }}>{event.responsable}</span></span>
         )}
-        {typeof event.tiempo === 'number' && event.tiempo > 0 && <span>· {event.tiempo}min</span>}
+        {isLlamada && event.hora && <span>{event.hora}</span>}
+        {isLlamada
+          ? (event.tiempo > 0 && <span>· {event.tiempo}min</span>)
+          : canEditTiempo
+            ? <TiempoInline value={event.tiempo} onChange={(v) => onUpdateTiempo(event.id, v)} />
+            : (typeof event.tiempo === 'number' && event.tiempo > 0 && <span>· {event.tiempo}min</span>)
+        }
       </div>
+      {isLlamada && expanded && <CallBody llamada={event.__llamada} />}
     </div>
   );
 }
