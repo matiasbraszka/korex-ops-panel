@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { sbFetch } from '@korex/db';
+import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds } from '../utils/helpers';
@@ -97,6 +97,17 @@ export function AppProvider({ children }) {
   const tasksRef = useRef(tasks);
   clientsRef.current = clients;
   tasksRef.current = tasks;
+  // Id del usuario actual en un ref para usarlo dentro de callbacks memoizados
+  // (dbSaveTask, dbSyncAll) sin recrearlos. Lo usan los triggers de la DB para
+  // excluir auto-notificaciones (no notificarte por tu propia edición).
+  const currentUserIdRef = useRef(null);
+  currentUserIdRef.current = currentUser?.id || null;
+
+  // ── Notificaciones (buzón) ──
+  const [notifications, setNotifications] = useState([]);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  // Última notificación entrante para el toast flotante. La UI la limpia al cerrarse.
+  const [notifToast, setNotifToast] = useState(null);
 
   // ── Inject Meta Metrics from CLIENT_ADS_DATA ──
   const injectMetaMetrics = useCallback((clientList) => {
@@ -169,7 +180,8 @@ export function AppProvider({ children }) {
         accumulated_days: t.accumulatedDays || 0,
         timer_started_at: t.timerStartedAt || null,
         enabled_date: t.enabledDate || null,
-        position: t.position ?? 0
+        position: t.position ?? 0,
+        last_actor_id: currentUserIdRef.current,
       })
     });
   }, []);
@@ -233,7 +245,8 @@ export function AppProvider({ children }) {
         accumulated_days: t.accumulatedDays || 0,
         timer_started_at: t.timerStartedAt || null,
         enabled_date: t.enabledDate || null,
-        position: t.position ?? 0
+        position: t.position ?? 0,
+        last_actor_id: currentUserIdRef.current,
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -915,6 +928,70 @@ export function AppProvider({ children }) {
     setTaskComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
   }, []);
 
+  // ── Notificaciones ──
+  // Las filas las generan triggers de Postgres (ver migrations/notifications_v1.sql).
+  // Acá solo leemos, marcamos como leído y abrimos/cerramos el buzón.
+  const markNotificationRead = useCallback(async (id) => {
+    setNotifications(prev => prev.map(n => n.id === id && !n.read_at
+      ? { ...n, read_at: new Date().toISOString() } : n));
+    await sbFetch('notifications?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ read_at: new Date().toISOString() }),
+    });
+  }, []);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    const uid = currentUserIdRef.current;
+    if (!uid) return;
+    const nowIso = new Date().toISOString();
+    setNotifications(prev => prev.map(n => n.read_at ? n : { ...n, read_at: nowIso }));
+    await sbFetch(
+      'notifications?recipient_id=eq.' + encodeURIComponent(uid) + '&read_at=is.null',
+      { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ read_at: nowIso }) },
+    );
+  }, []);
+
+  const openNotifications = useCallback(() => setNotifPanelOpen(true), []);
+  const closeNotifications = useCallback(() => setNotifPanelOpen(false), []);
+  const dismissNotifToast = useCallback(() => setNotifToast(null), []);
+
+  const unreadNotifCount = useMemo(
+    () => notifications.filter(n => !n.read_at).length,
+    [notifications],
+  );
+
+  // Carga inicial + suscripción realtime cuando hay usuario. Filtra por
+  // recipient_id para que cada persona reciba solo lo suyo (mismo id que
+  // currentUser.id / team_members.id). Primer uso de realtime en el panel.
+  useEffect(() => {
+    const uid = currentUser?.id;
+    if (!uid) { setNotifications([]); return; }
+    let active = true;
+
+    (async () => {
+      const rows = await sbFetch(
+        'notifications?recipient_id=eq.' + encodeURIComponent(uid) +
+        '&order=created_at.desc&limit=100',
+        { headers: { 'Prefer': 'return=representation' } },
+      );
+      if (active && Array.isArray(rows)) setNotifications(rows);
+    })();
+
+    const channel = supabase
+      .channel('notifs_' + uid)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'recipient_id=eq.' + uid },
+        (payload) => {
+          const n = payload.new;
+          setNotifications(prev => (prev.some(x => x.id === n.id) ? prev : [n, ...prev]));
+          setNotifToast(n);
+        })
+      .subscribe();
+
+    return () => { active = false; supabase.removeChannel(channel); };
+  }, [currentUser?.id]);
+
   // ── CRUD: report_bullet_comments ──
   // Mismo patron que task_comments pero apunta a un bullet dentro de un informe.
   // bullet_id es un soft-link (no FK) contra el id que vive en progress_by_client.
@@ -1564,6 +1641,16 @@ export function AppProvider({ children }) {
     // Alias legacy para compat con el panel actual (devuelve el taskId si esta abierto en modo task).
     openCommentTaskId: commentsTarget?.kind === 'task' ? commentsTarget.taskId : null,
     closeTaskComments: () => setCommentsTarget(null),
+    // Notificaciones (buzón)
+    notifications,
+    unreadNotifCount,
+    notifPanelOpen,
+    openNotifications,
+    closeNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    notifToast,
+    dismissNotifToast,
     strategies,
     strategyPages,
     addStrategy,

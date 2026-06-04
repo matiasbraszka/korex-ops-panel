@@ -18,6 +18,9 @@ const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 import SearchBar from './components/SearchBar';
 import Modal from './components/Modal';
 import CommentsSidePanel from './components/comments/CommentsSidePanel';
+import NotificationBell from './components/notifications/NotificationBell';
+import NotificationsPanel from './components/notifications/NotificationsPanel';
+import NotificationToast from './components/notifications/NotificationToast';
 import { today } from './utils/helpers';
 
 // Lazy-load del modulo Ventas: el chunk se baja solo si el usuario entra.
@@ -656,6 +659,8 @@ function MainLayout() {
             <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-xl bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
               {syncStatus === 'syncing' ? '↻ Guardando...' : syncStatus === 'error' ? '✕ Error sync' : '● Sincronizado'}
             </span>
+            {/* Campana de notificaciones — visible en todas las áreas */}
+            <NotificationBell />
             {/* SearchBar global solo busca clientes/tareas de Operaciones — ocultar en area Ventas */}
             {pathPrefix !== 'sales' && <SearchBar />}
             {view === 'clients' && (
@@ -723,6 +728,9 @@ function MainLayout() {
       {/* Panel lateral de comentarios — accesible globalmente desde cualquier
           vista de tareas (Roadmap, Lista, Timeline). */}
       <CommentsSidePanel />
+      {/* Buzón de notificaciones + aviso flotante (montados al root). */}
+      <NotificationsPanel />
+      <NotificationToast />
     </div>
   );
 }
