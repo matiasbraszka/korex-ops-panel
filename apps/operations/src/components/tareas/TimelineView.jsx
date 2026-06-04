@@ -182,6 +182,7 @@ export default function TimelineView({ onGoToTaskList }) {
   }
   const weekWidth = 100;
   const labelWidth = 300;
+  const avatarColWidth = 60;
   const totalTimelineStart = weekColumns[0].startIso;
   const totalTimelineEnd = weekColumns[weekColumns.length - 1].endIso;
   const totalDays = Math.round((new Date(totalTimelineEnd) - new Date(totalTimelineStart)) / 864e5);
@@ -404,9 +405,9 @@ export default function TimelineView({ onGoToTaskList }) {
               className="timeline-scroll overflow-x-auto -mx-5 max-md:-mx-3 px-5 max-md:px-3"
               style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
             >
-              <div style={{ minWidth: labelWidth + weekColumns.length * weekWidth, position: 'relative' }}>
+              <div style={{ minWidth: labelWidth + avatarColWidth + weekColumns.length * weekWidth, position: 'relative' }}>
                 {/* Week header */}
-                <div className="flex" style={{ marginLeft: labelWidth }}>
+                <div className="flex" style={{ marginLeft: labelWidth + avatarColWidth }}>
                   {weekColumns.map((w, i) => (
                     <div key={i} className={`shrink-0 border-b pb-1.5 ${w.hasToday ? 'border-b-2 border-[#EF4444] bg-[#FEF4F3]' : 'border-[#E2E5EB]'}`} style={{ width: weekWidth }}>
                       <div className="text-center pt-1">
@@ -428,7 +429,7 @@ export default function TimelineView({ onGoToTaskList }) {
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    left: labelWidth + todayCenterPx - 1,
+                    left: labelWidth + avatarColWidth + todayCenterPx - 1,
                     top: 32,
                     bottom: 0,
                     width: 2,
@@ -456,7 +457,7 @@ export default function TimelineView({ onGoToTaskList }) {
                   return (
                   <div key={cl.id} className={`border-b last:border-b-0 ${cIsKorex ? 'border-[#E2E5EB] bg-[#FBFBFC]' : 'border-[#EEF0F3]'}`}>
                     <div className="flex items-center bg-[#FAFBFC] border-b border-[#EEF0F3]" style={{ height: 32 }}>
-                      <div className="shrink-0 pr-3 pl-3 flex items-center gap-2" style={{ width: labelWidth }}>
+                      <div className="shrink-0 pr-3 pl-3 flex items-center gap-2" style={{ width: labelWidth + avatarColWidth }}>
                         {cIsKorex && <span className="text-[12px]" title="Empresa Korex">{'\uD83C\uDFE2'}</span>}
                         <div className={`text-[12.5px] font-bold leading-tight truncate ${cIsKorex ? 'text-[#1A1D26]' : 'text-[#1A1D26]'}`}>{cl.name}</div>
                         {cIsKorex && <span className="text-[9px] font-bold tracking-wide uppercase px-1.5 py-[2px] rounded bg-[#2B3242] text-white shrink-0">INTERNO</span>}
@@ -518,6 +519,8 @@ export default function TimelineView({ onGoToTaskList }) {
                                 </button>
                               )}
                             </div>
+                            {/* Spacer para alinear con la columna de avatares de las tareas (los miembros de la fase se siguen viendo dentro de la barra) */}
+                            <div className="shrink-0" style={{ width: avatarColWidth }} />
                             <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 32 }}>
                               {weekColumns.map((w, i) => (
                                 <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-[#FEF4F3]' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #EEF0F3' }} />
@@ -740,6 +743,16 @@ export default function TimelineView({ onGoToTaskList }) {
                                     </span>
                                   )}
                                 </div>
+                                {/* Columna fija de avatares: queda alineada verticalmente entre todas las tareas */}
+                                <div className="shrink-0 flex items-center justify-end pr-2" style={{ width: 60 }}>
+                                  {taskMembers.length > 0 && (
+                                    <span className="flex -space-x-1.5">
+                                      {taskMembers.slice(0, 3).map(m => (
+                                        <TeamAvatar key={m.id} member={m} size={18} className="ring-2 ring-white" />
+                                      ))}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="relative flex items-center shrink-0" style={{ width: weekColumns.length * weekWidth, height: 26 }}>
                                   {weekColumns.map((w, i) => (
                                     <div key={i} className={`absolute top-0 bottom-0 ${w.hasToday ? 'bg-[#FEF4F3]/60' : ''}`} style={{ left: i * weekWidth, width: weekWidth, borderLeft: '1px solid #F1F3F6' }} />
@@ -777,11 +790,6 @@ export default function TimelineView({ onGoToTaskList }) {
                                           onPointerDown={(e) => startTaskDrag(e, task, 'right')}
                                           title="Cambiar fecha de entrega"
                                         />
-                                        <span className="flex -space-x-1.5 shrink-0 relative z-[1]">
-                                          {taskMembers.slice(0, 3).map(m => (
-                                            <TeamAvatar key={m.id} member={m} size={14} className="ring-2 ring-white" />
-                                          ))}
-                                        </span>
                                         {isDragging && (
                                           <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#5B7CF5] text-white whitespace-nowrap z-[3] shadow-sm">
                                             {dragPreview.mode === 'move' && `${addDaysISO(task.startedDate, dragPreview.deltaDays).slice(5)} \u2192 ${addDaysISO(task.dueDate, dragPreview.deltaDays).slice(5)}`}
@@ -820,13 +828,8 @@ export default function TimelineView({ onGoToTaskList }) {
                                   )}
                                   {/* Sin due date pero con start: icono de reloj en la posici\u00f3n de inicio */}
                                   {hasStart && !hasDue && !isBlocked && (
-                                    <div className="absolute z-[1] flex items-center gap-1" style={{ left: dateToPx(task.startedDate) + 2, top: 5 }}>
+                                    <div className="absolute z-[1] flex items-center" style={{ left: dateToPx(task.startedDate) + 2, top: 5 }}>
                                       <span className="text-[10px] text-gray-400">{'\u23F1'}</span>
-                                      <span className="flex -space-x-1">
-                                        {taskMembers.slice(0, 3).map(m => (
-                                          <TeamAvatar key={m.id} member={m} size={12} className="ring-1 ring-white opacity-70" />
-                                        ))}
-                                      </span>
                                     </div>
                                   )}
                                 </div>
