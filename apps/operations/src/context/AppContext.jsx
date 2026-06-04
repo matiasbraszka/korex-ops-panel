@@ -388,12 +388,14 @@ export function AppProvider({ children }) {
   }, [save, dbSaveTask, recalculateTimers]);
 
   const updateTask = useCallback((id, updates) => {
+    // Limpio flags privados (_skip*) antes de mergear para no inflar el objeto en memoria
+    const { _skipTimerRecalc, _skipRecomputeStarted, ...cleanUpdates } = updates;
     setTasks(prev => {
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
-        const merged = { ...t, ...updates };
+        const merged = { ...t, ...cleanUpdates };
         // completedDate automático al pasar a done. startedDate lo gestiona recomputeStartedDates.
-        if (updates.status && updates.status !== t.status && updates.status === 'done') {
+        if (cleanUpdates.status && cleanUpdates.status !== t.status && cleanUpdates.status === 'done') {
           merged.completedDate = today();
         }
         return merged;
@@ -401,7 +403,7 @@ export function AppProvider({ children }) {
 
       // Recalculate timers unless flagged to skip
       let finalTasks = mappedTasks;
-      if (!updates._skipTimerRecalc) {
+      if (!_skipTimerRecalc) {
         const task = mappedTasks.find(t => t.id === id);
         if (task) {
           const result = recalculateTimers(task.clientId, mappedTasks);
@@ -409,14 +411,17 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Recomputar startedDate según reglas del sistema (enabled/blocked/deps)
-      const beforeRecompute = finalTasks;
-      finalTasks = recomputeStartedDates(finalTasks);
-      // Persistir cualquier tarea que haya cambiado por el recompute
-      if (dbReady.current) {
-        finalTasks.forEach((t, i) => {
-          if (t !== beforeRecompute[i]) dbSaveTask(t);
-        });
+      // Recomputar startedDate según reglas del sistema (enabled/blocked/deps).
+      // _skipRecomputeStarted lo usa el drag manual del timeline para que el
+      // sistema no pise las fechas que el usuario movio a mano.
+      if (!_skipRecomputeStarted) {
+        const beforeRecompute = finalTasks;
+        finalTasks = recomputeStartedDates(finalTasks);
+        if (dbReady.current) {
+          finalTasks.forEach((t, i) => {
+            if (t !== beforeRecompute[i]) dbSaveTask(t);
+          });
+        }
       }
 
       save(clientsRef.current, finalTasks);

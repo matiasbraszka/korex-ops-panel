@@ -252,15 +252,16 @@ export default function TimelineView({ onGoToTaskList }) {
         updateTask(drag.taskId, {
           startedDate: addDaysISO(drag.originalStart, d),
           dueDate: addDaysISO(drag.originalEnd, d),
+          _skipRecomputeStarted: true,
         });
       } else if (drag.mode === 'left') {
         const newStart = addDaysISO(drag.originalStart, d);
         if (newStart > drag.originalEnd) return;
-        updateTask(drag.taskId, { startedDate: newStart });
+        updateTask(drag.taskId, { startedDate: newStart, _skipRecomputeStarted: true });
       } else if (drag.mode === 'right') {
         const newEnd = addDaysISO(drag.originalEnd, d);
         if (newEnd < drag.originalStart) return;
-        updateTask(drag.taskId, { dueDate: newEnd });
+        updateTask(drag.taskId, { dueDate: newEnd, _skipRecomputeStarted: true });
       } else if (drag.mode === 'phase-deadline' && drag.extra) {
         const c = clients.find(x => x.id === drag.extra.clientId);
         if (!c) return;
@@ -333,7 +334,7 @@ export default function TimelineView({ onGoToTaskList }) {
   };
 
   const handleAssignTaskDate = (taskId, dateVal) => {
-    updateTask(taskId, { dueDate: dateVal || null });
+    updateTask(taskId, { dueDate: dateVal || null, _skipRecomputeStarted: true });
     setAssigningTaskDate(null);
   };
 
