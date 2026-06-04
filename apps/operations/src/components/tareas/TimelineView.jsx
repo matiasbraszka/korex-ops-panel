@@ -227,6 +227,17 @@ export default function TimelineView({ onGoToTaskList }) {
     setDragPreview({ taskId: task.id, deltaDays: 0, mode });
   };
 
+  // Refs siempre actualizadas a las callbacks vigentes — evitan que los
+  // handlers de drag (que se montan UNA vez) queden con closures stale.
+  const updateTaskRef = useRef(updateTask);
+  const updateClientRef = useRef(updateClient);
+  const clientsRef2 = useRef(clients);
+  const dayPxRef = useRef(dayPx);
+  useEffect(() => { updateTaskRef.current = updateTask; }, [updateTask]);
+  useEffect(() => { updateClientRef.current = updateClient; }, [updateClient]);
+  useEffect(() => { clientsRef2.current = clients; }, [clients]);
+  useEffect(() => { dayPxRef.current = dayPx; }, [dayPx]);
+
   // Listeners de drag adjuntados UNA sola vez. Toda la state del drag vive
   // en dragRef para que estos handlers no necesiten ser recreados en cada
   // pointermove (asi evitamos remove/add de listeners por evento y eventuales
@@ -236,7 +247,7 @@ export default function TimelineView({ onGoToTaskList }) {
       const drag = dragRef.current;
       if (!drag) return;
       const deltaPx = e.clientX - drag.startX;
-      const deltaDays = Math.round(deltaPx / dayPx);
+      const deltaDays = Math.round(deltaPx / dayPxRef.current);
       if (drag.lastDeltaDays === deltaDays) return;
       drag.lastDeltaDays = deltaDays;
       setDragPreview(prev => prev ? { ...prev, deltaDays } : prev);
@@ -244,31 +255,41 @@ export default function TimelineView({ onGoToTaskList }) {
     const handleUp = () => {
       const drag = dragRef.current;
       dragRef.current = null;
-      setDragPreview(null);
-      if (!drag) return;
-      const d = drag.lastDeltaDays || 0;
-      if (d === 0) return;
-      if (drag.mode === 'move') {
-        updateTask(drag.taskId, {
-          startedDate: addDaysISO(drag.originalStart, d),
-          dueDate: addDaysISO(drag.originalEnd, d),
-          _skipRecomputeStarted: true,
-        });
-      } else if (drag.mode === 'left') {
-        const newStart = addDaysISO(drag.originalStart, d);
-        if (newStart > drag.originalEnd) return;
-        updateTask(drag.taskId, { startedDate: newStart, _skipRecomputeStarted: true });
-      } else if (drag.mode === 'right') {
-        const newEnd = addDaysISO(drag.originalEnd, d);
-        if (newEnd < drag.originalStart) return;
-        updateTask(drag.taskId, { dueDate: newEnd, _skipRecomputeStarted: true });
-      } else if (drag.mode === 'phase-deadline' && drag.extra) {
-        const c = clients.find(x => x.id === drag.extra.clientId);
-        if (!c) return;
-        const newDeadlines = { ...(c.phaseDeadlines || {}) };
-        newDeadlines[drag.extra.phaseKey] = addDaysISO(drag.originalEnd, d);
-        updateClient(drag.extra.clientId, { phaseDeadlines: newDeadlines });
+      if (!drag) {
+        setDragPreview(null);
+        return;
       }
+      const d = drag.lastDeltaDays || 0;
+      // Commit primero, despues limpio el preview — asi React batchea ambos
+      // updates y el bar nunca aparece en la posicion vieja en el medio.
+      if (d !== 0) {
+        if (drag.mode === 'move') {
+          updateTaskRef.current(drag.taskId, {
+            startedDate: addDaysISO(drag.originalStart, d),
+            dueDate: addDaysISO(drag.originalEnd, d),
+            _skipRecomputeStarted: true,
+            _skipTimerRecalc: true,
+          });
+        } else if (drag.mode === 'left') {
+          const newStart = addDaysISO(drag.originalStart, d);
+          if (newStart <= drag.originalEnd) {
+            updateTaskRef.current(drag.taskId, { startedDate: newStart, _skipRecomputeStarted: true, _skipTimerRecalc: true });
+          }
+        } else if (drag.mode === 'right') {
+          const newEnd = addDaysISO(drag.originalEnd, d);
+          if (newEnd >= drag.originalStart) {
+            updateTaskRef.current(drag.taskId, { dueDate: newEnd, _skipRecomputeStarted: true, _skipTimerRecalc: true });
+          }
+        } else if (drag.mode === 'phase-deadline' && drag.extra) {
+          const c = (clientsRef2.current || []).find(x => x.id === drag.extra.clientId);
+          if (c) {
+            const newDeadlines = { ...(c.phaseDeadlines || {}) };
+            newDeadlines[drag.extra.phaseKey] = addDaysISO(drag.originalEnd, d);
+            updateClientRef.current(drag.extra.clientId, { phaseDeadlines: newDeadlines });
+          }
+        }
+      }
+      setDragPreview(null);
     };
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
@@ -276,7 +297,6 @@ export default function TimelineView({ onGoToTaskList }) {
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Inicia drag del diamante de deadline de fase. Cuando se suelta, persiste
