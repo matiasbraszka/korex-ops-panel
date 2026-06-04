@@ -3,12 +3,14 @@ import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTria
 // Mapeo tipo de notificación -> ícono + color. Centralizado para que el panel
 // y el toast se vean consistentes. Los colores siguen la paleta del panel.
 const META = {
-  task_assigned:    { Icon: ClipboardList,   color: '#5B7CF5' },
-  task_comment:     { Icon: MessageSquare,   color: '#06B6D4' },
-  comment_reply:    { Icon: CornerDownRight, color: '#8B5CF6' },
-  task_description: { Icon: FileText,        color: '#22C55E' },
-  task_blocked:     { Icon: Ban,             color: '#EF4444' },
-  task_overdue:     { Icon: AlertTriangle,   color: '#F59E0B' },
+  task_assigned:         { Icon: ClipboardList,   color: '#5B7CF5' },
+  task_comment:          { Icon: MessageSquare,   color: '#06B6D4' },
+  comment_reply:         { Icon: CornerDownRight, color: '#8B5CF6' },
+  bullet_comment:        { Icon: MessageSquare,   color: '#0891B2' },
+  bullet_comment_reply:  { Icon: CornerDownRight, color: '#7C3AED' },
+  task_description:      { Icon: FileText,        color: '#22C55E' },
+  task_blocked:          { Icon: Ban,             color: '#EF4444' },
+  task_overdue:          { Icon: AlertTriangle,   color: '#F59E0B' },
 };
 
 export function notifMeta(type) {
