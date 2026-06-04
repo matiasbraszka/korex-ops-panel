@@ -586,8 +586,9 @@ export default function TimelineView({ onGoToTaskList }) {
                                     {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u00B7'}
                                   </span>
                                   <span
-                                    className={`text-[11.5px] leading-snug cursor-pointer truncate flex-1 min-w-0 hover:underline ${task.status === 'done' ? 'line-through text-[#B6BCC4]' : isBlocked ? 'text-[#DC4B43] font-semibold' : 'text-[#3F4653]'}`}
+                                    className={`text-[11.5px] leading-snug cursor-pointer flex-1 min-w-0 hover:underline break-words ${task.status === 'done' ? 'line-through text-[#B6BCC4]' : isBlocked ? 'text-[#DC4B43] font-semibold' : 'text-[#3F4653]'}`}
                                     onClick={(e) => { e.stopPropagation(); onGoToTaskList && onGoToTaskList(cl.id, task.id); }}
+                                    title={task.title}
                                   >
                                     {task.title}
                                   </span>
