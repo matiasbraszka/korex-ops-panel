@@ -30,6 +30,13 @@ export default function TimelineView({ onGoToTaskList }) {
   const [assigningDeadline, setAssigningDeadline] = useState(null);
   const [expandedPhases, setExpandedPhases] = useState({});
   const [assigningTaskDate, setAssigningTaskDate] = useState(null);
+  const [statusMenuTaskId, setStatusMenuTaskId] = useState(null);
+  useEffect(() => {
+    if (!statusMenuTaskId) return;
+    const close = () => setStatusMenuTaskId(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [statusMenuTaskId]);
   const [showAddPhase, setShowAddPhase] = useState(false);
   const [editingPhaseDeadline, setEditingPhaseDeadline] = useState(null);
 
@@ -575,16 +582,54 @@ export default function TimelineView({ onGoToTaskList }) {
                             return (
                               <div key={task.id} className={`group flex items-center py-1.5 border-b border-[#F1F3F6] last:border-b-0 hover:bg-[#F7F9FC] ${isBlocked ? 'bg-[#FEF2F2]/30' : ''}`} title={depBlocked ? 'Bloqueada por dependencias' : 'Click en el texto para abrir en Lista'}>
                                 <div className="shrink-0 pr-3 flex items-center gap-1.5 pl-9" style={{ width: labelWidth }}>
-                                  <span
-                                    className="text-[10px] shrink-0 w-[14px] h-[14px] rounded-full flex items-center justify-center"
-                                    style={{
-                                      color: taskColor,
-                                      background: taskColor + '15',
-                                      border: `1.4px solid ${taskColor}`,
-                                    }}
-                                  >
-                                    {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u00B7'}
-                                  </span>
+                                  <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setStatusMenuTaskId(statusMenuTaskId === task.id ? null : task.id)}
+                                      className="text-[10px] shrink-0 w-[14px] h-[14px] rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-transform border-0 p-0"
+                                      style={{
+                                        color: taskColor,
+                                        background: taskColor + '15',
+                                        border: `1.4px solid ${taskColor}`,
+                                      }}
+                                      title="Cambiar estado"
+                                    >
+                                      {task.status === 'done' ? '\u2713' : isBlocked ? '\uD83D\uDD12' : '\u00B7'}
+                                    </button>
+                                    {statusMenuTaskId === task.id && (
+                                      <div className="absolute left-0 top-full mt-1 z-30 bg-white border border-[#E2E5EB] rounded-lg shadow-md py-1 min-w-[140px]">
+                                        {[
+                                          { k: 'pending',     label: 'Pendiente',   color: '#9CA3AF', dot: '\u00B7' },
+                                          { k: 'in_progress', label: 'En progreso', color: '#5B7CF5', dot: '\u00B7' },
+                                          { k: 'blocked',     label: 'Bloqueada',   color: '#EF4444', dot: '\uD83D\uDD12' },
+                                          { k: 'done',        label: 'Completa',    color: '#22C55E', dot: '\u2713' },
+                                        ].map(opt => {
+                                          const active = task.status === opt.k;
+                                          return (
+                                            <button
+                                              key={opt.k}
+                                              type="button"
+                                              onClick={() => {
+                                                const patch = { status: opt.k };
+                                                if (opt.k === 'done' && !task.completedDate) patch.completedDate = today();
+                                                if (opt.k !== 'done') patch.completedDate = null;
+                                                if (opt.k === 'blocked' && !task.blockedSince) patch.blockedSince = today();
+                                                if (opt.k !== 'blocked') patch.blockedSince = null;
+                                                updateTask(task.id, patch);
+                                                setStatusMenuTaskId(null);
+                                              }}
+                                              className={`w-full text-left text-[11.5px] py-1 px-2.5 flex items-center gap-2 hover:bg-[#F7F9FC] bg-transparent border-none cursor-pointer ${active ? 'font-bold' : 'font-medium'}`}
+                                              style={{ color: opt.color }}
+                                            >
+                                              <span className="w-[14px] h-[14px] rounded-full inline-flex items-center justify-center text-[9px]" style={{ background: opt.color + '15', border: `1.4px solid ${opt.color}`, color: opt.color }}>{opt.dot}</span>
+                                              <span style={{ color: '#1A1D26' }}>{opt.label}</span>
+                                              {active && <span className="ml-auto text-[10px]" style={{ color: opt.color }}>\u2713</span>}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
                                   <span
                                     className={`text-[11.5px] leading-snug cursor-pointer flex-1 min-w-0 hover:underline break-words ${task.status === 'done' ? 'line-through text-[#B6BCC4]' : isBlocked ? 'text-[#DC4B43] font-semibold' : 'text-[#3F4653]'}`}
                                     onClick={(e) => { e.stopPropagation(); onGoToTaskList && onGoToTaskList(cl.id, task.id); }}
