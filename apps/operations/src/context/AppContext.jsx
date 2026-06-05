@@ -4,6 +4,21 @@ import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds } from '../utils/helpers';
+import { extractMentions } from '../utils/mentions';
+
+// Recorre progress_by_client y rellena mentioned_ids en cada bullet.
+function enrichBulletsWithMentions(progressByClient, teamMembers, excludeId) {
+  if (!Array.isArray(progressByClient)) return progressByClient;
+  return progressByClient.map(block => ({
+    ...block,
+    bullets: Array.isArray(block?.bullets)
+      ? block.bullets.map(b => ({
+          ...b,
+          mentioned_ids: extractMentions(b?.text || '', teamMembers, { excludeId }),
+        }))
+      : block?.bullets,
+  }));
+}
 
 const AppContext = createContext(null);
 
@@ -102,6 +117,14 @@ export function AppProvider({ children }) {
   // excluir auto-notificaciones (no notificarte por tu propia edición).
   const currentUserIdRef = useRef(null);
   currentUserIdRef.current = currentUser?.id || null;
+  const teamMembersRef = useRef([]);
+  teamMembersRef.current = teamMembers;
+  const taskCommentsRef = useRef([]);
+  taskCommentsRef.current = taskComments;
+  const bulletCommentsRef = useRef([]);
+  bulletCommentsRef.current = bulletComments;
+  const teamReportsRef = useRef([]);
+  teamReportsRef.current = teamReports;
 
   // ── Notificaciones (buzón) ──
   const [notifications, setNotifications] = useState([]);
@@ -634,7 +657,11 @@ export function AppProvider({ children }) {
       worked_internal: !!data.worked_internal,
       progress_today: data.progress_today || '',
       next_day: data.next_day || '',
-      progress_by_client: ensureBulletIds(data.progress_by_client || []),
+      progress_by_client: enrichBulletsWithMentions(
+        ensureBulletIds(data.progress_by_client || []),
+        teamMembersRef.current || [],
+        data.user_id,
+      ),
       weekly_data: data.weekly_data || {},
     };
     await sbFetch('team_reports', {
@@ -670,7 +697,14 @@ export function AppProvider({ children }) {
 
   const updateTeamReport = useCallback(async (id, fields) => {
     const patch = { ...fields };
-    if (patch.progress_by_client) patch.progress_by_client = ensureBulletIds(patch.progress_by_client);
+    if (patch.progress_by_client) {
+      const author = (teamReportsRef.current || []).find(r => r.id === id)?.user_id;
+      patch.progress_by_client = enrichBulletsWithMentions(
+        ensureBulletIds(patch.progress_by_client),
+        teamMembersRef.current || [],
+        author,
+      );
+    }
     await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
@@ -887,13 +921,16 @@ export function AppProvider({ children }) {
   // padre y borra todo al borrar la tarea.
   const addTaskComment = useCallback(async (data) => {
     const id = 'tc_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const body = String(data.body || '').trim();
+    const mentioned_ids = extractMentions(body, teamMembersRef.current || [], { excludeId: data.author_id });
     const row = {
       id,
       task_id: data.task_id,
       parent_id: data.parent_id || null,
       author_id: data.author_id,
-      body: String(data.body || '').trim(),
+      body,
       edited: false,
+      mentioned_ids,
     };
     await sbFetch('task_comments', {
       method: 'POST',
@@ -908,7 +945,11 @@ export function AppProvider({ children }) {
 
   const updateTaskComment = useCallback(async (id, fields) => {
     const patch = { ...fields };
-    if (patch.body !== undefined) patch.body = String(patch.body).trim();
+    if (patch.body !== undefined) {
+      patch.body = String(patch.body).trim();
+      const author = (taskCommentsRef.current || []).find(c => c.id === id)?.author_id;
+      patch.mentioned_ids = extractMentions(patch.body, teamMembersRef.current || [], { excludeId: author });
+    }
     patch.edited = true;
     await sbFetch('task_comments?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
@@ -997,14 +1038,17 @@ export function AppProvider({ children }) {
   // bullet_id es un soft-link (no FK) contra el id que vive en progress_by_client.
   const addBulletComment = useCallback(async (data) => {
     const id = 'bc_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const body = String(data.body || '').trim();
+    const mentioned_ids = extractMentions(body, teamMembersRef.current || [], { excludeId: data.author_id });
     const row = {
       id,
       report_id: data.report_id,
       bullet_id: data.bullet_id,
       parent_id: data.parent_id || null,
       author_id: data.author_id,
-      body: String(data.body || '').trim(),
+      body,
       edited: false,
+      mentioned_ids,
     };
     await sbFetch('report_bullet_comments', {
       method: 'POST',
@@ -1019,7 +1063,11 @@ export function AppProvider({ children }) {
 
   const updateBulletComment = useCallback(async (id, fields) => {
     const patch = { ...fields };
-    if (patch.body !== undefined) patch.body = String(patch.body).trim();
+    if (patch.body !== undefined) {
+      patch.body = String(patch.body).trim();
+      const author = (bulletCommentsRef.current || []).find(c => c.id === id)?.author_id;
+      patch.mentioned_ids = extractMentions(patch.body, teamMembersRef.current || [], { excludeId: author });
+    }
     patch.edited = true;
     await sbFetch('report_bullet_comments?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',

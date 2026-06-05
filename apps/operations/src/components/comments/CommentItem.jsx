@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import TeamAvatar from '../TeamAvatar';
 import CommentInput from './CommentInput';
+import MentionText from './MentionText';
 
 // Helpers de fecha — replican los de EquipoPage para no acoplar.
 function fmtRelative(dateStr) {
@@ -128,7 +129,7 @@ export default function CommentItem({
           </div>
         ) : (
           <div className="text-[12.5px] text-gray-700 whitespace-pre-wrap break-words mt-0.5 leading-relaxed">
-            {comment.body}
+            <MentionText text={comment.body} />
           </div>
         )}
 

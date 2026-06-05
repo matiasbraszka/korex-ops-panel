@@ -1,4 +1,4 @@
-import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTriangle, Bell, CreditCard } from 'lucide-react';
+import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTriangle, Bell, CreditCard, AtSign } from 'lucide-react';
 
 // Mapeo tipo de notificación -> ícono + color. Centralizado para que el panel
 // y el toast se vean consistentes. Los colores siguen la paleta del panel.
@@ -12,6 +12,7 @@ const META = {
   task_blocked:          { Icon: Ban,             color: '#EF4444' },
   task_overdue:          { Icon: AlertTriangle,   color: '#F59E0B' },
   meta_account_error:    { Icon: CreditCard,      color: '#DC2626' },
+  mention:               { Icon: AtSign,          color: '#9333EA' },
 };
 
 export function notifMeta(type) {

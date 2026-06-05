@@ -9,6 +9,7 @@ import CrearNotaModal from '../components/notas/CrearNotaModal';
 import { sanitizeNoteHtml, htmlToPlainText } from '../components/notas/sanitize';
 import { getNoteColor } from '../components/notas/colors';
 import { getBullets } from '../utils/helpers';
+import MentionText from '../components/comments/MentionText';
 
 // ── helpers de fecha ──────────────────────────────────────────────────────
 function fmtReportDate(dateStr) {
@@ -321,7 +322,7 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                   return (
                                     <li key={key} className="flex gap-1.5 items-start">
                                       <span className={`${markerClass} shrink-0`}>{marker}</span>
-                                      <span className="flex-1 min-w-0">{b.text}</span>
+                                      <span className="flex-1 min-w-0"><MentionText text={b.text} /></span>
                                       <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); openBulletComments(r.id, b.id); }}

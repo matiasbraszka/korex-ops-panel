@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import { X, GripVertical, Plus, CheckCircle2, Circle } from 'lucide-react';
+import MentionTextarea from '../comments/MentionTextarea';
+import { useApp } from '../../context/AppContext';
 
 // BulletRows — lista editable de bullets para los informes.
 // Cada bullet: { text, category: 'entregable' | 'avance' | null }.
@@ -12,6 +14,7 @@ import { X, GripVertical, Plus, CheckCircle2, Circle } from 'lucide-react';
 // - Texto vacio se filtra al guardar (no es bug).
 
 export default function BulletRows({ bullets, onChange, disabled = false }) {
+  const { teamMembers, currentUser } = useApp();
   const dragIdx = useRef(null);
   const overIdx = useRef(null);
 
@@ -107,16 +110,20 @@ export default function BulletRows({ bullets, onChange, disabled = false }) {
               </button>
             </div>
 
-            <input
-              type="text"
-              value={b.text}
-              onChange={(e) => update(i, { text: e.target.value })}
-              disabled={disabled}
-              placeholder="Ej: Terminé el contrato para networkers"
-              className={`flex-1 border rounded-md py-1.5 px-2 text-[12.5px] outline-none focus:border-blue-400 transition-colors ${
-                needsCategory ? 'border-amber-300 bg-amber-50/30' : 'border-gray-200'
-              }`}
-            />
+            <div className="flex-1">
+              <MentionTextarea
+                singleLine
+                value={b.text}
+                onChange={(v) => update(i, { text: v })}
+                disabled={disabled}
+                teamMembers={teamMembers || []}
+                excludeId={currentUser?.id}
+                placeholder="Ej: Terminé el contrato. Etiquetá con @ si necesitás algo de alguien."
+                className={`w-full border rounded-md py-1.5 px-2 text-[12.5px] outline-none focus:border-blue-400 transition-colors ${
+                  needsCategory ? 'border-amber-300 bg-amber-50/30' : 'border-gray-200'
+                }`}
+              />
+            </div>
 
             <button
               type="button"

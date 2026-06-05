@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
+import MentionTextarea from './MentionTextarea';
+import { useApp } from '../../context/AppContext';
 
-// CommentInput — textarea + boton enviar. Modo controlado por el padre.
+// CommentInput — textarea con @mention autocomplete + boton enviar.
 // Ctrl/Cmd + Enter envia. Auto-resize hasta 6 lineas y despues scroll.
 
 export default function CommentInput({
@@ -10,51 +12,29 @@ export default function CommentInput({
   onCancel,
   saving = false,
   autoFocus = false,
-  placeholder = 'Escribí un comentario… (Ctrl+Enter para enviar)',
+  placeholder = 'Escribí un comentario… Usá @ para etiquetar (Ctrl+Enter para enviar)',
   submitLabel = 'Comentar',
   showCancel = false,
 }) {
+  const { teamMembers, currentUser } = useApp();
   const ref = useRef(null);
-
-  useEffect(() => {
-    if (autoFocus && ref.current) {
-      ref.current.focus();
-      // Cursor al final
-      const len = ref.current.value.length;
-      try { ref.current.setSelectionRange(len, len); } catch {}
-    }
-  }, [autoFocus]);
-
-  // Autosize: ajusta el alto segun contenido (hasta ~6 lineas).
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.style.height = 'auto';
-    const max = 140;
-    ref.current.style.height = Math.min(max, ref.current.scrollHeight) + 'px';
-  }, [value]);
 
   const canSubmit = !saving && String(value || '').trim().length > 0;
 
-  const handleKeyDown = (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      if (canSubmit) onSubmit();
-    } else if (e.key === 'Escape' && showCancel && onCancel) {
-      e.preventDefault();
-      onCancel();
-    }
-  };
-
   return (
     <div className="flex flex-col gap-1.5">
-      <textarea
+      <MentionTextarea
         ref={ref}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onChange={onChange}
+        onSubmit={() => canSubmit && onSubmit()}
+        onCancel={showCancel ? onCancel : undefined}
+        teamMembers={teamMembers || []}
+        excludeId={currentUser?.id}
         placeholder={placeholder}
-        rows={2}
+        autoFocus={autoFocus}
         disabled={saving}
+        rows={2}
         className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[12.5px] font-sans outline-none focus:border-blue-400 resize-none bg-white disabled:bg-gray-50"
         style={{ minHeight: 44 }}
       />

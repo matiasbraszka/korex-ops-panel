@@ -32,6 +32,7 @@ export default function NotificationsPanel() {
   const FILTERS = [
     { key: 'all',     label: 'Todas',     match: () => true },
     { key: 'unread',  label: 'Sin leer',  match: (n) => !n.read_at },
+    { key: 'mention',       label: 'Menciones',     match: (n) => n.type === 'mention' },
     { key: 'task_comment',  label: 'Comentarios',   match: (n) => n.type === 'task_comment' || n.type === 'bullet_comment' },
     { key: 'comment_reply', label: 'Respuestas',    match: (n) => n.type === 'comment_reply' || n.type === 'bullet_comment_reply' },
     { key: 'tasks',   label: 'Tareas',    match: (n) => n.type === 'task_assigned' || n.type === 'task_description' },
