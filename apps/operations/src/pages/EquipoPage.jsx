@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, Users, GripVertical, MessageSquare } from 'lucide-react';
+import { Sparkles, Plus, AlertCircle, Calendar, Trash2, ChevronDown, ChevronUp, Lightbulb, Search, FileText, Pencil, StickyNote, Pin, PinOff, Users, GripVertical, MessageSquare, Maximize2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import TeamAvatar from '../components/TeamAvatar';
 import CrearInformeModal from '../components/informes/CrearInformeModal';
@@ -636,7 +636,7 @@ function IdeasView({ openCreateIdea, openEditIdea }) {
 }
 
 // ── sub-vista: Notas ──────────────────────────────────────────────────────
-function NotasView({ openCreateNota, openEditNota }) {
+function NotasView({ openCreateNota, openEditNota, openExpandNota }) {
   const { notas, teamMembers, currentUser, updateNota, deleteNota, reorderNota } = useApp();
   const [search, setSearch] = useState('');
   const [tagFilter, setTagFilter] = useState('all');
@@ -909,6 +909,11 @@ function NotasView({ openCreateNota, openEditNota }) {
                       title={n.pinned ? 'Desfijar' : 'Fijar arriba'}
                     >{n.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>
                   )}
+                  <button
+                    onClick={() => openExpandNota(n)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 bg-transparent border-none cursor-pointer rounded-md transition-colors"
+                    title="Abrir en pantalla completa"
+                  ><Maximize2 size={13} /></button>
                   {canEditOrDelete(n) && (
                     <button
                       onClick={() => openEditNota(n)}
@@ -975,6 +980,7 @@ export default function EquipoPage() {
   const [editingIdea, setEditingIdea] = useState(null);
   const [creatingNota, setCreatingNota] = useState(false);
   const [editingNota, setEditingNota] = useState(null);
+  const [notaFullScreen, setNotaFullScreen] = useState(false);
 
   const openCreateInforme = (type = 'daily') => {
     setEditingInforme(null);
@@ -1010,17 +1016,26 @@ export default function EquipoPage() {
 
   const openCreateNota = () => {
     setEditingNota(null);
+    setNotaFullScreen(false);
     setCreatingNota(true);
   };
 
   const openEditNota = (nota) => {
     setEditingNota(nota);
+    setNotaFullScreen(false);
+    setCreatingNota(true);
+  };
+
+  const openExpandNota = (nota) => {
+    setEditingNota(nota);
+    setNotaFullScreen(true);
     setCreatingNota(true);
   };
 
   const closeNota = () => {
     setCreatingNota(false);
     setEditingNota(null);
+    setNotaFullScreen(false);
   };
 
   return (
@@ -1060,7 +1075,7 @@ export default function EquipoPage() {
       {tab === 'informes' && <InformesView openCreateInforme={openCreateInforme} openEditInforme={openEditInforme} />}
       {tab === 'bloqueos' && <BloqueosList />}
       {tab === 'ideas' && <IdeasView openCreateIdea={openCreateIdea} openEditIdea={openEditIdea} />}
-      {tab === 'notas' && <NotasView openCreateNota={openCreateNota} openEditNota={openEditNota} />}
+      {tab === 'notas' && <NotasView openCreateNota={openCreateNota} openEditNota={openEditNota} openExpandNota={openExpandNota} />}
 
       {/* Modales globales */}
       <CrearInformeModal
@@ -1078,6 +1093,7 @@ export default function EquipoPage() {
         open={creatingNota}
         onClose={closeNota}
         note={editingNota}
+        startFullScreen={notaFullScreen}
       />
     </div>
   );
