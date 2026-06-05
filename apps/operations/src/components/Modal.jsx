@@ -42,7 +42,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
             </button>
           </div>
         </div>
-        <div className={fullScreen ? 'py-5 px-[22px] flex-1 overflow-y-auto' : 'py-5 px-[22px]'}>{children}</div>
+        <div className={fullScreen ? 'flex-1 overflow-hidden p-0' : 'py-5 px-[22px]'}>{children}</div>
         {footer && (
           <div className="py-3.5 px-[22px] border-t border-border flex justify-end gap-2 shrink-0">
             {footer}

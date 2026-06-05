@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Check, Maximize2, Minimize2 } from 'lucide-react';
+import { Check, Maximize2, Minimize2, Settings2 } from 'lucide-react';
 import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
 import RichTextEditor from './RichTextEditor';
@@ -24,6 +24,7 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fullScreen, setFullScreen] = useState(startFullScreen);
+  const [showSettings, setShowSettings] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
     setColor(co);
     setError('');
     setFullScreen(startFullScreen);
+    setShowSettings(false);
     setInitialSnapshot(JSON.stringify({ t, b, tg, sh, co }));
   }, [open, note, startFullScreen]);
 
@@ -111,14 +113,26 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
       dismissOnEscape={false}
       fullScreen={fullScreen}
       headerExtra={
-        <button
-          type="button"
-          onClick={() => setFullScreen(v => !v)}
-          title={fullScreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-          className="bg-transparent border-none text-text3 cursor-pointer w-7 h-7 rounded-md flex items-center justify-center hover:bg-surface2 hover:text-text"
-        >
-          {fullScreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-        </button>
+        <>
+          {fullScreen && (
+            <button
+              type="button"
+              onClick={() => setShowSettings(v => !v)}
+              title={showSettings ? 'Ocultar ajustes' : 'Color, tags y compartir'}
+              className={`bg-transparent border-none cursor-pointer w-7 h-7 rounded-md flex items-center justify-center hover:bg-surface2 hover:text-text ${showSettings ? 'text-blue-600 bg-blue-50' : 'text-text3'}`}
+            >
+              <Settings2 size={15} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setFullScreen(v => !v)}
+            title={fullScreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            className="bg-transparent border-none text-text3 cursor-pointer w-7 h-7 rounded-md flex items-center justify-center hover:bg-surface2 hover:text-text"
+          >
+            {fullScreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        </>
       }
       footer={
         <>
@@ -137,8 +151,82 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
         </>
       }
     >
-      <div className={fullScreen ? 'flex gap-6 h-full max-md:flex-col' : 'space-y-3'}>
-        <div className={fullScreen ? 'flex-1 flex flex-col gap-3 min-w-0' : 'space-y-3'}>
+      {fullScreen ? (
+        <div className="relative flex h-full w-full">
+          {/* Canvas centrado tipo Google Docs */}
+          <div className="flex-1 min-w-0 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[820px] px-6 py-4 flex flex-col gap-3 max-md:px-3 max-md:py-2">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Título de la nota"
+                autoFocus
+                className="w-full border-none rounded-none py-2 px-0 text-[28px] font-bold font-sans outline-none placeholder:font-normal placeholder:text-gray-300 max-md:text-[20px]"
+              />
+              <RichTextEditor
+                value={bodyHtml}
+                onChange={setBodyHtml}
+                placeholder="Empezá a escribir…"
+                minHeight={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 240)}
+              />
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-[12px] rounded-md py-2 px-3 whitespace-pre-line">{error}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Drawer lateral de ajustes (toggleable). En mobile ocupa todo el ancho. */}
+          {showSettings && (
+            <div className="w-80 max-md:w-full max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-10 max-md:shadow-xl shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Color</label>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {NOTE_COLOR_KEYS.map(k => {
+                      const c = getNoteColor(k);
+                      const selected = color === k;
+                      return (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setColor(k)}
+                          title={c.label}
+                          className={`w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${selected ? 'scale-110 shadow-md' : 'hover:scale-105'}`}
+                          style={{ background: c.bg, borderColor: selected ? c.dot : c.border }}
+                        >
+                          {selected && <Check size={12} style={{ color: c.dot }} strokeWidth={3} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Tags (categorías libres)</label>
+                  <TagInput tags={tags} onChange={setTags} suggestions={knownTags} />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Compartir con</label>
+                  <SharePicker
+                    selectedIds={shareWithIds}
+                    onChange={setShareWithIds}
+                    teamMembers={teamMembers || []}
+                    excludeIds={authorId ? [authorId] : []}
+                    placeholder="Solo yo (privada)"
+                  />
+                </div>
+
+                <div className="text-[10.5px] text-gray-400 leading-relaxed">
+                  La nota la ven: vos, las personas con las que la compartas y los admins.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1">Título *</label>
             <input
@@ -147,26 +235,15 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ej: Estrategia Q3, ideas para onboarding, reunion semanal…"
               autoFocus
-              className={
-                fullScreen
-                  ? 'w-full border-none rounded-none py-2 px-0 text-[22px] font-bold font-sans outline-none placeholder:font-normal placeholder:text-gray-300'
-                  : 'w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400'
-              }
+              className="w-full border border-gray-200 rounded-lg py-2 px-3 text-[13px] font-sans outline-none focus:border-blue-400"
             />
           </div>
 
-          <div className={fullScreen ? 'flex-1 min-h-0 flex flex-col' : ''}>
-            {!fullScreen && <label className="block text-[11px] font-semibold text-gray-500 mb-1">Contenido</label>}
-            <RichTextEditor
-              value={bodyHtml}
-              onChange={setBodyHtml}
-              placeholder="Empezá a escribir. Usá la barra de arriba para títulos, negritas y listas."
-              minHeight={fullScreen ? Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 280) : 180}
-            />
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Contenido</label>
+            <RichTextEditor value={bodyHtml} onChange={setBodyHtml} placeholder="Empezá a escribir. Usá la barra de arriba para títulos, negritas y listas." />
           </div>
-        </div>
 
-        <div className={fullScreen ? 'w-72 shrink-0 space-y-4 border-l border-gray-200 pl-6 overflow-y-auto max-md:w-full max-md:border-l-0 max-md:border-t max-md:pl-0 max-md:pt-4' : 'space-y-3'}>
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1">Color</label>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -214,7 +291,7 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
             <div className="bg-red-50 border border-red-200 text-red-700 text-[12px] rounded-md py-2 px-3 whitespace-pre-line">{error}</div>
           )}
         </div>
-      </div>
+      )}
     </Modal>
   );
 }
