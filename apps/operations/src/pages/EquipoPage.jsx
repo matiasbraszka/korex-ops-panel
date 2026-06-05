@@ -439,7 +439,12 @@ function InformesView({ openCreateInforme, openEditInforme }) {
 
 // ── sub-vista: Ideas ──────────────────────────────────────────────────────
 function IdeasView({ openCreateIdea, openEditIdea }) {
-  const { ideas, teamMembers, currentUser, updateIdea, deleteIdea } = useApp();
+  const { ideas, teamMembers, currentUser, updateIdea, deleteIdea, ideaComments, openIdeaComments } = useApp();
+  const ideaCommentCounts = useMemo(() => {
+    const map = {};
+    (ideaComments || []).forEach(c => { map[c.idea_id] = (map[c.idea_id] || 0) + 1; });
+    return map;
+  }, [ideaComments]);
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -604,6 +609,18 @@ function IdeasView({ openCreateIdea, openEditIdea }) {
                   )}
                 </div>
 
+                <button
+                  onClick={e => { e.stopPropagation(); openIdeaComments(idea.id); }}
+                  className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer ${
+                    (ideaCommentCounts[idea.id] || 0) > 0
+                      ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600'
+                  }`}
+                  title="Comentar"
+                >
+                  <MessageSquare size={11} />
+                  {ideaCommentCounts[idea.id] || 0}
+                </button>
                 {canEditOrDelete(idea) && (
                   <button
                     onClick={e => { e.stopPropagation(); handleDelete(idea.id); }}

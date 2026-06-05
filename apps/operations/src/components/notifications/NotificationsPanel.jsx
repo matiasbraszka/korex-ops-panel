@@ -13,7 +13,7 @@ export default function NotificationsPanel() {
   const {
     notifications, notifPanelOpen, closeNotifications,
     markNotificationRead, markAllNotificationsRead, unreadNotifCount,
-    teamMembers, openTaskComments, openBulletComments,
+    teamMembers, openTaskComments, openBulletComments, openIdeaComments, openBlockerComments,
   } = useApp();
 
   const open = !!notifPanelOpen;
@@ -33,8 +33,8 @@ export default function NotificationsPanel() {
     { key: 'all',     label: 'Todas',     match: () => true },
     { key: 'unread',  label: 'Sin leer',  match: (n) => !n.read_at },
     { key: 'mention',       label: 'Menciones',     match: (n) => n.type === 'mention' },
-    { key: 'task_comment',  label: 'Comentarios',   match: (n) => n.type === 'task_comment' || n.type === 'bullet_comment' },
-    { key: 'comment_reply', label: 'Respuestas',    match: (n) => n.type === 'comment_reply' || n.type === 'bullet_comment_reply' },
+    { key: 'task_comment',  label: 'Comentarios',   match: (n) => ['task_comment','bullet_comment','idea_comment','blocker_comment'].includes(n.type) },
+    { key: 'comment_reply', label: 'Respuestas',    match: (n) => ['comment_reply','bullet_comment_reply','idea_comment_reply','blocker_comment_reply'].includes(n.type) },
     { key: 'tasks',   label: 'Tareas',    match: (n) => n.type === 'task_assigned' || n.type === 'task_description' },
     { key: 'urgent',  label: 'Urgentes',  match: (n) => n.type === 'task_blocked' || n.type === 'task_overdue' },
   ];
@@ -102,8 +102,13 @@ export default function NotificationsPanel() {
 
   const handleOpenTask = async (n) => {
     if (!n.read_at) await markNotificationRead(n.id);
-    // Bullets de informe abren el panel de bullet comments; tareas, el de task.
-    if (n.bullet_id && n.report_id) {
+    if (n.idea_id) {
+      openIdeaComments(n.idea_id);
+      closeNotifications();
+    } else if (n.blocker_id) {
+      openBlockerComments(n.blocker_id);
+      closeNotifications();
+    } else if (n.bullet_id && n.report_id) {
       openBulletComments(n.report_id, n.bullet_id);
       closeNotifications();
     } else if (n.task_id) {

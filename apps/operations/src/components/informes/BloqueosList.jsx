@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
-import { Check, RotateCcw, AlertCircle, Search } from 'lucide-react';
+import { Check, RotateCcw, AlertCircle, Search, MessageSquare } from 'lucide-react';
 
 function fmtRelative(dateStr) {
   if (!dateStr) return '';
@@ -22,7 +22,12 @@ function fmtAbsolute(dateStr) {
 }
 
 export default function BloqueosList() {
-  const { teamBlockers, teamMembers, resolveBlocker, unresolveBlocker } = useApp();
+  const { teamBlockers, teamMembers, resolveBlocker, unresolveBlocker, blockerComments, openBlockerComments } = useApp();
+  const commentCounts = useMemo(() => {
+    const map = {};
+    (blockerComments || []).forEach(c => { map[c.blocker_id] = (map[c.blocker_id] || 0) + 1; });
+    return map;
+  }, [blockerComments]);
   const [statusFilter, setStatusFilter] = useState('open'); // open | resolved | all
   const [userFilter, setUserFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -162,6 +167,19 @@ export default function BloqueosList() {
                   </div>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => openBlockerComments(b.id)}
+                  className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer ${
+                    (commentCounts[b.id] || 0) > 0
+                      ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600'
+                  }`}
+                  title="Comentar"
+                >
+                  <MessageSquare size={11} />
+                  {commentCounts[b.id] || 0}
+                </button>
                 {b.resolved && (
                   <button
                     type="button"

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Send, MessageSquare, Calendar, AlertTriangle, Building2, FileText } from 'lucide-react';
+import { X, Send, MessageSquare, Calendar, AlertTriangle, Building2, FileText, Lightbulb, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
 import CommentItem from './CommentItem';
@@ -42,6 +42,8 @@ export default function CommentsSidePanel() {
     currentUser, teamMembers, tasks, clients,
     taskComments, addTaskComment, updateTaskComment, deleteTaskComment,
     bulletComments, addBulletComment, updateBulletComment, deleteBulletComment,
+    ideas, ideaComments, addIdeaComment, updateIdeaComment, deleteIdeaComment,
+    teamBlockers, blockerComments, addBlockerComment, updateBlockerComment, deleteBlockerComment,
     teamReports,
     commentsTarget, closeComments,
   } = useApp();
@@ -85,6 +87,21 @@ export default function CommentsSidePanel() {
   const bulletAuthor = report ? (teamMembers || []).find(m => m.id === report.user_id) : null;
   const bulletClient = bullet?.clientId ? (clients || []).find(c => c.id === bullet.clientId) : null;
 
+  // ── Modo idea ──
+  const idea = useMemo(
+    () => kind === 'idea' ? ((ideas || []).find(i => i.id === shownTarget?.ideaId) || null) : null,
+    [ideas, shownTarget, kind],
+  );
+  const ideaAuthor = idea ? (teamMembers || []).find(m => m.id === idea.author_id) : null;
+
+  // ── Modo blocker ──
+  const blocker = useMemo(
+    () => kind === 'blocker' ? ((teamBlockers || []).find(b => b.id === shownTarget?.blockerId) || null) : null,
+    [teamBlockers, shownTarget, kind],
+  );
+  const blockerAuthor = blocker ? (teamMembers || []).find(m => m.id === blocker.user_id) : null;
+  const blockerClient = blocker?.client_id ? (clients || []).find(c => c.id === blocker.client_id) : null;
+
   const memberById = useMemo(() => {
     const m = {};
     (teamMembers || []).forEach(t => { m[t.id] = t; });
@@ -98,11 +115,26 @@ export default function CommentsSidePanel() {
         .filter(c => c.task_id === shownTask.id)
         .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
     }
-    if (!shownTarget || kind !== 'bullet') return [];
-    return (bulletComments || [])
-      .filter(c => c.report_id === shownTarget.reportId && c.bullet_id === shownTarget.bulletId)
-      .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
-  }, [kind, taskComments, bulletComments, shownTask, shownTarget]);
+    if (kind === 'bullet') {
+      if (!shownTarget) return [];
+      return (bulletComments || [])
+        .filter(c => c.report_id === shownTarget.reportId && c.bullet_id === shownTarget.bulletId)
+        .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    }
+    if (kind === 'idea') {
+      if (!idea) return [];
+      return (ideaComments || [])
+        .filter(c => c.idea_id === idea.id)
+        .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    }
+    if (kind === 'blocker') {
+      if (!blocker) return [];
+      return (blockerComments || [])
+        .filter(c => c.blocker_id === blocker.id)
+        .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    }
+    return [];
+  }, [kind, taskComments, bulletComments, ideaComments, blockerComments, shownTask, shownTarget, idea, blocker]);
 
   // Agrupar por dia (Hoy / Ayer / fecha) — solo raices; respuestas debajo.
   const groupedByDay = useMemo(() => {
@@ -128,7 +160,7 @@ export default function CommentsSidePanel() {
   useEffect(() => {
     setDraft('');
     setReplyTo(null);
-  }, [commentsTarget?.taskId, commentsTarget?.reportId, commentsTarget?.bulletId]);
+  }, [commentsTarget?.taskId, commentsTarget?.reportId, commentsTarget?.bulletId, commentsTarget?.ideaId, commentsTarget?.blockerId]);
 
   useEffect(() => {
     if (!open) return;
@@ -153,29 +185,23 @@ export default function CommentsSidePanel() {
     }
   }, [open]);
 
-  const hasTarget = kind === 'task' ? !!shownTask : (!!report && !!bullet);
+  const hasTarget =
+    kind === 'task' ? !!shownTask
+    : kind === 'bullet' ? (!!report && !!bullet)
+    : kind === 'idea' ? !!idea
+    : kind === 'blocker' ? !!blocker
+    : false;
   const canSubmit = !sending && draft.trim().length > 0 && currentUser?.id && hasTarget;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSending(true);
     try {
-      if (kind === 'task') {
-        await addTaskComment({
-          task_id: shownTask.id,
-          parent_id: replyTo || null,
-          body: draft,
-          author_id: currentUser.id,
-        });
-      } else {
-        await addBulletComment({
-          report_id: shownTarget.reportId,
-          bullet_id: shownTarget.bulletId,
-          parent_id: replyTo || null,
-          body: draft,
-          author_id: currentUser.id,
-        });
-      }
+      const common = { parent_id: replyTo || null, body: draft, author_id: currentUser.id };
+      if (kind === 'task')         await addTaskComment   ({ ...common, task_id: shownTask.id });
+      else if (kind === 'bullet')  await addBulletComment ({ ...common, report_id: shownTarget.reportId, bullet_id: shownTarget.bulletId });
+      else if (kind === 'idea')    await addIdeaComment   ({ ...common, idea_id: idea.id });
+      else if (kind === 'blocker') await addBlockerComment({ ...common, blocker_id: blocker.id });
       setDraft('');
       setReplyTo(null);
     } catch (e) {
@@ -186,12 +212,16 @@ export default function CommentsSidePanel() {
   };
 
   const handleUpdate = async (id, body) => {
-    if (kind === 'task') await updateTaskComment(id, { body });
-    else await updateBulletComment(id, { body });
+    if (kind === 'task')         await updateTaskComment   (id, { body });
+    else if (kind === 'bullet')  await updateBulletComment (id, { body });
+    else if (kind === 'idea')    await updateIdeaComment   (id, { body });
+    else if (kind === 'blocker') await updateBlockerComment(id, { body });
   };
   const handleDelete = async (id) => {
-    if (kind === 'task') await deleteTaskComment(id);
-    else await deleteBulletComment(id);
+    if (kind === 'task')         await deleteTaskComment   (id);
+    else if (kind === 'bullet')  await deleteBulletComment (id);
+    else if (kind === 'idea')    await deleteIdeaComment   (id);
+    else if (kind === 'blocker') await deleteBlockerComment(id);
   };
 
   // Click en "Responder" en un comentario raiz: setea el destino + mete un
@@ -290,6 +320,60 @@ export default function CommentsSidePanel() {
                   </div>
                 </div>
               )}
+              {kind === 'idea' && idea && (
+                <div className="flex items-start gap-2.5 bg-[#F7F8FA] rounded-[11px] px-3 py-2.5">
+                  <span className="shrink-0 w-[22px] h-[22px] rounded-full inline-flex items-center justify-center bg-amber-100 text-amber-600 mt-0.5">
+                    <Lightbulb size={12} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-[#1A1D26] leading-snug break-words">{idea.title}</div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {idea.department && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 bg-[#EEF2FF] text-[#4A67D8]">
+                          {idea.department}
+                        </span>
+                      )}
+                      {ideaAuthor && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B7280]">
+                          <FileText size={10} /> Propuesta por {ideaAuthor.name?.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {kind === 'blocker' && blocker && (
+                <div className="flex items-start gap-2.5 bg-[#F7F8FA] rounded-[11px] px-3 py-2.5">
+                  <span className="shrink-0 w-[22px] h-[22px] rounded-full inline-flex items-center justify-center bg-red-100 text-red-600 mt-0.5">
+                    <AlertCircle size={12} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-[#1A1D26] leading-snug break-words">{blocker.description}</div>
+                    {blocker.needs && (
+                      <div className="text-[11.5px] text-[#6B7280] mt-1 leading-snug break-words">
+                        <span className="font-semibold">Necesita:</span> {blocker.needs}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {blockerAuthor && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B7280]">
+                          <FileText size={10} /> Reportado por {blockerAuthor.name?.split(' ')[0]}
+                        </span>
+                      )}
+                      {blockerClient && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] text-[#6B7280]">
+                          <Building2 size={10} />{blockerClient.name}
+                        </span>
+                      )}
+                      {blocker.resolved && (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 bg-[#ECFDF5] text-[#16A34A]">
+                          ✓ Resuelto
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {kind === 'bullet' && bullet && report && (
                 <div className="flex items-start gap-2.5 bg-[#F7F8FA] rounded-[11px] px-3 py-2.5">
                   <span
@@ -360,8 +444,8 @@ export default function CommentsSidePanel() {
                             isReply
                             canEdit={rep.author_id === currentUser?.id}
                             canDelete={rep.author_id === currentUser?.id || isAdmin}
-                            onUpdate={async (id, body) => { await updateTaskComment(id, { body }); }}
-                            onDelete={async (id) => { await deleteTaskComment(id); }}
+                            onUpdate={async (id, body) => { await handleUpdate(id, body); }}
+                            onDelete={async (id) => { await handleDelete(id); }}
                           />
                         ))}
                       </div>

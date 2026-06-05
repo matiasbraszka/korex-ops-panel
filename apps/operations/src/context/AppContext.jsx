@@ -104,6 +104,9 @@ export function AppProvider({ children }) {
   const [commentsTarget, setCommentsTarget] = useState(null);
   // Comentarios por bullet de informe (mirror del patron de task_comments)
   const [bulletComments, setBulletComments] = useState([]);
+  // Comentarios sobre ideas y bloqueos (mismo patron)
+  const [ideaComments, setIdeaComments] = useState([]);
+  const [blockerComments, setBlockerComments] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -1085,6 +1088,85 @@ export function AppProvider({ children }) {
     setBulletComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
   }, []);
 
+  // ── CRUD: idea_comments y blocker_comments ──
+  // Mismo patron que task_comments, apuntando a ideas o team_blockers.
+  const ideaCommentsRef = useRef([]);
+  ideaCommentsRef.current = ideaComments;
+  const blockerCommentsRef = useRef([]);
+  blockerCommentsRef.current = blockerComments;
+
+  const addIdeaComment = useCallback(async (data) => {
+    const id = 'ic_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const body = String(data.body || '').trim();
+    const mentioned_ids = extractMentions(body, teamMembersRef.current || [], { excludeId: data.author_id });
+    const row = {
+      id,
+      idea_id: data.idea_id,
+      parent_id: data.parent_id || null,
+      author_id: data.author_id,
+      body,
+      edited: false,
+      mentioned_ids,
+    };
+    await sbFetch('idea_comments', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(row), throwOnError: true });
+    const nowIso = new Date().toISOString();
+    setIdeaComments(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
+    return id;
+  }, []);
+
+  const updateIdeaComment = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    if (patch.body !== undefined) {
+      patch.body = String(patch.body).trim();
+      const author = (ideaCommentsRef.current || []).find(c => c.id === id)?.author_id;
+      patch.mentioned_ids = extractMentions(patch.body, teamMembersRef.current || [], { excludeId: author });
+    }
+    patch.edited = true;
+    await sbFetch('idea_comments?id=eq.' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(patch), throwOnError: true });
+    setIdeaComments(prev => prev.map(c => c.id === id ? { ...c, ...patch, updated_at: new Date().toISOString() } : c));
+  }, []);
+
+  const deleteIdeaComment = useCallback(async (id) => {
+    await sbFetch('idea_comments?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setIdeaComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
+  }, []);
+
+  const addBlockerComment = useCallback(async (data) => {
+    const id = 'blkc_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    const body = String(data.body || '').trim();
+    const mentioned_ids = extractMentions(body, teamMembersRef.current || [], { excludeId: data.author_id });
+    const row = {
+      id,
+      blocker_id: data.blocker_id,
+      parent_id: data.parent_id || null,
+      author_id: data.author_id,
+      body,
+      edited: false,
+      mentioned_ids,
+    };
+    await sbFetch('blocker_comments', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(row), throwOnError: true });
+    const nowIso = new Date().toISOString();
+    setBlockerComments(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
+    return id;
+  }, []);
+
+  const updateBlockerComment = useCallback(async (id, fields) => {
+    const patch = { ...fields };
+    if (patch.body !== undefined) {
+      patch.body = String(patch.body).trim();
+      const author = (blockerCommentsRef.current || []).find(c => c.id === id)?.author_id;
+      patch.mentioned_ids = extractMentions(patch.body, teamMembersRef.current || [], { excludeId: author });
+    }
+    patch.edited = true;
+    await sbFetch('blocker_comments?id=eq.' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(patch), throwOnError: true });
+    setBlockerComments(prev => prev.map(c => c.id === id ? { ...c, ...patch, updated_at: new Date().toISOString() } : c));
+  }, []);
+
+  const deleteBlockerComment = useCallback(async (id) => {
+    await sbFetch('blocker_comments?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    setBlockerComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
+  }, []);
+
   // ── CRUD: notas ──
   // Tabla `notas` (notas_v1.sql). Mismo patron que ideas: optimistic UI +
   // POST/PATCH/DELETE contra Supabase. Toda la sanitizacion del body_html
@@ -1311,6 +1393,16 @@ export function AppProvider({ children }) {
         const allBulletComments = await sbFetch('report_bullet_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allBulletComments && Array.isArray(allBulletComments)) setBulletComments(allBulletComments);
       } catch (e) { console.warn('loadBulletComments error', e); }
+
+      // Comentarios sobre ideas y bloqueos
+      try {
+        const allIdeaComments = await sbFetch('idea_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allIdeaComments && Array.isArray(allIdeaComments)) setIdeaComments(allIdeaComments);
+      } catch (e) { console.warn('loadIdeaComments error', e); }
+      try {
+        const allBlockerComments = await sbFetch('blocker_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allBlockerComments && Array.isArray(allBlockerComments)) setBlockerComments(allBlockerComments);
+      } catch (e) { console.warn('loadBlockerComments error', e); }
 
       // Estrategias y paginas por cliente (Fase 2 ficha cliente)
       try {
@@ -1681,10 +1773,20 @@ export function AppProvider({ children }) {
     addBulletComment,
     updateBulletComment,
     deleteBulletComment,
-    // Side panel de comentarios (generico para task o bullet).
+    ideaComments,
+    addIdeaComment,
+    updateIdeaComment,
+    deleteIdeaComment,
+    blockerComments,
+    addBlockerComment,
+    updateBlockerComment,
+    deleteBlockerComment,
+    // Side panel de comentarios (generico para task, bullet, idea o blocker).
     commentsTarget,
     openTaskComments: (taskId) => setCommentsTarget(taskId ? { kind: 'task', taskId } : null),
     openBulletComments: (reportId, bulletId) => setCommentsTarget({ kind: 'bullet', reportId, bulletId }),
+    openIdeaComments: (ideaId) => setCommentsTarget({ kind: 'idea', ideaId }),
+    openBlockerComments: (blockerId) => setCommentsTarget({ kind: 'blocker', blockerId }),
     closeComments: () => setCommentsTarget(null),
     // Alias legacy para compat con el panel actual (devuelve el taskId si esta abierto en modo task).
     openCommentTaskId: commentsTarget?.kind === 'task' ? commentsTarget.taskId : null,
