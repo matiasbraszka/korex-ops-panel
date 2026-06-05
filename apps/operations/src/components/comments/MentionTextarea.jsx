@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { createPortal } from 'react-dom';
 import { suggestMentions, slugifyName } from '../../utils/mentions';
 import TeamAvatar from '../TeamAvatar';
 
-// Textarea con autocomplete @mention. Wrappea un <textarea> normal y muestra
-// un dropdown flotante cuando el usuario escribe "@" + (opcional) texto.
+// Textarea/input con autocomplete @mention. Dropdown renderizado en portal
+// (document.body) y z-index altísimo para escapar de cualquier contenedor
+// con overflow/zindex (side panels, modales).
 //
-// - Detecta @palabra terminando en el cursor (la palabra no puede tener espacios).
-// - Arrow Up/Down navegan, Enter/Tab insertan, Esc cierra.
-// - Al insertar reemplaza @palabra por @primer-nombre + espacio.
-//
-// Props: value, onChange, onSubmit (Ctrl/Cmd+Enter), onCancel (Esc cuando NO hay
-// dropdown abierto), teamMembers, excludeId, placeholder, autoFocus, disabled,
-// className, style, rows.
+// Detecta @palabra terminando en el cursor. Arrow keys navegan, Enter/Tab
+// insertan, Esc cierra. Al insertar reemplaza @palabra por @primer-nombre+espacio.
 
-const MENTION_RE = /(^|\s)@([a-zA-ZÀ-ſ0-9._-]*)$/;
+const MENTION_RE = /(^|\s|\()@([\w.\-]*)$/;
 
 const MentionTextarea = forwardRef(function MentionTextarea({
   value,
@@ -46,7 +43,6 @@ const MentionTextarea = forwardRef(function MentionTextarea({
     }
   }, [autoFocus]);
 
-  // Autosize (solo textarea).
   useEffect(() => {
     if (singleLine || !taRef.current) return;
     taRef.current.style.height = 'auto';
@@ -58,44 +54,68 @@ const MentionTextarea = forwardRef(function MentionTextarea({
 
   const closeMenu = () => { setOpen(false); setQuery(''); setHighlight(0); };
 
-  // Detecta si hay un "@palabra" pegado al cursor; si si, abre menu.
+  const updatePos = () => {
+    if (!taRef.current) return;
+    const r = taRef.current.getBoundingClientRect();
+    const dropdownHeight = 240;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const top = spaceBelow < dropdownHeight ? Math.max(8, r.top - dropdownHeight - 4) : r.bottom + 4;
+    setPos({ top, left: r.left });
+  };
+
   const detect = (val, caret) => {
-    const before = val.slice(0, caret);
+    const safeCaret = typeof caret === 'number' ? caret : val.length;
+    const before = val.slice(0, safeCaret);
     const m = before.match(MENTION_RE);
     if (!m) { closeMenu(); return; }
     setQuery(m[2] || '');
     setHighlight(0);
     setOpen(true);
-    // Posicion del dropdown: aproximacion simple debajo del textarea.
-    if (taRef.current) {
-      const r = taRef.current.getBoundingClientRect();
-      // position: fixed se mide respecto al viewport, no al document. No sumar scroll.
-      setPos({ top: r.bottom + 4, left: r.left });
-    }
+    updatePos();
   };
+
+  // Reposicionar si la ventana cambia mientras el menu esta abierto.
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => updatePos();
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [open]);
 
   const handleChange = (e) => {
     const v = e.target.value;
     onChange(v);
-    detect(v, e.target.selectionStart || v.length);
+    detect(v, e.target.selectionStart);
+  };
+
+  // Tambien detectamos al hacer click o keyup (mover cursor sin tipear).
+  const handleKeyUp = (e) => {
+    if (['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(e.key) && open) return;
+    detect(e.target.value, e.target.selectionStart);
+  };
+  const handleClick = (e) => {
+    detect(e.target.value, e.target.selectionStart);
   };
 
   const insertMention = (member) => {
     if (!taRef.current) return;
     const el = taRef.current;
-    const caret = el.selectionStart || (value || '').length;
+    const caret = typeof el.selectionStart === 'number' ? el.selectionStart : (value || '').length;
     const before = (value || '').slice(0, caret);
     const after = (value || '').slice(caret);
     const m = before.match(MENTION_RE);
     if (!m) { closeMenu(); return; }
-    const prefix = m[1]; // espacio o '' al inicio
-    const startIdx = before.length - m[0].length + prefix.length; // posicion del @
+    const prefix = m[1];
+    const startIdx = before.length - m[0].length + prefix.length;
     const handle = slugifyName(member.name.split(/\s+/)[0] || member.name);
     const insert = '@' + handle + ' ';
     const next = before.slice(0, startIdx) + insert + after;
     onChange(next);
     closeMenu();
-    // Reponer cursor justo despues del @nombre + espacio
     requestAnimationFrame(() => {
       try {
         const c = startIdx + insert.length;
@@ -114,7 +134,7 @@ const MentionTextarea = forwardRef(function MentionTextarea({
         insertMention(suggestions[highlight]);
         return;
       }
-      if (e.key === 'Escape')   { e.preventDefault(); closeMenu(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
     }
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -127,6 +147,46 @@ const MentionTextarea = forwardRef(function MentionTextarea({
     }
   };
 
+  const dropdown = open && (
+    <div
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 9999,
+        background: 'white',
+        border: '1px solid #E5E7EB',
+        borderRadius: 8,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+        padding: '4px 0',
+        minWidth: 240,
+        maxHeight: 240,
+        overflowY: 'auto',
+      }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {suggestions.length === 0 ? (
+        <div className="px-3 py-2 text-[12px] text-gray-400">Sin coincidencias para "{query}"</div>
+      ) : suggestions.map((m, i) => (
+        <button
+          key={m.id}
+          type="button"
+          onClick={() => insertMention(m)}
+          onMouseEnter={() => setHighlight(i)}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left bg-transparent border-none cursor-pointer ${
+            i === highlight ? 'bg-purple-50' : 'hover:bg-gray-50'
+          }`}
+        >
+          <TeamAvatar member={{ ...m, avatar: m.avatar_url || m.avatar }} size={20} />
+          <div className="flex flex-col leading-tight">
+            <span className="text-[12px] font-semibold text-gray-800">{m.name}</span>
+            {m.role && <span className="text-[10px] text-gray-500">{m.role}</span>}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
       {singleLine ? (
@@ -136,7 +196,9 @@ const MentionTextarea = forwardRef(function MentionTextarea({
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onBlur={() => setTimeout(closeMenu, 120)}
+          onKeyUp={handleKeyUp}
+          onClick={handleClick}
+          onBlur={() => setTimeout(closeMenu, 150)}
           placeholder={placeholder}
           disabled={disabled}
           className={className}
@@ -148,7 +210,9 @@ const MentionTextarea = forwardRef(function MentionTextarea({
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onBlur={() => setTimeout(closeMenu, 120)}
+          onKeyUp={handleKeyUp}
+          onClick={handleClick}
+          onBlur={() => setTimeout(closeMenu, 150)}
           placeholder={placeholder}
           rows={rows}
           disabled={disabled}
@@ -156,31 +220,7 @@ const MentionTextarea = forwardRef(function MentionTextarea({
           style={style}
         />
       )}
-      {open && suggestions.length > 0 && (
-        <div
-          className="fixed z-[300] bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[220px]"
-          style={{ top: pos.top, left: pos.left }}
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          {suggestions.map((m, i) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => insertMention(m)}
-              onMouseEnter={() => setHighlight(i)}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left bg-transparent border-none cursor-pointer ${
-                i === highlight ? 'bg-purple-50' : 'hover:bg-gray-50'
-              }`}
-            >
-              <TeamAvatar member={{ ...m, avatar: m.avatar_url || m.avatar }} size={20} />
-              <div className="flex flex-col leading-tight">
-                <span className="text-[12px] font-semibold text-gray-800">{m.name}</span>
-                {m.role && <span className="text-[10px] text-gray-500">{m.role}</span>}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown && createPortal(dropdown, document.body)}
     </>
   );
 });
