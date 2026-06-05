@@ -69,7 +69,8 @@ const MentionTextarea = forwardRef(function MentionTextarea({
     // Posicion del dropdown: aproximacion simple debajo del textarea.
     if (taRef.current) {
       const r = taRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + window.scrollY + 4, left: r.left + window.scrollX });
+      // position: fixed se mide respecto al viewport, no al document. No sumar scroll.
+      setPos({ top: r.bottom + 4, left: r.left });
     }
   };
 
