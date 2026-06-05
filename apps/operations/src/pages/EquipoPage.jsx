@@ -38,11 +38,12 @@ function fmtAbsolute(dateStr) {
 
 // ── catálogos ─────────────────────────────────────────────────────────────
 const DEPARTMENTS = {
-  marketing:   { label: 'Marketing',    color: '#5B7CF5', bg: '#EEF2FF' },
-  operaciones: { label: 'Operaciones',  color: '#22C55E', bg: '#ECFDF5' },
-  ventas:      { label: 'Ventas',       color: '#F97316', bg: '#FFF7ED' },
-  finanzas:    { label: 'Finanzas',     color: '#EAB308', bg: '#FEFCE8' },
-  legalidad:   { label: 'Legalidad',    color: '#8B5CF6', bg: '#F5F3FF' },
+  marketing:    { label: 'Marketing',     color: '#5B7CF5', bg: '#EEF2FF' },
+  operaciones:  { label: 'Operaciones',   color: '#22C55E', bg: '#ECFDF5' },
+  ventas:       { label: 'Ventas',        color: '#F97316', bg: '#FFF7ED' },
+  finanzas:     { label: 'Finanzas',      color: '#EAB308', bg: '#FEFCE8' },
+  legalidad:    { label: 'Legalidad',     color: '#8B5CF6', bg: '#F5F3FF' },
+  programacion: { label: 'Programación',  color: '#0EA5E9', bg: '#E0F2FE' },
 };
 
 const IDEA_STATUSES = {

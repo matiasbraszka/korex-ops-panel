@@ -3,11 +3,12 @@ import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
 
 const DEPARTMENTS = [
-  { key: 'marketing',   label: 'Marketing',    color: '#5B7CF5' },
-  { key: 'operaciones', label: 'Operaciones',  color: '#22C55E' },
-  { key: 'ventas',      label: 'Ventas',       color: '#F97316' },
-  { key: 'finanzas',    label: 'Finanzas',     color: '#EAB308' },
-  { key: 'legalidad',   label: 'Legalidad',    color: '#8B5CF6' },
+  { key: 'marketing',    label: 'Marketing',     color: '#5B7CF5' },
+  { key: 'operaciones',  label: 'Operaciones',   color: '#22C55E' },
+  { key: 'ventas',       label: 'Ventas',        color: '#F97316' },
+  { key: 'finanzas',     label: 'Finanzas',      color: '#EAB308' },
+  { key: 'legalidad',    label: 'Legalidad',     color: '#8B5CF6' },
+  { key: 'programacion', label: 'Programación',  color: '#0EA5E9' },
 ];
 
 export default function CrearIdeaModal({ open, onClose, idea = null }) {
