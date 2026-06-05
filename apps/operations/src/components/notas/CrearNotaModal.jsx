@@ -155,7 +155,7 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
         <div className="relative flex h-full w-full">
           {/* Canvas centrado tipo Google Docs */}
           <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="mx-auto w-full max-w-[820px] px-6 py-4 flex flex-col gap-3 max-md:px-3 max-md:py-2">
+            <div className="w-full px-8 py-4 flex flex-col gap-3 max-md:px-3 max-md:py-2">
               <input
                 type="text"
                 value={title}
