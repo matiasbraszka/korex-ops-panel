@@ -192,9 +192,12 @@ export default function TasksPage({ embedded = false }) {
   //   priority*100000 + position. De esta forma, mover un cliente "hacia abajo"
   //   pasando otros que no tienen orden custom queda bien posicionado entre
   //   ellos (la nueva position se calcula en el rango de los vecinos).
+  // Sin filtro de persona: usa la position global de clientes (mismo orden que
+  // la pestaña Clientes, que ya viene sorteada por position.asc desde la DB).
+  // Con filtro de persona: position custom si existe, sino la global como fallback.
   const getClientEffPos = (c) => {
     if (orderUserId && customPosByClient[c.id] !== undefined) return customPosByClient[c.id];
-    return (c.priority || 5) * 100000 + (c.position ?? 0);
+    return c.position ?? 0;
   };
   groups.sort((a, b) => getClientEffPos(a.client) - getClientEffPos(b.client));
 
