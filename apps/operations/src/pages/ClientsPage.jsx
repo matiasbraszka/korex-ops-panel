@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Users, Megaphone, MessageSquare, FileText } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Users, Megaphone, MessageSquare, FileText, Pencil } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, fmtDate, clientPill } from '../utils/helpers';
@@ -13,8 +13,82 @@ const CLIENTS_TAB_KEY = 'clientes_current_tab';
 // 'informe' queda oculto del menu pero la ruta interna sigue funcionando.
 const VALID_TABS = ['lista', 'publicidad'];
 
+// Pildora de estado de publicidad. Lee metaMetrics.adsActive + pauseStatus.
+function AdsBadge({ client }) {
+  const m = client.metaMetrics;
+  if (!m) return <span className="text-[10px] text-text3">—</span>;
+  const status = m.pauseStatus;
+  if (status === 'mcp_pendiente') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-blue-50 text-blue-700" title={m.pauseReason || 'MCP pendiente'}>🔵 MCP</span>;
+  }
+  if (status === 'pago_error') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Error de pago'}>⚠ Pago</span>;
+  }
+  if (status === 'cuenta_inactiva') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Cuenta deshabilitada'}>✕ Cuenta</span>;
+  }
+  if (m.adsActive) {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-green-50 text-green-700">● Activa</span>;
+  }
+  return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-gray-100 text-gray-500" title={m.pauseReason || 'Sin gasto reciente'}>○ Inactiva</span>;
+}
+
+// Celda editable inline para "pendiente para avanzar". Click -> input,
+// blur o Enter guarda. Esc cancela.
+function PendienteCell({ client, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(client.bottleneck || '');
+  const inputRef = useRef(null);
+
+  useEffect(() => { setValue(client.bottleneck || ''); }, [client.bottleneck]);
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const v = value.trim();
+    if (v !== (client.bottleneck || '').trim()) onSave(v);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setValue(client.bottleneck || ''); setEditing(false); }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        placeholder="¿Qué hace falta para avanzar?"
+        className="w-full border border-blue-300 rounded-md py-1 px-2 text-[12px] outline-none focus:border-blue-500 bg-white"
+      />
+    );
+  }
+
+  const text = (client.bottleneck || '').trim();
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="group/p flex items-center gap-1.5 cursor-text rounded-md py-1 px-2 -mx-2 hover:bg-gray-50"
+      title={text || 'Click para escribir el pendiente'}
+    >
+      <span className={`flex-1 truncate text-[12px] ${text ? 'text-gray-700' : 'text-gray-400 italic'}`}>
+        {text || '¿Qué hace falta para avanzar?'}
+      </span>
+      <Pencil size={10} className="text-gray-300 opacity-0 group-hover/p:opacity-100 shrink-0" />
+    </div>
+  );
+}
+
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel, phase, setPhase } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel, phase, setPhase, updateClient } = useApp();
 
   const [tab, setTab] = useState(() => {
     try {
@@ -166,6 +240,17 @@ export default function ClientsPage() {
       {!cls.length && (
         <div className="text-center text-text3 text-xs py-[60px]">Sin resultados</div>
       )}
+      {/* Header de columnas (solo desktop) */}
+      {cls.length > 0 && (
+        <div className="hidden md:grid items-center gap-3 py-2 px-4 mb-1 grid-cols-[36px_minmax(140px,1.4fr)_140px_minmax(200px,2fr)_110px_20px] text-[10px] font-bold uppercase tracking-wider text-text3">
+          <span></span>
+          <span>Cliente</span>
+          <span>Fase</span>
+          <span>Pendiente para avanzar</span>
+          <span>Publicidad</span>
+          <span></span>
+        </div>
+      )}
       {cls.map(c => {
         const p = c.priority || 5;
         const pcfg = getPriorityLabel(p);
@@ -196,7 +281,7 @@ export default function ClientsPage() {
           <div key={c.id}>
             {prioLabel}
             <div
-              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-xl mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_minmax(140px,1fr)_minmax(180px,2fr)_60px_120px_90px_28px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
+              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-xl mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_minmax(140px,1.4fr)_140px_minmax(200px,2fr)_110px_20px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
               onClick={() => setSelectedId(c.id)}
             >
               {c.avatarUrl ? (
@@ -210,18 +295,21 @@ export default function ClientsPage() {
                   {initials(c.name)}
                 </div>
               )}
+              {/* Col 1: nombre + empresa */}
               <div className="min-w-0">
                 <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
                   <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span>
                 </div>
-                {/* Mobile-only: progress + pill inline */}
-                <div className="hidden max-md:flex items-center gap-2 mt-1.5">
-                  <div className="flex-1 h-1 bg-surface3 rounded-sm overflow-hidden max-w-[80px]">
-                    <div className="h-full rounded-sm" style={{ width: pct + '%', background: c.color }} />
-                  </div>
-                  <span className="text-[10px] text-text3 font-semibold">{pct}%</span>
+                {/* Mobile-only: fase + ads inline */}
+                <div className="hidden max-md:flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wide rounded-full px-1.5 py-0.5"
+                    style={{ background: phaseColor + '15', color: phaseColor }}
+                  >{phaseLabel}</span>
+                  <AdsBadge client={c} />
                 </div>
               </div>
+              {/* Col 2: fase */}
               <div className="max-md:hidden min-w-0 overflow-hidden">
                 <span
                   className="inline-block max-w-full truncate align-middle text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5"
@@ -229,17 +317,13 @@ export default function ClientsPage() {
                   title={phaseLabel}
                 >{phaseLabel}</span>
               </div>
-              <div className="text-center max-md:hidden">
-                <strong className="text-[15px]">{days}</strong>
-                <div className="text-[9px] text-text3">días</div>
+              {/* Col 3: pendiente editable */}
+              <div className="max-md:hidden min-w-0">
+                <PendienteCell client={c} onSave={(v) => updateClient(c.id, { bottleneck: v })} />
               </div>
-              <div className="max-md:hidden">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1 bg-surface3 rounded-sm overflow-hidden">
-                    <div className="h-full rounded-sm" style={{ width: pct + '%', background: c.color }} />
-                  </div>
-                  <div className="text-[11px] text-text3 font-semibold min-w-[32px] text-right">{pct}%</div>
-                </div>
+              {/* Col 4: publicidad */}
+              <div className="max-md:hidden flex justify-start">
+                <AdsBadge client={c} />
               </div>
               <div className="text-text3 text-center max-md:self-center">&rsaquo;</div>
             </div>
