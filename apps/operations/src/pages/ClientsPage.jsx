@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2 } from 'lucide-react';
+import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, fmtDate, clientPill } from '../utils/helpers';
@@ -104,7 +104,13 @@ function PendienteCell({ client, onSave }) {
 }
 
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel, phase, setPhase, updateClient } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel, phase, setPhase, updateClient, reorderClient, currentUser } = useApp();
+  const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
+
+  // Drag&drop refs (solo se usan si isAdmin)
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+  const [dragOverPrio, setDragOverPrio] = useState(null); // para divisores de seccion
 
   const [tab, setTab] = useState(() => {
     try {
@@ -159,7 +165,12 @@ export default function ClientsPage() {
   ];
 
   // By default (filter === 'all'), hide descartados from the list
-  let cls = [...visibleClients].sort((a, bb) => (a.priority || 5) - (bb.priority || 5));
+  // Orden: primero por priority asc (para que las secciones queden agrupadas), despues por position asc (orden manual dentro de la seccion).
+  let cls = [...visibleClients].sort((a, bb) => {
+    const pa = a.priority || 5, pb = bb.priority || 5;
+    if (pa !== pb) return pa - pb;
+    return (a.position ?? 0) - (bb.position ?? 0);
+  });
   if (filter === 'all')         cls = cls.filter(c => (c.priority || 5) !== 6);
   if (filter === 'super')       cls = cls.filter(c => (c.priority || 5) === 1);
   if (filter === 'important')   cls = cls.filter(c => (c.priority || 5) === 2);
@@ -186,6 +197,56 @@ export default function ClientsPage() {
   }
 
   let lastPrio = null;
+
+  // ── Drag&drop handlers (solo si isAdmin) ──
+  const handleDragStart = (e, c) => {
+    if (!isAdmin) { e.preventDefault(); return; }
+    setDragId(c.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', c.id);
+  };
+  const handleDragOverRow = (e, c) => {
+    if (!isAdmin || !dragId || dragId === c.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(c.id);
+    setDragOverPrio(null);
+  };
+  const handleDragOverDivider = (e, prio) => {
+    if (!isAdmin || !dragId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverPrio(prio);
+    setDragOverId(null);
+  };
+  const clearDrag = () => { setDragId(null); setDragOverId(null); setDragOverPrio(null); };
+  const handleDropOnRow = async (e, targetClient) => {
+    if (!isAdmin || !dragId || dragId === targetClient.id) { clearDrag(); return; }
+    e.preventDefault();
+    const dragged = visibleClients.find(c => c.id === dragId);
+    if (!dragged) { clearDrag(); return; }
+    // Insertar ARRIBA del target. Buscar el cliente que queda inmediatamente arriba del target en la lista ordenada.
+    const idx = cls.findIndex(c => c.id === targetClient.id);
+    const above = idx > 0 ? cls[idx - 1] : null;
+    const prevPosition = targetClient.position ?? 0;
+    const nextPosition = above && above.id !== dragId ? (above.position ?? 0) : null;
+    const newPriority = targetClient.priority || 5;
+    await reorderClient(dragId, { prevPosition, nextPosition, newPriority });
+    clearDrag();
+  };
+  const handleDropOnDivider = async (e, prio) => {
+    if (!isAdmin || !dragId) { clearDrag(); return; }
+    e.preventDefault();
+    // Soltar arriba de TODA la seccion prio: position justo encima del primero de esa seccion.
+    const firstOfPrio = cls.find(c => (c.priority || 5) === prio && c.id !== dragId);
+    if (firstOfPrio) {
+      await reorderClient(dragId, { prevPosition: firstOfPrio.position ?? 0, newPriority: prio });
+    } else {
+      // seccion vacia: usar prio*100000 como base
+      await reorderClient(dragId, { prevPosition: prio * 100000, newPriority: prio });
+    }
+    clearDrag();
+  };
 
   return (
     <div>
@@ -285,8 +346,15 @@ export default function ClientsPage() {
         let prioLabel = null;
         if (p !== lastPrio) {
           lastPrio = p;
+          const isHotDivider = isAdmin && dragOverPrio === p;
           prioLabel = (
-            <div className="text-[10px] font-bold uppercase tracking-[1.5px] py-2 pb-1.5 flex items-center gap-2" style={{ color: pcfg.color }}>
+            <div
+              className={`text-[10px] font-bold uppercase tracking-[1.5px] py-2 pb-1.5 flex items-center gap-2 transition-colors rounded-md ${isHotDivider ? 'bg-blue-50 ring-2 ring-blue-300 px-2 -mx-2' : ''}`}
+              style={{ color: pcfg.color }}
+              onDragOver={(e) => handleDragOverDivider(e, p)}
+              onDragLeave={() => setDragOverPrio(null)}
+              onDrop={(e) => handleDropOnDivider(e, p)}
+            >
               {pcfg.label}
               <span className="flex-1 h-px bg-border" />
             </div>
@@ -297,7 +365,16 @@ export default function ClientsPage() {
           <div key={c.id}>
             {prioLabel}
             <div
-              className="grid items-center gap-3 py-3 px-4 bg-white border border-border rounded-xl mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_minmax(140px,1.4fr)_140px_minmax(200px,2fr)_110px_20px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px]"
+              draggable={isAdmin}
+              onDragStart={(e) => handleDragStart(e, c)}
+              onDragOver={(e) => handleDragOverRow(e, c)}
+              onDragLeave={() => setDragOverId(prev => prev === c.id ? null : prev)}
+              onDragEnd={clearDrag}
+              onDrop={(e) => handleDropOnRow(e, c)}
+              className={`group/row grid items-center gap-3 py-3 px-4 bg-white border rounded-xl mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_minmax(140px,1.4fr)_140px_minmax(200px,2fr)_110px_20px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px] ${
+                dragId === c.id ? 'opacity-40 scale-[0.99] border-border' :
+                dragOverId === c.id ? 'border-blue-400 -translate-y-px shadow-md' : 'border-border'
+              }`}
               onClick={() => setSelectedId(c.id)}
             >
               {c.avatarUrl ? (
@@ -312,7 +389,16 @@ export default function ClientsPage() {
                 </div>
               )}
               {/* Col 1: nombre + empresa */}
-              <div className="min-w-0">
+              <div className="min-w-0 relative">
+                {isAdmin && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute -left-3 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 opacity-0 group-hover/row:opacity-100 transition-opacity max-md:hidden"
+                    title="Arrastrá para reordenar (solo admin)"
+                  >
+                    <GripVertical size={14} />
+                  </div>
+                )}
                 <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
                   <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span>
                 </div>

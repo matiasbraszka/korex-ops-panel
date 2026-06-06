@@ -107,6 +107,9 @@ export function AppProvider({ children }) {
   // Comentarios sobre ideas y bloqueos (mismo patron)
   const [ideaComments, setIdeaComments] = useState([]);
   const [blockerComments, setBlockerComments] = useState([]);
+  // Orden custom de tareas por usuario. Filas {task_id, user_id, position}.
+  // Si una tarea no tiene fila para un user, ordena por tasks.position (fallback).
+  const [taskUserPositions, setTaskUserPositions] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -155,7 +158,7 @@ export function AppProvider({ children }) {
       body: JSON.stringify({
         id: c.id, name: c.name, company: c.company, service: c.service,
         start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
-        priority: c.priority, bottleneck: c.bottleneck, notes: c.notes,
+        priority: c.priority, position: typeof c.position === 'number' ? c.position : 0, bottleneck: c.bottleneck, notes: c.notes,
         steps: c.steps, feedback: c.feedback, history: c.history,
         phone: c.phone || '',
         avatar_url: c.avatarUrl || '',
@@ -223,7 +226,7 @@ export function AppProvider({ children }) {
       const clientRows = clientList.map(c => ({
         id: c.id, name: c.name, company: c.company, service: c.service,
         start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
-        priority: c.priority, bottleneck: c.bottleneck, notes: c.notes,
+        priority: c.priority, position: typeof c.position === 'number' ? c.position : 0, bottleneck: c.bottleneck, notes: c.notes,
         steps: c.steps, feedback: c.feedback, history: c.history,
         phone: c.phone || '',
         avatar_url: c.avatarUrl || '',
@@ -354,6 +357,34 @@ export function AppProvider({ children }) {
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics, appSettings]);
+
+  // Recalcula position al arrastrar un cliente entre vecinos (similar a reorderNota).
+  // prevPosition = position del cliente que queda DEBAJO (target). nextPosition = del que queda ARRIBA (above) o null.
+  // newPriority opcional: si viene, se cambia la prioridad junto con la posicion.
+  const reorderClient = useCallback(async (id, { prevPosition, nextPosition, newPriority } = {}) => {
+    let newPos;
+    if (typeof prevPosition === 'number' && typeof nextPosition === 'number') {
+      newPos = (prevPosition + nextPosition) / 2;
+    } else if (typeof prevPosition === 'number') {
+      newPos = prevPosition - 0.5; // movido encima del primero de la seccion
+    } else if (typeof nextPosition === 'number') {
+      newPos = nextPosition + 0.5; // movido al final de la seccion
+    } else {
+      return; // nada que hacer
+    }
+    const patch = { position: newPos };
+    if (typeof newPriority === 'number') patch.priority = newPriority;
+    setClients(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+    save(clientsRef.current.map(c => c.id === id ? { ...c, ...patch } : c), tasksRef.current);
+    if (dbReady.current) {
+      try {
+        await sbFetch('clients?id=eq.' + encodeURIComponent(id), {
+          method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify(patch),
+        });
+      } catch (e) { console.warn('reorderClient persist', e); }
+    }
+  }, [save]);
 
   const updateClient = useCallback((id, updates) => {
     // Aplicamos el cambio al state local INMEDIATO (optimistic).
@@ -1172,6 +1203,36 @@ export function AppProvider({ children }) {
     setBlockerComments(prev => prev.filter(c => c.id !== id && c.parent_id !== id));
   }, []);
 
+  // ── Orden custom de tareas por usuario ──
+  // Recalcula la position entre vecinos y upsertea en task_user_positions.
+  // prevPosition = del que queda DEBAJO, nextPosition = del que queda ARRIBA.
+  const reorderTaskForUser = useCallback(async (taskId, userId, { prevPosition, nextPosition } = {}) => {
+    if (!taskId || !userId) return;
+    let newPos;
+    if (typeof prevPosition === 'number' && typeof nextPosition === 'number') {
+      newPos = (prevPosition + nextPosition) / 2;
+    } else if (typeof prevPosition === 'number') {
+      newPos = prevPosition - 0.5;
+    } else if (typeof nextPosition === 'number') {
+      newPos = nextPosition + 0.5;
+    } else {
+      return;
+    }
+    const row = { task_id: taskId, user_id: userId, position: newPos };
+    setTaskUserPositions(prev => {
+      const exists = prev.find(r => r.task_id === taskId && r.user_id === userId);
+      if (exists) return prev.map(r => r.task_id === taskId && r.user_id === userId ? { ...r, position: newPos } : r);
+      return [...prev, { ...row, updated_at: new Date().toISOString() }];
+    });
+    try {
+      await sbFetch('task_user_positions', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+        body: JSON.stringify(row),
+      });
+    } catch (e) { console.warn('reorderTaskForUser persist', e); }
+  }, []);
+
   // ── CRUD: notas ──
   // Tabla `notas` (notas_v1.sql). Mismo patron que ideas: optimistic UI +
   // POST/PATCH/DELETE contra Supabase. Toda la sanitizacion del body_html
@@ -1313,10 +1374,10 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data';
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data';
       const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
-        sbFetch(`clients?select=${CLIENT_COLS}&order=priority.asc`, { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
         sbFetch(`tasks?select=${TASK_COLS}&order=created_at.asc&limit=2000`, { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('briefings?id=eq.latest&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('report_feedback?select=*&order=created_at.desc&limit=20', { headers: { 'Prefer': 'return=representation' } }),
@@ -1404,6 +1465,12 @@ export function AppProvider({ children }) {
         const allIdeaComments = await sbFetch('idea_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allIdeaComments && Array.isArray(allIdeaComments)) setIdeaComments(allIdeaComments);
       } catch (e) { console.warn('loadIdeaComments error', e); }
+
+      // Orden custom de tareas por usuario.
+      try {
+        const tup = await sbFetch('task_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
+        if (tup && Array.isArray(tup)) setTaskUserPositions(tup);
+      } catch (e) { console.warn('loadTaskUserPositions error', e); }
       try {
         const allBlockerComments = await sbFetch('blocker_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allBlockerComments && Array.isArray(allBlockerComments)) setBlockerComments(allBlockerComments);
@@ -1427,7 +1494,9 @@ export function AppProvider({ children }) {
         const mappedClients = sbClients.map(c => ({
           id: c.id, name: c.name, company: c.company, service: c.service,
           startDate: c.start_date, pm: c.pm, color: c.color, status: c.status,
-          priority: normalizePriority(c.priority), bottleneck: c.bottleneck, notes: c.notes,
+          priority: normalizePriority(c.priority),
+          position: typeof c.position === 'number' ? c.position : (Number(c.position) || 0),
+          bottleneck: c.bottleneck, notes: c.notes,
           steps: c.steps || [], feedback: c.feedback || [], history: c.history || [],
           phone: c.phone || '', avatarUrl: c.avatar_url || '',
           slackChannel: c.slack_channel || '', slackChannelId: c.slack_channel_id || '',
@@ -1786,6 +1855,10 @@ export function AppProvider({ children }) {
     addBlockerComment,
     updateBlockerComment,
     deleteBlockerComment,
+    // Orden custom de tareas por usuario + reorder de clientes
+    taskUserPositions,
+    reorderTaskForUser,
+    reorderClient,
     // Side panel de comentarios (generico para task, bullet, idea o blocker).
     commentsTarget,
     openTaskComments: (taskId) => setCommentsTarget(taskId ? { kind: 'task', taskId } : null),

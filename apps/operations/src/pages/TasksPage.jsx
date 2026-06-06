@@ -9,13 +9,39 @@ import TeamAvatar from '../components/TeamAvatar';
 import AddToWeeklyButton from '../components/tareas/AddToWeeklyButton';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, taskUserPositions, reorderTaskForUser } = useApp();
+  const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
   const commentCountsByTask = useMemo(() => {
     const map = {};
     (taskComments || []).forEach(c => { map[c.task_id] = (map[c.task_id] || 0) + 1; });
     return map;
   }, [taskComments]);
   const TEAM = teamMembers || [];
+
+  // ── Orden custom por persona ──
+  // Resolver el user_id segun el filtro de Encargado:
+  // - 'all'  → null (sin orden custom, usa tasks.position global)
+  // - 'mine' → currentUser.id
+  // - nombre → buscar member por nombre (lowercase match)
+  const orderUserId = useMemo(() => {
+    if (!taskAssignee || taskAssignee === 'all') return null;
+    if (taskAssignee === 'mine') return currentUser?.id || null;
+    const m = (teamMembers || []).find(x => x.name.toLowerCase() === taskAssignee.toLowerCase() || x.id === taskAssignee);
+    return m?.id || null;
+  }, [taskAssignee, currentUser?.id, teamMembers]);
+
+  // Mapa task_id → position custom para el user de filtro. Si no hay row, undefined.
+  const customPosByTask = useMemo(() => {
+    if (!orderUserId) return {};
+    const map = {};
+    (taskUserPositions || []).forEach(r => { if (r.user_id === orderUserId) map[r.task_id] = r.position; });
+    return map;
+  }, [orderUserId, taskUserPositions]);
+
+  // ¿Puede el currentUser arrastrar con este filtro?
+  // - Si filtro = 'all' → no (se mantiene drag global existente con reorderTask)
+  // - Si filtro = mio o soy admin → si
+  const canDragForUser = !!orderUserId && (orderUserId === currentUser?.id || isAdmin);
   const [addingTaskTo, setAddingTaskTo] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
@@ -178,6 +204,8 @@ export default function TasksPage({ embedded = false }) {
     return 0;
   };
   const handleDragStart = (e, task, group) => {
+    // Si hay filtro por persona y el currentUser no esta autorizado (no es esa persona ni admin), bloquear.
+    if (orderUserId && !canDragForUser) { e.preventDefault(); return; }
     setDragTaskId(task.id);
     dragGroupRef.current = getStatusGroup(task);
     e.dataTransfer.effectAllowed = 'move';
@@ -215,7 +243,22 @@ export default function TasksPage({ embedded = false }) {
     const reordered = [...sortedGroup];
     const [moved] = reordered.splice(fromIdx, 1);
     reordered.splice(insertIdx, 0, moved);
-    reorderTask(reordered);
+
+    if (orderUserId && canDragForUser) {
+      // Orden custom por persona: solo persistir la fila task_user_positions
+      // del item movido (entre los vecinos en sortedGroup post-reorder).
+      const newIdx = reordered.findIndex(t => t.id === fromId);
+      const above = newIdx > 0 ? reordered[newIdx - 1] : null;
+      const below = newIdx < reordered.length - 1 ? reordered[newIdx + 1] : null;
+      const effPos = (t) => (customPosByTask[t.id] !== undefined) ? customPosByTask[t.id] : (t.position ?? 0);
+      const prevPosition = below ? effPos(below) : null;
+      const nextPosition = above ? effPos(above) : null;
+      reorderTaskForUser(fromId, orderUserId, { prevPosition, nextPosition });
+    } else {
+      // Sin filtro de persona: actualizar tasks.position global (comportamiento original).
+      reorderTask(reordered);
+    }
+
     setDragTaskId(null);
     setDragOverTaskId(null);
     setDragOverHalf(null);
@@ -277,14 +320,14 @@ export default function TasksPage({ embedded = false }) {
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
           onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
         >
-          {/* Drag handle — solo tareas activas */}
-          {getStatusGroup(t) === 0 ? (
+          {/* Drag handle — solo tareas activas. Si filtro por persona, requiere autorizacion. */}
+          {getStatusGroup(t) === 0 && (!orderUserId || canDragForUser) ? (
             <div
               className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-gray-400 select-none"
               draggable
               onDragStart={(e) => handleDragStart(e, t, sortedGroup)}
               onDragEnd={handleDragEnd}
-              title="Arrastrar para reordenar"
+              title={orderUserId ? 'Arrastrá para reordenar (solo para esta persona)' : 'Arrastrar para reordenar'}
             ><GripVertical size={14} /></div>
           ) : <div />}
 
@@ -809,10 +852,14 @@ export default function TasksPage({ embedded = false }) {
               {korexTasks.length > 0 ? (
                 (() => {
                   const getG = (t) => { if (t.status === 'done') return 2; if (isTaskBlocked(t)) return 1; return 0; };
+                  const effPos = (t) => (orderUserId && customPosByTask[t.id] !== undefined) ? customPosByTask[t.id] : (t.position ?? 0);
                   const sorted = [...korexTasks].sort((a, b) => {
                     const ga = getG(a), gb = getG(b);
                     if (ga !== gb) return ga - gb;
-                    return (a.position ?? 0) - (b.position ?? 0);
+                    const aHas = orderUserId && customPosByTask[a.id] !== undefined;
+                    const bHas = orderUserId && customPosByTask[b.id] !== undefined;
+                    if (aHas !== bHas) return aHas ? -1 : 1;
+                    return effPos(a) - effPos(b);
                   });
                   return (
                     <>
@@ -886,10 +933,21 @@ export default function TasksPage({ embedded = false }) {
           if (isTaskBlocked(t)) return 1;
           return 0; // backlog, in-progress, en-revision = all active
         };
+        const effectivePos = (t) => {
+          // Cuando hay filtro de persona, priorizar position custom de esa persona.
+          // Fallback al position global de la tarea.
+          if (orderUserId && customPosByTask[t.id] !== undefined) return customPosByTask[t.id];
+          return t.position ?? 0;
+        };
         const sortedTasks = [...g.tasks].sort((a, b) => {
           const ga = getGroup(a), gb = getGroup(b);
           if (ga !== gb) return ga - gb;
-          return (a.position ?? 0) - (b.position ?? 0);
+          const pa = effectivePos(a), pb = effectivePos(b);
+          // Tareas con custom position van primero (las arrastradas explicitamente). Las sin custom usan position global.
+          const aHasCustom = orderUserId && customPosByTask[a.id] !== undefined;
+          const bHasCustom = orderUserId && customPosByTask[b.id] !== undefined;
+          if (aHasCustom !== bHasCustom) return aHasCustom ? -1 : 1;
+          return pa - pb;
         });
         const collapsed = collapsedGroups[g.client.id];
         const taskCount = g.tasks.filter(t => t.status !== 'done').length;
