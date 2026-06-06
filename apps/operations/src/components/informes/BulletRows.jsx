@@ -27,25 +27,36 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   const overIdx = useRef(null);
   const [taskPickerOpenForIdx, setTaskPickerOpenForIdx] = useState(null);
 
-  // Tareas pendientes mias con este cliente.
-  const myPendingTasks = (() => {
+  // Tareas mias con este cliente. Incluimos las completadas (done) para que
+  // el usuario pueda igual dejar un avance/entregable sobre algo ya cerrado.
+  // Pending primero, done despues; visualmente diferenciadas por status.
+  const myTasksForClient = (() => {
     if (!clientId || !currentUser) return [];
     const myNames = new Set([
       (currentUser.name || '').toLowerCase(),
       ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
       currentUser.id,
     ].filter(Boolean));
-    return (tasks || []).filter(t => {
+    const mine = (tasks || []).filter(t => {
       if (t.clientId !== clientId) return false;
-      if (t.status === 'done') return false;
       const parts = parseAssignees(t.assignee).map(s => s.toLowerCase());
       return parts.some(p => myNames.has(p));
     });
+    return mine.sort((a, b) => {
+      const aDone = a.status === 'done' ? 1 : 0;
+      const bDone = b.status === 'done' ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return (a.title || '').localeCompare(b.title || '');
+    });
   })();
+  // Alias por compatibilidad con el resto del componente.
+  const myPendingTasks = myTasksForClient.filter(t => t.status !== 'done');
 
-  // task_ids ya vinculados en la lista actual (para no repetir en el picker).
+  // task_ids ya vinculados en la lista actual (para no repetir el atajo).
   const linkedTaskIds = new Set((bullets || []).map(b => b?.task_id).filter(Boolean));
-  const tasksById = Object.fromEntries(myPendingTasks.map(t => [t.id, t]));
+  // Incluye tareas done para que un bullet ya vinculado a una tarea cerrada
+  // pueda seguir mostrando su chip y permitir desvincular.
+  const tasksById = Object.fromEntries(myTasksForClient.map(t => [t.id, t]));
 
   const update = (idx, patch) => {
     const next = bullets.map((b, i) => i === idx ? { ...b, ...patch } : b);
@@ -121,10 +132,10 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
         const needsCategory = b.text.trim() && !b.category;
         const linkedTask = b.task_id ? tasksById[b.task_id] : null;
         const pickerOpen = taskPickerOpenForIdx === i;
-        // Mostramos SIEMPRE todas las tareas pendientes mias del cliente, sin
-        // filtrar las ya vinculadas en otros bullets. Una misma tarea puede
-        // tener avances en varios bullets (ej: avance + entregable mas tarde).
-        const pickableForThisBullet = myPendingTasks;
+        // Mostramos SIEMPRE todas mis tareas del cliente (pending + done).
+        // Sin filtrar las ya vinculadas: una misma tarea puede tener avances
+        // en varios bullets (ej: avance + entregable mas tarde).
+        const pickableForThisBullet = myTasksForClient;
         return (
           <div
             key={i}
@@ -213,7 +224,7 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                         <X size={9} />
                       </button>
                     </span>
-                  ) : pickableForThisBullet.length > 0 ? (
+                  ) : (
                     <div className="relative">
                       <button
                         type="button"
@@ -232,25 +243,44 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                             className="fixed inset-0 z-[60]"
                             onClick={() => setTaskPickerOpenForIdx(null)}
                           />
-                          <div className="absolute z-[61] mt-1 left-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[220px] overflow-y-auto min-w-[260px]">
-                            {pickableForThisBullet.map(t => (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => { update(i, { task_id: t.id }); setTaskPickerOpenForIdx(null); }}
-                                className="block w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-blue-50 cursor-pointer border-none bg-transparent"
-                              >
-                                <span className="font-medium">{t.title}</span>
-                                {t.phase && (
-                                  <span className="block text-[10px] text-gray-400 mt-0.5">Fase: {t.phase}</span>
-                                )}
-                              </button>
-                            ))}
+                          <div className="absolute z-[61] mt-1 left-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[220px] overflow-y-auto min-w-[280px]">
+                            {pickableForThisBullet.length === 0 && (
+                              <div className="px-3 py-2 text-[11.5px] text-gray-400 italic">
+                                Sin tareas mias en este cliente
+                              </div>
+                            )}
+                            {pickableForThisBullet.map(t => {
+                              const isDone = t.status === 'done';
+                              return (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => { update(i, { task_id: t.id }); setTaskPickerOpenForIdx(null); }}
+                                  className={`block w-full text-left px-3 py-1.5 text-[12px] hover:bg-blue-50 cursor-pointer border-none bg-transparent ${
+                                    isDone ? 'text-gray-500' : 'text-gray-700'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`font-medium truncate ${isDone ? 'line-through' : ''}`}>
+                                      {t.title}
+                                    </span>
+                                    {isDone && (
+                                      <span className="ml-auto shrink-0 inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-green-100 text-green-700 px-1.5 py-0.5">
+                                        Completada
+                                      </span>
+                                    )}
+                                  </div>
+                                  {t.phase && (
+                                    <span className="block text-[10px] text-gray-400 mt-0.5">Fase: {t.phase}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
                           </div>
                         </>
                       )}
                     </div>
-                  ) : null}
+                  )}
 
                   {/* Hint resaltado cuando entregable + linked */}
                   {linkedTask && isEntregable && (
