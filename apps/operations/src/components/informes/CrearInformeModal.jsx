@@ -53,7 +53,19 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           const d = JSON.parse(raw);
           setType(d.type || defaultType);
           setReportDate(d.reportDate || (defaultType === 'weekly' ? mondayOf(today()) : today()));
-          setProgressItems(Array.isArray(d.progressItems) ? d.progressItems : []);
+          // Al restaurar, limpiamos bullets vacios (placeholders sin texto y
+          // sin categoria). Si tenian task_id, esa tarea queda libre para
+          // volver a vincularse — sino el picker la vetaba como "ya tomada"
+          // por un placeholder que el usuario nunca lleno.
+          const restoredItems = (Array.isArray(d.progressItems) ? d.progressItems : []).map(p => {
+            if (!Array.isArray(p?.bullets)) return p;
+            const filtered = p.bullets.filter(b => {
+              const txt = String(b?.text || '').trim();
+              return txt || b?.category;
+            });
+            return { ...p, bullets: filtered };
+          });
+          setProgressItems(restoredItems);
           setNextDay(d.nextDay || '');
           setHasBlocker(!!d.hasBlocker);
           setBlockerDesc(d.blockerDesc || '');
@@ -533,6 +545,24 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       dismissOnEscape={false}
       footer={
         <>
+          {!isEditing && draftKey && progressItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!confirm('Descartar el borrador y empezar de cero?')) return;
+                try { localStorage.removeItem(draftKey); } catch {}
+                setProgressItems([]);
+                setNextDay('');
+                setHasBlocker(false);
+                setBlockerDesc('');
+                setBlockerImprovement('');
+                userTouchedRef.current = false;
+              }}
+              disabled={saving}
+              className="py-2 px-3 bg-transparent border border-amber-200 text-amber-700 text-[12px] rounded-lg cursor-pointer font-sans hover:bg-amber-50 disabled:opacity-40 mr-auto"
+              title="Empezar de cero (no guarda en DB, solo el borrador local)"
+            >Descartar borrador</button>
+          )}
           <button
             type="button"
             onClick={onClose}
