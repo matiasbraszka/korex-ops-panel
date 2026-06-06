@@ -4,8 +4,9 @@ import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
 import CommentItem from './CommentItem';
 import MentionTextarea from './MentionTextarea';
-import { TASK_STATUS } from '../../utils/constants';
+import { TASK_STATUS, PHASES } from '../../utils/constants';
 import { getBullets } from '../../utils/helpers';
+import { formatSystemEvent, formatReportEvent } from '../../utils/taskActivity';
 
 // CommentsSidePanel — panel lateral de actividad (comentarios + contexto
 // de la tarea). Se monta una sola vez al root de la app y abre/cierra via
@@ -425,32 +426,79 @@ export default function CommentsSidePanel() {
                       {day}
                       <span className="flex-1 h-px bg-[#EEF0F3]" />
                     </div>
-                    {groupedByDay.byDay[day].map(root => (
-                      <div key={root.id} className="mb-4 space-y-2">
-                        <CommentItem
-                          comment={root}
-                          author={memberById[root.author_id]}
-                          canReply
-                          canEdit={root.author_id === currentUser?.id}
-                          canDelete={root.author_id === currentUser?.id || isAdmin}
-                          onReply={() => startReply(root.id, root.author_id)}
-                          onUpdate={async (id, body) => { await handleUpdate(id, body); }}
-                          onDelete={async (id) => { await handleDelete(id); }}
-                        />
-                        {(groupedByDay.repliesByParent[root.id] || []).map(rep => (
+                    {groupedByDay.byDay[day].map(root => {
+                      const rootKind = root.kind || 'user';
+                      if (rootKind === 'system') {
+                        const phases = shownClient ? { ...PHASES, ...(shownClient.phaseNameOverrides || {}) } : PHASES;
+                        const ev = formatSystemEvent(root.event_meta, { phases });
+                        const author = memberById[root.author_id];
+                        return (
+                          <div key={root.id} className="mb-3 flex items-center gap-2 text-[11px] text-[#6B7280]">
+                            <span className="flex-1 h-px bg-[#EEF0F3]" />
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#F7F8FA] border border-[#EEF0F3]">
+                              <span style={{ color: ev.iconColor || '#6B7280' }}>{ev.icon}</span>
+                              <span>{ev.text}</span>
+                              <span className="text-[#9CA3AF]">·</span>
+                              <span>{author?.name?.split(' ')[0] || 'sistema'}</span>
+                              <span className="text-[#9CA3AF]">·</span>
+                              <span>{fmtTime(root.created_at)}</span>
+                            </span>
+                            <span className="flex-1 h-px bg-[#EEF0F3]" />
+                          </div>
+                        );
+                      }
+                      if (rootKind === 'report') {
+                        const ev = formatReportEvent(root.event_meta, root.body);
+                        const author = memberById[root.author_id];
+                        return (
+                          <div key={root.id} className="mb-3 ml-1">
+                            <div
+                              className="rounded-[11px] border-l-4 px-3 py-2 bg-white"
+                              style={{ borderLeftColor: ev.color, background: ev.bg }}
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span
+                                  className="text-[9.5px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded-full"
+                                  style={{ background: ev.color, color: 'white' }}
+                                >{ev.badge}</span>
+                                <span className="text-[10.5px] text-[#6B7280]">
+                                  {author?.name?.split(' ')[0] || 'equipo'} · {fmtTime(root.created_at)}
+                                </span>
+                              </div>
+                              <div className="text-[12.5px] text-[#1A1D26] leading-snug whitespace-pre-wrap break-words">
+                                {ev.body}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={root.id} className="mb-4 space-y-2">
                           <CommentItem
-                            key={rep.id}
-                            comment={rep}
-                            author={memberById[rep.author_id]}
-                            isReply
-                            canEdit={rep.author_id === currentUser?.id}
-                            canDelete={rep.author_id === currentUser?.id || isAdmin}
+                            comment={root}
+                            author={memberById[root.author_id]}
+                            canReply
+                            canEdit={root.author_id === currentUser?.id}
+                            canDelete={root.author_id === currentUser?.id || isAdmin}
+                            onReply={() => startReply(root.id, root.author_id)}
                             onUpdate={async (id, body) => { await handleUpdate(id, body); }}
                             onDelete={async (id) => { await handleDelete(id); }}
                           />
-                        ))}
-                      </div>
-                    ))}
+                          {(groupedByDay.repliesByParent[root.id] || []).map(rep => (
+                            <CommentItem
+                              key={rep.id}
+                              comment={rep}
+                              author={memberById[rep.author_id]}
+                              isReply
+                              canEdit={rep.author_id === currentUser?.id}
+                              canDelete={rep.author_id === currentUser?.id || isAdmin}
+                              onUpdate={async (id, body) => { await handleUpdate(id, body); }}
+                              onDelete={async (id) => { await handleDelete(id); }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 ))
               )}

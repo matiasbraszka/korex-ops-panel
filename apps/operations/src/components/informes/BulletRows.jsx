@@ -1,10 +1,11 @@
 import { useRef } from 'react';
-import { X, GripVertical, Plus, CheckCircle2, Circle } from 'lucide-react';
+import { X, GripVertical, Plus, CheckCircle2, Circle, Link2 } from 'lucide-react';
 import MentionTextarea from '../comments/MentionTextarea';
 import { useApp } from '../../context/AppContext';
+import { parseAssignees } from '../../utils/taskActivity';
 
 // BulletRows — lista editable de bullets para los informes.
-// Cada bullet: { text, category: 'entregable' | 'avance' | null }.
+// Cada bullet: { text, category: 'entregable' | 'avance' | null, task_id? }.
 // El padre maneja todo el estado; este componente solo emite cambios.
 //
 // UX:
@@ -12,9 +13,28 @@ import { useApp } from '../../context/AppContext';
 // - Default al agregar: category=null (sin elegir) para forzar decision.
 // - Drag & drop nativo (mismo patron que NotasView).
 // - Texto vacio se filtra al guardar (no es bug).
+// - Si se pasa clientId, se habilita un selector opcional "Vincular tarea"
+//   con las tareas pendientes del autor del informe para ese cliente.
 
-export default function BulletRows({ bullets, onChange, disabled = false }) {
-  const { teamMembers, currentUser } = useApp();
+export default function BulletRows({ bullets, onChange, disabled = false, clientId = null }) {
+  const { teamMembers, currentUser, tasks } = useApp();
+
+  // Tareas pendientes mias con este cliente (para el selector "Vincular tarea").
+  // Reusa el patron de TasksPage: assignee es CSV; matchea por nombre o id.
+  const myPendingTasks = (() => {
+    if (!clientId || !currentUser) return [];
+    const myNames = new Set([
+      (currentUser.name || '').toLowerCase(),
+      ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
+      currentUser.id,
+    ].filter(Boolean));
+    return (tasks || []).filter(t => {
+      if (t.clientId !== clientId) return false;
+      if (t.status === 'done') return false;
+      const parts = parseAssignees(t.assignee).map(s => s.toLowerCase());
+      return parts.some(p => myNames.has(p));
+    });
+  })();
   const dragIdx = useRef(null);
   const overIdx = useRef(null);
 
@@ -110,7 +130,7 @@ export default function BulletRows({ bullets, onChange, disabled = false }) {
               </button>
             </div>
 
-            <div className="flex-1">
+            <div className="flex-1 space-y-1">
               <MentionTextarea
                 singleLine
                 value={b.text}
@@ -123,6 +143,30 @@ export default function BulletRows({ bullets, onChange, disabled = false }) {
                   needsCategory ? 'border-amber-300 bg-amber-50/30' : 'border-gray-200'
                 }`}
               />
+              {clientId && myPendingTasks.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Link2 size={11} className="text-gray-400 shrink-0" />
+                  <select
+                    value={b.task_id || ''}
+                    onChange={(e) => update(i, { task_id: e.target.value || null })}
+                    disabled={disabled}
+                    className={`text-[11px] py-0.5 px-1.5 border rounded-md outline-none bg-white text-gray-600 focus:border-blue-400 max-w-full truncate ${
+                      b.task_id ? 'border-blue-200 bg-blue-50/40 text-blue-700 font-semibold' : 'border-gray-200'
+                    }`}
+                    title={b.task_id ? 'Tarea vinculada' : 'Vincular este bullet a una de tus tareas pendientes'}
+                  >
+                    <option value="">Sin vincular tarea</option>
+                    {myPendingTasks.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                  {b.task_id && isEntregable && (
+                    <span className="text-[10px] text-green-700 font-semibold inline-flex items-center gap-0.5">
+                      <CheckCircle2 size={10} /> Al guardar marca la tarea como completada
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <button

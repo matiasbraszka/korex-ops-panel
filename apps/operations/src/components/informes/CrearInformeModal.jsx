@@ -437,8 +437,15 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
         };
         if (true && Array.isArray(i.bullets)) {
           // Filtrar bullets vacios y guardar bullets + text derivado por compat.
+          // Preservamos id y task_id si vienen (necesarios para el historial
+          // automatico de tareas y para no duplicar al re-guardar).
           const cleaned = i.bullets
-            .map(b => ({ text: String(b?.text || '').trim(), category: b?.category || null }))
+            .map(b => ({
+              ...(b?.id ? { id: b.id } : {}),
+              text: String(b?.text || '').trim(),
+              category: b?.category || null,
+              ...(b?.task_id ? { task_id: b.task_id } : {}),
+            }))
             .filter(b => b.text);
           base.bullets = cleaned;
           base.text = serializeBullets(cleaned);
@@ -799,6 +806,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                         <BulletRows
                           bullets={Array.isArray(item.bullets) ? item.bullets : []}
                           onChange={(next) => updateItemBullets(item.key, next)}
+                          clientId={item.key !== INTERNAL_KEY ? item.key : null}
                         />
                       </div>
                     </div>
@@ -810,6 +818,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                       <BulletRows
                         bullets={Array.isArray(item.bullets) ? item.bullets : []}
                         onChange={(next) => updateItemBullets(item.key, next)}
+                        clientId={item.key !== INTERNAL_KEY ? item.key : null}
                       />
                     </>
                   )}

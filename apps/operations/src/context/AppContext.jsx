@@ -5,6 +5,7 @@ import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
+import { diffTaskFields, diffBulletsByTaskLink } from '../utils/taskActivity';
 
 // Recorre progress_by_client y rellena mentioned_ids en cada bullet.
 function enrichBulletsWithMentions(progressByClient, teamMembers, excludeId) {
@@ -134,6 +135,9 @@ export function AppProvider({ children }) {
   bulletCommentsRef.current = bulletComments;
   const teamReportsRef = useRef([]);
   teamReportsRef.current = teamReports;
+  // Ref para llamar recordTaskSystemEvents desde updateTask sin generar orden
+  // de declaracion. Lo seteamos al final cuando la funcion ya existe.
+  const recordTaskSystemEventsRef = useRef(null);
 
   // ── Notificaciones (buzón) ──
   const [notifications, setNotifications] = useState([]);
@@ -470,7 +474,9 @@ export function AppProvider({ children }) {
 
   const updateTask = useCallback((id, updates) => {
     // Limpio flags privados (_skip*) antes de mergear para no inflar el objeto en memoria
-    const { _skipTimerRecalc, _skipRecomputeStarted, ...cleanUpdates } = updates;
+    const { _skipTimerRecalc, _skipRecomputeStarted, _skipHistory, ...cleanUpdates } = updates;
+    // Snapshot del estado previo para el historial automatico (system comments).
+    const prevForHistory = tasksRef.current.find(t => t.id === id);
     setTasks(prev => {
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
@@ -481,6 +487,13 @@ export function AppProvider({ children }) {
         }
         return merged;
       });
+      // Historial: cuando la tarea cambia en uno de los campos relevantes, dejar
+      // entradas system en task_comments. Se hace fire-and-forget via ref para
+      // no introducir orden de definicion entre updateTask y addTaskComment.
+      if (!_skipHistory && prevForHistory && recordTaskSystemEventsRef.current) {
+        const after = mappedTasks.find(t => t.id === id);
+        if (after) recordTaskSystemEventsRef.current(id, prevForHistory, after);
+      }
 
       // Recalculate timers unless flagged to skip
       let finalTasks = mappedTasks;
@@ -714,6 +727,25 @@ export function AppProvider({ children }) {
     });
     setTeamReports(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
 
+    // Side-effects: bullets vinculados a tareas. Por cada bullet con task_id:
+    // - si es 'entregable' → updateTask({ status:'done' }) (deja system comment).
+    // - siempre → insertar comment kind='report' con el texto del bullet.
+    try {
+      const linkedBullets = diffBulletsByTaskLink([], row.progress_by_client);
+      for (const b of linkedBullets) {
+        if (b.category === 'entregable') {
+          updateTask(b.task_id, { status: 'done' });
+        }
+        addTaskComment({
+          task_id: b.task_id,
+          author_id: data.user_id,
+          body: b.text || '',
+          kind: 'report',
+          event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
+        }).catch(e => console.warn('addTeamReport linked bullet', e));
+      }
+    } catch (e) { console.warn('addTeamReport task links', e); }
+
     // Si vino bloqueo, lo persisto en team_blockers
     if (data.blocker && data.blocker.description && data.blocker.needs) {
       const blockerId = 'bl_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
@@ -735,12 +767,13 @@ export function AppProvider({ children }) {
       setTeamBlockers(prev => [{ ...blockerRow, created_at: new Date().toISOString() }, ...prev]);
     }
     return row;
-  }, []);
+  }, [updateTask, addTaskComment]);
 
   const updateTeamReport = useCallback(async (id, fields) => {
     const patch = { ...fields };
+    const before = (teamReportsRef.current || []).find(r => r.id === id);
+    const author = before?.user_id;
     if (patch.progress_by_client) {
-      const author = (teamReportsRef.current || []).find(r => r.id === id)?.user_id;
       patch.progress_by_client = enrichBulletsWithMentions(
         ensureBulletIds(patch.progress_by_client),
         teamMembersRef.current || [],
@@ -754,7 +787,27 @@ export function AppProvider({ children }) {
       throwOnError: true,
     });
     setTeamReports(prev => prev.map(r => r.id === id ? { ...r, ...patch, updated_at: new Date().toISOString() } : r));
-  }, []);
+
+    // Side-effects: solo procesar bullets nuevos o con task_id distinto al
+    // anterior, para no duplicar al editar el informe.
+    if (patch.progress_by_client && author) {
+      try {
+        const linkedBullets = diffBulletsByTaskLink(before?.progress_by_client || [], patch.progress_by_client);
+        for (const b of linkedBullets) {
+          if (b.category === 'entregable') {
+            updateTask(b.task_id, { status: 'done' });
+          }
+          addTaskComment({
+            task_id: b.task_id,
+            author_id: author,
+            body: b.text || '',
+            kind: 'report',
+            event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
+          }).catch(e => console.warn('updateTeamReport linked bullet', e));
+        }
+      } catch (e) { console.warn('updateTeamReport task links', e); }
+    }
+  }, [updateTask, addTaskComment]);
 
   const deleteTeamReport = useCallback(async (id) => {
     await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
@@ -964,7 +1017,12 @@ export function AppProvider({ children }) {
   const addTaskComment = useCallback(async (data) => {
     const id = 'tc_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
     const body = String(data.body || '').trim();
-    const mentioned_ids = extractMentions(body, teamMembersRef.current || [], { excludeId: data.author_id });
+    const kind = data.kind || 'user';
+    // Solo extraemos menciones para comentarios de usuario; en system/report no
+    // queremos notificar por @ ni interpretar texto crudo.
+    const mentioned_ids = kind === 'user'
+      ? extractMentions(body, teamMembersRef.current || [], { excludeId: data.author_id })
+      : [];
     const row = {
       id,
       task_id: data.task_id,
@@ -973,6 +1031,8 @@ export function AppProvider({ children }) {
       body,
       edited: false,
       mentioned_ids,
+      kind,
+      event_meta: data.event_meta || null,
     };
     await sbFetch('task_comments', {
       method: 'POST',
@@ -984,6 +1044,27 @@ export function AppProvider({ children }) {
     setTaskComments(prev => [...prev, { ...row, created_at: nowIso, updated_at: nowIso }]);
     return id;
   }, []);
+
+  // ── Helpers: historial automatico de tareas ──
+  // Inserta entradas kind='system' por cada cambio detectado (status, dueDate,
+  // phase, assignee). Llamada desde updateTask. No bloquea la UI.
+  const recordTaskSystemEvents = useCallback((taskId, prev, next) => {
+    if (!taskId || !prev || !next) return;
+    const author = currentUserIdRef.current;
+    if (!author) return; // sin usuario logueado no registramos (ej: hidratacion inicial)
+    const events = diffTaskFields(prev, next);
+    events.forEach(ev => {
+      // Fire-and-forget; si falla queda log, no rompe el update.
+      addTaskComment({
+        task_id: taskId,
+        author_id: author,
+        body: '',
+        kind: 'system',
+        event_meta: ev,
+      }).catch(e => console.warn('recordTaskSystemEvents', e));
+    });
+  }, [addTaskComment]);
+  recordTaskSystemEventsRef.current = recordTaskSystemEvents;
 
   const updateTaskComment = useCallback(async (id, fields) => {
     const patch = { ...fields };
