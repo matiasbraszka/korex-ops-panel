@@ -110,6 +110,9 @@ export function AppProvider({ children }) {
   // Orden custom de tareas por usuario. Filas {task_id, user_id, position}.
   // Si una tarea no tiene fila para un user, ordena por tasks.position (fallback).
   const [taskUserPositions, setTaskUserPositions] = useState([]);
+  // Orden custom de CLIENTES por usuario (vista Lista de tareas).
+  // Filas {client_id, user_id, position}. Sin fila → fallback a clients.position.
+  const [clientUserPositions, setClientUserPositions] = useState([]);
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -1233,6 +1236,34 @@ export function AppProvider({ children }) {
     } catch (e) { console.warn('reorderTaskForUser persist', e); }
   }, []);
 
+  // ── Orden custom de CLIENTES por usuario (vista Lista de tareas) ──
+  const reorderClientForUser = useCallback(async (clientId, userId, { prevPosition, nextPosition } = {}) => {
+    if (!clientId || !userId) return;
+    let newPos;
+    if (typeof prevPosition === 'number' && typeof nextPosition === 'number') {
+      newPos = (prevPosition + nextPosition) / 2;
+    } else if (typeof prevPosition === 'number') {
+      newPos = prevPosition - 0.5;
+    } else if (typeof nextPosition === 'number') {
+      newPos = nextPosition + 0.5;
+    } else {
+      return;
+    }
+    const row = { client_id: clientId, user_id: userId, position: newPos };
+    setClientUserPositions(prev => {
+      const exists = prev.find(r => r.client_id === clientId && r.user_id === userId);
+      if (exists) return prev.map(r => r.client_id === clientId && r.user_id === userId ? { ...r, position: newPos } : r);
+      return [...prev, { ...row, updated_at: new Date().toISOString() }];
+    });
+    try {
+      await sbFetch('client_user_positions', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+        body: JSON.stringify(row),
+      });
+    } catch (e) { console.warn('reorderClientForUser persist', e); }
+  }, []);
+
   // ── CRUD: notas ──
   // Tabla `notas` (notas_v1.sql). Mismo patron que ideas: optimistic UI +
   // POST/PATCH/DELETE contra Supabase. Toda la sanitizacion del body_html
@@ -1471,6 +1502,10 @@ export function AppProvider({ children }) {
         const tup = await sbFetch('task_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
         if (tup && Array.isArray(tup)) setTaskUserPositions(tup);
       } catch (e) { console.warn('loadTaskUserPositions error', e); }
+      try {
+        const cup = await sbFetch('client_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
+        if (cup && Array.isArray(cup)) setClientUserPositions(cup);
+      } catch (e) { console.warn('loadClientUserPositions error', e); }
       try {
         const allBlockerComments = await sbFetch('blocker_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allBlockerComments && Array.isArray(allBlockerComments)) setBlockerComments(allBlockerComments);
@@ -1858,6 +1893,8 @@ export function AppProvider({ children }) {
     // Orden custom de tareas por usuario + reorder de clientes
     taskUserPositions,
     reorderTaskForUser,
+    clientUserPositions,
+    reorderClientForUser,
     reorderClient,
     // Side panel de comentarios (generico para task, bullet, idea o blocker).
     commentsTarget,
