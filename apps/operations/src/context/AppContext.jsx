@@ -138,6 +138,10 @@ export function AppProvider({ children }) {
   // Ref para llamar recordTaskSystemEvents desde updateTask sin generar orden
   // de declaracion. Lo seteamos al final cuando la funcion ya existe.
   const recordTaskSystemEventsRef = useRef(null);
+  // Refs para llamar addTaskComment y updateTask desde addTeamReport/updateTeamReport
+  // sin disparar TDZ (estan declarados despues). Se setean al final del archivo.
+  const addTaskCommentRef = useRef(null);
+  const updateTaskRef = useRef(null);
 
   // ── Notificaciones (buzón) ──
   const [notifications, setNotifications] = useState([]);
@@ -733,16 +737,18 @@ export function AppProvider({ children }) {
     try {
       const linkedBullets = diffBulletsByTaskLink([], row.progress_by_client);
       for (const b of linkedBullets) {
-        if (b.category === 'entregable') {
-          updateTask(b.task_id, { status: 'done' });
+        if (b.category === 'entregable' && updateTaskRef.current) {
+          updateTaskRef.current(b.task_id, { status: 'done' });
         }
-        addTaskComment({
-          task_id: b.task_id,
-          author_id: data.user_id,
-          body: b.text || '',
-          kind: 'report',
-          event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
-        }).catch(e => console.warn('addTeamReport linked bullet', e));
+        if (addTaskCommentRef.current) {
+          addTaskCommentRef.current({
+            task_id: b.task_id,
+            author_id: data.user_id,
+            body: b.text || '',
+            kind: 'report',
+            event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
+          }).catch(e => console.warn('addTeamReport linked bullet', e));
+        }
       }
     } catch (e) { console.warn('addTeamReport task links', e); }
 
@@ -767,7 +773,7 @@ export function AppProvider({ children }) {
       setTeamBlockers(prev => [{ ...blockerRow, created_at: new Date().toISOString() }, ...prev]);
     }
     return row;
-  }, [updateTask, addTaskComment]);
+  }, []);
 
   const updateTeamReport = useCallback(async (id, fields) => {
     const patch = { ...fields };
@@ -794,20 +800,22 @@ export function AppProvider({ children }) {
       try {
         const linkedBullets = diffBulletsByTaskLink(before?.progress_by_client || [], patch.progress_by_client);
         for (const b of linkedBullets) {
-          if (b.category === 'entregable') {
-            updateTask(b.task_id, { status: 'done' });
+          if (b.category === 'entregable' && updateTaskRef.current) {
+            updateTaskRef.current(b.task_id, { status: 'done' });
           }
-          addTaskComment({
-            task_id: b.task_id,
-            author_id: author,
-            body: b.text || '',
-            kind: 'report',
-            event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
-          }).catch(e => console.warn('updateTeamReport linked bullet', e));
+          if (addTaskCommentRef.current) {
+            addTaskCommentRef.current({
+              task_id: b.task_id,
+              author_id: author,
+              body: b.text || '',
+              kind: 'report',
+              event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
+            }).catch(e => console.warn('updateTeamReport linked bullet', e));
+          }
         }
       } catch (e) { console.warn('updateTeamReport task links', e); }
     }
-  }, [updateTask, addTaskComment]);
+  }, []);
 
   const deleteTeamReport = useCallback(async (id) => {
     await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
@@ -1065,6 +1073,8 @@ export function AppProvider({ children }) {
     });
   }, [addTaskComment]);
   recordTaskSystemEventsRef.current = recordTaskSystemEvents;
+  addTaskCommentRef.current = addTaskComment;
+  updateTaskRef.current = updateTask;
 
   const updateTaskComment = useCallback(async (id, fields) => {
     const patch = { ...fields };
