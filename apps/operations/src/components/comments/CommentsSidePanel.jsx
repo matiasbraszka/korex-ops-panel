@@ -3,6 +3,7 @@ import { X, Send, MessageSquare, Calendar, AlertTriangle, Building2, FileText, L
 import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
 import CommentItem from './CommentItem';
+import MentionTextarea from './MentionTextarea';
 import { TASK_STATUS } from '../../utils/constants';
 import { getBullets } from '../../utils/helpers';
 
@@ -479,17 +480,21 @@ export default function CommentsSidePanel() {
                     size={30}
                   />
                 )}
-                <textarea
-                  ref={taRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Escribí un comentario…  (Ctrl+Enter)"
-                  disabled={sending}
-                  rows={1}
-                  className="flex-1 border border-[#E2E5EB] rounded-[11px] py-2.5 px-3 text-[12.5px] font-sans outline-none focus:border-[#5B7CF5] resize-none bg-white disabled:bg-[#F7F8FA]"
-                  style={{ minHeight: 44, maxHeight: 120, lineHeight: 1.45, boxShadow: 'none' }}
-                />
+                <div className="flex-1">
+                  <MentionTextarea
+                    ref={taRef}
+                    value={draft}
+                    onChange={setDraft}
+                    onSubmit={handleSubmit}
+                    teamMembers={teamMembers || []}
+                    excludeId={currentUser?.id}
+                    placeholder="Escribí un comentario… Usá @ para etiquetar (Ctrl+Enter)"
+                    disabled={sending}
+                    rows={1}
+                    className="w-full border border-[#E2E5EB] rounded-[11px] py-2.5 px-3 text-[12.5px] font-sans outline-none focus:border-[#5B7CF5] resize-none bg-white disabled:bg-[#F7F8FA]"
+                    style={{ minHeight: 44, maxHeight: 120, lineHeight: 1.45, boxShadow: 'none' }}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={handleSubmit}
