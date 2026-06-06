@@ -9,7 +9,7 @@ import TeamAvatar from '../components/TeamAvatar';
 import AddToWeeklyButton from '../components/tareas/AddToWeeklyButton';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, taskUserPositions, reorderTaskForUser, clientUserPositions, reorderClientForUser } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, taskUserPositions, reorderTaskForUser, clientUserPositions, reorderClientForUser } = useApp();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
   const commentCountsByTask = useMemo(() => {
     const map = {};
@@ -317,8 +317,18 @@ export default function TasksPage({ embedded = false }) {
     const [moved] = reordered.splice(fromIdx, 1);
     reordered.splice(insertIdx, 0, moved);
 
-    // Drag de tareas individuales solo aplica sin filtro de persona (orden global).
-    reorderTask(reordered);
+    if (orderUserId && canDragForUser) {
+      // Orden custom por persona: persistir solo la fila task_user_positions del item movido.
+      const newIdx = reordered.findIndex(t => t.id === fromId);
+      const above = newIdx > 0 ? reordered[newIdx - 1] : null;
+      const below = newIdx < reordered.length - 1 ? reordered[newIdx + 1] : null;
+      const effPos = (t) => (customPosByTask[t.id] !== undefined) ? customPosByTask[t.id] : (t.position ?? 0);
+      const prevPosition = below ? effPos(below) : null;
+      const nextPosition = above ? effPos(above) : null;
+      reorderTaskForUser(fromId, orderUserId, { prevPosition, nextPosition });
+    } else {
+      reorderTask(reordered);
+    }
 
     setDragTaskId(null);
     setDragOverTaskId(null);
@@ -381,15 +391,15 @@ export default function TasksPage({ embedded = false }) {
           onDrop={(e) => handleDrop(e, t, sortedGroup)}
           onDragLeave={() => { if (dragOverTaskId === t.id) setDragOverTaskId(null); }}
         >
-          {/* Drag handle por tarea — solo activo cuando no hay filtro por persona.
-              Con filtro por persona, el orden se controla a nivel CLIENTE (drag en el header). */}
-          {getStatusGroup(t) === 0 && !orderUserId ? (
+          {/* Drag handle por tarea — siempre disponible.
+              Con filtro por persona persiste en task_user_positions; sin filtro, en tasks.position. */}
+          {getStatusGroup(t) === 0 && (!orderUserId || canDragForUser) ? (
             <div
               className="flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-40 hover:!opacity-100 transition-opacity text-gray-400 select-none"
               draggable
               onDragStart={(e) => handleDragStart(e, t, sortedGroup)}
               onDragEnd={handleDragEnd}
-              title="Arrastrar para reordenar"
+              title={orderUserId ? 'Arrastrá para reordenar (solo para esta persona)' : 'Arrastrar para reordenar'}
             ><GripVertical size={14} /></div>
           ) : <div />}
 
@@ -837,6 +847,7 @@ export default function TasksPage({ embedded = false }) {
   // Korex tasks (always shown at bottom)
   const korexTasks = korexClient ? filteredTasks.filter(t => t.clientId === korexClientId) : [];
   const korexTaskCount = korexTasks.filter(t => t.status !== 'done').length;
+  const korexCollapsed = collapsedGroups['_korex'];
 
   return (
     <div>
@@ -898,12 +909,17 @@ export default function TasksPage({ embedded = false }) {
       {/* Empresa Korex section — at top, solo si tiene tareas visibles con los filtros activos */}
       {korexClient && korexTasks.length > 0 && (
         <div className="mb-2 bg-slate-50 border border-slate-300 border-l-[5px] border-l-slate-700 rounded-xl overflow-visible">
-          <div className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold select-none border-b border-slate-200 rounded-t-[6px]">
+          <div
+            className="flex items-center gap-2.5 py-2.5 px-4 text-[13px] font-bold cursor-pointer select-none border-b border-slate-200 hover:bg-slate-100 rounded-t-[6px]"
+            onClick={() => setCollapsedGroups(prev => ({ ...prev, '_korex': !prev['_korex'] }))}
+          >
+            <span className={`text-xs text-slate-400 transition-transform duration-200 ${korexCollapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[14px] shrink-0 bg-slate-700">{'\uD83C\uDFE2'}</div>
             <span className="text-slate-800">Empresa Korex</span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase whitespace-nowrap bg-slate-700 text-white">{'\uD83C\uDFE2'} INTERNO</span>
             <span className="bg-slate-200 text-slate-600 text-[11px] font-semibold py-[1px] px-2 rounded-xl ml-auto">{korexTaskCount}</span>
           </div>
+          {!korexCollapsed && (
           <div>
               {korexTasks.length > 0 ? (
                 (() => {
@@ -977,6 +993,7 @@ export default function TasksPage({ embedded = false }) {
 
               <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-slate-400 text-xs hover:text-slate-700 hover:bg-slate-100" onClick={() => { setAddingTaskTo(korexClientId); setTimeout(() => { const i = document.getElementById('korex-task-input'); if (i) i.focus(); }, 50); }}>+ Agregar tarea</div>
           </div>
+          )}
         </div>
       )}
 
@@ -1005,6 +1022,7 @@ export default function TasksPage({ embedded = false }) {
           return pa - pb;
         });
         const taskCount = g.tasks.filter(t => t.status !== 'done').length;
+        const collapsed = collapsedGroups[g.client.id];
         const isClientDragging = dragClientId === g.client.id;
         const isClientDragOver = dragOverClientId === g.client.id && dragClientId !== g.client.id;
         const showClientDrag = !!orderUserId && canDragForUser;
@@ -1018,20 +1036,26 @@ export default function TasksPage({ embedded = false }) {
             onDragLeave={() => { if (dragOverClientId === g.client.id) setDragOverClientId(null); }}
           >
             {isClientDragOver && dragOverClientHalf === 'top' && <div className="drag-indicator" />}
-            <div className="flex items-center gap-2.5 py-3 px-4 text-[13.5px] font-bold select-none border-b border-[#EEF0F3] bg-[#FAFBFC]">
+            <div
+              className="flex items-center gap-2.5 py-3 px-4 text-[13.5px] font-bold cursor-pointer select-none border-b border-[#EEF0F3] bg-[#FAFBFC] hover:bg-[#F4F6F9]"
+              onClick={() => setCollapsedGroups(prev => ({ ...prev, [g.client.id]: !prev[g.client.id] }))}
+            >
+              <span className={`text-xs text-[#9CA3AF] transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}>{'\u25BC'}</span>
               {showClientDrag ? (
                 <span
                   className="cursor-grab active:cursor-grabbing text-[#9CA3AF] hover:text-[#5B7CF5] transition-colors"
                   draggable
-                  onDragStart={(e) => handleClientDragStart(e, g.client.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onDragStart={(e) => { e.stopPropagation(); handleClientDragStart(e, g.client.id); }}
                   onDragEnd={handleClientDragEnd}
                   title={orderUserId === currentUser?.id ? 'Arrastr\u00E1 para reordenar tus clientes' : 'Arrastr\u00E1 para reordenar los clientes de esta persona'}
                 ><GripVertical size={14} /></span>
-              ) : <span className="w-[14px]" />}
+              ) : null}
               <TeamAvatar member={{ name: g.client.name, color: g.client.color, avatar: g.client.avatarUrl, initials: (g.client.name||'').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase() }} size={26} />
               <span className="text-[#1A1D26]">{g.client.name}</span>
               <span className="bg-[#F0F2F5] text-[#6B7280] text-[11px] font-semibold py-[2px] px-2 rounded-full">{taskCount} pendiente{taskCount !== 1 ? 's' : ''}</span>
             </div>
+            {!collapsed && (
             <div>
                 {/* Column header \u2014 solo desktop. Mismo grid que las filas. */}
                 <div
@@ -1093,6 +1117,7 @@ export default function TasksPage({ embedded = false }) {
 
                 <div className="py-1.5 px-4 flex items-center gap-1.5 cursor-pointer text-text3 text-xs hover:text-blue hover:bg-blue-bg2" onClick={() => { setAddingTaskTo(g.client.id); setNewTaskTitle(''); setTimeout(() => { if (newTaskInputRef.current) newTaskInputRef.current.focus(); }, 50); }}>+ Agregar tarea</div>
             </div>
+            )}
             {isClientDragOver && dragOverClientHalf === 'bottom' && <div className="drag-indicator" />}
           </div>
         );
