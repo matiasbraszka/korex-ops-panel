@@ -61,7 +61,7 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   };
 
   // Atajo: insertar un bullet por cada tarea pendiente mia que no este ya
-  // vinculada en la lista. El texto arranca vacio (el usuario escribe el avance).
+  // vinculada en la lista actual. Si todas estan vinculadas, no agrega nada.
   const addAllMyPending = () => {
     const news = myPendingTasks
       .filter(t => !linkedTaskIds.has(t.id))
@@ -69,6 +69,7 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
     if (news.length === 0) return;
     onChange([...(bullets || []), ...news]);
   };
+  const pendingPickableCount = myPendingTasks.filter(t => !linkedTaskIds.has(t.id)).length;
 
   const handleDragStart = (e, idx) => {
     if (disabled) return;
@@ -92,8 +93,6 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
     next.splice(to, 0, moved);
     onChange(next);
   };
-
-  const pendingPickableCount = myPendingTasks.filter(t => !linkedTaskIds.has(t.id)).length;
 
   return (
     <div className="space-y-1.5">
@@ -122,7 +121,10 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
         const needsCategory = b.text.trim() && !b.category;
         const linkedTask = b.task_id ? tasksById[b.task_id] : null;
         const pickerOpen = taskPickerOpenForIdx === i;
-        const pickableForThisBullet = myPendingTasks.filter(t => !linkedTaskIds.has(t.id) || t.id === b.task_id);
+        // Mostramos SIEMPRE todas las tareas pendientes mias del cliente, sin
+        // filtrar las ya vinculadas en otros bullets. Una misma tarea puede
+        // tener avances en varios bullets (ej: avance + entregable mas tarde).
+        const pickableForThisBullet = myPendingTasks;
         return (
           <div
             key={i}
