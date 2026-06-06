@@ -528,7 +528,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       open={open}
       onClose={saving ? () => {} : onClose}
       title={headerLabel}
-      maxWidth={type === 'weekly' ? 900 : 580}
+      maxWidth={type === 'weekly' ? 1000 : 820}
       dismissOnOverlay={false}
       dismissOnEscape={false}
       footer={
