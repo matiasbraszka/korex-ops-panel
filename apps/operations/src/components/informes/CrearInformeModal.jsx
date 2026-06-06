@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { X, ChevronDown, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, ChevronDown, Search, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react';
 import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
 import { today, mondayOf, weekDatesOf, getBullets, serializeBullets } from '../../utils/helpers';
@@ -316,6 +316,27 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     }
   }, [weekMonday]);
 
+  // Digest semanal por cliente: para cada client_key (o INTERNAL_KEY) construye
+  // [{ date, dayLabel, bullets[] }] con SOLO los dias que tienen bullets,
+  // ordenados de lunes a domingo. Sirve para mostrar al lado del editor del
+  // semanal lo que se hizo cada dia, sin tener que abrir cada diario.
+  const weekDigestByClient = useMemo(() => {
+    if (type !== 'weekly' || !weekMonday) return {};
+    const map = {};
+    weekDates.forEach(d => {
+      const r = dailiesByDate[d];
+      if (!r) return;
+      (r.progress_by_client || []).forEach(p => {
+        const key = p.client_id || INTERNAL_KEY;
+        const bullets = getBullets(p);
+        if (bullets.length === 0) return;
+        if (!map[key]) map[key] = [];
+        map[key].push({ date: d, dayLabel: fmtDayChip(d), bullets });
+      });
+    });
+    return map;
+  }, [type, weekMonday, weekDates, dailiesByDate]);
+
   const totalMinutes = progressItems.reduce((acc, i) => acc + (parseInt(i.minutes, 10) || 0), 0);
   const fmtMinutes = (m) => {
     if (!m) return '0 min';
@@ -500,7 +521,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
       open={open}
       onClose={saving ? () => {} : onClose}
       title={headerLabel}
-      maxWidth={580}
+      maxWidth={type === 'weekly' ? 900 : 580}
       dismissOnOverlay={false}
       dismissOnEscape={false}
       footer={
@@ -739,24 +760,58 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                       title="Quitar"
                     ><X size={14} /></button>
                   </div>
-                  <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                    ¿Qué avanzaste con {item.label}?
-                  </label>
-                  {true ? (
-                    <BulletRows
-                      bullets={Array.isArray(item.bullets) ? item.bullets : []}
-                      onChange={(next) => updateItemBullets(item.key, next)}
-                    />
+                  {type === 'weekly' && (weekDigestByClient[item.key] || []).length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Izquierda: lo que hiciste cada dia (read-only digest) */}
+                      <div className="bg-white border border-gray-200 rounded-md p-2.5">
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-2">
+                          <Calendar size={11} /> Lo que hiciste en la semana
+                        </div>
+                        <div className="space-y-2.5">
+                          {(weekDigestByClient[item.key] || []).map(d => (
+                            <div key={d.date} className="border-l-2 border-gray-200 pl-2.5">
+                              <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                {d.dayLabel}
+                              </div>
+                              <ul className="space-y-1">
+                                {d.bullets.map((b, idx) => {
+                                  const cat = b.category;
+                                  const marker = cat === 'entregable' ? '✓' : cat === 'avance' ? '•' : '–';
+                                  const color = cat === 'entregable' ? 'text-green-600' : cat === 'avance' ? 'text-blue-600' : 'text-gray-400';
+                                  return (
+                                    <li key={idx} className="flex items-start gap-1.5 text-[12px] text-gray-700 leading-snug">
+                                      <span className={`${color} font-bold shrink-0 mt-0.5`}>{marker}</span>
+                                      <span className="break-words">{b.text}</span>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Derecha: lo que va en el informe semanal (editable) */}
+                      <div>
+                        <label className="block text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-2">
+                          Para el informe semanal
+                        </label>
+                        <BulletRows
+                          bullets={Array.isArray(item.bullets) ? item.bullets : []}
+                          onChange={(next) => updateItemBullets(item.key, next)}
+                        />
+                      </div>
+                    </div>
                   ) : (
-                    <textarea
-                      value={item.text}
-                      onChange={e => updateItemText(item.key, e.target.value)}
-                      placeholder={isInternal
-                        ? 'Ej: Avancé el rediseño del panel de operaciones'
-                        : 'Ej: Entregué los guiones y dejé la landing lista para revisión'}
-                      rows={2}
-                      className="w-full border border-gray-200 rounded-md py-1.5 px-2 text-[13px] font-sans outline-none focus:border-blue-400 resize-y bg-white"
-                    />
+                    <>
+                      <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                        ¿Qué avanzaste con {item.label}?
+                      </label>
+                      <BulletRows
+                        bullets={Array.isArray(item.bullets) ? item.bullets : []}
+                        onChange={(next) => updateItemBullets(item.key, next)}
+                      />
+                    </>
                   )}
                   {/* Minutos invertidos en este avance — borde rojo si falta */}
                   {(() => {
