@@ -14,6 +14,11 @@ const CLIENTS_TAB_KEY = 'clientes_current_tab';
 const VALID_TABS = ['lista', 'publicidad'];
 
 // Pildora de estado de publicidad. Lee metaMetrics.adsActive + pauseStatus.
+// Estados de Meta differenciados:
+//   - deuda_meta: UNSETTLED, Meta intentó cobrar y no pudo (urgente)
+//   - cuenta_bloqueada: DISABLED por motivo distinto a pago (urgente)
+//   - sin_tarjeta: has_payment_method=false (informativo, no urgente)
+//   - mcp_pendiente: conector MCP no habilitado (informativo)
 function AdsBadge({ client }) {
   const m = client.metaMetrics;
   if (!m) return <span className="text-[10px] text-text3">—</span>;
@@ -21,11 +26,14 @@ function AdsBadge({ client }) {
   if (status === 'mcp_pendiente') {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-blue-50 text-blue-700" title={m.pauseReason || 'MCP pendiente'}>🔵 MCP</span>;
   }
-  if (status === 'pago_error') {
-    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Error de pago'}>⚠ Pago</span>;
+  if (status === 'deuda_meta') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Deuda con Meta — pago rechazado'}>💰 Deuda</span>;
   }
-  if (status === 'cuenta_inactiva') {
-    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Cuenta deshabilitada'}>✕ Cuenta</span>;
+  if (status === 'cuenta_bloqueada') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Bloqueada por Meta'}>🚫 Bloqueada</span>;
+  }
+  if (status === 'sin_tarjeta') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-amber-50 text-amber-700" title={m.pauseReason || 'Sin tarjeta vinculada'}>💳 Sin tarjeta</span>;
   }
   if (m.adsActive) {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-green-50 text-green-700">● Activa</span>;
