@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Megaphone, MessageSquare, FileText, Pencil } from 'lucide-react';
+import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, fmtDate, clientPill } from '../utils/helpers';
@@ -34,10 +34,12 @@ function AdsBadge({ client }) {
 }
 
 // Celda editable inline para "pendiente para avanzar". Click -> input,
-// blur o Enter guarda. Esc cancela.
+// blur o Enter guarda. Esc cancela. Muestra spinner mientras persiste y un
+// check verde fugaz cuando confirma el save.
 function PendienteCell({ client, onSave }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(client.bottleneck || '');
+  const [status, setStatus] = useState(null); // null | 'saving' | 'saved' | 'error'
   const inputRef = useRef(null);
 
   useEffect(() => { setValue(client.bottleneck || ''); }, [client.bottleneck]);
@@ -48,10 +50,21 @@ function PendienteCell({ client, onSave }) {
     }
   }, [editing]);
 
-  const commit = () => {
+  const commit = async () => {
     setEditing(false);
     const v = value.trim();
-    if (v !== (client.bottleneck || '').trim()) onSave(v);
+    const prev = (client.bottleneck || '').trim();
+    if (v === prev) return;
+    setStatus('saving');
+    try {
+      await onSave(v);
+      setStatus('saved');
+      setTimeout(() => setStatus(null), 1500);
+    } catch (e) {
+      console.warn('save bottleneck', e);
+      setStatus('error');
+      setTimeout(() => setStatus(null), 4000);
+    }
   };
 
   if (editing) {
@@ -82,7 +95,10 @@ function PendienteCell({ client, onSave }) {
       <span className={`flex-1 truncate text-[12px] ${text ? 'text-gray-700' : 'text-gray-400 italic'}`}>
         {text || '¿Qué hace falta para avanzar?'}
       </span>
-      <Pencil size={10} className="text-gray-300 opacity-0 group-hover/p:opacity-100 shrink-0" />
+      {status === 'saving' && <Loader2 size={11} className="text-blue-500 animate-spin shrink-0" />}
+      {status === 'saved' && <Check size={11} className="text-green-600 shrink-0" />}
+      {status === 'error' && <span className="text-[9px] text-red-500 font-semibold shrink-0" title="No se pudo guardar — reintenta">⚠ fallo</span>}
+      {!status && <Pencil size={10} className="text-gray-300 opacity-0 group-hover/p:opacity-100 shrink-0" />}
     </div>
   );
 }

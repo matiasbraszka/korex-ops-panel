@@ -356,13 +356,18 @@ export function AppProvider({ children }) {
   }, [save, dbSaveClient, dbSaveTask, injectMetaMetrics, appSettings]);
 
   const updateClient = useCallback((id, updates) => {
+    // Aplicamos el cambio al state local INMEDIATO (optimistic).
+    let updated = null;
     setClients(prev => {
       const newClients = prev.map(c => c.id === id ? { ...c, ...updates } : c);
       save(newClients, tasksRef.current);
-      const updated = newClients.find(c => c.id === id);
-      if (updated && dbReady.current) dbSaveClient(updated);
+      updated = newClients.find(c => c.id === id);
       return newClients;
     });
+    // Devolvemos la promesa de persistencia en Supabase para que quien llame
+    // pueda hacer await y mostrar feedback (spinner / check / error).
+    if (updated && dbReady.current) return dbSaveClient(updated);
+    return Promise.resolve();
   }, [save, dbSaveClient]);
 
   // Borra un cliente y TODAS sus tareas (incluido fases custom y deadlines).
