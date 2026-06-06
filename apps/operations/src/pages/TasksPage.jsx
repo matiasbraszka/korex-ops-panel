@@ -187,21 +187,16 @@ export default function TasksPage({ embedded = false }) {
   const groups = Object.values(grouped).filter(g => g.tasks.length > 0 || addingTaskTo === g.client.id);
   // Sort client groups:
   // - Sin filtro de persona → por prioridad del cliente (critico=1 primero).
-  // - Con filtro de persona → primero los que tienen orden custom de esa persona,
-  //   despues el resto por prioridad. Esto permite que cada persona arme su orden
-  //   de clientes en su Lista.
+  // - Con filtro de persona → puramente por position efectiva. Si la persona ya
+  //   ordenó ese cliente, usa su position custom; si no, cae al fallback
+  //   priority*100000 + position. De esta forma, mover un cliente "hacia abajo"
+  //   pasando otros que no tienen orden custom queda bien posicionado entre
+  //   ellos (la nueva position se calcula en el rango de los vecinos).
   const getClientEffPos = (c) => {
     if (orderUserId && customPosByClient[c.id] !== undefined) return customPosByClient[c.id];
     return (c.priority || 5) * 100000 + (c.position ?? 0);
   };
-  groups.sort((a, b) => {
-    if (orderUserId) {
-      const aHas = customPosByClient[a.client.id] !== undefined;
-      const bHas = customPosByClient[b.client.id] !== undefined;
-      if (aHas !== bHas) return aHas ? -1 : 1;
-    }
-    return getClientEffPos(a.client) - getClientEffPos(b.client);
-  });
+  groups.sort((a, b) => getClientEffPos(a.client) - getClientEffPos(b.client));
 
   // ── Drag de CLIENTES (solo con filtro persona) ──
   const handleClientDragStart = (e, clientId) => {
