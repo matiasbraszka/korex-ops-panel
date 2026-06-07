@@ -515,6 +515,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
               text: String(b?.text || '').trim(),
               category: b?.category || null,
               ...(b?.task_id ? { task_id: b.task_id } : {}),
+              ...(b?.complete_task ? { complete_task: true } : {}),
             }))
             .filter(b => b.text);
           base.bullets = cleaned;

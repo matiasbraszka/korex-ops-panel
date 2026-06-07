@@ -121,3 +121,23 @@ export function diffBulletsByTaskLink(prev, next) {
   });
   return toEmit;
 }
+
+// Bullets cuya tarea hay que marcar como COMPLETADA: entregable vinculado a una
+// tarea, con complete_task === true marcado a mano por el usuario, y que aún no
+// estaba pedido (nuevo, o el flag pasó a true). Una tarea puede tener muchos
+// entregables; solo se completa cuando el usuario lo elige explícitamente.
+export function bulletsToComplete(prev, next) {
+  const prevMap = new Map();
+  (prev || []).forEach(item => {
+    (item.bullets || []).forEach(b => { if (b?.id) prevMap.set(b.id, b); });
+  });
+  const out = [];
+  (next || []).forEach(item => {
+    (item.bullets || []).forEach(b => {
+      if (!b?.task_id || b.complete_task !== true || b.category !== 'entregable') return;
+      const before = prevMap.get(b?.id || '');
+      if (!before || before.complete_task !== true) out.push(b);
+    });
+  });
+  return out;
+}

@@ -131,7 +131,7 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
             <div className="flex shrink-0 gap-1 mt-0.5">
               <button
                 type="button"
-                onClick={() => update(i, { category: isEntregable ? null : 'entregable' })}
+                onClick={() => update(i, isEntregable ? { category: null, complete_task: undefined } : { category: 'entregable' })}
                 disabled={disabled}
                 title="Entregable: trabajo terminado y entregado"
                 className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10.5px] font-semibold border transition-colors ${
@@ -191,9 +191,26 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                     ))}
                   </select>
                   {linkedTask && isEntregable && (
-                    <span className="inline-flex items-center gap-1 text-[10.5px] text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 font-semibold">
-                      <CheckCircle2 size={10} />
-                      Al guardar se marca completada
+                    <span className="inline-flex items-center gap-1.5 text-[10.5px]">
+                      <span className="text-gray-500 font-medium">¿Completar la tarea?</span>
+                      <button
+                        type="button"
+                        onClick={() => update(i, { complete_task: true })}
+                        className={`px-2 py-0.5 rounded-full font-semibold border transition-colors ${
+                          b.complete_task === true
+                            ? 'bg-green-100 border-green-300 text-green-800'
+                            : 'bg-white border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700'
+                        }`}
+                      >Sí</button>
+                      <button
+                        type="button"
+                        onClick={() => update(i, { complete_task: false })}
+                        className={`px-2 py-0.5 rounded-full font-semibold border transition-colors ${
+                          b.complete_task === false
+                            ? 'bg-gray-200 border-gray-300 text-gray-700'
+                            : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                        }`}
+                      >No</button>
                     </span>
                   )}
                 </div>

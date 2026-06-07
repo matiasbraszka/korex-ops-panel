@@ -5,7 +5,7 @@ import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
-import { diffTaskFields, diffBulletsByTaskLink } from '../utils/taskActivity';
+import { diffTaskFields, diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
 // Recorre progress_by_client y rellena mentioned_ids en cada bullet.
 function enrichBulletsWithMentions(progressByClient, teamMembers, excludeId) {
@@ -732,14 +732,12 @@ export function AppProvider({ children }) {
     setTeamReports(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
 
     // Side-effects: bullets vinculados a tareas. Por cada bullet con task_id:
-    // - si es 'entregable' → updateTask({ status:'done' }) (deja system comment).
-    // - siempre → insertar comment kind='report' con el texto del bullet.
+    // - inserta comment kind='report' con el texto del bullet.
+    // - completa la tarea SOLO si el usuario marcó complete_task (una tarea puede
+    //   tener muchos entregables; no se cierra sola al primer entregable).
     try {
       const linkedBullets = diffBulletsByTaskLink([], row.progress_by_client);
       for (const b of linkedBullets) {
-        if (b.category === 'entregable' && updateTaskRef.current) {
-          updateTaskRef.current(b.task_id, { status: 'done' });
-        }
         if (addTaskCommentRef.current) {
           addTaskCommentRef.current({
             task_id: b.task_id,
@@ -749,6 +747,9 @@ export function AppProvider({ children }) {
             event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
           }).catch(e => console.warn('addTeamReport linked bullet', e));
         }
+      }
+      for (const b of bulletsToComplete([], row.progress_by_client)) {
+        if (updateTaskRef.current) updateTaskRef.current(b.task_id, { status: 'done' });
       }
     } catch (e) { console.warn('addTeamReport task links', e); }
 
@@ -800,9 +801,6 @@ export function AppProvider({ children }) {
       try {
         const linkedBullets = diffBulletsByTaskLink(before?.progress_by_client || [], patch.progress_by_client);
         for (const b of linkedBullets) {
-          if (b.category === 'entregable' && updateTaskRef.current) {
-            updateTaskRef.current(b.task_id, { status: 'done' });
-          }
           if (addTaskCommentRef.current) {
             addTaskCommentRef.current({
               task_id: b.task_id,
@@ -812,6 +810,10 @@ export function AppProvider({ children }) {
               event_meta: { report_id: id, bullet_id: b.id, category: b.category || null },
             }).catch(e => console.warn('updateTeamReport linked bullet', e));
           }
+        }
+        // Completar tareas solo donde el usuario lo pidió explícitamente.
+        for (const b of bulletsToComplete(before?.progress_by_client || [], patch.progress_by_client)) {
+          if (updateTaskRef.current) updateTaskRef.current(b.task_id, { status: 'done' });
         }
       } catch (e) { console.warn('updateTeamReport task links', e); }
     }
