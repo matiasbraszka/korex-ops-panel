@@ -1,36 +1,35 @@
-import { useRef, useState } from 'react';
-import { X, GripVertical, Plus, CheckCircle2, Circle, Link2, ChevronDown, Sparkles } from 'lucide-react';
+import { useRef } from 'react';
+import { X, GripVertical, Plus, CheckCircle2, Circle } from 'lucide-react';
 import MentionTextarea from '../comments/MentionTextarea';
 import { useApp } from '../../context/AppContext';
 import { parseAssignees } from '../../utils/taskActivity';
 
 // BulletRows — lista editable de bullets para los informes.
 // Cada bullet: { id?, text, category: 'entregable' | 'avance' | null, task_id? }.
-// El padre maneja todo el estado; este componente solo emite cambios.
 //
 // UX:
 // - Cada fila: drag handle + chips de categoria + input de texto + boton X.
 // - Default al agregar: category=null (sin elegir) para forzar decision.
 // - Drag & drop nativo (mismo patron que NotasView).
 // - Texto vacio se filtra al guardar (no es bug).
-// - Si se pasa clientId, se habilita el flujo de "vincular tarea":
-//     * Boton "Cargar mis pendientes" arriba (atajo): inserta un bullet por
-//       cada tarea pendiente mia, prerellenado con el titulo y task_id.
-//     * En cada bullet, debajo del input, "+ Vincular tarea" o un chip con
-//       la tarea ya vinculada (con boton X para desvincular).
-//     * Si el bullet esta marcado entregable Y tiene task_id, hint verde:
-//       "Al guardar se marca la tarea como completada".
+//
+// Prop enableTaskLink:
+// - true  (diario): debajo de cada bullet hay un dropdown 'Vinculada a tarea'
+//   con opciones 'Otra' (default) + tareas pendientes mias del cliente.
+// - false (semanal): no aparece nada del flujo de tareas.
+//
+// Tareas done nunca aparecen en el dropdown.
 
-export default function BulletRows({ bullets, onChange, disabled = false, clientId = null }) {
+export default function BulletRows({ bullets, onChange, disabled = false, clientId = null, enableTaskLink = false }) {
   const { teamMembers, currentUser, tasks } = useApp();
   const dragIdx = useRef(null);
   const overIdx = useRef(null);
-  const [taskPickerOpenForIdx, setTaskPickerOpenForIdx] = useState(null);
 
-  // Tareas pendientes mias con este cliente. Las completadas NO se muestran
-  // nunca en el picker (politica explicita: el picker es solo para pendientes).
+  const showTaskLink = enableTaskLink && !!clientId;
+
+  // Tareas pendientes mias con este cliente (status !== 'done').
   const myPendingTasks = (() => {
-    if (!clientId || !currentUser) return [];
+    if (!showTaskLink || !currentUser) return [];
     const myNames = new Set([
       (currentUser.name || '').toLowerCase(),
       ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
@@ -46,10 +45,6 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
       .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   })();
 
-  // task_ids ya vinculados en la lista actual (para no repetir el atajo).
-  const linkedTaskIds = new Set((bullets || []).map(b => b?.task_id).filter(Boolean));
-  // Solo pending — un bullet con task_id apuntando a una tarea que ya esta
-  // done o eliminada se va a renderear como "stale" mas abajo.
   const tasksById = Object.fromEntries(myPendingTasks.map(t => [t.id, t]));
 
   const update = (idx, patch) => {
@@ -64,17 +59,6 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   const add = () => {
     onChange([...(bullets || []), { text: '', category: null }]);
   };
-
-  // Atajo: insertar un bullet por cada tarea pendiente mia que no este ya
-  // vinculada en la lista actual. Si todas estan vinculadas, no agrega nada.
-  const addAllMyPending = () => {
-    const news = myPendingTasks
-      .filter(t => !linkedTaskIds.has(t.id))
-      .map(t => ({ text: '', category: null, task_id: t.id }));
-    if (news.length === 0) return;
-    onChange([...(bullets || []), ...news]);
-  };
-  const pendingPickableCount = myPendingTasks.filter(t => !linkedTaskIds.has(t.id)).length;
 
   const handleDragStart = (e, idx) => {
     if (disabled) return;
@@ -101,38 +85,14 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
 
   return (
     <div className="space-y-1.5">
-      {/* Atajo: cargar mis pendientes con este cliente. Solo cuando clientId
-          fue pasado y hay tareas no vinculadas todavia. */}
-      {clientId && pendingPickableCount > 0 && (
-        <button
-          type="button"
-          onClick={addAllMyPending}
-          disabled={disabled}
-          className="w-full flex items-center justify-between gap-2 text-[11.5px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-1.5 cursor-pointer font-sans transition-colors"
-          title="Inserta un bullet vinculado por cada tarea pendiente tuya con este cliente"
-        >
-          <span className="flex items-center gap-1.5">
-            <Sparkles size={13} />
-            <span className="font-semibold">Cargar mis tareas pendientes</span>
-            <span className="text-blue-500">({pendingPickableCount})</span>
-          </span>
-          <span className="text-blue-400 text-[10px]">Las podes editar o quitar despues</span>
-        </button>
-      )}
-
       {(bullets || []).map((b, i) => {
         const isEntregable = b.category === 'entregable';
         const isAvance = b.category === 'avance';
         const needsCategory = b.text.trim() && !b.category;
+        // Si el bullet tiene task_id pero la tarea no esta en pending (fue
+        // done o eliminada), tratamos como "Otra" en el select.
         const linkedTask = b.task_id ? tasksById[b.task_id] : null;
-        // Stale: el bullet tiene un task_id heredado del borrador pero esa
-        // tarea ya no esta entre las pendientes (fue completada o eliminada).
-        const isStaleLink = !!b.task_id && !linkedTask;
-        const pickerOpen = taskPickerOpenForIdx === i;
-        // Mostramos SIEMPRE todas las tareas pendientes mias del cliente. Sin
-        // filtrar las ya vinculadas: una misma tarea puede tener varios
-        // avances en distintos bullets del informe.
-        const pickableForThisBullet = myPendingTasks;
+        const selectValue = linkedTask ? b.task_id : '';
         return (
           <div
             key={i}
@@ -141,9 +101,9 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
             onDragOver={(e) => handleDragOver(e, i)}
             onDrop={handleDrop}
             onDragEnd={() => { dragIdx.current = null; overIdx.current = null; }}
-            className={`group flex items-start gap-1.5 rounded-md p-1.5 transition-colors ${
+            className={`group flex items-start gap-1.5 rounded-md p-1 transition-colors ${
               needsCategory ? 'bg-amber-50/40' : ''
-            } ${linkedTask ? 'bg-blue-50/30 ring-1 ring-blue-100' : ''}`}
+            }`}
           >
             <button
               type="button"
@@ -193,106 +153,33 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                 disabled={disabled}
                 teamMembers={teamMembers || []}
                 excludeId={currentUser?.id}
-                placeholder={linkedTask
-                  ? `Avance sobre "${linkedTask.title}"...`
-                  : "Ej: Terminé el contrato. Etiquetá con @ si necesitás algo de alguien."
-                }
+                placeholder="Ej: Terminé el contrato. Etiquetá con @ si necesitás algo de alguien."
                 className={`w-full border rounded-md py-1.5 px-2 text-[12.5px] outline-none focus:border-blue-400 transition-colors ${
                   needsCategory ? 'border-amber-300 bg-amber-50/30' : 'border-gray-200'
                 }`}
               />
 
-              {/* Linea de vinculacion con tarea — solo cuando hay clientId */}
-              {clientId && (
+              {/* Selector de tarea — solo informes diarios con cliente real */}
+              {showTaskLink && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  {linkedTask ? (
-                    <span className="inline-flex items-center gap-1.5 bg-blue-100 border border-blue-200 text-blue-800 text-[11px] rounded-full pl-2 pr-1 py-0.5 max-w-full">
-                      <Link2 size={11} className="shrink-0" />
-                      <span className="font-semibold truncate max-w-[280px]" title={linkedTask.title}>
-                        {linkedTask.title}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => update(i, { task_id: null })}
-                        disabled={disabled}
-                        title="Desvincular"
-                        className="ml-0.5 w-4 h-4 rounded-full bg-blue-200 hover:bg-blue-300 text-blue-800 border-none cursor-pointer flex items-center justify-center"
-                      >
-                        <X size={9} />
-                      </button>
-                    </span>
-                  ) : (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setTaskPickerOpenForIdx(pickerOpen ? null : i)}
-                        disabled={disabled}
-                        className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:bg-blue-50 border border-blue-200 bg-white rounded-full px-2 py-0.5 cursor-pointer font-sans transition-colors"
-                        title="Vincular este bullet a una tarea pendiente tuya"
-                      >
-                        <Link2 size={10} />
-                        Vincular tarea
-                        <ChevronDown size={10} className={pickerOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
-                      </button>
-                      {pickerOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-[60]"
-                            onClick={() => setTaskPickerOpenForIdx(null)}
-                          />
-                          <div className="absolute z-[61] mt-1 left-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[220px] overflow-y-auto min-w-[280px]">
-                            {pickableForThisBullet.length === 0 && (
-                              <div className="px-3 py-2 text-[11.5px] text-gray-400 italic">
-                                Sin tareas pendientes mias en este cliente
-                              </div>
-                            )}
-                            {pickableForThisBullet.map(t => (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => { update(i, { task_id: t.id }); setTaskPickerOpenForIdx(null); }}
-                                className="block w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-blue-50 cursor-pointer border-none bg-transparent"
-                              >
-                                <span className="font-medium truncate">{t.title}</span>
-                                {t.phase && (
-                                  <span className="block text-[10px] text-gray-400 mt-0.5">Fase: {t.phase}</span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Hint resaltado cuando entregable + linked */}
+                  <label className="text-[10.5px] text-gray-500 font-medium">Vinculada a tarea:</label>
+                  <select
+                    value={selectValue}
+                    onChange={(e) => update(i, { task_id: e.target.value || null })}
+                    disabled={disabled}
+                    className={`text-[11.5px] py-0.5 px-1.5 border rounded-md outline-none bg-white focus:border-blue-400 max-w-[260px] truncate ${
+                      selectValue ? 'border-blue-300 text-blue-700 bg-blue-50/40 font-medium' : 'border-gray-200 text-gray-600'
+                    }`}
+                  >
+                    <option value="">Otra</option>
+                    {myPendingTasks.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
                   {linkedTask && isEntregable && (
                     <span className="inline-flex items-center gap-1 text-[10.5px] text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 font-semibold">
                       <CheckCircle2 size={10} />
-                      Al guardar marca la tarea como completada
-                    </span>
-                  )}
-                  {linkedTask && !b.category && (
-                    <span className="text-[10.5px] text-amber-700">
-                      Marcá Entregable para cerrar la tarea, o Avance para solo dejar nota.
-                    </span>
-                  )}
-
-                  {/* Stale: bullet con task_id heredado del borrador apuntando
-                      a una tarea ya completada/borrada. Avisar + boton para
-                      limpiar el vinculo huerfano. */}
-                  {isStaleLink && (
-                    <span className="inline-flex items-center gap-1.5 text-[10.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full pl-2 pr-1 py-0.5">
-                      La tarea anterior ya esta completada — eligi otra
-                      <button
-                        type="button"
-                        onClick={() => update(i, { task_id: null })}
-                        disabled={disabled}
-                        title="Quitar vinculo huerfano"
-                        className="ml-0.5 w-4 h-4 rounded-full bg-amber-200 hover:bg-amber-300 text-amber-800 border-none cursor-pointer flex items-center justify-center"
-                      >
-                        <X size={9} />
-                      </button>
+                      Al guardar se marca completada
                     </span>
                   )}
                 </div>
