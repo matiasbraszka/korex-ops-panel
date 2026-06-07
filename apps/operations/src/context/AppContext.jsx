@@ -322,6 +322,10 @@ export function AppProvider({ children }) {
     }
   }, [dbSaveClient, dbSaveTask]);
 
+  // Limpiar el timer de guardado al desmontar para evitar un guardado fantasma
+  // (setTimeout pendiente que dispara después de desmontar el provider).
+  useEffect(() => () => clearTimeout(saveTimer.current), []);
+
   // ── CRUD: Clients ──
   const createClient = useCallback((name, company, service, start, pm, extraFields = {}) => {
     // Inyectamos la plantilla configurada de "recursos pendientes" desde
@@ -1540,19 +1544,19 @@ export function AppProvider({ children }) {
       try {
         const vids = await sbFetch('loom_videos?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } });
         if (vids && Array.isArray(vids)) setLoomVideos(vids);
-      } catch (e) { /* silent */ }
+      } catch { /* silent */ }
 
       // Cargar llamadas procesadas
       try {
         const calls = await sbFetch('llamadas?select=*&order=fecha.desc.nullslast&limit=300', { headers: { 'Prefer': 'return=representation' } }).then(r => Array.isArray(r) ? r.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)) : r);
         if (calls && Array.isArray(calls)) setLlamadas(calls);
-      } catch (e) { /* silent */ }
+      } catch { /* silent */ }
 
       // Contar llamadas pendientes de procesar
       try {
         const pending = await sbFetch('llamadas_inbox?processed=eq.false&select=id', { headers: { 'Prefer': 'return=representation' } });
         if (pending && Array.isArray(pending)) setPendingCallsCount(pending.length);
-      } catch (e) { /* silent */ }
+      } catch { /* silent */ }
 
       // Informes del equipo (últimos 60 días)
       try {
@@ -1562,7 +1566,7 @@ export function AppProvider({ children }) {
           { headers: { 'Prefer': 'return=representation' } }
         );
         if (reports && Array.isArray(reports)) setTeamReports(reports);
-      } catch (e) { /* silent */ }
+      } catch { /* silent */ }
 
       // Bloqueos: todos los abiertos + últimos 30 días resueltos
       try {
@@ -1572,13 +1576,13 @@ export function AppProvider({ children }) {
           { headers: { 'Prefer': 'return=representation' } }
         );
         if (blockers && Array.isArray(blockers)) setTeamBlockers(blockers);
-      } catch (e) { /* silent */ }
+      } catch { /* silent */ }
 
       // Cajón de ideas
       try {
         const allIdeas = await sbFetch('ideas?select=*&order=created_at.desc&limit=200', { headers: { 'Prefer': 'return=representation' } });
         if (allIdeas && Array.isArray(allIdeas)) setIdeas(allIdeas);
-      } catch (e) { /* silent */ }
+      } catch { /* silent */ }
 
       // Notas del equipo (v15). Cargar todas las visibles; filtrado por
       // visibilidad ocurre en el frontend (NotasView). Log explicito de
@@ -1809,7 +1813,7 @@ export function AppProvider({ children }) {
         }
         return prev;
       });
-    } catch (e) {
+    } catch {
       /* silent fail on poll */
     }
   }, []);
@@ -1863,7 +1867,7 @@ export function AppProvider({ children }) {
         const p = JSON.parse(raw);
         localClients = (p.clients || []).map(c => ({ ...c, priority: normalizePriority(c.priority) }));
         localTasks = p.tasks || [];
-      } catch (e) { /* ignore parse errors */ }
+      } catch { /* ignore parse errors */ }
     }
     const injected = injectMetaMetrics(localClients);
     setClients(injected);

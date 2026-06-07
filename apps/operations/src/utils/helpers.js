@@ -410,7 +410,7 @@ export function mkClient(name, company, service, start, pm, clientCount = 0, { p
     slackChannel: slackChannel || '', slackChannelId: '', metaAds: [], metaMetrics: null,
     customSteps: [], customPhases: [], clientFeedbacks: [],
     stepNameOverrides: {}, phaseNameOverrides: {},
-    steps: PROCESS_STEPS.map((ps, idx) => ({ status: 'pending', startDate: '', endDate: '', responsible: '', notes: '', dependsOn: ps.dependsOn ? [...ps.dependsOn] : [] })),
+    steps: PROCESS_STEPS.map((ps) => ({ status: 'pending', startDate: '', endDate: '', responsible: '', notes: '', dependsOn: ps.dependsOn ? [...ps.dependsOn] : [] })),
     feedback: [],
     links: [],
     pendingResources: buildInitialPendingResources(pendingResourcesTemplate),
@@ -493,7 +493,7 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
   };
 }
 
-export function effectiveTime(task, client) {
+export function effectiveTime(task) {
   if (!task.startedDate) return null;
   const end = task.completedDate || today();
   const total = daysBetween(task.startedDate, end);
@@ -620,7 +620,7 @@ export function getEstimatedDays(task) {
 /**
  * Migration: convert old client steps to new roadmap tasks.
  */
-export function migrateClientToRoadmap(client, existingTasks) {
+export function migrateClientToRoadmap(client) {
   const DEFAULT_TASKS = DEFAULT_TASKS_TEMPLATE;
   const oldSteps = client.steps || [];
 

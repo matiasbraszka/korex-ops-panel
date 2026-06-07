@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
-import { initials, progress, currentTask, getAllPhases, daysAgo, fmtDate, clientPill } from '../utils/helpers';
+import { initials, progress, currentTask, getAllPhases, daysAgo, clientPill } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
 import PublicidadPage from './PublicidadPage';
