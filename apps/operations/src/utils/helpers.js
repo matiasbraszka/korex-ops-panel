@@ -269,56 +269,12 @@ export function getAllPhases(c) {
 }
 
 /**
- * getBottleneck: uses tasks if available, else falls back to steps.
+ * getBottleneck: "Pendiente para avanzar" es un texto MANUAL por cliente,
+ * editado a mano desde la lista de clientes y guardado en Supabase (columna
+ * `bottleneck`). El sistema NUNCA lo deriva ni lo pisa automaticamente.
  */
-export function getBottleneck(c, tasks) {
-  if (c.bottleneck) return c.bottleneck;
-
-  if (tasks && hasRoadmapTasks(c.id, tasks)) {
-    const rt = getRoadmapTasks(c.id, tasks);
-    // Check blocked tasks
-    const blocked = rt.find(t => t.status === 'blocked');
-    if (blocked) return `Bloqueado en: ${blocked.title}${blocked.assignee ? ' \u2014 ' + blocked.assignee : ''}`;
-    // Check overdue in-progress
-    for (const t of rt) {
-      if (t.status === 'in-progress' && t.startedDate) {
-        const d = daysAgo(t.startedDate);
-        const est = t.estimatedDays || 7;
-        if (d > est) {
-          return `${t.title} con retraso (${d}d de ${est}d)${t.assignee ? ' \u2014 ' + t.assignee : ''}`;
-        }
-      }
-    }
-    // Current task
-    const cur = rt.find(t => t.status !== 'done');
-    if (cur && cur.assignee) return `${cur.title} \u2014 ${cur.assignee}`;
-    if (cur) return cur.title;
-    return '';
-  }
-
-  // Fallback to steps
-  for (let i = 0; i < c.steps.length; i++) {
-    if (c.steps[i].status === 'blocked') {
-      return `Bloqueado en: ${PROCESS_STEPS[i].name}${c.steps[i].responsible ? ' \u2014 ' + c.steps[i].responsible : ''}`;
-    }
-  }
-  for (let i = 0; i < c.steps.length; i++) {
-    if (c.steps[i].status === 'waiting-client') {
-      return `Esperando cliente: ${PROCESS_STEPS[i].name}`;
-    }
-  }
-  for (let i = 0; i < c.steps.length; i++) {
-    if (c.steps[i].status === 'in-progress' && c.steps[i].startDate) {
-      const d = daysAgo(c.steps[i].startDate);
-      if (d > PROCESS_STEPS[i].days) {
-        return `${PROCESS_STEPS[i].name} con retraso (${d}d de ${PROCESS_STEPS[i].days}d)${c.steps[i].responsible ? ' \u2014 ' + c.steps[i].responsible : ''}`;
-      }
-    }
-  }
-  const cur = currentStep(c);
-  if (cur && cur.cs.responsible) return `${cur.def.name} \u2014 ${cur.cs.responsible}`;
-  if (cur) return cur.def.name;
-  return '';
+export function getBottleneck(c) {
+  return c.bottleneck || '';
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS } from '../utils/constants';
-import { initials, progress, getBottleneck, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, getElapsedDays } from '../utils/helpers';
+import { initials, progress, getAllPhases, getStepNameForClient, getRoadmapTasks, daysAgo, daysBetween, fmtDate, clientPill, today, getElapsedDays } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
@@ -63,7 +63,6 @@ export default function ClientDetail({ client: c }) {
   const p = c.priority || 5;
   const pcfg = getPriorityLabel(p);
   const pill = clientPill(c, tasks);
-  const bn = getBottleneck(c, tasks);
   const ct = clientTasks.filter(t => t.status !== 'done').length;
   const allPh = getAllPhases(c);
 
