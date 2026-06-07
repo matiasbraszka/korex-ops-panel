@@ -29,8 +29,8 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   // interno de la empresa ("Korex – Interno"), cuyas tareas viven con client_id null.
   const showTaskLink = enableTaskLink && (isInternal || !!clientId);
 
-  // Todas las tareas pendientes del cliente (no solo las mias). Las mias
-  // aparecen primero en el dropdown con un (•) para diferenciarlas.
+  // Solo las tareas pendientes ASIGNADAS al usuario que carga el informe.
+  // No mostramos tareas de otros miembros aunque sean del mismo cliente.
   // Tareas done nunca se incluyen.
   const myNames = (() => {
     if (!currentUser) return new Set();
@@ -47,13 +47,8 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   const pendingTasksForClient = (() => {
     if (!showTaskLink) return [];
     return (tasks || [])
-      .filter(t => (isInternal ? t.clientId == null : t.clientId === clientId) && t.status !== 'done')
-      .sort((a, b) => {
-        const am = isMine(a) ? 0 : 1;
-        const bm = isMine(b) ? 0 : 1;
-        if (am !== bm) return am - bm;
-        return (a.title || '').localeCompare(b.title || '');
-      });
+      .filter(t => (isInternal ? t.clientId == null : t.clientId === clientId) && t.status !== 'done' && isMine(t))
+      .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   })();
 
   const tasksById = Object.fromEntries(pendingTasksForClient.map(t => [t.id, t]));
@@ -184,7 +179,7 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                   >
                     <option value="">Otra</option>
                     {pendingTasksForClient.map(t => (
-                      <option key={t.id} value={t.id}>{isMine(t) ? '• ' : ''}{t.title}</option>
+                      <option key={t.id} value={t.id}>{t.title}</option>
                     ))}
                   </select>
                   {linkedTask && isEntregable && (
