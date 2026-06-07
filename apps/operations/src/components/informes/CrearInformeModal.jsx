@@ -92,22 +92,31 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
 
   // Clave del borrador en localStorage. Distinta para creacion vs edicion
   // (al editar prefiere los datos del informe real, no un borrador viejo).
+  // El borrador se guarda por TIPO ACTUAL (daily/weekly), no por defaultType.
+  // Antes usaba defaultType y, como el modal queda montado entre aperturas, el
+  // contenido de un semanal se escribía en el borrador del diario (y aparecía
+  // al reabrir el diario). Guardar/leer por tipo evita esa contaminación.
   const draftKey = useMemo(() => {
     if (!currentUser?.id) return null;
     if (editingReport) return null; // no autosave al editar
-    return `informe_draft__${currentUser.id}__${defaultType}`;
-  }, [currentUser?.id, defaultType, editingReport]);
+    return `informe_draft__${currentUser.id}__${type}`;
+  }, [currentUser?.id, type, editingReport]);
 
   // Reset / prefill al abrir
   useEffect(() => {
     if (!open) return;
-    // Modo creacion: si hay borrador guardado, lo restauramos antes de empezar
-    if (!editingReport && draftKey) {
+    // Modo creacion: si hay borrador guardado para ESTE tipo, lo restauramos.
+    // La clave de restauración usa defaultType (el tipo con el que se abrió) y
+    // se ignora cualquier borrador cuyo tipo no coincida (descarta borradores
+    // viejos contaminados del bug anterior).
+    if (!editingReport && currentUser?.id) {
       try {
-        const raw = localStorage.getItem(draftKey);
+        const restoreKey = `informe_draft__${currentUser.id}__${defaultType}`;
+        const raw = localStorage.getItem(restoreKey);
         if (raw) {
           const d = JSON.parse(raw);
-          setType(d.type || defaultType);
+          if (d.type && d.type !== defaultType) throw new Error('draft de otro tipo');
+          setType(defaultType);
           setReportDate(d.reportDate || (defaultType === 'weekly' ? mondayOf(today()) : today()));
           // Al restaurar:
           // 1) Descartar bullets vacios (sin texto y sin categoria). Los
