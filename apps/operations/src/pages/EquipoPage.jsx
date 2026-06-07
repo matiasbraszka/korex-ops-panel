@@ -977,11 +977,14 @@ function NotasView({ openCreateNota, openEditNota, openExpandNota }) {
 
       {/* Estilos para que el HTML guardado se vea formateado dentro de la card */}
       <style>{`
+        .rte-content h1 { font-size: 19px; font-weight: 800; margin: 10px 0 5px; color: #0F172A; line-height: 1.25; }
         .rte-content h2 { font-size: 15px; font-weight: 700; margin: 8px 0 4px; color: #111827; }
         .rte-content h3 { font-size: 13px; font-weight: 700; margin: 6px 0 3px; color: #1F2937; }
         .rte-content p  { margin: 4px 0; }
-        .rte-content ul, .rte-content ol { padding-left: 22px; margin: 6px 0; }
-        .rte-content li { margin: 2px 0; }
+        .rte-content ul { list-style-type: disc; padding-left: 22px; margin: 6px 0; }
+        .rte-content ol { list-style-type: decimal; padding-left: 22px; margin: 6px 0; }
+        .rte-content li { margin: 2px 0; display: list-item; }
+        .rte-content li::marker { color: #111827; }
         .rte-content a  { color: #3B82F6; text-decoration: underline; }
         .rte-content u  { text-decoration: underline; }
       `}</style>

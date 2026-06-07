@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 // Whitelist intencionalmente estrecho. No permitimos <script>, <style>, <iframe>,
 // <img>, on* handlers, ni javascript: URLs. Las notas son texto formateado
 // (titulos, negrita, subrayado, listas, links). Cualquier otra cosa se descarta.
-const ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'div'];
+const ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'div'];
 const ALLOWED_ATTR = ['href', 'target', 'rel'];
 
 // Forzamos target/rel seguros en cualquier <a>.

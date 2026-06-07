@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading2, Heading3, List, ListOrdered, Link2, Eraser } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -84,14 +84,15 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const Divider = () => <div className="w-px h-5 bg-gray-200" />;
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white focus-within:border-blue-400 transition-colors">
-      <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-100 bg-gray-50/60 flex-wrap">
+    <div className="border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
+      <div className="sticky top-0 z-20 flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg flex-wrap">
         <Btn Icon={Bold}          title="Negrita (Ctrl+B)"   onClick={() => exec('bold')} />
         <Btn Icon={Italic}        title="Cursiva (Ctrl+I)"   onClick={() => exec('italic')} />
         <Btn Icon={UnderlineIcon} title="Subrayado (Ctrl+U)" onClick={() => exec('underline')} />
         <Divider />
-        <Btn Icon={Heading2} title="Título grande" onClick={() => exec('formatBlock', 'H2')} />
-        <Btn Icon={Heading3} title="Título chico"  onClick={() => exec('formatBlock', 'H3')} />
+        <Btn Icon={Heading1} title="Título principal (H1)" onClick={() => exec('formatBlock', 'H1')} />
+        <Btn Icon={Heading2} title="Título grande (H2)" onClick={() => exec('formatBlock', 'H2')} />
+        <Btn Icon={Heading3} title="Título chico (H3)"  onClick={() => exec('formatBlock', 'H3')} />
         <Divider />
         <Btn Icon={List}        title="Lista con viñetas" onClick={() => exec('insertUnorderedList')} />
         <Btn Icon={ListOrdered} title="Lista numerada"    onClick={() => exec('insertOrderedList')} />
@@ -115,11 +116,14 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
           color: #9CA3AF;
           pointer-events: none;
         }
+        .rte-content h1 { font-size: 22px; font-weight: 800; margin: 12px 0 6px; color: #0F172A; line-height: 1.25; }
         .rte-content h2 { font-size: 16px; font-weight: 700; margin: 10px 0 4px; color: #111827; }
         .rte-content h3 { font-size: 14px; font-weight: 700; margin: 8px 0 3px; color: #1F2937; }
         .rte-content p  { margin: 4px 0; }
-        .rte-content ul, .rte-content ol { padding-left: 22px; margin: 6px 0; }
-        .rte-content li { margin: 2px 0; }
+        .rte-content ul { list-style-type: disc; padding-left: 22px; margin: 6px 0; }
+        .rte-content ol { list-style-type: decimal; padding-left: 22px; margin: 6px 0; }
+        .rte-content li { margin: 2px 0; display: list-item; }
+        .rte-content li::marker { color: #111827; }
         .rte-content a  { color: #3B82F6; text-decoration: underline; }
       `}</style>
     </div>
