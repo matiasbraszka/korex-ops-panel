@@ -280,8 +280,15 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     return () => document.removeEventListener('mousedown', handler);
   }, [showClientPicker]);
 
+  // Lista de clientes para el selector del informe. Se EXCLUYE el cliente que
+  // representa a la empresa ("Empresa (Korex)"): Korex es interno, no un
+  // cliente. Sus tareas se reportan bajo la opción fija "Korex – Interno"
+  // (que linkea contra ese mismo cliente vía internalTaskClientId). Así no hay
+  // dos "Korex" en el selector. Sigue apareciendo en Clientes y Tareas.
   const activeClients = useMemo(
-    () => (clients || []).filter(c => c.status === 'active').sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    () => (clients || [])
+      .filter(c => c.status === 'active' && !(c.name || '').toLowerCase().includes('korex'))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
     [clients]
   );
 
