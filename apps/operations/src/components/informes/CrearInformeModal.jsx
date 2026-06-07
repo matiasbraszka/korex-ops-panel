@@ -242,6 +242,32 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     } catch (e) { /* quota / private mode — ignorar */ }
   }, [open, draftKey, editingReport, type, reportDate, progressItems, nextDay, hasBlocker, blockerDesc, blockerImprovement]);
 
+  // Al CERRAR el modal (sin guardar): descartar el borrador de ambos tipos y
+  // limpiar el form. Así la próxima apertura arranca limpia. El modal queda
+  // montado entre aperturas, por eso hay que limpiar el estado a mano. El
+  // borrador solo sirve para no perder lo escrito ante un refresh (no dispara
+  // onClose), no para resucitar contenido al reabrir a propósito.
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (open) { wasOpenRef.current = true; return; }
+    if (!wasOpenRef.current) return; // nunca se abrió: no tocar nada
+    wasOpenRef.current = false;
+    if (!editingReport && currentUser?.id) {
+      try {
+        localStorage.removeItem(`informe_draft__${currentUser.id}__daily`);
+        localStorage.removeItem(`informe_draft__${currentUser.id}__weekly`);
+      } catch (e) { /* ignore */ }
+    }
+    setProgressItems([]);
+    setNextDay('');
+    setHasBlocker(false);
+    setBlockerDesc('');
+    setBlockerImprovement('');
+    setError('');
+    userTouchedRef.current = false;
+    autoFillSourceMondayRef.current = null;
+  }, [open, editingReport, currentUser?.id]);
+
   // Cerrar picker al click afuera
   useEffect(() => {
     if (!showClientPicker) return;
