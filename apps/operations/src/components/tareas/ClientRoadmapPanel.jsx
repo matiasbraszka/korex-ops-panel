@@ -140,15 +140,21 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
 
       const isCustomPhase = g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey);
 
-      // Si el filtro "ocultar completadas" esta activo, una fase completa
-      // (todas hechas o sin tareas pendientes) tampoco aparece — vale tambien
-      // para fases custom. Es lo que pidio Matias para mantener el roadmap
-      // enfocado en lo que falta.
-      if (hideCompleted && g.allDone) return false;
+      // Una fase VACÍA (sin tareas) NO es lo mismo que una fase COMPLETADA.
+      // Antes "totalCount === 0" contaba como completada (g.allDone), así que con
+      // el filtro de "ocultar completadas" activo las fases recién creadas (aún
+      // vacías) desaparecían. Una fase custom vacía se muestra siempre para
+      // poder llenarla.
+      const isEmpty = g.totalCount === 0;
+      const isReallyCompleted = g.totalCount > 0 && g.doneCount === g.totalCount;
+      if (isCustomPhase && isEmpty) return true;
 
-      // Las fases custom del cliente siempre se muestran (aunque esten vacias)
-      // si no hay filtro de completadas activo — es la unica forma de poder
-      // llenarlas recien creadas.
+      // Si el filtro "ocultar completadas" está activo, ocultar SOLO las fases
+      // realmente completadas (tienen tareas y todas están hechas). Las vacías
+      // no cuentan como completadas.
+      if (hideCompleted && isReallyCompleted) return false;
+
+      // Las fases custom del cliente siempre se muestran.
       if (isCustomPhase) return true;
 
       // Si hay algun filtro activo (assignee, hide blocked, due range),
