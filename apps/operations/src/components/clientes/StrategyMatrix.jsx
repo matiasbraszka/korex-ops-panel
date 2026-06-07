@@ -116,20 +116,20 @@ function AccessFormModal({ open, onClose, initial, onSave }) {
 }
 
 function LinkFormModal({ open, onClose, kind, initial, onSave }) {
-  // kind: 'drive' | 'doc'
+  // kind: 'folder' | 'doc'
   const isEdit = !!initial;
   const [form, setForm] = useState({ label: '', url: '' });
   if (open && form._k !== (initial?.url || 'new-' + kind)) {
-    setForm({ label: initial?.label || (kind === 'drive' ? 'Drive de la estrategia' : ''), url: initial?.url || '', _k: initial?.url || 'new-' + kind });
+    setForm({ label: initial?.label || '', url: initial?.url || '', _k: initial?.url || 'new-' + kind });
   }
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const save = () => {
     if (!form.url.trim()) return;
-    onSave({ label: form.label.trim() || (kind === 'drive' ? 'Drive' : 'Documento'), url: form.url.trim() });
+    onSave({ label: form.label.trim() || (kind === 'folder' ? 'Carpeta' : 'Documento'), url: form.url.trim() });
     onClose();
   };
-  const title = kind === 'drive'
-    ? (isEdit ? 'Editar carpeta Drive' : 'Nueva carpeta Drive')
+  const title = kind === 'folder'
+    ? (isEdit ? `Editar carpeta · ${initial?.label}` : 'Nueva carpeta')
     : (isEdit ? `Editar documento · ${initial?.label}` : 'Nuevo documento');
   return (
     <Modal open={open} onClose={onClose} title={title} maxWidth={500}
@@ -143,7 +143,7 @@ function LinkFormModal({ open, onClose, kind, initial, onSave }) {
       <div className="grid gap-3 p-1">
         <div className="grid gap-1">
           <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Nombre</label>
-          <input type="text" value={form.label} onChange={e => set('label', e.target.value)} className={inputClass} placeholder={kind === 'drive' ? 'Drive de la estrategia' : 'Guion VSL, Copy de anuncios…'} autoFocus />
+          <input type="text" value={form.label} onChange={e => set('label', e.target.value)} className={inputClass} placeholder={kind === 'folder' ? 'Drive de la estrategia, Carpeta de creativos…' : 'Guion VSL, Copy de anuncios…'} autoFocus />
         </div>
         <div className="grid gap-1">
           <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>URL *</label>
@@ -160,8 +160,16 @@ const STATUS_STYLES = {
   pausada: { bg: '#FEFCE8', fg: '#CA8A04', label: 'Pausada' },
 };
 
-const PAGE_GRID = '1.3fr 1fr 1fr 1fr 1.3fr 60px';
-const PAGE_GRID_COLS = 'gridTemplateColumns: \'1.3fr 1fr 1fr 1fr 1.3fr 60px\'';
+// Estado de cada página (desplegable). 'vieja' = quedó anticuada.
+const PAGE_STATUS = {
+  activa:            { bg: '#ECFDF5', fg: '#16A34A', label: 'Activa' },
+  pausada:           { bg: '#FEFCE8', fg: '#CA8A04', label: 'Pausada' },
+  'en-construccion': { bg: '#EEF2FF', fg: '#5B7CF5', label: 'En construcción' },
+  cambios:           { bg: '#F5F3FF', fg: '#7C3AED', label: 'Haciendo cambios' },
+  vieja:             { bg: '#F0F2F5', fg: '#6B7280', label: 'Vieja' },
+};
+
+const PAGE_GRID = '1.2fr 0.95fr 1fr 1fr 1fr 1.1fr 56px';
 
 const EVENT_PRESETS = ['Visitas', 'Registro lead', 'Thank you page', 'WhatsApp'];
 
@@ -369,15 +377,52 @@ function TrackingModal({ page, onClose, onPatch }) {
   );
 }
 
-function UrlPill({ url, isLive, label, color = 'blue' }) {
+function UrlPill({ url, label, color = 'blue' }) {
   if (!url) return <span className="text-[12px]" style={{ color: '#9CA3AF' }}>—</span>;
   const bg = color === 'purple' ? '#F5F3FF' : '#EEF2FF';
   const fg = color === 'purple' ? '#7C3AED' : '#5B7CF5';
   return (
     <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] no-underline py-1 px-2 rounded-md" style={{ background: bg, color: fg }}>
       {label || 'Abrir'} <ExternalLink size={11} />
-      {isLive && <span className="ml-1 inline-flex items-center py-[1px] px-1.5 rounded-full text-[9px] font-bold bg-green-bg text-[#16A34A]">live</span>}
     </a>
+  );
+}
+
+// Pill desplegable con el estado de la página.
+function PageStatusPill({ status, onChange }) {
+  const [open, setOpen] = useState(false);
+  const cfg = PAGE_STATUS[status] || PAGE_STATUS.activa;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 py-[3px] px-2 rounded-full text-[10.5px] font-bold cursor-pointer hover:opacity-80 border-none max-w-full"
+        style={{ background: cfg.bg, color: cfg.fg }}
+        onClick={() => setOpen(o => !o)}
+        title="Cambiar estado"
+      >
+        <span className="truncate">{cfg.label}</span>
+        <ChevronDown size={10} className="shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 bg-white border border-[#E2E5EB] rounded-lg shadow-md z-20 min-w-[150px] overflow-hidden">
+            {Object.entries(PAGE_STATUS).map(([k, v]) => (
+              <button
+                key={k}
+                className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-blue-bg2 bg-transparent border-none cursor-pointer font-medium"
+                style={{ color: v.fg }}
+                onClick={() => { onChange(k); setOpen(false); }}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: v.fg }} />
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -387,9 +432,9 @@ function PageRow({ p, onUpdate, onDelete }) {
     name: p.name,
     testing_url: p.testing_url || '',
     prod_url: p.prod_url || '',
-    is_live: p.is_live,
     ads_url: p.ads_url || '',
   });
+  const status = p.status || 'activa';
 
   const save = () => {
     onUpdate(p.id, form);
@@ -404,11 +449,9 @@ function PageRow({ p, onUpdate, onDelete }) {
         {/* Desktop: edicion inline en fila */}
         <div className="hidden md:grid items-center py-2 px-3 bg-blue-bg2 gap-2" style={{ gridTemplateColumns: PAGE_GRID }}>
           <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="text-[12px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="Nombre página" />
+          <PageStatusPill status={status} onChange={(v) => onUpdate(p.id, { status: v })} />
           <input type="text" value={form.testing_url} onChange={e => setForm({ ...form, testing_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL testing" />
-          <div className="flex items-center gap-1.5">
-            <input type="text" value={form.prod_url} onChange={e => setForm({ ...form, prod_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue flex-1 min-w-0" placeholder="URL producción" />
-            <label className="inline-flex items-center gap-1 text-[10px] cursor-pointer shrink-0" title="Marcar como live"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> live</label>
-          </div>
+          <input type="text" value={form.prod_url} onChange={e => setForm({ ...form, prod_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL producción" />
           <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11px] py-1 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
           <TrackingEditor page={p} onPatch={patchTracking} compact />
           <div className="flex gap-1 justify-end">
@@ -421,7 +464,10 @@ function PageRow({ p, onUpdate, onDelete }) {
           <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="text-[12px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="Nombre página" />
           <input type="text" value={form.testing_url} onChange={e => setForm({ ...form, testing_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL testing" />
           <input type="text" value={form.prod_url} onChange={e => setForm({ ...form, prod_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL producción" />
-          <label className="inline-flex items-center gap-1.5 text-[11px] cursor-pointer self-start"><input type="checkbox" checked={form.is_live} onChange={e => setForm({ ...form, is_live: e.target.checked })} /> Marcar como live</label>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px]" style={{ color: '#6B7280' }}>Estado:</span>
+            <PageStatusPill status={status} onChange={(v) => onUpdate(p.id, { status: v })} />
+          </div>
           <input type="text" value={form.ads_url} onChange={e => setForm({ ...form, ads_url: e.target.value })} className="text-[11.5px] py-1.5 px-2 rounded border border-[#E2E5EB] outline-none focus:border-blue" placeholder="URL campaña Meta" />
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#9CA3AF' }}>Tracking</div>
@@ -443,8 +489,9 @@ function PageRow({ p, onUpdate, onDelete }) {
         <div className="flex items-center gap-1.5 text-[12.5px] font-medium min-w-0" style={{ color: '#1A1D26' }}>
           <FileText size={13} className="text-[#9CA3AF] shrink-0" /><span className="truncate">{p.name}</span>
         </div>
+        <div className="min-w-0"><PageStatusPill status={status} onChange={(v) => onUpdate(p.id, { status: v })} /></div>
         <div><UrlPill url={p.testing_url} /></div>
-        <div><UrlPill url={p.prod_url} isLive={p.is_live} /></div>
+        <div><UrlPill url={p.prod_url} /></div>
         <div><UrlPill url={p.ads_url} label="Meta" color="purple" /></div>
         <div className="min-w-0"><TrackingEditor page={p} onPatch={patchTracking} compact /></div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
@@ -462,12 +509,16 @@ function PageRow({ p, onUpdate, onDelete }) {
         </div>
         <div className="grid grid-cols-2 gap-1.5 text-[11px]">
           <div>
+            <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Estado</div>
+            <PageStatusPill status={status} onChange={(v) => onUpdate(p.id, { status: v })} />
+          </div>
+          <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Testing</div>
             <UrlPill url={p.testing_url} />
           </div>
           <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Producción</div>
-            <UrlPill url={p.prod_url} isLive={p.is_live} />
+            <UrlPill url={p.prod_url} />
           </div>
           <div>
             <div className="text-[9.5px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Publicidad</div>
@@ -575,6 +626,13 @@ function StrategyCard({ s, pages }) {
   const myPages = pages.filter(p => p.strategy_id === s.id).sort((a, b) => (a.position || 0) - (b.position || 0));
   const st = STATUS_STYLES[s.status] || STATUS_STYLES.borrador;
 
+  // Carpetas: lista ilimitada. Fallback al drive_url legacy si todavía no se migró.
+  const folders = (Array.isArray(s.folders) && s.folders.length)
+    ? s.folders
+    : (s.drive_url ? [{ label: 'Drive de la estrategia', url: s.drive_url }] : []);
+  // Al guardar carpetas limpiamos el drive_url legacy para no duplicar.
+  const saveFolders = (next) => updateStrategy(s.id, { folders: next, drive_url: null });
+
   const saveName = () => {
     if (nameValue.trim() && nameValue !== s.name) updateStrategy(s.id, { name: nameValue.trim() });
     setEditingName(false);
@@ -633,6 +691,7 @@ function StrategyCard({ s, pages }) {
       <div>
         <div className="hidden md:grid items-center py-2 px-3 text-[10px] font-bold uppercase tracking-wider border-b border-[#F0F2F5] gap-2" style={{ gridTemplateColumns: PAGE_GRID, color: '#9CA3AF' }}>
           <div>Página</div>
+          <div>Estado</div>
           <div>Testing</div>
           <div>Producción</div>
           <div>Publicidad</div>
@@ -665,15 +724,15 @@ function StrategyCard({ s, pages }) {
             <Folder size={11} /> Archivos
           </div>
           <div className="flex flex-col gap-1.5">
-            {s.drive_url && (
-              <div className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
+            {folders.map((f, fi) => (
+              <div key={fi} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
                 <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Folder size={12} className="text-blue" /></span>
-                <a href={s.drive_url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>Drive de la estrategia</a>
-                <CopyButton value={s.drive_url} title="Copiar URL" />
-                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ kind: 'drive', initial: { label: 'Drive', url: s.drive_url } })} title="Editar"><Pencil size={11} /></button>
-                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Quitar el Drive?')) updateStrategy(s.id, { drive_url: null }); }} title="Quitar"><X size={11} /></button>
+                <a href={f.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{f.label}</a>
+                <CopyButton value={f.url} title="Copiar URL" />
+                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ kind: 'folder', initial: f, index: fi })} title="Editar"><Pencil size={11} /></button>
+                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${f.label}"?`)) saveFolders(folders.filter((_, i) => i !== fi)); }} title="Quitar"><X size={11} /></button>
               </div>
-            )}
+            ))}
             {(s.docs || []).map((d, di) => (
               <div key={di} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
                 <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#F5F3FF' }}><FileText size={12} className="text-purple" /></span>
@@ -683,10 +742,11 @@ function StrategyCard({ s, pages }) {
                 <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={11} /></button>
               </div>
             ))}
+            {folders.length === 0 && (s.docs || []).length === 0 && (
+              <span className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin carpetas ni documentos</span>
+            )}
             <div className="flex gap-1 flex-wrap">
-              {!s.drive_url && (
-                <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'drive', initial: null })}><Plus size={11} /> Drive</button>
-              )}
+              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'folder', initial: null })}><Plus size={11} /> Carpeta</button>
               <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'doc', initial: null })}><Plus size={11} /> Documento</button>
             </div>
           </div>
@@ -751,8 +811,11 @@ function StrategyCard({ s, pages }) {
           kind={linkModal.kind}
           initial={linkModal.initial}
           onSave={(data) => {
-            if (linkModal.kind === 'drive') {
-              updateStrategy(s.id, { drive_url: data.url });
+            if (linkModal.kind === 'folder') {
+              const next = [...folders];
+              if (linkModal.index != null) next[linkModal.index] = data;
+              else next.push(data);
+              saveFolders(next);
             } else {
               const docs = [...(s.docs || [])];
               if (linkModal.index != null) docs[linkModal.index] = data;

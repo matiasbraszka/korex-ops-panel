@@ -898,6 +898,7 @@ export function AppProvider({ children }) {
       version: data.version || 'v1',
       drive_url: data.drive_url || null,
       docs: Array.isArray(data.docs) ? data.docs : [],
+      folders: Array.isArray(data.folders) ? data.folders : [],
       start_date: data.start_date || null,
     };
     await sbFetch('strategies', {
@@ -940,6 +941,7 @@ export function AppProvider({ children }) {
       testing_url: data.testing_url || null,
       prod_url: data.prod_url || null,
       is_live: !!data.is_live,
+      status: data.status || 'activa',
       ads_url: data.ads_url || null,
       conversion_events: Array.isArray(data.conversion_events) ? data.conversion_events : [],
       pixel_id: data.pixel_id || null,
