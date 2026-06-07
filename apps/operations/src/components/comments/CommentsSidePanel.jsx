@@ -5,7 +5,7 @@ import TeamAvatar from '../TeamAvatar';
 import CommentItem from './CommentItem';
 import MentionTextarea from './MentionTextarea';
 import { TASK_STATUS, PHASES } from '../../utils/constants';
-import { getBullets } from '../../utils/helpers';
+import { getBullets, fmtTime, dayKey } from '../../utils/helpers';
 import { formatSystemEvent, formatReportEvent } from '../../utils/taskActivity';
 
 // CommentsSidePanel — panel lateral de actividad (comentarios + contexto
@@ -14,30 +14,7 @@ import { formatSystemEvent, formatReportEvent } from '../../utils/taskActivity';
 //
 // Diseño: side drawer a la derecha de 408px con scrim + slide-in,
 // composer abajo con avatar + textarea + send circular.
-
-function fmtTime(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (diffSec < 60) return 'recién';
-  if (diffSec < 3600) return `hace ${Math.floor(diffSec / 60)} min`;
-  if (diffSec < 86400) return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-  const diffDays = Math.floor(diffSec / 86400);
-  if (diffDays === 1) return 'ayer';
-  if (diffDays < 7) return `hace ${diffDays} días`;
-  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
-}
-
-function dayKey(dateStr) {
-  const d = new Date(dateStr);
-  const today = new Date();
-  const isSameDay = (a, b) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (isSameDay(d, today)) return 'Hoy';
-  const yest = new Date(today); yest.setDate(yest.getDate() - 1);
-  if (isSameDay(d, yest)) return 'Ayer';
-  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' });
-}
+// fmtTime y dayKey viven en utils/helpers.js (fuente única).
 
 export default function CommentsSidePanel() {
   const {

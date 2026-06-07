@@ -134,6 +134,34 @@ export function fmtDayShort(d) {
   return `${days[date.getDay()]} ${date.getDate()}`;
 }
 
+// Hora relativa amable de un timestamp (created_at): "rec\u00e9n", "hace X min",
+// hora, "ayer", "hace N d\u00edas", o fecha corta. Usada en el buz\u00f3n de
+// notificaciones y en el panel de comentarios (antes estaba duplicada).
+export function fmtTime(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 60) return 'reci\u00e9n';
+  if (diffSec < 3600) return `hace ${Math.floor(diffSec / 60)} min`;
+  if (diffSec < 86400) return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const diffDays = Math.floor(diffSec / 86400);
+  if (diffDays === 1) return 'ayer';
+  if (diffDays < 7) return `hace ${diffDays} d\u00edas`;
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+}
+
+// Etiqueta de d\u00eda para agrupar feeds (Hoy / Ayer / fecha larga).
+export function dayKey(dateStr) {
+  const d = new Date(dateStr);
+  const today = new Date();
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, today)) return 'Hoy';
+  const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+  if (sameDay(d, yest)) return 'Ayer';
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' });
+}
+
 /**
  * Devuelve true si el dateStr (YYYY-MM-DD) cae dentro del rango del filtro.
  * range: 'all' | 'this-week' | 'next-week' | 'this-month' | 'overdue'
