@@ -194,6 +194,14 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     [clients]
   );
 
+  // Cliente que representa a la empresa misma ("Empresa (Korex)"). Las tareas
+  // internas de Korex se cargan bajo este cliente, no con client_id null, asi
+  // que el item "Korex – Interno" linkea contra las tareas de este cliente.
+  const companyClientId = useMemo(() => {
+    const c = (clients || []).find(x => (x.name || '').toLowerCase().includes('korex'));
+    return c?.id || null;
+  }, [clients]);
+
   // ── Soporte de semanal asistido (solo flag ON) ────────────────────────────
   const meId = currentUser?.id;
   const weekMonday = (type === 'weekly' && reportDate) ? mondayOf(reportDate) : null;
@@ -853,6 +861,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                           onChange={(next) => updateItemBullets(item.key, next)}
                           clientId={item.key !== INTERNAL_KEY ? item.key : null}
                           isInternal={item.key === INTERNAL_KEY}
+                          internalTaskClientId={companyClientId}
                           enableTaskLink={type === 'daily'}
                         />
                       </div>
@@ -867,6 +876,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                         onChange={(next) => updateItemBullets(item.key, next)}
                         clientId={item.key !== INTERNAL_KEY ? item.key : null}
                         isInternal={item.key === INTERNAL_KEY}
+                        internalTaskClientId={companyClientId}
                         enableTaskLink={type === 'daily'}
                       />
                     </>

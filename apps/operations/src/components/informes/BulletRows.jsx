@@ -20,18 +20,19 @@ import { parseAssignees } from '../../utils/taskActivity';
 //
 // Tareas done nunca aparecen en el dropdown.
 
-export default function BulletRows({ bullets, onChange, disabled = false, clientId = null, isInternal = false, enableTaskLink = false }) {
+export default function BulletRows({ bullets, onChange, disabled = false, clientId = null, isInternal = false, internalTaskClientId = null, enableTaskLink = false }) {
   const { teamMembers, currentUser, tasks } = useApp();
   const dragIdx = useRef(null);
   const overIdx = useRef(null);
 
   // Mostramos el desplegable tanto para clientes reales como para el trabajo
-  // interno de la empresa ("Korex – Interno"), cuyas tareas viven con client_id null.
+  // interno de la empresa ("Korex – Interno").
   const showTaskLink = enableTaskLink && (isInternal || !!clientId);
 
-  // Solo las tareas pendientes ASIGNADAS al usuario que carga el informe.
+  // Solo las tareas ASIGNADAS al usuario que carga el informe.
   // No mostramos tareas de otros miembros aunque sean del mismo cliente.
-  // Tareas done nunca se incluyen.
+  // Se incluyen TODOS los estados menos "done" (backlog, en progreso, pausada,
+  // bloqueada, en revision, retrasada).
   const myNames = (() => {
     if (!currentUser) return new Set();
     return new Set([
@@ -44,10 +45,17 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
     const parts = parseAssignees(task.assignee).map(s => s.toLowerCase());
     return parts.some(p => myNames.has(p));
   };
+  // Para "Korex – Interno": las tareas de la empresa viven bajo el cliente
+  // "Empresa (Korex)" (internalTaskClientId), no con client_id null. Por eso
+  // incluimos ese cliente ademas de las tareas sin cliente.
+  const belongsToScope = (t) => {
+    if (isInternal) return t.clientId == null || (internalTaskClientId && t.clientId === internalTaskClientId);
+    return t.clientId === clientId;
+  };
   const pendingTasksForClient = (() => {
     if (!showTaskLink) return [];
     return (tasks || [])
-      .filter(t => (isInternal ? t.clientId == null : t.clientId === clientId) && t.status !== 'done' && isMine(t))
+      .filter(t => belongsToScope(t) && t.status !== 'done' && isMine(t))
       .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   })();
 
