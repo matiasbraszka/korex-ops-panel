@@ -112,7 +112,7 @@ function PendienteCell({ client, onSave }) {
 }
 
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, briefing, taskProposals, getPriorityLabel, phase, setPhase, updateClient, reorderClient, currentUser } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, getPriorityLabel, phase, setPhase, updateClient, reorderClient, currentUser } = useApp();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
 
   // Drag&drop refs (solo se usan si isAdmin)
@@ -135,19 +135,9 @@ export default function ClientsPage() {
     if (c) return <ClientDetail client={c} />;
   }
 
-  const pendingProposals = taskProposals.filter(p => p.approval === 'pending').length;
-  const stored = briefing;
-
   // Filter out Empresa (Korex) from the client list
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
   const visibleClients = clients.filter(c => !isKorexClient(c));
-
-  let preview = 'Sin informe disponible. El agente de operaciones enviará el próximo informe automáticamente.';
-  if (stored && stored.text) {
-    const lines = stored.text.replace(/<[^>]+>/g, '').split('\n').filter(l => l.trim() && !l.startsWith('#'));
-    preview = lines.slice(0, 2).join(' ').substring(0, 200);
-    if (lines.join(' ').length > 200) preview += '...';
-  }
 
   // Exclude descartados (6) from default active count / KPIs
   const activeForKpis = visibleClients.filter(c => (c.priority || 5) !== 6);
