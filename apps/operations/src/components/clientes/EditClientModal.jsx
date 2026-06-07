@@ -44,42 +44,79 @@ function Field({ label, required, hint, children }) {
 
 const inputClass = 'text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue focus:ring focus:ring-blue-bg bg-white';
 
-export default function EditClientModal({ open, onClose, client, updateClient, getAllPriorityLabels }) {
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+export default function EditClientModal({ open, onClose, client, updateClient, createClient, existingClients = [], getAllPriorityLabels }) {
+  // Mismo formulario para crear y editar. Si no llega `client`, es modo "nuevo".
+  const isCreate = !client;
   const [form, setForm] = useState({});
   useEffect(() => {
     if (!open) return;
+    const c = client || {};
     setForm({
-      name: client.name || '',
-      company: client.company || '',
-      niche: client.niche || '',
-      email: client.email || '',
-      phone: client.phone || '',
-      country: client.country || '',
-      tier: client.tier || 'starter',
-      avatarUrl: client.avatarUrl || '',
-      service: client.service || '',
-      startDate: client.startDate || '',
-      priority: client.priority || 5,
-      status: client.status || 'active',
-      billingAmount: client.billingAmount ?? '',
-      billingCurrency: client.billingCurrency || 'EUR',
-      billingCycle: client.billingCycle || 'mensual',
-      billingInstallments: client.billingInstallments || 1,
-      nextChargeDate: client.nextChargeDate || '',
-      paymentMethod: client.paymentMethod || '',
-      billingStatus: client.billingStatus || 'al_dia',
-      conector: client.conector || '',
-      closer: client.closer || '',
-      contractData: client.contractData || '',
-      notes: client.notes || '',
+      name: c.name || '',
+      company: c.company || '',
+      niche: c.niche || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      country: c.country || '',
+      tier: c.tier || 'starter',
+      avatarUrl: c.avatarUrl || '',
+      slackChannel: c.slackChannel || '',
+      service: c.service || (isCreate ? 'Funnel completo + Ads' : ''),
+      startDate: c.startDate || (isCreate ? todayStr() : ''),
+      priority: c.priority || 5,
+      status: c.status || 'active',
+      billingAmount: c.billingAmount ?? '',
+      billingCurrency: c.billingCurrency || 'EUR',
+      billingCycle: c.billingCycle || 'mensual',
+      billingInstallments: c.billingInstallments || 1,
+      nextChargeDate: c.nextChargeDate || '',
+      paymentMethod: c.paymentMethod || '',
+      billingStatus: c.billingStatus || 'al_dia',
+      conector: c.conector || '',
+      closer: c.closer || '',
+      contractData: c.contractData || '',
+      notes: c.notes || '',
     });
-  }, [open, client]);
+  }, [open, client, isCreate]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = () => {
     if (!form.name.trim() || !form.company.trim()) {
       alert('Nombre y empresa son obligatorios');
+      return;
+    }
+    if (isCreate) {
+      // Evitar duplicados: avisar si ya existe un cliente con el mismo nombre.
+      const dup = (existingClients || []).some(c => (c.name || '').trim().toLowerCase() === form.name.trim().toLowerCase());
+      if (dup && !window.confirm(`Ya existe un cliente llamado "${form.name.trim()}". ¿Crear otro igual de todas formas?`)) {
+        return;
+      }
+      createClient(form.name.trim(), form.company.trim(), form.service.trim(), form.startDate || todayStr(), '', {
+        niche: form.niche.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        country: form.country.trim(),
+        tier: form.tier || 'starter',
+        avatarUrl: form.avatarUrl.trim(),
+        slackChannel: form.slackChannel.trim(),
+        priority: Number(form.priority) || 5,
+        status: form.status,
+        billingAmount: form.billingAmount === '' ? null : Number(form.billingAmount),
+        billingCurrency: form.billingCurrency,
+        billingCycle: form.billingCycle,
+        billingInstallments: Number(form.billingInstallments) || 1,
+        nextChargeDate: form.nextChargeDate || null,
+        paymentMethod: form.paymentMethod || null,
+        billingStatus: form.billingStatus,
+        conector: form.conector.trim(),
+        closer: form.closer.trim(),
+        contractData: form.contractData.trim(),
+        notes: form.notes,
+      });
+      onClose();
       return;
     }
     updateClient(client.id, {
@@ -91,6 +128,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
       country: form.country.trim() || null,
       tier: form.tier || 'starter',
       avatarUrl: form.avatarUrl.trim(),
+      slackChannel: form.slackChannel.trim(),
       service: form.service.trim(),
       startDate: form.startDate || null,
       priority: Number(form.priority) || 5,
@@ -117,14 +155,14 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
     <Modal
       open={open}
       onClose={onClose}
-      title={`Editar cliente · ${client.name}`}
+      title={isCreate ? 'Nuevo cliente' : `Editar cliente · ${client.name}`}
       maxWidth={740}
       footer={
         <div className="flex items-center justify-between w-full">
           <span className="text-[11px]" style={{ color: '#9CA3AF' }}>Los campos con <span className="text-red-500">*</span> son obligatorios</span>
           <div className="flex gap-2">
             <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
-            <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark" onClick={handleSave}>Guardar cambios</button>
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark" onClick={handleSave}>{isCreate ? 'Crear cliente' : 'Guardar cambios'}</button>
           </div>
         </div>
       }
@@ -150,6 +188,9 @@ export default function EditClientModal({ open, onClose, client, updateClient, g
             </Field>
             <Field label="País">
               <input type="text" value={form.country || ''} onChange={e => set('country', e.target.value)} className={inputClass} placeholder="España, México, Argentina…" />
+            </Field>
+            <Field label="Canal de Slack">
+              <input type="text" value={form.slackChannel || ''} onChange={e => set('slackChannel', e.target.value)} className={inputClass} placeholder="nombre-del-canal" />
             </Field>
             <Field label="Nivel">
               <div className="flex gap-2">

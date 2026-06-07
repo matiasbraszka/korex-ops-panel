@@ -16,12 +16,11 @@ const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 import SearchBar from './components/SearchBar';
-import Modal from './components/Modal';
+import EditClientModal from './components/clientes/EditClientModal';
 import CommentsSidePanel from './components/comments/CommentsSidePanel';
 import NotificationBell from './components/notifications/NotificationBell';
 import NotificationsPanel from './components/notifications/NotificationsPanel';
 import NotificationToast from './components/notifications/NotificationToast';
-import { today } from './utils/helpers';
 
 // Lazy-load del modulo Ventas: el chunk se baja solo si el usuario entra.
 const SalesRoutes = lazy(() =>
@@ -236,7 +235,7 @@ function AreaDropdown({ areas, activeArea, onSwitch, collapsed = false }) {
 }
 
 function MainLayout() {
-  const { view, setSelectedId, currentUser, doLogout, syncStatus, tasks, createClient: ctxCreateClient, appSettings, loomVideos } = useApp();
+  const { view, setSelectedId, currentUser, doLogout, syncStatus, tasks, clients, createClient: ctxCreateClient, getAllPriorityLabels, loomVideos } = useApp();
   const navigate = useNavigate();
   const [newClientModal, setNewClientModal] = useState(false);
   // Sidebar colapsable (PC) — persiste en localStorage
@@ -252,11 +251,6 @@ function MainLayout() {
   };
   // Drawer mobile para cambiar de area
   const [areaDrawerOpen, setAreaDrawerOpen] = useState(false);
-  const services = appSettings?.services && appSettings.services.length > 0
-    ? appSettings.services
-    : ['Funnel completo + Ads'];
-  const [ncForm, setNcForm] = useState({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: services[0], avatarUrl: '', tier: 'starter', conector: '', closer: '', contractData: '' });
-
   // Contar videos no vistos para badge
   const seenKey = `loom_seen_${currentUser?.id || 'anon'}`;
   const seenVideos = (() => { try { return JSON.parse(localStorage.getItem(seenKey) || '[]'); } catch { return []; } })();
@@ -320,22 +314,6 @@ function MainLayout() {
   };
 
   const [title, subtitle] = titles[view] || ['', ''];
-
-  const handleCreateClient = () => {
-    if (!ncForm.firstName.trim() || !ncForm.lastName.trim() || !ncForm.company.trim()) { alert('Completa nombre, apellido y empresa.'); return; }
-    const fullName = ncForm.firstName.trim() + ' ' + ncForm.lastName.trim();
-    ctxCreateClient(fullName, ncForm.company.trim(), ncForm.service.trim(), today(), '', {
-      phone: ncForm.phone.trim(),
-      slackChannel: ncForm.slackChannel.trim(),
-      avatarUrl: ncForm.avatarUrl.trim(),
-      tier: ncForm.tier || 'starter',
-      conector: ncForm.conector.trim(),
-      closer: ncForm.closer.trim(),
-      contractData: ncForm.contractData.trim(),
-    });
-    setNewClientModal(false);
-    setNcForm({ firstName: '', lastName: '', company: '', phone: '', slackChannel: '', service: 'Funnel completo + Ads', avatarUrl: '', tier: 'starter', conector: '', closer: '', contractData: '' });
-  };
 
   // Fallback al primer area accesible. Asi un user sin Operaciones que cae en
   // / o /operations/* termina en su area real (Ventas) en vez de ver un
@@ -681,50 +659,15 @@ function MainLayout() {
       </div>
 
       {/* New Client Modal */}
-      <Modal
+      {/* Nuevo cliente — usa el MISMO formulario que "Editar" para que sean idénticos. */}
+      <EditClientModal
         open={newClientModal}
         onClose={() => setNewClientModal(false)}
-        title="Nuevo cliente"
-        footer={<>
-          <button className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] cursor-pointer font-sans hover:bg-surface2" onClick={() => setNewClientModal(false)}>Cancelar</button>
-          <button className="py-2 px-4 rounded-md border-none bg-blue text-white text-[13px] cursor-pointer font-sans hover:bg-blue-dark" onClick={handleCreateClient}>Crear</button>
-        </>}
-      >
-        <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Nombre <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Juan" value={ncForm.firstName} onChange={e => setNcForm(f => ({ ...f, firstName: e.target.value }))} autoFocus /></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Apellido <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Garcia" value={ncForm.lastName} onChange={e => setNcForm(f => ({ ...f, lastName: e.target.value }))} /></div>
-        </div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Empresa <span className="text-red">*</span></label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Garcia Store" value={ncForm.company} onChange={e => setNcForm(f => ({ ...f, company: e.target.value }))} /></div>
-        <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Teléfono</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="+34 612 345 678" value={ncForm.phone} onChange={e => setNcForm(f => ({ ...f, phone: e.target.value }))} /></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Canal de Slack</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="nombre-del-canal" value={ncForm.slackChannel} onChange={e => setNcForm(f => ({ ...f, slackChannel: e.target.value }))} /></div>
-        </div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Servicio</label><select className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] cursor-pointer" value={ncForm.service} onChange={e => setNcForm(f => ({ ...f, service: e.target.value }))}>{services.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-[5px]">Nivel del cliente <span className="text-red">*</span></label>
-          <div className="flex gap-2">
-            {[
-              { k: 'starter', label: 'Starter', color: '#6B7280', bg: '#F3F4F6' },
-              { k: 'partner', label: 'Partner', color: '#5B7CF5', bg: '#EEF2FF' },
-            ].map(opt => (
-              <button key={opt.k} type="button"
-                className={`flex-1 py-2 px-3 rounded-md text-[12.5px] font-semibold cursor-pointer border ${ncForm.tier === opt.k ? 'border-2' : ''}`}
-                style={ncForm.tier === opt.k ? { borderColor: opt.color, background: opt.bg, color: opt.color } : { borderColor: '#E2E5EB', background: 'white', color: '#6B7280' }}
-                onClick={() => setNcForm(f => ({ ...f, tier: opt.k }))}
-              >{opt.label}</button>
-            ))}
-          </div>
-        </div>
-        <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Foto de perfil</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="URL de la foto (opcional)" value={ncForm.avatarUrl} onChange={e => setNcForm(f => ({ ...f, avatarUrl: e.target.value }))} /></div>
-        <div className="grid grid-cols-2 gap-2.5 max-sm:grid-cols-1">
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Conector</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Quién conectó al cliente" value={ncForm.conector} onChange={e => setNcForm(f => ({ ...f, conector: e.target.value }))} /></div>
-          <div className="mb-3.5"><label className="block text-xs font-semibold text-text2 mb-[5px]">Closer</label><input type="text" className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] font-sans outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]" placeholder="Quién cerró la venta" value={ncForm.closer} onChange={e => setNcForm(f => ({ ...f, closer: e.target.value }))} /></div>
-        </div>
-        <div className="mb-3.5">
-          <label className="block text-xs font-semibold text-text2 mb-[5px]">Datos para el contrato</label>
-          <textarea className="w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[12.5px] font-mono outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)] resize-y min-h-[90px]" placeholder={'Razón social: ...\nNIF / RFC / CUIT: ...\nDirección fiscal: ...\nRepresentante legal: ...'} value={ncForm.contractData} onChange={e => setNcForm(f => ({ ...f, contractData: e.target.value }))} />
-        </div>
-      </Modal>
+        client={null}
+        createClient={ctxCreateClient}
+        existingClients={clients}
+        getAllPriorityLabels={getAllPriorityLabels}
+      />
       {/* Panel lateral de comentarios — accesible globalmente desde cualquier
           vista de tareas (Roadmap, Lista, Timeline). */}
       <CommentsSidePanel />
