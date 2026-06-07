@@ -15,7 +15,7 @@ const INTERNAL_KEY = '__internal__';
 const INTERNAL_LABEL = 'Korex – Interno';
 
 export default function CrearInformeModal({ open, onClose, defaultType = 'daily', editingReport = null }) {
-  const { clients, currentUser, addTeamReport, updateTeamReport, appSettings, teamReports } = useApp();
+  const { clients, currentUser, addTeamReport, updateTeamReport, appSettings, teamReports, tasks: tasksFromContext } = useApp();
   const isEditing = !!editingReport;
   // Bullets categorizados + auto-fill semanal son ahora el flujo unico.
   // El render legacy (textarea libre) queda solo en el codigo como rama
@@ -53,16 +53,31 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
           const d = JSON.parse(raw);
           setType(d.type || defaultType);
           setReportDate(d.reportDate || (defaultType === 'weekly' ? mondayOf(today()) : today()));
-          // Al restaurar, limpiamos bullets vacios (placeholders sin texto y
-          // sin categoria). Si tenian task_id, esa tarea queda libre para
-          // volver a vincularse — sino el picker la vetaba como "ya tomada"
-          // por un placeholder que el usuario nunca lleno.
+          // Al restaurar:
+          // 1) Descartar bullets vacios (sin texto y sin categoria). Los
+          //    placeholders heredados de "Cargar mis pendientes" sin completar
+          //    no deben sobrevivir entre sesiones.
+          // 2) Limpiar task_id que apunte a una tarea inexistente o ya done.
+          //    Esto resetea el "cache antiguo" del borrador cuando el usuario
+          //    completo tareas en una sesion previa.
           const restoredItems = (Array.isArray(d.progressItems) ? d.progressItems : []).map(p => {
             if (!Array.isArray(p?.bullets)) return p;
-            const filtered = p.bullets.filter(b => {
-              const txt = String(b?.text || '').trim();
-              return txt || b?.category;
-            });
+            const filtered = p.bullets
+              .filter(b => {
+                const txt = String(b?.text || '').trim();
+                return txt || b?.category;
+              })
+              .map(b => {
+                if (!b?.task_id) return b;
+                // Si la tarea ya no existe en el contexto o esta done,
+                // limpiamos el task_id stale (conservamos texto/categoria).
+                const t = (tasksFromContext || []).find(x => x.id === b.task_id);
+                if (!t || t.status === 'done') {
+                  const { task_id, ...rest } = b;
+                  return rest;
+                }
+                return b;
+              });
             return { ...p, bullets: filtered };
           });
           setProgressItems(restoredItems);

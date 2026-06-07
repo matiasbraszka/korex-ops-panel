@@ -27,36 +27,30 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   const overIdx = useRef(null);
   const [taskPickerOpenForIdx, setTaskPickerOpenForIdx] = useState(null);
 
-  // Tareas mias con este cliente. Incluimos las completadas (done) para que
-  // el usuario pueda igual dejar un avance/entregable sobre algo ya cerrado.
-  // Pending primero, done despues; visualmente diferenciadas por status.
-  const myTasksForClient = (() => {
+  // Tareas pendientes mias con este cliente. Las completadas NO se muestran
+  // nunca en el picker (politica explicita: el picker es solo para pendientes).
+  const myPendingTasks = (() => {
     if (!clientId || !currentUser) return [];
     const myNames = new Set([
       (currentUser.name || '').toLowerCase(),
       ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
       currentUser.id,
     ].filter(Boolean));
-    const mine = (tasks || []).filter(t => {
-      if (t.clientId !== clientId) return false;
-      const parts = parseAssignees(t.assignee).map(s => s.toLowerCase());
-      return parts.some(p => myNames.has(p));
-    });
-    return mine.sort((a, b) => {
-      const aDone = a.status === 'done' ? 1 : 0;
-      const bDone = b.status === 'done' ? 1 : 0;
-      if (aDone !== bDone) return aDone - bDone;
-      return (a.title || '').localeCompare(b.title || '');
-    });
+    return (tasks || [])
+      .filter(t => {
+        if (t.clientId !== clientId) return false;
+        if (t.status === 'done') return false;
+        const parts = parseAssignees(t.assignee).map(s => s.toLowerCase());
+        return parts.some(p => myNames.has(p));
+      })
+      .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   })();
-  // Alias por compatibilidad con el resto del componente.
-  const myPendingTasks = myTasksForClient.filter(t => t.status !== 'done');
 
   // task_ids ya vinculados en la lista actual (para no repetir el atajo).
   const linkedTaskIds = new Set((bullets || []).map(b => b?.task_id).filter(Boolean));
-  // Incluye tareas done para que un bullet ya vinculado a una tarea cerrada
-  // pueda seguir mostrando su chip y permitir desvincular.
-  const tasksById = Object.fromEntries(myTasksForClient.map(t => [t.id, t]));
+  // Solo pending — un bullet con task_id apuntando a una tarea que ya esta
+  // done o eliminada se va a renderear como "stale" mas abajo.
+  const tasksById = Object.fromEntries(myPendingTasks.map(t => [t.id, t]));
 
   const update = (idx, patch) => {
     const next = bullets.map((b, i) => i === idx ? { ...b, ...patch } : b);
@@ -131,11 +125,14 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
         const isAvance = b.category === 'avance';
         const needsCategory = b.text.trim() && !b.category;
         const linkedTask = b.task_id ? tasksById[b.task_id] : null;
+        // Stale: el bullet tiene un task_id heredado del borrador pero esa
+        // tarea ya no esta entre las pendientes (fue completada o eliminada).
+        const isStaleLink = !!b.task_id && !linkedTask;
         const pickerOpen = taskPickerOpenForIdx === i;
-        // Mostramos SIEMPRE todas mis tareas del cliente (pending + done).
-        // Sin filtrar las ya vinculadas: una misma tarea puede tener avances
-        // en varios bullets (ej: avance + entregable mas tarde).
-        const pickableForThisBullet = myTasksForClient;
+        // Mostramos SIEMPRE todas las tareas pendientes mias del cliente. Sin
+        // filtrar las ya vinculadas: una misma tarea puede tener varios
+        // avances en distintos bullets del informe.
+        const pickableForThisBullet = myPendingTasks;
         return (
           <div
             key={i}
@@ -246,36 +243,22 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                           <div className="absolute z-[61] mt-1 left-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[220px] overflow-y-auto min-w-[280px]">
                             {pickableForThisBullet.length === 0 && (
                               <div className="px-3 py-2 text-[11.5px] text-gray-400 italic">
-                                Sin tareas mias en este cliente
+                                Sin tareas pendientes mias en este cliente
                               </div>
                             )}
-                            {pickableForThisBullet.map(t => {
-                              const isDone = t.status === 'done';
-                              return (
-                                <button
-                                  key={t.id}
-                                  type="button"
-                                  onClick={() => { update(i, { task_id: t.id }); setTaskPickerOpenForIdx(null); }}
-                                  className={`block w-full text-left px-3 py-1.5 text-[12px] hover:bg-blue-50 cursor-pointer border-none bg-transparent ${
-                                    isDone ? 'text-gray-500' : 'text-gray-700'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`font-medium truncate ${isDone ? 'line-through' : ''}`}>
-                                      {t.title}
-                                    </span>
-                                    {isDone && (
-                                      <span className="ml-auto shrink-0 inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-green-100 text-green-700 px-1.5 py-0.5">
-                                        Completada
-                                      </span>
-                                    )}
-                                  </div>
-                                  {t.phase && (
-                                    <span className="block text-[10px] text-gray-400 mt-0.5">Fase: {t.phase}</span>
-                                  )}
-                                </button>
-                              );
-                            })}
+                            {pickableForThisBullet.map(t => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => { update(i, { task_id: t.id }); setTaskPickerOpenForIdx(null); }}
+                                className="block w-full text-left px-3 py-1.5 text-[12px] text-gray-700 hover:bg-blue-50 cursor-pointer border-none bg-transparent"
+                              >
+                                <span className="font-medium truncate">{t.title}</span>
+                                {t.phase && (
+                                  <span className="block text-[10px] text-gray-400 mt-0.5">Fase: {t.phase}</span>
+                                )}
+                              </button>
+                            ))}
                           </div>
                         </>
                       )}
@@ -292,6 +275,24 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                   {linkedTask && !b.category && (
                     <span className="text-[10.5px] text-amber-700">
                       Marcá Entregable para cerrar la tarea, o Avance para solo dejar nota.
+                    </span>
+                  )}
+
+                  {/* Stale: bullet con task_id heredado del borrador apuntando
+                      a una tarea ya completada/borrada. Avisar + boton para
+                      limpiar el vinculo huerfano. */}
+                  {isStaleLink && (
+                    <span className="inline-flex items-center gap-1.5 text-[10.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full pl-2 pr-1 py-0.5">
+                      La tarea anterior ya esta completada — eligi otra
+                      <button
+                        type="button"
+                        onClick={() => update(i, { task_id: null })}
+                        disabled={disabled}
+                        title="Quitar vinculo huerfano"
+                        className="ml-0.5 w-4 h-4 rounded-full bg-amber-200 hover:bg-amber-300 text-amber-800 border-none cursor-pointer flex items-center justify-center"
+                      >
+                        <X size={9} />
+                      </button>
                     </span>
                   )}
                 </div>
