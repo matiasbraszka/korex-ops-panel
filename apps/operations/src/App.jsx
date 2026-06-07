@@ -665,6 +665,7 @@ function MainLayout() {
         onClose={() => setNewClientModal(false)}
         client={null}
         createClient={ctxCreateClient}
+        onCreated={(c) => { if (c?.id) setSelectedId(c.id); }}
         existingClients={clients}
         getAllPriorityLabels={getAllPriorityLabels}
       />

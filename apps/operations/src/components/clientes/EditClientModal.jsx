@@ -46,7 +46,7 @@ const inputClass = 'text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] out
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-export default function EditClientModal({ open, onClose, client, updateClient, createClient, existingClients = [], getAllPriorityLabels }) {
+export default function EditClientModal({ open, onClose, client, updateClient, createClient, onCreated, existingClients = [], getAllPriorityLabels }) {
   // Mismo formulario para crear y editar. Si no llega `client`, es modo "nuevo".
   const isCreate = !client;
   const [form, setForm] = useState({});
@@ -94,7 +94,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       if (dup && !window.confirm(`Ya existe un cliente llamado "${form.name.trim()}". ¿Crear otro igual de todas formas?`)) {
         return;
       }
-      createClient(form.name.trim(), form.company.trim(), form.service.trim(), form.startDate || todayStr(), '', {
+      const created = createClient(form.name.trim(), form.company.trim(), form.service.trim(), form.startDate || todayStr(), '', {
         niche: form.niche.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
@@ -117,6 +117,9 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
         notes: form.notes,
       });
       onClose();
+      // Abrir la ficha del cliente recién creado para que no "se pierda" en la
+      // lista (los clientes nuevos van al grupo NUEVOS, al final del listado).
+      if (created?.id) onCreated?.(created);
       return;
     }
     updateClient(client.id, {
