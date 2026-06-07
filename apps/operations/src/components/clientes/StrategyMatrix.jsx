@@ -183,9 +183,8 @@ function TrackingEditor({ page, onPatch, compact = false }) {
   const list = normalizeEvents(page.conversion_events);
   const [openModal, setOpenModal] = useState(false);
   const configured = list.filter(e => e.meta_name).length;
-  const hasPixel = !!page.pixel_id;
   const hasClarity = !!page.clarity_id;
-  const hasAny = hasPixel || hasClarity || list.length > 0;
+  const hasAny = hasClarity || list.length > 0;
 
   // Vista compacta (en la tabla desktop o card mobile)
   if (compact) {
@@ -203,9 +202,6 @@ function TrackingEditor({ page, onPatch, compact = false }) {
             </span>
           ) : (
             <>
-              {hasPixel && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium py-[2px] px-2 rounded-full" style={{ background: '#EEF2FF', color: '#5B7CF5' }}>Pixel</span>
-              )}
               {hasClarity && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-medium py-[2px] px-2 rounded-full" style={{ background: '#ECFEFF', color: '#0891B2' }}>Clarity</span>
               )}
@@ -234,13 +230,6 @@ function TrackingEditor({ page, onPatch, compact = false }) {
     <div className="flex flex-col gap-1">
       {!hasAny && (
         <span className="text-[11px] italic" style={{ color: '#9CA3AF' }}>Sin tracking configurado</span>
-      )}
-      {hasPixel && (
-        <div className="flex items-center gap-1.5 text-[11px]">
-          <span className="font-medium shrink-0" style={{ color: '#1A1D26', minWidth: 90 }}>Pixel Meta</span>
-          <span style={{ color: '#9CA3AF' }}>→</span>
-          <span className="font-mono flex-1 truncate" style={{ color: '#5B7CF5' }}>{page.pixel_id}</span>
-        </div>
       )}
       {hasClarity && (
         <div className="flex items-center gap-1.5 text-[11px]">
@@ -278,7 +267,6 @@ function TrackingModal({ page, onClose, onPatch }) {
     });
     return rows;
   })();
-  const [pixelId, setPixelId] = useState(page.pixel_id || '');
   const [clarityId, setClarityId] = useState(page.clarity_id || '');
   const [rows, setRows] = useState(initialEvents);
 
@@ -291,7 +279,6 @@ function TrackingModal({ page, onClose, onPatch }) {
       .filter(r => r.label.trim() && (r.meta_name.trim() || !r.preset))
       .map(r => ({ label: r.label.trim(), meta_name: r.meta_name.trim() }));
     onPatch({
-      pixel_id: pixelId.trim() || null,
       clarity_id: clarityId.trim() || null,
       conversion_events: cleaned,
     });
@@ -308,24 +295,15 @@ function TrackingModal({ page, onClose, onPatch }) {
       }
     >
       <div className="p-1 flex flex-col gap-5">
-        {/* Pixels */}
+        {/* Microsoft Clarity (el Pixel de Meta se configura en la sección de Publicidad) */}
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>Píxeles instalados</div>
-          <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <div className="grid gap-1">
-              <label className="text-[11.5px] font-semibold inline-flex items-center gap-1.5" style={{ color: '#1A1D26' }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: '#5B7CF5' }} /> Pixel de Meta
-              </label>
-              <input type="text" value={pixelId} onChange={e => setPixelId(e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono" placeholder="123456789012345" />
-              <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Pixel ID del Business Manager</span>
-            </div>
-            <div className="grid gap-1">
-              <label className="text-[11.5px] font-semibold inline-flex items-center gap-1.5" style={{ color: '#1A1D26' }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: '#0891B2' }} /> Microsoft Clarity
-              </label>
-              <input type="text" value={clarityId} onChange={e => setClarityId(e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono" placeholder="abc12defgh" />
-              <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Project ID de Clarity</span>
-            </div>
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>Microsoft Clarity</div>
+          <div className="grid gap-1">
+            <label className="text-[11.5px] font-semibold inline-flex items-center gap-1.5" style={{ color: '#1A1D26' }}>
+              <span className="w-2 h-2 rounded-full" style={{ background: '#0891B2' }} /> Project ID
+            </label>
+            <input type="text" value={clarityId} onChange={e => setClarityId(e.target.value)} className="text-[13px] py-2 px-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-blue bg-white font-mono" placeholder="abc12defgh" />
+            <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Para grabaciones y mapas de calor de la página</span>
           </div>
         </div>
 
