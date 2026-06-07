@@ -319,10 +319,10 @@ export default function ClientsPage() {
       {cls.length > 0 && (
         <div className="hidden md:grid items-center gap-3 py-2 px-4 mb-1 border border-transparent grid-cols-[36px_minmax(140px,1.4fr)_140px_minmax(200px,2fr)_110px_20px] text-[10px] font-bold uppercase tracking-wider text-text3">
           <span></span>
-          <span>Cliente</span>
-          <span>Fase</span>
-          <span>Pendiente para avanzar</span>
-          <span>Publicidad</span>
+          <span className="min-w-0 truncate">Cliente</span>
+          <span className="min-w-0 truncate pl-2">Fase</span>
+          <span className="min-w-0 truncate">Pendiente para avanzar</span>
+          <span className="min-w-0 truncate pl-2">Publicidad</span>
           <span></span>
         </div>
       )}
