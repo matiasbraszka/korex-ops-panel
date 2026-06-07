@@ -20,32 +20,43 @@ import { parseAssignees } from '../../utils/taskActivity';
 //
 // Tareas done nunca aparecen en el dropdown.
 
-export default function BulletRows({ bullets, onChange, disabled = false, clientId = null, enableTaskLink = false }) {
+export default function BulletRows({ bullets, onChange, disabled = false, clientId = null, isInternal = false, enableTaskLink = false }) {
   const { teamMembers, currentUser, tasks } = useApp();
   const dragIdx = useRef(null);
   const overIdx = useRef(null);
 
-  const showTaskLink = enableTaskLink && !!clientId;
+  // Mostramos el desplegable tanto para clientes reales como para el trabajo
+  // interno de la empresa ("Korex – Interno"), cuyas tareas viven con client_id null.
+  const showTaskLink = enableTaskLink && (isInternal || !!clientId);
 
-  // Tareas pendientes mias con este cliente (status !== 'done').
-  const myPendingTasks = (() => {
-    if (!showTaskLink || !currentUser) return [];
-    const myNames = new Set([
+  // Todas las tareas pendientes del cliente (no solo las mias). Las mias
+  // aparecen primero en el dropdown con un (•) para diferenciarlas.
+  // Tareas done nunca se incluyen.
+  const myNames = (() => {
+    if (!currentUser) return new Set();
+    return new Set([
       (currentUser.name || '').toLowerCase(),
       ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
       currentUser.id,
     ].filter(Boolean));
+  })();
+  const isMine = (task) => {
+    const parts = parseAssignees(task.assignee).map(s => s.toLowerCase());
+    return parts.some(p => myNames.has(p));
+  };
+  const pendingTasksForClient = (() => {
+    if (!showTaskLink) return [];
     return (tasks || [])
-      .filter(t => {
-        if (t.clientId !== clientId) return false;
-        if (t.status === 'done') return false;
-        const parts = parseAssignees(t.assignee).map(s => s.toLowerCase());
-        return parts.some(p => myNames.has(p));
-      })
-      .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      .filter(t => (isInternal ? t.clientId == null : t.clientId === clientId) && t.status !== 'done')
+      .sort((a, b) => {
+        const am = isMine(a) ? 0 : 1;
+        const bm = isMine(b) ? 0 : 1;
+        if (am !== bm) return am - bm;
+        return (a.title || '').localeCompare(b.title || '');
+      });
   })();
 
-  const tasksById = Object.fromEntries(myPendingTasks.map(t => [t.id, t]));
+  const tasksById = Object.fromEntries(pendingTasksForClient.map(t => [t.id, t]));
 
   const update = (idx, patch) => {
     const next = bullets.map((b, i) => i === idx ? { ...b, ...patch } : b);
@@ -172,8 +183,8 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                     }`}
                   >
                     <option value="">Otra</option>
-                    {myPendingTasks.map(t => (
-                      <option key={t.id} value={t.id}>{t.title}</option>
+                    {pendingTasksForClient.map(t => (
+                      <option key={t.id} value={t.id}>{isMine(t) ? '• ' : ''}{t.title}</option>
                     ))}
                   </select>
                   {linkedTask && isEntregable && (

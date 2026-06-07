@@ -852,6 +852,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                           bullets={Array.isArray(item.bullets) ? item.bullets : []}
                           onChange={(next) => updateItemBullets(item.key, next)}
                           clientId={item.key !== INTERNAL_KEY ? item.key : null}
+                          isInternal={item.key === INTERNAL_KEY}
                           enableTaskLink={type === 'daily'}
                         />
                       </div>
@@ -865,6 +866,7 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                         bullets={Array.isArray(item.bullets) ? item.bullets : []}
                         onChange={(next) => updateItemBullets(item.key, next)}
                         clientId={item.key !== INTERNAL_KEY ? item.key : null}
+                        isInternal={item.key === INTERNAL_KEY}
                         enableTaskLink={type === 'daily'}
                       />
                     </>
