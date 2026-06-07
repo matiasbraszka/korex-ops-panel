@@ -115,22 +115,30 @@ function AccessFormModal({ open, onClose, initial, onSave }) {
   );
 }
 
-function LinkFormModal({ open, onClose, kind, initial, onSave }) {
-  // kind: 'folder' | 'doc'
+// Categorías de archivo de una estrategia. La categoría se guarda en cada item
+// (campo `category`) y se puede cambiar desde el modal de edición.
+const ARCHIVO_CATS = {
+  folder: { label: 'Carpeta',      Icon: Folder,       bg: '#EEF2FF', color: '#5B7CF5', placeholder: 'Drive de la estrategia, Carpeta de creativos…' },
+  doc:    { label: 'Documento',    Icon: FileText,     bg: '#F5F3FF', color: '#8B5CF6', placeholder: 'Guion VSL, Copy de anuncios…' },
+  link:   { label: 'Link externo', Icon: ExternalLink, bg: '#ECFDF5', color: '#16A34A', placeholder: 'Landing, Notion, sitio externo…' },
+};
+const ARCHIVO_CAT_ORDER = ['folder', 'doc', 'link'];
+
+function LinkFormModal({ open, onClose, initial, defaultCategory = 'folder', onSave }) {
   const isEdit = !!initial;
-  const [form, setForm] = useState({ label: '', url: '' });
-  if (open && form._k !== (initial?.url || 'new-' + kind)) {
-    setForm({ label: initial?.label || '', url: initial?.url || '', _k: initial?.url || 'new-' + kind });
+  const [form, setForm] = useState({ label: '', url: '', category: 'folder' });
+  const k = initial?.url || ('new-' + defaultCategory);
+  if (open && form._k !== k) {
+    setForm({ label: initial?.label || '', url: initial?.url || '', category: initial?.category || defaultCategory, _k: k });
   }
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (key, v) => setForm(f => ({ ...f, [key]: v }));
+  const catInfo = ARCHIVO_CATS[form.category] || ARCHIVO_CATS.folder;
   const save = () => {
     if (!form.url.trim()) return;
-    onSave({ label: form.label.trim() || (kind === 'folder' ? 'Carpeta' : 'Documento'), url: form.url.trim() });
+    onSave({ label: form.label.trim() || catInfo.label, url: form.url.trim(), category: form.category || 'folder' });
     onClose();
   };
-  const title = kind === 'folder'
-    ? (isEdit ? `Editar carpeta · ${initial?.label}` : 'Nueva carpeta')
-    : (isEdit ? `Editar documento · ${initial?.label}` : 'Nuevo documento');
+  const title = isEdit ? `Editar archivo · ${initial?.label}` : 'Nuevo archivo';
   return (
     <Modal open={open} onClose={onClose} title={title} maxWidth={500}
       footer={
@@ -142,8 +150,14 @@ function LinkFormModal({ open, onClose, kind, initial, onSave }) {
     >
       <div className="grid gap-3 p-1">
         <div className="grid gap-1">
+          <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Categoría</label>
+          <select value={form.category} onChange={e => set('category', e.target.value)} className={inputClass + ' cursor-pointer'}>
+            {ARCHIVO_CAT_ORDER.map(c => <option key={c} value={c}>{ARCHIVO_CATS[c].label}</option>)}
+          </select>
+        </div>
+        <div className="grid gap-1">
           <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>Nombre</label>
-          <input type="text" value={form.label} onChange={e => set('label', e.target.value)} className={inputClass} placeholder={kind === 'folder' ? 'Drive de la estrategia, Carpeta de creativos…' : 'Guion VSL, Copy de anuncios…'} autoFocus />
+          <input type="text" value={form.label} onChange={e => set('label', e.target.value)} className={inputClass} placeholder={catInfo.placeholder} autoFocus />
         </div>
         <div className="grid gap-1">
           <label className="text-[11.5px] font-semibold" style={{ color: '#1A1D26' }}>URL *</label>
@@ -613,12 +627,22 @@ function StrategyCard({ s, pages }) {
   const myPages = pages.filter(p => p.strategy_id === s.id).sort((a, b) => (a.position || 0) - (b.position || 0));
   const st = STATUS_STYLES[s.status] || STATUS_STYLES.borrador;
 
-  // Carpetas: lista ilimitada. Fallback al drive_url legacy si todavía no se migró.
-  const folders = (Array.isArray(s.folders) && s.folders.length)
+  // Archivos del cliente: lista unificada con categoría (carpeta / documento /
+  // link externo). Cada item = { label, url, category }. Se puede cambiar la
+  // categoría desde el modal de edición. Mientras no se haya guardado nunca en
+  // `archivos`, se arma desde los campos legacy (folders / docs / drive_url);
+  // a partir del primer guardado, `archivos` es la fuente de verdad.
+  const legacyFolders = (Array.isArray(s.folders) && s.folders.length)
     ? s.folders
     : (s.drive_url ? [{ label: 'Drive de la estrategia', url: s.drive_url }] : []);
-  // Al guardar carpetas limpiamos el drive_url legacy para no duplicar.
-  const saveFolders = (next) => updateStrategy(s.id, { folders: next, drive_url: null });
+  const archivos = Array.isArray(s.archivos)
+    ? s.archivos
+    : [
+        ...legacyFolders.map(f => ({ label: f.label, url: f.url, category: 'folder' })),
+        ...(s.docs || []).map(d => ({ label: d.label, url: d.url, category: 'doc' })),
+      ];
+  // Al guardar limpiamos los campos legacy para no duplicar.
+  const saveArchivos = (next) => updateStrategy(s.id, { archivos: next, folders: [], docs: [], drive_url: null });
 
   const saveName = () => {
     if (nameValue.trim() && nameValue !== s.name) updateStrategy(s.id, { name: nameValue.trim() });
@@ -725,30 +749,26 @@ function StrategyCard({ s, pages }) {
             <Folder size={11} /> Archivos
           </div>
           <div className="flex flex-col gap-1.5">
-            {folders.map((f, fi) => (
-              <div key={fi} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
-                <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#EEF2FF' }}><Folder size={12} className="text-blue" /></span>
-                <a href={f.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{f.label}</a>
-                <CopyButton value={f.url} title="Copiar URL" />
-                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ kind: 'folder', initial: f, index: fi })} title="Editar"><Pencil size={11} /></button>
-                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${f.label}"?`)) saveFolders(folders.filter((_, i) => i !== fi)); }} title="Quitar"><X size={11} /></button>
-              </div>
-            ))}
-            {(s.docs || []).map((d, di) => (
-              <div key={di} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
-                <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#F5F3FF' }}><FileText size={12} className="text-purple" /></span>
-                <a href={d.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{d.label}</a>
-                <CopyButton value={d.url} title="Copiar URL" />
-                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ kind: 'doc', initial: d, index: di })} title="Editar"><Pencil size={11} /></button>
-                <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${d.label}"?`)) updateStrategy(s.id, { docs: (s.docs || []).filter((_, i) => i !== di) }); }} title="Quitar"><X size={11} /></button>
-              </div>
-            ))}
-            {folders.length === 0 && (s.docs || []).length === 0 && (
-              <span className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin carpetas ni documentos</span>
+            {archivos.map((a, ai) => {
+              const cat = ARCHIVO_CATS[a.category] || ARCHIVO_CATS.link;
+              const Icon = cat.Icon;
+              return (
+                <div key={ai} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
+                  <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cat.bg }}><Icon size={12} style={{ color: cat.color }} /></span>
+                  <a href={a.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{a.label}</a>
+                  <CopyButton value={a.url} title="Copiar URL" />
+                  <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ initial: a, index: ai })} title="Editar / cambiar categoría"><Pencil size={11} /></button>
+                  <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${a.label}"?`)) saveArchivos(archivos.filter((_, i) => i !== ai)); }} title="Quitar"><X size={11} /></button>
+                </div>
+              );
+            })}
+            {archivos.length === 0 && (
+              <span className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin archivos</span>
             )}
             <div className="flex gap-1 flex-wrap">
-              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'folder', initial: null })}><Plus size={11} /> Carpeta</button>
-              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ kind: 'doc', initial: null })}><Plus size={11} /> Documento</button>
+              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ initial: null, category: 'folder' })}><Plus size={11} /> Carpeta</button>
+              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ initial: null, category: 'doc' })}><Plus size={11} /> Documento</button>
+              <button className="inline-flex items-center gap-1 text-[11px] bg-transparent py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] cursor-pointer text-text3 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ initial: null, category: 'link' })}><Plus size={11} /> Link</button>
             </div>
           </div>
         </div>
@@ -810,20 +830,13 @@ function StrategyCard({ s, pages }) {
         <LinkFormModal
           open={!!linkModal}
           onClose={() => setLinkModal(null)}
-          kind={linkModal.kind}
           initial={linkModal.initial}
+          defaultCategory={linkModal.category || 'folder'}
           onSave={(data) => {
-            if (linkModal.kind === 'folder') {
-              const next = [...folders];
-              if (linkModal.index != null) next[linkModal.index] = data;
-              else next.push(data);
-              saveFolders(next);
-            } else {
-              const docs = [...(s.docs || [])];
-              if (linkModal.index != null) docs[linkModal.index] = data;
-              else docs.push(data);
-              updateStrategy(s.id, { docs });
-            }
+            const next = [...archivos];
+            if (linkModal.index != null) next[linkModal.index] = data;
+            else next.push(data);
+            saveArchivos(next);
           }}
         />
       )}
