@@ -3,6 +3,7 @@ import { X, GripVertical, Plus, CheckCircle2, Circle } from 'lucide-react';
 import MentionTextarea from '../comments/MentionTextarea';
 import { useApp } from '../../context/AppContext';
 import { parseAssignees } from '../../utils/taskActivity';
+import { isTaskEnabled } from '../../utils/helpers';
 
 // BulletRows — lista editable de bullets para los informes.
 // Cada bullet: { id?, text, category: 'entregable' | 'avance' | null, task_id? }.
@@ -31,8 +32,9 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
 
   // Solo las tareas ASIGNADAS al usuario que carga el informe.
   // No mostramos tareas de otros miembros aunque sean del mismo cliente.
-  // Se excluyen las "done" y las "blocked" (una tarea bloqueada no se puede
-  // avanzar, así que no tiene sentido vincularla a un avance/entregable).
+  // Se excluyen las "done" y las que NO están habilitadas (candado): bloqueadas
+  // o con dependencias sin cumplir. Una tarea trabada no se puede avanzar, así
+  // que no tiene sentido vincularla a un avance/entregable.
   const myNames = (() => {
     if (!currentUser) return new Set();
     return new Set([
@@ -54,8 +56,11 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   };
   const pendingTasksForClient = (() => {
     if (!showTaskLink) return [];
-    return (tasks || [])
-      .filter(t => belongsToScope(t) && t.status !== 'done' && t.status !== 'blocked' && isMine(t))
+    // isTaskEnabled necesita las tareas del mismo ámbito para resolver
+    // dependencias (depends_on). Excluye bloqueadas y trabadas (candado).
+    const scopeTasks = (tasks || []).filter(belongsToScope);
+    return scopeTasks
+      .filter(t => t.status !== 'done' && isTaskEnabled(t, scopeTasks) && isMine(t))
       .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   })();
 
