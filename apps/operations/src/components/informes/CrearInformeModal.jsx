@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { X, ChevronDown, Search, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react';
+import { X, ChevronDown, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Modal from '../Modal';
 import { useApp } from '../../context/AppContext';
 import { today, mondayOf, weekDatesOf, getBullets, serializeBullets } from '../../utils/helpers';
@@ -13,6 +13,62 @@ function fmtDateLabel(dateStr) {
 
 const INTERNAL_KEY = '__internal__';
 const INTERNAL_LABEL = 'Korex – Interno';
+const NO_DAY = '__none__';
+
+// Editor del informe semanal segmentado por día. Cada bullet trae _day/_dayLabel
+// (stampeados al auto-rellenar desde los diarios). Renderiza un bloque por día
+// con su propio BulletRows; al editar/agregar/borrar reconstruye la lista plena
+// preservando el orden de los días. Si los bullets no tienen día (ej. al editar
+// un informe viejo) cae a un único editor sin encabezados.
+function WeeklyBulletsByDay({ bullets, onChange, ...bulletProps }) {
+  const list = Array.isArray(bullets) ? bullets : [];
+
+  // Agrupar por día respetando el orden de aparición (lunes → viernes).
+  const groups = [];
+  const byDay = new Map();
+  list.forEach(b => {
+    const day = b._day || NO_DAY;
+    if (!byDay.has(day)) {
+      const g = { day, dayLabel: b._dayLabel || null, items: [] };
+      byDay.set(day, g);
+      groups.push(g);
+    }
+    byDay.get(day).items.push(b);
+  });
+
+  const onlyNoDay = groups.length <= 1 && (groups[0]?.day === NO_DAY || groups.length === 0);
+
+  if (onlyNoDay) {
+    return <BulletRows bullets={list} onChange={onChange} {...bulletProps} />;
+  }
+
+  const handleGroupChange = (group, nextSubset) => {
+    // Los bullets nuevos del grupo heredan su día.
+    const stamped = nextSubset.map(b => (
+      b._day ? b : { ...b, ...(group.day !== NO_DAY ? { _day: group.day, _dayLabel: group.dayLabel } : {}) }
+    ));
+    const next = [];
+    groups.forEach(g => { next.push(...(g.day === group.day ? stamped : g.items)); });
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      {groups.map(group => (
+        <div key={group.day} className="border-l-2 border-gray-200 pl-2.5">
+          <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            {group.day === NO_DAY ? 'Otros' : (group.dayLabel || group.day)}
+          </div>
+          <BulletRows
+            bullets={group.items}
+            onChange={(next) => handleGroupChange(group, next)}
+            {...bulletProps}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function CrearInformeModal({ open, onClose, defaultType = 'daily', editingReport = null }) {
   const { clients, currentUser, addTeamReport, updateTeamReport, appSettings, teamReports, tasks: tasksFromContext } = useApp();
@@ -295,12 +351,16 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     dailies
       .sort((a, b) => a.report_date.localeCompare(b.report_date))
       .forEach(d => {
+        const dayLabel = fmtDayChip(d.report_date);
         (d.progress_by_client || []).forEach(p => {
           const key = p.client_id || INTERNAL_KEY;
           const label = p.client_id
             ? (clientsById[p.client_id]?.name || 'Cliente eliminado')
             : INTERNAL_LABEL;
-          const bullets = getBullets(p);
+          // Stampeamos el día en cada bullet (_day/_dayLabel) para poder
+          // agrupar el editor semanal por día. Estos campos son internos: el
+          // guardado los descarta (solo persiste id/text/category/task_id).
+          const bullets = getBullets(p).map(b => ({ ...b, _day: d.report_date, _dayLabel: dayLabel }));
           const prev = byClient.get(key) || { label, bullets: [], minutes: 0 };
           prev.bullets.push(...bullets);
           prev.minutes += parseInt(p.minutes, 10) || 0;
@@ -308,20 +368,15 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
         });
       });
 
-    return Array.from(byClient.entries()).map(([key, v]) => {
-      const sortedBullets = [
-        ...v.bullets.filter(b => b.category === 'entregable'),
-        ...v.bullets.filter(b => b.category === 'avance'),
-        ...v.bullets.filter(b => !b.category),
-      ];
-      return {
-        key,
-        label: v.label,
-        bullets: sortedBullets,
-        text: serializeBullets(sortedBullets),
-        minutes: String(v.minutes),
-      };
-    });
+    // Mantenemos el orden cronológico por día (lunes → viernes) en vez de
+    // reordenar por categoría, para que el editor quede segmentado por día.
+    return Array.from(byClient.entries()).map(([key, v]) => ({
+      key,
+      label: v.label,
+      bullets: v.bullets,
+      text: serializeBullets(v.bullets),
+      minutes: String(v.minutes),
+    }));
   };
 
   // Auto-rellenar el form del semanal al elegir una semana con los 5 diarios
@@ -351,26 +406,6 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
     }
   }, [weekMonday]);
 
-  // Digest semanal por cliente: para cada client_key (o INTERNAL_KEY) construye
-  // [{ date, dayLabel, bullets[] }] con SOLO los dias que tienen bullets,
-  // ordenados de lunes a domingo. Sirve para mostrar al lado del editor del
-  // semanal lo que se hizo cada dia, sin tener que abrir cada diario.
-  const weekDigestByClient = useMemo(() => {
-    if (type !== 'weekly' || !weekMonday) return {};
-    const map = {};
-    weekDates.forEach(d => {
-      const r = dailiesByDate[d];
-      if (!r) return;
-      (r.progress_by_client || []).forEach(p => {
-        const key = p.client_id || INTERNAL_KEY;
-        const bullets = getBullets(p);
-        if (bullets.length === 0) return;
-        if (!map[key]) map[key] = [];
-        map[key].push({ date: d, dayLabel: fmtDayChip(d), bullets });
-      });
-    });
-    return map;
-  }, [type, weekMonday, weekDates, dailiesByDate]);
 
   const totalMinutes = progressItems.reduce((acc, i) => acc + (parseInt(i.minutes, 10) || 0), 0);
   const fmtMinutes = (m) => {
@@ -820,52 +855,20 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
                       title="Quitar"
                     ><X size={14} /></button>
                   </div>
-                  {type === 'weekly' && (weekDigestByClient[item.key] || []).length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Izquierda: lo que hiciste cada dia (read-only digest) */}
-                      <div className="bg-white border border-gray-200 rounded-md p-2.5">
-                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-2">
-                          <Calendar size={11} /> Lo que hiciste en la semana
-                        </div>
-                        <div className="space-y-2.5">
-                          {(weekDigestByClient[item.key] || []).map(d => (
-                            <div key={d.date} className="border-l-2 border-gray-200 pl-2.5">
-                              <div className="text-[10.5px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                {d.dayLabel}
-                              </div>
-                              <ul className="space-y-1">
-                                {d.bullets.map((b, idx) => {
-                                  const cat = b.category;
-                                  const marker = cat === 'entregable' ? '✓' : cat === 'avance' ? '•' : '–';
-                                  const color = cat === 'entregable' ? 'text-green-600' : cat === 'avance' ? 'text-blue-600' : 'text-gray-400';
-                                  return (
-                                    <li key={idx} className="flex items-start gap-1.5 text-[12px] text-gray-700 leading-snug">
-                                      <span className={`${color} font-bold shrink-0 mt-0.5`}>{marker}</span>
-                                      <span className="break-words">{b.text}</span>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Derecha: lo que va en el informe semanal (editable) */}
-                      <div>
-                        <label className="block text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-2">
-                          Para el informe semanal
-                        </label>
-                        <BulletRows
-                          bullets={Array.isArray(item.bullets) ? item.bullets : []}
-                          onChange={(next) => updateItemBullets(item.key, next)}
-                          clientId={item.key !== INTERNAL_KEY ? item.key : null}
-                          isInternal={item.key === INTERNAL_KEY}
-                          internalTaskClientId={companyClientId}
-                          enableTaskLink={type === 'daily'}
-                        />
-                      </div>
-                    </div>
+                  {type === 'weekly' ? (
+                    <>
+                      <label className="block text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-2">
+                        Para el informe semanal
+                      </label>
+                      <WeeklyBulletsByDay
+                        bullets={Array.isArray(item.bullets) ? item.bullets : []}
+                        onChange={(next) => updateItemBullets(item.key, next)}
+                        clientId={item.key !== INTERNAL_KEY ? item.key : null}
+                        isInternal={item.key === INTERNAL_KEY}
+                        internalTaskClientId={companyClientId}
+                        enableTaskLink={false}
+                      />
+                    </>
                   ) : (
                     <>
                       <label className="block text-[11px] font-semibold text-gray-600 mb-1">
