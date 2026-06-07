@@ -614,6 +614,15 @@ function StrategyCard({ s, pages }) {
   const { updateStrategy, deleteStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(s.name);
+  // Plegado/desplegado, recordado por estrategia para no reabrir todas al refrescar.
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('strat_collapsed_' + s.id) === '1'; } catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed(c => {
+    const next = !c;
+    try { localStorage.setItem('strat_collapsed_' + s.id, next ? '1' : '0'); } catch { /* noop */ }
+    return next;
+  });
   const [adding, setAdding] = useState(false);
   const [newPageName, setNewPageName] = useState('');
   const [statusOpen, setStatusOpen] = useState(false);
@@ -649,6 +658,14 @@ function StrategyCard({ s, pages }) {
     <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden mb-4">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-2 md:gap-3 py-3 px-3 md:px-4 border-b border-[#F0F2F5]" style={{ background: '#F5F7FF' }}>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          className="w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-text3 hover:bg-white hover:text-blue inline-flex items-center justify-center shrink-0 transition-colors"
+          title={collapsed ? 'Desplegar estrategia' : 'Plegar estrategia'}
+        >
+          <ChevronDown size={16} className={`transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+        </button>
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[11px] font-bold text-white" style={{ background: '#1A1D26' }}>#{s.position + 1}</span>
         {editingName ? (
           <input type="text" value={nameValue} onChange={e => setNameValue(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setNameValue(s.name); setEditingName(false); } }} autoFocus className="text-[14px] font-bold py-0.5 px-1.5 border border-blue rounded outline-none flex-1" style={{ color: '#1A1D26' }} />
@@ -684,9 +701,15 @@ function StrategyCard({ s, pages }) {
             <Calendar size={11} /> {s.start_date ? fmtDate(s.start_date) : 'Fecha inicio'}
           </button>
         )}
+        {collapsed && (
+          <span className="inline-flex items-center gap-1 text-[11px] py-1 px-2 rounded-md bg-white border border-[#E2E5EB]" style={{ color: '#6B7280' }}>
+            {myPages.length} página{myPages.length !== 1 ? 's' : ''}
+          </span>
+        )}
         <button className="w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Borrar la estrategia "${s.name}" y todas sus páginas?`)) deleteStrategy(s.id); }} title="Eliminar estrategia"><Trash2 size={13} /></button>
       </div>
 
+      {!collapsed && (<>
       {/* Matriz */}
       <div>
         <div className="hidden md:grid items-center py-2 px-3 text-[10px] font-bold uppercase tracking-wider border-b border-[#F0F2F5] gap-2" style={{ gridTemplateColumns: PAGE_GRID, color: '#9CA3AF' }}>
@@ -802,6 +825,7 @@ function StrategyCard({ s, pages }) {
         {/* Recursos necesarios (checklist) */}
         <VisualChecklist strategy={s} onUpdate={updateStrategy} />
       </div>
+      </>)}
 
       {/* Modales */}
       {linkModal && (
