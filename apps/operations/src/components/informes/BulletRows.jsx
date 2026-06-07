@@ -31,8 +31,8 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
 
   // Solo las tareas ASIGNADAS al usuario que carga el informe.
   // No mostramos tareas de otros miembros aunque sean del mismo cliente.
-  // Se incluyen TODOS los estados menos "done" (backlog, en progreso, pausada,
-  // bloqueada, en revision, retrasada).
+  // Se excluyen las "done" y las "blocked" (una tarea bloqueada no se puede
+  // avanzar, así que no tiene sentido vincularla a un avance/entregable).
   const myNames = (() => {
     if (!currentUser) return new Set();
     return new Set([
@@ -55,7 +55,7 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   const pendingTasksForClient = (() => {
     if (!showTaskLink) return [];
     return (tasks || [])
-      .filter(t => belongsToScope(t) && t.status !== 'done' && isMine(t))
+      .filter(t => belongsToScope(t) && t.status !== 'done' && t.status !== 'blocked' && isMine(t))
       .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   })();
 
