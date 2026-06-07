@@ -114,6 +114,10 @@ export function AppProvider({ children }) {
   // Orden custom de CLIENTES por usuario (vista Lista de tareas).
   // Filas {client_id, user_id, position}. Sin fila → fallback a clients.position.
   const [clientUserPositions, setClientUserPositions] = useState([]);
+  // Lectura de comentarios por tarea (por usuario): taskId -> ISO de la última
+  // vez que el usuario abrió los comentarios de esa tarea. Sirve para mostrar el
+  // chip de comentarios como leído (gris) o no leído (azul). Solo localStorage.
+  const [commentReads, setCommentReads] = useState({});
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -1910,6 +1914,41 @@ export function AppProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser]);
 
+  // ── Lectura de comentarios por tarea (leído/no leído del chip) ──
+  // Cargar el mapa de lecturas del usuario actual desde localStorage.
+  useEffect(() => {
+    const uid = currentUser?.id;
+    if (!uid) return;
+    try {
+      const raw = localStorage.getItem('korex_comment_reads_' + uid);
+      setCommentReads(raw ? JSON.parse(raw) : {});
+    } catch { setCommentReads({}); }
+  }, [currentUser?.id]);
+
+  // Marca los comentarios de una tarea como leídos (ahora) y persiste.
+  const markTaskCommentsRead = useCallback((taskId) => {
+    const uid = currentUserIdRef.current;
+    if (!uid || !taskId) return;
+    setCommentReads(prev => {
+      const next = { ...prev, [taskId]: new Date().toISOString() };
+      try { localStorage.setItem('korex_comment_reads_' + uid, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Set de taskIds con al menos un comentario SIN LEER (más nuevo que la última
+  // vez que abrí esa tarea). Mis propios comentarios no cuentan como no leídos.
+  const unreadCommentTaskIds = useMemo(() => {
+    const uid = currentUser?.id;
+    const set = new Set();
+    (taskComments || []).forEach(c => {
+      if (!c.task_id || c.author_id === uid) return;
+      const lastSeen = commentReads[c.task_id];
+      if (!lastSeen || (c.created_at && c.created_at > lastSeen)) set.add(c.task_id);
+    });
+    return set;
+  }, [taskComments, commentReads, currentUser?.id]);
+
   const value = {
     // State
     clients, setClients,
@@ -2028,7 +2067,10 @@ export function AppProvider({ children }) {
     reorderClient,
     // Side panel de comentarios (generico para task, bullet, idea o blocker).
     commentsTarget,
-    openTaskComments: (taskId) => setCommentsTarget(taskId ? { kind: 'task', taskId } : null),
+    openTaskComments: (taskId) => { if (taskId) markTaskCommentsRead(taskId); setCommentsTarget(taskId ? { kind: 'task', taskId } : null); },
+    // Chip de comentarios leído/no leído
+    unreadCommentTaskIds,
+    markTaskCommentsRead,
     openBulletComments: (reportId, bulletId) => setCommentsTarget({ kind: 'bullet', reportId, bulletId }),
     openIdeaComments: (ideaId) => setCommentsTarget({ kind: 'idea', ideaId }),
     openBlockerComments: (blockerId) => setCommentsTarget({ kind: 'blocker', blockerId }),

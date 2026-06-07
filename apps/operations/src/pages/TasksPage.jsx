@@ -9,7 +9,7 @@ import TeamAvatar from '../components/TeamAvatar';
 import AddToWeeklyButton from '../components/tareas/AddToWeeklyButton';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, taskUserPositions, reorderTaskForUser, clientUserPositions, reorderClientForUser } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds, taskUserPositions, reorderTaskForUser, clientUserPositions, reorderClientForUser } = useApp();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
   const commentCountsByTask = useMemo(() => {
     const map = {};
@@ -512,11 +512,16 @@ export default function TasksPage({ embedded = false }) {
                   ><MessageSquare size={13} /></button>
                 );
               }
+              const unread = unreadCommentTaskIds?.has(t.id);
               return (
                 <button
-                  className="text-[11.5px] h-[26px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-semibold flex items-center gap-1 transition-colors"
+                  className={`text-[11.5px] h-[26px] rounded-lg px-2 border-none cursor-pointer font-semibold flex items-center gap-1 transition-colors ${
+                    unread
+                      ? 'bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE]'
+                      : 'bg-[#F1F3F6] text-[#9CA3AF] hover:bg-[#E5E7EB]'
+                  }`}
                   onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
-                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                  title={unread ? `${cnt} comentario${cnt !== 1 ? 's' : ''} · sin leer` : `${cnt} comentario${cnt !== 1 ? 's' : ''}`}
                 >
                   <MessageSquare size={11} />{cnt}
                 </button>

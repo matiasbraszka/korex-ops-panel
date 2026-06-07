@@ -19,6 +19,7 @@ export default function TimelineView({ onGoToTaskList }) {
     teamMembers,
     taskComments,
     openTaskComments,
+    unreadCommentTaskIds,
   } = useApp();
   const TEAM = teamMembers || [];
   const commentCountsByTask = useMemo(() => {
@@ -732,11 +733,16 @@ export default function TimelineView({ onGoToTaskList }) {
                                             ><MessageSquare size={11} /></button>
                                           );
                                         }
+                                        const unread = unreadCommentTaskIds?.has(task.id);
                                         return (
                                           <button
-                                            className="shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer text-[10px] font-semibold transition-colors"
+                                            className={`shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md border-none cursor-pointer text-[10px] font-semibold transition-colors ${
+                                              unread
+                                                ? 'bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE]'
+                                                : 'bg-[#F1F3F6] text-[#9CA3AF] hover:bg-[#E5E7EB]'
+                                            }`}
                                             onClick={(e) => { e.stopPropagation(); openTaskComments(task.id); }}
-                                            title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                                            title={unread ? `${cnt} comentario${cnt !== 1 ? 's' : ''} · sin leer` : `${cnt} comentario${cnt !== 1 ? 's' : ''}`}
                                           ><MessageSquare size={10} />{cnt}</button>
                                         );
                                       })()}

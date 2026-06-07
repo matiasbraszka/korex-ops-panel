@@ -17,7 +17,7 @@ import AddToWeeklyButton from './AddToWeeklyButton';
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
 export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
-  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments } = useApp();
+  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds } = useApp();
   const TEAM = teamMembers || [];
 
   // Conteo de comentarios por tarea para el badge del row.
@@ -509,11 +509,16 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
                   ><MessageSquare size={13} /></button>
                 );
               }
+              const unread = unreadCommentTaskIds?.has(t.id);
               return (
                 <button
-                  className="text-[11.5px] h-[26px] rounded-lg px-2 bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE] border-none cursor-pointer font-semibold flex items-center gap-1 transition-colors"
+                  className={`text-[11.5px] h-[26px] rounded-lg px-2 border-none cursor-pointer font-semibold flex items-center gap-1 transition-colors ${
+                    unread
+                      ? 'bg-[#EEF2FF] text-[#4A67D8] hover:bg-[#DEE6FE]'
+                      : 'bg-[#F1F3F6] text-[#9CA3AF] hover:bg-[#E5E7EB]'
+                  }`}
                   onClick={(e) => { e.stopPropagation(); openTaskComments(t.id); }}
-                  title={`${cnt} comentario${cnt !== 1 ? 's' : ''}`}
+                  title={unread ? `${cnt} comentario${cnt !== 1 ? 's' : ''} · sin leer` : `${cnt} comentario${cnt !== 1 ? 's' : ''}`}
                 >
                   <MessageSquare size={11} />{cnt}
                 </button>
