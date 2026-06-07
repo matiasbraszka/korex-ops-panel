@@ -1778,9 +1778,28 @@ export function AppProvider({ children }) {
         });
       }
 
-      // Check tasks
-      const remoteTasks = await sbFetch('tasks?select=id,title,client_id,assignee,priority,status,notes,step_idx,created_date,updated_at&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
+      // Check tasks. Traemos TODAS las columnas (no solo un subset) para que las
+      // tareas nuevas detectadas por el poll lleguen completas (con phase,
+      // depends_on, due_date, etc.). Si solo trajéramos un subset, una tarea
+      // nueva se agregaría sin fase y caería en "Sin fase" en el roadmap.
+      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,updated_at';
+      const remoteTasks = await sbFetch('tasks?select=' + POLL_TASK_COLS + '&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
       if (!remoteTasks || !remoteTasks.length) return;
+
+      const mapPollTask = (t) => ({
+        id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
+        priority: t.priority, status: t.status, notes: t.notes,
+        description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
+        startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
+        phase: t.phase || null, dependsOn: t.depends_on || null, isRoadmapTask: t.is_roadmap_task || false,
+        templateId: t.template_id || null, estimatedDays: t.estimated_days || null, isClientTask: t.is_client_task || false,
+        daysFromUnblock: t.days_from_unblock != null ? Number(t.days_from_unblock) : null,
+        dueDate: t.due_date || null,
+        accumulatedDays: t.accumulated_days || 0,
+        timerStartedAt: t.timer_started_at || null,
+        enabledDate: t.enabled_date || null,
+        position: t.position ?? 0
+      });
 
       setTasks(prev => {
         let changed = false;
@@ -1789,20 +1808,16 @@ export function AppProvider({ children }) {
           const existingIdx = newTasks.findIndex(x => x.id === t.id);
           if (existingIdx >= 0) {
             const existing = newTasks[existingIdx];
-            if (t.title !== existing.title || t.status !== existing.status || t.assignee !== existing.assignee || t.priority !== existing.priority) {
+            if (t.title !== existing.title || t.status !== existing.status || t.assignee !== existing.assignee || t.priority !== existing.priority || (t.phase || null) !== (existing.phase || null)) {
               newTasks[existingIdx] = {
                 ...existing,
                 title: t.title, status: t.status, assignee: t.assignee,
-                priority: t.priority, notes: t.notes
+                priority: t.priority, notes: t.notes, phase: t.phase || null
               };
               changed = true;
             }
           } else {
-            newTasks.push({
-              id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
-              priority: t.priority, status: t.status, notes: t.notes,
-              stepIdx: t.step_idx, createdDate: t.created_date
-            });
+            newTasks.push(mapPollTask(t));
             changed = true;
           }
         });
