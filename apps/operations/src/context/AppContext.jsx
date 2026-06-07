@@ -820,10 +820,26 @@ export function AppProvider({ children }) {
   }, []);
 
   const deleteTeamReport = useCallback(async (id) => {
+    // Borrar los comentarios de tareas generados por este informe (kind='report'
+    // con event_meta.report_id = id). Sus respuestas se borran por cascade en DB
+    // (parent_id ON DELETE CASCADE). Así, al eliminar un informe se va también el
+    // avance/entregable que ese informe dejó en cada tarea.
+    try {
+      await sbFetch('task_comments?kind=eq.report&event_meta->>report_id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
+    } catch (e) { console.warn('deleteTeamReport report-comments', e); }
+
     await sbFetch('team_reports?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
     setTeamReports(prev => prev.filter(r => r.id !== id));
     // Los bloqueos vinculados se borran por CASCADE en DB; reflejamos local
     setTeamBlockers(prev => prev.filter(b => b.report_id !== id));
+    // Reflejar local: quitar los comentarios del informe + sus respuestas.
+    setTaskComments(prev => {
+      const reportCommentIds = new Set(
+        prev.filter(c => c.kind === 'report' && c.event_meta?.report_id === id).map(c => c.id),
+      );
+      if (reportCommentIds.size === 0) return prev;
+      return prev.filter(c => !reportCommentIds.has(c.id) && !reportCommentIds.has(c.parent_id));
+    });
   }, []);
 
   const resolveBlocker = useCallback(async (blockerId) => {
