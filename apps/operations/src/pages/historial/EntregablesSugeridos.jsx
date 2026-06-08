@@ -167,23 +167,18 @@ export function EntregablesSugeridos({
   // ── Contenido (lista) reutilizable en desktop y mobile ──
   const body = (
     <>
-      <div style={{ padding: '14px 16px', borderBottom: `1px solid ${T.border}` }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: T.text3, textTransform: 'uppercase' }}>
-          Entregables del equipo
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginTop: 2 }}>
-          Cargar al historial
-        </div>
-        <div style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>
-          De los informes diarios y semanales · {total} en total
+      <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Entregables del equipo</div>
+          <div style={{ fontSize: 10.5, color: T.text3 }}>{total} en total</div>
         </div>
         {weeks.length > 0 && (
           <select
             value={week}
             onChange={(e) => setWeek(e.target.value)}
             style={{
-              width: '100%', marginTop: 10, background: '#fff', border: `1px solid ${T.border}`,
-              borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text,
+              width: '100%', marginTop: 7, background: '#fff', border: `1px solid ${T.border}`,
+              borderRadius: 7, padding: '6px 9px', fontSize: 11.5, color: T.text,
               fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
             }}
           >
@@ -195,7 +190,7 @@ export function EntregablesSugeridos({
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
         {list.length === 0 ? (
           <div style={{ textAlign: 'center', color: T.text3, fontSize: 12, padding: '32px 8px' }}>
             {total === 0
@@ -203,7 +198,7 @@ export function EntregablesSugeridos({
               : 'Sin entregables en la semana seleccionada.'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {list.map((s) => {
               const loaded = isLoaded(s);
               const tk = suggestTipo(s.text, tipoKeys);
@@ -213,40 +208,35 @@ export function EntregablesSugeridos({
                 <div key={s.key} style={{
                   border: `1px solid ${checked ? T.blue : T.border}`,
                   background: loaded ? T.bg : '#fff',
-                  borderRadius: 10, padding: '10px 12px', opacity: loaded ? 0.6 : 1,
+                  borderRadius: 8, padding: '6px 8px', opacity: loaded ? 0.55 : 1,
+                  display: 'flex', alignItems: 'flex-start', gap: 7,
                   transition: 'border 0.12s, opacity 0.12s',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    {!loaded && (
-                      <input
-                        type="checkbox" checked={checked} onChange={() => toggleSel(s.key)}
-                        style={{ accentColor: T.blue, width: 15, height: 15, marginTop: 2, cursor: 'pointer', flexShrink: 0 }}
-                      />
-                    )}
-                    {loaded && (
-                      <span style={{ color: T.green, fontSize: 13, marginTop: 1, flexShrink: 0 }} title="Ya cargado">✓</span>
-                    )}
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 12.5, color: T.text, lineHeight: 1.4 }}>{s.text}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, color: tinfo.color, background: tinfo.bg,
-                          border: `1px solid ${tinfo.color}30`, borderRadius: 6, padding: '2px 6px',
-                        }}>{tinfo.dot} {tinfo.label}</span>
-                        <span style={{ fontSize: 10.5, color: T.text3 }}>{fmtDayShort(s.date)} {fmtDate(s.date)}</span>
-                        {s.author && <span style={{ fontSize: 10.5, color: T.text3 }}>· {s.author}</span>}
-                        {s.weekly && <span style={{ fontSize: 10.5, color: T.text3 }}>· semanal</span>}
-                      </div>
+                  {loaded ? (
+                    <span style={{ color: T.green, fontSize: 12, marginTop: 1, flexShrink: 0 }} title="Ya cargado">✓</span>
+                  ) : (
+                    <input
+                      type="checkbox" checked={checked} onChange={() => toggleSel(s.key)}
+                      style={{ accentColor: T.blue, width: 14, height: 14, marginTop: 2, cursor: 'pointer', flexShrink: 0 }}
+                    />
+                  )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12, color: T.text, lineHeight: 1.3 }}>{s.text}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontSize: 9.5, fontWeight: 700, color: tinfo.color, background: tinfo.bg,
+                        border: `1px solid ${tinfo.color}30`, borderRadius: 5, padding: '1px 5px',
+                      }}>{tinfo.dot} {tinfo.label}</span>
+                      <span style={{ fontSize: 10, color: T.text3 }}>{fmtDayShort(s.date)}{s.weekly ? ' · sem' : ''}</span>
+                      {s.author && <span style={{ fontSize: 10, color: T.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>· {s.author}</span>}
                     </div>
                   </div>
                   {!loaded && (
-                    <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-                      <button onClick={() => { onPick && onPick(s); if (vp.mobile) setMobileOpen(false); }} style={{
-                        background: T.blueBg, border: `1px solid ${T.blue}30`, color: T.blue,
-                        borderRadius: 7, padding: '5px 12px', fontSize: 11, fontWeight: 700,
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}>Usar →</button>
-                    </div>
+                    <button onClick={() => { onPick && onPick(s); if (vp.mobile) setMobileOpen(false); }} style={{
+                      background: T.blueBg, border: `1px solid ${T.blue}30`, color: T.blue,
+                      borderRadius: 6, padding: '3px 9px', fontSize: 10.5, fontWeight: 700,
+                      cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, alignSelf: 'center',
+                    }}>Usar →</button>
                   )}
                 </div>
               );

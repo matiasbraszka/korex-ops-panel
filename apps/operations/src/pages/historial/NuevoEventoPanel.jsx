@@ -160,8 +160,9 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
         transition: 'opacity 0.2s', backdropFilter: open ? 'blur(2px)' : 'none',
       }} />
 
-      {/* Panel de entregables sugeridos (izquierda del drawer / hoja en mobile) */}
-      {!isEdit && cliente?.id && (
+      {/* Panel de entregables sugeridos (izquierda del drawer / hoja en mobile).
+          Solo se monta cuando el drawer está abierto → nunca asoma "fijo". */}
+      {open && !isEdit && cliente?.id && (
         <EntregablesSugeridos
           open={open}
           clienteId={cliente.id}
