@@ -2,8 +2,9 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Timeline } from './Timeline.jsx';
 import { NuevoEventoPanel } from './NuevoEventoPanel.jsx';
 import { ResumenEditorModal } from './ResumenEditorModal.jsx';
-import { listEventos, createEvento, deleteEvento, updateEvento } from './api.js';
+import { listEventos, createEvento, createEventosBulk, deleteEvento, dismissEvento, updateEvento } from './api.js';
 import { useHistorialConfig, getClienteFaseId } from './useHistorialConfig.js';
+import { buildImportEvents } from './historialImport.js';
 import { useApp } from '../../context/AppContext';
 import Modal from '../../components/Modal';
 import { T } from './tokens.js';
@@ -45,8 +46,8 @@ function llamadaToEvento(l) {
 }
 
 export function HistorialTab({ cliente }) {
-  const { fases } = useHistorialConfig(cliente);
-  const { currentUser, llamadas } = useApp();
+  const { fases, tipos } = useHistorialConfig(cliente);
+  const { currentUser, llamadas, teamReports, teamMembers } = useApp();
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -58,9 +59,19 @@ export function HistorialTab({ cliente }) {
     if (!cliente?.id) return;
     setLoading(true);
     const list = await listEventos(cliente.id);
-    setEventos(list);
+    // Auto-importar avances/entregables nuevos de los informes diarios.
+    const tipoKeys = (tipos || []).map(t => t.key);
+    const existing = new Set(list.filter(e => e.source_bullet_id).map(e => e.source_bullet_id));
+    const candidates = buildImportEvents(teamReports, cliente.id, teamMembers, tipoKeys)
+      .filter(ev => !existing.has(ev.source_bullet_id));
+    let all = list;
+    if (candidates.length) {
+      const creados = await createEventosBulk(cliente.id, candidates);
+      all = creados.length ? [...creados, ...list] : await listEventos(cliente.id);
+    }
+    setEventos(all);
     setLoading(false);
-  }, [cliente?.id]);
+  }, [cliente?.id, teamReports, teamMembers, tipos]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -79,7 +90,8 @@ export function HistorialTab({ cliente }) {
     const calls = (llamadas || [])
       .filter(l => l.cliente_id === cliente?.id && l.categoria === 'cliente')
       .map(llamadaToEvento);
-    return [...eventos, ...calls].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    const visibles = eventos.filter(e => e.dismissed !== true);
+    return [...visibles, ...calls].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   }, [eventos, llamadas, cliente?.id]);
 
   const openNuevo = () => { setEditingEvento(null); setShowPanel(true); };
@@ -104,26 +116,21 @@ export function HistorialTab({ cliente }) {
     }
   };
 
-  // Crea varios eventos de una (desde el panel de entregables sugeridos).
-  const handleSaveMany = async (nuevos) => {
-    if (!Array.isArray(nuevos) || nuevos.length === 0) return;
-    const creados = [];
-    for (const ev of nuevos) {
-      const c = await createEvento(cliente.id, ev);
-      if (c) creados.push(c);
-    }
-    if (creados.length) setEventos(prev => [...creados, ...prev]);
-    else refresh();
-  };
-
   const handleDeleteEvento = (evento) => setConfirmDelete(evento);
 
   const confirmarEliminar = async () => {
     if (!confirmDelete?.id) { setConfirmDelete(null); return; }
-    const id = confirmDelete.id;
+    const ev = confirmDelete;
     setConfirmDelete(null);
-    setEventos(prev => prev.filter(e => e.id !== id));
-    await deleteEvento(id);
+    if (ev.source_bullet_id) {
+      // Auto-importado: soft-delete (marcar dismissed) para que no reaparezca.
+      setEventos(prev => prev.map(e => e.id === ev.id ? { ...e, dismissed: true } : e));
+      await dismissEvento(ev.id);
+    } else {
+      // Manual: borrado real.
+      setEventos(prev => prev.filter(e => e.id !== ev.id));
+      await deleteEvento(ev.id);
+    }
   };
 
   return (
@@ -154,13 +161,11 @@ export function HistorialTab({ cliente }) {
         open={showPanel}
         onClose={closePanel}
         onSave={handleSaveEvento}
-        onSaveMany={handleSaveMany}
         cliente={cliente}
         clienteNombre={cliente?.name}
         faseActualClienteId={faseActualId}
         currentUser={currentUser}
         eventoExistente={editingEvento}
-        eventosExistentes={eventos}
       />
       <ResumenEditorModal
         open={showResumen}

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
 import { useHistorialConfig } from './useHistorialConfig.js';
-import { EntregablesSugeridos, suggestTipo, extractUrls, shortTitle } from './EntregablesSugeridos.jsx';
 
 function Label({ children }) {
   return <div style={{ fontSize: 11, fontWeight: 700, color: T.text3, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>{children}</div>;
@@ -38,7 +37,7 @@ const horaAhora = () => {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, clienteNombre, faseActualClienteId, currentUser, eventoExistente, eventosExistentes }) {
+export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre, faseActualClienteId, currentUser, eventoExistente }) {
   const vp = useViewport();
   const { fases, tipos } = useHistorialConfig(cliente);
   const isEdit = !!eventoExistente;
@@ -48,8 +47,6 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
   const [descripcion, setDescripcion] = useState('');
   const [fecha, setFecha] = useState(today());
   const [fase, setFase] = useState(faseActualClienteId || fases[0]?.id || '');
-  const [tiempo, setTiempo] = useState(15);
-  const [responsable, setResponsable] = useState('Korex');
   const [incluirResumen, setIncluirResumen] = useState(true);
   const [bloqueoCategoria, setBloqueoCategoria] = useState('Cliente');
   const [bloqueoEsperando, setBloqueoEsperando] = useState('');
@@ -66,8 +63,6 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
       setDescripcion(eventoExistente.descripcion || '');
       setFecha(eventoExistente.fecha || today());
       setFase(eventoExistente.fase || faseActualClienteId || fases[0]?.id || '');
-      setTiempo(Number(eventoExistente.tiempo) || 0);
-      setResponsable(eventoExistente.responsable || 'Korex');
       setIncluirResumen(eventoExistente.incluirResumen !== false);
       setBloqueoCategoria(eventoExistente.bloqueo?.categoria || 'Cliente');
       setBloqueoEsperando(eventoExistente.bloqueo?.esperando || '');
@@ -77,24 +72,13 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
     } else {
       setTipo(tipos[0]?.key || 'entregable'); setTitulo(''); setDescripcion('');
       setFecha(today());
-      setFase(faseActualClienteId || fases[0]?.id || ''); setTiempo(15); setResponsable('Korex');
+      setFase(faseActualClienteId || fases[0]?.id || '');
       setIncluirResumen(true); setBloqueoCategoria('Cliente');
       setBloqueoEsperando(''); setBloqueoDias(0);
       setLinks([]); setLinkDraft('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventoExistente?.id]);
-
-  // Llena el formulario con un entregable elegido del panel de sugerencias.
-  const applySuggestion = (s) => {
-    if (!s) return;
-    setTipo(suggestTipo(s.text, tipos.map(t => t.key)));
-    setTitulo(shortTitle(s.text));
-    setDescripcion(s.text);
-    setFecha(s.date || today());
-    const urls = extractUrls(s.text);
-    if (urls.length) setLinks(urls);
-  };
 
   const addLink = () => {
     const url = linkDraft.trim();
@@ -109,7 +93,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
     if (!titulo.trim()) return;
     const baseEvento = {
       tipo, titulo: titulo.trim(), descripcion: descripcion.trim(),
-      fase, tiempo: Number(tiempo) || 0, responsable,
+      fase, tiempo: 0, responsable: '',
       estado: tipo === 'bloqueo' ? 'en-curso' : 'completado',
       links,
       incluirResumen,
@@ -160,20 +144,6 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
         transition: 'opacity 0.2s', backdropFilter: open ? 'blur(2px)' : 'none',
       }} />
 
-      {/* Panel de entregables sugeridos (izquierda del drawer / hoja en mobile).
-          Solo se monta cuando el drawer está abierto → nunca asoma "fijo". */}
-      {open && !isEdit && cliente?.id && (
-        <EntregablesSugeridos
-          open={open}
-          clienteId={cliente.id}
-          onPick={applySuggestion}
-          onSaveMany={onSaveMany}
-          eventosExistentes={eventosExistentes}
-          faseActual={fase}
-          currentUser={currentUser}
-          tipos={tipos}
-        />
-      )}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: vp.mobile ? '100vw' : 'min(460px, 95vw)',
@@ -282,37 +252,17 @@ export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, c
             onBlur={e => e.target.style.borderColor = T.border}
           />
 
-          <Label>Fecha del evento</Label>
-          <Input type="date" value={fecha} onChange={setFecha} />
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+            <div>
+              <Label>Fecha del evento</Label>
+              <Input type="date" value={fecha} onChange={setFecha} />
+            </div>
             <div>
               <Label>Fase</Label>
               <Select value={fase} onChange={setFase}>
                 {fases.map(f => <option key={f.id} value={f.id}>{f.n}. {f.label}</option>)}
               </Select>
             </div>
-            <div>
-              <Label>Espera a</Label>
-              <Select value={responsable} onChange={setResponsable}>
-                <option>Korex</option>
-                <option>Cliente</option>
-                <option>Externo</option>
-              </Select>
-            </div>
-          </div>
-
-          <Label>Tiempo invertido (min)</Label>
-          <div style={{ display: 'grid', gridTemplateColumns: vp.mobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', gap: 6, marginBottom: 16 }}>
-            {[5, 15, 30, 60, 120, 240].map(m => (
-              <button key={m} onClick={() => setTiempo(m)} style={{
-                background: tiempo === m ? T.blueBg : '#fff',
-                border: `1px solid ${tiempo === m ? T.blue : T.border}`,
-                color: tiempo === m ? T.blue : T.text2,
-                borderRadius: 8, padding: '10px 0', fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
-              }}>{m}m</button>
-            ))}
           </div>
 
           <Label>Links / adjuntos</Label>

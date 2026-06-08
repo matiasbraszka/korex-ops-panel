@@ -267,9 +267,6 @@ export function EventCard({ cliente, event, showFase = true, onClick, onDelete, 
         flexWrap: 'wrap',
       }}>
         {!isLlamada && <AuthorChip autorUser={event.autorUser} autor={event.autor} />}
-        {!isLlamada && event.responsable && (
-          <span>· espera: <span style={{ color: event.responsable === 'Cliente' ? T.orange : T.text2, fontWeight: 600 }}>{event.responsable}</span></span>
-        )}
         {isLlamada && event.hora && <span>{event.hora}</span>}
         {isLlamada
           ? (event.tiempo > 0 && <span>· {event.tiempo}min</span>)

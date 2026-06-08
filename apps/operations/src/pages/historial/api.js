@@ -22,6 +22,8 @@ function rowToEvento(r) {
     links: Array.isArray(r.links) ? r.links : [],
     adjuntos: Array.isArray(r.links) ? r.links.length : (r.adjuntos || 0),
     incluirResumen: r.incluir_resumen !== false,
+    source_bullet_id: r.source_bullet_id || null,
+    dismissed: r.dismissed === true,
     bloqueo: r.tipo === 'bloqueo'
       ? {
           categoria: r.bloqueo_categoria || '',
@@ -52,6 +54,7 @@ function eventoToRow(e, clienteId) {
     bloqueo_esperando: e.bloqueo?.esperando || null,
     bloqueo_dias: Number(e.bloqueo?.diasBloqueo) || 0,
     incluir_resumen: e.incluirResumen !== false,
+    source_bullet_id: e.source_bullet_id || null,
   };
 }
 
@@ -83,6 +86,43 @@ export async function createEvento(clienteId, evento) {
   }
   const data = await res.json();
   return rowToEvento(Array.isArray(data) ? data[0] : data);
+}
+
+// Inserta varios eventos de una (importación desde informes). Ignora duplicados
+// por (cliente_id, source_bullet_id) → idempotente. Devuelve solo los insertados.
+export async function createEventosBulk(clienteId, eventos) {
+  if (!Array.isArray(eventos) || eventos.length === 0) return [];
+  const rows = eventos.map((e) => eventoToRow(e, clienteId));
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}?on_conflict=cliente_id,source_bullet_id`;
+  const session = (await supabase.auth.getSession()).data.session;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation,resolution=ignore-duplicates',
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) {
+    console.warn('createEventosBulk error', res.status, await res.text());
+    return [];
+  }
+  const data = await res.json();
+  return (Array.isArray(data) ? data : []).map(rowToEvento);
+}
+
+// "Soft-delete" de un evento auto-importado: se marca dismissed para que NO se
+// vuelva a importar (la fila conserva su source_bullet_id).
+export async function dismissEvento(eventoId) {
+  if (!eventoId) return false;
+  await sbFetch(`${TABLE}?id=eq.${encodeURIComponent(eventoId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dismissed: true }),
+  });
+  return true;
 }
 
 export async function deleteEvento(eventoId) {
