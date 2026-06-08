@@ -236,8 +236,18 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
             })}
           </div>
 
-          <Label>Título corto</Label>
-          <Input value={titulo} onChange={setTitulo} placeholder="Ej: Mockup landing v2 entregado" />
+          <Label>Título</Label>
+          <textarea value={titulo} onChange={e => setTitulo(e.target.value)} rows={2}
+            placeholder="Ej: Mockup landing v2 entregado"
+            style={{
+              width: '100%', background: '#fff', border: `1px solid ${T.border}`,
+              borderRadius: 8, padding: '10px 12px', fontSize: 13, fontFamily: 'inherit',
+              color: T.text, outline: 'none', marginBottom: 16, resize: 'vertical',
+              lineHeight: 1.4, transition: 'border 0.12s',
+            }}
+            onFocus={e => e.target.style.borderColor = T.blue}
+            onBlur={e => e.target.style.borderColor = T.border}
+          />
 
           <Label>Descripción · 1-3 líneas</Label>
           <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={3}
