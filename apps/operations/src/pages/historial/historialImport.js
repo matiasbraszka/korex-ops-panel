@@ -23,14 +23,6 @@ export function extractUrls(text) {
   return found.map((u) => ({ url: /^https?:\/\//i.test(u) ? u : 'https://' + u }));
 }
 
-export function shortTitle(text, n = 70) {
-  const t = (text || '').trim();
-  if (t.length <= n) return t;
-  const cut = t.slice(0, n);
-  const sp = cut.lastIndexOf(' ');
-  return (sp > 40 ? cut.slice(0, sp) : cut) + '…';
-}
-
 // Reparte `total` minutos entre `n` ítems de forma exacta (el resto va a los primeros).
 function splitMinutes(total, n) {
   const m = Math.max(0, Math.round(Number(total) || 0));
@@ -70,8 +62,8 @@ export function buildImportEvents(teamReports, clienteId, teamMembers, tipoKeys 
         if (!text || !b.id) return;
         out.push({
           tipo: suggestTipo(text, tipoKeys),
-          titulo: shortTitle(text),
-          descripcion: text,
+          titulo: text,        // texto completo: el título no se corta (envuelve en el card)
+          descripcion: '',     // sin descripción → no se repite el texto
           fecha: r.report_date,
           hora: '',
           fase: '',
