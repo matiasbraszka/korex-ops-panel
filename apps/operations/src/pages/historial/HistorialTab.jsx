@@ -104,6 +104,18 @@ export function HistorialTab({ cliente }) {
     }
   };
 
+  // Crea varios eventos de una (desde el panel de entregables sugeridos).
+  const handleSaveMany = async (nuevos) => {
+    if (!Array.isArray(nuevos) || nuevos.length === 0) return;
+    const creados = [];
+    for (const ev of nuevos) {
+      const c = await createEvento(cliente.id, ev);
+      if (c) creados.push(c);
+    }
+    if (creados.length) setEventos(prev => [...creados, ...prev]);
+    else refresh();
+  };
+
   const handleDeleteEvento = (evento) => setConfirmDelete(evento);
 
   const confirmarEliminar = async () => {
@@ -142,11 +154,13 @@ export function HistorialTab({ cliente }) {
         open={showPanel}
         onClose={closePanel}
         onSave={handleSaveEvento}
+        onSaveMany={handleSaveMany}
         cliente={cliente}
         clienteNombre={cliente?.name}
         faseActualClienteId={faseActualId}
         currentUser={currentUser}
         eventoExistente={editingEvento}
+        eventosExistentes={eventos}
       />
       <ResumenEditorModal
         open={showResumen}

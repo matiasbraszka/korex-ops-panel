@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { T } from './tokens.js';
 import { useViewport } from './useViewport.js';
 import { useHistorialConfig } from './useHistorialConfig.js';
+import { EntregablesSugeridos, suggestTipo, extractUrls, shortTitle } from './EntregablesSugeridos.jsx';
 
 function Label({ children }) {
   return <div style={{ fontSize: 11, fontWeight: 700, color: T.text3, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>{children}</div>;
@@ -37,7 +38,7 @@ const horaAhora = () => {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre, faseActualClienteId, currentUser, eventoExistente }) {
+export function NuevoEventoPanel({ open, onClose, onSave, onSaveMany, cliente, clienteNombre, faseActualClienteId, currentUser, eventoExistente, eventosExistentes }) {
   const vp = useViewport();
   const { fases, tipos } = useHistorialConfig(cliente);
   const isEdit = !!eventoExistente;
@@ -45,6 +46,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
   const [tipo, setTipo] = useState(tipos[0]?.key || 'entregable');
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [fecha, setFecha] = useState(today());
   const [fase, setFase] = useState(faseActualClienteId || fases[0]?.id || '');
   const [tiempo, setTiempo] = useState(15);
   const [responsable, setResponsable] = useState('Korex');
@@ -62,6 +64,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
       setTipo(eventoExistente.tipo || tipos[0]?.key || 'entregable');
       setTitulo(eventoExistente.titulo || '');
       setDescripcion(eventoExistente.descripcion || '');
+      setFecha(eventoExistente.fecha || today());
       setFase(eventoExistente.fase || faseActualClienteId || fases[0]?.id || '');
       setTiempo(Number(eventoExistente.tiempo) || 0);
       setResponsable(eventoExistente.responsable || 'Korex');
@@ -73,6 +76,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
       setLinkDraft('');
     } else {
       setTipo(tipos[0]?.key || 'entregable'); setTitulo(''); setDescripcion('');
+      setFecha(today());
       setFase(faseActualClienteId || fases[0]?.id || ''); setTiempo(15); setResponsable('Korex');
       setIncluirResumen(true); setBloqueoCategoria('Cliente');
       setBloqueoEsperando(''); setBloqueoDias(0);
@@ -80,6 +84,17 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventoExistente?.id]);
+
+  // Llena el formulario con un entregable elegido del panel de sugerencias.
+  const applySuggestion = (s) => {
+    if (!s) return;
+    setTipo(suggestTipo(s.text, tipos.map(t => t.key)));
+    setTitulo(shortTitle(s.text));
+    setDescripcion(s.text);
+    setFecha(s.date || today());
+    const urls = extractUrls(s.text);
+    if (urls.length) setLinks(urls);
+  };
 
   const addLink = () => {
     const url = linkDraft.trim();
@@ -101,17 +116,17 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
     };
     let evento;
     if (isEdit) {
-      // En modo edición: conserva id, fecha/hora original y autor original.
+      // En modo edición: conserva id/hora/autor; la fecha es editable.
       evento = {
         ...baseEvento,
         id: eventoExistente.id,
-        fecha: eventoExistente.fecha,
+        fecha: fecha || eventoExistente.fecha,
         hora: eventoExistente.hora,
         autor: eventoExistente.autor,
         autorUser: eventoExistente.autorUser,
       };
     } else {
-      // En modo creación: setea autor desde currentUser y fecha/hora actual.
+      // En modo creación: autor desde currentUser; fecha editable (default hoy).
       evento = {
         ...baseEvento,
         autor: currentUser?.name || '',
@@ -122,7 +137,7 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
           color: currentUser.color || '#5B7CF5',
           initials: currentUser.initials || '',
         } : null,
-        fecha: today(),
+        fecha: fecha || today(),
         hora: horaAhora(),
       };
     }
@@ -144,6 +159,20 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
         zIndex: 50, opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none',
         transition: 'opacity 0.2s', backdropFilter: open ? 'blur(2px)' : 'none',
       }} />
+
+      {/* Panel de entregables sugeridos (izquierda del drawer / hoja en mobile) */}
+      {!isEdit && cliente?.id && (
+        <EntregablesSugeridos
+          open={open}
+          clienteId={cliente.id}
+          onPick={applySuggestion}
+          onSaveMany={onSaveMany}
+          eventosExistentes={eventosExistentes}
+          faseActual={fase}
+          currentUser={currentUser}
+          tipos={tipos}
+        />
+      )}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: vp.mobile ? '100vw' : 'min(460px, 95vw)',
@@ -251,6 +280,9 @@ export function NuevoEventoPanel({ open, onClose, onSave, cliente, clienteNombre
             onFocus={e => e.target.style.borderColor = T.blue}
             onBlur={e => e.target.style.borderColor = T.border}
           />
+
+          <Label>Fecha del evento</Label>
+          <Input type="date" value={fecha} onChange={setFecha} />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
             <div>
