@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { MessageSquare, Link2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
+import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange, isKorexClient, userOwnsTask } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
@@ -17,7 +17,7 @@ import AddToWeeklyButton from './AddToWeeklyButton';
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
 export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
-  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds } = useApp();
+  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds, currentUser } = useApp();
   const TEAM = teamMembers || [];
 
   // Conteo de comentarios por tarea para el badge del row.
@@ -50,7 +50,11 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
   const rdDragPhaseRef = useRef(null);
   const dropdownRefs = useRef({});
 
-  const clientTasks = tasks.filter(t => t.clientId === c.id);
+  // Usuarios de operaciones que NO son admin solo ven las tareas de Korex
+  // asignadas a ellos (los demás clientes se ven completos).
+  const restricted = !!currentUser && !currentUser.isAdmin;
+  let clientTasks = tasks.filter(t => t.clientId === c.id);
+  if (restricted && isKorexClient(c)) clientTasks = clientTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
   const allPh = getAllPhases(c);
   const now = today();
 

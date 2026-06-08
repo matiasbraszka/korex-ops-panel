@@ -297,6 +297,32 @@ export function getAllPhases(c) {
 }
 
 /**
+ * isKorexClient: detecta el "cliente" interno de la empresa (Korex). Misma regex
+ * que ya se usaba inline en varias vistas, centralizada para reusarla.
+ */
+export function isKorexClient(client) {
+  return /empresa|korex/i.test(client?.name || '');
+}
+
+/**
+ * userOwnsTask: ¿la tarea está asignada al usuario actual? Misma lógica que el
+ * filtro "Mis tareas" de TasksPage y el isMine de BulletRows. `assignee` es un
+ * texto con nombres separados por coma (nombre completo, nombre parcial o id).
+ */
+export function userOwnsTask(task, currentUser, teamMembers = []) {
+  if (!task?.assignee || !currentUser) return false;
+  const names = [
+    (currentUser.name || '').toLowerCase(),
+    ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
+    (currentUser.id || '').toLowerCase(),
+  ];
+  const me = (teamMembers || []).find(m => m.id === currentUser.id);
+  if (me?.name) names.push(me.name.toLowerCase());
+  const parts = task.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  return parts.some(p => p && names.includes(p));
+}
+
+/**
  * getBottleneck: "Pendiente para avanzar" es un texto MANUAL por cliente,
  * editado a mano desde la lista de clientes y guardado en Supabase (columna
  * `bottleneck`). El sistema NUNCA lo deriva ni lo pisa automaticamente.

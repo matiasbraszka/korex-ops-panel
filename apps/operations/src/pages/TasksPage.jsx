@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS } from '../utils/constants';
-import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange, userOwnsTask } from '../utils/helpers';
 import { GripVertical, MessageSquare, Link2, Calendar, AlertTriangle } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
@@ -847,8 +847,11 @@ export default function TasksPage({ embedded = false }) {
   const clientsInGroups = new Set(groups.map(g => g.client.id));
   const remaining = regularClients.filter(c => !clientsInGroups.has(c.id));
 
-  // Korex tasks (always shown at bottom)
-  const korexTasks = korexClient ? filteredTasks.filter(t => t.clientId === korexClientId) : [];
+  // Korex tasks (always shown at bottom). Usuarios de operaciones que NO son admin
+  // solo ven las tareas de Korex asignadas a ellos.
+  const restricted = !!currentUser && !currentUser.isAdmin;
+  let korexTasks = korexClient ? filteredTasks.filter(t => t.clientId === korexClientId) : [];
+  if (restricted) korexTasks = korexTasks.filter(t => userOwnsTask(t, currentUser, TEAM));
   const korexTaskCount = korexTasks.filter(t => t.status !== 'done').length;
   const korexCollapsed = collapsedGroups['_korex'];
 

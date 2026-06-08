@@ -93,14 +93,18 @@ function InformesView({ openCreateInforme, openEditInforme }) {
     return map;
   }, [teamBlockers]);
 
+  // Usuarios de operaciones que NO son admin solo pueden ver sus propios informes.
+  const restricted = !!currentUser && !currentUser.isAdmin;
+
   const filteredReports = useMemo(() => {
     let list = (teamReports || []).filter(r => r.report_type === reportType);
-    if (userFilter !== 'all') list = list.filter(r => r.user_id === userFilter);
+    if (restricted) list = list.filter(r => r.user_id === currentUser.id);
+    else if (userFilter !== 'all') list = list.filter(r => r.user_id === userFilter);
     return list.sort((a, b) =>
       (b.report_date || '').localeCompare(a.report_date || '') ||
       (b.created_at || '').localeCompare(a.created_at || '')
     );
-  }, [teamReports, reportType, userFilter]);
+  }, [teamReports, reportType, userFilter, restricted, currentUser]);
 
   const usersWithReports = useMemo(() => {
     const set = new Set((teamReports || []).map(r => r.user_id));
@@ -137,7 +141,7 @@ function InformesView({ openCreateInforme, openEditInforme }) {
           ))}
         </div>
 
-        {usersWithReports.length > 1 && (
+        {usersWithReports.length > 1 && !restricted && (
           <select
             value={userFilter}
             onChange={e => setUserFilter(e.target.value)}

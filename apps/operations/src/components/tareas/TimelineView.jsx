@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { MessageSquare, MoveHorizontal } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange } from '../../utils/helpers';
+import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange, userOwnsTask } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 export default function TimelineView({ onGoToTaskList }) {
@@ -17,6 +17,7 @@ export default function TimelineView({ onGoToTaskList }) {
     hideCompletedTasks,
     hideBlockedTasks,
     teamMembers,
+    currentUser,
     taskComments,
     openTaskComments,
     unreadCommentTaskIds,
@@ -54,6 +55,8 @@ export default function TimelineView({ onGoToTaskList }) {
   const now = today();
 
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
+  // Usuarios de operaciones que NO son admin solo ven las tareas de Korex propias.
+  const restricted = !!currentUser && !currentUser.isAdmin;
 
   // Helper: check if a task matches the assignee filter
   const taskMatchesAssignee = (t, assigneeFilter) => {
@@ -107,6 +110,10 @@ export default function TimelineView({ onGoToTaskList }) {
       if (!phInfo) return;
       // Start with all tasks in this phase
       let phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
+      // Korex: usuarios restringidos solo ven las tareas asignadas a ellos.
+      if (restricted && isKorexClient(c)) {
+        phaseTasks = phaseTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
+      }
       // Apply assignee cascade filter
       if (taskAssignee !== 'all') {
         phaseTasks = phaseTasks.filter(t => taskMatchesAssignee(t, taskAssignee));

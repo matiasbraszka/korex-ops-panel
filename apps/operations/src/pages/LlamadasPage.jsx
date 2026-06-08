@@ -51,6 +51,8 @@ export default function LlamadasPage() {
   useEffect(() => { setVisibleCount(PAGE); }, [catFilter, clientFilter, search]);
 
   const canEdit = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
+  // Usuarios de operaciones que NO son admin solo ven llamadas de categoría "Cliente".
+  const restricted = !!currentUser && !currentUser.isAdmin;
   const source = detectSource(form.url);
 
   // Lookup O(1) por cliente — evita .find() dentro de cada .map()
@@ -63,6 +65,7 @@ export default function LlamadasPage() {
   // Filter (memoizado, recalcula solo al cambiar fuente o filtros)
   const filtered = useMemo(() => {
     let out = llamadas || [];
+    if (restricted) out = out.filter(l => l.categoria === 'cliente');
     if (catFilter !== 'all') out = out.filter(l => l.categoria === catFilter);
     if (clientFilter !== 'all') out = out.filter(l => l.cliente_id === clientFilter);
     if (search.trim()) {
@@ -70,7 +73,7 @@ export default function LlamadasPage() {
       out = out.filter(l => (l.titulo || '').toLowerCase().includes(q) || (l.resumen || '').toLowerCase().includes(q));
     }
     return out;
-  }, [llamadas, catFilter, clientFilter, search]);
+  }, [llamadas, catFilter, clientFilter, search, restricted]);
 
   // Aggregate insights from filtered calls — solo se calcula cuando el panel está abierto
   const insights = useMemo(() => {
@@ -422,7 +425,8 @@ export default function LlamadasPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Category pills */}
+        {/* Category pills — ocultas para usuarios restringidos (solo ven "Cliente") */}
+        {!restricted && (
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
           <button
             onClick={() => setCatFilter('all')}
@@ -436,6 +440,7 @@ export default function LlamadasPage() {
             >{cfg.label}</button>
           ))}
         </div>
+        )}
 
         {/* Client dropdown */}
         {clientOptions.length > 0 && (
