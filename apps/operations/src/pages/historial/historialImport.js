@@ -4,6 +4,9 @@
 // eventos ya existentes antes de insertar.
 import { getBullets } from '../../utils/helpers';
 
+// Normaliza texto para comparar/deduplicar (minúsculas, espacios colapsados).
+export const normText = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
 // Mapea el texto a una de las categorías (tipos) configuradas. Default 'entregable'.
 export function suggestTipo(text, keys = []) {
   const t = (text || '').toLowerCase();

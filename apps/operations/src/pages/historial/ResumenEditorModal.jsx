@@ -80,11 +80,22 @@ export function ResumenEditorModal({ open, onClose, eventos, cliente }) {
     });
   }, [eventosRango]);
 
+  // Dedup por título normalizado: nunca repetir lo mismo en el email.
+  const dedupeByTitulo = (list) => {
+    const seen = new Set();
+    return list.filter(e => {
+      const k = (e.titulo || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+
   const incluidosLista = eventosRango.filter(e => incluidos[e.id]);
-  const entregables = incluidosLista.filter(e => e.tipo === 'entregable' || e.tipo === 'hito');
-  const decisiones  = incluidosLista.filter(e => e.tipo === 'decision' || e.tipo === 'validacion');
-  const bloqueos    = incluidosLista.filter(e => e.tipo === 'bloqueo');
-  const metricas    = incluidosLista.filter(e => e.tipo === 'metrica');
+  const entregables = dedupeByTitulo(incluidosLista.filter(e => e.tipo === 'entregable' || e.tipo === 'hito'));
+  const decisiones  = dedupeByTitulo(incluidosLista.filter(e => e.tipo === 'decision' || e.tipo === 'validacion'));
+  const bloqueos    = dedupeByTitulo(incluidosLista.filter(e => e.tipo === 'bloqueo'));
+  const metricas    = dedupeByTitulo(incluidosLista.filter(e => e.tipo === 'metrica'));
 
   const generarCuerpo = () => {
     const nombre = (cliente?.name || '').split(' ')[0] || 'cliente';

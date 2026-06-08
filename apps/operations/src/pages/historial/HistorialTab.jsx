@@ -4,7 +4,7 @@ import { NuevoEventoPanel } from './NuevoEventoPanel.jsx';
 import { ResumenEditorModal } from './ResumenEditorModal.jsx';
 import { listEventos, createEvento, createEventosBulk, deleteEvento, dismissEvento, updateEvento } from './api.js';
 import { useHistorialConfig, getClienteFaseId } from './useHistorialConfig.js';
-import { buildImportEvents } from './historialImport.js';
+import { buildImportEvents, normText } from './historialImport.js';
 import { useApp } from '../../context/AppContext';
 import Modal from '../../components/Modal';
 import { T } from './tokens.js';
@@ -59,11 +59,22 @@ export function HistorialTab({ cliente }) {
     if (!cliente?.id) return;
     setLoading(true);
     const list = await listEventos(cliente.id);
-    // Auto-importar avances/entregables nuevos de los informes diarios.
+    // Auto-importar avances/entregables nuevos de los informes diarios,
+    // SIN duplicar: ni por bullet ya importado, ni por texto ya presente
+    // (otro evento del historial con el mismo título) ni entre candidatos.
     const tipoKeys = (tipos || []).map(t => t.key);
-    const existing = new Set(list.filter(e => e.source_bullet_id).map(e => e.source_bullet_id));
-    const candidates = buildImportEvents(teamReports, cliente.id, teamMembers, tipoKeys)
-      .filter(ev => !existing.has(ev.source_bullet_id));
+    const existingBulletIds = new Set(list.filter(e => e.source_bullet_id).map(e => e.source_bullet_id));
+    const existingTexts = new Set(list.filter(e => e.dismissed !== true).map(e => normText(e.titulo)));
+    const byText = new Map();
+    buildImportEvents(teamReports, cliente.id, teamMembers, tipoKeys)
+      .filter(ev => !existingBulletIds.has(ev.source_bullet_id))
+      .forEach(ev => {
+        const k = normText(ev.titulo);
+        if (!k || existingTexts.has(k)) return;
+        const prev = byText.get(k);
+        if (!prev || (ev.tiempo || 0) > (prev.tiempo || 0)) byText.set(k, ev);
+      });
+    const candidates = [...byText.values()];
     let all = list;
     if (candidates.length) {
       const creados = await createEventosBulk(cliente.id, candidates);
@@ -170,7 +181,7 @@ export function HistorialTab({ cliente }) {
       <ResumenEditorModal
         open={showResumen}
         onClose={() => setShowResumen(false)}
-        eventos={eventos}
+        eventos={eventos.filter(e => e.dismissed !== true)}
         cliente={cliente}
       />
       <Modal
