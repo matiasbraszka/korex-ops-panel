@@ -68,30 +68,38 @@ export function EntregablesSugeridos({
     return m;
   }, [teamMembers]);
 
-  // Entregables del cliente, deduplicados por texto (prefiere el diario, fecha más temprana).
+  // Entregables Y avances del cliente, deduplicados por texto.
+  // Al elegir uno se carga igual (un evento de historial); el `source` solo
+  // sirve para mostrar un mini-tag. Prioridad ante duplicados:
+  // entregable > avance, luego diario > semanal, luego fecha más temprana.
   const suggestions = useMemo(() => {
     if (!clienteId) return [];
+    const ent = (x) => (x.source === 'entregable' ? 0 : 1);
+    const better = (a, b) => {
+      if (ent(a) !== ent(b)) return ent(a) < ent(b);
+      if (a.weekly !== b.weekly) return !a.weekly;
+      return a.date < b.date;
+    };
     const map = new Map();
     (teamReports || []).forEach((r) => {
       if (!r?.report_date) return;
       (r.progress_by_client || []).forEach((p) => {
         if (p.client_id !== clienteId) return;
         getBullets(p).forEach((b) => {
-          if (b.category !== 'entregable') return;
+          if (b.category !== 'entregable' && b.category !== 'avance') return;
           const text = (b.text || '').trim();
           if (!text) return;
           const key = norm(text);
           const cand = {
             key, text,
+            source: b.category, // 'entregable' | 'avance'
             date: r.report_date,
             weekly: r.report_type === 'weekly',
             author: memberById[r.user_id]?.name || '',
             monday: mondayOf(r.report_date),
           };
           const ex = map.get(key);
-          if (!ex) { map.set(key, cand); return; }
-          if (ex.weekly && !cand.weekly) { map.set(key, cand); return; }
-          if (ex.weekly === cand.weekly && cand.date < ex.date) map.set(key, cand);
+          if (!ex || better(cand, ex)) map.set(key, cand);
         });
       });
     });
@@ -169,7 +177,7 @@ export function EntregablesSugeridos({
     <>
       <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}` }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Entregables del equipo</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Entregables y avances</div>
           <div style={{ fontSize: 10.5, color: T.text3 }}>{total} en total</div>
         </div>
         {weeks.length > 0 && (
@@ -194,8 +202,8 @@ export function EntregablesSugeridos({
         {list.length === 0 ? (
           <div style={{ textAlign: 'center', color: T.text3, fontSize: 12, padding: '32px 8px' }}>
             {total === 0
-              ? 'No hay entregables reportados por el equipo para este cliente todavía.'
-              : 'Sin entregables en la semana seleccionada.'}
+              ? 'No hay entregables ni avances reportados por el equipo para este cliente todavía.'
+              : 'Sin entregables ni avances en la semana seleccionada.'}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -227,6 +235,12 @@ export function EntregablesSugeridos({
                         fontSize: 9.5, fontWeight: 700, color: tinfo.color, background: tinfo.bg,
                         border: `1px solid ${tinfo.color}30`, borderRadius: 5, padding: '1px 5px',
                       }}>{tinfo.dot} {tinfo.label}</span>
+                      {s.source === 'avance' && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, color: T.text2, background: T.surface2,
+                          borderRadius: 5, padding: '1px 5px', letterSpacing: '0.02em',
+                        }}>avance</span>
+                      )}
                       <span style={{ fontSize: 10, color: T.text3 }}>{fmtDayShort(s.date)}{s.weekly ? ' · sem' : ''}</span>
                       {s.author && <span style={{ fontSize: 10, color: T.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>· {s.author}</span>}
                     </div>
