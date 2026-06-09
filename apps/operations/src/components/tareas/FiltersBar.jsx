@@ -11,7 +11,10 @@ export default function FiltersBar() {
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,
     getAllPriorityLabels,
+    currentUser,
   } = useApp();
+  // Los no-admin solo ven sus tareas → el filtro de "encargado" no aplica.
+  const restricted = !!currentUser && !currentUser.isAdmin;
 
   // Incluir Korex en el dropdown (aparece en roadmap/timeline con estilo distinto)
   const activeClients = clients.filter(c => c.status !== 'completed');
@@ -42,14 +45,16 @@ export default function FiltersBar() {
         ))}
       </select>
 
-      <select
-        value={taskAssignee}
-        onChange={(e) => setTaskAssignee(e.target.value)}
-        className={selectBase}
-      >
-        <option value="all">Todos los encargados</option>
-        {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-      </select>
+      {!restricted && (
+        <select
+          value={taskAssignee}
+          onChange={(e) => setTaskAssignee(e.target.value)}
+          className={selectBase}
+        >
+          <option value="all">Todos los encargados</option>
+          {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+        </select>
+      )}
 
       <select
         value={taskDueFilter}

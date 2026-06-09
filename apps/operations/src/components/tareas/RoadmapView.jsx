@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { isInDueRange } from '../../utils/helpers';
+import { isInDueRange, userOwnsTask } from '../../utils/helpers';
 import ClientRoadmapPanel from './ClientRoadmapPanel';
 
 const EXPANDED_KEY = 'tareas_roadmap_expanded';
@@ -18,7 +18,10 @@ export default function RoadmapView() {
     hideCompletedTasks,
     hideBlockedTasks,
     getPriorityLabel,
+    currentUser,
+    teamMembers,
   } = useApp();
+  const restricted = !!currentUser && !currentUser.isAdmin;
 
   // Expanded state persisted
   const [expanded, setExpanded] = useState(() => {
@@ -66,11 +69,12 @@ export default function RoadmapView() {
       }
       return false;
     };
-    const anyFilterActive = taskAssignee !== 'all' || hideCompletedTasks || hideBlockedTasks || (taskDueFilter && taskDueFilter !== 'all');
+    const anyFilterActive = restricted || taskAssignee !== 'all' || hideCompletedTasks || hideBlockedTasks || (taskDueFilter && taskDueFilter !== 'all');
     if (anyFilterActive) {
       filteredClients = filteredClients.filter(c => {
         const clientTasks = tasks.filter(t => t.clientId === c.id);
         return clientTasks.some(t => {
+          if (restricted && !userOwnsTask(t, currentUser, teamMembers)) return false;
           if (!matchesAssignee(t)) return false;
           if (hideCompletedTasks && t.status === 'done') return false;
           if (hideBlockedTasks && isBlocked(t)) return false;

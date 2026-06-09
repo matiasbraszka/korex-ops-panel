@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { MessageSquare, Link2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange, isKorexClient, userOwnsTask } from '../../utils/helpers';
+import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange, userOwnsTask } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
@@ -50,11 +50,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
   const rdDragPhaseRef = useRef(null);
   const dropdownRefs = useRef({});
 
-  // Usuarios de operaciones que NO son admin solo ven las tareas de Korex
-  // asignadas a ellos (los demás clientes se ven completos).
+  // Usuarios de operaciones que NO son admin solo ven SUS tareas (en todo cliente).
   const restricted = !!currentUser && !currentUser.isAdmin;
   let clientTasks = tasks.filter(t => t.clientId === c.id);
-  if (restricted && isKorexClient(c)) clientTasks = clientTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
+  if (restricted) clientTasks = clientTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
   const allPh = getAllPhases(c);
   const now = today();
 
@@ -143,39 +142,31 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
       if ((c.phaseNameOverrides || {})[g.phaseKey] === '__HIDDEN__') return false;
 
       const isCustomPhase = g.phaseKey !== '_unphased' && (c.customPhases || []).some(cp => cp.id === g.phaseKey);
-
-      // Una fase VACÍA (sin tareas) NO es lo mismo que una fase COMPLETADA.
-      // Antes "totalCount === 0" contaba como completada (g.allDone), así que con
-      // el filtro de "ocultar completadas" activo las fases recién creadas (aún
-      // vacías) desaparecían. Una fase custom vacía se muestra siempre para
-      // poder llenarla.
       const isEmpty = g.totalCount === 0;
       const isReallyCompleted = g.totalCount > 0 && g.doneCount === g.totalCount;
-      if (isCustomPhase && isEmpty) return true;
+      // Filtro de PERSONA: el usuario no-admin (solo ve lo suyo) o el filtro de
+      // encargado. Es lo que oculta las fases sin tareas de esa persona.
+      const personFilter = restricted || assigneeFilter !== 'all';
+      const dueActive = !!(dueFilter && dueFilter !== 'all');
 
-      // Si el filtro "ocultar completadas" está activo, ocultar SOLO las fases
-      // realmente completadas (tienen tareas y todas están hechas). Las vacías
-      // no cuentan como completadas.
+      // 1) Ocultar SOLO las fases realmente completadas (con tareas, todas hechas)
+      //    cuando el filtro "ocultar completadas" está activo. Las vacías no cuentan.
       if (hideCompleted && isReallyCompleted) return false;
 
-      // Las fases custom del cliente siempre se muestran.
-      if (isCustomPhase) return true;
+      // 2) Si la fase tiene tareas que pasan los filtros activos → mostrar.
+      if (g.phaseTasks.length > 0) return true;
 
-      // Si hay algun filtro activo (assignee, hide blocked, due range),
-      // ocultar fases cuyas tareas filtradas (phaseTasks) son 0 — no relleno vacio.
-      const anyFilterActive = assigneeFilter !== 'all' || hideCompleted || hideBlocked || (dueFilter && dueFilter !== 'all');
-      if (anyFilterActive) {
-        if (g.phaseTasks.length === 0) {
-          if (dueFilter && dueFilter !== 'all') {
-            const phDeadline = (c.phaseDeadlines || {})[g.phaseKey];
-            if (phDeadline && isInDueRange(phDeadline, dueFilter)) return true;
-          }
-          return false;
-        }
-        return true;
+      // De acá en adelante NO hay tareas visibles en la fase:
+      // 3) Rango de entrega: mostrar si la fase tiene deadline dentro del rango.
+      if (dueActive) {
+        const phDeadline = (c.phaseDeadlines || {})[g.phaseKey];
+        if (phDeadline && isInDueRange(phDeadline, dueFilter)) return true;
       }
-      // Sin filtros: mostrar fases con tareas
-      return g.totalCount > 0;
+      // 4) Fase custom vacía: se muestra para poder llenarla, SALVO que haya filtro
+      //    de persona (en ese caso, si no tiene tareas de esa persona, se oculta).
+      if (isCustomPhase && isEmpty && !personFilter) return true;
+
+      return false;
     });
 
   const isCollapsed = (phaseKey, allDone) => {

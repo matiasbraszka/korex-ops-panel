@@ -36,6 +36,8 @@ export default function ClientDetail({ client: c }) {
   const dropdownRefs = useRef({});
 
   const canDeleteClient = currentUser?.role === 'COO' || currentUser?.canAccessSettings === true;
+  // Usuarios de operaciones que NO son admin: no ven facturación ni pueden editar el cliente.
+  const restricted = !!currentUser && !currentUser.isAdmin;
 
   const clientTasks = tasks.filter(t => t.clientId === c.id);
   const roadmapTasks = getRoadmapTasks(c.id, tasks);
@@ -124,7 +126,9 @@ export default function ClientDetail({ client: c }) {
             </div>
           </div>
           <div className="flex gap-2 ml-auto shrink-0">
-            <button className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border border-[#E2E5EB] bg-white text-text2 text-xs font-medium cursor-pointer font-sans hover:bg-surface2 hover:text-text max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={openEditModal}><Pencil size={13} /> Editar</button>
+            {!restricted && (
+              <button className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border border-[#E2E5EB] bg-white text-text2 text-xs font-medium cursor-pointer font-sans hover:bg-surface2 hover:text-text max-md:py-1 max-md:px-2 max-md:text-[11px]" onClick={openEditModal}><Pencil size={13} /> Editar</button>
+            )}
             {canDeleteClient && (
               <button
                 className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border border-red-200 bg-white text-red-500 text-xs font-medium cursor-pointer font-sans hover:bg-red-50 hover:border-red-300 max-md:py-1 max-md:px-2 max-md:text-[11px]"
@@ -171,7 +175,7 @@ export default function ClientDetail({ client: c }) {
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
           { key: 'historial', label: 'Historial' },
-        ];
+        ].filter(t => !(restricted && t.key === 'facturacion'));
         return (
           <>
             <div className="flex gap-1 border-b border-[#E2E5EB] mb-4 overflow-x-auto">
@@ -220,7 +224,7 @@ export default function ClientDetail({ client: c }) {
                 { icon: Megaphone, label: 'CPL 7d', value: m.avgCpl7d ? `${cs}${m.avgCpl7d.toFixed(2)}` : '—', sub: m.ctr7d ? `CTR ${m.ctr7d.toFixed(2)}%` : '—', color: m.avgCpl7d && m.avgCpl7d > 15 ? '#EF4444' : '#16A34A', tab: 'publicidad' },
                 { icon: Clock, label: 'Días con Korex', value: days, sub: c.startDate ? `desde ${fmtDate(c.startDate)}` : '—', color: '#1A1D26' },
                 { icon: User, label: 'Llamadas', value: clientLlamadas.length, sub: clientLlamadas.length ? `última: ${clientLlamadas[0]?.fecha ? fmtDate(clientLlamadas[0].fecha.split('T')[0]) : '—'}` : 'sin registros', color: '#1A1D26', tab: 'llamadas' },
-              ];
+              ].filter(t => !(restricted && t.tab === 'facturacion'));
               return (
                 <div className="mb-4">
                   <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
@@ -247,7 +251,7 @@ export default function ClientDetail({ client: c }) {
 
             {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
 
-            {activeTab === 'facturacion' && <BillingTab client={c} />}
+            {activeTab === 'facturacion' && !restricted && <BillingTab client={c} />}
 
             {activeTab === 'roadmap' && (
               <div className="mb-4">

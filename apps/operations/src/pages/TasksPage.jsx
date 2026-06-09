@@ -165,6 +165,12 @@ export default function TasksPage({ embedded = false }) {
     });
   }
 
+  // Usuarios de operaciones que NO son admin solo ven SUS tareas (todos los clientes).
+  const restricted = !!currentUser && !currentUser.isAdmin;
+  if (restricted) {
+    filteredTasks = filteredTasks.filter(t => userOwnsTask(t, currentUser, TEAM));
+  }
+
   // Client filter
   if (taskClientFilter !== 'all') {
     filteredTasks = filteredTasks.filter(t => t.clientId === taskClientFilter);
@@ -847,11 +853,9 @@ export default function TasksPage({ embedded = false }) {
   const clientsInGroups = new Set(groups.map(g => g.client.id));
   const remaining = regularClients.filter(c => !clientsInGroups.has(c.id));
 
-  // Korex tasks (always shown at bottom). Usuarios de operaciones que NO son admin
-  // solo ven las tareas de Korex asignadas a ellos.
-  const restricted = !!currentUser && !currentUser.isAdmin;
-  let korexTasks = korexClient ? filteredTasks.filter(t => t.clientId === korexClientId) : [];
-  if (restricted) korexTasks = korexTasks.filter(t => userOwnsTask(t, currentUser, TEAM));
+  // Korex tasks (always shown at bottom). `filteredTasks` ya viene filtrado a
+  // las tareas del usuario cuando es no-admin (ver arriba).
+  const korexTasks = korexClient ? filteredTasks.filter(t => t.clientId === korexClientId) : [];
   const korexTaskCount = korexTasks.filter(t => t.status !== 'done').length;
   const korexCollapsed = collapsedGroups['_korex'];
 

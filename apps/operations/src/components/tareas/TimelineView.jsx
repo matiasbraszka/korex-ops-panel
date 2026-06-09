@@ -110,8 +110,8 @@ export default function TimelineView({ onGoToTaskList }) {
       if (!phInfo) return;
       // Start with all tasks in this phase
       let phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
-      // Korex: usuarios restringidos solo ven las tareas asignadas a ellos.
-      if (restricted && isKorexClient(c)) {
+      // Usuarios restringidos (no-admin) solo ven SUS tareas, en todo cliente.
+      if (restricted) {
         phaseTasks = phaseTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
       }
       // Apply assignee cascade filter
@@ -122,7 +122,7 @@ export default function TimelineView({ onGoToTaskList }) {
       phaseTasks = phaseTasks.filter(t => !isTaskHidden(t));
       // Si algun filtro esta activo y no quedan tareas visibles, ocultar la fase
       // (aunque tenga deadline). Sin filtros: mostrar fases con deadline aunque no tengan tareas.
-      const anyFilterActive = taskAssignee !== 'all' || hideCompletedTasks || hideBlockedTasks;
+      const anyFilterActive = restricted || taskAssignee !== 'all' || hideCompletedTasks || hideBlockedTasks;
       if (phaseTasks.length === 0 && (anyFilterActive || !deadlines[phaseKey])) return;
       // Filtro por rango de entrega: en el Timeline la unidad de entrega es la fase,
       // asi que solo mostrar fases cuyo DEADLINE caiga en el rango. Fases sin deadline
