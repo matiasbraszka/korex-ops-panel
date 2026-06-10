@@ -27,6 +27,10 @@ const SalesRoutes = lazy(() =>
   import('@korex/sales').then((m) => ({ default: m.SalesRoutes }))
 );
 
+// Formulario publico de carga de KPIs (sin login). Se baja solo si alguien
+// abre el link /cargar-kpis.
+const PublicKpisForm = lazy(() => import('./pages/PublicKpisForm'));
+
 function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -320,7 +324,7 @@ function MainLayout() {
   // ClientsPage sin permisos.
   const homePath = canAccessOperations
     ? '/operations/clients'
-    : (canAccessSales ? '/sales/dashboard' : '/operations/clients');
+    : (canAccessSales ? '/sales/kpis' : '/operations/clients');
   // Guard: si el user NO tiene acceso a operaciones, redirigimos cualquier
   // /operations/* a su home. Antes solo se gateaba el sidebar y la ruta de
   // /admin/settings — las rutas /operations/* quedaban abiertas y un vendedor
@@ -681,6 +685,17 @@ function MainLayout() {
 
 function App() {
   const { user: authUser, profile, loading } = useAuth();
+  const location = useLocation();
+
+  // Ruta PUBLICA: formulario de carga de KPIs. Se renderiza sin requerir login,
+  // antes del gate de autenticacion, para que cualquiera con el link pueda cargar.
+  if (location.pathname.startsWith('/cargar-kpis')) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
+        <PublicKpisForm />
+      </Suspense>
+    );
+  }
 
   if (loading) {
     return (

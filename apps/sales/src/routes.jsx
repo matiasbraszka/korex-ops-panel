@@ -7,8 +7,9 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import KpisPage from './pages/KpisPage.jsx';
 
 // Items que el shell/sidebar consume para pintar las sub-pestañas del modulo.
+// Dashboard queda oculto del menu por ahora (la ruta sigue accesible por URL);
+// la pantalla principal de Ventas es KPIs.
 export const salesNavItems = [
-  { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard, path: '/sales/dashboard' },
   { id: 'kpis',      label: 'KPIs',      Icon: BarChart3,       path: '/sales/kpis' },
   { id: 'crm',       label: 'CRM',       Icon: Users,           path: '/sales/crm' },
   { id: 'contacts',  label: 'Contactos', Icon: Contact,         path: '/sales/contacts' },
@@ -18,7 +19,7 @@ export const salesNavItems = [
 export function SalesRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="dashboard" replace />} />
+      <Route path="/" element={<Navigate to="kpis" replace />} />
       <Route path="dashboard" element={<DashboardPage />} />
       <Route path="kpis" element={<KpisPage />} />
       <Route path="crm" element={<CrmPage />} />
