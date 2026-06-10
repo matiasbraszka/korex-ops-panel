@@ -138,7 +138,7 @@ export default function KpisPage() {
             <KpiCard icon={Target}     tone="orange" label="Ofertas"               value={fmtInt(totals.ofertas)}              sub={`${fmtPct(rates.pct_oferta)} de calificadas`} />
             <KpiCard icon={TrendingUp} tone="green"  label="Ventas"                value={fmtInt(totals.ventas)}               sub={`${fmtPct(rates.pct_cierre)} cierre`} />
             <KpiCard icon={DollarSign} tone="green"  label="Facturación"           value={fmtMoney(totals.facturacion)}        sub={`Ticket ${fmtMoney(rates.ticket)}`} />
-            <KpiCard icon={DollarSign} tone="blue"   label="New upfront cash"      value={fmtMoney(totals.new_upfront_cash)}   sub={`${fmtMoney(rates.cash_por_venta)} por venta`} />
+            <KpiCard icon={DollarSign} tone="blue"   label="CashCollect"           value={fmtMoney(totals.new_upfront_cash)}   sub={`${fmtMoney(rates.cash_por_venta)} por venta`} />
             <KpiCard icon={Percent}    tone="orange" label="% Calificación"        value={fmtPct(rates.pct_calificacion)}      sub="calificadas / llamadas" />
             <KpiCard icon={Percent}    tone="purple" label="Depósitos"             value={fmtInt(totals.depositos)}            sub="señas del período" />
           </div>

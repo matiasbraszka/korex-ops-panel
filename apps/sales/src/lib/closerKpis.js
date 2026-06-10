@@ -13,30 +13,28 @@ export const INPUT_GROUPS = [
   {
     title: 'Prospección',
     fields: [
-      { key: 'seguimientos',           label: 'Seguimientos',                         kind: 'int' },
-      { key: 'contactos_contactados',  label: 'Contactos contactados',                kind: 'int' },
-      { key: 'leads_vieron_contenido', label: 'Vieron VSL / contenido / testimonios', kind: 'int' },
-      { key: 'calendlys_enviados',     label: 'Calendlys / propuestas de llamada',    kind: 'int' },
-      { key: 'llamadas_agendadas',     label: 'Llamadas agendadas (LA)',              kind: 'int' },
+      { key: 'seguimientos',          label: 'Seguimientos',                      kind: 'int' },
+      { key: 'contactos_contactados', label: 'Contactos contactados',             kind: 'int' },
+      { key: 'calendlys_enviados',    label: 'Calendlys / propuestas de llamada', kind: 'int' },
+      { key: 'llamadas_agendadas',    label: 'Llamadas agendadas (LA)',           kind: 'int' },
     ],
   },
   {
     title: 'Llamadas del día',
     fields: [
-      { key: 'llamadas_calendario_inicio', label: 'En el calendario al inicio del día', kind: 'int' },
-      { key: 'llamadas_tuve',              label: 'Llamadas que tuve',                  kind: 'int' },
-      { key: 'llamadas_calificadas',       label: 'Con prospectos calificados',         kind: 'int' },
-      { key: 'llamadas_no_asistieron',     label: 'No asistieron',                      kind: 'int' },
-      { key: 'ofertas',                    label: 'Ofertas presentadas',                kind: 'int' },
+      { key: 'llamadas_tuve',          label: 'Llamadas que tuve',          kind: 'int' },
+      { key: 'llamadas_calificadas',   label: 'Con prospectos calificados', kind: 'int' },
+      { key: 'llamadas_no_asistieron', label: 'No asistieron',              kind: 'int' },
+      { key: 'ofertas',                label: 'Ofertas presentadas',        kind: 'int' },
     ],
   },
   {
     title: 'Cierre',
     fields: [
-      { key: 'depositos',        label: 'Depósitos (cantidad)',   kind: 'int' },
-      { key: 'ventas',           label: 'Ventas cerradas',        kind: 'int' },
-      { key: 'facturacion',      label: 'Facturación (USD)',      kind: 'money' },
-      { key: 'new_upfront_cash', label: 'New upfront cash (USD)', kind: 'money' },
+      { key: 'depositos',        label: 'Depósitos (cantidad)', kind: 'int' },
+      { key: 'ventas',           label: 'Ventas cerradas',      kind: 'int' },
+      { key: 'facturacion',      label: 'Facturación (USD)',    kind: 'money' },
+      { key: 'new_upfront_cash', label: 'CashCollect (USD)',    kind: 'money' },
     ],
   },
 ];
@@ -80,13 +78,12 @@ export function computeRates(t = EMPTY_ROW) {
 export function funnelStages(t = EMPTY_ROW) {
   const n = (k) => Number(t[k] || 0);
   return [
-    { name: 'Contactos',        color: '#9CA3AF', cnt: n('contactos_contactados') },
-    { name: 'Vieron contenido', color: '#64748B', cnt: n('leads_vieron_contenido') },
-    { name: 'Agendadas',        color: '#5B7CF5', cnt: n('llamadas_agendadas') },
+    { name: 'Contactos',         color: '#9CA3AF', cnt: n('contactos_contactados') },
+    { name: 'Agendadas',         color: '#5B7CF5', cnt: n('llamadas_agendadas') },
     { name: 'Llamadas que tuve', color: '#6366F1', cnt: n('llamadas_tuve') },
-    { name: 'Calificadas',      color: '#EAB308', cnt: n('llamadas_calificadas') },
-    { name: 'Ofertas',          color: '#F97316', cnt: n('ofertas') },
-    { name: 'Ventas',           color: '#22C55E', cnt: n('ventas') },
+    { name: 'Calificadas',       color: '#EAB308', cnt: n('llamadas_calificadas') },
+    { name: 'Ofertas',           color: '#F97316', cnt: n('ofertas') },
+    { name: 'Ventas',            color: '#22C55E', cnt: n('ventas') },
   ];
 }
 
