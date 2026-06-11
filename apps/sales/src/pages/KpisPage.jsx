@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Users, Phone, DollarSign, Target, TrendingUp, Percent } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Users, Phone, DollarSign, Target, TrendingUp, Percent, Repeat } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { useCrm } from '../hooks/useCrm.js';
 import { useCloserScorecard } from '../hooks/useCloserScorecard.js';
@@ -14,6 +14,7 @@ const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','A
 // vive en el modal). El resto de campos se ven igual sumados en las cards.
 const TABLE_COLS = [
   { key: 'contactos_contactados', label: 'Cont.',  kind: 'int' },
+  { key: 'seguimientos',          label: 'Seguim.',kind: 'int' },
   { key: 'llamadas_agendadas',    label: 'Agend.', kind: 'int' },
   { key: 'llamadas_tuve',         label: 'Llam.',  kind: 'int' },
   { key: 'llamadas_calificadas',  label: 'Calif.', kind: 'int' },
@@ -134,6 +135,7 @@ export default function KpisPage() {
           {/* KPIs principales */}
           <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3.5 max-md:gap-2.5">
             <KpiCard icon={Users}      tone="blue"   label="Contactos contactados" value={fmtInt(totals.contactos_contactados)} sub={`${fmtPct(rates.pct_agendamiento)} agendamiento`} />
+            <KpiCard icon={Repeat}     tone="purple" label="Seguimientos"          value={fmtInt(totals.seguimientos)}          sub="follow-ups del período" />
             <KpiCard icon={Phone}      tone="purple" label="Llamadas que tuve"     value={fmtInt(totals.llamadas_tuve)}        sub={`${fmtPct(rates.pct_show_up)} show up`} />
             <KpiCard icon={Target}     tone="orange" label="Ofertas"               value={fmtInt(totals.ofertas)}              sub={`${fmtPct(rates.pct_oferta)} de calificadas`} />
             <KpiCard icon={TrendingUp} tone="green"  label="Ventas"                value={fmtInt(totals.ventas)}               sub={`${fmtPct(rates.pct_cierre)} cierre`} />
