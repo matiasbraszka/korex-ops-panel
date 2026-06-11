@@ -11,7 +11,7 @@ function todayISO() {
 // Modal para cargar / editar el scorecard de un dia.
 //  - Si ya existe una fila para (closer, fecha), prefilea sus valores.
 //  - Admins pueden elegir el closer; los no-admin cargan siempre lo propio (meId).
-export default function CloserDayModal({ open, onClose, onSaved, saveDay, rows = [], closerOptions = [], meId, isAdmin, initialDate, initialCloserId }) {
+export default function CloserDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], closerOptions = [], meId, isAdmin, initialDate, initialCloserId }) {
   const [date, setDate] = useState(todayISO());
   const [closerId, setCloserId] = useState(meId || '');
   const [form, setForm] = useState({ ...EMPTY_ROW });
@@ -19,26 +19,50 @@ export default function CloserDayModal({ open, onClose, onSaved, saveDay, rows =
   const [error, setError] = useState('');
 
   // Al abrir, posicionar en la fecha/closer indicados (modo edicion desde la
-  // tabla) o en hoy + el usuario actual (carga nueva).
+  // tabla) o en hoy + el usuario actual (carga nueva), y cargar sus valores.
   useEffect(() => {
     if (!open) return;
-    setDate(initialDate || todayISO());
-    setCloserId(initialCloserId || meId || '');
+    const d = initialDate || todayISO();
+    const cid = initialCloserId || meId || '';
+    setDate(d);
+    setCloserId(cid);
+    const existing = rows.find((r) => r.closer_id === cid && r.date === d);
+    const next = { ...EMPTY_ROW };
+    if (existing) INPUT_KEYS.forEach((k) => { next[k] = Number(existing[k] ?? 0); });
+    setForm(next);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Prefill: cargar valores existentes de (closer efectivo, fecha) si los hay.
+  // Al cambiar fecha/closer MANUALMENTE: si ese dia ya tiene datos cargados, los
+  // trae; si NO tiene, deja lo que el usuario escribio (no lo pisa con ceros).
+  // Asi cambiar la fecha de un registro no borra los numeros tipeados.
   useEffect(() => {
     if (!open) return;
     const cid = isAdmin ? (closerId || meId) : meId;
     const existing = rows.find((r) => r.closer_id === cid && r.date === date);
-    const next = { ...EMPTY_ROW };
-    if (existing) INPUT_KEYS.forEach((k) => { next[k] = Number(existing[k] ?? 0); });
-    setForm(next);
-  }, [open, date, closerId, rows, meId, isAdmin]);
+    if (existing) {
+      const next = { ...EMPTY_ROW };
+      INPUT_KEYS.forEach((k) => { next[k] = Number(existing[k] ?? 0); });
+      setForm(next);
+    }
+  }, [date, closerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
 
+  const effectiveCid = isAdmin ? (closerId || meId) : meId;
+  const existsRow = rows.some((r) => r.closer_id === effectiveCid && r.date === date);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleDelete = async () => {
+    if (!existsRow) return;
+    if (!window.confirm('¿Eliminar los datos de este día? Esta acción no se puede deshacer.')) return;
+    setSaving(true); setError('');
+    const res = await onDelete?.(date, effectiveCid);
+    setSaving(false);
+    if (res?.error) { setError(res.error); return; }
+    onSaved?.();
+    onClose?.();
+  };
 
   const handleSave = async () => {
     const cid = isAdmin ? (closerId || meId) : meId;
@@ -46,8 +70,14 @@ export default function CloserDayModal({ open, onClose, onSaved, saveDay, rows =
     if (!date) { setError('Elegí una fecha.'); return; }
     setSaving(true); setError('');
     const res = await saveDay(date, cid, form);
+    if (res?.error) { setSaving(false); setError(res.error); return; }
+    // Si estabamos editando un registro y cambio la fecha/closer, mover =
+    // borrar el original para no dejar el dia viejo duplicado.
+    const origCid = initialCloserId || meId;
+    if (initialDate && onDelete && (date !== initialDate || cid !== origCid)) {
+      await onDelete(initialDate, origCid);
+    }
     setSaving(false);
-    if (res?.error) { setError(res.error); return; }
     onSaved?.();
     onClose?.();
   };
@@ -108,15 +138,25 @@ export default function CloserDayModal({ open, onClose, onSaved, saveDay, rows =
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-border bg-white flex items-center justify-end gap-2 rounded-b-xl">
-          <button onClick={onClose} disabled={saving}
-                  className="py-2 px-4 rounded-lg border border-border bg-white text-text2 text-[13px] font-medium hover:bg-surface2 disabled:opacity-50">
-            Cancelar
-          </button>
-          <button onClick={handleSave} disabled={saving}
-                  className="py-2 px-4 rounded-lg bg-blue text-white text-[13px] font-bold hover:bg-blue-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
-            {saving ? 'Guardando…' : 'Guardar'}
-          </button>
+        <div className="px-5 py-3 border-t border-border bg-white flex items-center justify-between gap-2 rounded-b-xl">
+          <div>
+            {existsRow && onDelete && (
+              <button onClick={handleDelete} disabled={saving}
+                      className="py-2 px-3 rounded-lg border border-red/30 bg-white text-red text-[13px] font-medium hover:bg-red/10 disabled:opacity-50">
+                Eliminar
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} disabled={saving}
+                    className="py-2 px-4 rounded-lg border border-border bg-white text-text2 text-[13px] font-medium hover:bg-surface2 disabled:opacity-50">
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={saving}
+                    className="py-2 px-4 rounded-lg bg-blue text-white text-[13px] font-bold hover:bg-blue-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

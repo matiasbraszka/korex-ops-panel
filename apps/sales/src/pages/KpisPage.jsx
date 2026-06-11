@@ -66,7 +66,7 @@ export default function KpisPage() {
     return closer;
   }, [isAdmin, closer, me]);
 
-  const { rows, loading, error, reload, saveDay } = useCloserScorecard(year, month, effectiveCloserId);
+  const { rows, loading, error, reload, saveDay, deleteDay } = useCloserScorecard(year, month, effectiveCloserId);
 
   const totals = useMemo(() => sumRows(rows), [rows]);
   const rates = useMemo(() => computeRates(totals), [totals]);
@@ -205,6 +205,7 @@ export default function KpisPage() {
         onClose={() => { setModalOpen(false); setEditTarget(null); }}
         onSaved={reload}
         saveDay={saveDay}
+        onDelete={deleteDay}
         rows={rows}
         closerOptions={salesTeam}
         meId={me}

@@ -49,5 +49,15 @@ export function useCloserScorecard(year, month, closerId = null) {
     return { data };
   }, []);
 
-  return { rows, loading, error, reload: load, saveDay };
+  // Borra el dia de un closer.
+  const deleteDay = useCallback(async (date, forCloserId) => {
+    const { error: e } = await supabase
+      .from('sales_closer_daily')
+      .delete().eq('closer_id', forCloserId).eq('date', date);
+    if (e) { console.error('[scorecard] delete error', e); return { error: e.message }; }
+    setRows((prev) => prev.filter((r) => !(r.closer_id === forCloserId && r.date === date)));
+    return {};
+  }, []);
+
+  return { rows, loading, error, reload: load, saveDay, deleteDay };
 }
