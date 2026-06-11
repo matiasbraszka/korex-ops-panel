@@ -53,6 +53,7 @@ export default function KpisPage() {
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [closer, setCloser] = useState('me'); // 'me' | 'all' | user_id
   const [modalOpen, setModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState(null); // { date, closerId } al editar un dia
 
   const { salesTeam, me } = useCrm();
   const isAdmin = useIsAdmin();
@@ -95,6 +96,14 @@ export default function KpisPage() {
     setMonth(m); setYear(y);
   };
 
+  // Click en una fila: en vista equipo entra al detalle de ese closer; en vista
+  // diaria abre el formulario cargado con ese dia para corregirlo.
+  const handleRowClick = (row) => {
+    if (isByCloser) { setCloser(row.key); return; }
+    setEditTarget({ date: row.t.date, closerId: effectiveCloserId });
+    setModalOpen(true);
+  };
+
   return (
     <div className="flex flex-col gap-3.5 max-md:gap-3 pb-4">
       {/* Controles */}
@@ -115,7 +124,7 @@ export default function KpisPage() {
           </select>
         )}
         <div className="flex-1" />
-        <button onClick={() => setModalOpen(true)}
+        <button onClick={() => { setEditTarget(null); setModalOpen(true); }}
                 className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg bg-blue text-white text-[13px] font-bold hover:bg-blue-dark shadow-sm cursor-pointer">
           <Plus size={15} /> Cargar día
         </button>
@@ -152,7 +161,7 @@ export default function KpisPage() {
             <div className="bg-white border border-border rounded-xl overflow-hidden">
               <div className="px-3.5 pt-3 pb-2.5 border-b border-border">
                 <div className="text-[13px] font-bold text-text">{isByCloser ? 'Por closer' : 'Detalle diario'}</div>
-                <div className="text-[10.5px] text-text3 mt-0.5">{isByCloser ? 'Totales del mes por persona' : 'Cada día cargado del mes'}</div>
+                <div className="text-[10.5px] text-text3 mt-0.5">{isByCloser ? 'Tocá una persona para ver su detalle' : 'Tocá un día para editarlo'}</div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[12px] border-collapse">
@@ -169,7 +178,8 @@ export default function KpisPage() {
                     ) : dataRows.map((row) => {
                       const r = computeRates(row.t);
                       return (
-                        <tr key={row.key} className="border-t border-border hover:bg-surface2/60">
+                        <tr key={row.key} onClick={() => handleRowClick(row)}
+                            className="border-t border-border hover:bg-surface2/60 cursor-pointer">
                           <td className="text-left px-3 py-2 font-semibold whitespace-nowrap sticky left-0 bg-white capitalize">{row.label}</td>
                           {TABLE_COLS.map((c) => (
                             <td key={c.key} className="text-right px-3 py-2 tabular-nums">
@@ -192,13 +202,15 @@ export default function KpisPage() {
 
       <CloserDayModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setEditTarget(null); }}
         onSaved={reload}
         saveDay={saveDay}
         rows={rows}
         closerOptions={salesTeam}
         meId={me}
         isAdmin={isAdmin}
+        initialDate={editTarget?.date}
+        initialCloserId={editTarget?.closerId}
       />
     </div>
   );

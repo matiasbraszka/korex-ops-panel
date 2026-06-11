@@ -11,15 +11,20 @@ function todayISO() {
 // Modal para cargar / editar el scorecard de un dia.
 //  - Si ya existe una fila para (closer, fecha), prefilea sus valores.
 //  - Admins pueden elegir el closer; los no-admin cargan siempre lo propio (meId).
-export default function CloserDayModal({ open, onClose, onSaved, saveDay, rows = [], closerOptions = [], meId, isAdmin }) {
+export default function CloserDayModal({ open, onClose, onSaved, saveDay, rows = [], closerOptions = [], meId, isAdmin, initialDate, initialCloserId }) {
   const [date, setDate] = useState(todayISO());
   const [closerId, setCloserId] = useState(meId || '');
   const [form, setForm] = useState({ ...EMPTY_ROW });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Asegurar un closer por defecto al abrir.
-  useEffect(() => { if (open && !closerId) setCloserId(meId || ''); }, [open, meId]); // eslint-disable-line
+  // Al abrir, posicionar en la fecha/closer indicados (modo edicion desde la
+  // tabla) o en hoy + el usuario actual (carga nueva).
+  useEffect(() => {
+    if (!open) return;
+    setDate(initialDate || todayISO());
+    setCloserId(initialCloserId || meId || '');
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prefill: cargar valores existentes de (closer efectivo, fecha) si los hay.
   useEffect(() => {
