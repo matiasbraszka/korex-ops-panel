@@ -1,64 +1,33 @@
-import { Search, X, Inbox, MailOpen, User, Users, Archive } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 
-// Pestañas con ícono + contador (estilo team inbox) + búsqueda + etiqueta.
+// Filtros de la bandeja — Diseño A (WhatsApp + acento ámbar Soporte).
+// Pills de scope estilo WhatsApp + fila de chips de etiquetas + búsqueda.
 const TABS = [
-  { id: 'unread', label: 'No leídos', Icon: MailOpen },
-  { id: 'all', label: 'Todos', Icon: Inbox },
-  { id: 'dm', label: 'Personas', Icon: User },
-  { id: 'groups', label: 'Grupos', Icon: Users },
-  { id: 'archived', label: 'Archivo', Icon: Archive },
+  { id: 'all', label: 'Todos' },
+  { id: 'unread', label: 'No leídos' },
+  { id: 'dm', label: 'Personas' },
+  { id: 'groups', label: 'Grupos' },
+  { id: 'archived', label: 'Archivo' },
 ];
 
 export default function InboxFilters({ unreadCount = 0 }) {
   const { filters, setFilters, tagsCatalog } = useSoporte();
 
   return (
-    <div className="px-3 pt-3 pb-2 border-b border-border bg-white shrink-0">
-      <div className="flex items-center justify-between mb-2.5 px-0.5">
-        <span className="text-[14px] font-bold text-text">Bandeja WhatsApp</span>
-        {tagsCatalog.length > 0 && (
-          <select
-            value={filters.tagId || ''}
-            onChange={(e) => setFilters((f) => ({ ...f, tagId: e.target.value || null }))}
-            className="text-[11px] font-semibold px-1.5 py-1 rounded-lg border border-border bg-white text-text2 cursor-pointer outline-none max-w-[120px]"
-          >
-            <option value="">Etiqueta…</option>
-            {tagsCatalog.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
-            ))}
-          </select>
-        )}
+    <div className="px-3.5 pt-3.5 pb-0 bg-white shrink-0 flex flex-col gap-2.5">
+      <div className="flex items-center">
+        <span className="text-[15px] font-bold text-text">Bandeja WhatsApp</span>
       </div>
 
-      <div className="flex items-stretch gap-1 mb-2.5">
-        {TABS.map(({ id, label, Icon }) => {
-          const on = filters.scope === id;
-          return (
-            <button key={id}
-                    onClick={() => setFilters((f) => ({ ...f, scope: id }))}
-                    className={`flex-1 flex flex-col items-center gap-1 pt-2 pb-1.5 rounded-lg border-0 cursor-pointer transition-colors ${on ? 'bg-[#EEF2FF]' : 'bg-transparent hover:bg-surface2'}`}>
-              <span className="relative">
-                <Icon size={17} strokeWidth={on ? 2.25 : 1.75} className={on ? 'text-[#5B7CF5]' : 'text-text3'} />
-                {id === 'unread' && unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-3 min-w-[16px] h-[14px] px-1 rounded-full bg-[#5B7CF5] text-white text-[8.5px] font-bold flex items-center justify-center">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </span>
-              <span className={`text-[10px] font-semibold ${on ? 'text-[#5B7CF5]' : 'text-text3'}`}>{label}</span>
-            </button>
-          );
-        })}
-      </div>
-
+      {/* Búsqueda */}
       <div className="relative">
-        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text3" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text3" />
         <input
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           placeholder="Buscar chat, teléfono, cliente…"
-          className="w-full pl-8 pr-7 py-1.5 text-[12.5px] rounded-lg border border-border bg-surface2 outline-none focus:border-[#5B7CF5] focus:bg-white transition-colors"
+          className="w-full h-[34px] pl-8 pr-7 text-[12.5px] rounded-[10px] border border-border bg-surface2 outline-none focus:border-[#F59E0B] focus:bg-white transition-colors"
         />
         {filters.search && (
           <button onClick={() => setFilters((f) => ({ ...f, search: '' }))}
@@ -67,6 +36,51 @@ export default function InboxFilters({ unreadCount = 0 }) {
           </button>
         )}
       </div>
+
+      {/* Pills de scope (estilo WhatsApp, activa en ámbar) */}
+      <div className="flex gap-1.5 flex-wrap">
+        {TABS.map(({ id, label }) => {
+          const on = filters.scope === id;
+          return (
+            <button key={id}
+                    onClick={() => setFilters((f) => ({ ...f, scope: id }))}
+                    className={`px-3 py-[5px] rounded-full text-[12px] cursor-pointer transition-all duration-150 border ${
+                      on
+                        ? 'bg-[#FEF0D7] border-[#F5D9A8] text-[#B45309] font-semibold'
+                        : 'bg-white border-border text-text2 font-medium hover:bg-surface2 hover:border-[#D0D5DD]'
+                    }`}>
+              {label}
+              {id === 'unread' && unreadCount > 0 && (
+                <b className="ml-1 text-[#B45309]">{unreadCount > 99 ? '99+' : unreadCount}</b>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Chips de etiquetas (filtro por tag) */}
+      {tagsCatalog.length > 0 && (
+        <div className="flex gap-1.5 items-center flex-wrap pb-3 border-b border-surface2">
+          {tagsCatalog.slice(0, 4).map((t) => {
+            const on = filters.tagId === t.id;
+            return (
+              <button key={t.id}
+                      onClick={() => setFilters((f) => ({ ...f, tagId: on ? null : t.id }))}
+                      className={`text-[11px] font-semibold px-2.5 py-[3px] rounded-full cursor-pointer border-0 flex items-center gap-1.5 transition-all duration-150 ${on ? 'ring-1 ring-current' : ''}`}
+                      style={{ background: t.color + '1f', color: t.color }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.color }} />
+                {t.label}
+              </button>
+            );
+          })}
+          {tagsCatalog.length > 4 && (
+            <span className="text-[11px] font-semibold px-2.5 py-[3px] rounded-full border border-dashed border-[#D0D5DD] text-text3">
+              + {tagsCatalog.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+      {tagsCatalog.length === 0 && <div className="pb-1" />}
     </div>
   );
 }

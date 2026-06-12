@@ -1,14 +1,36 @@
 // Capa de acceso a datos del modulo Soporte. Wrappers finos sin estado sobre
 // sbFetch (REST con JWT del usuario -> RLS aplica) y functions.invoke.
 import { supabase, sbFetch } from '@korex/db';
+import { fmtNextCita } from './format.js';
 
-const CONV_SELECT = 'select=*,contact:contacts(id,full_name,phone,email),client:clients(id,name)';
+// Columnas explícitas: participants (puede tener cientos de miembros en
+// comunidades) NO viaja con la lista — se pide aparte al abrir el panel.
+const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,tags,notes,archived,created_at';
+const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,email),client:clients(id,name)`;
 
 export async function fetchConversations() {
-  return sbFetch(
-    `wa_conversations?${CONV_SELECT}&order=last_message_at.desc.nullslast&limit=300`,
+  const [convs, citas] = await Promise.all([
+    sbFetch(
+      `wa_conversations?${CONV_SELECT}&order=last_message_at.desc.nullslast&limit=300`,
+      { headers: { Prefer: 'return=representation' } },
+    ),
+    fetchNextAppointments(),
+  ]);
+  if (!Array.isArray(convs)) return convs;
+  return convs.map((c) => ({ ...c, next_appointment: citas[c.id] || null }));
+}
+
+// Próxima cita por conversación (para el chip "vie 10:00" de la lista).
+async function fetchNextAppointments() {
+  const rows = await sbFetch(
+    `appointments?select=conversation_id,start_at&status=eq.scheduled&start_at=gt.${encodeURIComponent(new Date().toISOString())}&order=start_at.asc&limit=200`,
     { headers: { Prefer: 'return=representation' } },
-  );
+  ).catch(() => []);
+  const map = {};
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (r.conversation_id && !map[r.conversation_id]) map[r.conversation_id] = fmtNextCita(r.start_at);
+  }
+  return map;
 }
 
 export async function fetchConversation(id) {
@@ -60,6 +82,38 @@ export async function fetchAppointments(convId) {
     { headers: { Prefer: 'return=representation' } },
   );
   return Array.isArray(rows) ? rows : [];
+}
+
+// Citas de un rango (vista semanal de la página Citas), con su conversación.
+export async function fetchAppointmentsRange(fromISO, toISO) {
+  const rows = await sbFetch(
+    `appointments?select=*,conversation:wa_conversations(id,wa_jid,wa_profile_name,is_group,contact:contacts(id,full_name))` +
+    `&status=eq.scheduled&start_at=gte.${encodeURIComponent(fromISO)}&start_at=lt.${encodeURIComponent(toISO)}&order=start_at.asc&limit=200`,
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+// Participantes de un grupo (jsonb pesado: se pide solo al abrir el panel).
+export async function fetchParticipants(convId) {
+  const rows = await sbFetch(
+    `wa_conversations?id=eq.${convId}&select=participants`,
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return rows?.[0]?.participants || null;
+}
+
+// Nombres visibles (pushName) de quienes hablaron en el grupo, por jid.
+export async function fetchGroupNames(convId) {
+  const rows = await sbFetch(
+    `wa_messages?conversation_id=eq.${convId}&direction=eq.in&select=sender_jid,pushname:payload->>pushName&order=created_at.desc&limit=300`,
+    { headers: { Prefer: 'return=representation' } },
+  );
+  const map = {};
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (r.sender_jid && r.pushname && !map[r.sender_jid]) map[r.sender_jid] = r.pushname;
+  }
+  return map;
 }
 
 export async function searchContacts(q) {

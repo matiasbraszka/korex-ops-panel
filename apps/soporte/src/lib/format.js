@@ -103,3 +103,19 @@ export function resolveTemplate(template, { nombre, fecha, hora }) {
     .replaceAll('{{fecha}}', fecha || '')
     .replaceAll('{{hora}}', hora || '');
 }
+
+// Chip corto de próxima cita: "vie 10:00" / "mañana 15:30" / "hoy 18:00".
+export function fmtNextCita(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const today = new Date();
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, today)) return `hoy ${hora}`;
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (sameDay(d, tomorrow)) return `mañana ${hora}`;
+  const dia = d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.', '');
+  return `${dia} ${hora}`;
+}

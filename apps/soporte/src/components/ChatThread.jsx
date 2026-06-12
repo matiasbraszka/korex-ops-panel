@@ -1,11 +1,21 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Calendar } from 'lucide-react';
+import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
 import Composer from './Composer.jsx';
 
-// Hilo de chat: agrupado por día, autoscroll inteligente, paginación hacia atrás.
+// Hilo de chat — Diseño A: wallpaper estilo WhatsApp, header con chip de
+// vínculo, píldora de día. Lógica idéntica a la versión anterior
+// (agrupado por día, autoscroll inteligente, paginación hacia atrás).
+
+// Wallpaper: beige WhatsApp + puntos sutiles (no hay token Tailwind, va inline).
+const WALLPAPER = {
+  backgroundColor: '#EFEAE2',
+  backgroundImage: 'radial-gradient(rgba(120,100,70,0.07) 1px, transparent 1.1px)',
+  backgroundSize: '18px 18px',
+};
+
 export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed } = useSoporte();
   const scrollRef = useRef(null);
@@ -16,9 +26,6 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const thread = threads[selectedId] || { items: [], hasMore: false, loadingOlder: false, loaded: false };
   const conv = selectedConversation;
 
-  // Grupos por día + flag de autor por burbuja (grupos). Los mensajes se
-  // ordenan por la hora REAL de WhatsApp (wa_timestamp): el webhook puede
-  // entregarlos fuera de orden si llegan casi juntos.
   const groups = useMemo(() => {
     const sorted = [...thread.items].sort((a, b) => {
       const ta = a.wa_timestamp || a.created_at || '';
@@ -55,19 +62,15 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     setShowJump(false);
   }, []);
 
-  // Al cambiar de conversación: al fondo.
   useEffect(() => {
     stickToBottom.current = true;
     setShowJump(false);
-    // El scroll real ocurre en el efecto de items (cuando carga el thread).
   }, [selectedId]);
 
-  // Mensajes nuevos: autoscroll solo si estaba al fondo; si no, pill.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     if (prevHeightRef.current !== null) {
-      // Veníamos de un loadOlder: preservar posición visual tras el prepend.
       el.scrollTop = el.scrollHeight - prevHeightRef.current;
       prevHeightRef.current = null;
       return;
@@ -89,10 +92,10 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
 
   if (!conv) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-[#F7F8FA] h-full">
+      <div className="flex-1 flex items-center justify-center h-full" style={WALLPAPER}>
         <div className="text-center px-6">
-          <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: '#ECFDF5' }}>
-            <Users size={24} style={{ color: '#22C55E' }} />
+          <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-white shadow-sm">
+            <Users size={24} className="text-[#F59E0B]" />
           </div>
           <div className="text-[14px] font-semibold text-text2">Elegí una conversación</div>
           <div className="text-[12px] text-text3 mt-1">Tus chats de WhatsApp aparecen a la izquierda.</div>
@@ -105,38 +108,50 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const color = colorFromString(conv.wa_jid);
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 bg-white">
+    <div className="flex-1 flex flex-col h-full min-h-0 min-w-0">
       {/* Header del chat */}
-      <div className="h-[54px] bg-white border-b border-border flex items-center gap-2.5 px-3 shrink-0">
+      <div className="h-[58px] bg-white border-b border-border flex items-center gap-2.5 px-3.5 shrink-0">
         <button onClick={onBack} className="md:hidden bg-transparent border-0 text-text2 cursor-pointer p-1 -ml-1">
           <ChevronLeft size={20} />
         </button>
         <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[12px] shrink-0"
-             style={{ background: color + '20', color }}>
+             style={{ background: color + '1d', color }}>
           {conv.is_group ? <Users size={15} /> : initials(name)}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13.5px] font-bold truncate">{name}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[13.5px] font-bold truncate">{name}</span>
+            {conv.client?.name && (
+              <span className="shrink-0 text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] max-md:hidden">
+                Cliente · {conv.client.name}
+              </span>
+            )}
+            {!conv.client && conv.contact?.full_name && (
+              <span className="shrink-0 text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#ECFEFF] text-[#0E7490] max-md:hidden">
+                {conv.contact.full_name}
+              </span>
+            )}
+          </div>
           <div className="text-[11px] text-text3 truncate">
             {conv.is_group ? 'Grupo' : fmtPhone(conv.wa_phone)}
-            {conv.client?.name ? ` · ${conv.client.name}` : ''}
             {conv.status === 'closed' ? ' · Cerrada' : ''}
           </div>
         </div>
         {!conv.is_group && (
           <button onClick={onSchedule} title="Agendar cita"
-                  className="bg-transparent border border-border rounded-lg p-1.5 text-text2 hover:text-[#F59E0B] hover:border-[#F59E0B]/60 cursor-pointer transition-colors">
-            <CalendarPlus size={16} />
+                  className="bg-white border border-border rounded-[9px] h-8 px-2.5 text-[12px] font-semibold text-text2 hover:text-[#B45309] hover:border-[#F5D9A8] cursor-pointer transition-colors duration-150 flex items-center gap-1.5">
+            <CalendarPlus size={14} />
+            <span className="max-md:hidden">Agendar</span>
           </button>
         )}
         <button onClick={onOpenPanel} title="Detalles, etiquetas y notas"
-                className="bg-transparent border border-border rounded-lg p-1.5 text-text2 hover:text-[#F59E0B] hover:border-[#F59E0B]/60 cursor-pointer transition-colors">
-          <PanelRight size={16} />
+                className="bg-[#FFFBF2] border border-[#F5D9A8] rounded-[9px] w-8 h-8 text-[#B45309] cursor-pointer transition-colors duration-150 flex items-center justify-center">
+          <PanelRight size={14} />
         </button>
       </div>
 
-      {/* Hilo */}
-      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto min-h-0 py-3 relative">
+      {/* Hilo sobre wallpaper */}
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto min-h-0 py-3.5 relative" style={WALLPAPER}>
         {thread.loadingOlder && (
           <div className="text-center text-[11px] text-text3 py-1.5">Cargando anteriores…</div>
         )}
@@ -149,8 +164,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
             {groups.map((g) =>
               g.type === 'day' ? (
                 <div key={g.key} className="flex justify-center my-2">
-                  <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-text2 bg-surface2 rounded-full px-3 py-1 capitalize">
-                    <Calendar size={11} /> {g.label}
+                  <span className="inline-flex items-center text-[10.5px] font-semibold text-text3 bg-white rounded-full px-3 py-1 uppercase shadow-[0_1px_2px_rgba(10,22,40,.06)]">
+                    {g.label}
                   </span>
                 </div>
               ) : (

@@ -94,10 +94,16 @@ interface WaEvent {
   data: Record<string, unknown> | Record<string, unknown>[];
 }
 
-// Nombre real de un grupo via Evolution API (best-effort). El pushName de los
-// mensajes es el AUTOR, no el grupo: sin esto los grupos quedarian con el
-// nombre del ultimo que hablo.
-async function fetchGroupSubject(jid: string): Promise<string | null> {
+// Datos reales de un grupo via Evolution API (best-effort). El pushName de
+// los mensajes es el AUTOR, no el grupo: sin esto los grupos quedarian con
+// el nombre del ultimo que hablo. Tambien trae los participantes para el
+// "quien es quien" del panel.
+interface GroupInfo {
+  subject: string | null;
+  participants: { jid: string; phone: string; admin: boolean }[] | null;
+}
+
+async function fetchGroupInfo(jid: string): Promise<GroupInfo | null> {
   try {
     const { data: s } = await supabase
       .from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
@@ -112,7 +118,18 @@ async function fetchGroupSubject(jid: string): Promise<string | null> {
     );
     if (!r.ok) return null;
     const info = await r.json().catch(() => null);
-    return str(info?.subject) || null;
+    if (!info) return null;
+    const participants = Array.isArray(info.participants)
+      ? info.participants.map((p: Record<string, unknown>) => {
+          const pjid = str(p.id);
+          return {
+            jid: pjid,
+            phone: pjid.split("@")[0].split(":")[0],
+            admin: Boolean(p.admin),
+          };
+        }).filter((p: { jid: string }) => p.jid)
+      : null;
+    return { subject: str(info.subject) || null, participants };
   } catch {
     return null;
   }
@@ -143,7 +160,7 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   // webhook reintentado no infla el contador de no leidos.
   const { data: existing } = await supabase
     .from("wa_conversations")
-    .select("id, contact_id, unread_count, wa_profile_name")
+    .select("id, contact_id, unread_count, wa_profile_name, participants")
     .eq("wa_jid", jid)
     .maybeSingle();
 
@@ -220,9 +237,13 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   };
   if (isGroup) {
     // El nombre del chat de un grupo es su subject (NO el pushName del autor).
-    if (!existing?.wa_profile_name) {
-      const subject = await fetchGroupSubject(jid);
-      if (subject) convPatch.wa_profile_name = subject;
+    // Participantes: se traen una vez y quedan cacheados en la conversacion.
+    const needName = !existing?.wa_profile_name;
+    const needParticipants = !existing?.participants;
+    if (needName || needParticipants) {
+      const info = await fetchGroupInfo(jid);
+      if (info?.subject && needName) convPatch.wa_profile_name = info.subject;
+      if (info?.participants && needParticipants) convPatch.participants = info.participants;
     }
   } else if (!fromMe && pushName) {
     // 1-a-1: pushName del remitente = nombre del contacto.

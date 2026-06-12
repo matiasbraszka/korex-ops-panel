@@ -3,8 +3,10 @@ import { supabase } from '@korex/db';
 import { useAuth } from '@korex/auth';
 import {
   fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
-  patchSoporteConfig, fetchAppointments, invokeSend, invokeCita, invokeMedia, PAGE_SIZE,
+  patchSoporteConfig, fetchAppointments, fetchParticipants, fetchGroupNames,
+  invokeSend, invokeCita, invokeMedia, PAGE_SIZE,
 } from '../lib/api.js';
+import { fmtNextCita } from '../lib/format.js';
 
 // Contexto del modulo Soporte: bandeja de WhatsApp.
 // Vive solo dentro de /soporte/* (montado por SoporteRoutes), asi su estado y
@@ -339,6 +341,38 @@ export function SoporteProvider({ children }) {
     await patchSoporteConfig({ tags });
   }, []);
 
+  // Plantillas de respuestas rápidas (popover "/" del composer + página Plantillas).
+  const saveTemplates = useCallback(async (templates) => {
+    setConfig((prev) => ({ ...prev, templates }));
+    await patchSoporteConfig({ templates });
+  }, []);
+
+  // Disponibilidad horaria (página Citas; la usará el futuro link público).
+  const saveAvailability = useCallback(async (availability) => {
+    setConfig((prev) => ({ ...prev, availability }));
+    await patchSoporteConfig({ availability });
+  }, []);
+
+  // Directorio de un grupo: participantes (jsonb pesado, se pide aparte) +
+  // nombres visibles de quienes ya hablaron (pushName de los mensajes).
+  const [groupDirByConv, setGroupDirByConv] = useState({});
+  const groupDirInflight = useRef(new Set());
+  const loadGroupDirectory = useCallback(async (convId) => {
+    if (!convId || groupDirInflight.current.has(convId) || groupDirByConv[convId]) return;
+    groupDirInflight.current.add(convId);
+    try {
+      const [participants, names] = await Promise.all([
+        fetchParticipants(convId),
+        fetchGroupNames(convId),
+      ]);
+      setGroupDirByConv((prev) => ({ ...prev, [convId]: { participants: participants || [], names } }));
+    } catch (e) {
+      console.error('soporte: fallo el directorio del grupo', e);
+    } finally {
+      groupDirInflight.current.delete(convId);
+    }
+  }, [groupDirByConv]);
+
   // ── Media (imagenes, audios, documentos) ──
   // mediaByMsg: { [msgId]: { status: 'loading'|'ok'|'failed', url?, mime?, filename? } }
   const [mediaByMsg, setMediaByMsg] = useState({});
@@ -360,6 +394,20 @@ export function SoporteProvider({ children }) {
   }, []);
 
   // ── Citas ──
+  const appointmentsRef = useRef(appointmentsByConv);
+  appointmentsRef.current = appointmentsByConv;
+
+  // Recalcula el chip "próxima cita" de la tarjeta en la lista.
+  const refreshNextCita = useCallback((convId, appts) => {
+    const now = Date.now();
+    const next = (appts || [])
+      .filter((a) => a.status === 'scheduled' && new Date(a.start_at).getTime() > now)
+      .sort((a, b) => (a.start_at < b.start_at ? -1 : 1))[0];
+    setConversations((prev) => prev.map((c) => (
+      c.id === convId ? { ...c, next_appointment: next ? fmtNextCita(next.start_at) : null } : c
+    )));
+  }, []);
+
   const loadAppointments = useCallback(async (convId) => {
     const rows = await fetchAppointments(convId);
     setAppointmentsByConv((prev) => ({ ...prev, [convId]: rows }));
@@ -379,33 +427,33 @@ export function SoporteProvider({ children }) {
   const createAppointment = useCallback(async (payload) => {
     const res = await invokeCita(payload); // lanza si falla
     if (res?.appointment) {
-      setAppointmentsByConv((prev) => ({
-        ...prev,
-        [payload.conversation_id]: [res.appointment, ...(prev[payload.conversation_id] || [])],
-      }));
+      const convId = payload.conversation_id;
+      const next = [res.appointment, ...(appointmentsRef.current[convId] || [])];
+      setAppointmentsByConv((prev) => ({ ...prev, [convId]: next }));
+      refreshNextCita(convId, next);
     }
     return res;
-  }, []);
+  }, [refreshNextCita]);
 
   const cancelAppointment = useCallback(async (convId, appointmentId) => {
     await invokeCita({ action: 'cancel', appointment_id: appointmentId });
-    setAppointmentsByConv((prev) => ({
-      ...prev,
-      [convId]: (prev[convId] || []).map((a) => (a.id === appointmentId ? { ...a, status: 'cancelled' } : a)),
-    }));
-  }, []);
+    const next = (appointmentsRef.current[convId] || []).map((a) =>
+      (a.id === appointmentId ? { ...a, status: 'cancelled' } : a));
+    setAppointmentsByConv((prev) => ({ ...prev, [convId]: next }));
+    refreshNextCita(convId, next);
+  }, [refreshNextCita]);
 
   // Mueve la cita: actualiza Calendar + Zoom y resetea los recordatorios.
   const rescheduleAppointment = useCallback(async (convId, payload) => {
     const res = await invokeCita({ action: 'reschedule', ...payload }); // lanza si falla
     if (res?.appointment) {
-      setAppointmentsByConv((prev) => ({
-        ...prev,
-        [convId]: (prev[convId] || []).map((a) => (a.id === res.appointment.id ? res.appointment : a)),
-      }));
+      const next = (appointmentsRef.current[convId] || []).map((a) =>
+        (a.id === res.appointment.id ? res.appointment : a));
+      setAppointmentsByConv((prev) => ({ ...prev, [convId]: next }));
+      refreshNextCita(convId, next);
     }
     return res;
-  }, []);
+  }, [refreshNextCita]);
 
   // ── Derivados ──
   const sortedConversations = useMemo(() => {
@@ -462,17 +510,22 @@ export function SoporteProvider({ children }) {
     sendMessage, sendAttachment, retrySend, discardFailed,
     tagsCatalog: config.tags || [],
     appointmentTemplate: config.appointment_template || '',
-    saveTagsCatalog,
+    templates: config.templates || [],
+    availability: config.availability || null,
+    saveTagsCatalog, saveTemplates, saveAvailability,
     updateConversation, updateNotes, linkContact,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
+    groupDirByConv, loadGroupDirectory,
     mediaByMsg, loadMedia,
     getDraft, setDraft, refresh,
   }), [
     loading, realtimeOk, visibleConversations, conversations.length, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, threads, loadOlder,
-    sendMessage, sendAttachment, retrySend, discardFailed, config, saveTagsCatalog,
+    sendMessage, sendAttachment, retrySend, discardFailed, config,
+    saveTagsCatalog, saveTemplates, saveAvailability,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
+    groupDirByConv, loadGroupDirectory,
     mediaByMsg, loadMedia, getDraft, setDraft, refresh,
   ]);
 

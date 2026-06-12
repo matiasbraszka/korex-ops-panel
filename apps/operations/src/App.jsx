@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -296,6 +296,8 @@ function MainLayout() {
   // paquete es el import() dinamico de SoporteRoutes.
   const soporteItems = [
     { id: 'inbox', label: 'WhatsApp', Icon: MessageCircle, path: '/soporte/inbox' },
+    { id: 'citas', label: 'Citas', Icon: CalendarDays, path: '/soporte/citas' },
+    { id: 'plantillas', label: 'Plantillas', Icon: Zap, path: '/soporte/plantillas' },
   ];
   // Tokens de color por area (mantienen consistencia con la paleta Korex).
   const areaTokens = {
