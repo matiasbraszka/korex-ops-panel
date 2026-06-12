@@ -20,9 +20,9 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="h-full min-h-0 flex rounded-xl border border-border overflow-hidden bg-white max-md:-m-0">
+    <div className="h-full min-h-0 flex rounded-[14px] border border-border overflow-hidden bg-white shadow-[0_1px_2px_rgba(10,22,40,.04),0_1px_3px_rgba(10,22,40,.06)] max-md:-m-0">
       {/* Lista de conversaciones */}
-      <div className={`w-[320px] shrink-0 border-r border-border min-h-0 max-md:w-full max-md:border-r-0 ${selectedId ? 'max-md:hidden' : ''}`}>
+      <div className={`w-[340px] shrink-0 border-r border-border min-h-0 max-md:w-full max-md:border-r-0 ${selectedId ? 'max-md:hidden' : ''}`}>
         <ConversationList />
       </div>
 

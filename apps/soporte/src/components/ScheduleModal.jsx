@@ -22,8 +22,10 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 // (admin@metodokorex.com via Apps Script) + reunión de Zoom, invita al
 // prospecto por mail si se carga su email, y manda el WhatsApp opcional.
 // appointment=null → crear; con una cita → reagendar esa cita.
-export default function ScheduleModal({ open, onClose, appointment = null }) {
-  const { selectedConversation: conv, appointmentTemplate, createAppointment, rescheduleAppointment } = useSoporte();
+// conversation: override opcional (la página Citas agenda sin chat abierto).
+export default function ScheduleModal({ open, onClose, appointment = null, conversation = null }) {
+  const { selectedConversation, appointmentTemplate, createAppointment, rescheduleAppointment } = useSoporte();
+  const conv = conversation || selectedConversation;
   const editing = Boolean(appointment);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(todayISO());

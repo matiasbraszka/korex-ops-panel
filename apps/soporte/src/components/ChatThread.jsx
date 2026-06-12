@@ -17,7 +17,7 @@ const WALLPAPER = {
 };
 
 export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
-  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed } = useSoporte();
+  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, groupDirByConv, loadGroupDirectory } = useSoporte();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
   const stickToBottom = useRef(true);
@@ -66,6 +66,27 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     stickToBottom.current = true;
     setShowJump(false);
   }, [selectedId]);
+
+  // En grupos, el sub del header lista a los participantes con nombre
+  // ("Pedro, Romina y 5 más"), como en el diseño.
+  const isGroup = Boolean(conv?.is_group);
+  const convId = conv?.id;
+  useEffect(() => {
+    if (isGroup && convId) loadGroupDirectory(convId);
+  }, [isGroup, convId, loadGroupDirectory]);
+  const dir = isGroup && convId ? groupDirByConv[convId] : null;
+  let groupSub = 'Grupo';
+  if (dir?.participants?.length) {
+    const names = dir.participants
+      .map((p) => dir.names?.[p.jid])
+      .filter(Boolean)
+      .map((n) => n.split(' ')[0]);
+    const shown = [...new Set(names)].slice(0, 4);
+    const more = dir.participants.length - shown.length;
+    groupSub = shown.length
+      ? `${shown.join(', ')}${more > 0 ? ` y ${more} más` : ''}`
+      : `${dir.participants.length} participantes`;
+  }
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -133,7 +154,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
             )}
           </div>
           <div className="text-[11px] text-text3 truncate">
-            {conv.is_group ? 'Grupo' : fmtPhone(conv.wa_phone)}
+            {conv.is_group ? groupSub : fmtPhone(conv.wa_phone)}
             {conv.status === 'closed' ? ' · Cerrada' : ''}
           </div>
         </div>

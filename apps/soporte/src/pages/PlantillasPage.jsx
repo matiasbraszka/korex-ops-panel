@@ -1,206 +1,326 @@
-import { useState } from 'react';
-import { Zap, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Zap, Plus, Trash2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
+import { convName } from '../lib/format.js';
 
-// Placeholders que el composer resuelve (o deja para completar a mano).
-const PLACEHOLDERS = [
-  { key: '{nombre}', desc: 'nombre del contacto del chat (se completa solo)' },
-  { key: '{fecha}', desc: 'fecha de la reunión' },
-  { key: '{hora}', desc: 'hora de la reunión' },
-  { key: '{zoom}', desc: 'link de Zoom' },
+// Wallpaper WhatsApp para la vista previa (mismo del hilo).
+const WALLPAPER = {
+  backgroundColor: '#EFEAE2',
+  backgroundImage: 'radial-gradient(rgba(120,100,70,0.07) 1px, transparent 1.1px)',
+  backgroundSize: '18px 18px',
+};
+
+const CATEGORIES = [
+  { id: 'citas', label: 'Citas', bg: '#DCFCE7', color: '#15803D' },
+  { id: 'soporte', label: 'Soporte', bg: '#EEF2FF', color: '#4A67D8' },
+  { id: 'grupos', label: 'Grupos', bg: '#F3E8FF', color: '#7C3AED' },
 ];
+const catOf = (id) => CATEGORIES.find((c) => c.id === id) || null;
+
+const VARIABLES = ['{nombre}', '{fecha}', '{hora}', '{zoom}', '{cliente}'];
 
 const slugify = (s) => String(s || '').toLowerCase().trim().replace(/\s+/g, '').replace(/[^a-z0-9_]/g, '');
 const newId = () => 'tpl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
 
-// Resalta los {placeholders} dentro del cuerpo.
-function Body({ text }) {
+// Texto con las {variables} resaltadas como tokens ámbar.
+function Tokens({ text, resolved = null }) {
   const parts = String(text || '').split(/(\{\w+\})/g);
   return (
-    <span>
-      {parts.map((p, i) =>
-        /^\{\w+\}$/.test(p)
-          ? <b key={i} className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{p}</b>
-          : <span key={i}>{p}</span>
-      )}
-    </span>
+    <>
+      {parts.map((p, i) => {
+        if (!/^\{\w+\}$/.test(p)) return <span key={i}>{p}</span>;
+        if (resolved && resolved[p] !== undefined) return <b key={i} className="font-semibold">{resolved[p]}</b>;
+        return <b key={i} className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded-[5px] px-1">{p}</b>;
+      })}
+    </>
   );
 }
 
-function TemplateForm({ initial, existingShortcuts, onSave, onCancel, saving }) {
-  const [shortcut, setShortcut] = useState(initial?.shortcut || '');
-  const [name, setName] = useState(initial?.name || '');
-  const [body, setBody] = useState(initial?.body || '');
-  const [error, setError] = useState('');
-
-  const submit = () => {
-    const s = slugify(shortcut);
-    setError('');
-    if (!s) { setError('Poné un atajo (ej: saludo).'); return; }
-    if (existingShortcuts.includes(s)) { setError(`El atajo /${s} ya existe.`); return; }
-    if (!body.trim()) { setError('El mensaje no puede estar vacío.'); return; }
-    onSave({ shortcut: s, name: name.trim() || s, body: body.trim() });
+// Textarea con variables resaltadas: backdrop pintado + textarea transparente
+// encima (técnica clásica de highlight overlay).
+function HighlightTextarea({ value, onChange, taRef }) {
+  const backRef = useRef(null);
+  const syncScroll = () => {
+    if (backRef.current && taRef.current) backRef.current.scrollTop = taRef.current.scrollTop;
   };
-
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
-        <div>
-          <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1">Atajo</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#B45309]">/</span>
-            <input value={shortcut} onChange={(e) => setShortcut(e.target.value)}
-                   placeholder="saludo"
-                   className="w-full pl-6 pr-3 py-2 text-[13px] rounded-[10px] border border-border outline-none focus:border-[#F59E0B] transition-colors duration-150" />
-          </div>
-        </div>
-        <div>
-          <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1">Nombre</label>
-          <input value={name} onChange={(e) => setName(e.target.value)}
-                 placeholder="Saludo inicial"
-                 className="w-full px-3 py-2 text-[13px] rounded-[10px] border border-border outline-none focus:border-[#F59E0B] transition-colors duration-150" />
-        </div>
+    <div className="relative rounded-[10px] border border-border focus-within:border-[#F59E0B] focus-within:shadow-[0_0_0_3px_rgba(245,158,11,.12)] transition-all duration-150 bg-white overflow-hidden">
+      <div ref={backRef}
+           className="absolute inset-0 px-3 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap break-words overflow-hidden pointer-events-none text-text"
+           aria-hidden>
+        <Tokens text={value} />
+        {'\n'}
       </div>
-      <div>
-        <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1">Mensaje</label>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3}
-                  placeholder="Hola {nombre}! …"
-                  className="w-full resize-none px-3 py-2 text-[13px] leading-relaxed rounded-[10px] border border-border outline-none focus:border-[#F59E0B] transition-colors duration-150" />
-      </div>
-      {error && <div className="text-[12px] font-medium" style={{ color: '#DC2626' }}>{error}</div>}
-      <div className="flex items-center gap-2">
-        <button onClick={submit} disabled={saving}
-                className="py-2 px-4 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-60">
-          <Check size={14} /> Guardar
-        </button>
-        <button onClick={onCancel}
-                className="py-2 px-3.5 rounded-[10px] border border-border bg-white text-[12.5px] font-medium text-text2 cursor-pointer hover:bg-surface2 flex items-center gap-1 transition-colors duration-150">
-          <X size={14} /> Cancelar
-        </button>
-      </div>
+      <textarea
+        ref={taRef}
+        value={value}
+        onChange={onChange}
+        onScroll={syncScroll}
+        rows={6}
+        className="relative w-full resize-none px-3 py-2.5 text-[13px] leading-relaxed bg-transparent outline-none border-0"
+        style={{ color: 'transparent', caretColor: '#1A1D26' }}
+      />
     </div>
   );
 }
 
-// Plantillas de respuestas rápidas: se usan tipeando "/" en el chat.
-// Viven en soporte_config.templates ({id, shortcut, name, body}).
+// Página Plantillas — master-detail del diseño: lista 400 | editor | preview 320.
+// Las respuestas rápidas viven en soporte_config.templates y se insertan
+// tipeando "/" en el chat.
 export default function PlantillasPage() {
-  const { templates, saveTemplates } = useSoporte();
-  const [creating, setCreating] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const { templates, saveTemplates, conversations } = useSoporte();
+  const [selectedId, setSelectedId] = useState(null); // id | 'new' | null
+  const [draft, setDraft] = useState(null); // {name, shortcut, category, body}
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const taRef = useRef(null);
+
+  const selected = selectedId === 'new' ? null : templates.find((t) => t.id === selectedId) || null;
+
+  // Cargar el borrador al cambiar la selección.
+  useEffect(() => {
+    setError('');
+    if (selectedId === 'new') setDraft({ name: '', shortcut: '', category: '', body: '' });
+    else if (selected) setDraft({ name: selected.name || '', shortcut: selected.shortcut || '', category: selected.category || '', body: selected.body || '' });
+    else setDraft(null);
+  }, [selectedId, selected]);
+
+  const dirty = draft && (
+    selectedId === 'new'
+      ? Boolean(draft.name || draft.shortcut || draft.body)
+      : draft.name !== (selected?.name || '') || draft.shortcut !== (selected?.shortcut || '') ||
+        draft.category !== (selected?.category || '') || draft.body !== (selected?.body || '')
+  );
+
+  // Datos de ejemplo para la vista previa (con el último chat real si hay).
+  const sample = useMemo(() => {
+    const conv = (conversations || []).find((c) => !c.is_group);
+    return {
+      '{nombre}': (conv ? convName(conv) : 'Caro').split(' ')[0],
+      '{cliente}': conv?.client?.name || 'Plan Funnels',
+      '{fecha}': new Date(Date.now() + 86400000).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }),
+      '{hora}': '10:00',
+      '{zoom}': 'https://zoom.us/j/8123…',
+    };
+  }, [conversations]);
+
+  const insertVariable = (v) => {
+    const ta = taRef.current;
+    if (!ta || !draft) return;
+    const pos = ta.selectionStart ?? draft.body.length;
+    const body = draft.body.slice(0, pos) + v + draft.body.slice(ta.selectionEnd ?? pos);
+    setDraft((d) => ({ ...d, body }));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = pos + v.length;
+    });
+  };
 
   const persist = async (next) => {
     setSaving(true);
     try {
       await saveTemplates(next);
-      setCreating(false);
-      setEditingId(null);
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2000);
     } finally {
       setSaving(false);
     }
   };
 
-  const addTemplate = (data) => persist([...templates, { id: newId(), ...data }]);
-  const updateTemplate = (id, data) => persist(templates.map((t) => (t.id === id ? { ...t, ...data } : t)));
-  const removeTemplate = (id) => persist(templates.filter((t) => t.id !== id));
+  const save = async () => {
+    if (!draft) return;
+    setError('');
+    const shortcut = slugify(draft.shortcut);
+    if (!shortcut) { setError('Poné un atajo (ej: saludo).'); return; }
+    const clash = templates.some((t) => t.shortcut === shortcut && t.id !== selectedId);
+    if (clash) { setError(`El atajo /${shortcut} ya existe.`); return; }
+    if (!draft.body.trim()) { setError('El mensaje no puede estar vacío.'); return; }
+    const data = { name: draft.name.trim() || shortcut, shortcut, category: draft.category || null, body: draft.body.trim() };
+    if (selectedId === 'new') {
+      const t = { id: newId(), ...data };
+      await persist([...templates, t]);
+      setSelectedId(t.id);
+    } else {
+      await persist(templates.map((t) => (t.id === selectedId ? { ...t, ...data } : t)));
+    }
+  };
+
+  const remove = async () => {
+    if (!selected) return;
+    await persist(templates.filter((t) => t.id !== selected.id));
+    setSelectedId(null);
+  };
+
+  const editorOpen = Boolean(draft);
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto">
-      <div className="max-w-[680px] mx-auto px-4 py-5 max-md:px-3 max-md:py-3">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-xl bg-[#FEF0D7] flex items-center justify-center">
-              <Zap size={17} className="text-[#B45309]" />
+    <div className="h-full min-h-0 flex rounded-[14px] border border-border overflow-hidden bg-white shadow-[0_1px_2px_rgba(10,22,40,.04),0_1px_3px_rgba(10,22,40,.06)]">
+      {/* Lista (400px) */}
+      <div className={`w-[400px] shrink-0 border-r border-border min-h-0 flex flex-col max-md:w-full max-md:border-r-0 ${editorOpen ? 'max-md:hidden' : ''}`}>
+        <div className="px-4 pt-4 pb-3 border-b border-surface2 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-[10px] bg-[#FEF0D7] flex items-center justify-center">
+              <Zap size={15} className="text-[#B45309]" />
             </span>
             <div>
-              <div className="text-[16px] font-bold">Plantillas</div>
-              <div className="text-[12px] text-text3">Respuestas rápidas para el chat</div>
+              <div className="text-[15px] font-bold leading-tight">Plantillas</div>
+              <div className="text-[11px] text-text3">Se insertan con «/» en el chat</div>
             </div>
           </div>
-          {!creating && (
-            <button onClick={() => { setCreating(true); setEditingId(null); }}
-                    className="py-2 px-3.5 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">
-              <Plus size={14} /> Nueva plantilla
-            </button>
+          <button onClick={() => setSelectedId('new')}
+                  className="py-2 px-3 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1 shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">
+            <Plus size={13} /> Nueva
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 p-2.5 flex flex-col gap-1.5">
+          {templates.length === 0 ? (
+            <div className="text-center py-12 px-6">
+              <Zap size={24} className="mx-auto text-text3 mb-2" />
+              <div className="text-[12.5px] font-semibold text-text2">Todavía no hay plantillas</div>
+              <div className="text-[11px] text-text3 mt-1">Creá la primera con el botón Nueva.</div>
+            </div>
+          ) : (
+            templates.map((t) => {
+              const on = t.id === selectedId;
+              const cat = catOf(t.category);
+              return (
+                <button key={t.id} onClick={() => setSelectedId(t.id)}
+                        className={`w-full text-left p-3 rounded-xl border cursor-pointer transition-all duration-150 ${on ? 'border-[#F59E0B]/65 bg-[#FFFBF2] shadow-[0_2px_10px_rgba(245,158,11,0.12)]' : 'border-border/70 bg-white hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)]'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold rounded-md px-2 py-0.5 shrink-0 ${on ? 'bg-[#FEF0D7] text-[#B45309]' : 'bg-surface2 text-text2'}`}>
+                      /{t.shortcut}
+                    </span>
+                    <span className="text-[12.5px] font-semibold truncate flex-1">{t.name}</span>
+                    {cat && (
+                      <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                            style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
+                    )}
+                    <ChevronRight size={13} className="text-text3 shrink-0 md:hidden" />
+                  </div>
+                  <div className="text-[11.5px] text-text3 mt-1 leading-snug line-clamp-2">
+                    <Tokens text={t.body} />
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
-        <div className="text-[12px] text-text2 mb-4 mt-2 px-0.5">
-          En cualquier chat, tipeá <b className="font-bold text-[#B45309]">/</b> y elegí una plantilla: se inserta al instante
-          con el <b className="font-semibold">{'{nombre}'}</b> del contacto ya completado.
-        </div>
+      </div>
 
-        {/* Alta */}
-        {creating && (
-          <div className="px-4 py-3.5 rounded-2xl border border-[#F5D9A8] bg-[#FFFBF2] mb-3">
-            <div className="text-[12.5px] font-bold mb-2.5">Nueva plantilla</div>
-            <TemplateForm
-              existingShortcuts={templates.map((t) => t.shortcut)}
-              onSave={addTemplate}
-              onCancel={() => setCreating(false)}
-              saving={saving}
-            />
-          </div>
-        )}
-
-        {/* Lista */}
-        {templates.length === 0 && !creating ? (
-          <div className="text-center py-14 px-6 rounded-2xl border border-dashed border-border bg-white">
-            <Zap size={26} className="mx-auto text-text3 mb-2" />
-            <div className="text-[13px] font-semibold text-text2">Todavía no hay plantillas</div>
-            <div className="text-[11.5px] text-text3 mt-1">Creá la primera con el botón de arriba.</div>
+      {/* Editor */}
+      <div className={`flex-1 min-w-0 min-h-0 overflow-y-auto ${!editorOpen ? 'max-md:hidden' : ''}`}>
+        {!draft ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center px-6">
+              <Zap size={26} className="mx-auto text-text3 mb-2" />
+              <div className="text-[13.5px] font-semibold text-text2">Elegí una plantilla</div>
+              <div className="text-[12px] text-text3 mt-1">O creá una nueva para responder más rápido.</div>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {templates.map((t) =>
-              editingId === t.id ? (
-                <div key={t.id} className="px-4 py-3.5 rounded-2xl border border-[#F5D9A8] bg-[#FFFBF2]">
-                  <TemplateForm
-                    initial={t}
-                    existingShortcuts={templates.filter((x) => x.id !== t.id).map((x) => x.shortcut)}
-                    onSave={(data) => updateTemplate(t.id, data)}
-                    onCancel={() => setEditingId(null)}
-                    saving={saving}
-                  />
-                </div>
-              ) : (
-                <div key={t.id}
-                     className="px-4 py-3 rounded-2xl border border-border/70 bg-white hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)] transition-all duration-150 flex items-start gap-3">
-                  <span className="text-[11.5px] font-bold rounded-lg px-2.5 py-1 bg-[#FEF0D7] text-[#B45309] shrink-0 mt-0.5">
-                    /{t.shortcut}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-bold truncate">{t.name}</div>
-                    <div className="text-[12px] text-text2 leading-relaxed mt-0.5"><Body text={t.body} /></div>
+          <div className="p-5 max-md:p-3.5 flex flex-col gap-4 max-w-[560px]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelectedId(null)}
+                        className="md:hidden bg-transparent border-0 text-text2 cursor-pointer p-1 -ml-1">
+                  <ChevronLeft size={18} />
+                </button>
+                <span className="text-[15px] font-bold">{selectedId === 'new' ? 'Nueva plantilla' : 'Editar plantilla'}</span>
+              </div>
+              {selected && (
+                <button onClick={remove} title="Eliminar plantilla"
+                        className="border border-border bg-white rounded-[9px] text-text2 hover:text-[#DC2626] hover:border-[#DC2626]/40 cursor-pointer p-2 transition-colors duration-150">
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+              <div>
+                <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1.5">Nombre</label>
+                <input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                       placeholder="Saludo inicial"
+                       className="w-full h-9 px-3 text-[13px] rounded-[10px] border border-border outline-none focus:border-[#F59E0B] transition-colors duration-150" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1.5">Atajo</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#B45309]">/</span>
+                    <input value={draft.shortcut} onChange={(e) => setDraft((d) => ({ ...d, shortcut: e.target.value }))}
+                           placeholder="saludo"
+                           className="w-full h-9 pl-6 pr-3 text-[13px] rounded-[10px] border border-border outline-none focus:border-[#F59E0B] transition-colors duration-150" />
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => { setEditingId(t.id); setCreating(false); }} title="Editar"
-                            className="border border-border bg-white rounded-[9px] text-text2 hover:text-[#B45309] hover:border-[#F5D9A8] cursor-pointer p-2 transition-colors duration-150">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => removeTemplate(t.id)} title="Eliminar"
-                            className="border border-border bg-white rounded-[9px] text-text2 hover:text-[#DC2626] hover:border-[#DC2626]/40 cursor-pointer p-2 transition-colors duration-150">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
                 </div>
-              )
-            )}
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1.5">Categoría</label>
+                  <select value={draft.category} onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+                          className="w-full h-9 px-2 text-[12.5px] rounded-[10px] border border-border outline-none bg-white cursor-pointer">
+                    <option value="">Sin categoría</option>
+                    {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold tracking-widest text-text3 uppercase block mb-1.5">Mensaje</label>
+              <HighlightTextarea value={draft.body} onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))} taRef={taRef} />
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[11px] text-text3 mr-0.5">Insertar variable:</span>
+                {VARIABLES.map((v) => (
+                  <button key={v} onClick={() => insertVariable(v)}
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-[#F5D9A8] bg-white text-[#B45309] cursor-pointer hover:bg-[#FEF0D7] transition-colors duration-150">
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10.5px] text-text3 mt-2">
+                <b className="font-semibold">{'{nombre}'}</b> se completa solo con el contacto del chat al insertarla;
+                las demás quedan para completar antes de enviar.
+              </div>
+            </div>
+
+            {error && <div className="text-[12px] font-medium" style={{ color: '#DC2626' }}>{error}</div>}
+
+            <div className="flex items-center gap-2">
+              <button onClick={save} disabled={saving || !dirty}
+                      className={`py-2 px-4 rounded-[10px] border-0 text-[12.5px] font-bold flex items-center gap-1.5 transition-colors duration-150 ${dirty ? 'bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]' : 'bg-surface2 text-text3 cursor-default'}`}>
+                <Check size={14} /> {saving ? 'Guardando…' : savedFlash ? 'Guardado ✓' : 'Guardar plantilla'}
+              </button>
+              {dirty && (
+                <button onClick={() => {
+                          setError('');
+                          setDraft(selected
+                            ? { name: selected.name || '', shortcut: selected.shortcut || '', category: selected.category || '', body: selected.body || '' }
+                            : { name: '', shortcut: '', category: '', body: '' });
+                        }}
+                        className="py-2 px-3.5 rounded-[10px] border border-border bg-white text-[12.5px] font-medium text-text2 cursor-pointer hover:bg-surface2 transition-colors duration-150">
+                  Descartar cambios
+                </button>
+              )}
+            </div>
           </div>
         )}
+      </div>
 
-        {/* Placeholders disponibles */}
-        <div className="mt-5 px-4 py-3.5 rounded-2xl border border-border bg-white">
-          <div className="text-[10px] font-bold tracking-widest text-text3 uppercase mb-2">Comodines disponibles</div>
-          <div className="flex flex-col gap-1.5">
-            {PLACEHOLDERS.map((p) => (
-              <div key={p.key} className="flex items-center gap-2.5 text-[12px]">
-                <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1.5 py-0.5 shrink-0">{p.key}</b>
-                <span className="text-text2">{p.desc}</span>
-              </div>
-            ))}
-          </div>
+      {/* Vista previa (320px, solo desktop) */}
+      <div className="w-[320px] shrink-0 border-l border-border min-h-0 flex-col max-md:hidden flex">
+        <div className="h-[52px] border-b border-surface2 flex items-center px-4 shrink-0">
+          <span className="text-[10px] font-bold tracking-widest text-text3 uppercase">Vista previa</span>
+        </div>
+        <div className="flex-1 min-h-0 p-4 flex items-start justify-center" style={WALLPAPER}>
+          {draft?.body ? (
+            <div className="max-w-full px-3 py-2 text-[13px] leading-relaxed break-words bg-[#DCFCE7] rounded-[14px] rounded-br-[4px] shadow-[0_1px_1px_rgba(10,22,40,.06)] mt-2">
+              <Tokens text={draft.body} resolved={sample} />
+              <div className="text-right text-[9.5px] text-[#7A9484] mt-0.5">11:42 ✓✓</div>
+            </div>
+          ) : (
+            <div className="text-[11.5px] text-text3 bg-white rounded-full px-3 py-1 mt-4 shadow-sm">
+              Escribí el mensaje para ver cómo queda
+            </div>
+          )}
         </div>
       </div>
     </div>

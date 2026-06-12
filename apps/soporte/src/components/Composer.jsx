@@ -147,6 +147,24 @@ export default function Composer({ onSent }) {
 
   return (
     <div className="px-3.5 pb-1.5 pt-2 shrink-0 relative">
+      {/* Mobile: respuestas rápidas como chips horizontales (el popover "/" es
+          incómodo con teclado táctil) */}
+      {!file && !text && (
+        <div className="hidden max-md:flex gap-1.5 mb-2 overflow-x-auto pb-0.5">
+          {templates.slice(0, 3).map((t) => (
+            <button key={t.id || t.shortcut} onClick={() => insertTemplate(t)}
+                    className="shrink-0 text-[11.5px] font-bold px-2.5 py-1 rounded-full border border-[#F5D9A8] bg-white text-[#B45309] cursor-pointer">
+              /{t.shortcut}
+            </button>
+          ))}
+          {templates.length > 3 && (
+            <button onClick={() => { setText('/'); setDraft(selectedId, '/'); taRef.current?.focus(); }}
+                    className="shrink-0 text-[11.5px] font-semibold px-2.5 py-1 rounded-full border border-dashed border-[#D0D5DD] bg-white text-text3 cursor-pointer">
+              más…
+            </button>
+          )}
+        </div>
+      )}
       {/* Popover de respuestas rápidas */}
       {popoverOpen && (
         <div className="absolute bottom-full left-3.5 mb-1.5 w-[min(430px,calc(100%-28px))] bg-white border border-border rounded-[14px] shadow-lg p-1.5 z-20">

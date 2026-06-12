@@ -5,6 +5,18 @@ import MediaContent from './MediaContent.jsx';
 // Tipos que renderizan contenido multimedia real (imagen, audio, video, doc).
 const MEDIA_TYPES = new Set(['imageMessage', 'stickerMessage', 'audioMessage', 'videoMessage', 'documentMessage']);
 
+// Menciones (@Nombre) coloreadas como en WhatsApp.
+function BodyText({ text }) {
+  const parts = String(text).split(/(@[\wÀ-ÿ.]+)/g);
+  return (
+    <div className="whitespace-pre-wrap">
+      {parts.map((p, i) =>
+        p.startsWith('@') ? <span key={i} className="font-semibold text-[#4A67D8]">{p}</span> : <span key={i}>{p}</span>
+      )}
+    </div>
+  );
+}
+
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
@@ -53,7 +65,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
         {typeLabel && (
           <div className={`text-[11.5px] font-medium ${msg.body ? 'mb-0.5' : ''} text-text2`}>{typeLabel}</div>
         )}
-        {msg.body && <div className="whitespace-pre-wrap">{msg.body}</div>}
+        {msg.body && <BodyText text={msg.body} />}
 
         <div className="flex items-center justify-end gap-1 mt-0.5">
           <span className={`text-[9.5px] ${out && !failed ? 'text-[#7A9484]' : 'text-text3'}`}>
