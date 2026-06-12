@@ -1,8 +1,14 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '@korex/db';
+import { useAuth } from '@korex/auth';
+import {
+  fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
+  patchSoporteConfig, fetchAppointments, invokeSend, invokeCita, PAGE_SIZE,
+} from '../lib/api.js';
 
-// Contexto del modulo Soporte. Esqueleto: cuando se construya la bandeja,
-// aca viven las conversaciones (wa_conversations), la suscripcion realtime
-// a wa_messages y las acciones de envio via Evolution API.
+// Contexto del modulo Soporte: bandeja de WhatsApp.
+// Vive solo dentro de /soporte/* (montado por SoporteRoutes), asi su estado y
+// el canal realtime mueren al salir del modulo.
 const SoporteContext = createContext(null);
 
 export function useSoporte() {
@@ -11,14 +17,371 @@ export function useSoporte() {
   return ctx;
 }
 
+let tempSeq = 0;
+const tempId = () => `tmp_${Date.now()}_${++tempSeq}`;
+
 export function SoporteProvider({ children }) {
-  const [conversations] = useState([]);
-  const [loading] = useState(false);
+  const { profile } = useAuth();
+  const currentMemberId = profile?.id || null;
+
+  const [loading, setLoading] = useState(true);
+  const [conversations, setConversations] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [filters, setFilters] = useState({ scope: 'all', tagId: null, search: '' });
+  // threads: { [convId]: { items, hasMore, loadingOlder, loaded } }
+  const [threads, setThreads] = useState({});
+  const [config, setConfig] = useState({ tags: [], appointment_template: '' });
+  const [appointmentsByConv, setAppointmentsByConv] = useState({});
+  const [realtimeOk, setRealtimeOk] = useState(true);
+
+  // Refs espejo para usar dentro de handlers realtime sin resuscribir el canal.
+  const selectedRef = useRef(null);
+  selectedRef.current = selectedId;
+  const threadsRef = useRef(threads);
+  threadsRef.current = threads;
+  // Borradores del composer por conversacion (no causan re-render).
+  const draftsRef = useRef({});
+  const markReadTimer = useRef(null);
+
+  // ── Carga inicial ──
+  const loadAll = useCallback(async () => {
+    const [convs, cfg] = await Promise.all([fetchConversations(), fetchSoporteConfig()]);
+    if (Array.isArray(convs)) setConversations(convs);
+    if (cfg) setConfig(cfg);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── markRead: clamp local + PATCH condicional (solo si unread > 0) ──
+  const markRead = useCallback((convId) => {
+    if (!convId) return;
+    setConversations((prev) => prev.map((c) => (c.id === convId && c.unread_count > 0 ? { ...c, unread_count: 0 } : c)));
+    patchConversation(convId, { unread_count: 0 }, { extraFilter: '&unread_count=gt.0' });
+  }, []);
+
+  // ── Threads: carga lazy + paginacion ──
+  const loadThread = useCallback(async (convId) => {
+    const existing = threadsRef.current[convId];
+    if (existing?.loaded) return;
+    const items = await fetchMessages(convId);
+    setThreads((prev) => ({
+      ...prev,
+      [convId]: { items, hasMore: items.length === PAGE_SIZE, loadingOlder: false, loaded: true },
+    }));
+  }, []);
+
+  const loadOlder = useCallback(async (convId) => {
+    const t = threadsRef.current[convId];
+    if (!t || t.loadingOlder || !t.hasMore || t.items.length === 0) return;
+    setThreads((prev) => ({ ...prev, [convId]: { ...prev[convId], loadingOlder: true } }));
+    const oldest = t.items.find((m) => !m._temp);
+    const older = await fetchMessages(convId, { before: oldest?.created_at });
+    setThreads((prev) => {
+      const cur = prev[convId];
+      if (!cur) return prev;
+      const seen = new Set(cur.items.map((m) => m.id));
+      const fresh = older.filter((m) => !seen.has(m.id));
+      return {
+        ...prev,
+        [convId]: { ...cur, items: [...fresh, ...cur.items], hasMore: older.length === PAGE_SIZE, loadingOlder: false },
+      };
+    });
+  }, []);
+
+  const selectConversation = useCallback((convId) => {
+    setSelectedId(convId);
+    if (convId) {
+      loadThread(convId);
+      markRead(convId);
+    }
+  }, [loadThread, markRead]);
+
+  // ── Realtime: un solo canal, 3 listeners ──
+  useEffect(() => {
+    let disposed = false;
+    let channel = null;
+    let retryDelay = 1000;
+    let retryTimer = null;
+
+    const upsertConv = (row) => {
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.id === row.id);
+        if (idx === -1) return [...prev, row];
+        // Merge preservando los embeds (contact/client) que el evento no trae.
+        const merged = { ...prev[idx], ...row };
+        const next = [...prev];
+        next[idx] = merged;
+        return next;
+      });
+      // Carrera markRead vs webhook: si la conversacion abierta vuelve a tener
+      // unread (el webhook la incremento despues de nuestro PATCH), re-marcar.
+      if (row.id === selectedRef.current && row.unread_count > 0 && document.visibilityState === 'visible') {
+        clearTimeout(markReadTimer.current);
+        markReadTimer.current = setTimeout(() => markRead(row.id), 400);
+      }
+    };
+
+    const onMessageInsert = (row) => {
+      const t = threadsRef.current[row.conversation_id];
+      if (!t?.loaded) return; // el hilo no esta abierto/cargado: la lista se actualiza sola por el UPDATE de la conversacion
+      setThreads((prev) => {
+        const cur = prev[row.conversation_id];
+        if (!cur) return prev;
+        if (cur.items.some((m) => m.id === row.id)) return prev; // duplicado
+        // Reconciliar con burbuja optimista: mismo body saliente en 'sending'.
+        const tmpIdx = cur.items.findIndex((m) => m._temp && m.direction === 'out' && m.status === 'sending' && m.body === row.body);
+        let items;
+        if (row.direction === 'out' && tmpIdx !== -1) {
+          items = [...cur.items];
+          items[tmpIdx] = row;
+        } else {
+          items = [...cur.items, row];
+        }
+        return { ...prev, [row.conversation_id]: { ...cur, items } };
+      });
+    };
+
+    const subscribe = () => {
+      if (disposed) return;
+      channel = supabase
+        .channel('soporte_inbox')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wa_conversations' }, (p) => upsertConv(p.new))
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wa_conversations' }, (p) => upsertConv(p.new))
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wa_messages' }, (p) => onMessageInsert(p.new))
+        .subscribe((status) => {
+          if (disposed) return;
+          if (status === 'SUBSCRIBED') {
+            setRealtimeOk(true);
+            retryDelay = 1000;
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            setRealtimeOk(false);
+            const ch = channel;
+            channel = null;
+            if (ch) supabase.removeChannel(ch);
+            retryTimer = setTimeout(subscribe, retryDelay);
+            retryDelay = Math.min(retryDelay * 2, 15000);
+          }
+        });
+    };
+    subscribe();
+
+    return () => {
+      disposed = true;
+      clearTimeout(retryTimer);
+      clearTimeout(markReadTimer.current);
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [markRead]);
+
+  // ── Resync al volver a la pestaña (la suscripcion pudo dormirse) ──
+  const refresh = useCallback(async () => {
+    const convs = await fetchConversations();
+    if (Array.isArray(convs)) {
+      setConversations(convs);
+      if (selectedRef.current && !convs.some((c) => c.id === selectedRef.current)) setSelectedId(null);
+    }
+    // Delta del hilo abierto: solo lo nuevo despues del ultimo cargado.
+    const convId = selectedRef.current;
+    const t = convId ? threadsRef.current[convId] : null;
+    if (convId && t?.loaded) {
+      const lastReal = [...t.items].reverse().find((m) => !m._temp);
+      if (lastReal) {
+        const fresh = await fetchMessages(convId, { after: lastReal.created_at });
+        if (fresh.length) {
+          setThreads((prev) => {
+            const cur = prev[convId];
+            if (!cur) return prev;
+            const seen = new Set(cur.items.map((m) => m.id));
+            const add = fresh.filter((m) => !seen.has(m.id));
+            return add.length ? { ...prev, [convId]: { ...cur, items: [...cur.items, ...add] } } : prev;
+          });
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refresh]);
+
+  // ── Envio con burbuja optimista ──
+  const patchTempMessage = (convId, id, patch) => {
+    setThreads((prev) => {
+      const cur = prev[convId];
+      if (!cur) return prev;
+      return { ...prev, [convId]: { ...cur, items: cur.items.map((m) => (m.id === id ? { ...m, ...patch } : m)) } };
+    });
+  };
+
+  const sendMessage = useCallback(async (convId, text) => {
+    const body = String(text || '').trim();
+    if (!convId || !body) return;
+    const now = new Date().toISOString();
+    const temp = {
+      id: tempId(), _temp: true, conversation_id: convId, direction: 'out',
+      msg_type: 'conversation', body, status: 'sending', sent_by: currentMemberId,
+      wa_timestamp: now, created_at: now,
+    };
+    setThreads((prev) => {
+      const cur = prev[convId] || { items: [], hasMore: false, loadingOlder: false, loaded: true };
+      return { ...prev, [convId]: { ...cur, items: [...cur.items, temp] } };
+    });
+    // Patch optimista de la lista (preview + orden).
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, last_message_at: now, last_message_preview: body.slice(0, 120) } : c)));
+
+    try {
+      const res = await invokeSend({ conversationId: convId, text: body });
+      const real = res?.message;
+      setThreads((prev) => {
+        const cur = prev[convId];
+        if (!cur) return prev;
+        const already = real && cur.items.some((m) => m.id === real.id);
+        const items = cur.items
+          .filter((m) => !(m.id === temp.id && (already || !real)))
+          .map((m) => (m.id === temp.id && real && !already ? real : m));
+        return { ...prev, [convId]: { ...cur, items } };
+      });
+      if (!real) patchTempMessage(convId, temp.id, { status: 'sent', _temp: false });
+    } catch (e) {
+      console.error('soporte: fallo el envio', e);
+      patchTempMessage(convId, temp.id, { status: 'failed' });
+    }
+  }, [currentMemberId]);
+
+  const retrySend = useCallback((convId, msgId) => {
+    const t = threadsRef.current[convId];
+    const msg = t?.items.find((m) => m.id === msgId);
+    if (!msg) return;
+    // Quitar la fallida y reenviar como mensaje nuevo.
+    setThreads((prev) => {
+      const cur = prev[convId];
+      return { ...prev, [convId]: { ...cur, items: cur.items.filter((m) => m.id !== msgId) } };
+    });
+    sendMessage(convId, msg.body);
+  }, [sendMessage]);
+
+  const discardFailed = useCallback((convId, msgId) => {
+    setThreads((prev) => {
+      const cur = prev[convId];
+      if (!cur) return prev;
+      return { ...prev, [convId]: { ...cur, items: cur.items.filter((m) => m.id !== msgId) } };
+    });
+  }, []);
+
+  // ── Tags / notas / vinculos / status ──
+  const updateConversation = useCallback(async (convId, patch) => {
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...patch } : c)));
+    await patchConversation(convId, patch);
+  }, []);
+
+  const notesTimers = useRef({});
+  const updateNotes = useCallback((convId, notes) => {
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, notes } : c)));
+    clearTimeout(notesTimers.current[convId]);
+    notesTimers.current[convId] = setTimeout(() => patchConversation(convId, { notes }), 800);
+  }, []);
+
+  const linkContact = useCallback(async (convId, { contactId = undefined, clientId = undefined, contact = undefined, client = undefined }) => {
+    const patch = {};
+    if (contactId !== undefined) patch.contact_id = contactId;
+    if (clientId !== undefined) patch.client_id = clientId;
+    setConversations((prev) => prev.map((c) => {
+      if (c.id !== convId) return c;
+      const next = { ...c, ...patch };
+      if (contact !== undefined) next.contact = contact;
+      if (client !== undefined) next.client = client;
+      return next;
+    }));
+    await patchConversation(convId, patch);
+  }, []);
+
+  const saveTagsCatalog = useCallback(async (tags) => {
+    setConfig((prev) => ({ ...prev, tags }));
+    await patchSoporteConfig({ tags });
+  }, []);
+
+  // ── Citas ──
+  const loadAppointments = useCallback(async (convId) => {
+    const rows = await fetchAppointments(convId);
+    setAppointmentsByConv((prev) => ({ ...prev, [convId]: rows }));
+  }, []);
+
+  const createAppointment = useCallback(async (payload) => {
+    const res = await invokeCita(payload); // lanza si falla
+    if (res?.appointment) {
+      setAppointmentsByConv((prev) => ({
+        ...prev,
+        [payload.conversation_id]: [res.appointment, ...(prev[payload.conversation_id] || [])],
+      }));
+    }
+    return res;
+  }, []);
+
+  const cancelAppointment = useCallback(async (convId, appointmentId) => {
+    await invokeCita({ action: 'cancel', appointment_id: appointmentId });
+    setAppointmentsByConv((prev) => ({
+      ...prev,
+      [convId]: (prev[convId] || []).map((a) => (a.id === appointmentId ? { ...a, status: 'cancelled' } : a)),
+    }));
+  }, []);
+
+  // ── Derivados ──
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      const ta = a.last_message_at || a.created_at || '';
+      const tb = b.last_message_at || b.created_at || '';
+      if (ta !== tb) return ta < tb ? 1 : -1;
+      return a.id < b.id ? 1 : -1;
+    });
+  }, [conversations]);
+
+  const visibleConversations = useMemo(() => {
+    const q = filters.search.trim().toLowerCase();
+    return sortedConversations.filter((c) => {
+      if (filters.scope === 'unread' && !(c.unread_count > 0 && c.id !== selectedId)) return false;
+      if (filters.scope === 'dm' && c.is_group) return false;
+      if (filters.scope === 'groups' && !c.is_group) return false;
+      if (filters.tagId && !(c.tags || []).includes(filters.tagId)) return false;
+      if (q) {
+        const hay = `${c.wa_profile_name || ''} ${c.wa_phone || ''} ${c.contact?.full_name || ''} ${c.client?.name || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [sortedConversations, filters, selectedId]);
+
+  const selectedConversation = useMemo(
+    () => conversations.find((c) => c.id === selectedId) || null,
+    [conversations, selectedId],
+  );
+
+  const getDraft = useCallback((convId) => draftsRef.current[convId] || '', []);
+  const setDraft = useCallback((convId, text) => { draftsRef.current[convId] = text; }, []);
 
   const value = useMemo(() => ({
-    conversations,
-    loading,
-  }), [conversations, loading]);
+    loading, realtimeOk,
+    conversations: visibleConversations,
+    allConversationsCount: conversations.length,
+    selectedId, selectedConversation, selectConversation,
+    filters, setFilters,
+    threads, loadOlder,
+    sendMessage, retrySend, discardFailed,
+    tagsCatalog: config.tags || [],
+    appointmentTemplate: config.appointment_template || '',
+    saveTagsCatalog,
+    updateConversation, updateNotes, linkContact,
+    appointmentsByConv, loadAppointments, createAppointment, cancelAppointment,
+    getDraft, setDraft, refresh,
+  }), [
+    loading, realtimeOk, visibleConversations, conversations.length, selectedId,
+    selectedConversation, selectConversation, filters, threads, loadOlder,
+    sendMessage, retrySend, discardFailed, config, saveTagsCatalog,
+    updateConversation, updateNotes, linkContact, appointmentsByConv,
+    loadAppointments, createAppointment, cancelAppointment, getDraft, setDraft, refresh,
+  ]);
 
   return <SoporteContext.Provider value={value}>{children}</SoporteContext.Provider>;
 }
