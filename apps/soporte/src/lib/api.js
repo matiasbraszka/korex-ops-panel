@@ -96,3 +96,12 @@ export async function invokeCita(payload) {
   if (data?.error) throw new Error(data.error);
   return data; // { ok, appointment } | { ok } en cancel
 }
+
+export async function invokeMedia(messageId) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-media', {
+    body: { message_id: messageId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data; // { ok, url, mime, filename }
+}

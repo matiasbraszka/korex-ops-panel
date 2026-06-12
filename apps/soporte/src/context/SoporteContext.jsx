@@ -3,7 +3,7 @@ import { supabase } from '@korex/db';
 import { useAuth } from '@korex/auth';
 import {
   fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
-  patchSoporteConfig, fetchAppointments, invokeSend, invokeCita, PAGE_SIZE,
+  patchSoporteConfig, fetchAppointments, invokeSend, invokeCita, invokeMedia, PAGE_SIZE,
 } from '../lib/api.js';
 
 // Contexto del modulo Soporte: bandeja de WhatsApp.
@@ -303,6 +303,26 @@ export function SoporteProvider({ children }) {
     await patchSoporteConfig({ tags });
   }, []);
 
+  // ── Media (imagenes, audios, documentos) ──
+  // mediaByMsg: { [msgId]: { status: 'loading'|'ok'|'failed', url?, mime?, filename? } }
+  const [mediaByMsg, setMediaByMsg] = useState({});
+  const mediaInflight = useRef(new Set());
+
+  const loadMedia = useCallback(async (msgId) => {
+    if (!msgId || mediaInflight.current.has(msgId)) return;
+    mediaInflight.current.add(msgId);
+    setMediaByMsg((prev) => (prev[msgId]?.url ? prev : { ...prev, [msgId]: { status: 'loading' } }));
+    try {
+      const res = await invokeMedia(msgId);
+      setMediaByMsg((prev) => ({ ...prev, [msgId]: { status: 'ok', url: res.url, mime: res.mime, filename: res.filename } }));
+    } catch (e) {
+      console.error('soporte: fallo la descarga de media', e);
+      setMediaByMsg((prev) => ({ ...prev, [msgId]: { status: 'failed' } }));
+    } finally {
+      mediaInflight.current.delete(msgId);
+    }
+  }, []);
+
   // ── Citas ──
   const loadAppointments = useCallback(async (convId) => {
     const rows = await fetchAppointments(convId);
@@ -380,13 +400,15 @@ export function SoporteProvider({ children }) {
     saveTagsCatalog,
     updateConversation, updateNotes, linkContact,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment,
+    mediaByMsg, loadMedia,
     getDraft, setDraft, refresh,
   }), [
     loading, realtimeOk, visibleConversations, conversations.length, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, threads, loadOlder,
     sendMessage, retrySend, discardFailed, config, saveTagsCatalog,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
-    loadAppointments, createAppointment, cancelAppointment, getDraft, setDraft, refresh,
+    loadAppointments, createAppointment, cancelAppointment,
+    mediaByMsg, loadMedia, getDraft, setDraft, refresh,
   ]);
 
   return <SoporteContext.Provider value={value}>{children}</SoporteContext.Provider>;

@@ -1,11 +1,16 @@
 import { Clock, AlertCircle, Check } from 'lucide-react';
 import { fmtClock, colorFromString, msgTypeLabel } from '../lib/format.js';
+import MediaContent from './MediaContent.jsx';
+
+// Tipos que renderizan contenido multimedia real (imagen, audio, video, doc).
+const MEDIA_TYPES = new Set(['imageMessage', 'stickerMessage', 'audioMessage', 'videoMessage', 'documentMessage']);
 
 // Burbuja de mensaje. showAuthor: en grupos, mostrar el autor arriba (solo en
 // la primera burbuja consecutiva del mismo remitente).
 export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard }) {
   const out = msg.direction === 'out';
-  const typeLabel = msgTypeLabel(msg.msg_type);
+  const isMedia = MEDIA_TYPES.has(msg.msg_type);
+  const typeLabel = !isMedia ? msgTypeLabel(msg.msg_type) : null;
   const authorName = !out && isGroup ? (msg.payload?.pushName || (msg.sender_jid || '').split('@')[0]) : null;
   const failed = msg.status === 'failed';
   const sending = msg.status === 'sending';
@@ -24,6 +29,11 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
             {authorName}
           </div>
         )}
+        {isMedia && (
+          <div className={msg.body ? 'mb-1' : ''}>
+            <MediaContent msg={msg} />
+          </div>
+        )}
         {typeLabel && (
           <div className={`text-[11.5px] font-medium ${msg.body ? 'mb-0.5' : ''} text-text2`}>{typeLabel}</div>
         )}
@@ -32,7 +42,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
           <span className="text-[9.5px] text-text3">{fmtClock(msg.wa_timestamp || msg.created_at)}</span>
           {out && sending && <Clock size={10} className="text-text3" />}
           {out && !sending && !failed && <Check size={11} className="text-[#16A34A]" />}
-          {failed && <AlertCircle size={11} className="text-red-500" style={{ color: '#DC2626' }} />}
+          {failed && <AlertCircle size={11} style={{ color: '#DC2626' }} />}
         </div>
         {failed && (
           <div className="flex items-center gap-2 mt-1 pt-1 border-t border-[#FCA5A5]/50">
