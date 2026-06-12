@@ -60,7 +60,9 @@ function kxcRemoveMeet(eventId) {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     muteHttpExceptions: true,
   });
-  return res.getResponseCode(); // 200 = Meet eliminado
+  // 200 = Meet eliminado; si falla, devolver el detalle para diagnosticar.
+  var code = res.getResponseCode();
+  return code === 200 ? 200 : code + ':' + res.getContentText().slice(0, 200);
 }
 
 function doPost(e) {
