@@ -94,6 +94,33 @@ interface WaEvent {
   data: Record<string, unknown> | Record<string, unknown>[];
 }
 
+// Config del modulo con cache corto (se consulta por cada mensaje).
+let cfgCache: { value: Record<string, string>; at: number } | null = null;
+async function getCfg(): Promise<Record<string, string>> {
+  if (cfgCache && Date.now() - cfgCache.at < 60_000) return cfgCache.value;
+  const { data: s } = await supabase
+    .from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+  cfgCache = { value: (s?.value as Record<string, string>) ?? {}, at: Date.now() };
+  return cfgCache.value;
+}
+
+// Alta del contacto en Google Contacts (via el Apps Script de Calendar) para
+// que el WhatsApp del celular muestre el nombre. Best-effort, post-respuesta.
+async function upsertGoogleContact(name: string, phone: string): Promise<void> {
+  try {
+    const cfg = await getCfg();
+    if (!cfg.calendar_script_url || !cfg.calendar_script_secret) return;
+    await fetch(cfg.calendar_script_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: cfg.calendar_script_secret, action: "upsert_contact", name, phone }),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (e) {
+    console.error("whatsapp-webhook: alta de contacto fallo", e);
+  }
+}
+
 // Datos reales de un grupo via Evolution API (best-effort). El pushName de
 // los mensajes es el AUTOR, no el grupo: sin esto los grupos quedarian con
 // el nombre del ultimo que hablo. Tambien trae los participantes para el
@@ -167,9 +194,11 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   let conversationId = existing?.id as string | undefined;
 
   if (!conversationId) {
+    // Chat nuevo: se asigna por defecto a la asistente (soporte_config).
+    const cfg = await getCfg();
     const { data: created, error } = await supabase
       .from("wa_conversations")
-      .insert({ wa_jid: jid, wa_phone: waPhone, is_group: isGroup })
+      .insert({ wa_jid: jid, wa_phone: waPhone, is_group: isGroup, assigned_to: cfg.default_assignee || null })
       .select("id")
       .single();
     if (error) {
@@ -249,6 +278,18 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   } else if (!fromMe && pushName) {
     // 1-a-1: pushName del remitente = nombre del contacto.
     convPatch.wa_profile_name = pushName;
+    // Primera vez que conocemos el nombre: alta en Google Contacts, despues
+    // de responder el webhook (no demora la respuesta a Evolution).
+    if (!existing?.wa_profile_name && waPhone) {
+      try {
+        // deno-lint-ignore no-explicit-any
+        (globalThis as any).EdgeRuntime?.waitUntil
+          ? (globalThis as any).EdgeRuntime.waitUntil(upsertGoogleContact(pushName, waPhone))
+          : upsertGoogleContact(pushName, waPhone);
+      } catch {
+        // sin waitUntil: igual se intenta, sin bloquear
+      }
+    }
   }
   if (!fromMe) {
     convPatch.unread_count = (Number(existing?.unread_count) || 0) + 1;

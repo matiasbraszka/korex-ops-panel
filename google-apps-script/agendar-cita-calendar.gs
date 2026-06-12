@@ -1,25 +1,29 @@
 /**
- * agendar-cita-calendar.gs — v3. Crea/mueve/borra eventos en el Google
+ * agendar-cita-calendar.gs — v4. Crea/mueve/borra eventos en el Google
  * Calendar de la cuenta donde se deploya (admin@metodokorex.com), lee la
- * asistencia (RSVP) de los invitados y saca el Meet automático.
+ * asistencia (RSVP), saca el Meet automático y da de alta contactos en
+ * Google Contacts (para que aparezcan con nombre en el WhatsApp del celu).
  *
- * Lo llama la edge function `crear-cita` del panel Korex con:
- *   POST { secret, action: 'create_event', title, description, start, end, guests? }
+ * Lo llama el backend del panel Korex con:
+ *   POST { secret, action: 'create_event', title, description, start, end, guests?, location? }
  *   POST { secret, action: 'update_event', eventId, title?, start, end }
  *   POST { secret, action: 'delete_event', eventId }
  *   POST { secret, action: 'get_rsvp', eventId }
+ *   POST { secret, action: 'upsert_contact', name, phone }
  *
  * SETUP (una vez, en admin@metodokorex.com):
  *   1. script.google.com → Nuevo proyecto → pegar este archivo.
- *   2. Implementar → Nueva implementación → "Aplicación web"
+ *   2. En "Servicios" (+) agregar **People API** (identificador People).
+ *   3. Implementar → Nueva implementación → "Aplicación web"
  *      - Ejecutar como: YO (admin@metodokorex.com)
  *      - Acceso: CUALQUIER PERSONA
- *   3. Copiar la URL del web app y guardarla en
+ *   4. Copiar la URL del web app y guardarla en
  *      app_settings.soporte_config.calendar_script_url
  *      (el secret de abajo ya está en calendar_script_secret).
  *
  * ACTUALIZAR (si ya estaba deployado):
  *   script.google.com → abrir el proyecto → reemplazar el código por este →
+ *   en "Servicios" (+) agregar **People API** si no está →
  *   ejecutar una vez la función "autorizar" (▶) y aceptar los permisos →
  *   Implementar → Administrar implementaciones → ✏️ en la implementación
  *   activa → Versión: "Nueva versión" → Implementar. LA URL NO CAMBIA.
@@ -43,7 +47,34 @@ function autorizar() {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     muteHttpExceptions: true,
   });
-  Logger.log('Permisos OK');
+  // Dispara el permiso de Contactos (requiere el servicio People API agregado).
+  try {
+    People.People.searchContacts({ query: '', readMask: 'names' });
+    Logger.log('Permisos OK (Calendar + Contactos)');
+  } catch (e) {
+    Logger.log('Falta agregar el servicio People API en "Servicios": ' + e);
+  }
+}
+
+// Alta de contacto en Google Contacts (si no existe ya uno con ese teléfono).
+// Así el WhatsApp del celular muestra el nombre en vez del número.
+function kxcUpsertContact(name, phone) {
+  var pretty = '+' + String(phone || '').replace(/\D/g, '');
+  if (pretty.length < 8) return { ok: false, error: 'bad_phone' };
+  // Warmup del índice de búsqueda (recomendación oficial de la People API).
+  try { People.People.searchContacts({ query: '', readMask: 'names' }); } catch (e) {}
+  var found = People.People.searchContacts({
+    query: pretty.slice(-9),
+    readMask: 'names,phoneNumbers',
+  });
+  if (found && found.results && found.results.length > 0) {
+    return { ok: true, existed: true };
+  }
+  People.People.createContact({
+    names: [{ givenName: String(name || pretty) }],
+    phoneNumbers: [{ value: pretty }],
+  });
+  return { ok: true, created: true };
 }
 
 // Google agrega un Google Meet automáticamente cuando el evento tiene
@@ -90,6 +121,9 @@ function doPost(e) {
       if (isNaN(end.getTime()) || end <= start) end = new Date(start.getTime() + 60 * 60000);
 
       var opts = { description: String(b.description || '') };
+      // location: el link de Zoom va como ubicación del evento — es donde
+      // Fathom y las apps de calendario detectan la videollamada.
+      if (b.location) opts.location = String(b.location);
       // guests: email(s) separados por coma → Google les manda la invitación
       // y pueden responder sí/no/quizás desde su propio calendario.
       if (b.guests) {
@@ -129,6 +163,14 @@ function doPost(e) {
       var ev = cal.getEventById(id);
       if (ev) ev.deleteEvent();
       return kxcJson({ ok: true });
+    }
+
+    if (action === 'upsert_contact') {
+      try {
+        return kxcJson(kxcUpsertContact(b.name, b.phone));
+      } catch (errC) {
+        return kxcJson({ ok: false, error: 'people_api: ' + String(errC) });
+      }
     }
 
     if (action === 'get_rsvp') {

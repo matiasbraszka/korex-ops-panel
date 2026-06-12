@@ -235,22 +235,28 @@ const RSVP_MAP: Record<string, string> = {
   INVITED: "needs_action",
 };
 
-// Lee la asistencia de Calendar para las citas vigentes con invitado y la
-// guarda en rsvp_status. Devuelve cuántas cambió.
+// Lee Calendar para las citas vigentes: si el evento fue BORRADO desde
+// Google Calendar la cita pasa a cancelada, y si tiene invitado se refleja
+// su asistencia en rsvp_status. Devuelve cuántas cambió.
 async function syncRsvpForConversation(cfg: SoporteConfig, conversationId: string): Promise<number> {
   const { data: appts } = await admin
     .from("appointments")
     .select("id, gcal_event_id, invite_email, rsvp_status")
     .eq("conversation_id", conversationId)
     .eq("status", "scheduled")
-    .not("invite_email", "is", null)
     .not("gcal_event_id", "is", null)
     .gte("start_at", new Date(Date.now() - 2 * 3600_000).toISOString())
     .limit(10);
   let changed = 0;
   for (const a of appts || []) {
     const res = await callCalendarScript(cfg, { action: "get_rsvp", eventId: a.gcal_event_id });
-    if (!res?.ok || !Array.isArray(res.guests)) continue;
+    if (res?.error === "not_found") {
+      // Borrada/rechazada directamente en Google Calendar.
+      await admin.from("appointments").update({ status: "cancelled" }).eq("id", a.id);
+      changed++;
+      continue;
+    }
+    if (!res?.ok || !Array.isArray(res.guests) || !a.invite_email) continue;
     const guest = (res.guests as { email: string; status: string }[])
       .find((g) => g.email?.toLowerCase() === String(a.invite_email).toLowerCase());
     const status = guest ? (RSVP_MAP[guest.status] || "needs_action") : null;
@@ -412,6 +418,9 @@ Deno.serve(async (req: Request) => {
       start: startAt,
       end: endAt || startAt,
       guests: inviteEmail || undefined,
+      // El link de Zoom como ubicación: ahí lo detectan Fathom y las apps
+      // de calendario como la videollamada "real" del evento.
+      location: meetingLink || undefined,
     });
     if (!cal?.ok) {
       console.error("crear-cita: fallo el Apps Script", cal);

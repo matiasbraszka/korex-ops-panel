@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore } from 'lucide-react';
+import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore, UserCheck } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
+import { fetchTeamMembers } from '../lib/api.js';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import TagPicker from './TagPicker.jsx';
 import LinkContactModal from './LinkContactModal.jsx';
+
+// Cache simple del equipo (no cambia durante la sesión).
+let teamCache = null;
 
 const fmtCita = (iso) =>
   new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' }) +
@@ -35,6 +39,12 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
   } = useSoporte();
   const [linkOpen, setLinkOpen] = useState(false);
   const [showAllParts, setShowAllParts] = useState(false);
+  const [team, setTeam] = useState(teamCache || []);
+
+  useEffect(() => {
+    if (teamCache) return;
+    fetchTeamMembers().then((rows) => { teamCache = rows; setTeam(rows); }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (open && conv?.id) {
@@ -162,6 +172,22 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
               </div>
             </div>
           )}
+
+          {/* Asignado a (responsable del chat; por defecto la asistente) */}
+          <div>
+            <SectionLabel>Asignado a</SectionLabel>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-white">
+              <UserCheck size={14} className="text-text3 shrink-0" />
+              <select
+                value={conv.assigned_to || ''}
+                onChange={(e) => updateConversation(conv.id, { assigned_to: e.target.value || null })}
+                className="flex-1 text-[12.5px] font-medium border-0 outline-none bg-transparent cursor-pointer"
+              >
+                <option value="">Sin asignar</option>
+                {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          </div>
 
           {/* Etiquetas */}
           <div>

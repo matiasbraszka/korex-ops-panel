@@ -116,6 +116,15 @@ export async function fetchGroupNames(convId) {
   return map;
 }
 
+// Miembros del equipo (para el selector "Asignado a").
+export async function fetchTeamMembers() {
+  const rows = await sbFetch(
+    'team_members?select=id,name&order=name.asc&limit=50',
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
 export async function searchContacts(q) {
   const term = encodeURIComponent(`%${q}%`);
   const rows = await sbFetch(

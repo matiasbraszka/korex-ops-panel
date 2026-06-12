@@ -184,20 +184,27 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── Sync RSVP de citas próximas con invitado por mail ──
+  // ── Sync contra Calendar: eventos borrados → cita cancelada; RSVP de
+  // invitados → rsvp_status ──
   let rsvpChanged = 0;
-  const { data: invited } = await admin
+  let cancelledSynced = 0;
+  const { data: upcoming } = await admin
     .from("appointments")
     .select("id, gcal_event_id, invite_email, rsvp_status")
     .eq("status", "scheduled")
-    .not("invite_email", "is", null)
     .not("gcal_event_id", "is", null)
     .gt("start_at", new Date(now - 2 * H).toISOString())
     .lt("start_at", new Date(now + 14 * 24 * H).toISOString())
-    .limit(15);
-  for (const a of invited || []) {
+    .limit(20);
+  for (const a of upcoming || []) {
     const res = await callCalendarScript(cfg, { action: "get_rsvp", eventId: a.gcal_event_id });
-    if (!res?.ok || !Array.isArray(res.guests)) continue;
+    if (res?.error === "not_found") {
+      // La reunión fue borrada/rechazada directamente en Google Calendar.
+      await admin.from("appointments").update({ status: "cancelled" }).eq("id", a.id);
+      cancelledSynced++;
+      continue;
+    }
+    if (!res?.ok || !Array.isArray(res.guests) || !a.invite_email) continue;
     const guest = (res.guests as { email: string; status: string }[])
       .find((g) => g.email?.toLowerCase() === String(a.invite_email).toLowerCase());
     const status = guest ? (RSVP_MAP[guest.status] || "needs_action") : null;
@@ -207,5 +214,5 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return jsonResp(200, { ok: true, sent_24h: sent24, sent_2h: sent2, rsvp_changed: rsvpChanged });
+  return jsonResp(200, { ok: true, sent_24h: sent24, sent_2h: sent2, rsvp_changed: rsvpChanged, cancelled_synced: cancelledSynced });
 });
