@@ -18,6 +18,7 @@
     "@korex/auth": "*",
     "@korex/db": "*",
     "@korex/sales": "*",
+    "@korex/soporte": "*",
     "@korex/ui": "*",
     "@supabase/supabase-js": "^2.101.1",
     "dompurify": "^3.4.7",

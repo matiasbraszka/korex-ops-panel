@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -25,6 +25,11 @@ import NotificationToast from './components/notifications/NotificationToast';
 // Lazy-load del modulo Ventas: el chunk se baja solo si el usuario entra.
 const SalesRoutes = lazy(() =>
   import('@korex/sales').then((m) => ({ default: m.SalesRoutes }))
+);
+
+// Lazy-load del modulo Soporte (bandeja WhatsApp, citas, recordatorios).
+const SoporteRoutes = lazy(() =>
+  import('@korex/soporte').then((m) => ({ default: m.SoporteRoutes }))
 );
 
 // Formulario publico de carga de KPIs (sin login). Se baja solo si alguien
@@ -263,6 +268,7 @@ function MainLayout() {
   const canAccessSettings = currentUser?.isAdmin || currentUser?.canAccessSettings === true;
   const canAccessOperations = useCan('operations', 'read');
   const canAccessSales = useCan('sales', 'read');
+  const canAccessSoporte = useCan('soporte', 'read');
   const location = useLocation();
 
   // Areas del panel: cada una tiene color propio, ruta base y modulos.
@@ -282,16 +288,24 @@ function MainLayout() {
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
   ];
+  // Items de Soporte definidos aca (no importados de @korex/soporte) para que
+  // el modulo entero quede en su propio chunk lazy: la unica referencia al
+  // paquete es el import() dinamico de SoporteRoutes.
+  const soporteItems = [
+    { id: 'inbox', label: 'WhatsApp', Icon: MessageCircle, path: '/soporte/inbox' },
+  ];
   // Tokens de color por area (mantienen consistencia con la paleta Korex).
   const areaTokens = {
-    operations: { color: '#22C55E', bg: '#ECFDF5', short: 'Ops',    icon: ClipboardList,  base: '/operations' },
-    sales:      { color: '#5B7CF5', bg: '#EEF2FF', short: 'Ventas', icon: Users,          base: '/sales' },
-    admin:      { color: '#8B5CF6', bg: '#F5F3FF', short: 'Admin',  icon: Shield,         base: '/admin' },
+    operations: { color: '#22C55E', bg: '#ECFDF5', short: 'Ops',     icon: ClipboardList,  base: '/operations' },
+    sales:      { color: '#5B7CF5', bg: '#EEF2FF', short: 'Ventas',  icon: Users,          base: '/sales' },
+    soporte:    { color: '#F59E0B', bg: '#FFFBEB', short: 'Soporte', icon: Headphones,     base: '/soporte' },
+    admin:      { color: '#8B5CF6', bg: '#F5F3FF', short: 'Admin',   icon: Shield,         base: '/admin' },
   };
   const areas = [
-    canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,   ...areaTokens.operations },
-    canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems, ...areaTokens.sales },
-    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems, ...areaTokens.admin },
+    canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,        ...areaTokens.operations },
+    canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems,      ...areaTokens.sales },
+    canAccessSoporte    && { id: 'soporte',    label: 'Soporte',        items: soporteItems,    ...areaTokens.soporte },
+    currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems,      ...areaTokens.admin },
   ].filter(Boolean);
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
@@ -324,7 +338,7 @@ function MainLayout() {
   // ClientsPage sin permisos.
   const homePath = canAccessOperations
     ? '/operations/clients'
-    : (canAccessSales ? '/sales/kpis' : '/operations/clients');
+    : (canAccessSales ? '/sales/kpis' : (canAccessSoporte ? '/soporte/inbox' : '/operations/clients'));
   // Guard: si el user NO tiene acceso a operaciones, redirigimos cualquier
   // /operations/* a su home. Antes solo se gateaba el sidebar y la ruta de
   // /admin/settings — las rutas /operations/* quedaban abiertas y un vendedor
@@ -363,6 +377,18 @@ function MainLayout() {
           canAccessSales ? (
             <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
               <SalesRoutes />
+            </Suspense>
+          ) : (
+            <Navigate to={homePath} replace />
+          )
+        }
+      />
+      <Route
+        path="/soporte/*"
+        element={
+          canAccessSoporte ? (
+            <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
+              <SoporteRoutes />
             </Suspense>
           ) : (
             <Navigate to={homePath} replace />

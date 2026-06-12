@@ -32,6 +32,17 @@ const FAC_BD = { nombre: 2, email: 7, direccion: 9, idFiscal: 10, facturarA: 11,
 const FAC_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const FAC_CONCEPTO_DEFAULT = 'ONBOARDING SISTEMA KOREX';
 
+// Concepto de la factura según el Tipo (col H de Ingresos).
+const FAC_CONCEPTOS = {
+  'SETUP': 'Implementación de sistema de marketing y tecnología para la captación de potenciales clientes',
+  'CRM': 'Acceso a software y servicio de marketing para la captación de potenciales clientes',
+  'PUBLICIDAD': 'Servicio de marketing y carga de saldo publicitario'
+};
+function facConcepto(tipo) {
+  var t = String(tipo || '').trim().toUpperCase();
+  return FAC_CONCEPTOS[t] || FAC_CONCEPTO_DEFAULT;
+}
+
 // Datos fijos del emisor (de la hoja Facturas) y textos legales.
 const FAC_EMISOR = { nombre: 'KOREX PROJECT LLC', ein: '33-3093287', ubicacion: '102 Gold Ave 443, Albuquerque' };
 const FAC_FORMA_PAGO = 'Tarjeta de crédito / débito';
@@ -106,10 +117,10 @@ function facPreview(row) {
   if (!cli.direccion) faltan.push('Dirección de facturación');
   if (!cli.email) faltan.push('E-mail');
 
-  var montoEur = Number(r[FAC_ING.eur - 1]) || 0;
   var montoUsd = Number(r[FAC_ING.usd - 1]) || 0;
-  var monto = montoEur || montoUsd;
-  var concepto = String(r[FAC_ING.producto - 1] || '').trim() || FAC_CONCEPTO_DEFAULT;
+  var montoEur = Number(r[FAC_ING.eur - 1]) || 0;
+  var monto = montoUsd || montoEur;   // SIEMPRE en USD (col D)
+  var concepto = facConcepto(r[FAC_ING.tipo - 1]);
   var hoy = new Date();
   var numero = facProximoNumero();
 
@@ -125,7 +136,7 @@ function facPreview(row) {
       email: cli.email,
       concepto: concepto,
       monto: monto,
-      moneda: montoEur ? 'EUR' : 'USD',
+      moneda: 'USD',
       numero: numero,
       numeroFmt: facPad4(numero),
       mesCarpeta: FAC_MESES[hoy.getMonth()] + ' ' + hoy.getFullYear(),
@@ -156,10 +167,10 @@ function facEnviar(row) {
     if (!cli.email) faltan.push('E-mail');
     if (faltan.length) return { ok: false, error: 'Faltan datos del cliente: ' + faltan.join(', ') + '. No se generó la factura.' };
 
-    var montoEur = Number(r[FAC_ING.eur - 1]) || 0;
     var montoUsd = Number(r[FAC_ING.usd - 1]) || 0;
-    var monto = montoEur || montoUsd;
-    var concepto = String(r[FAC_ING.producto - 1] || '').trim() || FAC_CONCEPTO_DEFAULT;
+    var montoEur = Number(r[FAC_ING.eur - 1]) || 0;
+    var monto = montoUsd || montoEur;   // SIEMPRE en USD (col D)
+    var concepto = facConcepto(r[FAC_ING.tipo - 1]);
 
     var numero = facProximoNumero();
     var hoy = new Date();
@@ -174,7 +185,7 @@ function facEnviar(row) {
       fecha: hoy,
       concepto: concepto,
       monto: monto,
-      moneda: montoEur ? 'EUR' : 'USD'
+      moneda: 'USD'
     }).setName(numero + ' ' + cli.nombreFactura + '.pdf');
 
     // 2) Enviar por email PRIMERO (si falla, no se guarda el PDF ni se consume el número).
@@ -239,8 +250,14 @@ function facBuscarCliente(nombre) {
     if (facNorm(vals[i][FAC_BD.nombre - 1]) === objetivo) {
       var empresa = String(vals[i][FAC_BD.empresa - 1] || '').trim();
       var nombreCol = String(vals[i][FAC_BD.nombre - 1] || '').trim();
+      var facturarA = String(vals[i][FAC_BD.facturarA - 1] || '').trim();
+      var esEmpresa = facturarA.toLowerCase() === 'empresa';
       return {
-        nombreFactura: empresa || nombreCol, // "Facturado a" (B8)
+        esEmpresa: esEmpresa,
+        empresa: empresa,
+        nombre: nombreCol,
+        // "Facturado a": si es Empresa va el nombre de la empresa (col L); si es Persona, el Nombre.
+        nombreFactura: esEmpresa ? empresa : nombreCol,
         idFiscal: String(vals[i][FAC_BD.idFiscal - 1] || '').trim(),
         direccion: String(vals[i][FAC_BD.direccion - 1] || '').trim(),
         email: String(vals[i][FAC_BD.email - 1] || '').trim()
@@ -330,7 +347,7 @@ function facHtmlFactura(d) {
       '<td style="vertical-align:top;width:50%;padding-left:18px;border-left:2px solid ' + BORDE + ';">' +
         '<div style="font-size:10.5px;font-weight:700;color:' + AZUL + ';letter-spacing:.5px;margin-bottom:5px;">FACTURADO A</div>' +
         '<div><b>' + esc(d.nombreFactura) + '</b></div>' +
-        '<div style="color:' + GRIS + ';">ID fiscal: ' + esc(d.idFiscal) + '</div>' +
+        '<div style="color:' + GRIS + ';">ID fiscal o DNI: ' + esc(d.idFiscal) + '</div>' +
         '<div style="color:' + GRIS + ';">' + esc(d.direccion) + '</div>' +
       '</td>' +
     '</tr></table>' +
@@ -375,11 +392,10 @@ function facHtmlFactura(d) {
   '</div></body></html>';
 }
 
-// "5000" -> "5.000,00"
+// Sin decimales (se truncan, no se redondean): 4775.9 -> "4.775"
 function facMiles(n) {
-  var x = (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).split('.');
-  x[0] = x[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return x[0] + ',' + x[1];
+  var x = String(Math.trunc(Number(n) || 0));
+  return x.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 function facPad4(n) { var s = String(n); while (s.length < 4) s = '0' + s; return s; }

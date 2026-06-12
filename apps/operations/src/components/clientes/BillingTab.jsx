@@ -364,7 +364,7 @@ function InvoiceItem({ inv, onEdit, onDelete }) {
   const KIcon = kind.icon;
   const sym = CURR_SYMBOL[inv.currency] || inv.currency;
   return (
-    <div className="flex items-center gap-3 py-2.5 px-3 border-b border-[#F0F2F5] last:border-b-0 hover:bg-[#F7F9FC] group">
+    <div className="flex items-center gap-3 py-2.5 px-2.5 rounded-lg border border-[#E2E5EB] hover:bg-[#F7F9FC] group">
       <span className="w-8 h-8 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: kind.bg }}>
         <KIcon size={14} style={{ color: kind.fg }} />
       </span>
@@ -635,14 +635,14 @@ export default function BillingTab({ client }) {
 
       <div className="flex flex-col gap-4">
         {/* Comprobantes de pago — prueba de pago del cliente (NO son facturas) */}
-        <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between py-3 px-4 border-b border-[#F0F2F5]">
+        <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px]">
+          <div className="flex items-center justify-between mb-3">
             <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}>
               <FileText size={16} className="text-text2" /> Comprobantes de pago
             </div>
           </div>
           {client.paymentReceiptUrl ? (
-            <div className="flex items-center gap-3 py-2.5 px-4">
+            <div className="flex items-center gap-2.5 border border-[#E2E5EB] rounded-lg p-2.5">
               <span className="w-8 h-8 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#ECFDF5' }}>
                 <FileText size={14} style={{ color: '#16A34A' }} />
               </span>
@@ -653,24 +653,24 @@ export default function BillingTab({ client }) {
               <a href={client.paymentReceiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-blue font-medium no-underline hover:underline shrink-0">Ver <ExternalLink size={11} /></a>
             </div>
           ) : (
-            <div className="text-center text-text3 text-[12px] py-7">Sin comprobantes de pago.</div>
+            <div className="text-center text-[12px] py-4" style={{ color: '#9CA3AF' }}>Sin comprobantes de pago.</div>
           )}
         </div>
 
         {/* Facturas — emitidas por nosotros (ingreso) o por el cliente (egreso) */}
-        <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between py-3 px-4 border-b border-[#F0F2F5]">
+        <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px]">
+          <div className="flex items-center justify-between mb-3">
             <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}>
               <FileText size={16} className="text-text2" /> Facturas ({myInvoices.length})
             </div>
-            <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold py-1.5 px-3 rounded-lg bg-blue text-white border-none cursor-pointer hover:bg-blue-dark" onClick={() => setInvoiceModal('new')}>
-              <Plus size={12} /> Agregar factura
+            <button className="inline-flex items-center gap-1 text-[11.5px] py-1 px-2 rounded-md border-none bg-blue text-white cursor-pointer hover:bg-blue-dark font-semibold" onClick={() => setInvoiceModal('new')}>
+              <Plus size={11} /> Agregar
             </button>
           </div>
           {myInvoices.length === 0 ? (
-            <div className="text-center text-text3 text-[12px] py-10">Sin facturas registradas. Tocá "Agregar factura" para la primera.</div>
+            <div className="text-center text-[12px] py-4" style={{ color: '#9CA3AF' }}>Sin facturas registradas. Tocá <b>Agregar</b> para la primera.</div>
           ) : (
-            <div>
+            <div className="flex flex-col gap-2">
               {myInvoices.map(inv => (
                 <InvoiceItem key={inv.id} inv={inv} onEdit={(i) => setInvoiceModal(i)} onDelete={deleteInvoice} />
               ))}

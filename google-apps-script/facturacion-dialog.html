@@ -74,7 +74,7 @@
     if (!c) { vsel.innerHTML = ''; return; }
     var ventas = PEND.filter(function(p){ return p.usuario === c; });
     vsel.innerHTML = '<option value="">— elegí la venta —</option>' + ventas.map(function(p){
-      var label = (p.fecha||'') + ' · ' + (p.producto||p.tipo||'venta') + ' · ' + money(p.montoEur||p.montoUsd, p.montoEur?'EUR':'USD');
+      var label = (p.fecha||'') + ' · ' + (p.producto||p.tipo||'venta') + ' · ' + money(p.montoUsd||p.montoEur, 'US$');
       return '<option value="'+p.row+'">'+esc(label)+'</option>';
     }).join('');
   }
