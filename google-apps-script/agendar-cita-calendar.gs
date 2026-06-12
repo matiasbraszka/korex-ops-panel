@@ -1,7 +1,7 @@
 /**
- * agendar-cita-calendar.gs — v2. Crea/mueve/borra eventos en el Google
- * Calendar de la cuenta donde se deploya (admin@metodokorex.com) y lee la
- * asistencia (RSVP) de los invitados.
+ * agendar-cita-calendar.gs — v3. Crea/mueve/borra eventos en el Google
+ * Calendar de la cuenta donde se deploya (admin@metodokorex.com), lee la
+ * asistencia (RSVP) de los invitados y saca el Meet automático.
  *
  * Lo llama la edge function `crear-cita` del panel Korex con:
  *   POST { secret, action: 'create_event', title, description, start, end, guests? }
@@ -53,13 +53,14 @@ function kxcRemoveMeet(eventId) {
   var id = String(eventId).replace('@google.com', '');
   var url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events/' +
     encodeURIComponent(id) + '?conferenceDataVersion=1';
-  UrlFetchApp.fetch(url, {
+  var res = UrlFetchApp.fetch(url, {
     method: 'patch',
     contentType: 'application/json',
     payload: JSON.stringify({ conferenceData: null }),
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     muteHttpExceptions: true,
   });
+  return res.getResponseCode(); // 200 = Meet eliminado
 }
 
 function doPost(e) {
@@ -75,6 +76,9 @@ function doPost(e) {
 
     var action = String(b.action || '');
     var cal = CalendarApp.getDefaultCalendar();
+
+    // Para verificar qué versión del script está corriendo la web app.
+    if (action === 'ping') return kxcJson({ ok: true, v: 3 });
 
     if (action === 'create_event') {
       var title = String(b.title || '').trim();
@@ -92,14 +96,15 @@ function doPost(e) {
       }
       var event = cal.createEvent(title, start, end, opts);
       // Con invitados, Google mete un Meet automático: sacarlo (es por Zoom).
+      var meetRemoved = null;
       if (b.guests) {
-        try { kxcRemoveMeet(event.getId()); } catch (errMeet) {}
+        try { meetRemoved = kxcRemoveMeet(event.getId()); } catch (errMeet) { meetRemoved = String(errMeet); }
       }
       // Link directo al evento en la UI de Google Calendar.
       var htmlLink = 'https://calendar.google.com/calendar/event?eid=' +
         Utilities.base64Encode(event.getId().replace('@google.com', '') + ' ' + cal.getId())
           .replace(/=+$/, '');
-      return kxcJson({ ok: true, eventId: event.getId(), htmlLink: htmlLink });
+      return kxcJson({ ok: true, v: 3, eventId: event.getId(), htmlLink: htmlLink, meetRemoved: meetRemoved });
     }
 
     if (action === 'update_event') {

@@ -31,7 +31,8 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
 
   const name = convName(conv);
   const color = colorFromString(conv.wa_jid);
-  const citas = appointmentsByConv[conv.id] || [];
+  // Solo citas vigentes: las canceladas no aportan nada en el panel.
+  const citas = (appointmentsByConv[conv.id] || []).filter((a) => a.status === 'scheduled');
 
   return (
     <>
@@ -102,11 +103,8 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
               ) : (
                 <div className="flex flex-col gap-1.5">
                   {citas.map((a) => (
-                    <div key={a.id} className={`px-2.5 py-2 rounded-lg border text-[12px] ${a.status === 'cancelled' ? 'border-border bg-surface2 opacity-60' : 'border-[#F59E0B]/40 bg-[#FFFBEB]'}`}>
-                      <div className="font-semibold truncate flex items-center gap-1.5">
-                        {a.title}
-                        {a.status === 'cancelled' && <span className="text-[9.5px] font-bold text-text3 uppercase">cancelada</span>}
-                      </div>
+                    <div key={a.id} className="px-2.5 py-2 rounded-lg border text-[12px] border-[#F59E0B]/40 bg-[#FFFBEB]">
+                      <div className="font-semibold truncate">{a.title}</div>
                       <div className="text-[11px] text-text2 capitalize">{fmtCita(a.start_at)}</div>
                       {a.invite_email && a.status === 'scheduled' && (
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
