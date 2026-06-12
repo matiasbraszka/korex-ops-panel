@@ -17,6 +17,7 @@
     "build": "npm run build -w @korex/operations",
     "build:operations": "npm run build -w @korex/operations",
     "lint": "npm run lint -w @korex/operations",
+    "test": "npm run test -w @korex/operations",
     "preview": "npm run preview -w @korex/operations"
   },
   "devDependencies": {

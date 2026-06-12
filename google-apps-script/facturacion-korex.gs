@@ -24,13 +24,18 @@ const FAC_SHEET_INGRESOS = 'Ingresos';
 const FAC_SHEET_BASE      = 'Base de datos';
 const FAC_EXCLUIR_CARPETAS = ['Egresos']; // no entran en la numeración de salida
 
-// Columnas de Ingresos (1-indexed)
-const FAC_ING = { fecha: 2, eur: 3, usd: 4, tipo: 8, producto: 9, usuario: 13, facturado: 17 };
+// Columnas de Ingresos (1-indexed). quienPaga = col T (Cliente/Empresa).
+const FAC_ING = { fecha: 2, eur: 3, usd: 4, tipo: 8, producto: 9, usuario: 13, facturado: 17, quienPaga: 20 };
 // Columnas de Base de datos (1-indexed)
 const FAC_BD = { nombre: 2, email: 7, direccion: 9, idFiscal: 10, facturarA: 11, empresa: 12 };
 
 const FAC_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const FAC_CONCEPTO_DEFAULT = 'ONBOARDING SISTEMA KOREX';
+
+// Datos fijos del emisor (de la hoja Facturas) y textos legales.
+const FAC_EMISOR = { nombre: 'KOREX PROJECT LLC', ein: '33-3093287', ubicacion: '102 Gold Ave 443, Albuquerque' };
+const FAC_FORMA_PAGO = 'Tarjeta de crédito / débito';
+const FAC_NOTA_IVA = 'Operation not subject to VAT according to Article 196 of EU VAT Directive / Operación no sujeta a IVA según el artículo 196 de la Directiva IVA UE.';
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -53,7 +58,8 @@ function facListarPendientes() {
   var sh = ss.getSheetByName(FAC_SHEET_INGRESOS);
   var last = sh.getLastRow();
   if (last < 3) return [];
-  var rng = sh.getRange(3, 1, last - 2, FAC_ING.facturado).getValues();
+  var rng = sh.getRange(3, 1, last - 2, FAC_ING.quienPaga).getValues();
+  var anioActual = new Date().getFullYear();
   var out = [];
   for (var i = 0; i < rng.length; i++) {
     var r = rng[i];
@@ -61,6 +67,10 @@ function facListarPendientes() {
     var fac = r[FAC_ING.facturado - 1];
     if (!usuario) continue;
     if (facEsFacturado(fac)) continue;
+    // Si el pago lo recibió el Cliente (col T = "Cliente"), no lo factura Korex.
+    if (String(r[FAC_ING.quienPaga - 1] || '').trim().toLowerCase() === 'cliente') continue;
+    // Solo ventas de este año (para no arrastrar el histórico).
+    if (facAnio(r[FAC_ING.fecha - 1]) !== anioActual) continue;
     var montoEur = Number(r[FAC_ING.eur - 1]) || 0;
     var montoUsd = Number(r[FAC_ING.usd - 1]) || 0;
     if (montoEur === 0 && montoUsd === 0) continue; // sin monto no se factura
@@ -81,10 +91,11 @@ function facListarPendientes() {
 function facPreview(row) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ing = ss.getSheetByName(FAC_SHEET_INGRESOS);
-  var r = ing.getRange(row, 1, 1, FAC_ING.facturado).getValues()[0];
+  var r = ing.getRange(row, 1, 1, FAC_ING.quienPaga).getValues()[0];
   var usuario = String(r[FAC_ING.usuario - 1] || '').trim();
   if (!usuario) return { ok: false, error: 'La fila no tiene cliente (Usuario).' };
   if (facEsFacturado(r[FAC_ING.facturado - 1])) return { ok: false, error: 'Esta venta ya está facturada.' };
+  if (String(r[FAC_ING.quienPaga - 1] || '').trim().toLowerCase() === 'cliente') return { ok: false, error: 'Esta venta la cobró el cliente (col T = "Cliente"), no la factura Korex.' };
 
   var cli = facBuscarCliente(usuario);
   if (!cli) return { ok: false, error: 'No encontré "' + usuario + '" en Base de datos.' };
@@ -130,10 +141,11 @@ function facEnviar(row) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var ing = ss.getSheetByName(FAC_SHEET_INGRESOS);
-    var r = ing.getRange(row, 1, 1, FAC_ING.facturado).getValues()[0];
+    var r = ing.getRange(row, 1, 1, FAC_ING.quienPaga).getValues()[0];
     var usuario = String(r[FAC_ING.usuario - 1] || '').trim();
     if (!usuario) return { ok: false, error: 'La fila no tiene cliente.' };
     if (facEsFacturado(r[FAC_ING.facturado - 1])) return { ok: false, error: 'Esta venta ya está facturada.' };
+    if (String(r[FAC_ING.quienPaga - 1] || '').trim().toLowerCase() === 'cliente') return { ok: false, error: 'Esta venta la cobró el cliente (col T = "Cliente"), no la factura Korex.' };
 
     var cli = facBuscarCliente(usuario);
     if (!cli) return { ok: false, error: 'No encontré "' + usuario + '" en Base de datos.' };
@@ -153,31 +165,32 @@ function facEnviar(row) {
     var hoy = new Date();
     var carpeta = facCarpetaMes(hoy);
 
-    // 1) Rellenar el template (hoja Facturas) y exportar a PDF.
-    var pdfBlob = facGenerarPdf(ss, {
+    // 1) Generar el PDF de la factura (template HTML) — blob en memoria.
+    var pdfBlob = facGenerarPdf({
       nombreFactura: cli.nombreFactura,
       idFiscal: cli.idFiscal,
       direccion: cli.direccion,
       numeroFmt: facPad4(numero),
       fecha: hoy,
       concepto: concepto,
-      monto: monto
-    });
-    var nombreArchivo = numero + ' ' + cli.nombreFactura + '.pdf';
-    pdfBlob.setName(nombreArchivo);
-    var file = carpeta.createFile(pdfBlob);
+      monto: monto,
+      moneda: montoEur ? 'EUR' : 'USD'
+    }).setName(numero + ' ' + cli.nombreFactura + '.pdf');
 
-    // 2) Enviar por email con el PDF adjunto.
+    // 2) Enviar por email PRIMERO (si falla, no se guarda el PDF ni se consume el número).
     var asunto = 'Factura N° ' + facPad4(numero) + ' — KOREX PROJECT LLC';
     var cuerpo = 'Hola' + (cli.nombreFactura ? ' ' + cli.nombreFactura : '') + ',\n\n' +
       'Adjuntamos la factura N° ' + facPad4(numero) + ' correspondiente a ' + concepto + '.\n\n' +
       'Cualquier consulta quedamos a disposición.\n\nSaludos,\nEquipo Korex';
     MailApp.sendEmail(cli.email, asunto, cuerpo, {
-      attachments: [file.getAs('application/pdf')],
+      attachments: [pdfBlob.copyBlob()],
       name: 'Korex'
     });
 
-    // 3) Marcar Facturado (checkbox) + nota con Nº y link.
+    // 3) Recién ahora guardar el PDF en la carpeta del mes.
+    var file = carpeta.createFile(pdfBlob);
+
+    // 4) Marcar Facturado (checkbox) + nota con Nº y link.
     var celdaFac = ing.getRange(row, FAC_ING.facturado);
     celdaFac.setValue(true);
     celdaFac.setNote('Factura N° ' + facPad4(numero) + ' enviada el ' + facFechaStr(hoy) + '\n' + file.getUrl());
@@ -271,28 +284,102 @@ function facCarpetaMes(date) {
   return raiz.createFolder(nombre);
 }
 
-// Rellena la hoja Facturas y exporta el rango A1:C18 a PDF.
-function facGenerarPdf(ss, d) {
-  var sh = ss.getSheetByName(FAC_SHEET_FACTURAS);
-  sh.getRange('B8').setValue(d.nombreFactura);
-  sh.getRange('B9').setValue(d.idFiscal);
-  sh.getRange('B10').setValue(d.direccion);
-  sh.getRange('B11').setValue(d.numeroFmt);
-  sh.getRange('B12').setValue(d.fecha); sh.getRange('B12').setNumberFormat('dd/MM/yyyy');
-  sh.getRange('A14').setValue(d.concepto);
-  sh.getRange('B14').setValue(1);
-  sh.getRange('C14').setValue(d.monto);
-  SpreadsheetApp.flush();
+// Genera el PDF de la factura desde un template HTML (mejor diseño) — blob.
+function facGenerarPdf(d) {
+  var html = facHtmlFactura(d);
+  return Utilities.newBlob(html, 'text/html', 'factura.html').getAs('application/pdf');
+}
 
-  var gid = sh.getSheetId();
-  var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?' + [
-    'format=pdf', 'gid=' + gid, 'range=A1:C18',
-    'portrait=true', 'fitw=true', 'gridlines=false', 'printtitle=false',
-    'sheetnames=false', 'pagenumbers=false', 'top_margin=0.5', 'bottom_margin=0.5',
-    'left_margin=0.5', 'right_margin=0.5'
-  ].join('&');
-  var resp = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
-  return resp.getBlob().setName('factura.pdf');
+// Template HTML de la factura. Diseñado con bordes/tipografía/color de TEXTO (no fondos,
+// porque el conversor HTML→PDF de Apps Script suele ignorar los background-color).
+function facHtmlFactura(d) {
+  var sym = d.moneda === 'USD' ? 'US$' : '€';
+  var importe = sym + ' ' + facMiles(d.monto);
+  var fechaStr = facFechaStr(d.fecha);
+  var AZUL = '#1d4ed8', GRIS = '#6b7280', BORDE = '#d1d5db', OSCURO = '#111827';
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  return '' +
+  '<!DOCTYPE html><html><head><meta charset="utf-8"></head>' +
+  '<body style="margin:0;font-family:Arial,Helvetica,sans-serif;color:' + OSCURO + ';">' +
+  '<div style="max-width:720px;margin:0 auto;padding:40px 44px;border-top:6px solid ' + AZUL + ';">' +
+
+    // Encabezado
+    '<table style="width:100%;border-collapse:collapse;margin-top:14px;"><tr>' +
+      '<td style="vertical-align:top;">' +
+        '<div style="font-size:28px;font-weight:800;letter-spacing:1px;color:' + AZUL + ';">KOREX</div>' +
+        '<div style="font-size:11px;color:' + GRIS + ';margin-top:2px;">' + esc(FAC_EMISOR.nombre) + '</div>' +
+      '</td>' +
+      '<td style="vertical-align:top;text-align:right;">' +
+        '<div style="font-size:24px;font-weight:700;letter-spacing:4px;color:' + OSCURO + ';">FACTURA</div>' +
+        '<div style="margin-top:10px;font-size:13px;"><span style="color:' + GRIS + ';">N° </span><b style="color:' + AZUL + ';font-size:15px;">' + esc(d.numeroFmt) + '</b></div>' +
+        '<div style="font-size:13px;margin-top:2px;"><span style="color:' + GRIS + ';">Fecha: </span><b>' + esc(fechaStr) + '</b></div>' +
+      '</td>' +
+    '</tr></table>' +
+
+    '<div style="border-top:2px solid ' + BORDE + ';margin:22px 0;"></div>' +
+
+    // Emisor / Facturado a
+    '<table style="width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.6;"><tr>' +
+      '<td style="vertical-align:top;width:50%;padding-right:18px;">' +
+        '<div style="font-size:10.5px;font-weight:700;color:' + AZUL + ';letter-spacing:.5px;margin-bottom:5px;">EMITIDO POR</div>' +
+        '<div><b>' + esc(FAC_EMISOR.nombre) + '</b></div>' +
+        '<div style="color:' + GRIS + ';">EIN: ' + esc(FAC_EMISOR.ein) + '</div>' +
+        '<div style="color:' + GRIS + ';">' + esc(FAC_EMISOR.ubicacion) + '</div>' +
+      '</td>' +
+      '<td style="vertical-align:top;width:50%;padding-left:18px;border-left:2px solid ' + BORDE + ';">' +
+        '<div style="font-size:10.5px;font-weight:700;color:' + AZUL + ';letter-spacing:.5px;margin-bottom:5px;">FACTURADO A</div>' +
+        '<div><b>' + esc(d.nombreFactura) + '</b></div>' +
+        '<div style="color:' + GRIS + ';">ID fiscal: ' + esc(d.idFiscal) + '</div>' +
+        '<div style="color:' + GRIS + ';">' + esc(d.direccion) + '</div>' +
+      '</td>' +
+    '</tr></table>' +
+
+    // Tabla de ítems (encabezado por borde inferior azul + texto, sin relleno)
+    '<table style="width:100%;border-collapse:collapse;margin-top:30px;font-size:13px;">' +
+      '<tr>' +
+        '<th style="text-align:left;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';">CONCEPTO</th>' +
+        '<th style="text-align:center;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:90px;">UNIDADES</th>' +
+        '<th style="text-align:right;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:150px;">SUBTOTAL</th>' +
+      '</tr>' +
+      '<tr>' +
+        '<td style="padding:12px;border-bottom:1px solid ' + BORDE + ';">' + esc(d.concepto) + '</td>' +
+        '<td style="padding:12px;border-bottom:1px solid ' + BORDE + ';text-align:center;">1</td>' +
+        '<td style="padding:12px;border-bottom:1px solid ' + BORDE + ';text-align:right;">' + esc(importe) + '</td>' +
+      '</tr>' +
+    '</table>' +
+
+    // Total (alineado a la derecha)
+    '<table style="width:100%;border-collapse:collapse;margin-top:6px;"><tr>' +
+      '<td style="width:60%;"></td>' +
+      '<td style="width:40%;">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:15px;">' +
+          '<tr>' +
+            '<td style="padding:10px 12px;color:' + GRIS + ';font-weight:700;">TOTAL</td>' +
+            '<td style="padding:10px 12px;text-align:right;font-weight:800;font-size:17px;color:' + AZUL + ';">' + esc(importe) + '</td>' +
+          '</tr>' +
+        '</table>' +
+      '</td>' +
+    '</tr></table>' +
+
+    // Forma de pago
+    '<div style="margin-top:28px;font-size:12.5px;">' +
+      '<span style="color:' + GRIS + ';">Forma de pago: </span><b>' + esc(FAC_FORMA_PAGO) + '</b>' +
+    '</div>' +
+
+    // Nota legal
+    '<div style="margin-top:44px;padding-top:14px;border-top:1px solid ' + BORDE + ';font-size:10px;color:' + GRIS + ';line-height:1.55;">' +
+      esc(FAC_NOTA_IVA) +
+    '</div>' +
+
+  '</div></body></html>';
+}
+
+// "5000" -> "5.000,00"
+function facMiles(n) {
+  var x = (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).split('.');
+  x[0] = x[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return x[0] + ',' + x[1];
 }
 
 function facPad4(n) { var s = String(n); while (s.length < 4) s = '0' + s; return s; }
@@ -301,9 +388,17 @@ function facNorm(s) {
   return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+// Devuelve un Date a partir de un valor de celda (Date o serial de Sheets) o null.
+function facToDate(v) {
+  if (v instanceof Date) return v;
+  if (typeof v === 'number' && v > 0) return new Date(Math.round((v - 25569) * 86400 * 1000));
+  return null;
+}
+
+function facAnio(v) { var d = facToDate(v); return d ? d.getFullYear() : 0; }
+
 function facFechaStr(v) {
-  var d = (v instanceof Date) ? v : null;
-  if (!d && typeof v === 'number' && v > 0) { d = new Date(Math.round((v - 25569) * 86400 * 1000)); }
+  var d = facToDate(v);
   if (!d) return String(v || '');
   var dd = ('0' + d.getDate()).slice(-2), mm = ('0' + (d.getMonth() + 1)).slice(-2);
   return dd + '/' + mm + '/' + d.getFullYear();
