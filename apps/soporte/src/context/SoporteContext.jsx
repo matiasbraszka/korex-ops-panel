@@ -363,6 +363,17 @@ export function SoporteProvider({ children }) {
   const loadAppointments = useCallback(async (convId) => {
     const rows = await fetchAppointments(convId);
     setAppointmentsByConv((prev) => ({ ...prev, [convId]: rows }));
+    // Si hay citas vigentes con invitado por mail, refrescar la asistencia
+    // (RSVP) en segundo plano contra Google Calendar.
+    if (rows.some((a) => a.status === 'scheduled' && a.invite_email)) {
+      invokeCita({ action: 'sync_rsvp', conversation_id: convId })
+        .then((res) => {
+          if (Array.isArray(res?.appointments)) {
+            setAppointmentsByConv((prev) => ({ ...prev, [convId]: res.appointments }));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const createAppointment = useCallback(async (payload) => {
@@ -384,6 +395,18 @@ export function SoporteProvider({ children }) {
     }));
   }, []);
 
+  // Mueve la cita: actualiza Calendar + Zoom y resetea los recordatorios.
+  const rescheduleAppointment = useCallback(async (convId, payload) => {
+    const res = await invokeCita({ action: 'reschedule', ...payload }); // lanza si falla
+    if (res?.appointment) {
+      setAppointmentsByConv((prev) => ({
+        ...prev,
+        [convId]: (prev[convId] || []).map((a) => (a.id === res.appointment.id ? res.appointment : a)),
+      }));
+    }
+    return res;
+  }, []);
+
   // ── Derivados ──
   const sortedConversations = useMemo(() => {
     return [...conversations].sort((a, b) => {
@@ -397,6 +420,12 @@ export function SoporteProvider({ children }) {
   const visibleConversations = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     return sortedConversations.filter((c) => {
+      // Archivados: solo se ven en su pestaña (y vuelven solos si escriben).
+      if (filters.scope === 'archived') {
+        if (!c.archived) return false;
+      } else if (c.archived) {
+        return false;
+      }
       if (filters.scope === 'unread' && !(c.unread_count > 0 && c.id !== selectedId)) return false;
       if (filters.scope === 'dm' && c.is_group) return false;
       if (filters.scope === 'groups' && !c.is_group) return false;
@@ -415,7 +444,7 @@ export function SoporteProvider({ children }) {
   );
 
   const unreadTotal = useMemo(
-    () => conversations.reduce((acc, c) => acc + (c.id === selectedId ? 0 : (c.unread_count || 0)), 0),
+    () => conversations.reduce((acc, c) => acc + (c.id === selectedId || c.archived ? 0 : (c.unread_count || 0)), 0),
     [conversations, selectedId],
   );
 
@@ -435,7 +464,7 @@ export function SoporteProvider({ children }) {
     appointmentTemplate: config.appointment_template || '',
     saveTagsCatalog,
     updateConversation, updateNotes, linkContact,
-    appointmentsByConv, loadAppointments, createAppointment, cancelAppointment,
+    appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     mediaByMsg, loadMedia,
     getDraft, setDraft, refresh,
   }), [
@@ -443,7 +472,7 @@ export function SoporteProvider({ children }) {
     selectedConversation, selectConversation, filters, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, config, saveTagsCatalog,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
-    loadAppointments, createAppointment, cancelAppointment,
+    loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     mediaByMsg, loadMedia, getDraft, setDraft, refresh,
   ]);
 

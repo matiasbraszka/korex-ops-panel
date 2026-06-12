@@ -1,11 +1,14 @@
 // supabase/functions/crear-cita/index.ts
-// Agenda una cita desde la bandeja de Soporte:
-//   1. Crea el evento en el Google Calendar de admin@metodokorex.com via el
-//      Apps Script agendar-cita-calendar.gs (config en soporte_config:
-//      calendar_script_url + calendar_script_secret).
-//   2. Guarda la fila en `appointments`.
-//   3. Si send_confirmation=true, manda el WhatsApp de confirmacion al chat.
-// action:'cancel' borra el evento del Calendar y marca la cita cancelada.
+// Citas de la bandeja de Soporte (crear / reagendar / cancelar / sync RSVP):
+//   - create (default): evento en Google Calendar (Apps Script en
+//     admin@metodokorex.com) + reunión Zoom (S2S OAuth, best-effort) + fila en
+//     `appointments` + WhatsApp de confirmación opcional. Si viene
+//     invite_email, el prospecto recibe la invitación por mail (RSVP).
+//   - action:'reschedule': mueve el evento de Calendar y la reunión de Zoom,
+//     resetea los recordatorios y avisa por WhatsApp opcionalmente.
+//   - action:'cancel': borra el evento de Calendar y la reunión de Zoom.
+//   - action:'sync_rsvp': lee la asistencia (sí/no/quizás) de los invitados
+//     desde Calendar y la refleja en appointments.rsvp_status.
 //
 // Auth: verify_jwt=true + permiso soporte:write (mismo patron que whatsapp-send).
 
@@ -60,24 +63,43 @@ interface SoporteConfig {
   zoom_client_secret?: string;
 }
 
-// Crea una reunion de Zoom (Server-to-Server OAuth) y devuelve el join_url.
-// Best-effort: si Zoom no esta configurado o falla, la cita sigue sin link.
-async function createZoomMeeting(cfg: SoporteConfig, args: { title: string; startAt: string; durationMin: number }): Promise<string | null> {
+async function getConfig(): Promise<SoporteConfig> {
+  const { data } = await admin.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+  return (data?.value as SoporteConfig) ?? {};
+}
+
+// ── Zoom (Server-to-Server OAuth) — todo best-effort ──
+
+async function zoomToken(cfg: SoporteConfig): Promise<string | null> {
   if (!cfg.zoom_account_id || !cfg.zoom_client_id || !cfg.zoom_client_secret) return null;
   try {
     const basic = btoa(`${cfg.zoom_client_id}:${cfg.zoom_client_secret}`);
-    const tokenRes = await fetch(
+    const r = await fetch(
       `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${encodeURIComponent(cfg.zoom_account_id)}`,
       { method: "POST", headers: { Authorization: `Basic ${basic}` }, signal: AbortSignal.timeout(15000) },
     );
-    const tokenData = await tokenRes.json().catch(() => null);
-    if (!tokenRes.ok || !tokenData?.access_token) {
-      console.error("crear-cita: Zoom token error", tokenRes.status, tokenData);
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data?.access_token) {
+      console.error("crear-cita: Zoom token error", r.status, data);
       return null;
     }
-    const meetRes = await fetch("https://api.zoom.us/v2/users/me/meetings", {
+    return String(data.access_token);
+  } catch (e) {
+    console.error("crear-cita: Zoom inalcanzable", e);
+    return null;
+  }
+}
+
+async function createZoomMeeting(
+  cfg: SoporteConfig,
+  args: { title: string; startAt: string; durationMin: number },
+): Promise<{ joinUrl: string; meetingId: string } | null> {
+  const token = await zoomToken(cfg);
+  if (!token) return null;
+  try {
+    const r = await fetch("https://api.zoom.us/v2/users/me/meetings", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenData.access_token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         topic: args.title,
         type: 2,
@@ -87,22 +109,62 @@ async function createZoomMeeting(cfg: SoporteConfig, args: { title: string; star
       }),
       signal: AbortSignal.timeout(15000),
     });
-    const meet = await meetRes.json().catch(() => null);
-    if (!meetRes.ok || !meet?.join_url) {
-      console.error("crear-cita: Zoom meeting error", meetRes.status, meet);
+    const meet = await r.json().catch(() => null);
+    if (!r.ok || !meet?.join_url) {
+      console.error("crear-cita: Zoom meeting error", r.status, meet);
       return null;
     }
-    return String(meet.join_url);
+    return { joinUrl: String(meet.join_url), meetingId: String(meet.id) };
   } catch (e) {
-    console.error("crear-cita: Zoom inalcanzable", e);
+    console.error("crear-cita: Zoom create fallo", e);
     return null;
   }
 }
 
-async function getConfig(): Promise<SoporteConfig> {
-  const { data } = await admin.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
-  return (data?.value as SoporteConfig) ?? {};
+// Mueve la reunión a la nueva fecha (requiere scope meeting:update; si no
+// está, el link viejo sigue sirviendo igual — Zoom no expira los links).
+async function updateZoomMeeting(
+  cfg: SoporteConfig,
+  meetingId: string,
+  args: { title?: string; startAt: string; durationMin: number },
+): Promise<void> {
+  const token = await zoomToken(cfg);
+  if (!token) return;
+  try {
+    const r = await fetch(`https://api.zoom.us/v2/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        ...(args.title ? { topic: args.title } : {}),
+        start_time: args.startAt,
+        duration: args.durationMin,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) console.error("crear-cita: Zoom update fallo", r.status, await r.text().catch(() => ""));
+  } catch (e) {
+    console.error("crear-cita: Zoom update inalcanzable", e);
+  }
 }
+
+async function deleteZoomMeeting(cfg: SoporteConfig, meetingId: string): Promise<void> {
+  const token = await zoomToken(cfg);
+  if (!token) return;
+  try {
+    const r = await fetch(`https://api.zoom.us/v2/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok && r.status !== 404) {
+      console.error("crear-cita: Zoom delete fallo (¿falta scope meeting:delete?)", r.status);
+    }
+  } catch (e) {
+    console.error("crear-cita: Zoom delete inalcanzable", e);
+  }
+}
+
+// ── Google Calendar via Apps Script ──
 
 async function callCalendarScript(cfg: SoporteConfig, payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   if (!cfg.calendar_script_url || !cfg.calendar_script_secret) return null;
@@ -165,6 +227,40 @@ async function sendWhatsAppText(args: {
   return true;
 }
 
+const RSVP_MAP: Record<string, string> = {
+  YES: "accepted",
+  NO: "declined",
+  MAYBE: "tentative",
+  INVITED: "needs_action",
+};
+
+// Lee la asistencia de Calendar para las citas vigentes con invitado y la
+// guarda en rsvp_status. Devuelve cuántas cambió.
+async function syncRsvpForConversation(cfg: SoporteConfig, conversationId: string): Promise<number> {
+  const { data: appts } = await admin
+    .from("appointments")
+    .select("id, gcal_event_id, invite_email, rsvp_status")
+    .eq("conversation_id", conversationId)
+    .eq("status", "scheduled")
+    .not("invite_email", "is", null)
+    .not("gcal_event_id", "is", null)
+    .gte("start_at", new Date(Date.now() - 2 * 3600_000).toISOString())
+    .limit(10);
+  let changed = 0;
+  for (const a of appts || []) {
+    const res = await callCalendarScript(cfg, { action: "get_rsvp", eventId: a.gcal_event_id });
+    if (!res?.ok || !Array.isArray(res.guests)) continue;
+    const guest = (res.guests as { email: string; status: string }[])
+      .find((g) => g.email?.toLowerCase() === String(a.invite_email).toLowerCase());
+    const status = guest ? (RSVP_MAP[guest.status] || "needs_action") : null;
+    if (status && status !== a.rsvp_status) {
+      await admin.from("appointments").update({ rsvp_status: status }).eq("id", a.id);
+      changed++;
+    }
+  }
+  return changed;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResp(405, { error: "method_not_allowed" });
@@ -181,7 +277,7 @@ Deno.serve(async (req: Request) => {
 
   const cfg = await getConfig();
 
-  // ── Cancelar ──
+  // ── Cancelar (borra evento de Calendar y reunión de Zoom) ──
   if (body.action === "cancel") {
     const id = String(body.appointment_id || "");
     if (!id) return jsonResp(400, { error: "missing_fields" });
@@ -190,8 +286,87 @@ Deno.serve(async (req: Request) => {
     if (appt.gcal_event_id) {
       await callCalendarScript(cfg, { action: "delete_event", eventId: appt.gcal_event_id });
     }
+    if (appt.zoom_meeting_id) await deleteZoomMeeting(cfg, appt.zoom_meeting_id);
     await admin.from("appointments").update({ status: "cancelled" }).eq("id", id);
     return jsonResp(200, { ok: true });
+  }
+
+  // ── Reagendar ──
+  if (body.action === "reschedule") {
+    const id = String(body.appointment_id || "");
+    const startAt = String(body.start_at || "");
+    const endAt = String(body.end_at || "") || null;
+    if (!id || !startAt) return jsonResp(400, { error: "missing_fields" });
+    if (isNaN(new Date(startAt).getTime())) return jsonResp(400, { error: "bad_date" });
+
+    const { data: appt } = await admin.from("appointments").select("*").eq("id", id).maybeSingle();
+    if (!appt) return jsonResp(404, { error: "not_found" });
+    if (appt.status !== "scheduled") return jsonResp(409, { error: "not_scheduled" });
+
+    const title = body.title ? String(body.title).trim() : appt.title;
+    const notes = body.notes !== undefined ? (body.notes ? String(body.notes) : null) : appt.notes;
+    const durationMin = endAt
+      ? Math.max(15, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60000))
+      : 60;
+
+    // Calendar: si el evento existe, moverlo es obligatorio (si falla avisamos).
+    if (appt.gcal_event_id && cfg.calendar_script_url) {
+      const cal = await callCalendarScript(cfg, {
+        action: "update_event",
+        eventId: appt.gcal_event_id,
+        title,
+        start: startAt,
+        end: endAt || startAt,
+      });
+      if (!cal?.ok) {
+        console.error("crear-cita: fallo update_event", cal);
+        return jsonResp(502, { error: "calendar_error" });
+      }
+    }
+    if (appt.zoom_meeting_id) {
+      await updateZoomMeeting(cfg, appt.zoom_meeting_id, { title, startAt, durationMin });
+    }
+
+    // Al moverla, los recordatorios se resetean para la nueva fecha.
+    const { data: updated, error: updErr } = await admin.from("appointments").update({
+      title,
+      notes,
+      start_at: startAt,
+      end_at: endAt,
+      reminder_24h_sent_at: null,
+      reminder_2h_sent_at: null,
+    }).eq("id", id).select("*").single();
+    if (updErr) {
+      console.error("crear-cita: error actualizando appointment", updErr);
+      return jsonResp(500, { error: "db_error" });
+    }
+
+    // Aviso del cambio por WhatsApp (best-effort).
+    let updateSent = false;
+    if (body.send_update === true && body.update_text && appt.conversation_id) {
+      const { data: conv } = await admin
+        .from("wa_conversations").select("id, wa_jid")
+        .eq("id", appt.conversation_id).maybeSingle();
+      if (conv) {
+        const text = appt.meeting_link
+          ? `${String(body.update_text)}\n\n🔗 Link de la reunión: ${appt.meeting_link}`
+          : String(body.update_text);
+        updateSent = await sendWhatsAppText({ conversation: conv, text, memberId: auth.memberId, cfg });
+      }
+    }
+    return jsonResp(200, { ok: true, appointment: updated, update_sent: updateSent });
+  }
+
+  // ── Sync de asistencia (RSVP) ──
+  if (body.action === "sync_rsvp") {
+    const convId = String(body.conversation_id || "");
+    if (!convId) return jsonResp(400, { error: "missing_fields" });
+    const changed = await syncRsvpForConversation(cfg, convId);
+    const { data: rows } = await admin
+      .from("appointments").select("*")
+      .eq("conversation_id", convId)
+      .order("start_at", { ascending: false }).limit(50);
+    return jsonResp(200, { ok: true, changed, appointments: rows || [] });
   }
 
   // ── Crear ──
@@ -200,8 +375,12 @@ Deno.serve(async (req: Request) => {
   const startAt = String(body.start_at || "");
   const endAt = String(body.end_at || "") || null;
   const notes = body.notes ? String(body.notes) : null;
+  const inviteEmail = String(body.invite_email || "").trim().toLowerCase() || null;
   if (!convId || !title || !startAt) return jsonResp(400, { error: "missing_fields" });
   if (isNaN(new Date(startAt).getTime())) return jsonResp(400, { error: "bad_date" });
+  if (inviteEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(inviteEmail)) {
+    return jsonResp(400, { error: "bad_email" });
+  }
 
   const { data: conv } = await admin
     .from("wa_conversations")
@@ -213,7 +392,8 @@ Deno.serve(async (req: Request) => {
   const durationMin = endAt
     ? Math.max(15, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60000))
     : 60;
-  const meetingLink = await createZoomMeeting(cfg, { title, startAt, durationMin });
+  const zoom = await createZoomMeeting(cfg, { title, startAt, durationMin });
+  const meetingLink = zoom?.joinUrl ?? null;
 
   // Evento en Google Calendar (si el script esta configurado, es obligatorio
   // que funcione; si no esta configurado, la cita se guarda igual sin evento).
@@ -230,6 +410,7 @@ Deno.serve(async (req: Request) => {
       ].filter(Boolean).join("\n"),
       start: startAt,
       end: endAt || startAt,
+      guests: inviteEmail || undefined,
     });
     if (!cal?.ok) {
       console.error("crear-cita: fallo el Apps Script", cal);
@@ -250,6 +431,9 @@ Deno.serve(async (req: Request) => {
     gcal_event_id: gcalEventId,
     gcal_link: gcalLink,
     meeting_link: meetingLink,
+    zoom_meeting_id: zoom?.meetingId ?? null,
+    invite_email: inviteEmail,
+    rsvp_status: inviteEmail ? "needs_action" : null,
     created_by: auth.memberId,
   }).select("*").single();
   if (insErr) {

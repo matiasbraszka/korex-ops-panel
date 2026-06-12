@@ -228,7 +228,11 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
     // 1-a-1: pushName del remitente = nombre del contacto.
     convPatch.wa_profile_name = pushName;
   }
-  if (!fromMe) convPatch.unread_count = (Number(existing?.unread_count) || 0) + 1;
+  if (!fromMe) {
+    convPatch.unread_count = (Number(existing?.unread_count) || 0) + 1;
+    // Un chat archivado vuelve a la bandeja cuando el contacto escribe.
+    convPatch.archived = false;
+  }
 
   await supabase.from("wa_conversations").update(convPatch).eq("id", conversationId);
   return waMessageId;

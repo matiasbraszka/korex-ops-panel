@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Link2, CalendarPlus, CalendarX, ExternalLink, Users } from 'lucide-react';
+import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Archive, ArchiveRestore } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import TagPicker from './TagPicker.jsx';
@@ -9,10 +9,18 @@ const fmtCita = (iso) =>
   new Date(iso).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }) +
   ' · ' + new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
+// Asistencia del invitado por mail (lo que respondió en Google Calendar).
+const RSVP_CHIP = {
+  accepted: { label: '✓ Confirmó asistencia', bg: '#DCFCE7', color: '#15803D' },
+  declined: { label: '✗ No asiste', bg: '#FEE2E2', color: '#B91C1C' },
+  tentative: { label: '? Quizás asista', bg: '#FEF3C7', color: '#B45309' },
+  needs_action: { label: 'Sin responder aún', bg: '#F1F3F6', color: '#6B7280' },
+};
+
 // Drawer derecho con los detalles de la conversación: etiquetas, notas,
-// vínculo a contacto/cliente y citas agendadas.
-export default function ContactPanel({ open, onClose, onSchedule }) {
-  const { selectedConversation: conv, updateNotes, appointmentsByConv, loadAppointments, cancelAppointment } = useSoporte();
+// vínculo a contacto/cliente, citas agendadas y archivado.
+export default function ContactPanel({ open, onClose, onSchedule, onReschedule }) {
+  const { selectedConversation: conv, updateNotes, updateConversation, appointmentsByConv, loadAppointments, cancelAppointment } = useSoporte();
   const [linkOpen, setLinkOpen] = useState(false);
 
   useEffect(() => {
@@ -100,6 +108,15 @@ export default function ContactPanel({ open, onClose, onSchedule }) {
                         {a.status === 'cancelled' && <span className="text-[9.5px] font-bold text-text3 uppercase">cancelada</span>}
                       </div>
                       <div className="text-[11px] text-text2 capitalize">{fmtCita(a.start_at)}</div>
+                      {a.invite_email && a.status === 'scheduled' && (
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full"
+                                style={{ background: (RSVP_CHIP[a.rsvp_status] || RSVP_CHIP.needs_action).bg, color: (RSVP_CHIP[a.rsvp_status] || RSVP_CHIP.needs_action).color }}>
+                            {(RSVP_CHIP[a.rsvp_status] || RSVP_CHIP.needs_action).label}
+                          </span>
+                          <span className="text-[10px] text-text3 truncate">{a.invite_email}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2.5 mt-1 flex-wrap">
                         {a.meeting_link && (
                           <a href={a.meeting_link} target="_blank" rel="noopener noreferrer"
@@ -114,10 +131,16 @@ export default function ContactPanel({ open, onClose, onSchedule }) {
                           </a>
                         )}
                         {a.status === 'scheduled' && (
-                          <button onClick={() => cancelAppointment(conv.id, a.id)}
-                                  className="text-[10.5px] font-semibold text-text3 bg-transparent border-0 cursor-pointer hover:text-red-500 flex items-center gap-0.5 p-0">
-                            <CalendarX size={10} /> Cancelar
-                          </button>
+                          <>
+                            <button onClick={() => onReschedule?.(a)}
+                                    className="text-[10.5px] font-semibold text-[#B45309] bg-transparent border-0 cursor-pointer hover:underline flex items-center gap-0.5 p-0">
+                              <CalendarClock size={10} /> Reagendar
+                            </button>
+                            <button onClick={() => cancelAppointment(conv.id, a.id)}
+                                    className="text-[10.5px] font-semibold text-text3 bg-transparent border-0 cursor-pointer hover:text-red-500 flex items-center gap-0.5 p-0">
+                              <CalendarX size={10} /> Cancelar
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -126,6 +149,26 @@ export default function ContactPanel({ open, onClose, onSchedule }) {
               )}
             </div>
           )}
+
+          {/* Archivar: lo saca de la bandeja sin borrar nada. Si el contacto
+              vuelve a escribir, el chat reaparece solo en la bandeja. */}
+          <div className="border-t border-border pt-3 mt-auto">
+            <button
+              onClick={() => updateConversation(conv.id, { archived: !conv.archived })}
+              className={`w-full py-2 rounded-lg border text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition-colors ${conv.archived
+                ? 'border-[#22C55E]/50 bg-[#ECFDF5] text-[#15803D] hover:bg-[#DCFCE7]'
+                : 'border-border bg-white text-text2 hover:bg-surface2'}`}
+            >
+              {conv.archived
+                ? (<><ArchiveRestore size={13} /> Desarchivar chat</>)
+                : (<><Archive size={13} /> Archivar chat</>)}
+            </button>
+            {!conv.archived && (
+              <div className="text-[10px] text-text3 mt-1 text-center">
+                Se va a la pestaña Archivo. Si te escribe, vuelve solo.
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <LinkContactModal open={linkOpen} onClose={() => setLinkOpen(false)} conv={conv} />

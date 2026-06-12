@@ -11,6 +11,13 @@ export default function InboxPage() {
   const { selectedId, selectConversation } = useSoporte();
   const [panelOpen, setPanelOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  // null = agendar nueva; una cita = reagendarla.
+  const [editingAppt, setEditingAppt] = useState(null);
+
+  const openSchedule = (appt = null) => {
+    setEditingAppt(appt);
+    setScheduleOpen(true);
+  };
 
   return (
     <div className="h-full min-h-0 flex rounded-xl border border-border overflow-hidden bg-white max-md:-m-0">
@@ -24,14 +31,19 @@ export default function InboxPage() {
         <ChatThread
           onBack={() => selectConversation(null)}
           onOpenPanel={() => setPanelOpen((v) => !v)}
-          onSchedule={() => setScheduleOpen(true)}
+          onSchedule={() => openSchedule()}
         />
       </div>
 
       {/* Drawer de detalles (desktop: columna; mobile: overlay) */}
-      <ContactPanel open={panelOpen} onClose={() => setPanelOpen(false)} onSchedule={() => setScheduleOpen(true)} />
+      <ContactPanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        onSchedule={() => openSchedule()}
+        onReschedule={(appt) => openSchedule(appt)}
+      />
 
-      <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} />
+      <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} appointment={editingAppt} />
     </div>
   );
 }

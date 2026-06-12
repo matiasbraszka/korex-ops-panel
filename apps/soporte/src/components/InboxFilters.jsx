@@ -1,4 +1,4 @@
-import { Search, X, Inbox, MailOpen, User, Users } from 'lucide-react';
+import { Search, X, Inbox, MailOpen, User, Users, Archive } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 
 // Pestañas con ícono + contador (estilo team inbox) + búsqueda + etiqueta.
@@ -7,6 +7,7 @@ const TABS = [
   { id: 'all', label: 'Todos', Icon: Inbox },
   { id: 'dm', label: 'Personas', Icon: User },
   { id: 'groups', label: 'Grupos', Icon: Users },
+  { id: 'archived', label: 'Archivo', Icon: Archive },
 ];
 
 export default function InboxFilters({ unreadCount = 0 }) {
