@@ -385,17 +385,26 @@ function DisponibilidadCard() {
 }
 
 // ── Mini-mes del rail: hoy en ámbar, puntos bajo días con citas ──
-function MiniMonth({ cursor, dots, onPickDay }) {
+function MiniMonth({ cursor, dots, onPickDay, onMoveMonth }) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const start = mondayOf(first);
   const cells = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return d; });
   const today = new Date();
+  const monthLabel = cursor.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
   return (
     <div className="rounded-xl border border-border bg-white p-3">
-      <div className="text-[12px] font-bold capitalize mb-2">
-        {cursor.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[12px] font-bold">{monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}</span>
+        <span className="flex items-center gap-0.5">
+          <button onClick={() => onMoveMonth(-1)} className="w-5 h-5 rounded-md border-0 bg-transparent text-text3 hover:text-text hover:bg-surface2 cursor-pointer flex items-center justify-center">
+            <ChevronLeft size={12} />
+          </button>
+          <button onClick={() => onMoveMonth(1)} className="w-5 h-5 rounded-md border-0 bg-transparent text-text3 hover:text-text hover:bg-surface2 cursor-pointer flex items-center justify-center">
+            <ChevronRight size={12} />
+          </button>
+        </span>
       </div>
-      <div className="grid grid-cols-7 gap-y-1 text-center">
+      <div className="grid gap-y-1 text-center" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
         {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((l, i) => (
           <span key={i} className="text-[9px] font-bold text-text3">{l}</span>
         ))}
@@ -421,6 +430,58 @@ function MiniMonth({ cursor, dots, onPickDay }) {
   );
 }
 
+// ── Vista mensual: celdas con chips de cita ──
+function MonthGrid({ cursor, items, onPickDay, onPickCita }) {
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const start = mondayOf(first);
+  const cells = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return d; });
+  const today = new Date();
+  const byDay = {};
+  for (const a of items) (byDay[dateISO(new Date(a.start_at))] ||= []).push(a);
+  return (
+    <div>
+      <div className="grid border-b border-border" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+        {DAY_LABELS.map((l) => (
+          <div key={l} className="text-center text-[9.5px] font-bold tracking-widest text-text3 py-2">{l}</div>
+        ))}
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+        {cells.map((d, idx) => {
+          const k = dateISO(d);
+          const inMonth = d.getMonth() === cursor.getMonth();
+          const isToday = sameDay(d, today);
+          const citas = (byDay[k] || []).sort((a, b) => (a.start_at < b.start_at ? -1 : 1));
+          return (
+            <div key={k} role="button" tabIndex={0} onClick={() => onPickDay(d)}
+                 className={`min-h-[96px] p-1.5 border-b border-r border-surface2 cursor-pointer transition-colors duration-150 hover:bg-surface2/40 ${idx % 7 === 0 ? 'border-l-0' : ''} ${isToday ? 'bg-[#FFFBF2]' : 'bg-white'}`}>
+              <span className={`inline-flex w-[22px] h-[22px] rounded-full text-[11px] font-bold items-center justify-center ${
+                isToday ? 'bg-[#F59E0B] text-white' : inMonth ? 'text-text' : 'text-text3/50'}`}>
+                {d.getDate()}
+              </span>
+              <div className="flex flex-col gap-0.5 mt-0.5">
+                {citas.slice(0, 3).map((a) => {
+                  const est = estadoOf(a);
+                  return (
+                    <button key={a.id}
+                            onClick={(e) => { e.stopPropagation(); onPickCita(a); }}
+                            className="w-full text-left px-1.5 py-0.5 rounded-md cursor-pointer text-[9.5px] font-semibold truncate border-0"
+                            style={{ background: est.bg, color: est.color, borderLeft: `2px solid ${est.bar}` }}>
+                      {timeHM(new Date(a.start_at))} {a.title}
+                    </button>
+                  );
+                })}
+                {citas.length > 3 && (
+                  <span className="text-[9px] font-semibold text-text3 px-1">+ {citas.length - 3} más</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Página Citas — diseño: rail izquierdo + grilla horaria semanal ──
 export default function CitasPage() {
   const [view, setView] = useState('week'); // 'day' | 'week'
@@ -438,6 +499,11 @@ export default function CitasPage() {
     if (view === 'day') {
       const from = new Date(cursor);
       const to = new Date(cursor); to.setDate(to.getDate() + 1);
+      return { from, to };
+    }
+    if (view === 'month') {
+      const from = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const to = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
       return { from, to };
     }
     const from = mondayOf(cursor);
@@ -499,14 +565,23 @@ export default function CitasPage() {
 
   const move = (delta) => setCursor((prev) => {
     const d = new Date(prev);
-    d.setDate(d.getDate() + delta * (view === 'day' ? 1 : 7));
+    if (view === 'month') d.setMonth(d.getMonth() + delta);
+    else d.setDate(d.getDate() + delta * (view === 'day' ? 1 : 7));
+    return d;
+  });
+  const moveMonth = (delta) => setCursor((prev) => {
+    const d = new Date(prev);
+    d.setMonth(d.getMonth() + delta);
     return d;
   });
   const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setCursor(d); setMobileDay(d); };
 
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   const rangeLabel = view === 'day'
-    ? cursor.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
-    : `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('es-AR', { month: 'long' })}, ${days[6].getFullYear()}`;
+    ? cap(cursor.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }))
+    : view === 'month'
+      ? cap(cursor.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))
+      : `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('es-AR', { month: 'long' })}, ${days[6].getFullYear()}`;
 
   // Posicionamiento de un bloque dentro de la columna del día.
   const blockStyle = (a) => {
@@ -540,7 +615,7 @@ export default function CitasPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <div className="text-[17px] font-bold">Citas</div>
-            <div className="text-[12px] text-text3">Reuniones agendadas desde la bandeja</div>
+            <div className="text-[12px] text-text3">Reuniones agendadas desde la bandeja · confirmación automática por WhatsApp</div>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] flex items-center gap-1.5">
@@ -571,14 +646,14 @@ export default function CitasPage() {
               <ChevronRight size={14} />
             </button>
           </div>
-          <span className="text-[13.5px] font-bold capitalize">{rangeLabel}</span>
+          <span className="text-[13.5px] font-bold">{rangeLabel}</span>
           <span className="flex-1" />
           <span className="flex items-center gap-3 text-[11px] text-text2">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#22C55E]" /> Confirmada</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#F59E0B]" /> Pendiente</span>
           </span>
           <div className="flex items-center bg-surface2 rounded-[10px] p-0.5">
-            {[['day', 'Día'], ['week', 'Semana']].map(([id, label]) => (
+            {[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([id, label]) => (
               <button key={id} onClick={() => setView(id)}
                       className={`h-7 px-3 rounded-lg text-[11.5px] font-semibold border-0 cursor-pointer transition-all duration-150 ${view === id ? 'bg-white shadow-sm text-text' : 'bg-transparent text-text3'}`}>
                 {label}
@@ -590,7 +665,7 @@ export default function CitasPage() {
         <div className="flex gap-3.5 items-start">
           {/* Rail izquierdo */}
           <div className="w-[264px] shrink-0 flex flex-col gap-3">
-            <MiniMonth cursor={cursor} dots={dots}
+            <MiniMonth cursor={cursor} dots={dots} onMoveMonth={moveMonth}
                        onPickDay={(d) => { setCursor(new Date(d)); setView('day'); }} />
             <div className="rounded-xl border border-border bg-white p-3">
               <div className="text-[10px] font-bold tracking-widest text-text3 uppercase mb-2">Próximas</div>
@@ -622,8 +697,13 @@ export default function CitasPage() {
             <DisponibilidadCard />
           </div>
 
-          {/* Grilla horaria */}
+          {/* Grilla horaria / vista mensual */}
           <div className="flex-1 min-w-0 rounded-[14px] border border-border bg-white overflow-hidden">
+            {view === 'month' ? (
+              <MonthGrid cursor={cursor} items={items}
+                         onPickDay={(d) => { setCursor(new Date(d)); setView('day'); }}
+                         onPickCita={(a) => setSelected(a)} />
+            ) : (<>
             {/* Cabecera de días */}
             <div className="flex border-b border-border">
               <div className="w-[52px] shrink-0" />
@@ -647,7 +727,8 @@ export default function CitasPage() {
             <div ref={gridRef} className="flex relative" style={{ height: hours.length * HOUR_PX }}>
               <div className="w-[52px] shrink-0 relative">
                 {hours.map((h, i) => (
-                  <span key={h} className="absolute right-2 text-[9.5px] text-text3 -translate-y-1/2" style={{ top: i * HOUR_PX }}>
+                  <span key={h} className={`absolute right-2 text-[9.5px] text-text3 ${i === 0 ? 'translate-y-[2px]' : '-translate-y-1/2'}`}
+                        style={{ top: i * HOUR_PX }}>
                     {pad(h)}:00
                   </span>
                 ))}
@@ -694,6 +775,7 @@ export default function CitasPage() {
                 </div>
               )}
             </div>
+            </>)}
           </div>
         </div>
       </div>
