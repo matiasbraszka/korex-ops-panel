@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -7,15 +7,19 @@ import TeamUsersEditor from '../components/settings/TeamUsersEditor';
 import HistorialTiposEditor from '../components/settings/HistorialTiposEditor';
 import HistorialEmailEditor from '../components/settings/HistorialEmailEditor';
 import PendingResourcesTemplateEditor from '../components/settings/PendingResourcesTemplateEditor';
+import OnboardingConfigEditor from '../components/settings/OnboardingConfigEditor';
+import FinanzasDefaultsEditor from '../components/settings/FinanzasDefaultsEditor';
 
 const TABS = [
   { id: 'team',          label: 'Equipo y usuarios',     Icon: Users },
+  { id: 'onboarding',    label: 'Onboarding',            Icon: Workflow },
   { id: 'template',      label: 'Plantilla de Roadmap',  Icon: LayoutGrid },
   { id: 'pending-res',   label: 'Recursos pendientes',   Icon: CheckSquare },
   { id: 'services',      label: 'Servicios',             Icon: Briefcase },
   { id: 'priorities',    label: 'Prioridades',           Icon: Tag },
   { id: 'hist-tipos',    label: 'Tipos de evento',       Icon: Sparkles },
   { id: 'hist-email',    label: 'Email del Historial',   Icon: Mail },
+  { id: 'finanzas',      label: 'Alta en finanzas',      Icon: DollarSign },
 ];
 
 export default function SettingsPage() {
@@ -50,12 +54,14 @@ export default function SettingsPage() {
 
       <div>
         {tab === 'team'        && <TeamUsersEditor />}
+        {tab === 'onboarding'  && <OnboardingConfigEditor />}
         {tab === 'template'    && <TemplateEditor />}
         {tab === 'pending-res' && <PendingResourcesTemplateEditor />}
         {tab === 'services'    && <ServicesEditor />}
         {tab === 'priorities'  && <PrioritiesEditor />}
         {tab === 'hist-tipos'  && <HistorialTiposEditor />}
         {tab === 'hist-email'  && <HistorialEmailEditor />}
+        {tab === 'finanzas'    && <FinanzasDefaultsEditor />}
       </div>
     </div>
   );

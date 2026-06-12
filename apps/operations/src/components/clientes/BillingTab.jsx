@@ -1,8 +1,38 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import Modal from '../Modal';
-import { CreditCard, FileText, ExternalLink, Plus, Pencil, Trash2, Scale, Calendar, AlertTriangle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { CreditCard, FileText, ExternalLink, Plus, Pencil, Trash2, Scale, Calendar, AlertTriangle, ArrowDownCircle, ArrowUpCircle, Copy, Check } from 'lucide-react';
 import { fmtDate, today, daysBetween } from '../../utils/helpers';
+
+// Estado del contrato en DocuSign (lo manda el webhook a la tabla contracts).
+const CONTRACT_STATUS = {
+  created:   { bg: '#F1F5F9', fg: '#64748B', label: 'Borrador' },
+  sent:      { bg: '#FEFCE8', fg: '#CA8A04', label: 'Enviado a firmar' },
+  delivered: { bg: '#EFF6FF', fg: '#2563EB', label: 'Recibido por el firmante' },
+  completed: { bg: '#ECFDF5', fg: '#16A34A', label: 'Firmado' },
+  declined:  { bg: '#FEF2F2', fg: '#EF4444', label: 'Rechazado' },
+  voided:    { bg: '#FEF2F2', fg: '#EF4444', label: 'Anulado' },
+};
+
+// Chip con el código Korex (copiable) para pegar en el contrato de DocuSign.
+function KorexCodeChip({ code }) {
+  const [copied, setCopied] = useState(false);
+  if (!code) return null;
+  const copy = () => {
+    navigator.clipboard?.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button onClick={copy} title="Copiar código para el contrato de DocuSign"
+      className="inline-flex items-center gap-1.5 py-1 px-2 rounded-md border border-[#E2E5EB] bg-[#FAFBFC] cursor-pointer hover:border-blue text-[11.5px] font-mono font-semibold"
+      style={{ color: '#1A1D26' }}>
+      {copied ? <Check size={11} className="text-green-600" /> : <Copy size={11} className="text-text3" />}
+      {code}
+    </button>
+  );
+}
 
 const CURR_SYMBOL = { USD: '$', EUR: '€', ARS: '$', MXN: 'MX$' };
 const CYCLE_OPTIONS = [
@@ -23,9 +53,20 @@ const INVOICE_KIND = {
   ingreso: { bg: '#ECFDF5', fg: '#16A34A', label: 'Ingreso', icon: ArrowDownCircle },
   egreso:  { bg: '#FEF2F2', fg: '#EF4444', label: 'Egreso',  icon: ArrowUpCircle },
 };
+// Reparto de comisiones (mismas claves que se cargan en el formulario de venta).
+const COMMISSION_LABELS = {
+  setup_conector: 'Setup · Conector',
+  crm_cliente: 'CRM · Cliente',
+  crm_afiliados: 'CRM · Afiliados',
+  crm_conector: 'CRM · Conector',
+  publicidad_cliente: 'Publicidad · Cliente',
+  publicidad_conector: 'Publicidad · Conector',
+};
+const CLIENT_TYPE_LABEL = { empresa: 'Empresa', lider: 'Líder' };
 
-function LegalCard({ c, onEdit }) {
+function LegalCard({ c, contract, onEdit }) {
   const hasContract = !!(c.contractUrl || c.contractSignedDate || c.contractRenewalDate || c.contractData);
+  const dsStatus = contract ? (CONTRACT_STATUS[contract.status] || null) : null;
   // Renewal warning: less than 30 days left
   let renewalWarn = null;
   if (c.contractRenewalDate) {
@@ -47,6 +88,20 @@ function LegalCard({ c, onEdit }) {
           <Pencil size={11} /> Editar
         </button>
       </div>
+
+      {/* Estado del contrato en DocuSign + código Korex (vinculación automática) */}
+      <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-[#F0F2F5] flex-wrap">
+        <div className="inline-flex items-center gap-2">
+          <span className="text-[11px] font-medium" style={{ color: '#9CA3AF' }}>DocuSign</span>
+          {dsStatus ? (
+            <span className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold" style={{ background: dsStatus.bg, color: dsStatus.fg }}>{dsStatus.label}</span>
+          ) : (
+            <span className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold" style={{ background: '#F1F5F9', color: '#94A3B8' }}>Sin contrato aún</span>
+          )}
+        </div>
+        <KorexCodeChip code={c.korexCode} />
+      </div>
+
       {!hasContract ? (
         <div className="text-center text-[12px] py-4" style={{ color: '#9CA3AF' }}>
           Sin contrato cargado. Tocá <b>Editar</b> para agregar.
@@ -146,7 +201,6 @@ function LegalEditModal({ open, onClose, client, updateClient }) {
 function BillingSummary({ c, onEdit }) {
   const bs = BILLING_STATUS[c.billingStatus || 'al_dia'];
   const sym = CURR_SYMBOL[c.billingCurrency || 'EUR'] || '€';
-  const cycle = CYCLE_OPTIONS.find(([k]) => k === c.billingCycle)?.[1] || 'Mensual';
 
   return (
     <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px]">
@@ -161,17 +215,64 @@ function BillingSummary({ c, onEdit }) {
       <div className="grid gap-y-2 gap-x-3 text-[12.5px]" style={{ gridTemplateColumns: 'auto 1fr' }}>
         <span className="font-medium" style={{ color: '#9CA3AF' }}>Importe</span>
         <span className="font-semibold text-right" style={{ color: '#1A1D26' }}>{c.billingAmount != null ? `${sym}${Number(c.billingAmount).toLocaleString()}` : '—'}</span>
-        <span className="font-medium" style={{ color: '#9CA3AF' }}>Ciclo</span>
-        <span className="text-right" style={{ color: '#1A1D26' }}>{cycle}{c.billingInstallments > 1 ? ` · ${c.billingInstallments} cuotas` : ''}</span>
-        <span className="font-medium" style={{ color: '#9CA3AF' }}>Próximo cobro</span>
-        <span className="text-right" style={{ color: '#1A1D26' }}>{c.nextChargeDate ? fmtDate(c.nextChargeDate) : '—'}</span>
+        {c.cashCollect != null && (<>
+          <span className="font-medium" style={{ color: '#9CA3AF' }}>Cobrado (CashCollect)</span>
+          <span className="text-right" style={{ color: '#16A34A' }}>{sym}{Number(c.cashCollect).toLocaleString()}</span>
+        </>)}
+        {c.remainingToCollect != null && (<>
+          <span className="font-medium" style={{ color: '#9CA3AF' }}>Restante por cobrar</span>
+          <span className="font-semibold text-right" style={{ color: c.remainingToCollect > 0 ? '#CA8A04' : '#16A34A' }}>{sym}{Number(c.remainingToCollect).toLocaleString()}</span>
+        </>)}
+        <span className="font-medium" style={{ color: '#9CA3AF' }}>Pago</span>
+        <span className="text-right" style={{ color: '#1A1D26' }}>{c.billingInstallments > 1 ? `${c.billingInstallments} cuotas` : 'Pago único'}</span>
+        {c.billingInstallments > 1 && (<>
+          <span className="font-medium" style={{ color: '#9CA3AF' }}>Próximo cobro</span>
+          <span className="text-right" style={{ color: '#1A1D26' }}>{c.nextChargeDate ? fmtDate(c.nextChargeDate) : '—'}</span>
+        </>)}
         <span className="font-medium" style={{ color: '#9CA3AF' }}>Método</span>
         <span className="text-right" style={{ color: '#1A1D26' }}>{c.paymentMethod || '—'}</span>
+        {c.clientType && (<>
+          <span className="font-medium" style={{ color: '#9CA3AF' }}>Tipo</span>
+          <span className="text-right" style={{ color: '#1A1D26' }}>{CLIENT_TYPE_LABEL[c.clientType] || c.clientType}</span>
+        </>)}
         <span className="font-medium" style={{ color: '#9CA3AF' }}>Estado</span>
         <span className="text-right">
           <span className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold" style={{ background: bs.bg, color: bs.fg }}>{bs.label}</span>
         </span>
       </div>
+
+      {/* Grabación de la llamada (cargada desde el formulario de venta) */}
+      {c.callRecordingUrl && (
+        <div className="mt-3 pt-3 border-t border-[#F0F2F5]">
+          <a href={c.callRecordingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] text-blue font-medium no-underline hover:underline">
+            <ExternalLink size={11} /> Grabación de la llamada
+          </a>
+        </div>
+      )}
+
+      {/* Carpeta de Drive del cliente (creada al cargar la venta) */}
+      {c.driveFolderUrl && (
+        <div className="mt-3 pt-3 border-t border-[#F0F2F5]">
+          <a href={c.driveFolderUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] text-blue font-medium no-underline hover:underline">
+            <ExternalLink size={11} /> 📁 Carpeta de Drive
+          </a>
+        </div>
+      )}
+
+      {/* Reparto de comisiones */}
+      {c.commissionSplit && Object.values(c.commissionSplit).some((v) => Number(v) > 0) && (
+        <div className="mt-3 pt-3 border-t border-[#F0F2F5]">
+          <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#9CA3AF' }}>Reparto de comisiones</div>
+          <div className="grid gap-y-1 gap-x-3 text-[12px]" style={{ gridTemplateColumns: 'auto 1fr' }}>
+            {Object.entries(c.commissionSplit).filter(([, v]) => Number(v) > 0).map(([k, v]) => (
+              <div key={k} className="contents">
+                <span style={{ color: '#6B7280' }}>{COMMISSION_LABELS[k] || k}</span>
+                <span className="text-right font-medium" style={{ color: '#1A1D26' }}>{Number(v)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -421,7 +522,13 @@ function BillingEditModal({ open, onClose, client, updateClient }) {
 }
 
 export default function BillingTab({ client }) {
-  const { invoices, addInvoice, updateInvoice, deleteInvoice, updateClient } = useApp();
+  const { invoices, addInvoice, updateInvoice, deleteInvoice, updateClient, contracts } = useApp();
+  // Contrato de DocuSign más reciente de este cliente (si hay).
+  const clientContract = useMemo(
+    () => (contracts || []).filter(ct => ct.client_id === client.id)
+      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0] || null,
+    [contracts, client.id]
+  );
   const [invoiceModal, setInvoiceModal] = useState(null); // null | 'new' | invoice obj
   const [billingModal, setBillingModal] = useState(false);
   const [legalModal, setLegalModal] = useState(false);
@@ -435,27 +542,53 @@ export default function BillingTab({ client }) {
     <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '330px 1fr' }}>
       <div className="flex flex-col gap-4">
         <BillingSummary c={client} onEdit={() => setBillingModal(true)} />
-        <LegalCard c={client} onEdit={() => setLegalModal(true)} />
+        <LegalCard c={client} contract={clientContract} onEdit={() => setLegalModal(true)} />
       </div>
 
-      <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between py-3 px-4 border-b border-[#F0F2F5]">
-          <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}>
-            <FileText size={16} className="text-text2" /> Facturas ({myInvoices.length})
+      <div className="flex flex-col gap-4">
+        {/* Comprobantes de pago — prueba de pago del cliente (NO son facturas) */}
+        <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between py-3 px-4 border-b border-[#F0F2F5]">
+            <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}>
+              <FileText size={16} className="text-text2" /> Comprobantes de pago
+            </div>
           </div>
-          <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold py-1.5 px-3 rounded-lg bg-blue text-white border-none cursor-pointer hover:bg-blue-dark" onClick={() => setInvoiceModal('new')}>
-            <Plus size={12} /> Agregar factura
-          </button>
+          {client.paymentReceiptUrl ? (
+            <div className="flex items-center gap-3 py-2.5 px-4">
+              <span className="w-8 h-8 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: '#ECFDF5' }}>
+                <FileText size={14} style={{ color: '#16A34A' }} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold" style={{ color: '#1A1D26' }}>Comprobante del cliente</div>
+                <div className="text-[10.5px]" style={{ color: '#9CA3AF' }}>Prueba de pago adjuntada en la carga de la venta</div>
+              </div>
+              <a href={client.paymentReceiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-blue font-medium no-underline hover:underline shrink-0">Ver <ExternalLink size={11} /></a>
+            </div>
+          ) : (
+            <div className="text-center text-text3 text-[12px] py-7">Sin comprobantes de pago.</div>
+          )}
         </div>
-        {myInvoices.length === 0 ? (
-          <div className="text-center text-text3 text-[12px] py-10">Sin facturas registradas. Tocá "Agregar factura" para la primera.</div>
-        ) : (
-          <div>
-            {myInvoices.map(inv => (
-              <InvoiceItem key={inv.id} inv={inv} onEdit={(i) => setInvoiceModal(i)} onDelete={deleteInvoice} />
-            ))}
+
+        {/* Facturas — emitidas por nosotros (ingreso) o por el cliente (egreso) */}
+        <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between py-3 px-4 border-b border-[#F0F2F5]">
+            <div className="inline-flex items-center gap-2 font-bold text-[14px]" style={{ color: '#1A1D26' }}>
+              <FileText size={16} className="text-text2" /> Facturas ({myInvoices.length})
+            </div>
+            <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold py-1.5 px-3 rounded-lg bg-blue text-white border-none cursor-pointer hover:bg-blue-dark" onClick={() => setInvoiceModal('new')}>
+              <Plus size={12} /> Agregar factura
+            </button>
           </div>
-        )}
+          {myInvoices.length === 0 ? (
+            <div className="text-center text-text3 text-[12px] py-10">Sin facturas registradas. Tocá "Agregar factura" para la primera.</div>
+          ) : (
+            <div>
+              {myInvoices.map(inv => (
+                <InvoiceItem key={inv.id} inv={inv} onEdit={(i) => setInvoiceModal(i)} onDelete={deleteInvoice} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {invoiceModal && (

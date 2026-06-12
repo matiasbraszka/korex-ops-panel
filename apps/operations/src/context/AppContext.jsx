@@ -100,6 +100,7 @@ export function AppProvider({ children }) {
   const [strategies, setStrategies] = useState([]);
   const [strategyPages, setStrategyPages] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [contracts, setContracts] = useState([]);
   // Panel lateral de actividad/comentarios: target abierto o null.
   // Forma: null | { kind: 'task', taskId } | { kind: 'bullet', reportId, bulletId }
   const [commentsTarget, setCommentsTarget] = useState(null);
@@ -204,6 +205,13 @@ export function AppProvider({ children }) {
         conector: c.conector || null,
         closer: c.closer || null,
         contract_data: c.contractData || null,
+        cash_collect: c.cashCollect ?? null,
+        remaining_to_collect: c.remainingToCollect ?? null,
+        call_recording_url: c.callRecordingUrl || null,
+        payment_receipt_url: c.paymentReceiptUrl || null,
+        commission_split: c.commissionSplit || {},
+        client_type: c.clientType || null,
+        drive_folder_url: c.driveFolderUrl || null,
       })
     });
   }, []);
@@ -1046,6 +1054,19 @@ export function AppProvider({ children }) {
     setInvoices(prev => prev.filter(i => i.id !== id));
   }, []);
 
+  // Vincular un contrato de DocuSign a un cliente a mano (desde la bandeja).
+  // clientId = null para desvincular.
+  const linkContract = useCallback(async (contractId, clientId) => {
+    const patch = { client_id: clientId, match_method: clientId ? 'manual' : 'none' };
+    await sbFetch('contracts?id=eq.' + encodeURIComponent(contractId), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+      throwOnError: true,
+    });
+    setContracts(prev => prev.map(c => c.id === contractId ? { ...c, ...patch } : c));
+  }, []);
+
   // ── CRUD: task_comments ──
   // Comentarios en tareas. Hilos de 1 nivel: parent_id NULL = raiz; si tiene
   // valor referencia al comentario padre. Cascade en DB borra hijos al borrar
@@ -1524,7 +1545,7 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data';
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,drive_folder_url';
       const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
@@ -1644,6 +1665,12 @@ export function AppProvider({ children }) {
         if (allInvoices && Array.isArray(allInvoices)) setInvoices(allInvoices);
       } catch (e) { console.warn('loadInvoices error', e); }
 
+      // Contratos de DocuSign (vinculados o sin vincular) por cliente.
+      try {
+        const allContracts = await sbFetch('contracts?select=*&order=updated_at.desc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
+        if (allContracts && Array.isArray(allContracts)) setContracts(allContracts);
+      } catch (e) { console.warn('loadContracts error', e); }
+
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
           id: c.id, name: c.name, company: c.company, service: c.service,
@@ -1676,10 +1703,19 @@ export function AppProvider({ children }) {
           contractUrl: c.contract_url || '',
           contractSignedDate: c.contract_signed_date || null,
           contractRenewalDate: c.contract_renewal_date || null,
+          contractSignerEmail: c.contract_signer_email || '',
+          korexCode: c.korex_code || '',
           tier: c.tier || null,
           conector: c.conector || '',
           closer: c.closer || '',
           contractData: c.contract_data || '',
+          cashCollect: c.cash_collect != null ? Number(c.cash_collect) : null,
+          remainingToCollect: c.remaining_to_collect != null ? Number(c.remaining_to_collect) : null,
+          callRecordingUrl: c.call_recording_url || '',
+          paymentReceiptUrl: c.payment_receipt_url || '',
+          commissionSplit: c.commission_split || {},
+          clientType: c.client_type || null,
+          driveFolderUrl: c.drive_folder_url || '',
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
@@ -2100,6 +2136,8 @@ export function AppProvider({ children }) {
     addInvoice,
     updateInvoice,
     deleteInvoice,
+    contracts,
+    linkContract,
     // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
     getPriorityLabel: (p) => {
       const fromDb = appSettings?.priority_labels?.[String(p)];

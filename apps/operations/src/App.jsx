@@ -647,11 +647,22 @@ function MainLayout() {
             {pathPrefix !== 'sales' && <SearchBar />}
             {view === 'clients' && (
               <button
-                className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 max-md:py-1 max-md:px-2 max-md:text-[11px]"
+                className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 shrink-0 max-md:py-1 max-md:px-2 max-md:text-[11px]"
                 onClick={() => setNewClientModal(true)}
               >
                 + <span className="max-md:hidden">Nuevo cliente</span><span className="hidden max-md:inline">Nuevo</span>
               </button>
+            )}
+            {view === 'clients' && (
+              <a
+                href="https://korex-venta-form.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Cargar una venta y dar de alta el cliente automáticamente"
+                className="py-1.5 px-2.5 rounded-md border border-blue text-blue text-xs font-medium cursor-pointer font-sans no-underline hover:bg-blue-bg flex items-center gap-1.5 shrink-0 max-md:py-1 max-md:px-2 max-md:text-[11px]"
+              >
+                <span className="max-md:hidden">Cargar venta</span><span className="hidden max-md:inline">Venta</span>
+              </a>
             )}
           </div>
         </div>
