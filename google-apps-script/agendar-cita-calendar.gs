@@ -18,8 +18,9 @@
  *      app_settings.soporte_config.calendar_script_url
  *      (el secret de abajo ya está en calendar_script_secret).
  *
- * ACTUALIZAR A v2 (si ya estaba deployado):
+ * ACTUALIZAR (si ya estaba deployado):
  *   script.google.com → abrir el proyecto → reemplazar el código por este →
+ *   ejecutar una vez la función "autorizar" (▶) y aceptar los permisos →
  *   Implementar → Administrar implementaciones → ✏️ en la implementación
  *   activa → Versión: "Nueva versión" → Implementar. LA URL NO CAMBIA.
  */
@@ -29,6 +30,36 @@ var KXC_SECRET = 'kxc_EwXyjKalH8zizpq34syllP';
 function kxcJson(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * EJECUTAR UNA VEZ a mano después de pegar este código (botón ▶ Ejecutar con
+ * la función "autorizar" seleccionada): dispara el cartel de permisos nuevos
+ * que necesita la limpieza del Meet automático.
+ */
+function autorizar() {
+  CalendarApp.getDefaultCalendar().getName();
+  UrlFetchApp.fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1', {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true,
+  });
+  Logger.log('Permisos OK');
+}
+
+// Google agrega un Google Meet automáticamente cuando el evento tiene
+// invitados. La reunión es por Zoom, así que lo sacamos para que en la
+// invitación quede UN solo link (el de Zoom, en la descripción).
+function kxcRemoveMeet(eventId) {
+  var id = String(eventId).replace('@google.com', '');
+  var url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events/' +
+    encodeURIComponent(id) + '?conferenceDataVersion=1';
+  UrlFetchApp.fetch(url, {
+    method: 'patch',
+    contentType: 'application/json',
+    payload: JSON.stringify({ conferenceData: null }),
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true,
+  });
 }
 
 function doPost(e) {
@@ -60,6 +91,10 @@ function doPost(e) {
         opts.sendInvites = true;
       }
       var event = cal.createEvent(title, start, end, opts);
+      // Con invitados, Google mete un Meet automático: sacarlo (es por Zoom).
+      if (b.guests) {
+        try { kxcRemoveMeet(event.getId()); } catch (errMeet) {}
+      }
       // Link directo al evento en la UI de Google Calendar.
       var htmlLink = 'https://calendar.google.com/calendar/event?eid=' +
         Utilities.base64Encode(event.getId().replace('@google.com', '') + ' ' + cal.getId())

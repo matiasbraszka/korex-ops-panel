@@ -130,19 +130,19 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                             <ExternalLink size={10} /> Ver en Calendar
                           </a>
                         )}
-                        {a.status === 'scheduled' && (
-                          <>
-                            <button onClick={() => onReschedule?.(a)}
-                                    className="text-[10.5px] font-semibold text-[#B45309] bg-transparent border-0 cursor-pointer hover:underline flex items-center gap-0.5 p-0">
-                              <CalendarClock size={10} /> Reagendar
-                            </button>
-                            <button onClick={() => cancelAppointment(conv.id, a.id)}
-                                    className="text-[10.5px] font-semibold text-text3 bg-transparent border-0 cursor-pointer hover:text-red-500 flex items-center gap-0.5 p-0">
-                              <CalendarX size={10} /> Cancelar
-                            </button>
-                          </>
-                        )}
                       </div>
+                      {a.status === 'scheduled' && (
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <button onClick={() => onReschedule?.(a)}
+                                  className="flex-1 text-[10.5px] font-bold px-2 py-1.5 rounded-md border border-[#F59E0B]/60 bg-white text-[#B45309] cursor-pointer hover:bg-[#FEF3C7] flex items-center justify-center gap-1 transition-colors">
+                            <CalendarClock size={11} /> Reagendar
+                          </button>
+                          <button onClick={() => cancelAppointment(conv.id, a.id)}
+                                  className="flex-1 text-[10.5px] font-semibold px-2 py-1.5 rounded-md border border-border bg-white text-text2 cursor-pointer hover:border-[#DC2626]/50 hover:text-[#DC2626] flex items-center justify-center gap-1 transition-colors">
+                            <CalendarX size={11} /> Cancelar
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
