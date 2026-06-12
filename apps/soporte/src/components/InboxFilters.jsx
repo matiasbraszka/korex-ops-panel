@@ -1,6 +1,7 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, X, PenSquare } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
+import { fetchTeamMembers } from '../lib/api.js';
 
 // Filtros de la bandeja — Diseño A (WhatsApp + acento ámbar Soporte).
 // Pills de scope estilo WhatsApp + fila de chips de etiquetas + búsqueda.
@@ -15,6 +16,11 @@ const TABS = [
 export default function InboxFilters({ unreadCount = 0 }) {
   const { filters, setFilters, tagsCatalog } = useSoporte();
   const searchRef = useRef(null);
+  const [team, setTeam] = useState([]);
+
+  useEffect(() => {
+    fetchTeamMembers().then(setTeam).catch(() => {});
+  }, []);
 
   return (
     <div className="px-3.5 pt-3.5 pb-0 bg-white shrink-0 flex flex-col gap-2.5">
@@ -44,8 +50,8 @@ export default function InboxFilters({ unreadCount = 0 }) {
         )}
       </div>
 
-      {/* Pills de scope (estilo WhatsApp, activa en ámbar) */}
-      <div className="flex gap-1.5 flex-wrap">
+      {/* Pills de scope (estilo WhatsApp, activa en ámbar) + filtro por asignado */}
+      <div className="flex gap-1.5 flex-wrap items-center">
         {TABS.map(({ id, label }) => {
           const on = filters.scope === id;
           return (
@@ -63,6 +69,20 @@ export default function InboxFilters({ unreadCount = 0 }) {
             </button>
           );
         })}
+        {team.length > 0 && (
+          <select
+            value={filters.assigneeId || ''}
+            onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value || null }))}
+            title="Filtrar por persona asignada"
+            className={`px-2.5 py-[5px] rounded-full text-[12px] cursor-pointer outline-none transition-all duration-150 border max-w-[130px] ${
+              filters.assigneeId
+                ? 'bg-[#FEF0D7] border-[#F5D9A8] text-[#B45309] font-semibold'
+                : 'bg-white border-border text-text2 font-medium hover:bg-surface2'
+            }`}>
+            <option value="">👤 Asignado…</option>
+            {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Chips de etiquetas (filtro por tag) */}

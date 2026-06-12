@@ -29,7 +29,7 @@ export function SoporteProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [filters, setFilters] = useState({ scope: 'all', tagId: null, search: '' });
+  const [filters, setFilters] = useState({ scope: 'all', tagId: null, assigneeId: null, search: '' });
   // threads: { [convId]: { items, hasMore, loadingOlder, loaded } }
   const [threads, setThreads] = useState({});
   const [config, setConfig] = useState({ tags: [], appointment_template: '' });
@@ -478,6 +478,7 @@ export function SoporteProvider({ children }) {
       if (filters.scope === 'dm' && c.is_group) return false;
       if (filters.scope === 'groups' && !c.is_group) return false;
       if (filters.tagId && !(c.tags || []).includes(filters.tagId)) return false;
+      if (filters.assigneeId && c.assigned_to !== filters.assigneeId) return false;
       if (q) {
         const hay = `${c.wa_profile_name || ''} ${c.wa_phone || ''} ${c.contact?.full_name || ''} ${c.client?.name || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;

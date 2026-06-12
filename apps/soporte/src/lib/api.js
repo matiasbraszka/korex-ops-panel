@@ -116,13 +116,17 @@ export async function fetchGroupNames(convId) {
   return map;
 }
 
-// Miembros del equipo (para el selector "Asignado a").
+// Miembros del equipo (selector "Asignado a" + filtro de la bandeja).
+// Cacheado: no cambia durante la sesión.
+let teamCache = null;
 export async function fetchTeamMembers() {
+  if (teamCache) return teamCache;
   const rows = await sbFetch(
     'team_members?select=id,name&order=name.asc&limit=50',
     { headers: { Prefer: 'return=representation' } },
   );
-  return Array.isArray(rows) ? rows : [];
+  teamCache = Array.isArray(rows) ? rows : [];
+  return teamCache;
 }
 
 export async function searchContacts(q) {

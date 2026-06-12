@@ -6,9 +6,6 @@ import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js'
 import TagPicker from './TagPicker.jsx';
 import LinkContactModal from './LinkContactModal.jsx';
 
-// Cache simple del equipo (no cambia durante la sesión).
-let teamCache = null;
-
 const fmtCita = (iso) =>
   new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' }) +
   ' · ' + new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -39,11 +36,10 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
   } = useSoporte();
   const [linkOpen, setLinkOpen] = useState(false);
   const [showAllParts, setShowAllParts] = useState(false);
-  const [team, setTeam] = useState(teamCache || []);
+  const [team, setTeam] = useState([]);
 
   useEffect(() => {
-    if (teamCache) return;
-    fetchTeamMembers().then((rows) => { teamCache = rows; setTeam(rows); }).catch(() => {});
+    fetchTeamMembers().then(setTeam).catch(() => {});
   }, []);
 
   useEffect(() => {
