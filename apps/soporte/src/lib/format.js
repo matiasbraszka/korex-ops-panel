@@ -57,13 +57,27 @@ export function fmtPhone(phone) {
 const TYPE_LABELS = {
   imageMessage: '📷 Imagen',
   videoMessage: '🎬 Video',
+  ptvMessage: '🎥 Video corto',
   audioMessage: '🎙 Audio',
   documentMessage: '📄 Documento',
+  documentWithCaptionMessage: '📄 Documento',
   stickerMessage: '✨ Sticker',
   locationMessage: '📍 Ubicación',
+  liveLocationMessage: '📍 Ubicación en vivo',
   contactMessage: '👤 Contacto',
+  contactsArrayMessage: '👤 Contactos',
   reactionMessage: '👍 Reacción',
+  encReactionMessage: '👍 Reacción',
   pollCreationMessage: '📊 Encuesta',
+  pollCreationMessageV3: '📊 Encuesta',
+  pollUpdateMessage: '📊 Voto en encuesta',
+  eventMessage: '📅 Evento',
+  viewOnceMessage: '🔒 Foto/video de ver una vez',
+  viewOnceMessageV2: '🔒 Foto/video de ver una vez',
+  secretEncryptedMessage: '🔒 Contenido protegido (verlo en el teléfono)',
+  protocolMessage: '⚙️ Evento del chat',
+  editedMessage: '✏️ Mensaje editado',
+  groupInviteMessage: '👥 Invitación a grupo',
 };
 export function msgTypeLabel(msgType) {
   if (!msgType || msgType === 'conversation' || msgType === 'extendedTextMessage') return null;

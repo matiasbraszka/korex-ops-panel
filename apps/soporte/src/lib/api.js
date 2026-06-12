@@ -81,9 +81,10 @@ export async function searchClients(q) {
 }
 
 // Edge functions (usan el JWT de la sesion; la function valida permiso soporte).
-export async function invokeSend({ conversationId, text }) {
+// media (opcional): { base64, mimetype, filename, kind: image|video|audio|document }
+export async function invokeSend({ conversationId, text, media }) {
   const { data, error } = await supabase.functions.invoke('whatsapp-send', {
-    body: { conversation_id: conversationId, text },
+    body: { conversation_id: conversationId, text, media },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);

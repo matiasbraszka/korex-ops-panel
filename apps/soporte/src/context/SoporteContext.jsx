@@ -251,6 +251,41 @@ export function SoporteProvider({ children }) {
     }
   }, [currentMemberId]);
 
+  // ── Envio de adjuntos (imagen/video/audio/documento) ──
+  const MSG_TYPE_BY_KIND = { image: 'imageMessage', video: 'videoMessage', audio: 'audioMessage', document: 'documentMessage' };
+  const sendAttachment = useCallback(async (convId, { base64, mimetype, filename, kind, caption }) => {
+    if (!convId || !base64) return;
+    const now = new Date().toISOString();
+    const temp = {
+      id: tempId(), _temp: true, conversation_id: convId, direction: 'out',
+      msg_type: MSG_TYPE_BY_KIND[kind] || 'documentMessage', body: caption?.trim() || null,
+      status: 'sending', sent_by: currentMemberId, wa_timestamp: now, created_at: now,
+      // Para reintentar si falla.
+      _mediaPayload: { base64, mimetype, filename, kind, caption },
+    };
+    setThreads((prev) => {
+      const cur = prev[convId] || { items: [], hasMore: false, loadingOlder: false, loaded: true };
+      return { ...prev, [convId]: { ...cur, items: [...cur.items, temp] } };
+    });
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, last_message_at: now, last_message_preview: caption || `📎 ${filename}` } : c)));
+    try {
+      const res = await invokeSend({ conversationId: convId, text: caption?.trim() || '', media: { base64, mimetype, filename, kind } });
+      const real = res?.message;
+      setThreads((prev) => {
+        const cur = prev[convId];
+        if (!cur) return prev;
+        const already = real && cur.items.some((m) => m.id === real.id);
+        const items = cur.items
+          .filter((m) => !(m.id === temp.id && (already || !real)))
+          .map((m) => (m.id === temp.id && real && !already ? real : m));
+        return { ...prev, [convId]: { ...cur, items } };
+      });
+    } catch (e) {
+      console.error('soporte: fallo el envio del adjunto', e);
+      patchTempMessage(convId, temp.id, { status: 'failed' });
+    }
+  }, [currentMemberId]);
+
   const retrySend = useCallback((convId, msgId) => {
     const t = threadsRef.current[convId];
     const msg = t?.items.find((m) => m.id === msgId);
@@ -260,8 +295,9 @@ export function SoporteProvider({ children }) {
       const cur = prev[convId];
       return { ...prev, [convId]: { ...cur, items: cur.items.filter((m) => m.id !== msgId) } };
     });
-    sendMessage(convId, msg.body);
-  }, [sendMessage]);
+    if (msg._mediaPayload) sendAttachment(convId, msg._mediaPayload);
+    else sendMessage(convId, msg.body);
+  }, [sendMessage, sendAttachment]);
 
   const discardFailed = useCallback((convId, msgId) => {
     setThreads((prev) => {
@@ -394,7 +430,7 @@ export function SoporteProvider({ children }) {
     selectedId, selectedConversation, selectConversation,
     filters, setFilters,
     threads, loadOlder,
-    sendMessage, retrySend, discardFailed,
+    sendMessage, sendAttachment, retrySend, discardFailed,
     tagsCatalog: config.tags || [],
     appointmentTemplate: config.appointment_template || '',
     saveTagsCatalog,
@@ -405,7 +441,7 @@ export function SoporteProvider({ children }) {
   }), [
     loading, realtimeOk, visibleConversations, conversations.length, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, threads, loadOlder,
-    sendMessage, retrySend, discardFailed, config, saveTagsCatalog,
+    sendMessage, sendAttachment, retrySend, discardFailed, config, saveTagsCatalog,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment,
     mediaByMsg, loadMedia, getDraft, setDraft, refresh,

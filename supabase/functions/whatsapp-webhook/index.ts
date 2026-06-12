@@ -36,6 +36,35 @@ function str(v: unknown): string {
   return v === null || v === undefined ? "" : String(v).trim();
 }
 
+// Algunos mensajes vienen ENVUELTOS (ver-una-vez, efimeros, documento con
+// texto): el contenido real esta un nivel adentro. Desenvolver para detectar
+// el tipo/texto verdadero.
+function unwrapMessage(message: Record<string, any> | null | undefined): Record<string, any> {
+  let m = message ?? {};
+  for (let i = 0; i < 3; i++) {
+    const inner = m.viewOnceMessage?.message || m.viewOnceMessageV2?.message ||
+      m.ephemeralMessage?.message || m.documentWithCaptionMessage?.message;
+    if (!inner) break;
+    m = inner;
+  }
+  return m;
+}
+
+const CONTENT_KEYS = [
+  "conversation", "extendedTextMessage", "imageMessage", "videoMessage", "ptvMessage",
+  "audioMessage", "documentMessage", "stickerMessage", "locationMessage", "liveLocationMessage",
+  "contactMessage", "contactsArrayMessage", "reactionMessage", "pollCreationMessage",
+  "pollCreationMessageV3", "eventMessage", "groupInviteMessage",
+];
+
+// Tipo real del contenido (tras desenvolver). Cae al messageType reportado.
+function resolveMsgType(unwrapped: Record<string, any>, reported: string): string | null {
+  for (const k of CONTENT_KEYS) {
+    if (unwrapped[k]) return k === "conversation" || k === "extendedTextMessage" ? "conversation" : k;
+  }
+  return reported || Object.keys(unwrapped)[0] || null;
+}
+
 // Texto plano del mensaje segun su tipo (Baileys anida el contenido).
 function extractBody(message: Record<string, unknown> | null | undefined): string {
   if (!message) return "";
@@ -102,8 +131,9 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   const isGroup = jid.endsWith("@g.us");
   const waPhone = isGroup ? null : jid.split("@")[0].split(":")[0];
   const pushName = str(item.pushName);
-  const body = extractBody(item.message);
-  const msgType = str(item.messageType) || Object.keys(item.message ?? {})[0] || null;
+  const unwrapped = unwrapMessage(item.message);
+  const body = extractBody(unwrapped);
+  const msgType = resolveMsgType(unwrapped, str(item.messageType));
   const tsRaw = Number(item.messageTimestamp ?? 0);
   const waTimestamp = tsRaw > 0 ? new Date(tsRaw * 1000).toISOString() : new Date().toISOString();
 
@@ -146,7 +176,7 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
       sender_jid: str(key.participant) || (fromMe ? null : jid),
       msg_type: msgType,
       body: body || null,
-      media_id: extractMediaId(item.message),
+      media_id: extractMediaId(unwrapped),
       status: fromMe ? "sent" : "received",
       payload: item,
       wa_timestamp: waTimestamp,

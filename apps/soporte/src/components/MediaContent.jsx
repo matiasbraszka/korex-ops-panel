@@ -12,12 +12,23 @@ export default function MediaContent({ msg }) {
   const { mediaByMsg, loadMedia } = useSoporte();
   const media = mediaByMsg[msg.id] || {};
   const type = msg.msg_type;
-  const auto = AUTO_LOAD.has(type);
+  const isTemp = msg._temp === true;
+  const auto = !isTemp && AUTO_LOAD.has(type);
 
   useEffect(() => {
     if (auto && !media.url && media.status !== 'failed') loadMedia(msg.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, msg.id]);
+
+  // Burbuja optimista de un adjunto que recien se esta enviando.
+  if (isTemp) {
+    return (
+      <div className="flex items-center gap-2 text-[12px] text-text3 py-1 px-0.5">
+        <span className="w-3 h-3 rounded-full border-2 border-text3 border-t-transparent animate-spin" />
+        Enviando {msg._mediaPayload?.filename || 'adjunto'}…
+      </div>
+    );
+  }
 
   // Nombre del documento sin esperar la descarga (viene en el payload crudo).
   const docName = msg.payload?.message?.documentMessage?.fileName || media.filename || 'Documento';

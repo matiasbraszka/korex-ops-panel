@@ -32,9 +32,15 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`text-[13px] truncate flex-1 ${unread > 0 ? 'font-bold text-text' : 'font-semibold text-text'}`}>
+          <span className={`text-[13px] truncate ${unread > 0 ? 'font-bold text-text' : 'font-semibold text-text'}`}>
             {name}
           </span>
+          {conv.is_group && (
+            <span className="shrink-0 text-[8.5px] font-bold uppercase tracking-wider text-text3 bg-surface2 rounded px-1 py-px">
+              Grupo
+            </span>
+          )}
+          <span className="flex-1" />
           <span className={`text-[10px] shrink-0 ${unread > 0 ? 'text-[#5B7CF5] font-semibold' : 'text-text3'}`}>{fmtTime(conv.last_message_at)}</span>
         </div>
         <div className="flex items-center gap-2 mt-1">

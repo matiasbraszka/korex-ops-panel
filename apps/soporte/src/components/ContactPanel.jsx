@@ -100,7 +100,13 @@ export default function ContactPanel({ open, onClose, onSchedule }) {
                         {a.status === 'cancelled' && <span className="text-[9.5px] font-bold text-text3 uppercase">cancelada</span>}
                       </div>
                       <div className="text-[11px] text-text2 capitalize">{fmtCita(a.start_at)}</div>
-                      <div className="flex items-center gap-2.5 mt-1">
+                      <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                        {a.meeting_link && (
+                          <a href={a.meeting_link} target="_blank" rel="noopener noreferrer"
+                             className="text-[10.5px] font-bold text-[#2563EB] no-underline hover:underline flex items-center gap-0.5">
+                            🎥 Unirse a la reunión
+                          </a>
+                        )}
                         {a.gcal_link && (
                           <a href={a.gcal_link} target="_blank" rel="noopener noreferrer"
                              className="text-[10.5px] font-semibold text-[#4A67D8] no-underline hover:underline flex items-center gap-0.5">

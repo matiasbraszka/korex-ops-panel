@@ -142,12 +142,17 @@ export default function ScheduleModal({ open, onClose }) {
               <span className="text-[12.5px] font-semibold">Mandarle la confirmación por WhatsApp</span>
             </label>
             {sendConfirmation && (
-              <textarea
-                value={confirmText}
-                onChange={(e) => { setConfirmText(e.target.value); setConfirmDirty(true); }}
-                rows={3}
-                className="w-full resize-none px-3 py-2 text-[12.5px] leading-relaxed rounded-lg border border-border bg-white outline-none focus:border-[#22C55E]"
-              />
+              <>
+                <textarea
+                  value={confirmText}
+                  onChange={(e) => { setConfirmText(e.target.value); setConfirmDirty(true); }}
+                  rows={3}
+                  className="w-full resize-none px-3 py-2 text-[12.5px] leading-relaxed rounded-lg border border-border bg-white outline-none focus:border-[#22C55E]"
+                />
+                <div className="text-[10.5px] text-text3 mt-1">
+                  Si Zoom está conectado, el link de la reunión se agrega solo al final del mensaje y al evento.
+                </div>
+              </>
             )}
           </div>
         )}

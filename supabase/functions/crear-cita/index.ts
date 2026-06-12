@@ -55,6 +55,48 @@ interface SoporteConfig {
   instance_name?: string;
   calendar_script_url?: string;
   calendar_script_secret?: string;
+  zoom_account_id?: string;
+  zoom_client_id?: string;
+  zoom_client_secret?: string;
+}
+
+// Crea una reunion de Zoom (Server-to-Server OAuth) y devuelve el join_url.
+// Best-effort: si Zoom no esta configurado o falla, la cita sigue sin link.
+async function createZoomMeeting(cfg: SoporteConfig, args: { title: string; startAt: string; durationMin: number }): Promise<string | null> {
+  if (!cfg.zoom_account_id || !cfg.zoom_client_id || !cfg.zoom_client_secret) return null;
+  try {
+    const basic = btoa(`${cfg.zoom_client_id}:${cfg.zoom_client_secret}`);
+    const tokenRes = await fetch(
+      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${encodeURIComponent(cfg.zoom_account_id)}`,
+      { method: "POST", headers: { Authorization: `Basic ${basic}` }, signal: AbortSignal.timeout(15000) },
+    );
+    const tokenData = await tokenRes.json().catch(() => null);
+    if (!tokenRes.ok || !tokenData?.access_token) {
+      console.error("crear-cita: Zoom token error", tokenRes.status, tokenData);
+      return null;
+    }
+    const meetRes = await fetch("https://api.zoom.us/v2/users/me/meetings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenData.access_token}` },
+      body: JSON.stringify({
+        topic: args.title,
+        type: 2,
+        start_time: args.startAt,
+        duration: args.durationMin,
+        settings: { join_before_host: true, waiting_room: false },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const meet = await meetRes.json().catch(() => null);
+    if (!meetRes.ok || !meet?.join_url) {
+      console.error("crear-cita: Zoom meeting error", meetRes.status, meet);
+      return null;
+    }
+    return String(meet.join_url);
+  } catch (e) {
+    console.error("crear-cita: Zoom inalcanzable", e);
+    return null;
+  }
 }
 
 async function getConfig(): Promise<SoporteConfig> {
@@ -167,6 +209,12 @@ Deno.serve(async (req: Request) => {
     .eq("id", convId).maybeSingle();
   if (!conv) return jsonResp(404, { error: "conversation_not_found" });
 
+  // Link de Zoom (si hay credenciales configuradas).
+  const durationMin = endAt
+    ? Math.max(15, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60000))
+    : 60;
+  const meetingLink = await createZoomMeeting(cfg, { title, startAt, durationMin });
+
   // Evento en Google Calendar (si el script esta configurado, es obligatorio
   // que funcione; si no esta configurado, la cita se guarda igual sin evento).
   let gcalEventId: string | null = null;
@@ -175,7 +223,11 @@ Deno.serve(async (req: Request) => {
     const cal = await callCalendarScript(cfg, {
       action: "create_event",
       title,
-      description: [notes, `Agendado desde el panel Korex · WhatsApp ${conv.wa_phone || conv.wa_jid}`].filter(Boolean).join("\n"),
+      description: [
+        notes,
+        meetingLink ? `Zoom: ${meetingLink}` : null,
+        `Agendado desde el panel Korex · WhatsApp ${conv.wa_phone || conv.wa_jid}`,
+      ].filter(Boolean).join("\n"),
       start: startAt,
       end: endAt || startAt,
     });
@@ -197,6 +249,7 @@ Deno.serve(async (req: Request) => {
     end_at: endAt,
     gcal_event_id: gcalEventId,
     gcal_link: gcalLink,
+    meeting_link: meetingLink,
     created_by: auth.memberId,
   }).select("*").single();
   if (insErr) {
@@ -205,11 +258,15 @@ Deno.serve(async (req: Request) => {
   }
 
   // Confirmacion por WhatsApp (best-effort: la cita ya quedo creada).
+  // Si hay link de Zoom, se agrega al final del mensaje automaticamente.
   let confirmationSent = false;
   if (body.send_confirmation === true && body.confirmation_text) {
+    const confirmText = meetingLink
+      ? `${String(body.confirmation_text)}\n\n🔗 Link de la reunión: ${meetingLink}`
+      : String(body.confirmation_text);
     confirmationSent = await sendWhatsAppText({
       conversation: conv,
-      text: String(body.confirmation_text),
+      text: confirmText,
       memberId: auth.memberId,
       cfg,
     });
