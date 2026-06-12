@@ -758,6 +758,10 @@ Deno.serve(async (req: Request) => {
         telefono: str(body.phone),
         company: str(body.company),
         clientType: str(body.client_type),
+        // Datos del contrato para Base de datos (I/J/K/L): persona/empresa + dirección + fiscal.
+        facturarA: str(body.signer_type).toLowerCase() === "empresa" ? "Empresa" : "personas",
+        billingAddress: str(body.billing_address),
+        fiscalId: str(body.fiscal_id),
         service: str(body.service),
         fecha: startDate,
         setter: str(body.setter),

@@ -91,8 +91,10 @@ function kxfAltaBaseDatos(ss, b, cliente, fecha) {
     6: kxfStr(b.conector),             // F Conector
     7: kxfStr(b.email),                // G E-mail
     8: kxfStr(b.telefono),             // H Telefono
-    11: kxfStr(b.clientType),          // K Facturar a (Persona/Empresa)
-    12: kxfStr(b.company)              // L Empresa
+    9: kxfStr(b.billingAddress),       // I Dirección de facturación (del contrato)
+    10: kxfStr(b.fiscalId),            // J Identificador fiscal / DNI (del contrato)
+    11: kxfStr(b.facturarA),           // K Facturar a: "Empresa" / "personas"
+    12: kxfStr(b.company)              // L Empresa (nombre, solo si se factura a empresa)
   });
   kxfSetDate(sh, row, 1, fecha);       // A Fecha de Ingreso (dd/MM/yyyy)
   return row;
@@ -189,16 +191,14 @@ function kxfAltaIngresos(ss, b, cliente, fecha) {
     3: kxfRound2(montoEUR),            // C Monto EUR
     4: kxfRound2(montoUSD),            // D MontoUSD
     5: kxfRound2(montoNeto),           // E Monto luego de fees (USD) — F se autocalcula, no se toca
+    7: kxfMetodoPagoG(b.paymentMethod),// G Método de pago (mapeado desde el form)
     8: 'SETUP',                        // H Tipo
-    9: kxfStr(b.service),              // I Producto
+    // I (col 9): se deja vacía a propósito.
     10: estado,                        // J Estado (Depositado/Parcial)
     11: kxfStr(b.setter),              // K Setter
     12: kxfStr(b.closer),              // L Closer
-    13: cliente,                       // M Usuario (= nombre del cliente)
-    17: false,                         // Q Facturado (checkbox desmarcado)
-    18: 0,                             // R Organizado en finanzas
-    19: 'NO',                          // S Llego a Mercury
-    21: 0                              // U Cargado en el software
+    13: cliente                        // M Usuario (= nombre del cliente)
+    // Q a V (17-22): NO se tocan (las maneja finanzas / tienen fórmula).
   };
   kxfSetCellsExcept(sh, row, cells, KXF_FORMULA_COLS);
   kxfSetDate(sh, row, 2, fecha);       // B Fecha (dd/MM/yyyy)
@@ -206,6 +206,18 @@ function kxfAltaIngresos(ss, b, cliente, fecha) {
 }
 
 // ---------- helpers ----------
+
+// Mapea el método de pago del formulario al texto exacto de la columna G de Ingresos.
+// Stripe -> "Stripe (Tarjeta) - Empresa", Transferencia -> "Mercury (Transferencia) - Empresa",
+// USDT -> "USDT - Empresa". Cualquier otro queda vacío.
+function kxfMetodoPagoG(pm) {
+  switch (String(pm || '').toLowerCase()) {
+    case 'stripe':        return 'Stripe (Tarjeta) - Empresa';
+    case 'transferencia': return 'Mercury (Transferencia) - Empresa';
+    case 'usdt':          return 'USDT - Empresa';
+    default:              return '';
+  }
+}
 
 // Última fila con contenido en una columna (1-indexed). 0 si vacía.
 function kxfLastRowInCol(sh, colIndex) {

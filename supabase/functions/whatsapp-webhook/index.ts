@@ -191,7 +191,10 @@ Deno.serve(async (req: Request) => {
 
   const event = str(payload.event).toLowerCase();
 
-  if (event === "messages.upsert") {
+  // send.message = mensajes enviados via API (mismo shape que messages.upsert).
+  // Redundante con el insert directo de whatsapp-send, pero la idempotencia
+  // por wa_message_id hace que de cualquier forma quede UNA sola fila.
+  if (event === "messages.upsert" || event === "send.message") {
     const items = Array.isArray(payload.data) ? payload.data : [payload.data];
     const processed: string[] = [];
     for (const item of items) {

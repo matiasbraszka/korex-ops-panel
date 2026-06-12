@@ -1,0 +1,219 @@
+// supabase/functions/crear-cita/index.ts
+// Agenda una cita desde la bandeja de Soporte:
+//   1. Crea el evento en el Google Calendar de admin@metodokorex.com via el
+//      Apps Script agendar-cita-calendar.gs (config en soporte_config:
+//      calendar_script_url + calendar_script_secret).
+//   2. Guarda la fila en `appointments`.
+//   3. Si send_confirmation=true, manda el WhatsApp de confirmacion al chat.
+// action:'cancel' borra el evento del Calendar y marca la cita cancelada.
+//
+// Auth: verify_jwt=true + permiso soporte:write (mismo patron que whatsapp-send).
+
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResp(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+}
+
+async function authorizeSoporteWrite(req: Request): Promise<{ userId: string; memberId: string | null } | null> {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const { data: { user }, error } = await admin.auth.getUser(token);
+  if (error || !user) return null;
+  const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", user.id);
+  const roleNames = (roles || []).map((r: { role: string }) => r.role);
+  let allowed = roleNames.includes("admin");
+  if (!allowed && roleNames.length > 0) {
+    const { data: perms } = await admin
+      .from("role_permissions").select("role")
+      .in("role", roleNames).eq("module", "soporte").eq("can_write", true).limit(1);
+    allowed = (perms || []).length > 0;
+  }
+  if (!allowed) return null;
+  const { data: member } = await admin
+    .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
+  return { userId: user.id, memberId: member?.id ?? null };
+}
+
+interface SoporteConfig {
+  server_url?: string;
+  evolution_api_key?: string;
+  instance_name?: string;
+  calendar_script_url?: string;
+  calendar_script_secret?: string;
+}
+
+async function getConfig(): Promise<SoporteConfig> {
+  const { data } = await admin.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+  return (data?.value as SoporteConfig) ?? {};
+}
+
+async function callCalendarScript(cfg: SoporteConfig, payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  if (!cfg.calendar_script_url || !cfg.calendar_script_secret) return null;
+  try {
+    const r = await fetch(cfg.calendar_script_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: cfg.calendar_script_secret, ...payload }),
+      signal: AbortSignal.timeout(60000),
+    });
+    return await r.json().catch(() => null);
+  } catch (e) {
+    console.error("crear-cita: Apps Script inalcanzable", e);
+    return null;
+  }
+}
+
+// Copia del helper de whatsapp-send (los edge functions no comparten archivos).
+async function sendWhatsAppText(args: {
+  conversation: { id: string; wa_jid: string };
+  text: string;
+  memberId: string | null;
+  cfg: SoporteConfig;
+}): Promise<boolean> {
+  const { conversation, text, memberId, cfg } = args;
+  const serverUrl = (cfg.server_url || "").replace(/\/$/, "");
+  const apiKey = cfg.evolution_api_key || "";
+  const instance = cfg.instance_name || "korex-soporte";
+  if (!serverUrl || !apiKey) return false;
+  let evoData: Record<string, any> | null = null;
+  try {
+    const evoRes = await fetch(`${serverUrl}/message/sendText/${instance}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify({ number: conversation.wa_jid, text }),
+      signal: AbortSignal.timeout(25000),
+    });
+    evoData = await evoRes.json().catch(() => null);
+    if (!evoRes.ok || !evoData?.key?.id) return false;
+  } catch {
+    return false;
+  }
+  const tsRaw = Number(evoData.messageTimestamp ?? 0);
+  const waTimestamp = tsRaw > 0 ? new Date(tsRaw * 1000).toISOString() : new Date().toISOString();
+  await admin.from("wa_messages").upsert({
+    conversation_id: conversation.id,
+    wa_message_id: String(evoData.key.id),
+    direction: "out",
+    msg_type: "conversation",
+    body: text,
+    status: "sent",
+    sent_by: memberId,
+    payload: evoData,
+    wa_timestamp: waTimestamp,
+  }, { onConflict: "wa_message_id", ignoreDuplicates: true });
+  await admin.from("wa_conversations").update({
+    last_message_at: waTimestamp,
+    last_message_preview: text.slice(0, 120),
+  }).eq("id", conversation.id);
+  return true;
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return jsonResp(405, { error: "method_not_allowed" });
+
+  const auth = await authorizeSoporteWrite(req);
+  if (!auth) return jsonResp(403, { error: "forbidden" });
+
+  let body: Record<string, any>;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResp(400, { error: "bad_json" });
+  }
+
+  const cfg = await getConfig();
+
+  // ── Cancelar ──
+  if (body.action === "cancel") {
+    const id = String(body.appointment_id || "");
+    if (!id) return jsonResp(400, { error: "missing_fields" });
+    const { data: appt } = await admin.from("appointments").select("*").eq("id", id).maybeSingle();
+    if (!appt) return jsonResp(404, { error: "not_found" });
+    if (appt.gcal_event_id) {
+      await callCalendarScript(cfg, { action: "delete_event", eventId: appt.gcal_event_id });
+    }
+    await admin.from("appointments").update({ status: "cancelled" }).eq("id", id);
+    return jsonResp(200, { ok: true });
+  }
+
+  // ── Crear ──
+  const convId = String(body.conversation_id || "");
+  const title = String(body.title || "").trim();
+  const startAt = String(body.start_at || "");
+  const endAt = String(body.end_at || "") || null;
+  const notes = body.notes ? String(body.notes) : null;
+  if (!convId || !title || !startAt) return jsonResp(400, { error: "missing_fields" });
+  if (isNaN(new Date(startAt).getTime())) return jsonResp(400, { error: "bad_date" });
+
+  const { data: conv } = await admin
+    .from("wa_conversations")
+    .select("id, wa_jid, wa_phone, wa_profile_name, contact_id")
+    .eq("id", convId).maybeSingle();
+  if (!conv) return jsonResp(404, { error: "conversation_not_found" });
+
+  // Evento en Google Calendar (si el script esta configurado, es obligatorio
+  // que funcione; si no esta configurado, la cita se guarda igual sin evento).
+  let gcalEventId: string | null = null;
+  let gcalLink: string | null = null;
+  if (cfg.calendar_script_url) {
+    const cal = await callCalendarScript(cfg, {
+      action: "create_event",
+      title,
+      description: [notes, `Agendado desde el panel Korex · WhatsApp ${conv.wa_phone || conv.wa_jid}`].filter(Boolean).join("\n"),
+      start: startAt,
+      end: endAt || startAt,
+    });
+    if (!cal?.ok) {
+      console.error("crear-cita: fallo el Apps Script", cal);
+      return jsonResp(502, { error: "calendar_error" });
+    }
+    gcalEventId = (cal.eventId as string) || null;
+    gcalLink = (cal.htmlLink as string) || null;
+  }
+
+  const { data: appt, error: insErr } = await admin.from("appointments").insert({
+    conversation_id: conv.id,
+    contact_id: conv.contact_id,
+    wa_jid: conv.wa_jid,
+    title,
+    notes,
+    start_at: startAt,
+    end_at: endAt,
+    gcal_event_id: gcalEventId,
+    gcal_link: gcalLink,
+    created_by: auth.memberId,
+  }).select("*").single();
+  if (insErr) {
+    console.error("crear-cita: error insertando appointment", insErr);
+    return jsonResp(500, { error: "db_error" });
+  }
+
+  // Confirmacion por WhatsApp (best-effort: la cita ya quedo creada).
+  let confirmationSent = false;
+  if (body.send_confirmation === true && body.confirmation_text) {
+    confirmationSent = await sendWhatsAppText({
+      conversation: conv,
+      text: String(body.confirmation_text),
+      memberId: auth.memberId,
+      cfg,
+    });
+  }
+
+  return jsonResp(200, { ok: true, appointment: appt, confirmation_sent: confirmationSent });
+});

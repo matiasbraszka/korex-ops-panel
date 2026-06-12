@@ -24,8 +24,8 @@ const FAC_SHEET_INGRESOS = 'Ingresos';
 const FAC_SHEET_BASE      = 'Base de datos';
 const FAC_EXCLUIR_CARPETAS = ['Egresos']; // no entran en la numeración de salida
 
-// Columnas de Ingresos (1-indexed). quienPaga = col T (Cliente/Empresa).
-const FAC_ING = { fecha: 2, eur: 3, usd: 4, tipo: 8, producto: 9, usuario: 13, facturado: 17, quienPaga: 20 };
+// Columnas de Ingresos (1-indexed). cuenta = col G (cuenta receptora), quienPaga = col T.
+const FAC_ING = { fecha: 2, eur: 3, usd: 4, cuenta: 7, tipo: 8, producto: 9, usuario: 13, facturado: 17, quienPaga: 20 };
 // Columnas de Base de datos (1-indexed)
 const FAC_BD = { nombre: 2, email: 7, direccion: 9, idFiscal: 10, facturarA: 11, empresa: 12 };
 
@@ -45,7 +45,16 @@ function facConcepto(tipo) {
 
 // Datos fijos del emisor (de la hoja Facturas) y textos legales.
 const FAC_EMISOR = { nombre: 'KOREX PROJECT LLC', ein: '33-3093287', ubicacion: '102 Gold Ave 443, Albuquerque' };
-const FAC_FORMA_PAGO = 'Tarjeta de crédito / débito';
+const FAC_FORMA_PAGO = 'Tarjeta de crédito / débito'; // fallback
+
+// Forma de pago según la cuenta receptora (col G de Ingresos).
+function facFormaPago(cuenta) {
+  var s = String(cuenta || '').toLowerCase();
+  if (s.indexOf('stripe') !== -1) return 'Tarjeta de crédito/débito vía Stripe';
+  if (s.indexOf('mercury') !== -1) return 'Transferencia bancaria';
+  if (s.indexOf('usdt') !== -1 || s.indexOf('safepal') !== -1) return 'Wallet USDT';
+  return FAC_FORMA_PAGO;
+}
 const FAC_NOTA_IVA = 'Operation not subject to VAT according to Article 196 of EU VAT Directive / Operación no sujeta a IVA según el artículo 196 de la Directiva IVA UE.';
 
 function onOpen() {
@@ -112,8 +121,8 @@ function facPreview(row) {
   if (!cli) return { ok: false, error: 'No encontré "' + usuario + '" en Base de datos.' };
 
   var faltan = [];
-  if (!cli.nombreFactura) faltan.push('Nombre/Empresa');
-  if (!cli.idFiscal) faltan.push('Identificación fiscal');
+  if (!cli.nombreFactura) faltan.push(cli.esEmpresa ? 'Nombre de la empresa (Base de datos col L)' : 'Nombre del cliente');
+  if (!cli.idFiscal) faltan.push('ID fiscal o DNI');
   if (!cli.direccion) faltan.push('Dirección de facturación');
   if (!cli.email) faltan.push('E-mail');
 
@@ -137,6 +146,7 @@ function facPreview(row) {
       concepto: concepto,
       monto: monto,
       moneda: 'USD',
+      formaPago: facFormaPago(r[FAC_ING.cuenta - 1]),
       numero: numero,
       numeroFmt: facPad4(numero),
       mesCarpeta: FAC_MESES[hoy.getMonth()] + ' ' + hoy.getFullYear(),
@@ -161,8 +171,8 @@ function facEnviar(row) {
     var cli = facBuscarCliente(usuario);
     if (!cli) return { ok: false, error: 'No encontré "' + usuario + '" en Base de datos.' };
     var faltan = [];
-    if (!cli.nombreFactura) faltan.push('Nombre/Empresa');
-    if (!cli.idFiscal) faltan.push('Identificación fiscal');
+    if (!cli.nombreFactura) faltan.push(cli.esEmpresa ? 'Nombre de la empresa (Base de datos col L)' : 'Nombre del cliente');
+    if (!cli.idFiscal) faltan.push('ID fiscal o DNI');
     if (!cli.direccion) faltan.push('Dirección de facturación');
     if (!cli.email) faltan.push('E-mail');
     if (faltan.length) return { ok: false, error: 'Faltan datos del cliente: ' + faltan.join(', ') + '. No se generó la factura.' };
@@ -185,7 +195,8 @@ function facEnviar(row) {
       fecha: hoy,
       concepto: concepto,
       monto: monto,
-      moneda: 'USD'
+      moneda: 'USD',
+      formaPago: facFormaPago(r[FAC_ING.cuenta - 1])
     }).setName(numero + ' ' + cli.nombreFactura + '.pdf');
 
     // 2) Enviar por email PRIMERO (si falla, no se guarda el PDF ni se consume el número).
@@ -381,7 +392,7 @@ function facHtmlFactura(d) {
 
     // Forma de pago
     '<div style="margin-top:28px;font-size:12.5px;">' +
-      '<span style="color:' + GRIS + ';">Forma de pago: </span><b>' + esc(FAC_FORMA_PAGO) + '</b>' +
+      '<span style="color:' + GRIS + ';">Forma de pago: </span><b>' + esc(d.formaPago || FAC_FORMA_PAGO) + '</b>' +
     '</div>' +
 
     // Nota legal

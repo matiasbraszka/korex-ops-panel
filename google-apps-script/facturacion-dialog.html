@@ -48,7 +48,7 @@
   var CURRENT = null;   // preview actual
 
   function money(n, cur) {
-    var v = (Math.round((Number(n)||0)*100)/100).toLocaleString('es-AR');
+    var v = Math.trunc(Number(n)||0).toLocaleString('es-AR'); // sin decimales
     return (cur || '') + ' ' + v;
   }
 
@@ -102,12 +102,13 @@
     html += '<div class="row"><span>Fecha</span><span>'+esc(d.fechaStr)+'</span></div>';
     html += '<hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0">';
     html += '<div class="row"><span>Facturado a</span><span>'+esc(d.nombreFactura||'—')+'</span></div>';
-    html += '<div class="row"><span>ID fiscal</span><span>'+esc(d.idFiscal||'—')+'</span></div>';
+    html += '<div class="row"><span>ID fiscal o DNI</span><span>'+esc(d.idFiscal||'—')+'</span></div>';
     html += '<div class="row"><span>Dirección</span><span>'+esc(d.direccion||'—')+'</span></div>';
     html += '<div class="row"><span>Email</span><span>'+esc(d.email||'—')+'</span></div>';
     html += '<hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0">';
     html += '<div class="row"><span>Concepto</span><span>'+esc(d.concepto)+'</span></div>';
     html += '<div class="row"><span>Importe</span><span>'+esc(money(d.monto, d.moneda))+'</span></div>';
+    html += '<div class="row"><span>Forma de pago</span><span>'+esc(d.formaPago||'—')+'</span></div>';
     html += '</div>';
     document.getElementById('preview').innerHTML = html;
     setSend(!(res.faltan && res.faltan.length));

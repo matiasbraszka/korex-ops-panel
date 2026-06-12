@@ -16,6 +16,7 @@ const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 import SearchBar from './components/SearchBar';
+import useSoporteUnread from './hooks/useSoporteUnread';
 import EditClientModal from './components/clientes/EditClientModal';
 import CommentsSidePanel from './components/comments/CommentsSidePanel';
 import NotificationBell from './components/notifications/NotificationBell';
@@ -269,6 +270,8 @@ function MainLayout() {
   const canAccessOperations = useCan('operations', 'read');
   const canAccessSales = useCan('sales', 'read');
   const canAccessSoporte = useCan('soporte', 'read');
+  // Mensajes de WhatsApp sin leer (badge del area Soporte en el nav).
+  const waUnread = useSoporteUnread(canAccessSoporte);
   const location = useLocation();
 
   // Areas del panel: cada una tiene color propio, ruta base y modulos.
@@ -454,7 +457,8 @@ function MainLayout() {
           {(activeArea?.items || []).map((item) => {
             const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
             const badge = item.id === 'tasks' && urgentCount > 0 ? urgentCount
-                        : item.id === 'videos' && unseenVideoCount > 0 ? unseenVideoCount : null;
+                        : item.id === 'videos' && unseenVideoCount > 0 ? unseenVideoCount
+                        : item.id === 'inbox' && waUnread > 0 ? waUnread : null;
             return (
               <button key={item.id}
                       onClick={() => switchTo(item.path)}
@@ -538,6 +542,9 @@ function MainLayout() {
               <span className="text-[9px] font-medium leading-none truncate w-full text-center">{item.label}</span>
               {item.id === 'tasks' && urgentCount > 0 && (
                 <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{urgentCount}</span>
+              )}
+              {item.id === 'inbox' && waUnread > 0 && (
+                <span className="absolute -top-0.5 right-1 bg-red text-white text-[8px] font-bold w-[14px] h-[14px] rounded-full flex items-center justify-center">{waUnread > 99 ? '99' : waUnread}</span>
               )}
             </button>
           );
