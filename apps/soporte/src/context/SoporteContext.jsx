@@ -358,6 +358,11 @@ export function SoporteProvider({ children }) {
     [conversations, selectedId],
   );
 
+  const unreadTotal = useMemo(
+    () => conversations.reduce((acc, c) => acc + (c.id === selectedId ? 0 : (c.unread_count || 0)), 0),
+    [conversations, selectedId],
+  );
+
   const getDraft = useCallback((convId) => draftsRef.current[convId] || '', []);
   const setDraft = useCallback((convId, text) => { draftsRef.current[convId] = text; }, []);
 
@@ -365,6 +370,7 @@ export function SoporteProvider({ children }) {
     loading, realtimeOk,
     conversations: visibleConversations,
     allConversationsCount: conversations.length,
+    unreadTotal,
     selectedId, selectedConversation, selectConversation,
     filters, setFilters,
     threads, loadOlder,
@@ -376,7 +382,7 @@ export function SoporteProvider({ children }) {
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment,
     getDraft, setDraft, refresh,
   }), [
-    loading, realtimeOk, visibleConversations, conversations.length, selectedId,
+    loading, realtimeOk, visibleConversations, conversations.length, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, threads, loadOlder,
     sendMessage, retrySend, discardFailed, config, saveTagsCatalog,
     updateConversation, updateNotes, linkContact, appointmentsByConv,

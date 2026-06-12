@@ -13,10 +13,10 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
   return (
     <div className={`flex ${out ? 'justify-end' : 'justify-start'} px-4`}>
       <div
-        className={`max-w-[75%] md:max-w-[60%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed break-words ${
+        className={`max-w-[75%] md:max-w-[60%] rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed break-words ${
           out
             ? failed ? 'bg-[#FEF2F2] border border-[#FCA5A5] text-text rounded-br-md' : 'bg-[#DCFCE7] text-text rounded-br-md'
-            : 'bg-white border border-border text-text rounded-bl-md'
+            : 'bg-[#F1F3F6] text-text rounded-bl-md'
         }`}
       >
         {showAuthor && authorName && (

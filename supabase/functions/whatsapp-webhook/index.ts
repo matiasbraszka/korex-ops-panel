@@ -65,6 +65,30 @@ interface WaEvent {
   data: Record<string, unknown> | Record<string, unknown>[];
 }
 
+// Nombre real de un grupo via Evolution API (best-effort). El pushName de los
+// mensajes es el AUTOR, no el grupo: sin esto los grupos quedarian con el
+// nombre del ultimo que hablo.
+async function fetchGroupSubject(jid: string): Promise<string | null> {
+  try {
+    const { data: s } = await supabase
+      .from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+    const cfg = (s?.value as Record<string, string> | null) ?? {};
+    const serverUrl = (cfg.server_url || "").replace(/\/$/, "");
+    const apiKey = cfg.evolution_api_key || "";
+    const instance = cfg.instance_name || "korex-soporte";
+    if (!serverUrl || !apiKey) return null;
+    const r = await fetch(
+      `${serverUrl}/group/findGroupInfos/${instance}?groupJid=${encodeURIComponent(jid)}`,
+      { headers: { apikey: apiKey }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!r.ok) return null;
+    const info = await r.json().catch(() => null);
+    return str(info?.subject) || null;
+  } catch {
+    return null;
+  }
+}
+
 // Procesa un item de messages.upsert: upsert de conversacion + insert de mensaje.
 async function processMessage(item: Record<string, any>): Promise<string | null> {
   const key = item.key ?? {};
@@ -89,7 +113,7 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   // webhook reintentado no infla el contador de no leidos.
   const { data: existing } = await supabase
     .from("wa_conversations")
-    .select("id, contact_id, unread_count")
+    .select("id, contact_id, unread_count, wa_profile_name")
     .eq("wa_jid", jid)
     .maybeSingle();
 
@@ -150,7 +174,13 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
     contactId = contact?.id ?? null;
   }
 
-  const preview = body ? body.slice(0, 120) : (msgType ? `[${msgType}]` : null);
+  // Preview: en grupos se antepone el autor para saber quien hablo.
+  const rawPreview = body || (msgType ? `[${msgType}]` : '');
+  const author = fromMe ? 'Vos' : (pushName || (str(key.participant).split('@')[0] || ''));
+  const preview = rawPreview
+    ? (isGroup && author ? `${author}: ${rawPreview}` : rawPreview).slice(0, 120)
+    : null;
+
   const convPatch: Record<string, unknown> = {
     wa_phone: waPhone,
     is_group: isGroup,
@@ -158,9 +188,16 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
     last_message_at: waTimestamp,
     last_message_preview: preview,
   };
-  // pushName es el nombre del REMITENTE: solo sirve como nombre del chat
-  // cuando el mensaje es entrante (en salientes seria el nombre de Matias).
-  if (!fromMe && pushName) convPatch.wa_profile_name = pushName;
+  if (isGroup) {
+    // El nombre del chat de un grupo es su subject (NO el pushName del autor).
+    if (!existing?.wa_profile_name) {
+      const subject = await fetchGroupSubject(jid);
+      if (subject) convPatch.wa_profile_name = subject;
+    }
+  } else if (!fromMe && pushName) {
+    // 1-a-1: pushName del remitente = nombre del contacto.
+    convPatch.wa_profile_name = pushName;
+  }
   if (!fromMe) convPatch.unread_count = (Number(existing?.unread_count) || 0) + 1;
 
   await supabase.from("wa_conversations").update(convPatch).eq("id", conversationId);

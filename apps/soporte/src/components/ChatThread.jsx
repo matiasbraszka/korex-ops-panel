@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users } from 'lucide-react';
+import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Calendar } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
@@ -16,12 +16,20 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const thread = threads[selectedId] || { items: [], hasMore: false, loadingOlder: false, loaded: false };
   const conv = selectedConversation;
 
-  // Grupos por día + flag de autor por burbuja (grupos).
+  // Grupos por día + flag de autor por burbuja (grupos). Los mensajes se
+  // ordenan por la hora REAL de WhatsApp (wa_timestamp): el webhook puede
+  // entregarlos fuera de orden si llegan casi juntos.
   const groups = useMemo(() => {
+    const sorted = [...thread.items].sort((a, b) => {
+      const ta = a.wa_timestamp || a.created_at || '';
+      const tb = b.wa_timestamp || b.created_at || '';
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      return (a.created_at || '') < (b.created_at || '') ? -1 : 1;
+    });
     const out = [];
     let lastDay = null;
     let lastSender = null;
-    for (const m of thread.items) {
+    for (const m of sorted) {
       const day = dayKey(m.wa_timestamp || m.created_at);
       if (day !== lastDay) {
         out.push({ type: 'day', key: 'day_' + day + '_' + out.length, label: day });
@@ -97,7 +105,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const color = colorFromString(conv.wa_jid);
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[#F0F2F5]">
+    <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 bg-white">
       {/* Header del chat */}
       <div className="h-[54px] bg-white border-b border-border flex items-center gap-2.5 px-3 shrink-0">
         <button onClick={onBack} className="md:hidden bg-transparent border-0 text-text2 cursor-pointer p-1 -ml-1">
@@ -140,8 +148,10 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
           <div className="flex flex-col gap-1.5">
             {groups.map((g) =>
               g.type === 'day' ? (
-                <div key={g.key} className="flex justify-center my-1.5">
-                  <span className="text-[10.5px] font-semibold text-text3 bg-white border border-border rounded-full px-2.5 py-0.5 capitalize">{g.label}</span>
+                <div key={g.key} className="flex justify-center my-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-text2 bg-surface2 rounded-full px-3 py-1 capitalize">
+                    <Calendar size={11} /> {g.label}
+                  </span>
                 </div>
               ) : (
                 <MessageBubble

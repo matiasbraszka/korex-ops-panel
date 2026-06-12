@@ -70,6 +70,13 @@ export function msgTypeLabel(msgType) {
   return TYPE_LABELS[msgType] || '📎 Adjunto';
 }
 
+// Preview legible: convierte "[audioMessage]" (crudo del webhook viejo) o
+// "Autor: [imageMessage]" en su etiqueta amable.
+export function prettyPreview(preview) {
+  if (!preview) return '';
+  return preview.replace(/\[(\w+Message|\w+)\]/g, (match, type) => TYPE_LABELS[type] || match);
+}
+
 // Nombre a mostrar de una conversación: contacto vinculado > nombre de perfil > teléfono > jid.
 export function convName(conv) {
   return conv?.contact?.full_name || conv?.wa_profile_name || fmtPhone(conv?.wa_phone) || conv?.wa_jid || '';

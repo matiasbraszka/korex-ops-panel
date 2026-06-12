@@ -4,17 +4,17 @@ import ConversationItem from './ConversationItem.jsx';
 import InboxFilters from './InboxFilters.jsx';
 
 export default function ConversationList() {
-  const { loading, realtimeOk, conversations, allConversationsCount, selectedId, selectConversation, tagsCatalog } = useSoporte();
+  const { loading, realtimeOk, conversations, allConversationsCount, unreadTotal, selectedId, selectConversation, tagsCatalog } = useSoporte();
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-white">
-      <InboxFilters />
+    <div className="flex flex-col h-full min-h-0 bg-[#F7F8FA]">
+      <InboxFilters unreadCount={unreadTotal} />
       {!realtimeOk && (
         <div className="px-3 py-1.5 bg-[#FFFBEB] text-[#B45309] text-[11px] font-medium flex items-center gap-1.5 shrink-0">
           <WifiOff size={12} /> Reconectando…
         </div>
       )}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 px-2 pt-2">
         {loading ? (
           <div className="text-text3 text-[12.5px] text-center py-10">Cargando chats…</div>
         ) : conversations.length === 0 ? (
