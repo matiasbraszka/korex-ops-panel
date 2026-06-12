@@ -111,7 +111,7 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                         {conv.client ? 'Cliente' : 'Contacto del CRM'}
                       </span>
                     </span>
-                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar →</span>
+                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Ver ficha →</span>
                   </>
                 ) : (
                   <>
@@ -202,22 +202,20 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                             <Video size={11} /> Unirse
                           </a>
                         )}
-                        {a.gcal_link && (
-                          <a href={a.gcal_link} target="_blank" rel="noopener noreferrer"
-                             className="text-[11px] font-semibold text-text2 no-underline hover:underline flex items-center gap-1">
-                            <ExternalLink size={10} /> Calendar
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2">
                         <button onClick={() => onReschedule?.(a)}
-                                className="flex-1 text-[10.5px] font-bold px-2 py-1.5 rounded-lg border border-[#F5D9A8] bg-white text-[#B45309] cursor-pointer hover:bg-[#FEF0D7] flex items-center justify-center gap-1 transition-colors duration-150">
+                                className="text-[11px] font-semibold text-text bg-transparent border-0 cursor-pointer hover:underline flex items-center gap-1 p-0">
                           <CalendarClock size={11} /> Reagendar
                         </button>
                         <button onClick={() => cancelAppointment(conv.id, a.id)}
-                                className="flex-1 text-[10.5px] font-semibold px-2 py-1.5 rounded-lg border border-border bg-white text-text2 cursor-pointer hover:border-[#DC2626]/50 hover:text-[#DC2626] flex items-center justify-center gap-1 transition-colors duration-150">
+                                className="text-[11px] font-semibold text-text3 bg-transparent border-0 cursor-pointer hover:text-[#DC2626] flex items-center gap-1 p-0">
                           <CalendarX size={11} /> Cancelar
                         </button>
+                        {a.gcal_link && (
+                          <a href={a.gcal_link} target="_blank" rel="noopener noreferrer"
+                             className="text-[11px] font-semibold text-text3 no-underline hover:underline flex items-center gap-1">
+                            <ExternalLink size={10} /> Calendar
+                          </a>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -1,4 +1,4 @@
-import { Users, MessageCircle, Calendar, Link2 } from 'lucide-react';
+import { Users, MessageCircle, Calendar, Link2, CheckCheck } from 'lucide-react';
 import { initials, fmtTime, colorFromString, convName, prettyPreview } from '../lib/format.js';
 
 // Item de conversación — Diseño A.
@@ -8,6 +8,9 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
   const name = convName(conv);
   const color = colorFromString(conv.wa_jid);
   const unread = isSelected ? 0 : conv.unread_count || 0;
+  // Sin nombre conocido (solo teléfono) → avatar "?" punteado, como el diseño.
+  const unknown = !conv.is_group && !conv.contact?.full_name && !conv.wa_profile_name;
+  const lastIsOurs = conv.last_message_direction === 'out';
   const tags = (conv.tags || [])
     .map((id) => tagsCatalog.find((t) => t.id === id))
     .filter(Boolean)
@@ -26,10 +29,16 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
     >
       {/* Avatar + mini-badge del canal */}
       <div className="relative shrink-0 self-start h-11">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-[13.5px]"
-             style={{ background: color + '1d', color }}>
-          {conv.is_group ? <Users size={17} /> : initials(name)}
-        </div>
+        {unknown ? (
+          <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-[15px] text-text3 bg-surface2 border border-dashed border-[#D0D5DD]">
+            ?
+          </div>
+        ) : (
+          <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-[13.5px]"
+               style={{ background: color + '1d', color }}>
+            {conv.is_group ? <Users size={17} /> : initials(name)}
+          </div>
+        )}
         <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#22C55E] border-2 border-white flex items-center justify-center">
           <MessageCircle size={9} className="text-white" />
         </span>
@@ -50,9 +59,14 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
           </span>
         </div>
 
-        {/* Fila 2: preview */}
-        <div className={`text-[12px] truncate mt-0.5 ${unread > 0 ? 'text-text font-medium' : 'text-text3'}`}>
-          {prettyPreview(conv.last_message_preview) || (conv.is_group ? 'Grupo' : 'Sin mensajes')}
+        {/* Fila 2: preview (tilde doble azul si el último mensaje es nuestro) */}
+        <div className={`text-[12px] truncate mt-0.5 flex items-center gap-1 ${unread > 0 ? 'text-text font-medium' : 'text-text3'}`}>
+          {lastIsOurs && <CheckCheck size={13} className="text-[#53BDEB] shrink-0" />}
+          <span className="truncate">
+            {(lastIsOurs
+              ? prettyPreview(conv.last_message_preview).replace(/^Vos: /, '')
+              : prettyPreview(conv.last_message_preview)) || (conv.is_group ? 'Grupo' : 'Sin mensajes')}
+          </span>
         </div>
 
         {/* Fila 3: vínculo + etiquetas + cita + no leídos */}

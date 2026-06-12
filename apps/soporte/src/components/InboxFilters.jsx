@@ -1,4 +1,5 @@
-import { Search, X } from 'lucide-react';
+import { useRef } from 'react';
+import { Search, X, PenSquare } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 
 // Filtros de la bandeja — Diseño A (WhatsApp + acento ámbar Soporte).
@@ -13,17 +14,23 @@ const TABS = [
 
 export default function InboxFilters({ unreadCount = 0 }) {
   const { filters, setFilters, tagsCatalog } = useSoporte();
+  const searchRef = useRef(null);
 
   return (
     <div className="px-3.5 pt-3.5 pb-0 bg-white shrink-0 flex flex-col gap-2.5">
-      <div className="flex items-center">
+      <div className="flex items-center justify-between">
         <span className="text-[15px] font-bold text-text">Bandeja WhatsApp</span>
+        <button onClick={() => searchRef.current?.focus()} title="Buscar un chat"
+                className="w-7 h-7 rounded-[9px] border border-border bg-white text-text2 hover:text-[#B45309] hover:border-[#F5D9A8] cursor-pointer flex items-center justify-center transition-colors duration-150">
+          <PenSquare size={13} />
+        </button>
       </div>
 
       {/* Búsqueda */}
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text3" />
         <input
+          ref={searchRef}
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           placeholder="Buscar chat, teléfono, cliente…"

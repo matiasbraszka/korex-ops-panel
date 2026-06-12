@@ -81,6 +81,7 @@ async function sendWhatsAppText(cfg: SoporteConfig, conversation: { id: string; 
   await admin.from("wa_conversations").update({
     last_message_at: waTimestamp,
     last_message_preview: text.slice(0, 120),
+    last_message_direction: "out",
   }).eq("id", conversation.id);
   return true;
 }

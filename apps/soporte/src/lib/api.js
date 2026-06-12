@@ -5,7 +5,7 @@ import { fmtNextCita } from './format.js';
 
 // Columnas explícitas: participants (puede tener cientos de miembros en
 // comunidades) NO viaja con la lista — se pide aparte al abrir el panel.
-const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,tags,notes,archived,created_at';
+const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at';
 const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,email),client:clients(id,name)`;
 
 export async function fetchConversations() {

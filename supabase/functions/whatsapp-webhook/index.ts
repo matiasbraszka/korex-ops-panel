@@ -234,6 +234,7 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
     contact_id: contactId,
     last_message_at: waTimestamp,
     last_message_preview: preview,
+    last_message_direction: fromMe ? "out" : "in",
   };
   if (isGroup) {
     // El nombre del chat de un grupo es su subject (NO el pushName del autor).

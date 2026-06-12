@@ -127,6 +127,7 @@ async function persistOutgoing(args: {
   await admin.from("wa_conversations").update({
     last_message_at: waTimestamp,
     last_message_preview: previewText.slice(0, 120),
+    last_message_direction: "out",
   }).eq("id", conversationId);
   return message as Record<string, unknown>;
 }
