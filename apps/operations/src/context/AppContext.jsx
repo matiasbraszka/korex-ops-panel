@@ -2022,7 +2022,40 @@ export function AppProvider({ children }) {
     return set;
   }, [taskComments, commentReads, currentUser?.id]);
 
-  const value = {
+  // ── Closures estables para el value memoizado ──
+  // Antes vivian inline dentro del objeto value: cada render del provider
+  // creaba funciones nuevas y recreaba el value entero, re-renderizando a
+  // TODOS los consumidores de useApp() aunque nada hubiera cambiado.
+  const dismissAlert = useCallback(async (alertId) => {
+    setDashboardAlerts(prev => prev.filter(a => a.id !== alertId));
+    try {
+      await sbFetch('dashboard_alerts?id=eq.' + alertId, {
+        method: 'PATCH',
+        body: JSON.stringify({ dismissed: true, updated_at: new Date().toISOString() })
+      });
+    } catch (e) { console.error('Failed to dismiss alert', e); }
+  }, []);
+  // Side panel de comentarios (generico para task, bullet, idea o blocker).
+  const openTaskComments = useCallback((taskId) => {
+    if (taskId) markTaskCommentsRead(taskId);
+    setCommentsTarget(taskId ? { kind: 'task', taskId } : null);
+  }, [markTaskCommentsRead]);
+  const openBulletComments = useCallback((reportId, bulletId) => setCommentsTarget({ kind: 'bullet', reportId, bulletId }), []);
+  const openIdeaComments = useCallback((ideaId) => setCommentsTarget({ kind: 'idea', ideaId }), []);
+  const openBlockerComments = useCallback((blockerId) => setCommentsTarget({ kind: 'blocker', blockerId }), []);
+  const closeComments = useCallback(() => setCommentsTarget(null), []);
+  // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
+  const getPriorityLabel = useCallback((p) => {
+    const fromDb = appSettings?.priority_labels?.[String(p)];
+    return fromDb || PRIO_CLIENT[p];
+  }, [appSettings]);
+  const getAllPriorityLabels = useCallback(() => {
+    const fromDb = appSettings?.priority_labels;
+    if (fromDb && Object.keys(fromDb).length > 0) return fromDb;
+    return PRIO_CLIENT;
+  }, [appSettings]);
+
+  const value = useMemo(() => ({
     // State
     clients, setClients,
     tasks, setTasks,
@@ -2042,15 +2075,7 @@ export function AppProvider({ children }) {
     reportFeedbacks, setReportFeedbacks,
     taskProposals, setTaskProposals,
     dashboardAlerts, setDashboardAlerts,
-    dismissAlert: async (alertId) => {
-      setDashboardAlerts(prev => prev.filter(a => a.id !== alertId));
-      try {
-        await sbFetch('dashboard_alerts?id=eq.' + alertId, {
-          method: 'PATCH',
-          body: JSON.stringify({ dismissed: true, updated_at: new Date().toISOString() })
-        });
-      } catch (e) { console.error('Failed to dismiss alert', e); }
-    },
+    dismissAlert,
     hideCompleted, setHideCompleted,
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,
@@ -2140,17 +2165,17 @@ export function AppProvider({ children }) {
     reorderClient,
     // Side panel de comentarios (generico para task, bullet, idea o blocker).
     commentsTarget,
-    openTaskComments: (taskId) => { if (taskId) markTaskCommentsRead(taskId); setCommentsTarget(taskId ? { kind: 'task', taskId } : null); },
+    openTaskComments,
     // Chip de comentarios leído/no leído
     unreadCommentTaskIds,
     markTaskCommentsRead,
-    openBulletComments: (reportId, bulletId) => setCommentsTarget({ kind: 'bullet', reportId, bulletId }),
-    openIdeaComments: (ideaId) => setCommentsTarget({ kind: 'idea', ideaId }),
-    openBlockerComments: (blockerId) => setCommentsTarget({ kind: 'blocker', blockerId }),
-    closeComments: () => setCommentsTarget(null),
+    openBulletComments,
+    openIdeaComments,
+    openBlockerComments,
+    closeComments,
     // Alias legacy para compat con el panel actual (devuelve el taskId si esta abierto en modo task).
     openCommentTaskId: commentsTarget?.kind === 'task' ? commentsTarget.taskId : null,
-    closeTaskComments: () => setCommentsTarget(null),
+    closeTaskComments: closeComments,
     // Notificaciones (buzón)
     notifications,
     unreadNotifCount,
@@ -2178,17 +2203,44 @@ export function AppProvider({ children }) {
     addContract,
     updateContract,
     deleteContract,
-    // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
-    getPriorityLabel: (p) => {
-      const fromDb = appSettings?.priority_labels?.[String(p)];
-      return fromDb || PRIO_CLIENT[p];
-    },
-    getAllPriorityLabels: () => {
-      const fromDb = appSettings?.priority_labels;
-      if (fromDb && Object.keys(fromDb).length > 0) return fromDb;
-      return PRIO_CLIENT;
-    },
-  };
+    getPriorityLabel,
+    getAllPriorityLabels,
+  }), [
+    // Estado (los setters de useState son estables y no necesitan estar aca)
+    clients, tasks, view, setView, selectedId, phase, filter, taskFilter,
+    taskAssignee, taskClientFilter, taskPriority, taskDueFilter,
+    currentUser, authUser, isAdmin, briefing, reportFeedbacks, taskProposals,
+    dashboardAlerts, hideCompleted, hideCompletedTasks, hideBlockedTasks,
+    collapsedGroups, syncStatus, appSettings, teamMembers, weeklyTodos,
+    loomVideos, llamadas, pendingCallsCount, teamReports, teamBlockers,
+    ideas, notas, taskComments, bulletComments, ideaComments, blockerComments,
+    taskUserPositions, clientUserPositions, commentsTarget, unreadCommentTaskIds,
+    notifications, unreadNotifCount, notifPanelOpen, notifToast,
+    strategies, strategyPages, invoices, contracts,
+    // Acciones (todas useCallback)
+    dismissAlert, save, dbSaveClient, dbSaveTask, dbSyncAll, dbDeleteTask,
+    createClient, updateClient, deleteClient, createTask, updateTask,
+    deleteTask, reorderTask, doLogout, injectMetaMetrics, recalculateTimers,
+    updateAppSettings, addTeamMember, updateTeamMember, deleteTeamMember,
+    loadWeeklyTodos, addWeeklyTodo, addWeeklyNote, removeWeeklyTodo,
+    updateWeeklyTodo, addLoomVideo, updateLoomVideo, deleteLoomVideo,
+    updateLlamada, deleteLlamada, addLlamadaInbox, addTeamReport,
+    updateTeamReport, deleteTeamReport, resolveBlocker, unresolveBlocker,
+    addIdea, updateIdea, deleteIdea, addNota, updateNota, deleteNota,
+    reorderNota, addTaskComment, updateTaskComment, deleteTaskComment,
+    addBulletComment, updateBulletComment, deleteBulletComment,
+    addIdeaComment, updateIdeaComment, deleteIdeaComment,
+    addBlockerComment, updateBlockerComment, deleteBlockerComment,
+    reorderTaskForUser, reorderClientForUser, reorderClient,
+    openTaskComments, markTaskCommentsRead, openBulletComments,
+    openIdeaComments, openBlockerComments, closeComments,
+    openNotifications, closeNotifications, markNotificationRead,
+    markAllNotificationsRead, dismissNotifToast,
+    addStrategy, updateStrategy, deleteStrategy, addStrategyPage,
+    updateStrategyPage, deleteStrategyPage, addInvoice, updateInvoice,
+    deleteInvoice, linkContract, addContract, updateContract, deleteContract,
+    getPriorityLabel, getAllPriorityLabels,
+  ]);
 
   return (
     <AppContext.Provider value={value}>
