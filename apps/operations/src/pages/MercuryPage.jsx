@@ -63,6 +63,20 @@ const EGRESO_STYLE = {
 };
 const egStyle = (c) => EGRESO_STYLE[c] || EGRESO_STYLE['Otros'];
 
+// Categorías disponibles para reclasificar manualmente un egreso.
+const EGRESO_CATEGORIES = [
+  'Publicidad (Meta)', 'Software', 'Pagos / transferencias externas',
+  'Transferencias internas', 'Otros gastos con tarjeta', 'Comisiones y fees', 'Otros',
+];
+
+// "2026-06-09" → "lun 9 jun"
+function fmtDay(dayKey) {
+  if (!dayKey) return 'Sin fecha';
+  try {
+    return new Date(`${dayKey}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
+  } catch { return dayKey; }
+}
+
 // Período → rango {from, to} en ISO para filtrar egresos. null = sin límite.
 function rangeOf(period, from, to) {
   const now = new Date();
@@ -95,10 +109,14 @@ export default function MercuryPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const [accRes, cardRes, txRes, metaRes] = await Promise.all([
       supabase.from('mercury_accounts').select('*'),
       supabase.from('mercury_cards').select('card_id, account_id, name_on_card, last_four'),
+      // Pagos fallidos: sólo los de este mes (el resto del histórico no hace falta).
       supabase.from('mercury_transactions').select('*').eq('status', 'failed')
+        .gte('tx_created_at', monthStart)
         .order('review_status', { ascending: true })
         .order('tx_created_at', { ascending: false }),
       supabase.rpc('korex_mercury_meta_spend'),   // gasto Meta exitoso por fondo
@@ -162,6 +180,40 @@ export default function MercuryPage() {
     () => (egCat ? egresos.filter((e) => e.category === egCat) : egresos),
     [egresos, egCat],
   );
+
+  // Egresos visibles agrupados por DÍA (día más reciente primero; dentro de cada
+  // día, del gasto más caro al más barato).
+  const egByDay = useMemo(() => {
+    const map = new Map();
+    for (const e of egVisible) {
+      const day = e.tx_created_at ? e.tx_created_at.slice(0, 10) : 'sin-fecha';
+      if (!map.has(day)) map.set(day, { day, items: [], total: 0 });
+      const g = map.get(day);
+      g.items.push(e); g.total += Number(e.amount) || 0;
+    }
+    const arr = [...map.values()];
+    arr.forEach((g) => g.items.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)));
+    arr.sort((a, b) => b.day.localeCompare(a.day));
+    return arr;
+  }, [egVisible]);
+
+  // Mini-resumen de la categoría seleccionada: contrapartes ordenadas por gasto desc.
+  const catBreakdown = useMemo(() => {
+    if (!egCat) return [];
+    const map = new Map();
+    for (const e of egVisible) {
+      const k = e.counterparty_name || '—';
+      map.set(k, (map.get(k) || 0) + (Number(e.amount) || 0));
+    }
+    return [...map.entries()].map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+  }, [egVisible, egCat]);
+
+  // Reclasificar manualmente un egreso (override). '__auto__' vuelve a la regla.
+  const setOverride = async (e, cat) => {
+    const value = cat === '__auto__' ? null : cat;
+    await supabase.from('mercury_transactions').update({ category_override: value }).eq('id', e.id);
+    loadEgresos(rangeOf(egPeriod, egFrom, egTo));
+  };
 
   const fundName = (a) => (a?.nickname || a?.name || a?.id || '—');
   const accountById = (id) => accounts.find((a) => a.id === id);
@@ -446,7 +498,27 @@ export default function MercuryPage() {
                 })}
               </div>
 
-              {/* Listado de egresos */}
+              {/* Mini-resumen de la categoría seleccionada (del más caro al más barato) */}
+              {egCat && catBreakdown.length > 0 && (
+                <div className="rounded-xl border border-border bg-surface2/40 p-3 mb-3">
+                  <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">
+                    Resumen de {egCat} · del más caro al más barato
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {catBreakdown.slice(0, 12).map((b) => (
+                      <div key={b.name} className="flex items-center justify-between gap-3 text-[12.5px]">
+                        <span className="text-text2 truncate">{b.name}</span>
+                        <span className="font-semibold text-text shrink-0">{money(b.total)}</span>
+                      </div>
+                    ))}
+                    {catBreakdown.length > 12 && (
+                      <div className="text-[11px] text-text3">y {catBreakdown.length - 12} más…</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Listado agrupado por DÍA */}
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[12px] font-bold text-text3 uppercase tracking-wide">
                   {egCat ? `Egresos · ${egCat}` : 'Todos los egresos'} ({egVisible.length})
@@ -455,25 +527,38 @@ export default function MercuryPage() {
                   <button onClick={() => setEgCat(null)} className="text-[12px] text-blue bg-transparent border-0 cursor-pointer">Ver todos</button>
                 )}
               </div>
-              <div className="border border-border rounded-xl bg-white overflow-hidden">
-                {egVisible.slice(0, 300).map((e) => {
-                  const st = egStyle(e.category);
-                  return (
-                    <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-surface2">
-                      <ArrowDownCircle size={15} className="text-text3 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-text truncate">{e.counterparty_name || 'Movimiento'}</div>
-                        <div className="text-[11px] text-text3 truncate">{e.fund_label || '—'} · {fmtDate(e.tx_created_at)}</div>
-                      </div>
-                      <span className="text-[10px] font-bold px-1.5 py-px rounded-full shrink-0 max-md:hidden" style={{ background: st.bg, color: st.color }}>{e.category}</span>
-                      <span className="text-[13.5px] font-bold text-text shrink-0 w-[110px] text-right">{money(e.amount, e.currency)}</span>
+              <div className="flex flex-col gap-3">
+                {egByDay.map((d) => (
+                  <div key={d.day} className="border border-border rounded-xl bg-white overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-4 py-2 bg-surface2/60 border-b border-border">
+                      <span className="text-[12px] font-bold text-text capitalize">{fmtDay(d.day)}</span>
+                      <span className="text-[12px] font-bold text-text3">{money(d.total)} · {d.items.length} mov.</span>
                     </div>
-                  );
-                })}
+                    <div>
+                      {d.items.map((e) => {
+                        const st = egStyle(e.category);
+                        return (
+                          <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-surface2">
+                            <ArrowDownCircle size={15} className="text-text3 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[13px] font-semibold text-text truncate">{e.counterparty_name || 'Movimiento'}</div>
+                              <div className="text-[11px] text-text3 truncate">{e.fund_label || '—'}</div>
+                            </div>
+                            {/* Selector para reclasificar (override manual) */}
+                            <select value={e.category} onChange={(ev) => setOverride(e, ev.target.value)} title="Reclasificar categoría"
+                              className="text-[10.5px] font-semibold rounded-full border-0 px-1.5 py-0.5 cursor-pointer outline-none"
+                              style={{ background: st.bg, color: st.color }}>
+                              {EGRESO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                              <option value="__auto__">↺ Automático</option>
+                            </select>
+                            <span className="text-[13.5px] font-bold text-text shrink-0 w-[100px] text-right">{money(e.amount, e.currency)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-              {egVisible.length > 300 && (
-                <div className="text-[11px] text-text3 text-center mt-2">Mostrando los 300 más recientes de {egVisible.length}.</div>
-              )}
             </>
           )}
         </div>
