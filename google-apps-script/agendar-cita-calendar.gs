@@ -1,5 +1,5 @@
 /**
- * agendar-cita-calendar.gs — v5. Crea/mueve/borra eventos en el Google
+ * agendar-cita-calendar.gs — v6. Crea/mueve/borra eventos en el Google
  * Calendar de la cuenta donde se deploya (admin@metodokorex.com), lee la
  * asistencia (RSVP), saca el Meet automático, da de alta contactos en
  * Google Contacts, pinta los eventos con el color del calendario elegido
@@ -14,6 +14,9 @@
  *   POST { secret, action: 'freebusy', emails: [], timeMin, timeMax }
  *     → bloques ocupados de cada email (cuentas @metodokorex.com directo;
  *       cuentas externas deben compartir su calendario con admin@).
+ *       v6: para la cuenta admin@ mira TODOS sus calendarios visibles (el
+ *       personal de Gmail, "Llamadas Metodo Korex", etc.), no solo el
+ *       principal. Feriados/cumpleaños no bloquean (Google los marca libre).
  *
  * SETUP (una vez, en admin@metodokorex.com):
  *   1. script.google.com → Nuevo proyecto → pegar este archivo.
@@ -115,23 +118,41 @@ function doPost(e) {
     var cal = CalendarApp.getDefaultCalendar();
 
     // Para verificar qué versión del script está corriendo la web app.
-    if (action === 'ping') return kxcJson({ ok: true, v: 5 });
+    if (action === 'ping') return kxcJson({ ok: true, v: 6 });
 
     // Libre/ocupado de varios calendarios a la vez (API oficial freeBusy).
     if (action === 'freebusy') {
-      var fbEmails = (b.emails || []).map(String).filter(Boolean).slice(0, 10);
+      var fbEmails = (b.emails || []).map(function (em) { return String(em).toLowerCase().trim(); }).filter(Boolean).slice(0, 10);
       var timeMin = new Date(b.timeMin);
       var timeMax = new Date(b.timeMax);
       if (!fbEmails.length || isNaN(timeMin.getTime()) || isNaN(timeMax.getTime())) {
         return kxcJson({ ok: false, error: 'bad_input' });
       }
+
+      // calMap: id de calendario a consultar → email del pedido al que aporta.
+      // Si piden la cuenta de este script (admin@), sumar TODOS sus
+      // calendarios visibles (el personal de Gmail, Llamadas, etc.) — los de
+      // feriados/cumpleaños no molestan porque sus eventos figuran "libre".
+      var calMap = {};
+      fbEmails.forEach(function (em) { calMap[em] = em; });
+      var ownerEmail = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+      if (ownerEmail && fbEmails.indexOf(ownerEmail) !== -1) {
+        try {
+          CalendarApp.getAllCalendars().forEach(function (c) {
+            var cid = String(c.getId() || '').toLowerCase();
+            if (cid && !calMap[cid]) calMap[cid] = ownerEmail;
+          });
+        } catch (errCals) {}
+      }
+      var calIds = Object.keys(calMap).slice(0, 25);
+
       var fbRes = UrlFetchApp.fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
         method: 'post',
         contentType: 'application/json',
         payload: JSON.stringify({
           timeMin: timeMin.toISOString(),
           timeMax: timeMax.toISOString(),
-          items: fbEmails.map(function (em) { return { id: em }; }),
+          items: calIds.map(function (cid) { return { id: cid }; }),
         }),
         headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
         muteHttpExceptions: true,
@@ -142,13 +163,18 @@ function doPost(e) {
       var fbData = JSON.parse(fbRes.getContentText());
       var busy = {};
       var errors = {};
-      fbEmails.forEach(function (em) {
-        var calInfo = (fbData.calendars || {})[em] || {};
-        busy[em] = calInfo.busy || [];
-        // Si Google no puede leer ese calendario (sin permiso), avisarlo.
-        if (calInfo.errors && calInfo.errors.length) errors[em] = calInfo.errors[0].reason || 'error';
+      fbEmails.forEach(function (em) { busy[em] = []; });
+      calIds.forEach(function (cid) {
+        var em = calMap[cid];
+        var calInfo = (fbData.calendars || {})[cid] || {};
+        (calInfo.busy || []).forEach(function (blk) { busy[em].push(blk); });
+        // Sin permiso sobre ese calendario: solo es problema si era el
+        // calendario pedido directamente (los extra se ignoran).
+        if (calInfo.errors && calInfo.errors.length && cid === em) {
+          errors[em] = calInfo.errors[0].reason || 'error';
+        }
       });
-      return kxcJson({ ok: true, v: 5, busy: busy, errors: errors });
+      return kxcJson({ ok: true, v: 6, busy: busy, errors: errors });
     }
 
     if (action === 'create_event') {

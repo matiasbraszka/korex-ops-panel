@@ -349,6 +349,7 @@ export default function AgendaPublica() {
                   {selDate ? (
                     <>
                       <span className="text-[13px] font-bold">{dayLabel}</span>
+                      <span className="text-[11.5px] text-[#98A2B3] -mt-1.5">🇦🇷 Horarios en hora de Argentina (GMT-3)</span>
                       <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] max-md:grid-cols-2">
                         {slots.map((t) => {
                           const selected = time === t;
@@ -406,7 +407,7 @@ export default function AgendaPublica() {
                 <span className="w-[34px] h-[34px] rounded-[10px] bg-white flex items-center justify-center shrink-0">{Icon.calendar()}</span>
                 <span className="flex-1 min-w-0 leading-[1.35]">
                   <span className="block text-[13px] font-bold">{dayLabel} · {time}</span>
-                  <span className="block text-[11.5px] text-[#5D6678]">{slotMinutes} min · Zoom · GMT-3</span>
+                  <span className="block text-[11.5px] text-[#5D6678]">{slotMinutes} min · Zoom · hora Argentina (GMT-3)</span>
                 </span>
                 <button onClick={() => setStep(1)}
                         className="border-0 bg-transparent text-[12px] font-bold cursor-pointer p-1.5" style={{ color: BLUE }}>
@@ -492,7 +493,7 @@ export default function AgendaPublica() {
                 <span className="flex items-center gap-2.5">
                   <span className="w-[34px] h-[34px] rounded-[10px] bg-[#EEF3FF] flex items-center justify-center shrink-0">{Icon.calendar()}</span>
                   <span className="leading-[1.35]">
-                    <span className="block text-[13.5px] font-bold">{dayLabel} · {time}</span>
+                    <span className="block text-[13.5px] font-bold">{dayLabel} · {time} <span className="font-semibold text-[11.5px] text-[#5D6678]">(hora Argentina, GMT-3)</span></span>
                     <span className="block text-[11.5px] text-[#5D6678]">{eventMeta?.title || 'Reunión'} · {slotMinutes} min · con {eventMeta?.host_name || 'Método Korex'}</span>
                   </span>
                 </span>

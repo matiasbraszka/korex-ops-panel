@@ -140,7 +140,9 @@ export async function updateTeamMember(id, patch) {
   });
   // Refrescar el caché en memoria con la fila actualizada.
   const updated = Array.isArray(rows) ? rows[0] : null;
-  if (updated && teamCache) {
+  // RLS puede filtrar el UPDATE sin error (0 filas) — tratarlo como fallo.
+  if (!updated) throw new Error('update_denied');
+  if (teamCache) {
     teamCache = teamCache.map((m) => (m.id === updated.id ? { ...m, ...updated } : m));
   }
   return updated;
@@ -162,7 +164,9 @@ export async function createBookingCalendar(cal) {
     headers: { Prefer: 'return=representation' },
     throwOnError: true,
   });
-  return Array.isArray(rows) ? rows[0] : rows;
+  const created = Array.isArray(rows) ? rows[0] : rows;
+  if (!created?.id) throw new Error('insert_denied');
+  return created;
 }
 
 export async function updateBookingCalendar(id, patch) {
@@ -172,7 +176,9 @@ export async function updateBookingCalendar(id, patch) {
     headers: { Prefer: 'return=representation' },
     throwOnError: true,
   });
-  return Array.isArray(rows) ? rows[0] : rows;
+  const updated = Array.isArray(rows) ? rows[0] : rows;
+  if (!updated?.id) throw new Error('update_denied');
+  return updated;
 }
 
 export async function searchContacts(q) {

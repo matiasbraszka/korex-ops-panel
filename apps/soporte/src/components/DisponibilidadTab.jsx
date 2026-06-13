@@ -117,6 +117,20 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
     setError('');
   }, [member?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ¿Hay cambios sin guardar respecto de lo que está en la base?
+  const dirty = useMemo(() => {
+    if (!member || !days) return false;
+    return JSON.stringify(toAvailability(days)) !== JSON.stringify(toAvailability(normalizeDays(member.availability)));
+  }, [member, days]);
+
+  // Cambiar de persona avisa si hay cambios sin guardar (causa típica de
+  // "cargué los horarios y no se guardaron").
+  const pickMember = (id) => {
+    if (id === selId) return;
+    if (dirty && !window.confirm(`Tenés cambios sin guardar de ${member?.name?.split(' ')[0] || 'esta persona'}. ¿Los descartamos?`)) return;
+    setSelId(id);
+  };
+
   const setDay = (i, patch) => setDays((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }));
   const setRange = (i, idx, range) => setDay(i, { ranges: days[i].ranges.map((r, j) => (j === idx ? range : r)) });
   const addRange = (i) => setDay(i, { enabled: true, ranges: [...days[i].ranges, nextRange(days[i].ranges)] });
@@ -268,7 +282,7 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
             const selected = m.id === selId;
             const sinDisp = !hasAvailability(m);
             return (
-              <button key={m.id} onClick={() => setSelId(m.id)}
+              <button key={m.id} onClick={() => pickMember(m.id)}
                       className={`w-full text-left p-3 rounded-xl border cursor-pointer flex items-center gap-2.5 transition-all duration-150 ${
                         selected
                           ? 'border-[#F59E0B]/65 bg-[#FFFBF2] shadow-[0_2px_10px_rgba(245,158,11,0.10)]'
@@ -298,7 +312,8 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
           )}
           {WeekEditor()}
           {error && <div className="text-[12px] font-medium" style={{ color: '#DC2626' }}>{error}</div>}
-          <span className="flex justify-end pt-1">
+          <span className="flex items-center justify-end gap-2.5 pt-1">
+            {dirty && <span className="text-[11.5px] font-semibold text-[#B45309]">● Cambios sin guardar</span>}
             {SaveButton()}
           </span>
         </div>
@@ -315,7 +330,7 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
           {team.map((m) => {
             const selected = m.id === selId;
             return (
-              <button key={m.id} onClick={() => setSelId(m.id)}
+              <button key={m.id} onClick={() => pickMember(m.id)}
                       className={`flex items-center justify-center gap-[7px] py-2 px-3 rounded-xl border cursor-pointer shrink-0 transition-all duration-150 ${
                         selected ? 'border-[#F5D9A8] bg-[#FFFBF2]' : 'border-border bg-white'} ${!hasAvailability(m) && !selected ? 'opacity-70' : ''}`}>
                 <MemberAvatar member={m} size={24} />
