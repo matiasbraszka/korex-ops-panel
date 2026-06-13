@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, Landmark } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -15,6 +15,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
+const MercuryPage = lazy(() => import('./pages/MercuryPage'));
 import SearchBar from './components/SearchBar';
 import useSoporteUnread from './hooks/useSoporteUnread';
 import EditClientModal from './components/clientes/EditClientModal';
@@ -292,6 +293,7 @@ function MainLayout() {
     : salesNavItems.filter((it) => it.id !== 'contacts');
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
+    { id: 'mercury', label: 'Mercury', Icon: Landmark, path: '/admin/mercury' },
   ];
   // Items de Soporte definidos aca (no importados de @korex/soporte) para que
   // el modulo entero quede en su propio chunk lazy: la unica referencia al
@@ -336,6 +338,7 @@ function MainLayout() {
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
+    mercury: ['Mercury', 'Fondos, saldos y transacciones fallidas a revisar'],
   };
 
   const [title, subtitle] = titles[view] || ['', ''];
@@ -377,6 +380,10 @@ function MainLayout() {
       <Route
         path="/admin/settings"
         element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to={homePath} replace />}
+      />
+      <Route
+        path="/admin/mercury"
+        element={currentUser?.isAdmin ? <MercuryPage /> : <Navigate to={homePath} replace />}
       />
       <Route
         path="/sales/*"
