@@ -1,4 +1,7 @@
-// supabase/functions/agenda-publica/index.ts — v4
+// supabase/functions/agenda-publica/index.ts — v5
+// v5: el calendario puede tener franjas horarias propias (availability); si
+// las tiene, los huecos son la intersección de (cada miembro) ∩ (calendario)
+// ∩ libre en Google Calendar. Si no, solo la intersección de los miembros.
 // Backend de la página pública /agendar[/<slug>] (leads reservan solos).
 //
 // v3: cada calendario lleva sus propios textos (description/host) y un
@@ -85,7 +88,14 @@ interface BookingCalendar {
   booking_window_days: number | null;
   min_notice_hours: number | null;
   confirm_instructions: unknown;
+  // Franjas propias del calendario (opcional): si están, se intersectan con
+  // las de los miembros. Mismo formato que team_members.availability.
+  availability: AvailabilityObj | null;
 }
+
+type AvailabilityObj = {
+  days?: Record<string, { enabled?: boolean; ranges?: { from?: string; to?: string }[]; from?: string; to?: string }>;
+};
 
 interface Question {
   id: string;
@@ -120,9 +130,7 @@ interface Member {
   name: string;
   email: string | null;
   whatsapp: string | null;
-  availability: {
-    days?: Record<string, { enabled?: boolean; ranges?: { from?: string; to?: string }[]; from?: string; to?: string }>;
-  } | null;
+  availability: AvailabilityObj | null;
 }
 
 // Normaliza un número de WhatsApp del equipo a solo dígitos (Matias lo carga
@@ -145,7 +153,7 @@ async function getCfg(): Promise<Cfg> {
 // Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
 async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
   let q = admin.from("booking_calendars")
-    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions")
+    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions, availability")
     .eq("active", true);
   if (slug) q = q.eq("slug", slug);
   else q = q.order("created_at", { ascending: true }).limit(1);
@@ -173,10 +181,10 @@ const toUTC = (date: string, time: string) => new Date(`${date}T${time}:00${TZ_O
 
 type Range = { s: number; e: number }; // minutos del día
 
-// Franjas habilitadas de un miembro para un día de semana (0=Lun).
+// Franjas habilitadas de una disponibilidad para un día de semana (0=Lun).
 // Soporta el formato nuevo {ranges:[{from,to}]} y el viejo {from,to}.
-function memberDayRanges(m: Member, weekdayIdx: number): Range[] {
-  const day = m.availability?.days?.[String(weekdayIdx)];
+function availabilityDayRanges(av: AvailabilityObj | null | undefined, weekdayIdx: number): Range[] {
+  const day = av?.days?.[String(weekdayIdx)];
   if (!day?.enabled) return [];
   const raw = Array.isArray(day.ranges)
     ? day.ranges
@@ -185,6 +193,13 @@ function memberDayRanges(m: Member, weekdayIdx: number): Range[] {
     .filter((r) => r?.from && r?.to)
     .map((r) => ({ s: toMin(r.from!), e: toMin(r.to!) }))
     .filter((r) => r.e > r.s);
+}
+const memberDayRanges = (m: Member, weekdayIdx: number): Range[] => availabilityDayRanges(m.availability, weekdayIdx);
+
+// ¿El calendario define franjas propias en algún día de la semana?
+function calUsesOwnHours(cal: BookingCalendar): boolean {
+  const days = cal.availability?.days || {};
+  return Object.keys(days).some((k) => availabilityDayRanges(cal.availability, Number(k)).length > 0);
 }
 
 // Intersección de listas de franjas (todos los miembros libres a la vez).
@@ -201,13 +216,19 @@ function intersectRanges(a: Range[], b: Range[]): Range[] {
 }
 
 // Slots configurados de un día (sin filtrar conflictos): turnos de `step`
-// minutos dentro de la intersección de las franjas de todos los miembros.
-function rawSlotsForDay(members: Member[], step: number, date: Date): string[] {
+// minutos dentro de la intersección de las franjas de todos los miembros y,
+// si el calendario tiene franjas propias, también con las del calendario.
+function rawSlotsForDay(members: Member[], step: number, date: Date, cal: BookingCalendar): string[] {
   if (!members.length) return [];
   const idx = (date.getUTCDay() + 6) % 7; // 0=Lun (mismo índice que el panel)
   let inter = memberDayRanges(members[0], idx);
   for (let i = 1; i < members.length && inter.length; i++) {
     inter = intersectRanges(inter, memberDayRanges(members[i], idx));
+  }
+  // Si el calendario define horarios propios, se cruzan con los del equipo
+  // (un día sin franjas del calendario, teniéndolas en otros, no ofrece nada).
+  if (calUsesOwnHours(cal)) {
+    inter = intersectRanges(inter, availabilityDayRanges(cal.availability, idx));
   }
   const out: string[] = [];
   for (const r of inter) {
@@ -296,7 +317,7 @@ async function computeMonth(cfg: Cfg, cal: BookingCalendar, members: Member[], y
   const days: Record<string, string[]> = {};
   for (let d = new Date(first); d < next; d.setUTCDate(d.getUTCDate() + 1)) {
     const dateStr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-    const slots = rawSlotsForDay(members, step, d).filter((t) => {
+    const slots = rawSlotsForDay(members, step, d, cal).filter((t) => {
       const s = toUTC(dateStr, t).getTime();
       if (s < minStart || s > maxStart) return false;
       const e = s + step * 60000;

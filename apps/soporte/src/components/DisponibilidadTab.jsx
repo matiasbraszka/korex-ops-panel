@@ -3,6 +3,7 @@ import { Check, Plus, X } from 'lucide-react';
 import { fetchSoporteTeam, updateTeamMember } from '../lib/api.js';
 import { initials as initialsOf, colorFromString } from '../lib/format.js';
 import { hasAvailability } from './CalendariosTab.jsx';
+import TimeSelect from './TimeSelect.jsx';
 
 const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const DAY_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -58,21 +59,18 @@ function DayToggle({ on, onChange, disabled }) {
   );
 }
 
-// Chip de franja: dos inputs de hora editables + X para borrar.
+// Chip de franja: dos selectores de hora (24 h) + X para borrar.
 function RangeChip({ range, onChange, onRemove, mobile, disabled }) {
-  const inputCls = 'border-0 outline-none bg-transparent p-0 font-semibold cursor-pointer';
   return (
-    <span className={`flex items-center border border-border ${mobile ? 'h-[30px] px-2.5 rounded-[9px] gap-1 text-[11.5px]' : 'h-8 px-3 rounded-[9px] gap-1.5 text-[12px]'}`}>
-      <input type="time" value={range.from} disabled={disabled}
-             onChange={(e) => onChange({ ...range, from: e.target.value })}
-             className={inputCls} style={{ fontSize: 'inherit', width: mobile ? 58 : 62 }} />
+    <span className="flex items-center gap-1.5">
+      <TimeSelect value={range.from} disabled={disabled} mobile={mobile}
+                  onChange={(v) => onChange({ ...range, from: v })} />
       <span className="text-text3">–</span>
-      <input type="time" value={range.to} disabled={disabled}
-             onChange={(e) => onChange({ ...range, to: e.target.value })}
-             className={inputCls} style={{ fontSize: 'inherit', width: mobile ? 58 : 62 }} />
+      <TimeSelect value={range.to} disabled={disabled} mobile={mobile}
+                  onChange={(v) => onChange({ ...range, to: v })} />
       {!disabled && (
         <button onClick={onRemove} className="bg-transparent border-0 cursor-pointer p-0 text-text3 hover:text-[#DC2626] flex items-center ml-0.5">
-          <X size={11} strokeWidth={2.5} />
+          <X size={12} strokeWidth={2.5} />
         </button>
       )}
     </span>

@@ -4,6 +4,33 @@ import {
   fetchBookingCalendars, createBookingCalendar, updateBookingCalendar, fetchSoporteTeam,
 } from '../lib/api.js';
 import { initials as initialsOf, colorFromString } from '../lib/format.js';
+import TimeSelect from './TimeSelect.jsx';
+
+const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const emptyWeek = () => { const d = {}; for (let i = 0; i < 7; i++) d[i] = { enabled: false, ranges: [] }; return d; };
+// Convierte la disponibilidad guardada del calendario al formato de edición.
+function weekFromAvailability(av) {
+  const w = emptyWeek();
+  for (let i = 0; i < 7; i++) {
+    const day = av?.days?.[i] || av?.days?.[String(i)];
+    if (!day) continue;
+    let ranges = Array.isArray(day.ranges) ? day.ranges.filter((r) => r?.from && r?.to) : [];
+    if (!ranges.length && day.from && day.to) ranges = [{ from: day.from, to: day.to }];
+    w[i] = { enabled: Boolean(day.enabled), ranges: ranges.map((r) => ({ ...r })) };
+  }
+  return w;
+}
+const weekHasEnabled = (w) => Object.values(w).some((d) => d.enabled && d.ranges.length);
+// Semana de edición → jsonb para guardar (solo franjas válidas).
+function availabilityPayload(week) {
+  const days = {};
+  for (let i = 0; i < 7; i++) {
+    const d = week[i] || { enabled: false, ranges: [] };
+    const ranges = (d.ranges || []).filter((r) => r.from && r.to && r.to > r.from);
+    days[i] = { enabled: Boolean(d.enabled && ranges.length), ranges };
+  }
+  return { days };
+}
 
 // Los 11 colores oficiales de evento de Google Calendar (colorId → hex).
 export const GCAL_COLORS = [
@@ -84,6 +111,7 @@ function draftFromCal(cal) {
         options: Array.isArray(q.options) ? [...q.options] : [],
       }))
     : [];
+  const availabilityDays = weekFromAvailability(cal.availability);
   return {
     ...cal,
     member_ids: [...(cal.member_ids || [])],
@@ -94,6 +122,20 @@ function draftFromCal(cal) {
     booking_window_days: cal.booking_window_days ?? 60,
     min_notice_hours: cal.min_notice_hours ?? 2,
     confirm_instructions: Array.isArray(cal.confirm_instructions) ? [...cal.confirm_instructions] : [],
+    use_own_hours: weekHasEnabled(availabilityDays),
+    availabilityDays,
+  };
+}
+
+// Draft nuevo (objetos frescos para no compartir referencias entre creaciones).
+function freshDraft() {
+  return {
+    ...NEW_DRAFT,
+    member_ids: [],
+    questions: NEW_DRAFT.questions.map((q) => ({ ...q, options: [...q.options] })),
+    confirm_instructions: [...DEFAULT_INSTRUCTIONS],
+    use_own_hours: false,
+    availabilityDays: emptyWeek(),
   };
 }
 
@@ -149,6 +191,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const [selId, setSelId] = useState(null);
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [mobileDetail, setMobileDetail] = useState(false);
@@ -166,7 +209,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   useEffect(() => {
     if (newSignal > 0) {
       setSelId(null);
-      setDraft({ ...NEW_DRAFT });
+      setDraft(freshDraft());
       setMobileDetail(true);
       setError('');
     }
@@ -202,6 +245,19 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const setInstruction = (i, val) => set({ confirm_instructions: draft.confirm_instructions.map((s, j) => (j === i ? val : s)) });
   const addInstruction = () => set({ confirm_instructions: [...draft.confirm_instructions, ''] });
   const removeInstruction = (i) => set({ confirm_instructions: draft.confirm_instructions.filter((_, j) => j !== i) });
+
+  // ── Franjas horarias propias del calendario ──
+  const setAvailDay = (i, patch) => set({ availabilityDays: { ...draft.availabilityDays, [i]: { ...draft.availabilityDays[i], ...patch } } });
+  const toggleAvailDay = (i, on) => setAvailDay(i, {
+    enabled: on,
+    ranges: on && !draft.availabilityDays[i].ranges.length ? [{ from: '09:00', to: '18:00' }] : draft.availabilityDays[i].ranges,
+  });
+  const setAvailRange = (i, idx, range) => setAvailDay(i, { ranges: draft.availabilityDays[i].ranges.map((r, j) => (j === idx ? range : r)) });
+  const addAvailRange = (i) => setAvailDay(i, { enabled: true, ranges: [...draft.availabilityDays[i].ranges, { from: '09:00', to: '13:00' }] });
+  const removeAvailRange = (i, idx) => {
+    const ranges = draft.availabilityDays[i].ranges.filter((_, j) => j !== idx);
+    setAvailDay(i, { ranges, enabled: ranges.length ? draft.availabilityDays[i].enabled : false });
+  };
 
   const uniqueSlug = (name, ownId) => {
     const base = slugify(name) || 'calendario';
@@ -254,6 +310,8 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
       booking_window_days: Math.min(365, Math.max(1, Number(draft.booking_window_days) || 60)),
       min_notice_hours: Math.min(168, Math.max(0, Number(draft.min_notice_hours) || 0)),
       confirm_instructions: draft.confirm_instructions.map((s) => s.trim()).filter(Boolean),
+      // Franjas propias del calendario: null si no se usan (toma solo las del equipo).
+      availability: draft.use_own_hours ? availabilityPayload(draft.availabilityDays) : null,
     };
     setSaving(true);
     try {
@@ -268,6 +326,8 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           setSelId(created.id);
         }
       }
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2500);
     } catch (e) {
       console.error('soporte: fallo el guardado del calendario', e);
       setError('No se pudo guardar. ¿Tenés permiso de administrador?');
@@ -279,7 +339,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const discard = () => {
     if (draft?.id) {
       const cal = calendars.find((c) => c.id === draft.id);
-      if (cal) setDraft({ ...cal, member_ids: [...(cal.member_ids || [])] });
+      if (cal) setDraft(draftFromCal(cal));
     } else {
       setDraft(null);
       setMobileDetail(false);
@@ -632,6 +692,63 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           </span>
         </div>
 
+        {/* Horarios propios del calendario (opcional) */}
+        <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+          <span className="flex items-center gap-2.5">
+            <span className={mobile ? 'text-[12px] font-semibold text-[#3D4659]' : 'text-[10px] font-bold tracking-[0.1em] text-text3'}>
+              {mobile ? 'Horarios del calendario' : 'HORARIOS DEL CALENDARIO'}
+            </span>
+            <Toggle on={draft.use_own_hours} onChange={(on) => set({ use_own_hours: on })} disabled={!isAdmin} />
+            <span className="text-[11px] font-semibold" style={{ color: draft.use_own_hours ? '#B45309' : '#98A2B3' }}>
+              {draft.use_own_hours ? 'Franjas propias' : 'Usa las del equipo'}
+            </span>
+          </span>
+          <span className="text-[11px] text-text3 -mt-1">
+            {draft.use_own_hours
+              ? 'Solo se ofrecen horarios dentro de estas franjas Y donde el equipo esté libre.'
+              : 'Los horarios salen de la disponibilidad del equipo (su disponibilidad + su Google Calendar). Activá esto para acotarlos a franjas propias de este calendario.'}
+          </span>
+          {draft.use_own_hours && (
+            <div className="flex flex-col">
+              {DAY_NAMES.map((name, i) => {
+                const d = draft.availabilityDays[i];
+                return (
+                  <div key={i} className={`flex items-start gap-3 py-2 ${i < 6 ? 'border-b border-surface2' : ''}`}>
+                    <span className="flex items-center gap-2 shrink-0 w-[112px] pt-1">
+                      <Toggle on={d.enabled} onChange={(on) => toggleAvailDay(i, on)} disabled={!isAdmin} />
+                      <span className={`text-[12px] font-semibold ${d.enabled ? '' : 'text-text3'}`}>{name}</span>
+                    </span>
+                    {d.enabled ? (
+                      <span className="flex flex-wrap gap-1.5 flex-1 items-center">
+                        {d.ranges.map((r, idx) => (
+                          <span key={idx} className="flex items-center gap-1.5">
+                            <TimeSelect value={r.from} disabled={!isAdmin} onChange={(v) => setAvailRange(i, idx, { ...r, from: v })} />
+                            <span className="text-text3">–</span>
+                            <TimeSelect value={r.to} disabled={!isAdmin} onChange={(v) => setAvailRange(i, idx, { ...r, to: v })} />
+                            {isAdmin && (
+                              <button onClick={() => removeAvailRange(i, idx)} className="bg-transparent border-0 cursor-pointer p-0 text-text3 hover:text-[#DC2626] flex items-center">
+                                <X size={12} strokeWidth={2.5} />
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                        {isAdmin && (
+                          <button onClick={() => addAvailRange(i)}
+                                  className="h-8 px-2.5 rounded-lg border border-dashed border-[#D0D5DD] bg-transparent text-[11.5px] font-semibold text-text3 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] transition-colors">
+                            + franja
+                          </button>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="flex-1 text-[12px] text-text3 pt-1.5">Sin horario</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Instrucciones de la página de confirmación */}
         <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
           <span className={mobile ? 'text-[12px] font-semibold text-[#3D4659]' : 'text-[10px] font-bold tracking-[0.1em] text-text3'}>
@@ -670,7 +787,12 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
 
         {/* Footer desktop */}
         {!mobile && isAdmin && (
-          <span className="flex gap-2 justify-end">
+          <span className="flex items-center gap-2 justify-end">
+            {savedFlash && (
+              <span className="text-[12px] font-semibold text-[#15803D] flex items-center gap-1 mr-1">
+                <Check size={13} strokeWidth={2.5} /> Cambios guardados
+              </span>
+            )}
             <button onClick={discard}
                     className="h-9 px-4 rounded-[10px] border border-border bg-white text-[12.5px] font-semibold text-text2 cursor-pointer hover:bg-surface2 transition-colors duration-150">
               Descartar
@@ -725,7 +847,12 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
             </div>
             {/* CTA fijo */}
             {isAdmin && (
-              <div className="shrink-0 px-4 pt-3 pb-2 border-t border-surface2 bg-white">
+              <div className="shrink-0 px-4 pt-2 pb-2 border-t border-surface2 bg-white">
+                {savedFlash && (
+                  <div className="text-[12px] font-semibold text-[#15803D] flex items-center justify-center gap-1 pb-1.5">
+                    <Check size={13} strokeWidth={2.5} /> Cambios guardados
+                  </div>
+                )}
                 <button onClick={save} disabled={saving}
                         className="w-full h-[50px] rounded-[14px] border-0 bg-[#F59E0B] text-white text-[14.5px] font-bold cursor-pointer shadow-[0_2px_6px_rgba(245,158,11,.35)] disabled:opacity-60">
                   {saving ? 'Guardando…' : 'Guardar calendario'}
