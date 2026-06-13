@@ -76,6 +76,15 @@ export async function patchSoporteConfig(partial) {
   });
 }
 
+// Briefings vivos por cliente (sección Recursos → Resumen de grupos).
+export async function fetchBriefings() {
+  const rows = await sbFetch(
+    'wa_briefings?select=*,client:clients(id,name)&order=sat_overall.asc.nullslast&limit=300',
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
 export async function fetchAppointments(convId) {
   const rows = await sbFetch(
     `appointments?conversation_id=eq.${convId}&order=start_at.desc&limit=50`,

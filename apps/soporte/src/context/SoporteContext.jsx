@@ -384,6 +384,12 @@ export function SoporteProvider({ children }) {
     await patchSoporteConfig({ availability });
   }, []);
 
+  // Enlaces y carpetas de la sección Recursos.
+  const saveRecursos = useCallback(async (recursos) => {
+    setConfig((prev) => ({ ...prev, recursos }));
+    await patchSoporteConfig({ recursos });
+  }, []);
+
   // Directorio de un grupo: participantes (jsonb pesado, se pide aparte) +
   // nombres visibles de quienes ya hablaron (pushName de los mensajes).
   const [groupDirByConv, setGroupDirByConv] = useState({});
@@ -569,7 +575,8 @@ export function SoporteProvider({ children }) {
     appointmentTemplate: config.appointment_template || '',
     templates: config.templates || [],
     availability: config.availability || null,
-    saveTagsCatalog, saveTemplates, saveAvailability,
+    recursos: config.recursos || [],
+    saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos,
     updateConversation, updateNotes, linkContact,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
@@ -579,7 +586,7 @@ export function SoporteProvider({ children }) {
     loading, realtimeOk, visibleConversations, conversations, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
-    saveTagsCatalog, saveTemplates, saveAvailability,
+    saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
