@@ -381,8 +381,8 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   }
   if (!fromMe) {
     convPatch.unread_count = (Number(existing?.unread_count) || 0) + 1;
-    // Un chat archivado vuelve a la bandeja cuando el contacto escribe.
-    convPatch.archived = false;
+    // Un chat archivado SIGUE archivado aunque lleguen mensajes nuevos: solo
+    // aparece en la pestaña "Archivo" hasta que se desarchive a mano.
   }
 
   await supabase.from("wa_conversations").update(convPatch).eq("id", conversationId);
