@@ -1,4 +1,6 @@
-// supabase/functions/agenda-publica/index.ts — v5
+// supabase/functions/agenda-publica/index.ts — v6
+// v6: el anfitrión visible en la página sale de un miembro elegido
+// (host_member_id) → su nombre y foto (host_avatar).
 // v5: el calendario puede tener franjas horarias propias (availability); si
 // las tiene, los huecos son la intersección de (cada miembro) ∩ (calendario)
 // ∩ libre en Google Calendar. Si no, solo la intersección de los miembros.
@@ -91,6 +93,7 @@ interface BookingCalendar {
   // Franjas propias del calendario (opcional): si están, se intersectan con
   // las de los miembros. Mismo formato que team_members.availability.
   availability: AvailabilityObj | null;
+  host_member_id: string | null;
 }
 
 type AvailabilityObj = {
@@ -153,12 +156,20 @@ async function getCfg(): Promise<Cfg> {
 // Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
 async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
   let q = admin.from("booking_calendars")
-    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions, availability")
+    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions, availability, host_member_id")
     .eq("active", true);
   if (slug) q = q.eq("slug", slug);
   else q = q.order("created_at", { ascending: true }).limit(1);
   const { data } = await q;
   return (data?.[0] as BookingCalendar) ?? null;
+}
+
+// Anfitrión visible en la página: el miembro elegido (nombre + foto).
+async function getHost(cal: BookingCalendar): Promise<{ name: string; avatar: string | null } | null> {
+  if (!cal.host_member_id) return null;
+  const { data } = await admin.from("team_members")
+    .select("name, avatar_url").eq("id", cal.host_member_id).maybeSingle();
+  return data ? { name: data.name, avatar: data.avatar_url ?? null } : null;
 }
 
 async function getMembers(cal: BookingCalendar): Promise<Member[]> {
@@ -448,6 +459,7 @@ Deno.serve(async (req: Request) => {
   const cfg = await getCfg();
   const cal = await getCalendar(slug);
   const members = cal ? await getMembers(cal) : [];
+  const host = cal ? await getHost(cal) : null;
   const pub = cfg.public_agenda || {};
   const slotMin = Math.max(15, Number(cal?.duration_min) || 60);
   const configured = isConfigured(cal, members);
@@ -470,8 +482,10 @@ Deno.serve(async (req: Request) => {
         title: cal?.name || "Reunión",
         // Textos propios del calendario; si están vacíos, los generales.
         description: cal ? (cal.description || "") : (pub.description || ""),
-        host_name: cal ? (cal.host_name || "") : (pub.host_name || ""),
+        // Anfitrión: el miembro elegido (nombre + foto); fallback al texto viejo.
+        host_name: host?.name || (cal ? (cal.host_name || "") : (pub.host_name || "")),
         host_role: cal ? (cal.host_role || "") : (pub.host_role || ""),
+        host_avatar: host?.avatar || null,
         slot_minutes: slotMin,
         questions: sanitizeQuestions(cal?.questions),
         confirm_instructions: sanitizeInstructions(cal?.confirm_instructions),

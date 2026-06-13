@@ -275,13 +275,18 @@ export default function AgendaPublica() {
 
           <div className="flex-1" />
 
-          {/* Anfitrión: solo si el calendario lo definió (ventas lo usa, servicio puede no). */}
+          {/* Anfitrión: solo si el calendario lo definió (con su foto si la tiene). */}
           {eventMeta?.host_name && (
             <div className="flex items-center gap-[11px] border-t border-[#F0F2F5] pt-4">
-              <span className="w-10 h-10 rounded-full text-white text-[13px] font-bold flex items-center justify-center shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #4878FF, #8B5CF6)' }}>
-                {eventMeta.host_name.split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}
-              </span>
+              {eventMeta.host_avatar ? (
+                <img src={eventMeta.host_avatar} alt={eventMeta.host_name}
+                     className="w-10 h-10 rounded-full object-cover shrink-0" />
+              ) : (
+                <span className="w-10 h-10 rounded-full text-white text-[13px] font-bold flex items-center justify-center shrink-0"
+                      style={{ background: 'linear-gradient(135deg, #4878FF, #8B5CF6)' }}>
+                  {eventMeta.host_name.split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+              )}
               <span className="flex flex-col leading-[1.3]">
                 <span className="text-[13px] font-bold">{eventMeta.host_name}</span>
                 {eventMeta.host_role && <span className="text-[11.5px] text-[#98A2B3]">{eventMeta.host_role}</span>}

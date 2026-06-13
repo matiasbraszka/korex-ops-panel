@@ -48,6 +48,19 @@ export const GCAL_COLORS = [
 ];
 export const gcalHex = (id) => GCAL_COLORS.find((c) => c.id === String(id))?.hex || '#039BE5';
 
+// Colores de la etiqueta de motivo (chip): clave guardada en purpose_color.
+export const TAG_COLORS = {
+  amber: { bg: '#FEF0D7', text: '#B45309' },
+  indigo: { bg: '#EEF2FF', text: '#4A67D8' },
+  green: { bg: '#F0FDF4', text: '#15803D' },
+  blue: { bg: '#EFF6FF', text: '#2563EB' },
+  purple: { bg: '#F5F3FF', text: '#7C3AED' },
+  rose: { bg: '#FFF1F2', text: '#E11D48' },
+  gray: { bg: '#F1F3F5', text: '#5D6678' },
+};
+const TAG_COLOR_KEYS = Object.keys(TAG_COLORS);
+const tagColor = (key) => TAG_COLORS[key] || TAG_COLORS.amber;
+
 const DURACIONES = [15, 20, 30, 45, 60, 90];
 
 const slugify = (s) => String(s || '')
@@ -89,9 +102,9 @@ const DEFAULT_INSTRUCTIONS = [
 ];
 
 const NEW_DRAFT = {
-  id: null, slug: '', name: '', purpose: 'ventas', duration_min: 30,
+  id: null, slug: '', name: '', purpose: 'Ventas', purpose_color: 'amber', duration_min: 30,
   gcal_title_template: '', gcal_color_id: '7', member_ids: [], active: true,
-  description: '', host_name: '', host_role: '',
+  description: '', host_member_id: '', host_role: '',
   questions: [{ id: 'q1', label: '¿Qué te gustaría resolver?', type: 'text', required: false, options: [] }],
   booking_window_days: 60, min_notice_hours: 2,
   confirm_instructions: [...DEFAULT_INSTRUCTIONS],
@@ -115,8 +128,10 @@ function draftFromCal(cal) {
   return {
     ...cal,
     member_ids: [...(cal.member_ids || [])],
+    purpose: cal.purpose || '',
+    purpose_color: cal.purpose_color || 'amber',
     description: cal.description || '',
-    host_name: cal.host_name || '',
+    host_member_id: cal.host_member_id || '',
     host_role: cal.host_role || '',
     questions,
     booking_window_days: cal.booking_window_days ?? 60,
@@ -139,13 +154,14 @@ function freshDraft() {
   };
 }
 
-// Chip de motivo: VENTAS ámbar · SERVICIO índigo.
-function PurposeChip({ purpose }) {
-  const ventas = purpose !== 'servicio';
+// Chip de motivo: etiqueta personalizable (texto libre + color).
+function PurposeChip({ label, color }) {
+  const c = tagColor(color);
+  if (!label) return null;
   return (
-    <span className="text-[9px] font-bold tracking-[0.08em] px-2 py-0.5 rounded-full shrink-0"
-          style={ventas ? { background: '#FEF0D7', color: '#B45309' } : { background: '#EEF2FF', color: '#4A67D8' }}>
-      {ventas ? 'VENTAS' : 'SERVICIO'}
+    <span className="text-[9px] font-bold tracking-[0.08em] px-2 py-0.5 rounded-full shrink-0 uppercase truncate max-w-[110px]"
+          style={{ background: c.bg, color: c.text }}>
+      {label}
     </span>
   );
 }
@@ -294,17 +310,21 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     if (badSelect) { setError(`La pregunta "${badSelect.label.trim()}" es de opciones pero no tiene ninguna cargada.`); return; }
 
     const slug = draft.slug || uniqueSlug(draft.name, draft.id);
+    // El anfitrión es un miembro del equipo; guardamos también su nombre.
+    const hostMember = team.find((m) => m.id === draft.host_member_id);
     const payload = {
       slug,
       name: draft.name.trim(),
-      purpose: draft.purpose,
+      purpose: draft.purpose?.trim() || 'Reunión',
+      purpose_color: draft.purpose_color || 'amber',
       duration_min: draft.duration_min,
       gcal_title_template: draft.gcal_title_template?.trim() || `${draft.name.trim()} — {nombre}`,
       gcal_color_id: draft.gcal_color_id,
       member_ids: draft.member_ids,
       active: draft.active,
+      host_member_id: draft.host_member_id || null,
+      host_name: hostMember?.name || null,
       description: draft.description?.trim() || null,
-      host_name: draft.host_name?.trim() || null,
       host_role: draft.host_role?.trim() || null,
       questions: cleanQuestions,
       booking_window_days: Math.min(365, Math.max(1, Number(draft.booking_window_days) || 60)),
@@ -373,7 +393,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
         <span className="flex items-center gap-2">
           <span className="w-[10px] h-[10px] rounded-[3px] shrink-0" style={{ background: gcalHex(cal.gcal_color_id) }} title="Color en Google Calendar" />
           <span className={`text-[13px] flex-1 truncate ${selected ? 'font-bold' : 'font-semibold'}`}>{cal.name}</span>
-          <PurposeChip purpose={cal.purpose} />
+          <PurposeChip label={cal.purpose} color={cal.purpose_color} />
           {mobile && <ChevronRight size={14} className="text-text3 shrink-0" />}
         </span>
         <span className="text-[11.5px] text-text2">{cal.duration_min} min · Zoom</span>
@@ -458,14 +478,21 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
             </label>
             <div className={mobile ? 'grid grid-cols-[1fr_120px] gap-2.5' : 'contents'}>
               <label className="flex flex-col gap-[5px]">
-                <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Motivo</span>
-                <span className={`flex bg-surface2 p-0.5 ${mobile ? 'h-[46px] rounded-xl' : 'h-9 rounded-[10px]'}`}>
-                  {[['ventas', 'Ventas'], ['servicio', 'Servicio']].map(([id, label]) => (
-                    <button key={id} onClick={() => isAdmin && set({ purpose: id })}
-                            className={`flex-1 border-0 cursor-pointer flex items-center justify-center transition-all duration-150 ${mobile ? 'rounded-[10px] text-[12.5px]' : 'rounded-lg text-[12px]'} ${
-                              draft.purpose === id ? 'bg-white font-bold text-[#B45309] shadow-[0_1px_2px_rgba(10,22,40,.08)]' : 'bg-transparent font-semibold text-text3'}`}>
-                      {label}
-                    </button>
+                <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Motivo (etiqueta)</span>
+                <input value={draft.purpose} onChange={(e) => set({ purpose: e.target.value })}
+                       placeholder="Ej: Ventas, Onboarding…" disabled={!isAdmin} list="motivo-sugerencias"
+                       className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 outline-none focus:border-[#F59E0B] transition-colors`} />
+                <datalist id="motivo-sugerencias">
+                  {['Ventas', 'Servicio', 'Onboarding', 'Seguimiento', 'Consultoría', 'Soporte'].map((s) => <option key={s} value={s} />)}
+                </datalist>
+                <span className="flex items-center gap-1.5 pt-0.5">
+                  {TAG_COLOR_KEYS.map((k) => (
+                    <button key={k} type="button" onClick={() => isAdmin && set({ purpose_color: k })}
+                            title={k} className="w-5 h-5 rounded-full border-0 cursor-pointer transition-all duration-150"
+                            style={{
+                              background: TAG_COLORS[k].text,
+                              boxShadow: draft.purpose_color === k ? `0 0 0 2px #fff, 0 0 0 4px ${TAG_COLORS[k].text}` : undefined,
+                            }} />
                   ))}
                 </span>
               </label>
@@ -514,10 +541,19 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           </label>
           <div className={mobile ? 'grid grid-cols-1 gap-3.5' : 'grid grid-cols-2 gap-3.5'}>
             <label className="flex flex-col gap-[5px]">
-              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Anfitrión (nombre)</span>
-              <input value={draft.host_name || ''} onChange={(e) => set({ host_name: e.target.value })}
-                     placeholder="Ej: Matias Braszka" disabled={!isAdmin}
-                     className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 outline-none focus:border-[#F59E0B] transition-colors`} />
+              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Anfitrión</span>
+              <span className="flex items-center gap-2">
+                {(() => {
+                  const h = team.find((m) => m.id === draft.host_member_id);
+                  return h ? <MemberAvatar member={h} size={mobile ? 30 : 28} ring={null} /> : null;
+                })()}
+                <select value={draft.host_member_id || ''} onChange={(e) => set({ host_member_id: e.target.value })} disabled={!isAdmin}
+                        className={`flex-1 min-w-0 ${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 bg-white outline-none cursor-pointer focus:border-[#F59E0B] transition-colors`}>
+                  <option value="">Sin anfitrión visible</option>
+                  {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </span>
+              <span className="text-[10.5px] text-text3">Su nombre y foto aparecen en la página de reserva.</span>
             </label>
             <label className="flex flex-col gap-[5px]">
               <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Anfitrión (qué hace en la reunión)</span>
