@@ -77,6 +77,7 @@ function transferRow(e: any, direction: string) {
     method: str(e.method) || null,
     txid: str(e.txid) || null,
     address: str(e.info) || null,
+    alias: str(e.key) || null,   // alias de la wallet (libreta de Kraken) → a quién le pagamos
     time: e.time ? new Date(Number(e.time) * 1000).toISOString() : null,
     status: str(e.status) || null,
     raw: e,

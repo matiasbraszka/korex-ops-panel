@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { Bitcoin, ArrowDownLeft, RefreshCw, Wallet, TrendingUp, Receipt, ExternalLink, CheckCircle2, Clock } from 'lucide-react';
+import { Bitcoin, ArrowDownLeft, RefreshCw, Wallet, TrendingUp, TrendingDown, Receipt, ExternalLink, CheckCircle2, Clock, Send } from 'lucide-react';
 
 // Los saldos/movimientos de Korex en Kraken son stablecoins / USD → 1:1 USD.
 const STABLE = /^(usdt|usdc|zusd|usd|usd\.hold|dai|usdg|pyusd|tusd)$/i;
@@ -32,6 +32,18 @@ function explorerUrl(method, txid) {
   if (m.includes('arbitrum')) return `https://arbiscan.io/tx/${txid}`;
   return null;
 }
+// Link a la dirección (wallet) en el explorador.
+function explorerAddrUrl(method, addr) {
+  if (!addr) return null;
+  const m = (method || '').toLowerCase();
+  if (m.includes('trc20') || m.includes('tron')) return `https://tronscan.org/#/address/${addr}`;
+  if (m.includes('arbitrum')) return `https://arbiscan.io/address/${addr}`;
+  if (m.includes('ethereum') || m.includes('erc20') || addr.startsWith('0x')) return `https://etherscan.io/address/${addr}`;
+  if (m.includes('solana') || m.includes('spl')) return `https://solscan.io/account/${addr}`;
+  if (m.includes('polygon')) return `https://polygonscan.com/address/${addr}`;
+  if (m.includes('bsc') || m.includes('bep20')) return `https://bscscan.com/address/${addr}`;
+  return null;
+}
 const shortTx = (t) => (t && t.length > 16 ? `${t.slice(0, 8)}…${t.slice(-6)}` : t);
 
 export default function KrakenPage() {
@@ -57,6 +69,11 @@ export default function KrakenPage() {
     () => transfers.filter((t) => t.direction === 'in' && /usdt/i.test(t.asset || '')),
     [transfers],
   );
+  // Pagos enviados = retiros (egresos), con alias de wallet (a quién le pagamos).
+  const enviados = useMemo(
+    () => transfers.filter((t) => t.direction === 'out'),
+    [transfers],
+  );
   // Comisiones de Kraken = fees (sobre todo de retiros).
   const comisiones = useMemo(
     () => transfers.filter((t) => Number(t.fee) > 0).sort((a, b) => (b.time || '').localeCompare(a.time || '')),
@@ -68,6 +85,7 @@ export default function KrakenPage() {
     [balances],
   );
   const totalRecibido = useMemo(() => pagos.reduce((s, t) => s + (Number(t.amount) || 0), 0), [pagos]);
+  const totalEnviado = useMemo(() => enviados.reduce((s, t) => s + (Number(t.amount) || 0), 0), [enviados]);
   const totalComisiones = useMemo(() => comisiones.reduce((s, t) => s + (Number(t.fee) || 0), 0), [comisiones]);
 
   // Agrupar una lista por día.
@@ -108,8 +126,13 @@ export default function KrakenPage() {
             <div className="text-[12px] text-text3 mt-1.5">{pagos.length} pagos · histórico</div>
           </div>
           <div>
+            <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5"><TrendingDown size={14} /> Pagos enviados</div>
+            <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#BE123C' }}>{money(totalEnviado)}</div>
+            <div className="text-[12px] text-text3 mt-1.5">{enviados.length} retiros · histórico</div>
+          </div>
+          <div>
             <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5"><Receipt size={14} /> Comisiones Kraken</div>
-            <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#BE123C' }}>{money(totalComisiones)}</div>
+            <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#A16207' }}>{money(totalComisiones)}</div>
             <div className="text-[12px] text-text3 mt-1.5">{comisiones.length} cobros de fee</div>
           </div>
         </div>
@@ -120,7 +143,7 @@ export default function KrakenPage() {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-4 border-b border-border">
-        {[{ id: 'pagos', label: 'Pagos recibidos', count: pagos.length }, { id: 'comisiones', label: 'Comisiones', count: comisiones.length }].map((t) => (
+        {[{ id: 'pagos', label: 'Pagos recibidos', count: pagos.length }, { id: 'enviados', label: 'Pagos enviados', count: enviados.length }, { id: 'comisiones', label: 'Comisiones', count: comisiones.length }].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className="relative px-4 py-2.5 text-[13px] font-semibold cursor-pointer bg-transparent border-0 -mb-px"
             style={{ color: tab === t.id ? 'var(--color-text)' : 'var(--color-text3)', borderBottom: tab === t.id ? '2px solid var(--color-blue)' : '2px solid transparent' }}>
@@ -167,6 +190,58 @@ export default function KrakenPage() {
                                 </a>
                               ) : (
                                 <span className="font-mono">{shortTx(t.txid)}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : tab === 'enviados' ? (
+        enviados.length === 0 ? (
+          <div className="text-[13px] text-text3 border border-dashed border-border rounded-xl p-6 text-center">Todavía no hay pagos enviados.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {byDay(enviados).map((d) => (
+              <div key={d.day} className="border border-border rounded-xl bg-white overflow-hidden">
+                <div className="px-4 py-2 bg-surface2/60 border-b border-border">
+                  <span className="text-[12px] font-bold text-text capitalize">{fmtDay(d.day)}</span>
+                </div>
+                <div>
+                  {d.items.map((t) => {
+                    const txLink = explorerUrl(t.method, t.txid);
+                    const addrLink = explorerAddrUrl(t.method, t.address);
+                    return (
+                      <div key={t.refid} className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-surface2">
+                        <Send size={16} className="shrink-0 mt-0.5" style={{ color: '#BE123C' }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[14px] font-bold text-text truncate">{t.alias || 'Sin alias'}</span>
+                            <span className="text-[14px] font-bold shrink-0" style={{ color: '#BE123C' }}>−{Number(t.amount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t.asset}</span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-text2">
+                            {t.method && <span className="inline-flex items-center gap-1"><Bitcoin size={11} className="text-text3" /> {t.method}</span>}
+                            <span className="text-text3">{fmtTime(t.time)}</span>
+                            <StatusPill status={t.status} />
+                            {Number(t.fee) > 0 && <span className="text-text3">fee {Number(t.fee).toLocaleString('es-AR', { maximumFractionDigits: 4 })} {t.asset}</span>}
+                          </div>
+                          {t.address && (
+                            <div className="mt-1 text-[11px] text-text3">
+                              <span className="font-medium">Wallet:</span>{' '}
+                              {addrLink ? (
+                                <a href={addrLink} target="_blank" rel="noopener noreferrer" className="text-blue inline-flex items-center gap-1 font-mono">{shortTx(t.address)} <ExternalLink size={10} /></a>
+                              ) : (<span className="font-mono">{shortTx(t.address)}</span>)}
+                              {t.txid && (
+                                <> · <span className="font-medium">Tx:</span>{' '}
+                                  {txLink ? (
+                                    <a href={txLink} target="_blank" rel="noopener noreferrer" className="text-blue inline-flex items-center gap-1 font-mono">{shortTx(t.txid)} <ExternalLink size={10} /></a>
+                                  ) : (<span className="font-mono">{shortTx(t.txid)}</span>)}
+                                </>
                               )}
                             </div>
                           )}

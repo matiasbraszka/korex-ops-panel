@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public.kraken_transfers (
   method      text,            -- ej. "Tether USD (TRC20)"
   txid        text,            -- id de transacción blockchain
   address     text,            -- campo 'info' (dirección de depósito/destino)
+  alias       text,            -- campo 'key' del retiro: alias de la wallet (a quién le pagamos)
   time        timestamptz,
   status      text,
   raw         jsonb,
