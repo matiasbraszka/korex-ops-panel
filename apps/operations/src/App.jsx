@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, Landmark } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, Landmark, Bitcoin } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -16,6 +16,7 @@ const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 const MercuryPage = lazy(() => import('./pages/MercuryPage'));
+const KrakenPage = lazy(() => import('./pages/KrakenPage'));
 import SearchBar from './components/SearchBar';
 import useSoporteUnread from './hooks/useSoporteUnread';
 import EditClientModal from './components/clientes/EditClientModal';
@@ -303,6 +304,7 @@ function MainLayout() {
     { id: 'citas', label: 'Citas', Icon: CalendarDays, path: '/soporte/citas' },
     { id: 'plantillas', label: 'Plantillas', Icon: Zap, path: '/soporte/plantillas' },
     ...(currentUser?.isAdmin ? [{ id: 'mercury', label: 'Mercury', Icon: Landmark, path: '/soporte/mercury' }] : []),
+    ...(currentUser?.isAdmin ? [{ id: 'kraken', label: 'Cripto', Icon: Bitcoin, path: '/soporte/kraken' }] : []),
   ];
   // Tokens de color por area (mantienen consistencia con la paleta Korex).
   const areaTokens = {
@@ -340,6 +342,7 @@ function MainLayout() {
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
     mercury: ['Mercury', 'Fondos, saldos y transacciones fallidas a revisar'],
+    kraken: ['Cripto (Kraken)', 'Saldos e ingresos/egresos en Kraken'],
   };
 
   const [title, subtitle] = titles[view] || ['', ''];
@@ -389,6 +392,10 @@ function MainLayout() {
       <Route
         path="/soporte/mercury"
         element={currentUser?.isAdmin ? <MercuryPage /> : <Navigate to={homePath} replace />}
+      />
+      <Route
+        path="/soporte/kraken"
+        element={currentUser?.isAdmin ? <KrakenPage /> : <Navigate to={homePath} replace />}
       />
       <Route
         path="/sales/*"
