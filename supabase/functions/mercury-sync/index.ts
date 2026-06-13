@@ -190,18 +190,24 @@ Deno.serve(async (req: Request) => {
   const token = str(cfg.api_token);
   const nowIso = new Date().toISOString();
 
-  // 1) Cuentas (fondos) + saldos.
+  // 1) Cuentas: depósito (/accounts) + crédito (/credit). La cuenta de crédito no
+  //    aparece en /accounts; sus cargos (mucho software) viven ahí.
   const accountsResp = await mercuryGet(token, "/accounts");
-  const accounts = arr(accountsResp, "accounts");
+  const depositAccounts = arr(accountsResp, "accounts");
+  const creditResp = await mercuryGet(token, "/credit");
+  const creditAccounts = arr(creditResp, "accounts").map((c) => ({ ...c, _credit: true }));
+  // Crédito PRIMERO: tiene los cargos de software y es la más importante; así se
+  // procesa aunque el barrido completo de depósito sea largo.
+  const accounts = [...creditAccounts, ...depositAccounts];
   let accUpserts = 0;
   for (const a of accounts) {
     const id = str(a.id);
     if (!id) continue;
     const { error } = await admin.from("mercury_accounts").upsert({
       id,
-      name: str(a.name) || null,
-      nickname: str(a.nickname) || null,
-      kind: str(a.kind) || str(a.type) || null,
+      name: a._credit ? "Tarjeta de Crédito Mercury" : (str(a.name) || null),
+      nickname: a._credit ? "Tarjeta de Crédito Mercury" : (str(a.nickname) || null),
+      kind: a._credit ? "credit" : (str(a.kind) || str(a.type) || null),
       status: str(a.status) || null,
       current_balance: num(a.currentBalance),
       available_balance: num(a.availableBalance),

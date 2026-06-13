@@ -218,9 +218,14 @@ export default function MercuryPage() {
   const fundName = (a) => (a?.nickname || a?.name || a?.id || '—');
   const accountById = (id) => accounts.find((a) => a.id === id);
 
+  // La cuenta de crédito no es efectivo (es deuda): se excluye del saldo total y
+  // de los fondos, pero sus cargos sí cuentan en Egresos.
+  const cashAccounts = useMemo(() => accounts.filter((a) => a.kind !== 'credit'), [accounts]);
+  const creditAcc = useMemo(() => accounts.find((a) => a.kind === 'credit'), [accounts]);
+
   const grandTotal = useMemo(
-    () => accounts.reduce((s, a) => s + (Number(a.current_balance) || 0), 0),
-    [accounts],
+    () => cashAccounts.reduce((s, a) => s + (Number(a.current_balance) || 0), 0),
+    [cashAccounts],
   );
 
   // Agrupar fondos: Korex/Internos primero, después cada cliente ordenado por saldo.
@@ -228,7 +233,7 @@ export default function MercuryPage() {
   // distinta tipografía en el apodo (ej. "Vozmediano" vs "VozMediano") no se parta.
   const groups = useMemo(() => {
     const map = new Map();
-    for (const a of accounts) {
+    for (const a of cashAccounts) {
       const c = classify(a.nickname || a.name);
       const key = c.group.toLowerCase().replace(/\s+/g, ' ').trim();
       if (!map.has(key)) map.set(key, { name: c.group, internal: c.internal, funds: [], total: 0, meta: 0 });
@@ -241,7 +246,7 @@ export default function MercuryPage() {
     arr.forEach((g) => g.funds.sort((x, y) => (Number(y.current_balance) || 0) - (Number(x.current_balance) || 0)));
     arr.sort((a, b) => (a.internal === b.internal ? b.total - a.total : (a.internal ? -1 : 1)));
     return arr;
-  }, [accounts, metaByAccount]);
+  }, [cashAccounts, metaByAccount]);
 
   const totalMeta = useMemo(
     () => Object.values(metaByAccount).reduce((s, v) => s + (Number(v) || 0), 0),
@@ -361,7 +366,7 @@ export default function MercuryPage() {
               <Wallet size={14} /> Saldo total en Mercury
             </div>
             <div className="text-[30px] font-extrabold text-text mt-1 leading-none">{money(grandTotal)}</div>
-            <div className="text-[12px] text-text3 mt-1.5">{accounts.length} fondos · {Object.values(cards).flat().length} tarjetas</div>
+            <div className="text-[12px] text-text3 mt-1.5">{cashAccounts.length} fondos · {Object.values(cards).flat().length} tarjetas</div>
           </div>
           <div>
             <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5">
@@ -370,6 +375,17 @@ export default function MercuryPage() {
             <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#4F5BD5' }}>{money(totalMeta)}</div>
             <div className="text-[12px] text-text3 mt-1.5">gasto en anuncios procesado</div>
           </div>
+          {creditAcc && (
+            <div>
+              <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5">
+                <CreditCard size={14} /> Tarjeta de crédito
+              </div>
+              <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#BE123C' }}>
+                {money(creditAcc.current_balance, creditAcc.currency)}
+              </div>
+              <div className="text-[12px] text-text3 mt-1.5">deuda actual</div>
+            </div>
+          )}
         </div>
         <button onClick={load} title="Actualizar"
           className="inline-flex items-center gap-1.5 text-[12px] text-text2 hover:text-text bg-white border border-border rounded-lg px-3 py-2 cursor-pointer">
