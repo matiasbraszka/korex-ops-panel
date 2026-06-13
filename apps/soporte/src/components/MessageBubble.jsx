@@ -1,4 +1,4 @@
-import { Clock, AlertCircle, CheckCheck } from 'lucide-react';
+import { Clock, AlertCircle, CheckCheck, Forward } from 'lucide-react';
 import { fmtClock, colorFromString, msgTypeLabel, initials } from '../lib/format.js';
 import MediaContent from './MediaContent.jsx';
 
@@ -20,7 +20,7 @@ function BodyText({ text }) {
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
-export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard }) {
+export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward }) {
   const out = msg.direction === 'out';
   const isMedia = MEDIA_TYPES.has(msg.msg_type);
   const typeLabel = !isMedia ? msgTypeLabel(msg.msg_type) : null;
@@ -29,8 +29,18 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
   const failed = msg.status === 'failed';
   const sending = msg.status === 'sending';
 
+  // Reenviar: disponible en mensajes ya enviados/recibidos (no fallidos ni en curso).
+  const canForward = onForward && !failed && !sending && !msg._temp && (msg.body || isMedia);
+  const fwdBtn = canForward ? (
+    <button onClick={() => onForward(msg)} title="Reenviar a otro chat"
+            className="self-center opacity-0 group-hover:opacity-100 max-md:opacity-70 transition-opacity duration-150 shrink-0 w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
+      <Forward size={13} />
+    </button>
+  ) : null;
+
   return (
-    <div className={`flex ${out ? 'justify-end' : 'justify-start'} px-4 gap-2`}>
+    <div className={`group flex items-center ${out ? 'justify-end' : 'justify-start'} px-4 gap-1.5`}>
+      {out && fwdBtn}
       {/* Avatar del autor en grupos (alineado abajo, spacer si es consecutiva) */}
       {!out && isGroup && (
         showAuthor && authorName ? (
@@ -84,6 +94,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
           </div>
         )}
       </div>
+      {!out && fwdBtn}
     </div>
   );
 }

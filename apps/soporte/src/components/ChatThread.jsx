@@ -4,6 +4,7 @@ import { useSoporte } from '../context/SoporteContext.jsx';
 import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
 import Composer from './Composer.jsx';
+import ForwardModal from './ForwardModal.jsx';
 
 // Hilo de chat — Diseño A: wallpaper estilo WhatsApp, header con chip de
 // vínculo, píldora de día. Lógica idéntica a la versión anterior
@@ -20,6 +21,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, groupDirByConv, loadGroupDirectory } = useSoporte();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
+  const [forwardMsg, setForwardMsg] = useState(null);
   const stickToBottom = useRef(true);
   const prevHeightRef = useRef(null);
 
@@ -197,6 +199,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   showAuthor={g.showAuthor}
                   onRetry={() => retrySend(selectedId, g.msg.id)}
                   onDiscard={() => discardFailed(selectedId, g.msg.id)}
+                  onForward={setForwardMsg}
                 />
               )
             )}
@@ -214,6 +217,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
       )}
 
       <Composer onSent={() => { stickToBottom.current = true; }} />
+
+      <ForwardModal msg={forwardMsg} onClose={() => setForwardMsg(null)} />
     </div>
   );
 }

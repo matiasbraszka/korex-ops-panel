@@ -288,6 +288,36 @@ export function SoporteProvider({ children }) {
     }
   }, [currentMemberId]);
 
+  // ── Reenviar un mensaje a otro chat (texto o media) ──
+  // Texto: lo manda como mensaje. Media: recupera los bytes vía invokeMedia
+  // (que ya cachea/firma desde Storage o Evolution) y los reenvía como adjunto.
+  const FWD_KIND = { imageMessage: 'image', stickerMessage: 'image', audioMessage: 'audio', videoMessage: 'video', documentMessage: 'document' };
+  const forwardMessage = useCallback(async (msg, toConvId) => {
+    if (!msg || !toConvId) return;
+    const kind = FWD_KIND[msg.msg_type];
+    if (!kind) {
+      const text = String(msg.body || '').trim();
+      if (text) await sendMessage(toConvId, text);
+      return;
+    }
+    const info = await invokeMedia(msg.id); // { url, mime, filename }
+    const blob = await (await fetch(info.url)).blob();
+    const base64 = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || '').split(',')[1] || '');
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+    if (!base64) throw new Error('media_vacia');
+    await sendAttachment(toConvId, {
+      base64,
+      mimetype: info.mime || blob.type || 'application/octet-stream',
+      filename: info.filename || 'archivo',
+      kind,
+      caption: '',
+    });
+  }, [sendMessage, sendAttachment]);
+
   const retrySend = useCallback((convId, msgId) => {
     const t = threadsRef.current[convId];
     const msg = t?.items.find((m) => m.id === msgId);
@@ -526,13 +556,14 @@ export function SoporteProvider({ children }) {
   const value = useMemo(() => ({
     loading, realtimeOk,
     conversations: visibleConversations,
+    allConversations: conversations,
     allConversationsCount: conversations.length,
     unreadTotal,
     selectedId, selectedConversation, selectConversation,
     filters, setFilters,
     tagCounts, linkedClients,
     threads, loadOlder,
-    sendMessage, sendAttachment, retrySend, discardFailed,
+    sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage,
     tagsCatalog: config.tags || [],
     appointmentTemplate: config.appointment_template || '',
     templates: config.templates || [],
@@ -544,9 +575,9 @@ export function SoporteProvider({ children }) {
     mediaByMsg, loadMedia,
     getDraft, setDraft, refresh,
   }), [
-    loading, realtimeOk, visibleConversations, conversations.length, unreadTotal, selectedId,
+    loading, realtimeOk, visibleConversations, conversations, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
-    sendMessage, sendAttachment, retrySend, discardFailed, config,
+    sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
     saveTagsCatalog, saveTemplates, saveAvailability,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
