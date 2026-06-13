@@ -1,15 +1,19 @@
 /**
- * agendar-cita-calendar.gs — v4. Crea/mueve/borra eventos en el Google
+ * agendar-cita-calendar.gs — v5. Crea/mueve/borra eventos en el Google
  * Calendar de la cuenta donde se deploya (admin@metodokorex.com), lee la
- * asistencia (RSVP), saca el Meet automático y da de alta contactos en
- * Google Contacts (para que aparezcan con nombre en el WhatsApp del celu).
+ * asistencia (RSVP), saca el Meet automático, da de alta contactos en
+ * Google Contacts, pinta los eventos con el color del calendario elegido
+ * y lee el libre/ocupado del equipo (para no ofrecer horarios tomados).
  *
  * Lo llama el backend del panel Korex con:
- *   POST { secret, action: 'create_event', title, description, start, end, guests?, location? }
+ *   POST { secret, action: 'create_event', title, description, start, end, guests?, location?, colorId? }
  *   POST { secret, action: 'update_event', eventId, title?, start, end }
  *   POST { secret, action: 'delete_event', eventId }
  *   POST { secret, action: 'get_rsvp', eventId }
  *   POST { secret, action: 'upsert_contact', name, phone }
+ *   POST { secret, action: 'freebusy', emails: [], timeMin, timeMax }
+ *     → bloques ocupados de cada email (cuentas @metodokorex.com directo;
+ *       cuentas externas deben compartir su calendario con admin@).
  *
  * SETUP (una vez, en admin@metodokorex.com):
  *   1. script.google.com → Nuevo proyecto → pegar este archivo.
@@ -111,7 +115,41 @@ function doPost(e) {
     var cal = CalendarApp.getDefaultCalendar();
 
     // Para verificar qué versión del script está corriendo la web app.
-    if (action === 'ping') return kxcJson({ ok: true, v: 3 });
+    if (action === 'ping') return kxcJson({ ok: true, v: 5 });
+
+    // Libre/ocupado de varios calendarios a la vez (API oficial freeBusy).
+    if (action === 'freebusy') {
+      var fbEmails = (b.emails || []).map(String).filter(Boolean).slice(0, 10);
+      var timeMin = new Date(b.timeMin);
+      var timeMax = new Date(b.timeMax);
+      if (!fbEmails.length || isNaN(timeMin.getTime()) || isNaN(timeMax.getTime())) {
+        return kxcJson({ ok: false, error: 'bad_input' });
+      }
+      var fbRes = UrlFetchApp.fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          items: fbEmails.map(function (em) { return { id: em }; }),
+        }),
+        headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+        muteHttpExceptions: true,
+      });
+      if (fbRes.getResponseCode() !== 200) {
+        return kxcJson({ ok: false, error: 'freebusy:' + fbRes.getResponseCode() + ':' + fbRes.getContentText().slice(0, 200) });
+      }
+      var fbData = JSON.parse(fbRes.getContentText());
+      var busy = {};
+      var errors = {};
+      fbEmails.forEach(function (em) {
+        var calInfo = (fbData.calendars || {})[em] || {};
+        busy[em] = calInfo.busy || [];
+        // Si Google no puede leer ese calendario (sin permiso), avisarlo.
+        if (calInfo.errors && calInfo.errors.length) errors[em] = calInfo.errors[0].reason || 'error';
+      });
+      return kxcJson({ ok: true, v: 5, busy: busy, errors: errors });
+    }
 
     if (action === 'create_event') {
       var title = String(b.title || '').trim();
@@ -131,6 +169,11 @@ function doPost(e) {
         opts.sendInvites = true;
       }
       var event = cal.createEvent(title, start, end, opts);
+      // colorId: color oficial de Google Calendar ('1'-'11') del calendario
+      // de reserva elegido en el panel.
+      if (b.colorId) {
+        try { event.setColor(String(b.colorId)); } catch (errColor) {}
+      }
       // Con invitados, Google mete un Meet automático: sacarlo (es por Zoom).
       var meetRemoved = null;
       if (b.guests) {

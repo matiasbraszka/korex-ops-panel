@@ -1,17 +1,22 @@
-// supabase/functions/agenda-publica/index.ts
-// Backend de la página pública /agendar (leads reservan reuniones solos).
+// supabase/functions/agenda-publica/index.ts — v2
+// Backend de la página pública /agendar[/<slug>] (leads reservan solos).
 //
-//   POST { action: 'slots', year, month }  → días/horarios libres del mes
-//     (disponibilidad de soporte_config.availability menos citas tomadas,
-//     con 2h mínimas de anticipación; zona horaria Argentina UTC-3 fija).
-//   POST { action: 'book', date, time, name, email, dial, phone, notes? }
-//     → valida el slot, crea Zoom + evento en Calendar (invitación al email,
-//     Zoom como ubicación), upsert de la conversación de WhatsApp (asignada
-//     a la asistente), inserta la cita (los recordatorios 24h/2h corren
-//     solos) y manda la confirmación por WhatsApp al lead.
+//   POST { action: 'slots', year, month, slug? } → días/horarios libres del mes
+//     para ese calendario de reserva (booking_calendars): intersección de la
+//     disponibilidad semanal de CADA miembro del equipo, menos citas internas
+//     que pisen a algún miembro, menos los bloques ocupados de sus Google
+//     Calendars reales (freebusy vía Apps Script). 2h mínimas de anticipación,
+//     zona horaria Argentina UTC-3 fija.
+//   POST { action: 'book', date, time, name, email, dial, phone, notes?, slug? }
+//     → revalida el slot, crea Zoom + evento en Calendar (título y color del
+//     calendario, invitación al lead y a los miembros — así Fathom entra solo
+//     y su freebusy lo bloquea), upsert de la conversación de WhatsApp,
+//     inserta la cita (recordatorios 24h/2h corren solos) y manda la
+//     confirmación por WhatsApp al lead.
 //
-// verify_jwt: false — página pública. Validación estricta de inputs +
-// límite de reservas futuras por teléfono.
+// verify_jwt: false — página pública. Validación estricta + límite de
+// reservas futuras por teléfono. Si el freebusy falla, degrada a bloqueos
+// internos (no rompe la página) y lo loguea.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -48,8 +53,28 @@ interface Cfg {
   zoom_client_id?: string;
   zoom_client_secret?: string;
   default_assignee?: string;
-  availability?: { slot_minutes?: number; days?: Record<string, { enabled: boolean; from: string; to: string }> } | null;
-  public_agenda?: { title?: string; description?: string; host_name?: string; host_role?: string; confirmation_template?: string };
+  public_agenda?: { description?: string; host_name?: string; host_role?: string; confirmation_template?: string };
+}
+
+interface BookingCalendar {
+  id: string;
+  slug: string;
+  name: string;
+  purpose: string;
+  duration_min: number;
+  gcal_title_template: string | null;
+  gcal_color_id: string | null;
+  member_ids: string[];
+  active: boolean;
+}
+
+interface Member {
+  id: string;
+  name: string;
+  email: string | null;
+  availability: {
+    days?: Record<string, { enabled?: boolean; ranges?: { from?: string; to?: string }[]; from?: string; to?: string }>;
+  } | null;
 }
 
 async function getCfg(): Promise<Cfg> {
@@ -57,52 +82,159 @@ async function getCfg(): Promise<Cfg> {
   return (data?.value as Cfg) ?? {};
 }
 
+// Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
+async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
+  let q = admin.from("booking_calendars")
+    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active")
+    .eq("active", true);
+  if (slug) q = q.eq("slug", slug);
+  else q = q.order("created_at", { ascending: true }).limit(1);
+  const { data } = await q;
+  return (data?.[0] as BookingCalendar) ?? null;
+}
+
+async function getMembers(cal: BookingCalendar): Promise<Member[]> {
+  if (!cal.member_ids?.length) return [];
+  const { data } = await admin.from("team_members")
+    .select("id, name, email, availability")
+    .in("id", cal.member_ids);
+  // Mantener el orden y exigir que estén todos (si falta uno, no hay agenda).
+  return cal.member_ids.map((id) => (data || []).find((m) => m.id === id)).filter(Boolean) as Member[];
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + (m || 0);
+};
 
 // Instante UTC de una fecha+hora local argentina.
 const toUTC = (date: string, time: string) => new Date(`${date}T${time}:00${TZ_OFFSET}`);
 
-// Slots configurados de un día (sin filtrar conflictos).
-function rawSlotsForDay(cfg: Cfg, date: Date): string[] {
-  const av = cfg.availability;
-  if (!av?.days) return [];
-  const idx = (date.getUTCDay() + 6) % 7; // 0=Lun (mismo índice que el panel)
-  const day = av.days[String(idx)];
-  if (!day?.enabled || !day.from || !day.to) return [];
-  const step = Math.max(15, Number(av.slot_minutes) || 60);
-  const [fh, fm] = day.from.split(":").map(Number);
-  const [th, tm] = day.to.split(":").map(Number);
-  const out: string[] = [];
-  for (let m = fh * 60 + fm; m + step <= th * 60 + tm; m += step) {
-    out.push(`${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
+type Range = { s: number; e: number }; // minutos del día
+
+// Franjas habilitadas de un miembro para un día de semana (0=Lun).
+// Soporta el formato nuevo {ranges:[{from,to}]} y el viejo {from,to}.
+function memberDayRanges(m: Member, weekdayIdx: number): Range[] {
+  const day = m.availability?.days?.[String(weekdayIdx)];
+  if (!day?.enabled) return [];
+  const raw = Array.isArray(day.ranges)
+    ? day.ranges
+    : (day.from && day.to ? [{ from: day.from, to: day.to }] : []);
+  return raw
+    .filter((r) => r?.from && r?.to)
+    .map((r) => ({ s: toMin(r.from!), e: toMin(r.to!) }))
+    .filter((r) => r.e > r.s);
+}
+
+// Intersección de listas de franjas (todos los miembros libres a la vez).
+function intersectRanges(a: Range[], b: Range[]): Range[] {
+  const out: Range[] = [];
+  for (const x of a) {
+    for (const y of b) {
+      const s = Math.max(x.s, y.s);
+      const e = Math.min(x.e, y.e);
+      if (e > s) out.push({ s, e });
+    }
   }
   return out;
 }
 
-// Días y horarios libres de un mes (descartando pasado y citas tomadas).
-async function computeMonth(cfg: Cfg, year: number, month: number) {
-  const step = Math.max(15, Number(cfg.availability?.slot_minutes) || 60);
+// Slots configurados de un día (sin filtrar conflictos): turnos de `step`
+// minutos dentro de la intersección de las franjas de todos los miembros.
+function rawSlotsForDay(members: Member[], step: number, date: Date): string[] {
+  if (!members.length) return [];
+  const idx = (date.getUTCDay() + 6) % 7; // 0=Lun (mismo índice que el panel)
+  let inter = memberDayRanges(members[0], idx);
+  for (let i = 1; i < members.length && inter.length; i++) {
+    inter = intersectRanges(inter, memberDayRanges(members[i], idx));
+  }
+  const out: string[] = [];
+  for (const r of inter) {
+    for (let m = r.s; m + step <= r.e; m += step) {
+      out.push(`${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
+    }
+  }
+  return [...new Set(out)].sort();
+}
+
+async function callCalendarScript(cfg: Cfg, payload: Record<string, unknown>) {
+  if (!cfg.calendar_script_url || !cfg.calendar_script_secret) return null;
+  try {
+    const r = await fetch(cfg.calendar_script_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: cfg.calendar_script_secret, ...payload }),
+      signal: AbortSignal.timeout(60000),
+    });
+    return await r.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+// Bloques ocupados de los Google Calendars reales de los miembros (freebusy).
+// Si el script falla, devuelve [] (degradar a bloqueos internos, no romper).
+async function googleBusy(cfg: Cfg, members: Member[], fromISO: string, toISO: string): Promise<Range2[]> {
+  const emails = members.map((m) => (m.email || "").trim().toLowerCase()).filter(Boolean);
+  if (!emails.length) return [];
+  const res = await callCalendarScript(cfg, { action: "freebusy", emails, timeMin: fromISO, timeMax: toISO });
+  if (!res?.ok) {
+    console.error("agenda-publica: freebusy falló", res);
+    return [];
+  }
+  const out: Range2[] = [];
+  for (const email of emails) {
+    for (const b of (res.busy?.[email] || [])) {
+      const s = new Date(b.start).getTime();
+      const e = new Date(b.end).getTime();
+      if (Number.isFinite(s) && Number.isFinite(e) && e > s) out.push({ s, e });
+    }
+  }
+  if (res.errors && Object.keys(res.errors).length) {
+    console.error("agenda-publica: freebusy sin acceso a", res.errors);
+  }
+  return out;
+}
+
+type Range2 = { s: number; e: number }; // epoch ms
+
+// Días y horarios libres de un mes para un calendario (descartando pasado,
+// citas internas que pisen a algún miembro y ocupados de Google Calendar).
+async function computeMonth(cfg: Cfg, cal: BookingCalendar, members: Member[], year: number, month: number) {
+  const step = Math.max(15, Number(cal.duration_min) || 60);
   const first = new Date(Date.UTC(year, month, 1));
   const next = new Date(Date.UTC(year, month + 1, 1));
+  const fromISO = new Date(first.getTime() - 86400_000).toISOString();
+  const toISO = new Date(next.getTime() + 86400_000).toISOString();
 
-  // Citas tomadas del mes (cualquier estado scheduled bloquea el horario).
-  const { data: taken } = await admin
+  // Citas internas: bloquean si comparten miembro con este calendario o si
+  // son viejas/manuales (sin member_ids → conservador, bloquean todo).
+  const memberList = `{${cal.member_ids.join(",")}}`;
+  const apptQ = admin
     .from("appointments")
     .select("start_at, end_at")
     .eq("status", "scheduled")
-    .gte("start_at", new Date(first.getTime() - 86400_000).toISOString())
-    .lt("start_at", new Date(next.getTime() + 86400_000).toISOString())
+    .gte("start_at", fromISO)
+    .lt("start_at", toISO)
+    .or(`member_ids.is.null,member_ids.ov.${memberList}`)
     .limit(500);
-  const busy = (taken || []).map((a) => ({
+
+  const [{ data: taken }, gbusy] = await Promise.all([
+    apptQ,
+    googleBusy(cfg, members, fromISO, toISO),
+  ]);
+
+  const busy: Range2[] = (taken || []).map((a) => ({
     s: new Date(a.start_at).getTime(),
     e: a.end_at ? new Date(a.end_at).getTime() : new Date(a.start_at).getTime() + 3600_000,
-  }));
+  })).concat(gbusy);
 
   const minStart = Date.now() + MIN_NOTICE_MS;
   const days: Record<string, string[]> = {};
   for (let d = new Date(first); d < next; d.setUTCDate(d.getUTCDate() + 1)) {
     const dateStr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-    const slots = rawSlotsForDay(cfg, d).filter((t) => {
+    const slots = rawSlotsForDay(members, step, d).filter((t) => {
       const s = toUTC(dateStr, t).getTime();
       if (s < minStart) return false;
       const e = s + step * 60000;
@@ -113,7 +245,15 @@ async function computeMonth(cfg: Cfg, year: number, month: number) {
   return days;
 }
 
-// ── Zoom / Calendar / WhatsApp (mismos helpers del resto del módulo) ──
+function isConfigured(cal: BookingCalendar | null, members: Member[]): boolean {
+  if (!cal || !members.length) return false;
+  // Todos los miembros tienen al menos una franja habilitada.
+  return members.every((m) =>
+    Object.keys(m.availability?.days || {}).some((k) => memberDayRanges(m, Number(k)).length > 0)
+  );
+}
+
+// ── Zoom / WhatsApp (mismos helpers del resto del módulo) ──
 
 async function createZoomMeeting(cfg: Cfg, args: { title: string; startAt: string; durationMin: number }) {
   if (!cfg.zoom_account_id || !cfg.zoom_client_id || !cfg.zoom_client_secret) return null;
@@ -137,21 +277,6 @@ async function createZoomMeeting(cfg: Cfg, args: { title: string; startAt: strin
     const meet = await r.json().catch(() => null);
     if (!r.ok || !meet?.join_url) return null;
     return { joinUrl: String(meet.join_url), meetingId: String(meet.id) };
-  } catch {
-    return null;
-  }
-}
-
-async function callCalendarScript(cfg: Cfg, payload: Record<string, unknown>) {
-  if (!cfg.calendar_script_url || !cfg.calendar_script_secret) return null;
-  try {
-    const r = await fetch(cfg.calendar_script_url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: cfg.calendar_script_secret, ...payload }),
-      signal: AbortSignal.timeout(60000),
-    });
-    return await r.json().catch(() => null);
   } catch {
     return null;
   }
@@ -220,9 +345,13 @@ Deno.serve(async (req: Request) => {
     return jsonResp(400, { error: "bad_json" });
   }
 
+  const slug = typeof body.slug === "string" && /^[a-z0-9-]{1,60}$/.test(body.slug) ? body.slug : null;
   const cfg = await getCfg();
+  const cal = await getCalendar(slug);
+  const members = cal ? await getMembers(cal) : [];
   const pub = cfg.public_agenda || {};
-  const slotMin = Math.max(15, Number(cfg.availability?.slot_minutes) || 60);
+  const slotMin = Math.max(15, Number(cal?.duration_min) || 60);
+  const configured = isConfigured(cal, members);
 
   // ── Horarios libres del mes ──
   if (body.action === "slots") {
@@ -234,24 +363,24 @@ Deno.serve(async (req: Request) => {
         monthsAhead < 0 || monthsAhead > MAX_MONTHS_AHEAD) {
       return jsonResp(400, { error: "bad_month" });
     }
-    const days = await computeMonth(cfg, year, month);
+    const days = (cal && configured) ? await computeMonth(cfg, cal, members, year, month) : {};
     return jsonResp(200, {
       ok: true,
       days,
       event: {
-        title: pub.title || "Reunión",
+        title: cal?.name || "Reunión",
         description: pub.description || "",
         host_name: pub.host_name || "Método Korex",
         host_role: pub.host_role || "",
         slot_minutes: slotMin,
       },
-      configured: Boolean(cfg.availability?.days &&
-        Object.values(cfg.availability.days).some((d) => d?.enabled)),
+      configured,
     });
   }
 
   // ── Reservar ──
   if (body.action === "book") {
+    if (!cal || !configured) return jsonResp(409, { error: "not_configured" });
     const date = String(body.date || "");
     const time = String(body.time || "");
     const name = String(body.name || "").trim().slice(0, 80);
@@ -266,10 +395,11 @@ Deno.serve(async (req: Request) => {
     const waDigits = waPhoneFrom(dial, phone);
     if (!waDigits) return jsonResp(400, { error: "bad_phone" });
 
-    // El slot tiene que seguir libre (recalcular el mes de esa fecha).
+    // El slot tiene que seguir libre (recalcular el mes de esa fecha — incluye
+    // citas internas y el freebusy fresco de los Google Calendars).
     const slotDate = toUTC(date, time);
     const [yy, mm] = date.split("-").map(Number);
-    const dayMap = await computeMonth(cfg, yy, mm - 1);
+    const dayMap = await computeMonth(cfg, cal, members, yy, mm - 1);
     if (!(dayMap[date] || []).includes(time)) return jsonResp(409, { error: "slot_taken" });
 
     const waJid = `${waDigits}@s.whatsapp.net`;
@@ -285,34 +415,40 @@ Deno.serve(async (req: Request) => {
 
     const startAt = slotDate.toISOString();
     const endAt = new Date(slotDate.getTime() + slotMin * 60000).toISOString();
-    const title = `${pub.title || "Reunión"} — ${name}`;
+    const title = (cal.gcal_title_template || `${cal.name} — {nombre}`)
+      .replaceAll("{nombre}", name)
+      .replaceAll("{telefono}", `+${waDigits}`)
+      .slice(0, 150);
 
-    // Zoom + Calendar (invitación al lead, Zoom como ubicación).
+    // Zoom + Calendar: invitación al lead Y a los miembros del equipo (les
+    // aparece en su calendario → Fathom entra solo y su freebusy lo bloquea).
     const zoom = await createZoomMeeting(cfg, { title, startAt, durationMin: slotMin });
     const meetingLink = zoom?.joinUrl ?? null;
+    const guestEmails = [...new Set([email, ...members.map((m) => (m.email || "").trim().toLowerCase()).filter(Boolean)])];
     let gcalEventId: string | null = null;
     let gcalLink: string | null = null;
     if (cfg.calendar_script_url) {
-      const cal = await callCalendarScript(cfg, {
+      const calRes = await callCalendarScript(cfg, {
         action: "create_event",
         title,
         description: [
-          `Reserva desde la agenda pública.`,
+          `Reserva desde la agenda pública (${cal.name}).`,
           `Lead: ${name} · ${email} · +${waDigits}`,
           notes ? `Quiere resolver: ${notes}` : null,
           meetingLink ? `Zoom: ${meetingLink}` : null,
         ].filter(Boolean).join("\n"),
         start: startAt,
         end: endAt,
-        guests: email,
+        guests: guestEmails.join(","),
         location: meetingLink || undefined,
+        colorId: cal.gcal_color_id || undefined,
       });
-      if (!cal?.ok) {
-        console.error("agenda-publica: fallo el Apps Script", cal);
+      if (!calRes?.ok) {
+        console.error("agenda-publica: fallo el Apps Script", calRes);
         return jsonResp(502, { error: "calendar_error" });
       }
-      gcalEventId = (cal.eventId as string) || null;
-      gcalLink = (cal.htmlLink as string) || null;
+      gcalEventId = (calRes.eventId as string) || null;
+      gcalLink = (calRes.htmlLink as string) || null;
     }
 
     // Conversación de WhatsApp (se crea si no existe; asignada a la asistente).
@@ -348,6 +484,8 @@ Deno.serve(async (req: Request) => {
       zoom_meeting_id: zoom?.meetingId ?? null,
       invite_email: email,
       rsvp_status: "needs_action",
+      calendar_id: cal.id,
+      member_ids: cal.member_ids,
       created_by: null,
     }).select("id").single();
     if (insErr) {
@@ -378,7 +516,7 @@ Deno.serve(async (req: Request) => {
       ok: true,
       appointment_id: appt.id,
       whatsapp_sent: waSent,
-      event: { title: pub.title || "Reunión", start_at: startAt, end_at: endAt, host_name: pub.host_name || "Método Korex" },
+      event: { title: cal.name, start_at: startAt, end_at: endAt, host_name: pub.host_name || "Método Korex" },
     });
   }
 

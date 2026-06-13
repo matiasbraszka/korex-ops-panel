@@ -84,10 +84,11 @@ export async function fetchAppointments(convId) {
   return Array.isArray(rows) ? rows : [];
 }
 
-// Citas de un rango (vista semanal de la página Citas), con su conversación.
+// Citas de un rango (vista semanal de la página Citas), con su conversación
+// y el calendario de reserva (para pintar el punto del color de GCal).
 export async function fetchAppointmentsRange(fromISO, toISO) {
   const rows = await sbFetch(
-    `appointments?select=*,conversation:wa_conversations(id,wa_jid,wa_profile_name,is_group,contact:contacts(id,full_name))` +
+    `appointments?select=*,calendar:booking_calendars(id,name,gcal_color_id),conversation:wa_conversations(id,wa_jid,wa_profile_name,is_group,contact:contacts(id,full_name))` +
     `&status=eq.scheduled&start_at=gte.${encodeURIComponent(fromISO)}&start_at=lt.${encodeURIComponent(toISO)}&order=start_at.asc&limit=200`,
     { headers: { Prefer: 'return=representation' } },
   );
@@ -116,17 +117,62 @@ export async function fetchGroupNames(convId) {
   return map;
 }
 
-// Miembros del equipo (selector "Asignado a" + filtro de la bandeja).
-// Cacheado: no cambia durante la sesión.
+// Miembros del equipo (selector "Asignado a", filtro de la bandeja y
+// pestañas Calendarios/Disponibilidad). Cacheado: cambia poco en la sesión.
 let teamCache = null;
 export async function fetchTeamMembers() {
   if (teamCache) return teamCache;
   const rows = await sbFetch(
-    'team_members?select=id,name&order=name.asc&limit=50',
+    'team_members?select=id,name,role,color,initials,email,availability&order=position.asc&limit=50',
     { headers: { Prefer: 'return=representation' } },
   );
   teamCache = Array.isArray(rows) ? rows : [];
   return teamCache;
+}
+
+// Email / disponibilidad de un miembro (pestaña Disponibilidad, solo admin).
+export async function updateTeamMember(id, patch) {
+  const rows = await sbFetch(`team_members?id=eq.${encodeURIComponent(id)}&select=id,name,role,color,initials,email,availability`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+    headers: { Prefer: 'return=representation' },
+    throwOnError: true,
+  });
+  // Refrescar el caché en memoria con la fila actualizada.
+  const updated = Array.isArray(rows) ? rows[0] : null;
+  if (updated && teamCache) {
+    teamCache = teamCache.map((m) => (m.id === updated.id ? { ...m, ...updated } : m));
+  }
+  return updated;
+}
+
+// ── Calendarios de reserva (pestaña Calendarios, link público por slug) ──
+export async function fetchBookingCalendars() {
+  const rows = await sbFetch(
+    'booking_calendars?select=*&order=created_at.asc&limit=50',
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function createBookingCalendar(cal) {
+  const rows = await sbFetch('booking_calendars', {
+    method: 'POST',
+    body: JSON.stringify(cal),
+    headers: { Prefer: 'return=representation' },
+    throwOnError: true,
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+export async function updateBookingCalendar(id, patch) {
+  const rows = await sbFetch(`booking_calendars?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+    headers: { Prefer: 'return=representation' },
+    throwOnError: true,
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
 }
 
 export async function searchContacts(q) {

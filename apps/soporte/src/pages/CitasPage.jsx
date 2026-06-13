@@ -2,13 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CalendarDays, ChevronLeft, ChevronRight, Video, ExternalLink, MessageCircle,
-  CalendarClock, CalendarX, Clock, Check, Plus, Search, Link2, Pencil,
+  CalendarClock, CalendarX, Clock, Check, Plus, Search, Link2,
 } from 'lucide-react';
+import { useAuth } from '@korex/auth';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { fetchAppointmentsRange } from '../lib/api.js';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import Modal from '../components/Modal.jsx';
 import ScheduleModal from '../components/ScheduleModal.jsx';
+import CalendariosTab, { gcalHex } from '../components/CalendariosTab.jsx';
+import DisponibilidadTab from '../components/DisponibilidadTab.jsx';
 
 const DAY_LABELS = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'];
 const HOUR_PX = 60; // 1 hora = 60px en la grilla
@@ -159,6 +162,12 @@ function CitaModal({ appt, onClose, onChanged }) {
           {apptName(appt)}
           {appt.invite_email && <span className="text-[11px] text-text3 truncate">· {appt.invite_email}</span>}
         </div>
+        {appt.calendar && (
+          <div className="flex items-center gap-2 text-[12px] text-text2">
+            <span className="w-[10px] h-[10px] rounded-[3px] ml-0.5 shrink-0" style={{ background: gcalHex(appt.calendar.gcal_color_id) }} />
+            Calendario: {appt.calendar.name}
+          </div>
+        )}
         <div className="flex items-center gap-3 flex-wrap">
           {appt.meeting_link && (
             <a href={appt.meeting_link} target="_blank" rel="noopener noreferrer"
@@ -278,109 +287,20 @@ function NuevaCitaModal({ open, onClose, onCreated }) {
   );
 }
 
-// ── Disponibilidad: resumen en el rail + modal de edición ──
-function DisponibilidadCard() {
-  const { availability, saveAvailability } = useSoporte();
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [slotMin, setSlotMin] = useState(availability?.slot_minutes || 60);
-  const [days, setDays] = useState(() => {
-    const base = {};
-    for (let i = 0; i < 7; i++) {
-      const cfg = availability?.days?.[i];
-      base[i] = cfg ? { ...cfg } : { enabled: false, from: '10:00', to: '18:00' };
-    }
-    return base;
-  });
-  const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-  const setDay = (i, patch) => setDays((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }));
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await saveAvailability({ slot_minutes: slotMin, days });
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const enabled = Object.entries(days).filter(([, d]) => d.enabled);
-
+// ── Disponibilidad: card del rail que lleva a la pestaña Disponibilidad ──
+function DisponibilidadCard({ onConfig }) {
   return (
-    <>
-      <div className="rounded-xl border border-border bg-white p-3">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] font-bold tracking-widest text-text3 uppercase">Disponibilidad</span>
-          <button onClick={() => setEditing(true)}
-                  className="text-[11px] font-semibold text-[#B45309] bg-transparent border-0 cursor-pointer hover:underline flex items-center gap-1 p-0">
-            <Pencil size={10} /> Editar
-          </button>
-        </div>
-        {enabled.length === 0 ? (
-          <div className="text-[11.5px] text-text3">Sin horarios cargados todavía.</div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {enabled.map(([i, d]) => (
-              <div key={i} className="flex items-center justify-between text-[11.5px]">
-                <span className="font-semibold">{labels[i]}</span>
-                <span className="text-text2">{d.from} – {d.to}</span>
-              </div>
-            ))}
-            <div className="text-[10.5px] text-text3 mt-0.5">Turnos de {DURATIONS.find((x) => x.min === slotMin)?.label || `${slotMin} min`}</div>
-          </div>
-        )}
-        <div className="text-[10px] text-text3 mt-2 leading-snug">
-          El link público de agenda solo ofrece estos horarios (menos los ya tomados).
-        </div>
+    <div className="rounded-xl border border-border bg-white p-3">
+      <div className="text-[10px] font-bold tracking-widest text-text3 uppercase mb-1.5">Disponibilidad</div>
+      <div className="text-[11px] text-text3 leading-snug">
+        Los links públicos ofrecen los huecos donde el equipo del calendario está libre
+        (su disponibilidad + su Google Calendar).
       </div>
-
-      {editing && (
-        <Modal open onClose={() => setEditing(false)} title="Mi disponibilidad" maxWidth={400}
-               footer={
-                 <>
-                   <button onClick={() => setEditing(false)}
-                           className="py-2 px-3.5 rounded-[10px] border border-border bg-white text-[12.5px] font-medium text-text2 cursor-pointer hover:bg-surface2">
-                     Cerrar
-                   </button>
-                   <button onClick={save} disabled={saving}
-                           className="py-2 px-4 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] disabled:opacity-60">
-                     {saving ? 'Guardando…' : 'Guardar'}
-                   </button>
-                 </>
-               }>
-          <div className="flex flex-col gap-2">
-            {labels.map((label, i) => (
-              <div key={i} className="flex items-center gap-3 text-[12.5px]">
-                <label className="flex items-center gap-2 w-[72px] cursor-pointer shrink-0">
-                  <input type="checkbox" checked={days[i].enabled} onChange={(e) => setDay(i, { enabled: e.target.checked })}
-                         className="cursor-pointer" />
-                  <span className={days[i].enabled ? 'font-semibold' : 'text-text3'}>{label}</span>
-                </label>
-                {days[i].enabled ? (
-                  <span className="flex items-center gap-1.5">
-                    <input type="time" value={days[i].from} onChange={(e) => setDay(i, { from: e.target.value })}
-                           className="px-2 py-1 text-[12px] rounded-lg border border-border outline-none focus:border-[#F59E0B]" />
-                    <span className="text-text3">a</span>
-                    <input type="time" value={days[i].to} onChange={(e) => setDay(i, { to: e.target.value })}
-                           className="px-2 py-1 text-[12px] rounded-lg border border-border outline-none focus:border-[#F59E0B]" />
-                  </span>
-                ) : (
-                  <span className="text-[11.5px] text-text3">Sin atención</span>
-                )}
-              </div>
-            ))}
-            <label className="flex items-center gap-2 text-[12.5px] pt-2 border-t border-surface2 mt-1">
-              Turnos de
-              <select value={slotMin} onChange={(e) => setSlotMin(Number(e.target.value))}
-                      className="px-2 py-1 text-[12px] rounded-lg border border-border outline-none bg-white cursor-pointer">
-                {DURATIONS.map((d) => <option key={d.min} value={d.min}>{d.label}</option>)}
-              </select>
-            </label>
-          </div>
-        </Modal>
-      )}
-    </>
+      <button onClick={onConfig}
+              className="mt-2 text-[11px] font-semibold text-[#B45309] bg-transparent border-0 cursor-pointer hover:underline p-0">
+        Configurar por persona →
+      </button>
+    </div>
   );
 }
 
@@ -482,8 +402,32 @@ function MonthGrid({ cursor, items, onPickDay, onPickCita }) {
   );
 }
 
-// ── Página Citas — diseño: rail izquierdo + grilla horaria semanal ──
+const TABS = [
+  ['agenda', 'Agenda'],
+  ['calendarios', 'Calendarios'],
+  ['disponibilidad', 'Disponibilidad'],
+];
+
+const SUBTITLES = {
+  agenda: 'Reuniones agendadas desde la bandeja · confirmación automática por WhatsApp',
+  calendarios: 'Links de reserva con distinto fin, equipo y evento de Google Calendar',
+  disponibilidad: 'Horarios de atención por persona · su Google Calendar bloquea lo ocupado',
+};
+
+// ── Página Citas: pestañas Agenda · Calendarios · Disponibilidad ──
 export default function CitasPage() {
+  const { isAdmin, profile } = useAuth();
+  const canManage = isAdmin || Boolean(profile?.can_access_settings);
+  const [tab, setTab] = useState('agenda');
+  const [newCalSignal, setNewCalSignal] = useState(0);
+  const [dispoMemberId, setDispoMemberId] = useState(null);
+
+  // Desde Calendarios: "Configurar disponibilidad por persona →".
+  const goDisponibilidad = (memberId) => {
+    setDispoMemberId(memberId || null);
+    setTab('disponibilidad');
+  };
+
   const [view, setView] = useState('week'); // 'day' | 'week'
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [items, setItems] = useState([]);
@@ -617,31 +561,97 @@ export default function CitasPage() {
     .sort((a, b) => (a.start_at < b.start_at ? -1 : 1));
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto relative">
-      {/* ════ DESKTOP ════ */}
-      <div className="max-md:hidden px-4 py-4 flex flex-col gap-3.5 min-w-[980px]">
-        {/* Header de página */}
+    <div className="h-full min-h-0 flex flex-col relative">
+      {/* ════ Header + pestañas (desktop) ════ */}
+      <div className="max-md:hidden px-4 pt-4 shrink-0">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <div className="text-[17px] font-bold">Citas</div>
-            <div className="text-[12px] text-text3">Reuniones agendadas desde la bandeja · confirmación automática por WhatsApp</div>
+            <div className="text-[12px] text-text3">{SUBTITLES[tab]}</div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> Google Calendar conectado
-            </span>
-            <button onClick={copyPublicLink}
-                    title="Copiar el link público para que los leads agenden solos"
-                    className="h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] flex items-center gap-1.5 transition-colors duration-150">
-              <Link2 size={13} /> {linkCopied ? '✓ Link copiado' : 'Link público de agenda'}
-            </button>
-            <button onClick={() => setNuevaOpen(true)}
-                    className="h-[34px] px-3.5 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">
-              <Plus size={14} /> Nueva cita
-            </button>
+            {tab === 'agenda' && (
+              <>
+                <span className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> Google Calendar conectado
+                </span>
+                <button onClick={copyPublicLink}
+                        title="Copiar el link público para que los leads agenden solos"
+                        className="h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] flex items-center gap-1.5 transition-colors duration-150">
+                  <Link2 size={13} /> {linkCopied ? '✓ Link copiado' : 'Link público de agenda'}
+                </button>
+                <button onClick={() => setNuevaOpen(true)}
+                        className="h-[34px] px-3.5 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">
+                  <Plus size={14} /> Nueva cita
+                </button>
+              </>
+            )}
+            {tab === 'calendarios' && canManage && (
+              <button onClick={() => setNewCalSignal((n) => n + 1)}
+                      className="h-[34px] px-3.5 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shadow-[0_2px_6px_rgba(245,158,11,.3)] transition-colors duration-150">
+                <Plus size={14} /> Nuevo calendario
+              </button>
+            )}
           </div>
         </div>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-surface2 mt-2.5">
+          {TABS.map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+                    className={`px-3.5 pt-2 pb-[9px] text-[12.5px] bg-transparent border-0 cursor-pointer transition-colors duration-150 ${
+                      tab === id ? 'font-bold text-[#B45309]' : 'font-semibold text-text3 hover:text-text2'}`}
+                    style={tab === id ? { boxShadow: 'inset 0 -2px 0 #F59E0B' } : undefined}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
+      {/* ════ Header + chips (mobile) ════ */}
+      <div className="hidden max-md:block shrink-0">
+        <div className="flex items-center px-4 pt-3 pb-2">
+          <span className="text-[18px] font-extrabold tracking-[-0.01em]">Citas</span>
+          {tab === 'calendarios' && canManage && (
+            <button onClick={() => setNewCalSignal((n) => n + 1)}
+                    className="ml-auto w-[34px] h-[34px] rounded-full border-0 bg-[#F59E0B] text-white cursor-pointer flex items-center justify-center shadow-[0_2px_6px_rgba(245,158,11,.35)]">
+              <Plus size={16} strokeWidth={2.5} />
+            </button>
+          )}
+          {tab === 'agenda' && (
+            <button onClick={goToday}
+                    className="ml-auto h-8 px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer">
+              Hoy
+            </button>
+          )}
+        </div>
+        <div className="flex gap-1.5 px-4 pb-3 border-b border-surface2 overflow-x-auto">
+          {TABS.map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+                    className={`px-3.5 py-1.5 rounded-full text-[12px] cursor-pointer shrink-0 transition-colors duration-150 ${
+                      tab === id
+                        ? 'bg-[#FEF0D7] border border-[#F5D9A8] text-[#B45309] font-bold'
+                        : 'bg-white border border-border text-text2 font-medium'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ════ Pestaña Calendarios ════ */}
+      {tab === 'calendarios' && (
+        <CalendariosTab newSignal={newCalSignal} onConfigDisponibilidad={goDisponibilidad} isAdmin={canManage} />
+      )}
+
+      {/* ════ Pestaña Disponibilidad ════ */}
+      {tab === 'disponibilidad' && (
+        <DisponibilidadTab initialMemberId={dispoMemberId} isAdmin={canManage} />
+      )}
+
+      {/* ════ Pestaña Agenda ════ */}
+      {tab === 'agenda' && (
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* ════ DESKTOP ════ */}
+      <div className="max-md:hidden px-4 py-3.5 flex flex-col gap-3.5 min-w-[980px]">
         {/* Toolbar */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <button onClick={goToday}
@@ -704,7 +714,7 @@ export default function CitasPage() {
                 </div>
               )}
             </div>
-            <DisponibilidadCard />
+            <DisponibilidadCard onConfig={() => setTab('disponibilidad')} />
           </div>
 
           {/* Grilla horaria / vista mensual */}
@@ -767,7 +777,13 @@ export default function CitasPage() {
                         <button key={a.id} onClick={() => setSelected(a)}
                                 className="absolute left-1 right-1 rounded-lg text-left px-2 py-1 cursor-pointer overflow-hidden transition-all duration-150 hover:brightness-[0.98]"
                                 style={{ ...blockStyle(a), background: est.bg, border: `1px solid ${est.border}`, borderLeft: `3px solid ${est.bar}` }}>
-                          <div className="text-[10px] font-bold" style={{ color: est.color }}>{timeHM(new Date(a.start_at))}</div>
+                          <div className="text-[10px] font-bold flex items-center gap-1" style={{ color: est.color }}>
+                            {timeHM(new Date(a.start_at))}
+                            {a.calendar && (
+                              <span className="w-[7px] h-[7px] rounded-[2px] ml-auto shrink-0"
+                                    style={{ background: gcalHex(a.calendar.gcal_color_id) }} title={a.calendar.name} />
+                            )}
+                          </div>
                           <div className="text-[10.5px] font-semibold truncate text-text">{a.title}</div>
                           <div className="text-[9.5px] truncate text-text3">{apptName(a)}</div>
                         </button>
@@ -792,17 +808,8 @@ export default function CitasPage() {
 
       {/* ════ MOBILE ════ */}
       <div className="hidden max-md:flex flex-col gap-3 px-3 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[18px] font-extrabold">Citas</div>
-            <div className="text-[11.5px] text-text3 capitalize">
-              {mobileDay.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
-            </div>
-          </div>
-          <button onClick={goToday}
-                  className="h-8 px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer">
-            Hoy
-          </button>
+        <div className="text-[11.5px] text-text3 capitalize px-1">
+          {mobileDay.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
         </div>
 
         {/* Tira semanal */}
@@ -869,6 +876,8 @@ export default function CitasPage() {
           <Plus size={22} />
         </button>
       </div>
+      </div>
+      )}
 
       {selected && <CitaModal appt={selected} onClose={() => setSelected(null)} onChanged={load} />}
       <NuevaCitaModal open={nuevaOpen} onClose={() => setNuevaOpen(false)} onCreated={load} />

@@ -55,6 +55,11 @@ const ASISTIR = [
 
 export default function AgendaPublica() {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+  // Calendario elegido por la URL: /agendar/<slug> (sin slug = el principal).
+  const slug = useMemo(() => {
+    const m = window.location.pathname.match(/^\/agendar\/([a-z0-9-]{1,60})\/?$/i);
+    return m ? m[1].toLowerCase() : null;
+  }, []);
   const [step, setStep] = useState(1);
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [monthsData, setMonthsData] = useState({}); // {key: {days, configured}}
@@ -79,7 +84,7 @@ export default function AgendaPublica() {
     setLoadingMonth(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('agenda-publica', {
-        body: { action: 'slots', year: m.getFullYear(), month: m.getMonth() },
+        body: { action: 'slots', year: m.getFullYear(), month: m.getMonth(), slug },
       });
       if (err || !data?.ok) throw err || new Error(data?.error);
       setMonthsData((prev) => ({ ...prev, [key]: { days: data.days || {}, configured: data.configured } }));
@@ -142,7 +147,7 @@ export default function AgendaPublica() {
     setBooking(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('agenda-publica', {
-        body: { action: 'book', date: selDate, time, name: name.trim(), email: email.trim(), dial, phone, notes: notes.trim() },
+        body: { action: 'book', date: selDate, time, name: name.trim(), email: email.trim(), dial, phone, notes: notes.trim(), slug },
       });
       const code = data?.error || (err ? 'network' : null);
       if (!data?.ok) {
