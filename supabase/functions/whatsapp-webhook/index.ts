@@ -217,10 +217,18 @@ async function handleLabelAssociation(data: any): Promise<void> {
   const next = type === "remove" ? cur.filter((t) => t !== tagId) : (cur.includes(tagId) ? cur : [...cur, tagId]);
   const patch: Record<string, unknown> = {};
   if (next.length !== cur.length) patch.tags = next;
-  // Auto-vincular a cliente si la etiqueta coincide con el nombre de un cliente.
-  if (type !== "remove" && !conv.client_id && tagLabel.trim()) {
-    const { data: client } = await supabase.from("clients").select("id").ilike("name", tagLabel.trim()).maybeSingle();
-    if (client) patch.client_id = client.id;
+  // Auto-vincular a cliente: 1) por alias explícito etiqueta→cliente
+  // (soporte_config.tag_client_aliases, para etiquetas con nombre distinto al
+  // del cliente); 2) si no, por nombre de etiqueta == nombre de cliente.
+  if (type !== "remove" && !conv.client_id) {
+    const cfg = await getCfg();
+    const aliases = ((cfg as any).tag_client_aliases as Record<string, string>) || {};
+    let clientId: string | null = aliases[tagId] || null;
+    if (!clientId && tagLabel.trim()) {
+      const { data: client } = await supabase.from("clients").select("id").ilike("name", tagLabel.trim()).maybeSingle();
+      clientId = client?.id || null;
+    }
+    if (clientId) patch.client_id = clientId;
   }
   if (Object.keys(patch).length) await supabase.from("wa_conversations").update(patch).eq("id", conv.id);
 }
