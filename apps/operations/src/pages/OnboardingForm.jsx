@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Upload, User, MapPin, IdCard, Phone, Wallet } from 'lucide-react';
+import { CheckCircle2, Upload, User, MapPin, IdCard, Phone, Wallet, ShieldCheck, Lock } from 'lucide-react';
 import { supabase } from '@korex/db';
 
 const LOGO = 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d8184c045c2748d55e8.png';
@@ -82,8 +82,34 @@ export default function OnboardingForm() {
           <img src={LOGO} alt="Método Korex" className="h-[40px] w-auto mx-auto mb-4" />
           <h1 className="text-[20px] font-bold text-text">Onboarding del equipo</h1>
           <p className="text-[13px] text-text2 mt-1">
-            Completá tus datos para sumarte a Korex. Es información confidencial, solo la ve el equipo de administración.
+            Completá tus datos para sumarte a Korex.
           </p>
+        </div>
+
+        {/* Cartel de confianza: explica en simple cómo se protegen los datos. */}
+        <div className="bg-green-bg/60 border border-green-600/25 rounded-2xl p-4 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldCheck size={17} className="text-green-700 shrink-0" />
+            <span className="text-[13.5px] font-bold text-green-900">Tus datos están protegidos</span>
+          </div>
+          <ul className="space-y-1.5 text-[12px] text-text2">
+            <li className="flex items-start gap-2">
+              <Lock size={13} className="text-green-700 mt-0.5 shrink-0" />
+              Viajan por una conexión segura y encriptada (el candado 🔒 de tu navegador).
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-700 mt-px">•</span>
+              Solo el equipo de administración de Korex puede verlos.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-700 mt-px">•</span>
+              Se usan únicamente para tu legajo, tus pagos y tu contacto.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-700 mt-px">•</span>
+              Tu documento y tu información no se comparten con nadie más.
+            </li>
+          </ul>
         </div>
 
         <div className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
@@ -178,7 +204,9 @@ export default function OnboardingForm() {
           </div>
         </div>
 
-        <div className="text-center text-[11px] text-text3 mt-6">Método Korex</div>
+        <div className="text-center text-[11px] text-text3 mt-6 flex items-center justify-center gap-1.5">
+          <Lock size={11} /> Información confidencial · Método Korex
+        </div>
       </div>
     </div>
   );
