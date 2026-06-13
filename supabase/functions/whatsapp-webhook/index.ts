@@ -135,7 +135,7 @@ async function fetchGroupInfo(jid: string): Promise<GroupInfo | null> {
     const { data: s } = await supabase
       .from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
     const cfg = (s?.value as Record<string, string> | null) ?? {};
-    const serverUrl = (cfg.server_url || "").replace(/\/$/, "");
+    const serverUrl = (cfg.server_url || "").replace(/[/]+$/, "");
     const apiKey = cfg.evolution_api_key || "";
     const instance = cfg.instance_name || "korex-soporte";
     if (!serverUrl || !apiKey) return null;
@@ -160,6 +160,86 @@ async function fetchGroupInfo(jid: string): Promise<GroupInfo | null> {
   } catch {
     return null;
   }
+}
+
+const TAG_PALETTE = ["#22C55E", "#F59E0B", "#4A67D8", "#E11D48", "#7C3AED", "#0E7490", "#15803D", "#B45309", "#2563EB", "#DC2626", "#8E24AA", "#0891B2"];
+
+// Catálogo de etiquetas del panel (soporte_config.tags).
+async function getTagsCatalog(): Promise<any[]> {
+  const { data } = await supabase.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+  const v = (data?.value as any) || {};
+  return Array.isArray(v.tags) ? v.tags : [];
+}
+async function saveTagsCatalog(tags: any[]): Promise<void> {
+  const { data } = await supabase.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+  const v = (data?.value as any) || {};
+  await supabase.from("app_settings").update({ value: { ...v, tags } }).eq("key", "soporte_config");
+}
+
+// Nombre de una etiqueta de WhatsApp (Evolution) por su id corto.
+async function fetchLabelName(labelId: string): Promise<string | null> {
+  try {
+    const cfg = await getCfg();
+    const serverUrl = (cfg.server_url || "").replace(/[/]+$/, "");
+    if (!serverUrl || !cfg.evolution_api_key) return null;
+    const r = await fetch(`${serverUrl}/label/findLabels/${cfg.instance_name || "korex-soporte"}`,
+      { headers: { apikey: cfg.evolution_api_key }, signal: AbortSignal.timeout(8000) });
+    const arr = await r.json().catch(() => null);
+    const list = Array.isArray(arr) ? arr : (arr?.labels || []);
+    const f = list.find((l: any) => String(l.labelId ?? l.id) === String(labelId) || String(l.id) === String(labelId));
+    return f ? str(f.name) || null : null;
+  } catch { return null; }
+}
+
+// Sincroniza una asociación etiqueta↔chat (labels.association) a la bandeja:
+// agrega/quita el tag en la conversación, crea el tag si falta y, si el nombre
+// del tag coincide con un cliente, vincula la conversación a ese cliente.
+async function handleLabelAssociation(data: any): Promise<void> {
+  const assoc = data?.association || data || {};
+  const chatId = str(assoc.chatId || assoc.chatJid || assoc.remoteJid);
+  const labelId = str(assoc.labelId);
+  const type = str(assoc.type || data?.type).toLowerCase(); // add | remove
+  if (!chatId || !labelId) return;
+  const tagId = `wa-${labelId}`;
+
+  let tags = await getTagsCatalog();
+  let tagLabel = tags.find((t) => t.id === tagId)?.label || "";
+  if (type !== "remove" && !tags.find((t) => t.id === tagId)) {
+    tagLabel = (await fetchLabelName(labelId)) || `Etiqueta ${labelId}`;
+    tags = [...tags, { id: tagId, label: tagLabel, color: TAG_PALETTE[tags.length % TAG_PALETTE.length] }];
+    await saveTagsCatalog(tags);
+  }
+
+  const { data: conv } = await supabase
+    .from("wa_conversations").select("id, tags, client_id").eq("wa_jid", chatId).maybeSingle();
+  if (!conv) return;
+  const cur: string[] = Array.isArray(conv.tags) ? conv.tags : [];
+  const next = type === "remove" ? cur.filter((t) => t !== tagId) : (cur.includes(tagId) ? cur : [...cur, tagId]);
+  const patch: Record<string, unknown> = {};
+  if (next.length !== cur.length) patch.tags = next;
+  // Auto-vincular a cliente si la etiqueta coincide con el nombre de un cliente.
+  if (type !== "remove" && !conv.client_id && tagLabel.trim()) {
+    const { data: client } = await supabase.from("clients").select("id").ilike("name", tagLabel.trim()).maybeSingle();
+    if (client) patch.client_id = client.id;
+  }
+  if (Object.keys(patch).length) await supabase.from("wa_conversations").update(patch).eq("id", conv.id);
+}
+
+// labels.edit: alta/renombre/baja de una etiqueta en el catálogo del panel.
+async function handleLabelEdit(data: any): Promise<void> {
+  const labelId = str(data?.id ?? data?.labelId);
+  if (!labelId) return;
+  const tagId = `wa-${labelId}`;
+  let tags = await getTagsCatalog();
+  if (data?.deleted === true) {
+    tags = tags.filter((t) => t.id !== tagId);
+  } else {
+    const nm = str(data?.name) || `Etiqueta ${labelId}`;
+    const ex = tags.find((t) => t.id === tagId);
+    if (ex) ex.label = nm;
+    else tags = [...tags, { id: tagId, label: nm, color: TAG_PALETTE[tags.length % TAG_PALETTE.length] }];
+  }
+  await saveTagsCatalog(tags);
 }
 
 // Procesa un item de messages.upsert: upsert de conversacion + insert de mensaje.
@@ -340,6 +420,18 @@ Deno.serve(async (req: Request) => {
       }
     }
     return jsonResp(200, { ok: true, processed: processed.length });
+  }
+
+  // Etiquetas de WhatsApp (sincronización automática con la bandeja).
+  if (event === "labels.association") {
+    try { await handleLabelAssociation(Array.isArray(payload.data) ? payload.data[0] : payload.data); }
+    catch (e) { console.error("whatsapp-webhook: labels.association", e); }
+    return jsonResp(200, { ok: true, label: "association" });
+  }
+  if (event === "labels.edit") {
+    try { await handleLabelEdit(Array.isArray(payload.data) ? payload.data[0] : payload.data); }
+    catch (e) { console.error("whatsapp-webhook: labels.edit", e); }
+    return jsonResp(200, { ok: true, label: "edit" });
   }
 
   // Otros eventos: solo log por ahora (connection.update, messages.update, ...).
