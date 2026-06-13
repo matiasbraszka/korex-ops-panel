@@ -44,8 +44,14 @@ export async function sbFetch(path, opts = {}) {
     }
     return null;
   }
-  if (restOpts.method === 'PATCH' || restOpts.method === 'DELETE' || restOpts.method === 'POST') {
-    return true;
+  // Mutaciones: por defecto devolvemos `true` (Prefer return=minimal, sin body).
+  // Si el caller pidió return=representation, devolvemos la(s) fila(s) afectadas
+  // (salvo 204 sin contenido, ej. DELETE minimal).
+  const method = restOpts.method;
+  if (method === 'PATCH' || method === 'DELETE' || method === 'POST') {
+    const wantsBody = String(headers.Prefer || '').includes('return=representation');
+    if (!wantsBody || r.status === 204) return true;
+    return r.json();
   }
   return r.json();
 }
