@@ -1,19 +1,15 @@
-// supabase/functions/citas-recordatorios/index.ts
-// Recordatorios automáticos de citas por WhatsApp. La llama pg_cron cada
-// 10 minutos (net.http_post con x-cron-secret).
+// supabase/functions/citas-recordatorios/index.ts — v5
+// Recordatorios/seguimientos automáticos de citas por WhatsApp. Lo llama
+// pg_cron cada 10 minutos (net.http_post con x-cron-secret).
 //
-// Reglas (pedidas por Matias):
-//   - Recordatorio 24h antes: solo si la cita se agendó con MÁS de 24h de
-//     anticipación (si se agendó el mismo día, no aplica).
-//   - Recordatorio 2h antes: solo si se agendó con más de 2h de anticipación.
-//   - Reagendar resetea ambos (crear-cita pone los sent_at en null).
-//   - Si la cita tiene link de Zoom, va al final del mensaje.
+// v5: los seguimientos son configurables por calendario (booking_calendars.reminders
+// = [{hours_before, message}]). Cada uno se manda una sola vez (se registra en
+// appointments.reminders_sent). Las citas SIN calendario (cargadas a mano en el
+// panel) siguen con la lógica vieja de 24h/2h y las plantillas globales.
+// Además sincroniza el RSVP del invitado contra Google Calendar (la cita queda
+// confirmada solo si el lead aceptó; si el evento se borró, pasa a cancelada).
 //
-// Además sincroniza la asistencia (RSVP) de los invitados por mail contra
-// Google Calendar, así el panel muestra si el prospecto confirmó.
-//
-// verify_jwt: false — auth por secreto compartido (?secret= o x-cron-secret)
-// contra app_settings.soporte_config.cron_secret.
+// verify_jwt: false — auth por secreto compartido (?secret= o x-cron-secret).
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -43,9 +39,9 @@ function jsonResp(status: number, body: unknown): Response {
   });
 }
 
-function resolveTemplate(tpl: string, vars: Record<string, string>): string {
-  return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? "");
-}
+// Plantillas viejas (citas a mano) usan {{var}}; las nuevas por calendario {var}.
+const resolveDouble = (tpl: string, v: Record<string, string>) => tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k] ?? "");
+const resolveSingle = (tpl: string, v: Record<string, string>) => tpl.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? "");
 
 async function sendWhatsAppText(cfg: SoporteConfig, conversation: { id: string; wa_jid: string }, text: string): Promise<boolean> {
   const serverUrl = (cfg.server_url || "").replace(/\/$/, "");
@@ -108,6 +104,15 @@ async function callCalendarScript(cfg: SoporteConfig, payload: Record<string, un
   }
 }
 
+interface ReminderCfg { hours_before: number; message: string }
+function parseReminders(raw: unknown): ReminderCfg[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((r: any) => ({ hours_before: Math.round(Number(r?.hours_before)), message: String(r?.message || "").trim() }))
+    .filter((r) => Number.isFinite(r.hours_before) && r.hours_before > 0 && r.message)
+    .sort((a, b) => a.hours_before - b.hours_before); // imminentes primero
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResp(405, { error: "method_not_allowed" });
 
@@ -121,10 +126,11 @@ Deno.serve(async (req: Request) => {
 
   const now = Date.now();
 
-  // Citas vigentes en las próximas 25 horas, con su conversación.
+  // Citas vigentes en las próximas 25 horas, con conversación y reminders del
+  // calendario (si tiene). Las de hasta 25h cubren el seguimiento de 24h.
   const { data: appts, error } = await admin
     .from("appointments")
-    .select("id, title, start_at, created_at, meeting_link, reminder_24h_sent_at, reminder_2h_sent_at, conversation:wa_conversations(id, wa_jid, wa_profile_name, is_group, contact:contacts(full_name))")
+    .select("id, title, start_at, created_at, meeting_link, reminder_24h_sent_at, reminder_2h_sent_at, reminders_sent, calendar:booking_calendars(reminders), conversation:wa_conversations(id, wa_jid, wa_profile_name, is_group, contact:contacts(full_name))")
     .eq("status", "scheduled")
     .gt("start_at", new Date(now).toISOString())
     .lt("start_at", new Date(now + 25 * H).toISOString())
@@ -139,7 +145,7 @@ Deno.serve(async (req: Request) => {
   const tpl2 = cfg.reminder_2h_template ||
     "Hola {{nombre}}! En un rato, a las {{hora}}, tenemos nuestra reunión. Nos vemos ahí 👋";
 
-  let sent24 = 0, sent2 = 0;
+  let sentCustom = 0, sent24 = 0, sent2 = 0;
   for (const a of appts || []) {
     const conv = a.conversation as unknown as
       { id: string; wa_jid: string; wa_profile_name: string | null; is_group: boolean; contact: { full_name: string | null } | null } | null;
@@ -156,27 +162,48 @@ Deno.serve(async (req: Request) => {
       nombre: fullName.split(" ")[0] || "",
       fecha: start.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: TZ }),
       hora: start.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: TZ }),
+      zoom: a.meeting_link || "",
     };
     const withLink = (text: string) =>
-      a.meeting_link ? `${text}\n\n🔗 Link de la reunión: ${a.meeting_link}` : text;
+      a.meeting_link && !text.includes(a.meeting_link) ? `${text}\n\n🔗 Link de la reunión: ${a.meeting_link}` : text;
 
-    // 2h antes (tiene prioridad si ambos están pendientes a esta altura).
+    const calReminders = parseReminders((a.calendar as any)?.reminders);
+
+    // ── Citas con calendario: seguimientos configurables ──
+    if (calReminders.length) {
+      const sentList: number[] = Array.isArray(a.reminders_sent) ? a.reminders_sent.map(Number) : [];
+      // Umbrales ya cruzados (untilStart <= hb) y todavía no enviados.
+      const due = calReminders.filter((r) => untilStart <= r.hours_before * H && !sentList.includes(r.hours_before));
+      if (!due.length) continue;
+      // El más imminente de los vencidos; los más lejanos cruzados se dan por
+      // superados (no se mandan tarde), pero se marcan como enviados.
+      const pick = due[0]; // due viene ordenado asc por hours_before
+      const supersede = due.map((r) => r.hours_before);
+      let ok = false;
+      if (noticeMs > pick.hours_before * H) {
+        ok = await sendWhatsAppText(cfg, conv, withLink(resolveSingle(pick.message, vars)));
+      }
+      // Marcar enviados (o superados) para no reintentar.
+      const newSent = [...new Set([...sentList, ...supersede])];
+      await admin.from("appointments").update({ reminders_sent: newSent }).eq("id", a.id);
+      if (ok) sentCustom++;
+      continue;
+    }
+
+    // ── Citas a mano (sin calendario): lógica vieja 24h/2h ──
     if (untilStart <= 2 * H && !a.reminder_2h_sent_at && noticeMs > 2 * H) {
-      const ok = await sendWhatsAppText(cfg, conv, withLink(resolveTemplate(tpl2, vars)));
+      const ok = await sendWhatsAppText(cfg, conv, withLink(resolveDouble(tpl2, vars)));
       if (ok) {
         await admin.from("appointments").update({
           reminder_2h_sent_at: new Date().toISOString(),
-          // Si el de 24h nunca salió y ya estamos a 2h, se da por superado.
           ...(a.reminder_24h_sent_at ? {} : { reminder_24h_sent_at: new Date().toISOString() }),
         }).eq("id", a.id);
         sent2++;
       }
       continue;
     }
-
-    // 24h antes — solo si se agendó con más de 24h de anticipación.
     if (untilStart <= 24 * H && untilStart > 2 * H && !a.reminder_24h_sent_at && noticeMs > 24 * H) {
-      const ok = await sendWhatsAppText(cfg, conv, withLink(resolveTemplate(tpl24, vars)));
+      const ok = await sendWhatsAppText(cfg, conv, withLink(resolveDouble(tpl24, vars)));
       if (ok) {
         await admin.from("appointments").update({ reminder_24h_sent_at: new Date().toISOString() }).eq("id", a.id);
         sent24++;
@@ -184,8 +211,8 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── Sync contra Calendar: eventos borrados → cita cancelada; RSVP de
-  // invitados → rsvp_status ──
+  // ── Sync contra Calendar: eventos borrados → cita cancelada; RSVP del
+  // invitado → rsvp_status (la cita queda confirmada solo si el lead aceptó) ──
   let rsvpChanged = 0;
   let cancelledSynced = 0;
   const { data: upcoming } = await admin
@@ -199,7 +226,6 @@ Deno.serve(async (req: Request) => {
   for (const a of upcoming || []) {
     const res = await callCalendarScript(cfg, { action: "get_rsvp", eventId: a.gcal_event_id });
     if (res?.error === "not_found") {
-      // La reunión fue borrada/rechazada directamente en Google Calendar.
       await admin.from("appointments").update({ status: "cancelled" }).eq("id", a.id);
       cancelledSynced++;
       continue;
@@ -209,12 +235,10 @@ Deno.serve(async (req: Request) => {
       .find((g) => g.email?.toLowerCase() === String(a.invite_email).toLowerCase());
     const status = guest ? (RSVP_MAP[guest.status] || "needs_action") : null;
     if (status && status !== a.rsvp_status) {
-      // No degradar a "pendiente" una cita ya confirmada (reservas públicas).
-      if (status === "needs_action" && a.rsvp_status === "accepted") continue;
       await admin.from("appointments").update({ rsvp_status: status }).eq("id", a.id);
       rsvpChanged++;
     }
   }
 
-  return jsonResp(200, { ok: true, sent_24h: sent24, sent_2h: sent2, rsvp_changed: rsvpChanged, cancelled_synced: cancelledSynced });
+  return jsonResp(200, { ok: true, sent_custom: sentCustom, sent_24h: sent24, sent_2h: sent2, rsvp_changed: rsvpChanged, cancelled_synced: cancelledSynced });
 });

@@ -683,10 +683,8 @@ export default function CitasPage() {
         </div>
 
         <div className="flex gap-3.5 items-start">
-          {/* Rail izquierdo */}
+          {/* Rail izquierdo — solo "Próximas" */}
           <div className="w-[264px] shrink-0 flex flex-col gap-3">
-            <MiniMonth cursor={cursor} dots={dots} onMoveMonth={moveMonth}
-                       onPickDay={(d) => { setCursor(new Date(d)); setView('day'); }} />
             <div className="rounded-xl border border-border bg-white p-3">
               <div className="text-[10px] font-bold tracking-widest text-text3 uppercase mb-2">Próximas</div>
               {upcoming.length === 0 ? (
@@ -714,7 +712,6 @@ export default function CitasPage() {
                 </div>
               )}
             </div>
-            <DisponibilidadCard onConfig={() => setTab('disponibilidad')} />
           </div>
 
           {/* Grilla horaria / vista mensual */}

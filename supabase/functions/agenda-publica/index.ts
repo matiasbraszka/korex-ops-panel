@@ -1,4 +1,7 @@
-// supabase/functions/agenda-publica/index.ts — v6
+// supabase/functions/agenda-publica/index.ts — v7
+// v7: la reserva nace PENDIENTE (rsvp needs_action); pasa a confirmada cuando
+// el lead acepta en Google. La confirmación de WhatsApp aclara la zona horaria
+// con la ciudad (no solo "local"). Mensaje de confirmación por calendario.
 // v6: el anfitrión visible en la página sale de un miembro elegido
 // (host_member_id) → su nombre y foto (host_avatar).
 // v5: el calendario puede tener franjas horarias propias (availability); si
@@ -94,6 +97,13 @@ interface BookingCalendar {
   // las de los miembros. Mismo formato que team_members.availability.
   availability: AvailabilityObj | null;
   host_member_id: string | null;
+  confirmation_template: string | null;
+}
+
+// Limpia un nombre antes de guardarlo / mandarlo a Google Contacts: quita el
+// carácter de reemplazo (�) y caracteres de control que ensucian la agenda.
+function cleanName(s: string): string {
+  return Array.from(String(s || "")).filter((c) => c !== String.fromCharCode(0xFFFD) && c.charCodeAt(0) >= 32).join("").replace(/ +/g, " ").trim();
 }
 
 type AvailabilityObj = {
@@ -156,7 +166,7 @@ async function getCfg(): Promise<Cfg> {
 // Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
 async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
   let q = admin.from("booking_calendars")
-    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions, availability, host_member_id")
+    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions, availability, host_member_id, confirmation_template")
     .eq("active", true);
   if (slug) q = q.eq("slug", slug);
   else q = q.order("created_at", { ascending: true }).limit(1);
@@ -501,7 +511,7 @@ Deno.serve(async (req: Request) => {
     if (!cal || !configured) return jsonResp(409, { error: "not_configured" });
     const date = String(body.date || "");
     const time = String(body.time || "");
-    const name = String(body.name || "").trim().slice(0, 80);
+    const name = cleanName(String(body.name || "")).slice(0, 80);
     const email = String(body.email || "").trim().toLowerCase().slice(0, 120);
     const dial = String(body.dial || "+54");
     const phone = String(body.phone || "");
@@ -617,9 +627,9 @@ Deno.serve(async (req: Request) => {
       meeting_link: meetingLink,
       zoom_meeting_id: zoom?.meetingId ?? null,
       invite_email: email,
-      // Reserva pública: damos por confirmada nuestra asistencia (verde en el
-      // panel). El sync de RSVP no la baja a pendiente (ver crear-cita).
-      rsvp_status: "accepted",
+      // Nace PENDIENTE: pasa a confirmada cuando el lead acepta en Google
+      // (lo sincroniza crear-cita/citas-recordatorios).
+      rsvp_status: "needs_action",
       calendar_id: cal.id,
       member_ids: cal.member_ids,
       created_by: null,
@@ -640,18 +650,22 @@ Deno.serve(async (req: Request) => {
       fecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: leadTz });
       horaLocal = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: leadTz }).format(slotDate);
       const parts = new Intl.DateTimeFormat("es-AR", { timeZoneName: "shortOffset", timeZone: leadTz }).formatToParts(slotDate);
-      zonaLabel = parts.find((p) => p.type === "timeZoneName")?.value || "GMT-3";
+      const offset = parts.find((p) => p.type === "timeZoneName")?.value || "GMT-3";
+      const city = leadTz.split("/").pop()?.replace(/_/g, " ") || "Argentina";
+      // Zona horaria explícita (no solo "local"): "(hora de Buenos Aires, GMT-3)".
+      zonaLabel = `${city}, ${offset}`;
     } catch {
       fecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" });
       horaLocal = time;
-      zonaLabel = "GMT-3";
+      zonaLabel = "Argentina, GMT-3";
     }
-    const tpl = pub.confirmation_template || "Hola {nombre}! Confirmamos tu reunión para el {fecha} a las {hora}{zona}.";
+    // Mensaje de confirmación: el del calendario o, si no, el general.
+    const tpl = cal.confirmation_template || pub.confirmation_template || "Hola {nombre}! Confirmamos tu reunión para el {fecha} a las {hora}{zona}.";
     let confirmText = tpl
       .replaceAll("{nombre}", name.split(" ")[0])
       .replaceAll("{fecha}", fecha)
       .replaceAll("{hora}", horaLocal)
-      .replaceAll("{zona}", ` (hora local, ${zonaLabel})`);
+      .replaceAll("{zona}", ` (hora de ${zonaLabel})`);
     if (meetingLink) confirmText += `\n\n🔗 Link de la reunión: ${meetingLink}`;
     let waSent = false;
     if (convId) waSent = await sendWhatsApp(cfg, { id: convId, wa_jid: waJid }, confirmText);

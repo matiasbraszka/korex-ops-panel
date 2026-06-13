@@ -101,6 +101,12 @@ const DEFAULT_INSTRUCTIONS = [
   'Si tienes socios, también deben participar de la reunión; de lo contrario, deberemos cancelarla.',
 ];
 
+const DEFAULT_CONFIRMATION = 'Hola {nombre}! Confirmamos tu reunión para el {fecha} a las {hora}{zona}. Cualquier cosa avisame por acá.';
+const DEFAULT_REMINDERS = [
+  { hours_before: 24, message: 'Hola {nombre}! Te recuerdo que mañana, el {fecha} a las {hora}, tenemos nuestra reunión. Te espero 👍' },
+  { hours_before: 2, message: 'Hola {nombre}! En un rato, a las {hora}, tenemos nuestra reunión. Nos vemos ahí 👋' },
+];
+
 const NEW_DRAFT = {
   id: null, slug: '', name: '', purpose: 'Ventas', purpose_color: 'amber', duration_min: 30,
   gcal_title_template: '', gcal_color_id: '7', member_ids: [], active: true,
@@ -108,6 +114,8 @@ const NEW_DRAFT = {
   questions: [{ id: 'q1', label: '¿Qué te gustaría resolver?', type: 'text', required: false, options: [] }],
   booking_window_days: 60, min_notice_hours: 2,
   confirm_instructions: [...DEFAULT_INSTRUCTIONS],
+  confirmation_template: DEFAULT_CONFIRMATION,
+  reminders: DEFAULT_REMINDERS.map((r) => ({ ...r })),
 };
 
 let qSeq = 0;
@@ -137,6 +145,8 @@ function draftFromCal(cal) {
     booking_window_days: cal.booking_window_days ?? 60,
     min_notice_hours: cal.min_notice_hours ?? 2,
     confirm_instructions: Array.isArray(cal.confirm_instructions) ? [...cal.confirm_instructions] : [],
+    confirmation_template: cal.confirmation_template || '',
+    reminders: Array.isArray(cal.reminders) ? cal.reminders.map((r) => ({ hours_before: r.hours_before, message: r.message || '' })) : [],
     use_own_hours: weekHasEnabled(availabilityDays),
     availabilityDays,
   };
@@ -262,6 +272,11 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const addInstruction = () => set({ confirm_instructions: [...draft.confirm_instructions, ''] });
   const removeInstruction = (i) => set({ confirm_instructions: draft.confirm_instructions.filter((_, j) => j !== i) });
 
+  // ── Mensajes y seguimientos ──
+  const setReminder = (i, patch) => set({ reminders: draft.reminders.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const addReminder = () => set({ reminders: [...draft.reminders, { hours_before: 1, message: '' }] });
+  const removeReminder = (i) => set({ reminders: draft.reminders.filter((_, j) => j !== i) });
+
   // ── Franjas horarias propias del calendario ──
   const setAvailDay = (i, patch) => set({ availabilityDays: { ...draft.availabilityDays, [i]: { ...draft.availabilityDays[i], ...patch } } });
   const toggleAvailDay = (i, on) => setAvailDay(i, {
@@ -332,6 +347,12 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
       confirm_instructions: draft.confirm_instructions.map((s) => s.trim()).filter(Boolean),
       // Franjas propias del calendario: null si no se usan (toma solo las del equipo).
       availability: draft.use_own_hours ? availabilityPayload(draft.availabilityDays) : null,
+      // Mensajes: confirmación + seguimientos (limpios y ordenados).
+      confirmation_template: draft.confirmation_template?.trim() || null,
+      reminders: draft.reminders
+        .map((r) => ({ hours_before: Math.max(1, Math.round(Number(r.hours_before) || 0)), message: r.message.trim() }))
+        .filter((r) => r.hours_before > 0 && r.message)
+        .sort((a, b) => b.hours_before - a.hours_before),
     };
     setSaving(true);
     try {
@@ -816,6 +837,52 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
                 <Plus size={13} /> Agregar instrucción
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Mensajes y seguimientos por WhatsApp */}
+        <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+          <span className={mobile ? 'text-[12px] font-semibold text-[#3D4659]' : 'text-[10px] font-bold tracking-[0.1em] text-text3'}>
+            {mobile ? 'Mensajes y seguimientos' : 'MENSAJES Y SEGUIMIENTOS'}
+          </span>
+          <label className="flex flex-col gap-[5px]">
+            <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Mensaje al agendar (ni bien reserva)</span>
+            <textarea value={draft.confirmation_template || ''} onChange={(e) => set({ confirmation_template: e.target.value })}
+                      placeholder={DEFAULT_CONFIRMATION} rows={2} disabled={!isAdmin}
+                      className="rounded-[10px] text-[12.5px] py-2 border border-border px-3 outline-none focus:border-[#F59E0B] resize-y transition-colors" />
+            <span className="text-[10.5px] text-text3">Usás <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{nombre}'}</b> <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{fecha}'}</b> <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{hora}'}</b> <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{zona}'}</b>. El link de Zoom se agrega solo.</span>
+          </label>
+
+          <div className="flex flex-col gap-1.5 pt-1">
+            <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Seguimientos antes de la reunión</span>
+            {draft.reminders.map((r, i) => (
+              <div key={i} className="rounded-xl border border-border bg-surface2/40 p-3 flex flex-col gap-2">
+                <span className="flex items-center gap-2">
+                  <input type="number" min={1} max={336} value={r.hours_before}
+                         onChange={(e) => setReminder(i, { hours_before: e.target.value })} disabled={!isAdmin}
+                         className="h-8 w-[68px] rounded-lg border border-border px-2.5 text-[12.5px] bg-white outline-none focus:border-[#F59E0B]" />
+                  <span className="text-[12px] text-text2">horas antes</span>
+                  {isAdmin && (
+                    <button onClick={() => removeReminder(i)} className="ml-auto bg-transparent border-0 cursor-pointer p-1 text-text3 hover:text-[#DC2626]">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </span>
+                <textarea value={r.message} onChange={(e) => setReminder(i, { message: e.target.value })}
+                          placeholder="Texto del seguimiento…" rows={2} disabled={!isAdmin}
+                          className="rounded-[10px] text-[12.5px] py-2 border border-border px-3 outline-none focus:border-[#F59E0B] resize-y transition-colors" />
+              </div>
+            ))}
+            {draft.reminders.length === 0 && (
+              <span className="text-[11.5px] text-text3 italic">Sin seguimientos: solo se manda el mensaje al agendar.</span>
+            )}
+            {isAdmin && draft.reminders.length < 6 && (
+              <button onClick={addReminder}
+                      className="self-start h-8 px-3 rounded-[10px] border border-dashed border-[#D0D5DD] bg-transparent text-[12px] font-semibold text-text3 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] transition-colors duration-150 flex items-center gap-1.5">
+                <Plus size={13} /> Agregar seguimiento
+              </button>
+            )}
+            <span className="text-[10.5px] text-text3">Cada seguimiento se manda una vez, esas horas antes de la reunión. Variables: <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{nombre}'}</b> <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{fecha}'}</b> <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{hora}'}</b> <b className="font-semibold text-[#B45309] bg-[#FEF0D7] rounded px-1">{'{zoom}'}</b>.</span>
           </div>
         </div>
 

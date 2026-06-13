@@ -261,9 +261,7 @@ async function syncRsvpForConversation(cfg: SoporteConfig, conversationId: strin
       .find((g) => g.email?.toLowerCase() === String(a.invite_email).toLowerCase());
     const status = guest ? (RSVP_MAP[guest.status] || "needs_action") : null;
     if (status && status !== a.rsvp_status) {
-      // No degradar a "pendiente" una cita ya confirmada (p.ej. reservas de la
-      // agenda pública nacen confirmadas; el lead no clickeó el mail todavía).
-      if (status === "needs_action" && a.rsvp_status === "accepted") continue;
+      // El chip refleja la asistencia del lead: confirmada solo si aceptó.
       await admin.from("appointments").update({ rsvp_status: status }).eq("id", a.id);
       changed++;
     }
@@ -345,6 +343,7 @@ Deno.serve(async (req: Request) => {
       end_at: endAt,
       reminder_24h_sent_at: null,
       reminder_2h_sent_at: null,
+      reminders_sent: [],
     }).eq("id", id).select("*").single();
     if (updErr) {
       console.error("crear-cita: error actualizando appointment", updErr);
