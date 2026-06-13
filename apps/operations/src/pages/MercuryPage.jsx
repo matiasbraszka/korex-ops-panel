@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
-import { Landmark, CreditCard, AlertTriangle, CheckCircle2, RefreshCw, Users, Wallet, PiggyBank, Megaphone } from 'lucide-react';
+import { Landmark, CreditCard, AlertTriangle, CheckCircle2, RefreshCw, Users, Wallet, PiggyBank, Megaphone, ArrowDownCircle } from 'lucide-react';
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 function money(amount, currency = 'USD') {
@@ -50,6 +50,27 @@ const CAT_STYLE = {
   Interno:           { bg: '#F1F5F9', color: '#64748B' },
 };
 
+// Colores por categoría de egreso.
+const EGRESO_STYLE = {
+  'Publicidad (Meta)':               { bg: '#EEF2FF', color: '#4F5BD5' },
+  'Software':                        { bg: '#ECFEFF', color: '#0E7490' },
+  'Pagos / transferencias externas': { bg: '#FEF3C7', color: '#B45309' },
+  'Transferencias internas':         { bg: '#F1F5F9', color: '#64748B' },
+  'Pago tarjeta de crédito':         { bg: '#F5F3FF', color: '#7C3AED' },
+  'Comisiones y fees':               { bg: '#FFE4E6', color: '#BE123C' },
+  'Otros gastos con tarjeta':        { bg: '#ECFDF5', color: '#15803D' },
+  'Otros':                           { bg: '#F1F5F9', color: '#475569' },
+};
+const egStyle = (c) => EGRESO_STYLE[c] || EGRESO_STYLE['Otros'];
+
+// Período → fecha "desde" (ISO) para filtrar egresos. null = todo.
+function sinceOf(period) {
+  const now = new Date();
+  if (period === 'mes') return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  if (period === '30d') return new Date(now.getTime() - 30 * 86400000).toISOString();
+  return null;
+}
+
 export default function MercuryPage() {
   const { currentUser } = useApp();
   const [accounts, setAccounts] = useState([]);
@@ -60,6 +81,11 @@ export default function MercuryPage() {
   const [tab, setTab] = useState('fondos');
   const [hideZero, setHideZero] = useState(true);
   const [metaByAccount, setMetaByAccount] = useState({}); // account_id -> gasto Meta (anuncios)
+  // Egresos (gastos categorizados)
+  const [egresos, setEgresos] = useState([]);
+  const [egPeriod, setEgPeriod] = useState('mes');     // mes | 30d | todo
+  const [egCat, setEgCat] = useState(null);            // categoría seleccionada (filtro)
+  const [egLoading, setEgLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +115,46 @@ export default function MercuryPage() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [load]);
+
+  // Carga de egresos (vista mercury_egresos) según el período elegido.
+  const loadEgresos = useCallback(async (period) => {
+    setEgLoading(true);
+    let q = supabase.from('mercury_egresos')
+      .select('id, fund_label, category, counterparty_name, amount, currency, tx_created_at, kind')
+      .order('tx_created_at', { ascending: false })
+      .limit(1000);
+    const since = sinceOf(period);
+    if (since) q = q.gte('tx_created_at', since);
+    const { data } = await q;
+    setEgresos(data || []);
+    setEgLoading(false);
+  }, []);
+
+  // Cargar egresos al entrar a la pestaña o cambiar el período.
+  useEffect(() => {
+    if (tab === 'egresos') loadEgresos(egPeriod);
+  }, [tab, egPeriod, loadEgresos]);
+
+  // Resumen por categoría + totales del período.
+  const egSummary = useMemo(() => {
+    const map = new Map();
+    let total = 0, real = 0;
+    for (const e of egresos) {
+      const amt = Number(e.amount) || 0;
+      if (!map.has(e.category)) map.set(e.category, { category: e.category, total: 0, count: 0 });
+      const c = map.get(e.category);
+      c.total += amt; c.count += 1;
+      total += amt;
+      if (e.category !== 'Transferencias internas') real += amt; // gasto que sale de Korex
+    }
+    const cats = [...map.values()].sort((a, b) => b.total - a.total);
+    return { cats, total, real };
+  }, [egresos]);
+
+  const egVisible = useMemo(
+    () => (egCat ? egresos.filter((e) => e.category === egCat) : egresos),
+    [egresos, egCat],
+  );
 
   const fundName = (a) => (a?.nickname || a?.name || a?.id || '—');
   const accountById = (id) => accounts.find((a) => a.id === id);
@@ -256,6 +322,7 @@ export default function MercuryPage() {
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {[
           { id: 'fondos', label: 'Fondos', count: accounts.length },
+          { id: 'egresos', label: 'Egresos', count: 0 },
           { id: 'fallidos', label: 'Pagos fallidos', count: pending.length, alert: pending.length > 0 },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -312,6 +379,84 @@ export default function MercuryPage() {
               );
             })}
           </div>
+        </div>
+      ) : tab === 'egresos' ? (
+        <div>
+          {/* Selector de período */}
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <div className="inline-flex rounded-lg border border-border overflow-hidden">
+              {[{ id: 'mes', label: 'Este mes' }, { id: '30d', label: 'Últimos 30 días' }, { id: 'todo', label: 'Todo' }].map((p) => (
+                <button key={p.id} onClick={() => { setEgPeriod(p.id); setEgCat(null); }}
+                  className="text-[12px] font-semibold px-3 py-1.5 cursor-pointer border-0"
+                  style={{ background: egPeriod === p.id ? 'var(--color-blue)' : '#fff', color: egPeriod === p.id ? '#fff' : 'var(--color-text2)' }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="text-right">
+              <div className="text-[12px] text-text3">Gasto real (sin transferencias internas)</div>
+              <div className="text-[20px] font-extrabold text-text leading-tight">{money(egSummary.real)}</div>
+            </div>
+          </div>
+
+          {egLoading ? (
+            <div className="text-text3 text-center py-12 text-sm">Cargando egresos…</div>
+          ) : egresos.length === 0 ? (
+            <div className="text-[13px] text-text3 border border-dashed border-border rounded-xl p-6 text-center">
+              No hay egresos en este período.
+            </div>
+          ) : (
+            <>
+              {/* Resumen por categoría (clickeable para filtrar) */}
+              <div className="grid grid-cols-3 max-md:grid-cols-2 gap-2 mb-4">
+                {egSummary.cats.map((c) => {
+                  const st = egStyle(c.category);
+                  const on = egCat === c.category;
+                  return (
+                    <button key={c.category} onClick={() => setEgCat(on ? null : c.category)}
+                      className="text-left rounded-xl border p-3 cursor-pointer transition-all"
+                      style={{ borderColor: on ? st.color : 'var(--color-border)', background: on ? st.bg : '#fff' }}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: st.color }} />
+                        <span className="text-[11.5px] font-semibold truncate" style={{ color: st.color }}>{c.category}</span>
+                      </div>
+                      <div className="text-[16px] font-bold text-text mt-1">{money(c.total)}</div>
+                      <div className="text-[10.5px] text-text3">{c.count} mov.</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Listado de egresos */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[12px] font-bold text-text3 uppercase tracking-wide">
+                  {egCat ? `Egresos · ${egCat}` : 'Todos los egresos'} ({egVisible.length})
+                </span>
+                {egCat && (
+                  <button onClick={() => setEgCat(null)} className="text-[12px] text-blue bg-transparent border-0 cursor-pointer">Ver todos</button>
+                )}
+              </div>
+              <div className="border border-border rounded-xl bg-white overflow-hidden">
+                {egVisible.slice(0, 300).map((e) => {
+                  const st = egStyle(e.category);
+                  return (
+                    <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-surface2">
+                      <ArrowDownCircle size={15} className="text-text3 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold text-text truncate">{e.counterparty_name || 'Movimiento'}</div>
+                        <div className="text-[11px] text-text3 truncate">{e.fund_label || '—'} · {fmtDate(e.tx_created_at)}</div>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-px rounded-full shrink-0 max-md:hidden" style={{ background: st.bg, color: st.color }}>{e.category}</span>
+                      <span className="text-[13.5px] font-bold text-text shrink-0 w-[110px] text-right">{money(e.amount, e.currency)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {egVisible.length > 300 && (
+                <div className="text-[11px] text-text3 text-center mt-2">Mostrando los 300 más recientes de {egVisible.length}.</div>
+              )}
+            </>
+          )}
         </div>
       ) : (
         <div>
