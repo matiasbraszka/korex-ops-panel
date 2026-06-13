@@ -16,14 +16,16 @@ const esc = (s) => String(s || '')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 // Nombre/descripcion del calendario por slug (o el principal activo si no hay).
+// Vía RPC agenda_calendar_meta (SECURITY DEFINER) porque la tabla tiene RLS
+// solo para usuarios autenticados; el RPC expone solo nombre+descripción.
 async function getCalendar(slug) {
   if (!SB_URL || !SB_KEY) return null;
   try {
-    const base = `${SB_URL}/rest/v1/booking_calendars?select=name,description&active=eq.true`;
-    const url = slug
-      ? `${base}&slug=eq.${encodeURIComponent(slug)}&limit=1`
-      : `${base}&order=created_at.asc&limit=1`;
-    const r = await fetch(url, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/agenda_calendar_meta`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_slug: slug || null }),
+    });
     if (!r.ok) return null;
     const rows = await r.json();
     return Array.isArray(rows) && rows[0] ? rows[0] : null;
