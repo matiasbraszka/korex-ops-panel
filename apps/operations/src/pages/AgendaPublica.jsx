@@ -71,32 +71,60 @@ export default function AgendaPublica() {
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(null);
 
-  // Zona horaria del visitante: los horarios se muestran en SU hora local
-  // (el backend los calcula en hora de Argentina y acá los convertimos).
-  const visitorTz = useMemo(() => {
+  // Zona horaria: se detecta la del visitante, pero puede cambiarla a mano
+  // (ej. agenda desde otro país y prefiere ver los horarios en otra zona).
+  // El backend calcula todo en hora de Argentina y acá lo convertimos.
+  const detectedTz = useMemo(() => {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Argentina/Buenos_Aires'; }
     catch { return 'America/Argentina/Buenos_Aires'; }
   }, []);
-  const sameAsArg = useMemo(() => { try { return new Date().getTimezoneOffset() === 180; } catch { return true; } }, []);
-  const tzLabel = useMemo(() => {
+  const [tz, setTz] = useState(detectedTz);
+  const offsetLabelOf = useCallback((zone) => {
     try {
-      const parts = new Intl.DateTimeFormat('es-AR', { timeZone: visitorTz, timeZoneName: 'shortOffset' }).formatToParts(new Date());
-      return parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT-3';
-    } catch { return 'GMT-3'; }
-  }, [visitorTz]);
+      const parts = new Intl.DateTimeFormat('es-AR', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+      return parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT';
+    } catch { return 'GMT'; }
+  }, []);
+  const tzLabel = useMemo(() => offsetLabelOf(tz), [tz, offsetLabelOf]);
+  const sameAsArg = useMemo(() => tz === 'America/Argentina/Buenos_Aires' || tzLabel === 'GMT-3', [tz, tzLabel]);
   const fmtLocalTime = useMemo(
-    () => new Intl.DateTimeFormat('es-AR', { timeZone: visitorTz, hour: '2-digit', minute: '2-digit', hour12: false }),
-    [visitorTz],
+    () => new Intl.DateTimeFormat('es-AR', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }),
+    [tz],
   );
-  // Hora local del visitante para un slot argentino (date 'YYYY-MM-DD', time 'HH:MM').
+  // Hora del visitante para un slot argentino (date 'YYYY-MM-DD', time 'HH:MM').
   const localTime = useCallback((argDate, argTime) => {
     if (!argDate || !argTime) return argTime || '';
     try { return fmtLocalTime.format(new Date(`${argDate}T${argTime}:00-03:00`)); }
     catch { return argTime; }
   }, [fmtLocalTime]);
+  // Zonas frecuentes (LatAm + España) para el selector manual; antepone la
+  // zona detectada del visitante si no está en la lista.
+  const tzOptions = useMemo(() => {
+    const base = [
+      ['America/Argentina/Buenos_Aires', 'Argentina'],
+      ['America/Montevideo', 'Uruguay'],
+      ['America/Santiago', 'Chile'],
+      ['America/Asuncion', 'Paraguay'],
+      ['America/La_Paz', 'Bolivia'],
+      ['America/Sao_Paulo', 'Brasil'],
+      ['America/Bogota', 'Colombia'],
+      ['America/Lima', 'Perú'],
+      ['America/Guayaquil', 'Ecuador'],
+      ['America/Caracas', 'Venezuela'],
+      ['America/Mexico_City', 'México'],
+      ['America/Panama', 'Panamá'],
+      ['America/Costa_Rica', 'Costa Rica'],
+      ['America/Santo_Domingo', 'Rep. Dominicana'],
+      ['America/New_York', 'EE.UU. (Este)'],
+      ['America/Los_Angeles', 'EE.UU. (Pacífico)'],
+      ['Europe/Madrid', 'España'],
+    ];
+    if (!base.some(([z]) => z === detectedTz)) base.unshift([detectedTz, 'Tu zona']);
+    return base.map(([zone, label]) => [zone, `${label} (${offsetLabelOf(zone)})`]);
+  }, [detectedTz, offsetLabelOf]);
   const tzNote = sameAsArg
     ? '🇦🇷 Horarios en hora de Argentina (GMT-3)'
-    : `🕐 Horarios en tu hora local (${tzLabel})`;
+    : `🕐 Horarios en hora local (${tzLabel})`;
 
   // ── Slots del mes (cacheados por mes) ──
   const loadMonth = useCallback(async (m, force = false) => {
@@ -187,7 +215,7 @@ export default function AgendaPublica() {
       const { data, error: err } = await supabase.functions.invoke('agenda-publica', {
         body: {
           action: 'book', date: selDate, time, name: name.trim(), email: email.trim(),
-          dial, phone, answers: answersPayload, tz: visitorTz, slug,
+          dial, phone, answers: answersPayload, tz, slug,
         },
       });
       const code = data?.error || (err ? 'network' : null);
@@ -314,7 +342,17 @@ export default function AgendaPublica() {
           {/* ════ PASO 1 ════ */}
           {step === 1 && (
             <div className="flex flex-col gap-3.5" style={{ animation: 'stepIn .25s ease' }}>
-              <span className="text-[15px] font-bold">Elige día y horario</span>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[15px] font-bold">Elige día y horario</span>
+                {/* Selector de zona horaria (editable por quien agenda) */}
+                <label className="flex items-center gap-1.5 text-[11.5px] text-[#5D6678]">
+                  <span className="text-[#98A2B3]">Zona horaria:</span>
+                  <select value={tz} onChange={(e) => setTz(e.target.value)} title="Cambiá la zona horaria"
+                          className="max-w-[185px] h-8 rounded-lg border-[1.5px] border-[#E2E5EB] bg-white px-2 text-[12px] font-semibold text-[#3461D9] outline-none cursor-pointer transition-colors duration-150 focus:border-[#4878FF]">
+                    {tzOptions.map(([z, l]) => <option key={z} value={z}>{l}</option>)}
+                  </select>
+                </label>
+              </div>
 
               <div className="flex flex-wrap gap-[22px]">
                 {/* calendario (mobile: colapsa a tira semanal tras elegir día) */}
@@ -356,7 +394,7 @@ export default function AgendaPublica() {
                   </div>
                   <span className="text-[11px] text-[#98A2B3] flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-[#EEF3FF] border-[1.5px] border-[#4878FF] inline-block" />
-                    {loadingMonth ? 'Cargando horarios…' : 'Días con horarios disponibles · zona horaria Argentina (GMT-3)'}
+                    {loadingMonth ? 'Cargando horarios…' : `Días con horarios disponibles · ${sameAsArg ? 'hora de Argentina' : 'hora local'} (${tzLabel})`}
                   </span>
                   {!cur.configured && !loadingMonth && (
                     <span className="text-[12px] text-[#98A2B3]">Por ahora no hay horarios publicados. Vuelve a intentarlo más tarde.</span>

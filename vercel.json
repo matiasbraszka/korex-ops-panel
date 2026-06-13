@@ -3,6 +3,8 @@
   "outputDirectory": "apps/operations/dist",
   "framework": null,
   "rewrites": [
+    { "source": "/agendar", "destination": "/api/agendar" },
+    { "source": "/agendar/:slug", "destination": "/api/agendar?slug=:slug" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
