@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
-import { Landmark, CreditCard, AlertTriangle, CheckCircle2, RefreshCw, Users, Wallet, PiggyBank } from 'lucide-react';
+import { Landmark, CreditCard, AlertTriangle, CheckCircle2, RefreshCw, Users, Wallet, PiggyBank, Megaphone } from 'lucide-react';
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 function money(amount, currency = 'USD') {
@@ -59,21 +59,26 @@ export default function MercuryPage() {
   const [savingId, setSavingId] = useState(null);
   const [tab, setTab] = useState('fondos');
   const [hideZero, setHideZero] = useState(true);
+  const [metaByAccount, setMetaByAccount] = useState({}); // account_id -> gasto Meta (anuncios)
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [accRes, cardRes, txRes] = await Promise.all([
+    const [accRes, cardRes, txRes, metaRes] = await Promise.all([
       supabase.from('mercury_accounts').select('*'),
       supabase.from('mercury_cards').select('card_id, account_id, name_on_card, last_four'),
       supabase.from('mercury_transactions').select('*').eq('status', 'failed')
         .order('review_status', { ascending: true })
         .order('tx_created_at', { ascending: false }),
+      supabase.rpc('korex_mercury_meta_spend'),   // gasto Meta exitoso por fondo
     ]);
     setAccounts(accRes.data || []);
     const cardMap = {};
     (cardRes.data || []).forEach((c) => { (cardMap[c.account_id] ||= []).push(c); });
     setCards(cardMap);
     setFailed(txRes.data || []);
+    const meta = {};
+    (metaRes.data || []).forEach((m) => { meta[m.account_id] = Number(m.meta_spend) || 0; });
+    setMetaByAccount(meta);
     setLoading(false);
   }, []);
 
@@ -94,20 +99,29 @@ export default function MercuryPage() {
   );
 
   // Agrupar fondos: Korex/Internos primero, después cada cliente ordenado por saldo.
+  // La clave se normaliza (minúsculas + espacios) para que un mismo cliente con
+  // distinta tipografía en el apodo (ej. "Vozmediano" vs "VozMediano") no se parta.
   const groups = useMemo(() => {
     const map = new Map();
     for (const a of accounts) {
       const c = classify(a.nickname || a.name);
-      if (!map.has(c.group)) map.set(c.group, { name: c.group, internal: c.internal, funds: [], total: 0 });
-      const g = map.get(c.group);
-      g.funds.push({ ...a, _category: c.category });
+      const key = c.group.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!map.has(key)) map.set(key, { name: c.group, internal: c.internal, funds: [], total: 0, meta: 0 });
+      const g = map.get(key);
+      g.funds.push({ ...a, _category: c.category, _meta: metaByAccount[a.id] || 0 });
       g.total += Number(a.current_balance) || 0;
+      g.meta += metaByAccount[a.id] || 0;
     }
     const arr = [...map.values()];
     arr.forEach((g) => g.funds.sort((x, y) => (Number(y.current_balance) || 0) - (Number(x.current_balance) || 0)));
     arr.sort((a, b) => (a.internal === b.internal ? b.total - a.total : (a.internal ? -1 : 1)));
     return arr;
-  }, [accounts]);
+  }, [accounts, metaByAccount]);
+
+  const totalMeta = useMemo(
+    () => Object.values(metaByAccount).reduce((s, v) => s + (Number(v) || 0), 0),
+    [metaByAccount],
+  );
 
   const pending = failed.filter((t) => t.review_status !== 'reviewed');
   const reviewed = failed.filter((t) => t.review_status === 'reviewed');
@@ -140,15 +154,18 @@ export default function MercuryPage() {
               </span>
             )}
           </div>
-          {fcards.length > 0 && (
-            <div className="mt-1 flex items-center gap-2 flex-wrap">
-              {fcards.map((c) => (
-                <span key={c.card_id} className="text-[10.5px] text-text3 inline-flex items-center gap-1">
-                  <CreditCard size={11} /> {c.name_on_card ? `${c.name_on_card} ` : ''}•• {c.last_four || '????'}
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="mt-1 flex items-center gap-3 flex-wrap">
+            {fcards.map((c) => (
+              <span key={c.card_id} className="text-[10.5px] text-text3 inline-flex items-center gap-1">
+                <CreditCard size={11} /> {c.name_on_card ? `${c.name_on_card} ` : ''}•• {c.last_four || '????'}
+              </span>
+            ))}
+            {f._meta > 0 && (
+              <span className="text-[10.5px] font-semibold inline-flex items-center gap-1" style={{ color: '#4F5BD5' }}>
+                <Megaphone size={11} /> Invertido en Meta: {money(f._meta, f.currency)}
+              </span>
+            )}
+          </div>
         </div>
         <div className="text-right shrink-0">
           <div className="text-[14px] font-bold text-text">{money(f.current_balance, f.currency)}</div>
@@ -211,17 +228,26 @@ export default function MercuryPage() {
 
   return (
     <div className="max-w-[960px] mx-auto">
-      {/* Cabecera: saldo total */}
-      <div className="rounded-2xl border border-border bg-gradient-to-br from-blue-bg2 to-white p-5 mb-5 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5">
-            <Wallet size={14} /> Saldo total en Mercury
+      {/* Cabecera: saldo total + inversión en Meta */}
+      <div className="rounded-2xl border border-border bg-gradient-to-br from-blue-bg2 to-white p-5 mb-5 flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-8 flex-wrap">
+          <div>
+            <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5">
+              <Wallet size={14} /> Saldo total en Mercury
+            </div>
+            <div className="text-[30px] font-extrabold text-text mt-1 leading-none">{money(grandTotal)}</div>
+            <div className="text-[12px] text-text3 mt-1.5">{accounts.length} fondos · {Object.values(cards).flat().length} tarjetas</div>
           </div>
-          <div className="text-[30px] font-extrabold text-text mt-1 leading-none">{money(grandTotal)}</div>
-          <div className="text-[12px] text-text3 mt-1.5">{accounts.length} fondos · {Object.values(cards).flat().length} tarjetas</div>
+          <div>
+            <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5">
+              <Megaphone size={14} /> Invertido en Meta
+            </div>
+            <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#4F5BD5' }}>{money(totalMeta)}</div>
+            <div className="text-[12px] text-text3 mt-1.5">gasto en anuncios procesado</div>
+          </div>
         </div>
         <button onClick={load} title="Actualizar"
-          className="inline-flex items-center gap-1.5 text-[12px] text-text2 hover:text-text bg-white border border-border rounded-lg px-3 py-2 cursor-pointer self-start">
+          className="inline-flex items-center gap-1.5 text-[12px] text-text2 hover:text-text bg-white border border-border rounded-lg px-3 py-2 cursor-pointer">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
         </button>
       </div>
@@ -258,7 +284,8 @@ export default function MercuryPage() {
           </div>
           <div className="flex flex-col gap-3">
             {groups.map((g) => {
-              const funds = hideZero ? g.funds.filter((f) => Number(f.current_balance) > 0) : g.funds;
+              // Mostrar el fondo si tiene saldo > 0 o historial de inversión en Meta.
+              const funds = hideZero ? g.funds.filter((f) => Number(f.current_balance) > 0 || (f._meta || 0) > 0) : g.funds;
               if (funds.length === 0) return null;
               const Icon = g.internal ? Landmark : Users;
               return (
@@ -269,7 +296,14 @@ export default function MercuryPage() {
                       <span className="text-[13px] font-bold text-text truncate">{g.name}</span>
                       <span className="text-[11px] text-text3">· {funds.length} fondo{funds.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <span className="text-[13px] font-bold text-text shrink-0">{money(g.total)}</span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {g.meta > 0 && (
+                        <span className="text-[11px] font-semibold inline-flex items-center gap-1" style={{ color: '#4F5BD5' }} title="Invertido en Meta (anuncios)">
+                          <Megaphone size={12} /> {money(g.meta)}
+                        </span>
+                      )}
+                      <span className="text-[13px] font-bold text-text">{money(g.total)}</span>
+                    </div>
                   </div>
                   <div className="p-1.5">
                     {funds.map((f) => <FundRow key={f.id} f={f} />)}

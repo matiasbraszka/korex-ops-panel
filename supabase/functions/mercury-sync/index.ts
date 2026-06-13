@@ -18,7 +18,7 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const MERCURY_API = "https://api.mercury.com/api/v1";
-const TX_PER_ACCOUNT = 50; // cuántas transacciones recientes revisar por cuenta
+const TX_PER_ACCOUNT = 500; // historial por cuenta (para totales "en total", ej. gasto Meta)
 
 interface MercuryConfig {
   api_token?: string;
@@ -158,7 +158,7 @@ async function alertFailed(
     `• *Fondo:* ${fundName}${fundBalance ? ` — saldo actual ${fundBalance}` : ""}\n` +
     (cardLabel ? `• *Tarjeta:* ${cardLabel}\n` : "") +
     `• *Motivo:* ${motivo}\n` +
-    `Revisar cuanto antes en el panel → Administración › Mercury.`);
+    `Revisar cuanto antes en el panel → Soporte › Mercury.`);
   return true;
 }
 
