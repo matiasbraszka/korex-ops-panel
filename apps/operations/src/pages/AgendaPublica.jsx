@@ -49,10 +49,14 @@ function StepDot({ n, step }) {
 
 export default function AgendaPublica() {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
-  // Calendario elegido por la URL: /agendar/<slug> (sin slug = el principal).
-  const slug = useMemo(() => {
-    const m = window.location.pathname.match(/^\/agendar\/([a-z0-9-]{1,60})\/?$/i);
-    return m ? m[1].toLowerCase() : null;
+  // Calendario por URL: /agendar/p/<token> (link permanente, no cambia) o
+  // /agendar/<slug> (link editable). Sin nada = el calendario principal.
+  const { slug, token } = useMemo(() => {
+    const path = window.location.pathname;
+    const mp = path.match(/^\/agendar\/p\/([A-Za-z0-9]{1,40})\/?$/);
+    if (mp) return { slug: null, token: mp[1] };
+    const ms = path.match(/^\/agendar\/([a-z0-9-]{1,60})\/?$/i);
+    return { slug: ms ? ms[1].toLowerCase() : null, token: null };
   }, []);
   const [step, setStep] = useState(1);
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -119,7 +123,12 @@ export default function AgendaPublica() {
       ['America/Los_Angeles', 'EE.UU. (Pacífico)'],
       ['Europe/Madrid', 'España'],
     ];
-    if (!base.some(([z]) => z === detectedTz)) base.unshift([detectedTz, 'Tu zona']);
+    // Si la zona detectada no está en la lista, la antepone con su NOMBRE
+    // explícito (ciudad de la zona IANA), nunca un genérico tipo "Tu zona".
+    if (!base.some(([z]) => z === detectedTz)) {
+      const city = (detectedTz.split('/').pop() || detectedTz).replace(/_/g, ' ');
+      base.unshift([detectedTz, city]);
+    }
     return base.map(([zone, label]) => [zone, `${label} (${offsetLabelOf(zone)})`]);
   }, [detectedTz, offsetLabelOf]);
   const tzNote = sameAsArg
@@ -133,7 +142,7 @@ export default function AgendaPublica() {
     setLoadingMonth(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('agenda-publica', {
-        body: { action: 'slots', year: m.getFullYear(), month: m.getMonth(), slug },
+        body: { action: 'slots', year: m.getFullYear(), month: m.getMonth(), slug, token },
       });
       if (err || !data?.ok) throw err || new Error(data?.error);
       setMonthsData((prev) => ({ ...prev, [key]: { days: data.days || {}, configured: data.configured } }));
@@ -215,7 +224,7 @@ export default function AgendaPublica() {
       const { data, error: err } = await supabase.functions.invoke('agenda-publica', {
         body: {
           action: 'book', date: selDate, time, name: name.trim(), email: email.trim(),
-          dial, phone, answers: answersPayload, tz, slug,
+          dial, phone, answers: answersPayload, tz, slug, token,
         },
       });
       const code = data?.error || (err ? 'network' : null);

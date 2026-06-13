@@ -15,16 +15,16 @@ const esc = (s) => String(s || '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-// Nombre/descripcion del calendario por slug (o el principal activo si no hay).
-// Vía RPC agenda_calendar_meta (SECURITY DEFINER) porque la tabla tiene RLS
-// solo para usuarios autenticados; el RPC expone solo nombre+descripción.
-async function getCalendar(slug) {
+// Nombre/descripcion del calendario por token (link permanente) o slug (link
+// editable). Vía RPC agenda_calendar_meta (SECURITY DEFINER) porque la tabla
+// tiene RLS solo para usuarios autenticados; el RPC expone solo nombre+desc.
+async function getCalendar({ slug, token }) {
   if (!SB_URL || !SB_KEY) return null;
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/agenda_calendar_meta`, {
       method: 'POST',
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_slug: slug || null }),
+      body: JSON.stringify({ p_slug: slug || null, p_token: token || null }),
     });
     if (!r.ok) return null;
     const rows = await r.json();
@@ -36,11 +36,15 @@ export default async function handler(req, res) {
   const host = req.headers['x-forwarded-host'] || req.headers.host || '';
   const proto = req.headers['x-forwarded-proto'] || 'https';
 
-  // slug: del rewrite (?slug=) o, por las dudas, del propio path.
+  // Identificador del calendario: token (link permanente /agendar/p/<token>)
+  // o slug (link editable /agendar/<slug>). Vienen del rewrite (?token=/?slug=).
+  let token = String((req.query && req.query.token) || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 40);
   let slug = (req.query && req.query.slug) || '';
-  if (!slug) {
-    const m = String(req.url || '').match(/\/agendar\/([^/?#]+)/i);
-    if (m) slug = decodeURIComponent(m[1]);
+  if (!slug && !token) {
+    const mp = String(req.url || '').match(/\/agendar\/p\/([^/?#]+)/i);
+    const ms = String(req.url || '').match(/\/agendar\/([^/?#]+)/i);
+    if (mp) token = decodeURIComponent(mp[1]).replace(/[^a-zA-Z0-9]/g, '').slice(0, 40);
+    else if (ms) slug = decodeURIComponent(ms[1]);
   }
   slug = String(slug || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 60);
 
@@ -59,11 +63,13 @@ export default async function handler(req, res) {
   }
 
   // 2) Datos de la llamada para el título de la preview.
-  const cal = await getCalendar(slug);
+  const cal = await getCalendar({ slug, token });
   const title = cal?.name ? `${cal.name} · Método Korex` : 'Agendá tu reunión · Método Korex';
   const desc = (cal?.description && String(cal.description).trim())
     || 'Reservá tu reunión por Zoom con el equipo de Método Korex.';
-  const ogUrl = `${proto}://${host}/agendar${slug ? '/' + slug : ''}`;
+  const ogUrl = token
+    ? `${proto}://${host}/agendar/p/${token}`
+    : `${proto}://${host}/agendar${slug ? '/' + slug : ''}`;
 
   const meta = [
     `<title>${esc(title)}</title>`,

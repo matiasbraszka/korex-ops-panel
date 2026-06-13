@@ -1,4 +1,8 @@
-// supabase/functions/agenda-publica/index.ts — v7
+// supabase/functions/agenda-publica/index.ts — v8
+// v8: el calendario se puede resolver por token permanente (public_token, link
+// que no cambia con el slug) además de por slug. Se guarda booking_tz (la zona
+// en que agendó el lead) para que confirmación y recordatorios salgan en SU
+// zona. El aviso interno a los anfitriones va SIEMPRE en hora de España.
 // v7: la reserva nace PENDIENTE (rsvp needs_action); pasa a confirmada cuando
 // el lead acepta en Google. La confirmación de WhatsApp aclara la zona horaria
 // con la ciudad (no solo "local"). Mensaje de confirmación por calendario.
@@ -163,12 +167,14 @@ async function getCfg(): Promise<Cfg> {
   return (data?.value as Cfg) ?? {};
 }
 
-// Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
-async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
+// Calendario de reserva: por token (link permanente, no cambia con el slug),
+// por slug (link editable), o el primero activo (link viejo /agendar).
+async function getCalendar(slug: string | null, token: string | null): Promise<BookingCalendar | null> {
   let q = admin.from("booking_calendars")
     .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions, availability, host_member_id, confirmation_template")
     .eq("active", true);
-  if (slug) q = q.eq("slug", slug);
+  if (token) q = q.eq("public_token", token);
+  else if (slug) q = q.eq("slug", slug);
   else q = q.order("created_at", { ascending: true }).limit(1);
   const { data } = await q;
   return (data?.[0] as BookingCalendar) ?? null;
@@ -466,8 +472,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const slug = typeof body.slug === "string" && /^[a-z0-9-]{1,60}$/.test(body.slug) ? body.slug : null;
+  const token = typeof body.token === "string" && /^[A-Za-z0-9]{1,40}$/.test(body.token) ? body.token : null;
   const cfg = await getCfg();
-  const cal = await getCalendar(slug);
+  const cal = await getCalendar(slug, token);
   const members = cal ? await getMembers(cal) : [];
   const host = cal ? await getHost(cal) : null;
   const pub = cfg.public_agenda || {};
@@ -556,6 +563,9 @@ Deno.serve(async (req: Request) => {
       .gt("start_at", new Date().toISOString());
     if ((count ?? 0) >= MAX_FUTURE_PER_PHONE) return jsonResp(429, { error: "too_many" });
 
+    // Zona horaria en la que el lead está agendando: se guarda en la cita y se
+    // usa para la confirmación Y los recordatorios. Inválida → hora Argentina.
+    const leadTz = (typeof body.tz === "string" && /^[A-Za-z]+\/[A-Za-z0-9_+\-/]+$/.test(body.tz)) ? body.tz : "America/Argentina/Buenos_Aires";
     const startAt = slotDate.toISOString();
     const endAt = new Date(slotDate.getTime() + slotMin * 60000).toISOString();
     const title = (cal.gcal_title_template || `${cal.name} — {nombre}`)
@@ -627,6 +637,7 @@ Deno.serve(async (req: Request) => {
       meeting_link: meetingLink,
       zoom_meeting_id: zoom?.meetingId ?? null,
       invite_email: email,
+      booking_tz: leadTz,
       // Nace PENDIENTE: pasa a confirmada cuando el lead acepta en Google
       // (lo sincroniza crear-cita/citas-recordatorios).
       rsvp_status: "needs_action",
@@ -642,9 +653,8 @@ Deno.serve(async (req: Request) => {
     // Alta del lead en Google Contacts (best-effort, no bloquea).
     const contactPromise = callCalendarScript(cfg, { action: "upsert_contact", name, phone: waDigits }).catch(() => null);
 
-    // Confirmación por WhatsApp — en la zona horaria del lead (la manda la
-    // página); si no llega o es inválida, se usa la hora de Argentina.
-    const leadTz = (typeof body.tz === "string" && /^[A-Za-z]+\/[A-Za-z0-9_+\-/]+$/.test(body.tz)) ? body.tz : "America/Argentina/Buenos_Aires";
+    // Confirmación por WhatsApp — en la zona horaria del lead (definida arriba
+    // como leadTz); si es inválida ya cayó a la hora de Argentina.
     let fecha: string, horaLocal: string, zonaLabel: string;
     try {
       fecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: leadTz });
@@ -671,13 +681,13 @@ Deno.serve(async (req: Request) => {
     if (convId) waSent = await sendWhatsApp(cfg, { id: convId, wa_jid: waJid }, confirmText);
 
     // Aviso por WhatsApp a los miembros del calendario (los que tengan número).
-    // En hora de Argentina (el equipo está acá). No bloquea la respuesta.
-    const argFecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" });
-    const argHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" }).format(slotDate);
+    // SIEMPRE en hora de España (por defecto del equipo). No bloquea la respuesta.
+    const espFecha = slotDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Madrid" });
+    const espHora = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Madrid" }).format(slotDate);
     const teamMsg = [
       `📅 Nueva reunión agendada — ${cal.name}`,
       `${name} · +${waDigits}`,
-      `🗓️ ${argFecha} a las ${argHora} (hora Argentina)`,
+      `🗓️ ${espFecha} a las ${espHora} (hora de España)`,
       notesText || null,
       meetingLink ? `🔗 ${meetingLink}` : null,
     ].filter(Boolean).join("\n");

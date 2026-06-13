@@ -1,4 +1,6 @@
-// supabase/functions/citas-recordatorios/index.ts — v5
+// supabase/functions/citas-recordatorios/index.ts — v6
+// v6: los recordatorios al lead salen en la zona en que agendó (booking_tz);
+// si no hay, hora de Argentina.
 // Recordatorios/seguimientos automáticos de citas por WhatsApp. Lo llama
 // pg_cron cada 10 minutos (net.http_post con x-cron-secret).
 //
@@ -130,7 +132,7 @@ Deno.serve(async (req: Request) => {
   // calendario (si tiene). Las de hasta 25h cubren el seguimiento de 24h.
   const { data: appts, error } = await admin
     .from("appointments")
-    .select("id, title, start_at, created_at, meeting_link, reminder_24h_sent_at, reminder_2h_sent_at, reminders_sent, calendar:booking_calendars(reminders), conversation:wa_conversations(id, wa_jid, wa_profile_name, is_group, contact:contacts(full_name))")
+    .select("id, title, start_at, created_at, booking_tz, meeting_link, reminder_24h_sent_at, reminder_2h_sent_at, reminders_sent, calendar:booking_calendars(reminders), conversation:wa_conversations(id, wa_jid, wa_profile_name, is_group, contact:contacts(full_name))")
     .eq("status", "scheduled")
     .gt("start_at", new Date(now).toISOString())
     .lt("start_at", new Date(now + 25 * H).toISOString())
@@ -158,10 +160,12 @@ Deno.serve(async (req: Request) => {
 
     const start = new Date(a.start_at);
     const fullName = conv.contact?.full_name || conv.wa_profile_name || "";
+    // Zona del lead (en la que agendó); si no hay, hora de Argentina.
+    const leadTz = (typeof a.booking_tz === "string" && a.booking_tz) ? a.booking_tz : TZ;
     const vars = {
       nombre: fullName.split(" ")[0] || "",
-      fecha: start.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: TZ }),
-      hora: start.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: TZ }),
+      fecha: start.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: leadTz }),
+      hora: start.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: leadTz }),
       zoom: a.meeting_link || "",
     };
     const withLink = (text: string) =>

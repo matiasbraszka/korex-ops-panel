@@ -4,6 +4,7 @@
   "framework": null,
   "rewrites": [
     { "source": "/agendar", "destination": "/api/agendar" },
+    { "source": "/agendar/p/:token", "destination": "/api/agendar?token=:token" },
     { "source": "/agendar/:slug", "destination": "/api/agendar?slug=:slug" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

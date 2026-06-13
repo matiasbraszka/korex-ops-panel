@@ -228,6 +228,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState('');
   const [error, setError] = useState('');
   const [mobileDetail, setMobileDetail] = useState(false);
 
@@ -314,6 +315,13 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     navigator.clipboard?.writeText(publicUrl(slug)).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+  // Link permanente: /agendar/p/<token> (no cambia aunque se edite el slug).
+  const permanentUrl = (tokenStr) => `${window.location.origin}/agendar/p/${tokenStr}`;
+  const copyUrl = (url, key) => {
+    navigator.clipboard?.writeText(url).catch(() => {});
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(''), 2000);
   };
 
   const save = async () => {
@@ -575,6 +583,46 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
             <span className="text-[10.5px] text-text3">Es el final del link que compartís. Solo minúsculas, números y guiones. Si lo cambiás, el link anterior deja de funcionar.</span>
           </label>
         </div>
+
+        {/* Links para compartir (permanente + editable) — solo si ya se guardó */}
+        {draft.public_token && (
+          <div className={`flex flex-col gap-3 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+            {!mobile && <span className="text-[10px] font-bold tracking-[0.1em] text-text3">LINKS PARA COMPARTIR</span>}
+            {mobile && <span className="text-[12px] font-semibold text-[#3D4659]">Links para compartir</span>}
+
+            {/* Link permanente */}
+            <div className="flex flex-col gap-[5px]">
+              <span className="text-[11.5px] font-semibold text-[#15803D] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> Link permanente · no cambia nunca
+              </span>
+              <span className="flex items-center gap-2">
+                <input readOnly value={permanentUrl(draft.public_token)} onFocus={(e) => e.target.select()}
+                       className={`flex-1 min-w-0 ${mobile ? 'h-[46px] text-[12.5px]' : 'h-9 text-[12px]'} rounded-[10px] border border-border bg-surface2/50 px-3 text-text2 outline-none`} />
+                <button onClick={() => copyUrl(permanentUrl(draft.public_token), 'perm')}
+                        className="h-9 px-3 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shrink-0 transition-colors">
+                  {copiedKey === 'perm' ? <><Check size={13} strokeWidth={2.5} /> Copiado</> : <><Copy size={13} /> Copiar</>}
+                </button>
+              </span>
+              <span className="text-[10.5px] text-text3">Ideal para anuncios, embudos o tu web: aunque cambies la dirección de arriba, este link sigue funcionando y siempre muestra la versión actual.</span>
+            </div>
+
+            {/* Link editable (slug) */}
+            <div className="flex flex-col gap-[5px]">
+              <span className="text-[11.5px] font-semibold text-text2 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#98A2B3]" /> Link con la dirección · se adapta si la cambiás
+              </span>
+              <span className="flex items-center gap-2">
+                <input readOnly value={publicUrl(slugPreview)} onFocus={(e) => e.target.select()}
+                       className={`flex-1 min-w-0 ${mobile ? 'h-[46px] text-[12.5px]' : 'h-9 text-[12px]'} rounded-[10px] border border-border bg-surface2/50 px-3 text-text2 outline-none`} />
+                <button onClick={() => copyUrl(publicUrl(slugPreview), 'slug')}
+                        className="h-9 px-3 rounded-[10px] border border-border bg-white text-text2 text-[12px] font-semibold cursor-pointer hover:bg-surface2 flex items-center gap-1.5 shrink-0 transition-colors">
+                  {copiedKey === 'slug' ? <><Check size={13} strokeWidth={2.5} className="text-[#15803D]" /> Copiado</> : <><Copy size={13} /> Copiar</>}
+                </button>
+              </span>
+              <span className="text-[10.5px] text-text3">Más lindo para mandar por mensaje. Si editás la dirección de arriba, este link cambia (el anterior deja de andar).</span>
+            </div>
+          </div>
+        )}
 
         {/* Textos de la página pública */}
         <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
