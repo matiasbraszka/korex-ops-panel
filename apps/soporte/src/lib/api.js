@@ -11,7 +11,7 @@ const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,ema
 export async function fetchConversations() {
   const [convs, citas] = await Promise.all([
     sbFetch(
-      `wa_conversations?${CONV_SELECT}&order=last_message_at.desc.nullslast&limit=300`,
+      `wa_conversations?${CONV_SELECT}&order=last_message_at.desc.nullslast&limit=1000`,
       { headers: { Prefer: 'return=representation' } },
     ),
     fetchNextAppointments(),
