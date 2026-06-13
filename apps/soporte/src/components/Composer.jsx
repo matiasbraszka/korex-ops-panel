@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Send, Paperclip, X, FileText, Image as ImageIcon, Film, Music } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Image as ImageIcon, Film, Music, Mic, Trash2 } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { convName } from '../lib/format.js';
 
@@ -35,6 +35,74 @@ export default function Composer({ onSent }) {
   const taRef = useRef(null);
   const fileRef = useRef(null);
 
+  // ── Grabación de nota de voz ──
+  const [recording, setRecording] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const recRef = useRef(null);      // MediaRecorder
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+  const timerRef = useRef(null);
+  const sendOnStopRef = useRef(false);
+  const fmtSecs = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  const stopTracks = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    clearInterval(timerRef.current);
+  };
+
+  const startRecording = async () => {
+    setFileError('');
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setFileError('Tu navegador no permite grabar audio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data?.size) chunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        stopTracks();
+        setRecording(false);
+        setRecSecs(0);
+        if (sendOnStopRef.current && blob.size > 0) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = String(reader.result || '').split(',')[1] || '';
+            if (!base64) return;
+            const ext = (blob.type.includes('mp4') ? 'm4a' : 'webm');
+            sendAttachment(selectedId, { base64, mimetype: blob.type || 'audio/webm', filename: `nota-de-voz.${ext}`, kind: 'audio', caption: '' });
+            onSent?.();
+          };
+          reader.readAsDataURL(blob);
+        }
+      };
+      rec.start();
+      recRef.current = rec;
+      setRecording(true);
+      setRecSecs(0);
+      timerRef.current = setInterval(() => setRecSecs((s) => s + 1), 1000);
+    } catch {
+      setFileError('No pudimos acceder al micrófono. Revisá los permisos del navegador.');
+      stopTracks();
+    }
+  };
+
+  const finishRecording = (send) => {
+    sendOnStopRef.current = send;
+    const rec = recRef.current;
+    if (rec && rec.state !== 'inactive') rec.stop();
+    else { stopTracks(); setRecording(false); setRecSecs(0); }
+  };
+
+  // Cortar la grabación si se cambia de chat o se desmonta.
+  useEffect(() => () => { sendOnStopRef.current = false; if (recRef.current?.state === 'recording') recRef.current.stop(); stopTracks(); }, []);
+
   const templates = useMemo(
     () => (configTemplates?.length ? configTemplates : DEFAULT_TEMPLATES),
     [configTemplates],
@@ -51,6 +119,8 @@ export default function Composer({ onSent }) {
   useEffect(() => { setHighlight(0); }, [slashQuery]);
 
   useEffect(() => {
+    // Si estaba grabando y cambia de chat, descartar la grabación.
+    if (recRef.current?.state === 'recording') { sendOnStopRef.current = false; recRef.current.stop(); }
     setText(getDraft(selectedId));
     setFile(null);
     setFileError('');
@@ -216,36 +286,60 @@ export default function Composer({ onSent }) {
         </div>
       )}
 
-      <div className="flex items-end gap-2 rounded-[14px] border border-border bg-white px-2.5 py-1.5 shadow-sm focus-within:border-[#F59E0B] transition-colors duration-150">
-        <input ref={fileRef} type="file" className="hidden" onChange={pickFile}
-               accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
-        <button onClick={() => fileRef.current?.click()} title="Adjuntar archivo"
-                className="shrink-0 w-9 h-9 rounded-xl border-0 bg-transparent text-text3 hover:text-[#B45309] hover:bg-[#FEF0D7] cursor-pointer flex items-center justify-center transition-colors duration-150 mb-0.5">
-          <Paperclip size={17} />
-        </button>
-        <textarea
-          ref={taRef}
-          value={text}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
-          rows={1}
-          placeholder={file ? 'Descripción (opcional)…' : 'Escribí un mensaje…'}
-          className="flex-1 resize-none text-[13px] leading-relaxed py-1.5 border-0 bg-transparent outline-none min-h-[32px] max-h-[120px]"
-        />
-        <button
-          onClick={submit}
-          disabled={!canSend}
-          className={`shrink-0 w-9 h-9 rounded-full border-0 flex items-center justify-center transition-colors duration-150 mb-0.5 ${
-            canSend
-              ? 'bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]'
-              : 'bg-surface2 text-text3 cursor-default'
-          }`}
-        >
-          <Send size={15} />
-        </button>
-      </div>
+      {recording ? (
+        /* Barra de grabación de nota de voz */
+        <div className="flex items-center gap-2.5 rounded-[14px] border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2.5">
+          <button onClick={() => finishRecording(false)} title="Descartar"
+                  className="shrink-0 w-9 h-9 rounded-xl border-0 bg-transparent text-[#DC2626] hover:bg-[#FEE2E2] cursor-pointer flex items-center justify-center transition-colors duration-150">
+            <Trash2 size={17} />
+          </button>
+          <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] animate-pulse shrink-0" />
+          <span className="text-[13px] font-bold text-[#B91C1C] tabular-nums shrink-0">{fmtSecs(recSecs)}</span>
+          <span className="flex-1 text-[12px] text-[#B91C1C]">Grabando nota de voz…</span>
+          <button onClick={() => finishRecording(true)} title="Enviar nota de voz"
+                  className="shrink-0 w-9 h-9 rounded-full border-0 bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] flex items-center justify-center shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">
+            <Send size={15} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2 rounded-[14px] border border-border bg-white px-2.5 py-1.5 shadow-sm focus-within:border-[#F59E0B] transition-colors duration-150">
+          <input ref={fileRef} type="file" className="hidden" onChange={pickFile}
+                 accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
+          <button onClick={() => fileRef.current?.click()} title="Adjuntar archivo"
+                  className="shrink-0 w-9 h-9 rounded-xl border-0 bg-transparent text-text3 hover:text-[#B45309] hover:bg-[#FEF0D7] cursor-pointer flex items-center justify-center transition-colors duration-150 mb-0.5">
+            <Paperclip size={17} />
+          </button>
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={onChange}
+            onKeyDown={onKeyDown}
+            rows={1}
+            placeholder={file ? 'Descripción (opcional)…' : 'Escribí un mensaje…'}
+            className="flex-1 resize-none text-[13px] leading-relaxed py-1.5 border-0 bg-transparent outline-none min-h-[32px] max-h-[120px]"
+          />
+          {canSend ? (
+            <button
+              onClick={submit}
+              className="shrink-0 w-9 h-9 rounded-full border-0 flex items-center justify-center transition-colors duration-150 mb-0.5 bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]"
+            >
+              <Send size={15} />
+            </button>
+          ) : (
+            <button
+              onClick={startRecording}
+              title="Grabar nota de voz"
+              className="shrink-0 w-9 h-9 rounded-full border-0 flex items-center justify-center transition-colors duration-150 mb-0.5 bg-surface2 text-text2 cursor-pointer hover:bg-[#FEF0D7] hover:text-[#B45309]"
+            >
+              <Mic size={16} />
+            </button>
+          )}
+        </div>
+      )}
       <div className="text-[10px] text-text3 mt-1 px-1">
-        Enter envía · Shift+Enter salto de línea · <b className="font-semibold">/</b> respuestas rápidas · adjuntos hasta {MAX_FILE_MB}MB
+        {recording
+          ? 'Tocá el avión para enviar la nota de voz · el tacho la descarta'
+          : <>Enter envía · Shift+Enter salto de línea · <b className="font-semibold">/</b> respuestas rápidas · 🎙 micrófono para nota de voz</>}
       </div>
     </div>
   );
