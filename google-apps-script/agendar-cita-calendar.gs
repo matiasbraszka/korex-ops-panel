@@ -1,5 +1,8 @@
 /**
- * agendar-cita-calendar.gs — v6. Crea/mueve/borra eventos en el Google
+ * agendar-cita-calendar.gs — v7. Agrega la acción 'list_events' (devuelve los
+ * eventos reales de los calendarios propios de admin@ en un rango, para
+ * mostrar la agenda completa en el panel resaltando los agendamientos).
+ * v6. Crea/mueve/borra eventos en el Google
  * Calendar de la cuenta donde se deploya (admin@metodokorex.com), lee la
  * asistencia (RSVP), saca el Meet automático, da de alta contactos en
  * Google Contacts, pinta los eventos con el color del calendario elegido
@@ -118,7 +121,39 @@ function doPost(e) {
     var cal = CalendarApp.getDefaultCalendar();
 
     // Para verificar qué versión del script está corriendo la web app.
-    if (action === 'ping') return kxcJson({ ok: true, v: 6 });
+    if (action === 'ping') return kxcJson({ ok: true, v: 7 });
+
+    // Eventos reales del calendario admin@ en un rango (para mostrar la agenda
+    // "tal cual" en el panel). Mira TODOS los calendarios propios (el principal
+    // + "Llamadas Metodo Korex", etc.), no los suscritos de feriados/cumpleaños.
+    if (action === 'list_events') {
+      var lsMin = new Date(b.timeMin);
+      var lsMax = new Date(b.timeMax);
+      if (isNaN(lsMin.getTime()) || isNaN(lsMax.getTime())) return kxcJson({ ok: false, error: 'bad_input' });
+      var events = [];
+      try {
+        CalendarApp.getAllCalendars().forEach(function (c) {
+          // Solo los calendarios que son míos (no feriados/cumpleaños suscritos).
+          if (!c.isOwnedByMe()) return;
+          c.getEvents(lsMin, lsMax).forEach(function (ev) {
+            var st = ev.getStartTime();
+            var en = ev.getEndTime();
+            if (!st || !en) return;
+            events.push({
+              id: ev.getId(),
+              title: ev.getTitle() || '(sin título)',
+              start: st.toISOString(),
+              end: en.toISOString(),
+              allDay: ev.isAllDayEvent(),
+              calendar: c.getName(),
+            });
+          });
+        });
+      } catch (errLs) {
+        return kxcJson({ ok: false, error: String(errLs) });
+      }
+      return kxcJson({ ok: true, v: 7, events: events });
+    }
 
     // Libre/ocupado de varios calendarios a la vez (API oficial freeBusy).
     if (action === 'freebusy') {

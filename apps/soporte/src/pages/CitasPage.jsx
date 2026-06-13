@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@korex/auth';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { fetchAppointmentsRange } from '../lib/api.js';
+import { fetchAppointmentsRange, fetchGcalEvents } from '../lib/api.js';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import Modal from '../components/Modal.jsx';
 import ScheduleModal from '../components/ScheduleModal.jsx';
@@ -431,6 +431,7 @@ export default function CitasPage() {
   const [view, setView] = useState('week'); // 'day' | 'week'
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [items, setItems] = useState([]);
+  const [gcalItems, setGcalItems] = useState([]); // eventos reales de Google Calendar
   const [monthItems, setMonthItems] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -462,7 +463,7 @@ export default function CitasPage() {
 
   const load = useCallback(async () => {
     try {
-      const [vis, month, upc] = await Promise.all([
+      const [vis, month, upc, gcal] = await Promise.all([
         fetchAppointmentsRange(range.from.toISOString(), range.to.toISOString()),
         // Mes del mini-calendario (puntos) — rango del mes del cursor.
         fetchAppointmentsRange(
@@ -470,10 +471,13 @@ export default function CitasPage() {
           new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1).toISOString(),
         ),
         fetchAppointmentsRange(new Date().toISOString(), new Date(Date.now() + 45 * 86400000).toISOString()),
+        // Eventos reales del Google Calendar del rango visible (contexto).
+        fetchGcalEvents(range.from.toISOString(), range.to.toISOString()),
       ]);
       setItems(vis);
       setMonthItems(month);
       setUpcoming(upc.slice(0, 5));
+      setGcalItems(Array.isArray(gcal) ? gcal : []);
     } catch (e) {
       console.error('soporte: fallo la carga de citas', e);
     }
@@ -489,7 +493,24 @@ export default function CitasPage() {
 
   const dots = useMemo(() => new Set(monthItems.map((a) => dateISO(new Date(a.start_at)))), [monthItems]);
 
-  // Rango horario de la grilla: 09–18 ampliado si hay citas afuera.
+  // Eventos del Google Calendar que NO son citas del sistema (esas ya se
+  // muestran resaltadas). Se machean por gcal_event_id; se omiten los de día
+  // completo (la grilla es horaria).
+  const apptGcalIds = useMemo(
+    () => new Set(items.map((a) => a.gcal_event_id).filter(Boolean)),
+    [items],
+  );
+  const gcalByDay = useMemo(() => {
+    const map = {};
+    for (const ev of gcalItems) {
+      if (ev.allDay || !ev.start) continue;
+      if (ev.id && apptGcalIds.has(ev.id)) continue;
+      (map[dateISO(new Date(ev.start))] ||= []).push(ev);
+    }
+    return map;
+  }, [gcalItems, apptGcalIds]);
+
+  // Rango horario de la grilla: 09–18 ampliado si hay citas o eventos afuera.
   const [hourStart, hourEnd] = useMemo(() => {
     let s = 9, e = 18;
     for (const a of items) {
@@ -498,8 +519,15 @@ export default function CitasPage() {
       s = Math.min(s, st.getHours());
       e = Math.max(e, en.getHours() + (en.getMinutes() > 0 ? 1 : 0));
     }
-    return [s, Math.max(e, s + 6)];
-  }, [items]);
+    for (const ev of gcalItems) {
+      if (ev.allDay || !ev.start) continue;
+      const st = new Date(ev.start);
+      const en = ev.end ? new Date(ev.end) : new Date(st.getTime() + 3600000);
+      s = Math.min(s, st.getHours());
+      e = Math.max(e, en.getHours() + (en.getMinutes() > 0 ? 1 : 0));
+    }
+    return [Math.max(0, s), Math.min(24, Math.max(e, s + 6))];
+  }, [items, gcalItems]);
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
 
   const today = new Date();
@@ -533,6 +561,14 @@ export default function CitasPage() {
     const en = a.end_at ? new Date(a.end_at) : new Date(st.getTime() + 3600000);
     const top = ((st.getHours() + st.getMinutes() / 60) - hourStart) * HOUR_PX;
     const height = Math.max(30, ((en - st) / 3600000) * HOUR_PX - 4);
+    return { top: `${top}px`, height: `${height}px` };
+  };
+  // Igual, para un evento de Google Calendar (start/end ISO).
+  const gcalBlockStyle = (ev) => {
+    const st = new Date(ev.start);
+    const en = ev.end ? new Date(ev.end) : new Date(st.getTime() + 3600000);
+    const top = ((st.getHours() + st.getMinutes() / 60) - hourStart) * HOUR_PX;
+    const height = Math.max(18, ((en - st) / 3600000) * HOUR_PX - 4);
     return { top: `${top}px`, height: `${height}px` };
   };
 
@@ -657,6 +693,7 @@ export default function CitasPage() {
           <span className="flex items-center gap-3 text-[11px] text-text2">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#22C55E]" /> Confirmada</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#F59E0B]" /> Pendiente</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#C3C9D4]" /> Google Calendar</span>
           </span>
           <div className="flex items-center bg-surface2 rounded-[10px] p-0.5">
             {[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([id, label]) => (
@@ -754,6 +791,16 @@ export default function CitasPage() {
                       <div className="absolute inset-0 pointer-events-none"
                            style={{ backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent ${HOUR_PX - 1}px, rgba(240,242,245,0.9) ${HOUR_PX - 1}px, rgba(240,242,245,0.9) ${HOUR_PX}px)` }} />
                     )}
+                    {/* Eventos reales del Google Calendar (contexto, en gris) —
+                        debajo de los agendamientos del sistema. */}
+                    {(gcalByDay[dateISO(d)] || []).map((ev) => (
+                      <div key={ev.id} title={`${ev.title} · ${ev.calendar || 'Google Calendar'}`}
+                           className="absolute left-1 right-1 rounded-md px-1.5 py-0.5 overflow-hidden bg-[#EDEFF3] border border-[#E2E5EB] pointer-events-none"
+                           style={gcalBlockStyle(ev)}>
+                        <div className="text-[9px] font-medium text-text3">{timeHM(new Date(ev.start))}</div>
+                        <div className="text-[10px] font-semibold truncate text-text2 leading-tight">{ev.title}</div>
+                      </div>
+                    ))}
                     {citas.map((a) => {
                       const est = estadoOf(a);
                       return (

@@ -95,6 +95,20 @@ export async function fetchAppointmentsRange(fromISO, toISO) {
   return Array.isArray(rows) ? rows : [];
 }
 
+// Eventos reales del Google Calendar de admin@ en un rango (para mostrar la
+// agenda completa). Devuelve [] si el Apps Script no está actualizado o falla.
+export async function fetchGcalEvents(fromISO, toISO) {
+  try {
+    const { data, error } = await supabase.functions.invoke('gcal-events', {
+      body: { from: fromISO, to: toISO },
+    });
+    if (error || !data?.ok || !Array.isArray(data.events)) return [];
+    return data.events;
+  } catch {
+    return [];
+  }
+}
+
 // Participantes de un grupo (jsonb pesado: se pide solo al abrir el panel).
 export async function fetchParticipants(convId) {
   const rows = await sbFetch(
