@@ -70,6 +70,15 @@ const slugify = (s) => String(s || '')
   .replace(/^-+|-+$/g, '')
   .slice(0, 40);
 
+// Versión suave para tipear el slug a mano: no recorta guiones al final
+// (así se puede escribir "demo-" → "demo-ventas") ni colapsa; eso lo hace
+// slugify() recién al guardar.
+const softSlug = (s) => String(s || '')
+  .toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9-]+/g, '-')
+  .slice(0, 40);
+
 // ¿El miembro tiene al menos una franja habilitada cargada?
 export const hasAvailability = (m) => {
   const days = m?.availability?.days || {};
@@ -324,7 +333,14 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     const badSelect = draft.questions.find((q) => q.type === 'select' && q.label.trim() && q.options.filter((o) => o.trim()).length === 0);
     if (badSelect) { setError(`La pregunta "${badSelect.label.trim()}" es de opciones pero no tiene ninguna cargada.`); return; }
 
-    const slug = draft.slug || uniqueSlug(draft.name, draft.id);
+    // Slug elegido a mano (limpio) o, si quedó vacío, derivado del nombre.
+    let slug = slugify(draft.slug);
+    if (!slug) {
+      slug = uniqueSlug(draft.name, draft.id);
+    } else if (calendars.some((c) => c.slug === slug && c.id !== draft.id)) {
+      setError(`Ya hay un calendario con el link "…/agendar/${slug}". Elegí otra dirección.`);
+      return;
+    }
     // El anfitrión es un miembro del equipo; guardamos también su nombre.
     const hostMember = team.find((m) => m.id === draft.host_member_id);
     const payload = {
@@ -547,6 +563,17 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
               </span>
             </label>
           </div>
+          {/* Dirección del link público (slug editable) */}
+          <label className="flex flex-col gap-[5px]">
+            <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Dirección del link público</span>
+            <span className={`flex items-center rounded-[10px] border border-border bg-white overflow-hidden focus-within:border-[#F59E0B] transition-colors ${mobile ? 'h-[46px]' : 'h-9'}`}>
+              <span className="pl-3 pr-0.5 text-text3 whitespace-nowrap select-none text-[12px]">/agendar/</span>
+              <input value={draft.slug || ''} onChange={(e) => set({ slug: softSlug(e.target.value) })}
+                     placeholder={slugify(draft.name) || 'demo'} disabled={!isAdmin} spellCheck={false}
+                     className={`flex-1 min-w-0 h-full border-0 outline-none bg-transparent font-semibold text-[#B45309] pr-3 ${mobile ? 'text-[13.5px]' : 'text-[12.5px]'}`} />
+            </span>
+            <span className="text-[10.5px] text-text3">Es el final del link que compartís. Solo minúsculas, números y guiones. Si lo cambiás, el link anterior deja de funcionar.</span>
+          </label>
         </div>
 
         {/* Textos de la página pública */}
