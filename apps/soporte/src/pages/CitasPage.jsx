@@ -331,7 +331,7 @@ function DisponibilidadCard() {
           </div>
         )}
         <div className="text-[10px] text-text3 mt-2 leading-snug">
-          El futuro link público solo va a ofrecer estos horarios.
+          El link público de agenda solo ofrece estos horarios (menos los ya tomados).
         </div>
       </div>
 
@@ -491,6 +491,15 @@ export default function CitasPage() {
   const [upcoming, setUpcoming] = useState([]);
   const [selected, setSelected] = useState(null);
   const [nuevaOpen, setNuevaOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Link público de agenda (página /agendar, sin login).
+  const copyPublicLink = () => {
+    const url = `${window.location.origin}/agendar`;
+    navigator.clipboard?.writeText(url).catch(() => {});
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2500);
+  };
   const [mobileDay, setMobileDay] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const gridRef = useRef(null);
 
@@ -621,9 +630,10 @@ export default function CitasPage() {
             <span className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> Google Calendar conectado
             </span>
-            <button title="Próximamente: página pública para que los prospectos agenden solos" disabled
-                    className="h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text3 cursor-not-allowed flex items-center gap-1.5">
-              <Link2 size={13} /> Link público <span className="text-[9px] font-bold px-1 py-px rounded bg-surface2">PRONTO</span>
+            <button onClick={copyPublicLink}
+                    title="Copiar el link público para que los leads agenden solos"
+                    className="h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] flex items-center gap-1.5 transition-colors duration-150">
+              <Link2 size={13} /> {linkCopied ? '✓ Link copiado' : 'Link público de agenda'}
             </button>
             <button onClick={() => setNuevaOpen(true)}
                     className="h-[34px] px-3.5 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">

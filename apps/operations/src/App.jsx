@@ -36,6 +36,7 @@ const SoporteRoutes = lazy(() =>
 // Formulario publico de carga de KPIs (sin login). Se baja solo si alguien
 // abre el link /cargar-kpis.
 const PublicKpisForm = lazy(() => import('./pages/PublicKpisForm'));
+const AgendaPublica = lazy(() => import('./pages/AgendaPublica'));
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -739,6 +740,15 @@ function App() {
     return (
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
         <PublicKpisForm />
+      </Suspense>
+    );
+  }
+
+  // Ruta PUBLICA: agenda para que los leads reserven reuniones solos.
+  if (location.pathname.startsWith('/agendar')) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
+        <AgendaPublica />
       </Suspense>
     );
   }
