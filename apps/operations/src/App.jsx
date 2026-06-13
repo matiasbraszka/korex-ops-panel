@@ -293,15 +293,16 @@ function MainLayout() {
     : salesNavItems.filter((it) => it.id !== 'contacts');
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
-    { id: 'mercury', label: 'Mercury', Icon: Landmark, path: '/admin/mercury' },
   ];
   // Items de Soporte definidos aca (no importados de @korex/soporte) para que
   // el modulo entero quede en su propio chunk lazy: la unica referencia al
   // paquete es el import() dinamico de SoporteRoutes.
+  // Mercury (banco) vive en Soporte pero es solo para admins (datos sensibles).
   const soporteItems = [
     { id: 'inbox', label: 'WhatsApp', Icon: MessageCircle, path: '/soporte/inbox' },
     { id: 'citas', label: 'Citas', Icon: CalendarDays, path: '/soporte/citas' },
     { id: 'plantillas', label: 'Plantillas', Icon: Zap, path: '/soporte/plantillas' },
+    ...(currentUser?.isAdmin ? [{ id: 'mercury', label: 'Mercury', Icon: Landmark, path: '/soporte/mercury' }] : []),
   ];
   // Tokens de color por area (mantienen consistencia con la paleta Korex).
   const areaTokens = {
@@ -381,8 +382,12 @@ function MainLayout() {
         path="/admin/settings"
         element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to={homePath} replace />}
       />
+      {/* Compat: ruta vieja de Mercury (estuvo brevemente en Admin) → Soporte. */}
+      <Route path="/admin/mercury" element={<Navigate to="/soporte/mercury" replace />} />
+      {/* Mercury (banco) vive bajo Soporte pero es admin-only. Va ANTES del
+          catch-all /soporte/* para que matchee esta ruta puntual. */}
       <Route
-        path="/admin/mercury"
+        path="/soporte/mercury"
         element={currentUser?.isAdmin ? <MercuryPage /> : <Navigate to={homePath} replace />}
       />
       <Route

@@ -113,9 +113,9 @@ async function alertFailed(
   let fundName = "—"; let fundBalance = "";
   if (tx.account_id) {
     const { data: acc } = await admin
-      .from("mercury_accounts").select("name, current_balance, currency").eq("id", tx.account_id).maybeSingle();
+      .from("mercury_accounts").select("name, nickname, current_balance, currency").eq("id", tx.account_id).maybeSingle();
     if (acc) {
-      fundName = str(acc.name) || tx.account_id;
+      fundName = str(acc.nickname) || str(acc.name) || tx.account_id;
       fundBalance = acc.current_balance != null ? fmtMoney(Number(acc.current_balance), str(acc.currency) || tx.currency) : "";
     }
   }
@@ -198,6 +198,7 @@ Deno.serve(async (req: Request) => {
     const { error } = await admin.from("mercury_accounts").upsert({
       id,
       name: str(a.name) || null,
+      nickname: str(a.nickname) || null,
       kind: str(a.kind) || str(a.type) || null,
       status: str(a.status) || null,
       current_balance: num(a.currentBalance),
