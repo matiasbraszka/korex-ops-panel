@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, ChevronRight, Copy } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Copy, Plus, Trash2, X } from 'lucide-react';
 import {
-  fetchBookingCalendars, createBookingCalendar, updateBookingCalendar, fetchTeamMembers,
+  fetchBookingCalendars, createBookingCalendar, updateBookingCalendar, fetchSoporteTeam,
 } from '../lib/api.js';
 import { initials as initialsOf, colorFromString } from '../lib/format.js';
 
@@ -50,7 +50,33 @@ function MemberAvatar({ member, size = 32, ring = 'white' }) {
 const NEW_DRAFT = {
   id: null, slug: '', name: '', purpose: 'ventas', duration_min: 30,
   gcal_title_template: '', gcal_color_id: '7', member_ids: [], active: true,
+  description: '', host_name: '', host_role: '',
+  questions: [{ id: 'q1', label: '¿Qué te gustaría resolver?', type: 'text', required: false, options: [] }],
 };
+
+let qSeq = 0;
+const newQuestionId = () => `q_${Date.now().toString(36)}_${++qSeq}`;
+
+// Copia editable de un calendario (rellena los campos que pueden venir null).
+function draftFromCal(cal) {
+  const questions = Array.isArray(cal.questions) && cal.questions.length
+    ? cal.questions.map((q) => ({
+        id: q.id || newQuestionId(),
+        label: q.label || '',
+        type: q.type === 'select' ? 'select' : 'text',
+        required: Boolean(q.required),
+        options: Array.isArray(q.options) ? [...q.options] : [],
+      }))
+    : [];
+  return {
+    ...cal,
+    member_ids: [...(cal.member_ids || [])],
+    description: cal.description || '',
+    host_name: cal.host_name || '',
+    host_role: cal.host_role || '',
+    questions,
+  };
+}
 
 // Chip de motivo: VENTAS ámbar · SERVICIO índigo.
 function PurposeChip({ purpose }) {
@@ -109,7 +135,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const [mobileDetail, setMobileDetail] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchBookingCalendars(), fetchTeamMembers()]).then(([cals, tm]) => {
+    Promise.all([fetchBookingCalendars(), fetchSoporteTeam()]).then(([cals, tm]) => {
       setCalendars(cals);
       setTeam(tm);
       setLoaded(true);
@@ -127,11 +153,11 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     }
   }, [newSignal]);
 
-  // Al elegir de la lista, el editor trabaja sobre una copia.
+  // Al elegir de la lista, el editor trabaja sobre una copia normalizada.
   useEffect(() => {
     if (!selId) return;
     const cal = calendars.find((c) => c.id === selId);
-    if (cal) { setDraft({ ...cal, member_ids: [...(cal.member_ids || [])] }); setError(''); }
+    if (cal) { setDraft(draftFromCal(cal)); setError(''); }
   }, [selId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCal = (id) => { setSelId(id); setMobileDetail(true); };
@@ -142,6 +168,16 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
       ? draft.member_ids.filter((x) => x !== id)
       : [...draft.member_ids, id],
   });
+
+  // ── Constructor de preguntas del formulario ──
+  const setQuestion = (idx, patch) => set({ questions: draft.questions.map((q, i) => (i === idx ? { ...q, ...patch } : q)) });
+  const addQuestion = () => set({
+    questions: [...draft.questions, { id: newQuestionId(), label: '', type: 'text', required: false, options: [] }],
+  });
+  const removeQuestion = (idx) => set({ questions: draft.questions.filter((_, i) => i !== idx) });
+  const setOption = (qi, oi, val) => setQuestion(qi, { options: draft.questions[qi].options.map((o, i) => (i === oi ? val : o)) });
+  const addOption = (qi) => setQuestion(qi, { options: [...draft.questions[qi].options, ''] });
+  const removeOption = (qi, oi) => setQuestion(qi, { options: draft.questions[qi].options.filter((_, i) => i !== oi) });
 
   const uniqueSlug = (name, ownId) => {
     const base = slugify(name) || 'calendario';
@@ -164,6 +200,19 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     setError('');
     if (!draft.name || draft.name.trim().length < 2) { setError('Poné un nombre para el calendario.'); return; }
     if (!draft.member_ids.length) { setError('Marcá al menos una persona del equipo.'); return; }
+    // Preguntas válidas: con texto y, si son de opciones, con al menos una.
+    const cleanQuestions = draft.questions
+      .map((q) => ({
+        id: q.id || newQuestionId(),
+        label: q.label.trim(),
+        type: q.type === 'select' ? 'select' : 'text',
+        required: Boolean(q.required),
+        options: q.type === 'select' ? q.options.map((o) => o.trim()).filter(Boolean) : [],
+      }))
+      .filter((q) => q.label && (q.type === 'text' || q.options.length > 0));
+    const badSelect = draft.questions.find((q) => q.type === 'select' && q.label.trim() && q.options.filter((o) => o.trim()).length === 0);
+    if (badSelect) { setError(`La pregunta "${badSelect.label.trim()}" es de opciones pero no tiene ninguna cargada.`); return; }
+
     const slug = draft.slug || uniqueSlug(draft.name, draft.id);
     const payload = {
       slug,
@@ -174,13 +223,17 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
       gcal_color_id: draft.gcal_color_id,
       member_ids: draft.member_ids,
       active: draft.active,
+      description: draft.description?.trim() || null,
+      host_name: draft.host_name?.trim() || null,
+      host_role: draft.host_role?.trim() || null,
+      questions: cleanQuestions,
     };
     setSaving(true);
     try {
       if (draft.id) {
         const updated = await updateBookingCalendar(draft.id, payload);
         setCalendars((prev) => prev.map((c) => (c.id === draft.id ? { ...c, ...(updated || payload) } : c)));
-        if (updated) setDraft({ ...updated, member_ids: [...(updated.member_ids || [])] });
+        if (updated) setDraft(draftFromCal(updated));
       } else {
         const created = await createBookingCalendar(payload);
         if (created?.id) {
@@ -336,6 +389,33 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           </div>
         </div>
 
+        {/* Textos de la página pública */}
+        <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+          {!mobile && <span className="text-[10px] font-bold tracking-[0.1em] text-text3">TEXTOS DE LA PÁGINA</span>}
+          {mobile && <span className="text-[12px] font-semibold text-[#3D4659]">Textos de la página</span>}
+          <label className="flex flex-col gap-[5px]">
+            <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Descripción</span>
+            <textarea value={draft.description || ''} onChange={(e) => set({ description: e.target.value })}
+                      placeholder="Qué verá el prospecto bajo el título (ej: en qué consiste la reunión)."
+                      rows={2} disabled={!isAdmin}
+                      className={`${mobile ? 'rounded-xl text-[13.5px] py-2.5' : 'rounded-[10px] text-[12.5px] py-2'} border border-border px-3 outline-none focus:border-[#F59E0B] resize-y transition-colors`} />
+          </label>
+          <div className={mobile ? 'grid grid-cols-1 gap-3.5' : 'grid grid-cols-2 gap-3.5'}>
+            <label className="flex flex-col gap-[5px]">
+              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Anfitrión (nombre)</span>
+              <input value={draft.host_name || ''} onChange={(e) => set({ host_name: e.target.value })}
+                     placeholder="Ej: Matias Braszka" disabled={!isAdmin}
+                     className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 outline-none focus:border-[#F59E0B] transition-colors`} />
+            </label>
+            <label className="flex flex-col gap-[5px]">
+              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Anfitrión (qué hace en la reunión)</span>
+              <input value={draft.host_role || ''} onChange={(e) => set({ host_role: e.target.value })}
+                     placeholder="Ej: Te muestra el sistema en vivo" disabled={!isAdmin}
+                     className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 outline-none focus:border-[#F59E0B] transition-colors`} />
+            </label>
+          </div>
+        </div>
+
         {/* Evento en Google Calendar */}
         <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
           {!mobile && <span className="text-[10px] font-bold tracking-[0.1em] text-text3">EVENTO EN GOOGLE CALENDAR</span>}
@@ -364,6 +444,85 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
                 ))}
               </span>
             </label>
+          </div>
+        </div>
+
+        {/* Formulario de reserva */}
+        <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+          <span className="flex items-center justify-between">
+            <span className={mobile ? 'text-[12px] font-semibold text-[#3D4659]' : 'text-[10px] font-bold tracking-[0.1em] text-text3'}>
+              {mobile ? 'Preguntas al reservar' : 'FORMULARIO AL RESERVAR'}
+            </span>
+          </span>
+          <span className="text-[11px] text-text3 -mt-1">
+            Lo que le preguntamos al prospecto cuando agenda. Las de opciones sirven para etiquetar y enfocar la llamada.
+          </span>
+          <div className="flex flex-col gap-2.5">
+            {draft.questions.map((q, qi) => (
+              <div key={q.id} className="rounded-xl border border-border bg-surface2/40 p-3 flex flex-col gap-2.5">
+                <div className="flex items-center gap-2">
+                  <input value={q.label} onChange={(e) => setQuestion(qi, { label: e.target.value })}
+                         placeholder="Texto de la pregunta" disabled={!isAdmin}
+                         className="flex-1 min-w-0 h-9 rounded-[10px] border border-border px-3 text-[12.5px] font-medium bg-white outline-none focus:border-[#F59E0B] transition-colors" />
+                  {isAdmin && (
+                    <button onClick={() => removeQuestion(qi)} title="Quitar pregunta"
+                            className="bg-transparent border-0 cursor-pointer p-1.5 text-text3 hover:text-[#DC2626] shrink-0">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Tipo: texto libre o lista de opciones */}
+                  <span className="flex bg-surface2 rounded-lg p-0.5 h-8">
+                    {[['text', 'Respuesta libre'], ['select', 'Opciones']].map(([id, label]) => (
+                      <button key={id} onClick={() => isAdmin && setQuestion(qi, { type: id })}
+                              className={`px-3 rounded-md text-[11.5px] border-0 cursor-pointer transition-all duration-150 ${
+                                q.type === id ? 'bg-white font-bold text-[#B45309] shadow-[0_1px_2px_rgba(10,22,40,.08)]' : 'bg-transparent font-semibold text-text3'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                  <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-text2 cursor-pointer">
+                    <input type="checkbox" checked={q.required} disabled={!isAdmin}
+                           onChange={(e) => setQuestion(qi, { required: e.target.checked })} className="cursor-pointer" />
+                    Obligatoria
+                  </label>
+                </div>
+                {/* Opciones (solo tipo select) */}
+                {q.type === 'select' && (
+                  <div className="flex flex-col gap-1.5 pl-1">
+                    {q.options.map((o, oi) => (
+                      <div key={oi} className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#C8D6FF] shrink-0" />
+                        <input value={o} onChange={(e) => setOption(qi, oi, e.target.value)}
+                               placeholder={`Opción ${oi + 1}`} disabled={!isAdmin}
+                               className="flex-1 min-w-0 h-8 rounded-lg border border-border px-2.5 text-[12px] bg-white outline-none focus:border-[#F59E0B] transition-colors" />
+                        {isAdmin && (
+                          <button onClick={() => removeOption(qi, oi)} className="bg-transparent border-0 cursor-pointer p-1 text-text3 hover:text-[#DC2626] shrink-0">
+                            <X size={12} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {isAdmin && (
+                      <button onClick={() => addOption(qi)}
+                              className="self-start mt-0.5 h-7 px-2.5 rounded-lg border border-dashed border-[#C8D6FF] bg-transparent text-[11.5px] font-semibold text-[#4A67D8] cursor-pointer hover:bg-[#EEF3FF] transition-colors">
+                        + Opción
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {draft.questions.length === 0 && (
+              <span className="text-[11.5px] text-text3 italic">Sin preguntas: el prospecto solo deja nombre, email y WhatsApp.</span>
+            )}
+            {isAdmin && draft.questions.length < 6 && (
+              <button onClick={addQuestion}
+                      className="self-start h-8 px-3 rounded-[10px] border border-dashed border-[#D0D5DD] bg-transparent text-[12px] font-semibold text-text3 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] transition-colors duration-150 flex items-center gap-1.5">
+                <Plus size={13} /> Agregar pregunta
+              </button>
+            )}
           </div>
         </div>
 

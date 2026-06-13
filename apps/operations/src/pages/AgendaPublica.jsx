@@ -72,10 +72,37 @@ export default function AgendaPublica() {
   const [email, setEmail] = useState('');
   const [dial, setDial] = useState('+54');
   const [phone, setPhone] = useState('');
-  const [notes, setNotes] = useState('');
+  const [answers, setAnswers] = useState({}); // { [questionId]: value }
   const [error, setError] = useState('');
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(null);
+
+  // Zona horaria del visitante: los horarios se muestran en SU hora local
+  // (el backend los calcula en hora de Argentina y acá los convertimos).
+  const visitorTz = useMemo(() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Argentina/Buenos_Aires'; }
+    catch { return 'America/Argentina/Buenos_Aires'; }
+  }, []);
+  const sameAsArg = useMemo(() => { try { return new Date().getTimezoneOffset() === 180; } catch { return true; } }, []);
+  const tzLabel = useMemo(() => {
+    try {
+      const parts = new Intl.DateTimeFormat('es-AR', { timeZone: visitorTz, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+      return parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT-3';
+    } catch { return 'GMT-3'; }
+  }, [visitorTz]);
+  const fmtLocalTime = useMemo(
+    () => new Intl.DateTimeFormat('es-AR', { timeZone: visitorTz, hour: '2-digit', minute: '2-digit', hour12: false }),
+    [visitorTz],
+  );
+  // Hora local del visitante para un slot argentino (date 'YYYY-MM-DD', time 'HH:MM').
+  const localTime = useCallback((argDate, argTime) => {
+    if (!argDate || !argTime) return argTime || '';
+    try { return fmtLocalTime.format(new Date(`${argDate}T${argTime}:00-03:00`)); }
+    catch { return argTime; }
+  }, [fmtLocalTime]);
+  const tzNote = sameAsArg
+    ? '🇦🇷 Horarios en hora de Argentina (GMT-3)'
+    : `🕐 Horarios en tu hora local (${tzLabel})`;
 
   // ── Slots del mes (cacheados por mes) ──
   const loadMonth = useCallback(async (m, force = false) => {
@@ -135,7 +162,13 @@ export default function AgendaPublica() {
 
   // ── Formulario ──
   const phoneDigits = phone.replace(/\D/g, '');
-  const canSubmit = name.trim().length > 1 && email.includes('@') && phoneDigits.length >= 6 && !booking;
+  const questions = useMemo(() => (Array.isArray(eventMeta?.questions) ? eventMeta.questions : []), [eventMeta]);
+  const requiredOk = useMemo(
+    () => questions.filter((q) => q.required).every((q) => String(answers[q.id] || '').trim()),
+    [questions, answers],
+  );
+  const setAnswer = (id, value) => setAnswers((prev) => ({ ...prev, [id]: value }));
+  const canSubmit = name.trim().length > 1 && email.includes('@') && phoneDigits.length >= 6 && requiredOk && !booking;
 
   const submit = async () => {
     if (booking) return;
@@ -143,11 +176,21 @@ export default function AgendaPublica() {
       setError('Completa nombre, email y WhatsApp para confirmar.');
       return;
     }
+    if (!requiredOk) {
+      setError('Por favor respondé las preguntas obligatorias.');
+      return;
+    }
     setError('');
     setBooking(true);
     try {
+      const answersPayload = questions
+        .map((q) => ({ id: q.id, value: String(answers[q.id] || '').trim() }))
+        .filter((a) => a.value);
       const { data, error: err } = await supabase.functions.invoke('agenda-publica', {
-        body: { action: 'book', date: selDate, time, name: name.trim(), email: email.trim(), dial, phone, notes: notes.trim(), slug },
+        body: {
+          action: 'book', date: selDate, time, name: name.trim(), email: email.trim(),
+          dial, phone, answers: answersPayload, tz: visitorTz, slug,
+        },
       });
       const code = data?.error || (err ? 'network' : null);
       if (!data?.ok) {
@@ -188,7 +231,7 @@ export default function AgendaPublica() {
 
   const reset = () => {
     setStep(1); setSelDate(null); setTime(null); setCalCollapsed(false);
-    setName(''); setEmail(''); setDial('+54'); setPhone(''); setNotes('');
+    setName(''); setEmail(''); setDial('+54'); setPhone(''); setAnswers({});
     setError(''); setBooked(null);
     loadMonth(month, true);
   };
@@ -234,16 +277,19 @@ export default function AgendaPublica() {
 
           <div className="flex-1" />
 
-          <div className="flex items-center gap-[11px] border-t border-[#F0F2F5] pt-4">
-            <span className="w-10 h-10 rounded-full text-white text-[13px] font-bold flex items-center justify-center shrink-0"
-                  style={{ background: 'linear-gradient(135deg, #4878FF, #8B5CF6)' }}>
-              {(eventMeta?.host_name || 'MK').split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}
-            </span>
-            <span className="flex flex-col leading-[1.3]">
-              <span className="text-[13px] font-bold">{eventMeta?.host_name || ''}</span>
-              <span className="text-[11.5px] text-[#98A2B3]">{eventMeta?.host_role || ''}</span>
-            </span>
-          </div>
+          {/* Anfitrión: solo si el calendario lo definió (ventas lo usa, servicio puede no). */}
+          {eventMeta?.host_name && (
+            <div className="flex items-center gap-[11px] border-t border-[#F0F2F5] pt-4">
+              <span className="w-10 h-10 rounded-full text-white text-[13px] font-bold flex items-center justify-center shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #4878FF, #8B5CF6)' }}>
+                {eventMeta.host_name.split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()}
+              </span>
+              <span className="flex flex-col leading-[1.3]">
+                <span className="text-[13px] font-bold">{eventMeta.host_name}</span>
+                {eventMeta.host_role && <span className="text-[11.5px] text-[#98A2B3]">{eventMeta.host_role}</span>}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ── Área de pasos ── */}
@@ -349,7 +395,7 @@ export default function AgendaPublica() {
                   {selDate ? (
                     <>
                       <span className="text-[13px] font-bold">{dayLabel}</span>
-                      <span className="text-[11.5px] text-[#98A2B3] -mt-1.5">🇦🇷 Horarios en hora de Argentina (GMT-3)</span>
+                      <span className="text-[11.5px] text-[#98A2B3] -mt-1.5">{tzNote}</span>
                       <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] max-md:grid-cols-2">
                         {slots.map((t) => {
                           const selected = time === t;
@@ -360,7 +406,7 @@ export default function AgendaPublica() {
                                       style={selected
                                         ? { background: '#3D4659', border: 0, color: '#fff' }
                                         : { background: '#fff', border: '1.5px solid #C8D6FF', color: '#3461D9' }}>
-                                {t}
+                                {localTime(selDate, t)}
                               </button>
                               {selected && (
                                 <button onClick={() => { setStep(2); setError(''); }}
@@ -392,7 +438,7 @@ export default function AgendaPublica() {
                   <button onClick={() => { setStep(2); setError(''); }}
                           className="w-full h-[52px] border-0 rounded-[14px] text-[15px] font-bold text-white cursor-pointer shadow-[0_4px_12px_rgba(72,120,255,.35)]"
                           style={{ background: BLUE }}>
-                    Siguiente — {dayLabel.split(',')[0]} {selDate?.slice(8)}, {time}
+                    Siguiente — {dayLabel.split(',')[0]} {selDate?.slice(8)}, {localTime(selDate, time)}
                   </button>
                 </div>
               )}
@@ -406,8 +452,8 @@ export default function AgendaPublica() {
               <div className="flex items-center gap-2.5 bg-[#EEF3FF] border border-[#C8D6FF] rounded-[14px] px-3.5 py-3">
                 <span className="w-[34px] h-[34px] rounded-[10px] bg-white flex items-center justify-center shrink-0">{Icon.calendar()}</span>
                 <span className="flex-1 min-w-0 leading-[1.35]">
-                  <span className="block text-[13px] font-bold">{dayLabel} · {time}</span>
-                  <span className="block text-[11.5px] text-[#5D6678]">{slotMinutes} min · Zoom · hora Argentina (GMT-3)</span>
+                  <span className="block text-[13px] font-bold">{dayLabel} · {localTime(selDate, time)}</span>
+                  <span className="block text-[11.5px] text-[#5D6678]">{slotMinutes} min · Zoom · {sameAsArg ? 'hora Argentina' : 'tu hora local'} ({tzLabel})</span>
                 </span>
                 <button onClick={() => setStep(1)}
                         className="border-0 bg-transparent text-[12px] font-bold cursor-pointer p-1.5" style={{ color: BLUE }}>
@@ -445,12 +491,36 @@ export default function AgendaPublica() {
                       : 'Ahí te enviamos el link de la reunión y el recordatorio.'}
                   </span>
                 </label>
-                <label className="flex flex-col gap-[5px]">
-                  <span className="text-[12px] font-semibold text-[#3D4659]">¿Qué te gustaría resolver? <span className="font-normal text-[#98A2B3]">(opcional)</span></span>
-                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
-                            placeholder="Cuéntanos en una línea tu situación o tu equipo…"
-                            className="border-[1.5px] border-[#E2E5EB] rounded-xl px-3.5 py-3 text-[14px] outline-none resize-none transition-colors duration-150 focus:border-[#4878FF] w-full leading-[1.5]" />
-                </label>
+                {/* Preguntas configurables del calendario */}
+                {questions.map((q) => (
+                  <label key={q.id} className="flex flex-col gap-[5px]">
+                    <span className="text-[12px] font-semibold text-[#3D4659]">
+                      {q.label}{' '}
+                      {!q.required && <span className="font-normal text-[#98A2B3]">(opcional)</span>}
+                    </span>
+                    {q.type === 'select' ? (
+                      <div className="flex flex-wrap gap-2">
+                        {q.options.map((opt) => {
+                          const sel = answers[q.id] === opt;
+                          return (
+                            <button key={opt} type="button"
+                                    onClick={() => setAnswer(q.id, sel && !q.required ? '' : opt)}
+                                    className="h-11 px-3.5 rounded-xl text-[13.5px] font-semibold cursor-pointer transition-all duration-150"
+                                    style={sel
+                                      ? { background: BLUE, color: '#fff', border: '1.5px solid ' + BLUE }
+                                      : { background: '#fff', color: '#3461D9', border: '1.5px solid #C8D6FF' }}>
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <textarea value={answers[q.id] || ''} onChange={(e) => setAnswer(q.id, e.target.value)} rows={3}
+                                placeholder="Escribe tu respuesta…"
+                                className="border-[1.5px] border-[#E2E5EB] rounded-xl px-3.5 py-3 text-[14px] outline-none resize-none transition-colors duration-150 focus:border-[#4878FF] w-full leading-[1.5]" />
+                    )}
+                  </label>
+                ))}
               </div>
 
               {error && <span className="text-[12px] font-semibold text-[#DC2626]">{error}</span>}
@@ -493,8 +563,8 @@ export default function AgendaPublica() {
                 <span className="flex items-center gap-2.5">
                   <span className="w-[34px] h-[34px] rounded-[10px] bg-[#EEF3FF] flex items-center justify-center shrink-0">{Icon.calendar()}</span>
                   <span className="leading-[1.35]">
-                    <span className="block text-[13.5px] font-bold">{dayLabel} · {time} <span className="font-semibold text-[11.5px] text-[#5D6678]">(hora Argentina, GMT-3)</span></span>
-                    <span className="block text-[11.5px] text-[#5D6678]">{eventMeta?.title || 'Reunión'} · {slotMinutes} min · con {eventMeta?.host_name || 'Método Korex'}</span>
+                    <span className="block text-[13.5px] font-bold">{dayLabel} · {localTime(selDate, time)} <span className="font-semibold text-[11.5px] text-[#5D6678]">({sameAsArg ? 'hora Argentina' : 'tu hora local'}, {tzLabel})</span></span>
+                    <span className="block text-[11.5px] text-[#5D6678]">{eventMeta?.title || 'Reunión'} · {slotMinutes} min{eventMeta?.host_name ? ` · con ${eventMeta.host_name}` : ''}</span>
                   </span>
                 </span>
                 <a href={gcalUrl} target="_blank" rel="noopener noreferrer"

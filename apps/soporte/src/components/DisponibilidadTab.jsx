@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Plus, X } from 'lucide-react';
-import { fetchTeamMembers, updateTeamMember } from '../lib/api.js';
+import { fetchSoporteTeam, updateTeamMember } from '../lib/api.js';
 import { initials as initialsOf, colorFromString } from '../lib/format.js';
 import { hasAvailability } from './CalendariosTab.jsx';
 
@@ -96,7 +96,7 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchTeamMembers().then((tm) => {
+    fetchSoporteTeam().then((tm) => {
       setTeam(tm);
       setSelId((prev) => prev || initialMemberId || tm[0]?.id || null);
     }).catch((e) => console.error('soporte: fallo la carga del equipo', e));

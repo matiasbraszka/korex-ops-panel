@@ -130,6 +130,22 @@ export async function fetchTeamMembers() {
   return teamCache;
 }
 
+// Solo los miembros con acceso al módulo Soporte (o admins) — para que las
+// pestañas Calendarios/Disponibilidad no listen a todo el equipo. Si el RPC
+// falla, se devuelve el equipo completo (mejor que una lista vacía).
+let soporteTeamCache = null;
+export async function fetchSoporteTeam() {
+  if (soporteTeamCache) return soporteTeamCache;
+  const all = await fetchTeamMembers();
+  let allowed = null;
+  try {
+    const { data } = await supabase.rpc('korex_soporte_member_ids');
+    if (Array.isArray(data) && data.length) allowed = new Set(data);
+  } catch { /* fallback al equipo completo */ }
+  soporteTeamCache = allowed ? all.filter((m) => allowed.has(m.id)) : all;
+  return soporteTeamCache;
+}
+
 // Email / disponibilidad de un miembro (pestaña Disponibilidad, solo admin).
 export async function updateTeamMember(id, patch) {
   const rows = await sbFetch(`team_members?id=eq.${encodeURIComponent(id)}&select=id,name,role,color,initials,email,availability`, {
@@ -142,9 +158,9 @@ export async function updateTeamMember(id, patch) {
   const updated = Array.isArray(rows) ? rows[0] : null;
   // RLS puede filtrar el UPDATE sin error (0 filas) — tratarlo como fallo.
   if (!updated) throw new Error('update_denied');
-  if (teamCache) {
-    teamCache = teamCache.map((m) => (m.id === updated.id ? { ...m, ...updated } : m));
-  }
+  const patchMember = (list) => list.map((m) => (m.id === updated.id ? { ...m, ...updated } : m));
+  if (teamCache) teamCache = patchMember(teamCache);
+  if (soporteTeamCache) soporteTeamCache = patchMember(soporteTeamCache);
   return updated;
 }
 

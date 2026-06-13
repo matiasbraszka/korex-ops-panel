@@ -1,5 +1,11 @@
-// supabase/functions/agenda-publica/index.ts — v2
+// supabase/functions/agenda-publica/index.ts — v3
 // Backend de la página pública /agendar[/<slug>] (leads reservan solos).
+//
+// v3: cada calendario lleva sus propios textos (description/host) y un
+// formulario configurable (questions[]); las respuestas del lead se guardan
+// en appointments.answers y van a la descripción del evento. Los horarios se
+// siguen calculando en hora de Argentina; la página los muestra en la zona
+// horaria del visitante.
 //
 //   POST { action: 'slots', year, month, slug? } → días/horarios libres del mes
 //     para ese calendario de reserva (booking_calendars): intersección de la
@@ -66,6 +72,32 @@ interface BookingCalendar {
   gcal_color_id: string | null;
   member_ids: string[];
   active: boolean;
+  description: string | null;
+  host_name: string | null;
+  host_role: string | null;
+  questions: unknown;
+}
+
+interface Question {
+  id: string;
+  label: string;
+  type: "text" | "select";
+  required: boolean;
+  options: string[];
+}
+
+// Preguntas del formulario del calendario, saneadas (jsonb editable en panel).
+function sanitizeQuestions(raw: unknown): Question[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 6).map((q: any) => ({
+    id: String(q?.id || "").slice(0, 40),
+    label: String(q?.label || "").trim().slice(0, 160),
+    type: (q?.type === "select" ? "select" : "text") as Question["type"],
+    required: Boolean(q?.required),
+    options: Array.isArray(q?.options)
+      ? q.options.map((o: any) => String(o).trim().slice(0, 80)).filter(Boolean).slice(0, 10)
+      : [],
+  })).filter((q) => q.id && q.label && (q.type === "text" || q.options.length > 0));
 }
 
 interface Member {
@@ -85,7 +117,7 @@ async function getCfg(): Promise<Cfg> {
 // Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
 async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
   let q = admin.from("booking_calendars")
-    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active")
+    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions")
     .eq("active", true);
   if (slug) q = q.eq("slug", slug);
   else q = q.order("created_at", { ascending: true }).limit(1);
@@ -369,10 +401,12 @@ Deno.serve(async (req: Request) => {
       days,
       event: {
         title: cal?.name || "Reunión",
-        description: pub.description || "",
-        host_name: pub.host_name || "Método Korex",
-        host_role: pub.host_role || "",
+        // Textos propios del calendario; si están vacíos, los generales.
+        description: cal ? (cal.description || "") : (pub.description || ""),
+        host_name: cal ? (cal.host_name || "") : (pub.host_name || ""),
+        host_role: cal ? (cal.host_role || "") : (pub.host_role || ""),
         slot_minutes: slotMin,
+        questions: sanitizeQuestions(cal?.questions),
       },
       configured,
     });
@@ -387,13 +421,28 @@ Deno.serve(async (req: Request) => {
     const email = String(body.email || "").trim().toLowerCase().slice(0, 120);
     const dial = String(body.dial || "+54");
     const phone = String(body.phone || "");
-    const notes = String(body.notes || "").trim().slice(0, 500) || null;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) return jsonResp(400, { error: "bad_slot" });
     if (name.length < 2) return jsonResp(400, { error: "bad_name" });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return jsonResp(400, { error: "bad_email" });
     const waDigits = waPhoneFrom(dial, phone);
     if (!waDigits) return jsonResp(400, { error: "bad_phone" });
+
+    // Respuestas del formulario del calendario (validadas contra sus preguntas).
+    const questions = sanitizeQuestions(cal.questions);
+    const rawAnswers = Array.isArray(body.answers) ? body.answers : [];
+    const answers: { id: string; label: string; value: string }[] = [];
+    for (const q of questions) {
+      const found = rawAnswers.find((a: any) => a?.id === q.id);
+      const value = String(found?.value ?? "").trim().slice(0, 500);
+      if (q.required && !value) return jsonResp(400, { error: "missing_answer" });
+      if (value && q.type === "select" && !q.options.includes(value)) return jsonResp(400, { error: "bad_answer" });
+      if (value) answers.push({ id: q.id, label: q.label, value });
+    }
+    // Compat con la versión anterior de la página (campo notes suelto).
+    const legacyNotes = String(body.notes || "").trim().slice(0, 500);
+    if (legacyNotes && !answers.length) answers.push({ id: "notes", label: "¿Qué te gustaría resolver?", value: legacyNotes });
+    const notesText = answers.map((a) => `${a.label}: ${a.value}`).join("\n") || null;
 
     // El slot tiene que seguir libre (recalcular el mes de esa fecha — incluye
     // citas internas y el freebusy fresco de los Google Calendars).
@@ -434,7 +483,7 @@ Deno.serve(async (req: Request) => {
         description: [
           `Reserva desde la agenda pública (${cal.name}).`,
           `Lead: ${name} · ${email} · +${waDigits}`,
-          notes ? `Quiere resolver: ${notes}` : null,
+          notesText,
           meetingLink ? `Zoom: ${meetingLink}` : null,
         ].filter(Boolean).join("\n"),
         start: startAt,
@@ -475,7 +524,8 @@ Deno.serve(async (req: Request) => {
       conversation_id: convId,
       wa_jid: waJid,
       title,
-      notes: notes ? `Quiere resolver: ${notes}` : null,
+      notes: notesText,
+      answers: answers.length ? answers : null,
       start_at: startAt,
       end_at: endAt,
       gcal_event_id: gcalEventId,
@@ -496,13 +546,26 @@ Deno.serve(async (req: Request) => {
     // Alta del lead en Google Contacts (best-effort, no bloquea).
     const contactPromise = callCalendarScript(cfg, { action: "upsert_contact", name, phone: waDigits }).catch(() => null);
 
-    // Confirmación por WhatsApp.
-    const fecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" });
-    const tpl = pub.confirmation_template || "Hola {nombre}! Confirmamos tu reunión para el {fecha} a las {hora} (hora Argentina).";
+    // Confirmación por WhatsApp — en la zona horaria del lead (la manda la
+    // página); si no llega o es inválida, se usa la hora de Argentina.
+    const leadTz = (typeof body.tz === "string" && /^[A-Za-z]+\/[A-Za-z0-9_+\-/]+$/.test(body.tz)) ? body.tz : "America/Argentina/Buenos_Aires";
+    let fecha: string, horaLocal: string, zonaLabel: string;
+    try {
+      fecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: leadTz });
+      horaLocal = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: leadTz }).format(slotDate);
+      const parts = new Intl.DateTimeFormat("es-AR", { timeZoneName: "shortOffset", timeZone: leadTz }).formatToParts(slotDate);
+      zonaLabel = parts.find((p) => p.type === "timeZoneName")?.value || "GMT-3";
+    } catch {
+      fecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" });
+      horaLocal = time;
+      zonaLabel = "GMT-3";
+    }
+    const tpl = pub.confirmation_template || "Hola {nombre}! Confirmamos tu reunión para el {fecha} a las {hora}{zona}.";
     let confirmText = tpl
       .replaceAll("{nombre}", name.split(" ")[0])
       .replaceAll("{fecha}", fecha)
-      .replaceAll("{hora}", time);
+      .replaceAll("{hora}", horaLocal)
+      .replaceAll("{zona}", ` (hora local, ${zonaLabel})`);
     if (meetingLink) confirmText += `\n\n🔗 Link de la reunión: ${meetingLink}`;
     let waSent = false;
     if (convId) waSent = await sendWhatsApp(cfg, { id: convId, wa_jid: waJid }, confirmText);
