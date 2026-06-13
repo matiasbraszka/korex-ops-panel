@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Zap, Plus, Trash2, ChevronLeft, ChevronRight, Check, X, Tag } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { convName } from '../lib/format.js';
-
-// Wallpaper WhatsApp para la vista previa (mismo del hilo).
-const WALLPAPER = {
-  backgroundColor: '#EFEAE2',
-  backgroundImage: 'radial-gradient(rgba(120,100,70,0.07) 1px, transparent 1.1px)',
-  backgroundSize: '18px 18px',
-};
 
 const CATEGORIES = [
   { id: 'citas', label: 'Citas', bg: '#DCFCE7', color: '#15803D' },
@@ -110,7 +102,7 @@ function TagsField({ value, onChange }) {
 // Las respuestas rápidas viven en soporte_config.templates y se insertan
 // tipeando "/" en el chat.
 export default function PlantillasPage() {
-  const { templates, saveTemplates, conversations } = useSoporte();
+  const { templates, saveTemplates } = useSoporte();
   const [selectedId, setSelectedId] = useState(null); // id | 'new' | null
   const [draft, setDraft] = useState(null); // {name, shortcut, category, body, tags}
   const [error, setError] = useState('');
@@ -148,18 +140,6 @@ export default function PlantillasPage() {
         draft.category !== (selected?.category || '') || draft.body !== (selected?.body || '') ||
         (draft.tags || []).join('') !== (selected?.tags || []).join('')
   );
-
-  // Datos de ejemplo para la vista previa (con el último chat real si hay).
-  const sample = useMemo(() => {
-    const conv = (conversations || []).find((c) => !c.is_group);
-    return {
-      '{nombre}': (conv ? convName(conv) : 'Caro').split(' ')[0],
-      '{cliente}': conv?.client?.name || 'Plan Funnels',
-      '{fecha}': new Date(Date.now() + 86400000).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }),
-      '{hora}': '10:00',
-      '{zoom}': 'https://zoom.us/j/8123…',
-    };
-  }, [conversations]);
 
   const insertVariable = (v) => {
     const ta = taRef.current;
@@ -400,24 +380,6 @@ export default function PlantillasPage() {
         )}
       </div>
 
-      {/* Vista previa (320px, solo desktop) */}
-      <div className="w-[320px] shrink-0 border-l border-border min-h-0 flex-col max-md:hidden flex">
-        <div className="h-[52px] border-b border-surface2 flex items-center px-4 shrink-0">
-          <span className="text-[10px] font-bold tracking-widest text-text3 uppercase">Vista previa</span>
-        </div>
-        <div className="flex-1 min-h-0 p-4 flex items-start justify-center" style={WALLPAPER}>
-          {draft?.body ? (
-            <div className="max-w-full px-3 py-2 text-[13px] leading-relaxed break-words bg-[#DCFCE7] rounded-[14px] rounded-br-[4px] shadow-[0_1px_1px_rgba(10,22,40,.06)] mt-2">
-              <Tokens text={draft.body} resolved={sample} />
-              <div className="text-right text-[9.5px] text-[#7A9484] mt-0.5">11:42 ✓✓</div>
-            </div>
-          ) : (
-            <div className="text-[11.5px] text-text3 bg-white rounded-full px-3 py-1 mt-4 shadow-sm">
-              Escribí el mensaje para ver cómo queda
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
