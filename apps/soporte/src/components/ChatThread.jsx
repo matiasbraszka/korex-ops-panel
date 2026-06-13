@@ -22,6 +22,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
   const [forwardMsg, setForwardMsg] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
   const stickToBottom = useRef(true);
   const prevHeightRef = useRef(null);
 
@@ -52,6 +53,13 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     return out;
   }, [thread.items]);
 
+  // Mapa wa_message_id → mensaje (para resolver la cita del "responder").
+  const byWaId = useMemo(() => {
+    const m = {};
+    for (const it of thread.items) if (it.wa_message_id) m[it.wa_message_id] = it;
+    return m;
+  }, [thread.items]);
+
   const isNearBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return true;
@@ -67,6 +75,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   useEffect(() => {
     stickToBottom.current = true;
     setShowJump(false);
+    setReplyTo(null);
   }, [selectedId]);
 
   // En grupos, el sub del header lista a los participantes con nombre
@@ -200,6 +209,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   onRetry={() => retrySend(selectedId, g.msg.id)}
                   onDiscard={() => discardFailed(selectedId, g.msg.id)}
                   onForward={setForwardMsg}
+                  onReply={setReplyTo}
+                  quotedMsg={g.msg.reply_to ? byWaId[g.msg.reply_to] : null}
                 />
               )
             )}
@@ -216,7 +227,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
         </div>
       )}
 
-      <Composer onSent={() => { stickToBottom.current = true; }} />
+      <Composer replyTo={replyTo} onClearReply={() => setReplyTo(null)}
+                onSent={() => { stickToBottom.current = true; }} />
 
       <ForwardModal msg={forwardMsg} onClose={() => setForwardMsg(null)} />
     </div>

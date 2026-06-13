@@ -218,14 +218,14 @@ export function SoporteProvider({ children }) {
     });
   };
 
-  const sendMessage = useCallback(async (convId, text) => {
+  const sendMessage = useCallback(async (convId, text, quotedId = null) => {
     const body = String(text || '').trim();
     if (!convId || !body) return;
     const now = new Date().toISOString();
     const temp = {
       id: tempId(), _temp: true, conversation_id: convId, direction: 'out',
       msg_type: 'conversation', body, status: 'sending', sent_by: currentMemberId,
-      wa_timestamp: now, created_at: now,
+      wa_timestamp: now, created_at: now, reply_to: quotedId || null,
     };
     setThreads((prev) => {
       const cur = prev[convId] || { items: [], hasMore: false, loadingOlder: false, loaded: true };
@@ -235,7 +235,7 @@ export function SoporteProvider({ children }) {
     setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, last_message_at: now, last_message_preview: body.slice(0, 120) } : c)));
 
     try {
-      const res = await invokeSend({ conversationId: convId, text: body });
+      const res = await invokeSend({ conversationId: convId, text: body, quotedId });
       const real = res?.message;
       setThreads((prev) => {
         const cur = prev[convId];
@@ -255,15 +255,16 @@ export function SoporteProvider({ children }) {
 
   // ── Envio de adjuntos (imagen/video/audio/documento) ──
   const MSG_TYPE_BY_KIND = { image: 'imageMessage', video: 'videoMessage', audio: 'audioMessage', document: 'documentMessage' };
-  const sendAttachment = useCallback(async (convId, { base64, mimetype, filename, kind, caption }) => {
+  const sendAttachment = useCallback(async (convId, { base64, mimetype, filename, kind, caption, quotedId = null }) => {
     if (!convId || !base64) return;
     const now = new Date().toISOString();
     const temp = {
       id: tempId(), _temp: true, conversation_id: convId, direction: 'out',
       msg_type: MSG_TYPE_BY_KIND[kind] || 'documentMessage', body: caption?.trim() || null,
       status: 'sending', sent_by: currentMemberId, wa_timestamp: now, created_at: now,
+      reply_to: quotedId || null,
       // Para reintentar si falla.
-      _mediaPayload: { base64, mimetype, filename, kind, caption },
+      _mediaPayload: { base64, mimetype, filename, kind, caption, quotedId },
     };
     setThreads((prev) => {
       const cur = prev[convId] || { items: [], hasMore: false, loadingOlder: false, loaded: true };
@@ -271,7 +272,7 @@ export function SoporteProvider({ children }) {
     });
     setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, last_message_at: now, last_message_preview: caption || `📎 ${filename}` } : c)));
     try {
-      const res = await invokeSend({ conversationId: convId, text: caption?.trim() || '', media: { base64, mimetype, filename, kind } });
+      const res = await invokeSend({ conversationId: convId, text: caption?.trim() || '', media: { base64, mimetype, filename, kind }, quotedId });
       const real = res?.message;
       setThreads((prev) => {
         const cur = prev[convId];

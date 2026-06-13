@@ -88,8 +88,9 @@ async function persistOutgoing(args: {
   memberId: string | null;
   media?: { path: string; mime: string; filename: string } | null;
   previewText: string;
+  replyTo?: string | null;
 }): Promise<Record<string, unknown>> {
-  const { conversationId, evoData, msgType, body, memberId, media, previewText } = args;
+  const { conversationId, evoData, msgType, body, memberId, media, previewText, replyTo } = args;
   const tsRaw = Number(evoData.messageTimestamp ?? 0);
   const waTimestamp = tsRaw > 0 ? new Date(tsRaw * 1000).toISOString() : new Date().toISOString();
   const row: Record<string, unknown> = {
@@ -103,6 +104,7 @@ async function persistOutgoing(args: {
     payload: evoData,
     wa_timestamp: waTimestamp,
   };
+  if (replyTo) row.reply_to = replyTo;
   if (media) {
     row.media_path = media.path;
     row.media_mime = media.mime;
@@ -163,6 +165,18 @@ Deno.serve(async (req: Request) => {
 
   const evoHeaders = { "Content-Type": "application/json", apikey: apiKey };
 
+  // Responder citando un mensaje (estilo WhatsApp): si viene quoted_id
+  // (wa_message_id del mensaje citado), armamos el `quoted` para Evolution
+  // a partir del payload guardado de ese mensaje.
+  const quotedId = String(body.quoted_id || "");
+  let quoted: Record<string, unknown> | null = null;
+  if (quotedId) {
+    const { data: qm } = await admin
+      .from("wa_messages").select("payload").eq("wa_message_id", quotedId).maybeSingle();
+    const p = (qm?.payload as any) || null;
+    if (p?.key) quoted = { key: p.key, message: p.message || {} };
+  }
+
   // ── Adjunto ──
   if (media?.base64) {
     const kind = String(media.kind || "");
@@ -187,7 +201,7 @@ Deno.serve(async (req: Request) => {
         evoRes = await fetch(`${serverUrl}/message/sendWhatsAppAudio/${instance}`, {
           method: "POST",
           headers: evoHeaders,
-          body: JSON.stringify({ number: conv.wa_jid, audio: media.base64 }),
+          body: JSON.stringify({ number: conv.wa_jid, audio: media.base64, ...(quoted ? { quoted } : {}) }),
           signal: AbortSignal.timeout(60000),
         });
       } else {
@@ -201,6 +215,7 @@ Deno.serve(async (req: Request) => {
             media: media.base64,
             fileName: filename,
             caption: text || undefined,
+            ...(quoted ? { quoted } : {}),
           }),
           signal: AbortSignal.timeout(60000),
         });
@@ -234,6 +249,7 @@ Deno.serve(async (req: Request) => {
       memberId: auth.memberId,
       media: mediaInfo,
       previewText: text || labels[kind] || "📎 Adjunto",
+      replyTo: quotedId || null,
     });
     return jsonResp(200, { ok: true, message });
   }
@@ -244,7 +260,7 @@ Deno.serve(async (req: Request) => {
     evoRes = await fetch(`${serverUrl}/message/sendText/${instance}`, {
       method: "POST",
       headers: evoHeaders,
-      body: JSON.stringify({ number: conv.wa_jid, text }),
+      body: JSON.stringify({ number: conv.wa_jid, text, ...(quoted ? { quoted } : {}) }),
       signal: AbortSignal.timeout(25000),
     });
   } catch (e) {
@@ -264,6 +280,7 @@ Deno.serve(async (req: Request) => {
     body: text,
     memberId: auth.memberId,
     previewText: text,
+    replyTo: quotedId || null,
   });
   return jsonResp(200, { ok: true, message });
 });

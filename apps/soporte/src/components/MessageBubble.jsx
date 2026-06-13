@@ -1,9 +1,13 @@
-import { Clock, AlertCircle, CheckCheck, Forward } from 'lucide-react';
+import { Clock, AlertCircle, CheckCheck, Forward, Reply } from 'lucide-react';
 import { fmtClock, colorFromString, msgTypeLabel, initials } from '../lib/format.js';
 import MediaContent from './MediaContent.jsx';
 
 // Tipos que renderizan contenido multimedia real (imagen, audio, video, doc).
 const MEDIA_TYPES = new Set(['imageMessage', 'stickerMessage', 'audioMessage', 'videoMessage', 'documentMessage']);
+
+// Texto corto de un mensaje (para la cita / preview).
+const MEDIA_SNIPPET = { imageMessage: '📷 Imagen', stickerMessage: 'Sticker', audioMessage: '🎙 Nota de voz', videoMessage: '🎬 Video', documentMessage: '📄 Documento' };
+const snippetOf = (m) => (m?.body && m.body.trim()) || MEDIA_SNIPPET[m?.msg_type] || 'Mensaje';
 
 // Menciones (@Nombre) coloreadas como en WhatsApp.
 function BodyText({ text }) {
@@ -20,7 +24,7 @@ function BodyText({ text }) {
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
-export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward }) {
+export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, quotedMsg }) {
   const out = msg.direction === 'out';
   const isMedia = MEDIA_TYPES.has(msg.msg_type);
   const typeLabel = !isMedia ? msgTypeLabel(msg.msg_type) : null;
@@ -29,18 +33,33 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
   const failed = msg.status === 'failed';
   const sending = msg.status === 'sending';
 
-  // Reenviar: disponible en mensajes ya enviados/recibidos (no fallidos ni en curso).
-  const canForward = onForward && !failed && !sending && !msg._temp && (msg.body || isMedia);
-  const fwdBtn = canForward ? (
-    <button onClick={() => onForward(msg)} title="Reenviar a otro chat"
-            className="self-center opacity-0 group-hover:opacity-100 max-md:opacity-70 transition-opacity duration-150 shrink-0 w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
-      <Forward size={13} />
-    </button>
+  // Acciones (responder / reenviar): en mensajes ya enviados o recibidos.
+  const actionable = !failed && !sending && !msg._temp && (msg.body || isMedia);
+  const canForward = onForward && actionable;
+  const canReply = onReply && actionable;
+  const actions = (canForward || canReply) ? (
+    <div className="self-center flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-70 transition-opacity duration-150 shrink-0">
+      {canReply && (
+        <button onClick={() => onReply(msg)} title="Responder a este mensaje"
+                className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
+          <Reply size={13} />
+        </button>
+      )}
+      {canForward && (
+        <button onClick={() => onForward(msg)} title="Reenviar a otro chat"
+                className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
+          <Forward size={13} />
+        </button>
+      )}
+    </div>
   ) : null;
+
+  // Nombre del autor del mensaje citado (para la cabecera de la cita).
+  const quotedAuthor = quotedMsg ? (quotedMsg.direction === 'out' ? 'Vos' : (quotedMsg.payload?.pushName || authorName || 'Contacto')) : null;
 
   return (
     <div className={`group flex items-center ${out ? 'justify-end' : 'justify-start'} px-4 gap-1.5`}>
-      {out && fwdBtn}
+      {out && actions}
       {/* Avatar del autor en grupos (alineado abajo, spacer si es consecutiva) */}
       {!out && isGroup && (
         showAuthor && authorName ? (
@@ -65,6 +84,12 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
         {showAuthor && authorName && (
           <div className="text-[11px] font-bold mb-0.5" style={{ color: authorColor }}>
             {authorName}
+          </div>
+        )}
+        {quotedMsg && (
+          <div className="mb-1 rounded-md border-l-[3px] border-[#4A67D8] bg-black/[0.045] px-2 py-1 overflow-hidden">
+            <div className="text-[10.5px] font-bold text-[#4A67D8] truncate leading-tight">{quotedAuthor}</div>
+            <div className="text-[11px] text-text2 truncate leading-tight">{snippetOf(quotedMsg)}</div>
           </div>
         )}
         {isMedia && (
@@ -94,7 +119,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
           </div>
         )}
       </div>
-      {!out && fwdBtn}
+      {!out && actions}
     </div>
   );
 }

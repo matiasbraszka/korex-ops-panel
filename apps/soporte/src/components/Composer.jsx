@@ -6,6 +6,9 @@ import { convName } from '../lib/format.js';
 
 const MAX_FILE_MB = 12;
 
+const REPLY_SNIPPET = { imageMessage: '📷 Imagen', stickerMessage: 'Sticker', audioMessage: '🎙 Nota de voz', videoMessage: '🎬 Video', documentMessage: '📄 Documento' };
+const replySnippet = (m) => (m?.body && m.body.trim()) || REPLY_SNIPPET[m?.msg_type] || 'Mensaje';
+
 function kindFromMime(mime) {
   if (mime.startsWith('image/')) return 'image';
   if (mime.startsWith('video/')) return 'video';
@@ -25,7 +28,7 @@ const DEFAULT_TEMPLATES = [
 
 // Composer — Diseño A: card redondeada, foco ámbar, enviar circular ámbar.
 // Tipear «/» al inicio abre el popover de respuestas rápidas (↑↓ Enter Esc).
-export default function Composer({ onSent }) {
+export default function Composer({ onSent, replyTo, onClearReply }) {
   const { selectedId, selectedConversation, sendMessage, sendAttachment, getDraft, setDraft, templates: configTemplates } = useSoporte();
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
@@ -76,7 +79,8 @@ export default function Composer({ onSent }) {
             const base64 = String(reader.result || '').split(',')[1] || '';
             if (!base64) return;
             const ext = (blob.type.includes('mp4') ? 'm4a' : 'webm');
-            sendAttachment(selectedId, { base64, mimetype: blob.type || 'audio/webm', filename: `nota-de-voz.${ext}`, kind: 'audio', caption: '' });
+            sendAttachment(selectedId, { base64, mimetype: blob.type || 'audio/webm', filename: `nota-de-voz.${ext}`, kind: 'audio', caption: '', quotedId: replyTo?.wa_message_id || null });
+            onClearReply?.();
             onSent?.();
           };
           reader.readAsDataURL(blob);
@@ -132,6 +136,9 @@ export default function Composer({ onSent }) {
     }
   }, [selectedId, getDraft]);
 
+  // Al elegir "responder", enfocar el cuadro de texto.
+  useEffect(() => { if (replyTo) taRef.current?.focus(); }, [replyTo]);
+
   const autosize = () => {
     const ta = taRef.current;
     if (!ta) return;
@@ -185,15 +192,17 @@ export default function Composer({ onSent }) {
 
   const submit = () => {
     const body = text.trim();
+    const quotedId = replyTo?.wa_message_id || null;
     if (file) {
-      sendAttachment(selectedId, { base64: file.base64, mimetype: file.mimetype, filename: file.filename, kind: file.kind, caption: body });
+      sendAttachment(selectedId, { base64: file.base64, mimetype: file.mimetype, filename: file.filename, kind: file.kind, caption: body, quotedId });
       setFile(null);
     } else {
       if (!body) return;
-      sendMessage(selectedId, body);
+      sendMessage(selectedId, body, quotedId);
     }
     setText('');
     setDraft(selectedId, '');
+    onClearReply?.();
     const ta = taRef.current;
     if (ta) ta.style.height = 'auto';
     onSent?.();
@@ -280,6 +289,22 @@ export default function Composer({ onSent }) {
             <div className="text-[10.5px] text-text3">{file.sizeMB} MB · el texto de abajo va como descripción</div>
           </div>
           <button onClick={() => setFile(null)}
+                  className="bg-transparent border-0 text-text3 hover:text-text cursor-pointer p-1 shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {replyTo && !recording && (
+        <div className="flex items-center gap-2.5 mb-2 px-2.5 py-2 rounded-xl border border-[#C8D6FF] bg-[#EEF3FF]">
+          <span className="w-0.5 self-stretch rounded-full bg-[#4A67D8] shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-bold text-[#4A67D8] truncate">
+              Respondiendo a {replyTo.direction === 'out' ? 'tu mensaje' : (convName(selectedConversation)?.split(' ')[0] || 'el contacto')}
+            </div>
+            <div className="text-[11.5px] text-text2 truncate">{replySnippet(replyTo)}</div>
+          </div>
+          <button onClick={onClearReply} title="Cancelar respuesta"
                   className="bg-transparent border-0 text-text3 hover:text-text cursor-pointer p-1 shrink-0">
             <X size={15} />
           </button>
