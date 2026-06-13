@@ -29,7 +29,7 @@ export function SoporteProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [filters, setFilters] = useState({ scope: 'all', tagId: null, assigneeId: null, search: '' });
+  const [filters, setFilters] = useState({ scope: 'all', tagId: null, assigneeId: null, clientId: null, search: '' });
   // threads: { [convId]: { items, hasMore, loadingOlder, loaded } }
   const [threads, setThreads] = useState({});
   const [config, setConfig] = useState({ tags: [], appointment_template: '' });
@@ -479,6 +479,7 @@ export function SoporteProvider({ children }) {
       if (filters.scope === 'groups' && !c.is_group) return false;
       if (filters.tagId && !(c.tags || []).includes(filters.tagId)) return false;
       if (filters.assigneeId && c.assigned_to !== filters.assigneeId) return false;
+      if (filters.clientId && c.client_id !== filters.clientId) return false;
       if (q) {
         const hay = `${c.wa_profile_name || ''} ${c.wa_phone || ''} ${c.contact?.full_name || ''} ${c.client?.name || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -491,6 +492,28 @@ export function SoporteProvider({ children }) {
     () => conversations.find((c) => c.id === selectedId) || null,
     [conversations, selectedId],
   );
+
+  // Conteos por etiqueta y clientes vinculados (sobre los chats NO archivados),
+  // para el panel "Etiquetas" y el filtro por cliente.
+  const tagCounts = useMemo(() => {
+    const counts = {};
+    for (const c of conversations) {
+      if (c.archived) continue;
+      for (const id of (c.tags || [])) counts[id] = (counts[id] || 0) + 1;
+    }
+    return counts;
+  }, [conversations]);
+
+  const linkedClients = useMemo(() => {
+    const map = new Map();
+    for (const c of conversations) {
+      if (c.archived || !c.client_id) continue;
+      const cur = map.get(c.client_id) || { id: c.client_id, name: c.client?.name || 'Cliente', count: 0 };
+      cur.count += 1;
+      map.set(c.client_id, cur);
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [conversations]);
 
   const unreadTotal = useMemo(
     () => conversations.reduce((acc, c) => acc + (c.id === selectedId || c.archived ? 0 : (c.unread_count || 0)), 0),
@@ -507,6 +530,7 @@ export function SoporteProvider({ children }) {
     unreadTotal,
     selectedId, selectedConversation, selectConversation,
     filters, setFilters,
+    tagCounts, linkedClients,
     threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed,
     tagsCatalog: config.tags || [],
@@ -521,7 +545,7 @@ export function SoporteProvider({ children }) {
     getDraft, setDraft, refresh,
   }), [
     loading, realtimeOk, visibleConversations, conversations.length, unreadTotal, selectedId,
-    selectedConversation, selectConversation, filters, threads, loadOlder,
+    selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, config,
     saveTagsCatalog, saveTemplates, saveAvailability,
     updateConversation, updateNotes, linkContact, appointmentsByConv,

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CalendarDays, ChevronLeft, ChevronRight, Video, ExternalLink, MessageCircle,
-  CalendarClock, CalendarX, Clock, Check, Plus, Search, Link2,
+  CalendarClock, CalendarX, Clock, Check, Plus, Search,
 } from 'lucide-react';
 import { useAuth } from '@korex/auth';
 import { useSoporte } from '../context/SoporteContext.jsx';
@@ -435,15 +435,6 @@ export default function CitasPage() {
   const [upcoming, setUpcoming] = useState([]);
   const [selected, setSelected] = useState(null);
   const [nuevaOpen, setNuevaOpen] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
-
-  // Link público de agenda (página /agendar, sin login).
-  const copyPublicLink = () => {
-    const url = `${window.location.origin}/agendar`;
-    navigator.clipboard?.writeText(url).catch(() => {});
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2500);
-  };
   const [mobileDay, setMobileDay] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const gridRef = useRef(null);
 
@@ -575,11 +566,6 @@ export default function CitasPage() {
                 <span className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" /> Google Calendar conectado
                 </span>
-                <button onClick={copyPublicLink}
-                        title="Copiar el link público para que los leads agenden solos"
-                        className="h-[34px] px-3 rounded-[10px] border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] flex items-center gap-1.5 transition-colors duration-150">
-                  <Link2 size={13} /> {linkCopied ? '✓ Link copiado' : 'Link público de agenda'}
-                </button>
                 <button onClick={() => setNuevaOpen(true)}
                         className="h-[34px] px-3.5 rounded-[10px] border-0 bg-[#F59E0B] text-white text-[12.5px] font-bold cursor-pointer hover:bg-[#E08C0B] flex items-center gap-1.5 shadow-[0_2px_6px_rgba(245,158,11,.35)] transition-colors duration-150">
                   <Plus size={14} /> Nueva cita

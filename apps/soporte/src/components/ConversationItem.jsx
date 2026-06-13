@@ -1,4 +1,4 @@
-import { Users, MessageCircle, Calendar, Link2, CheckCheck } from 'lucide-react';
+import { Users, Calendar, Link2, CheckCheck } from 'lucide-react';
 import { initials, fmtTime, colorFromString, convName, prettyPreview } from '../lib/format.js';
 
 // Item de conversación — Diseño A.
@@ -11,10 +11,12 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
   // Sin nombre conocido (solo teléfono) → avatar "?" punteado, como el diseño.
   const unknown = !conv.is_group && !conv.contact?.full_name && !conv.wa_profile_name;
   const lastIsOurs = conv.last_message_direction === 'out';
-  const tags = (conv.tags || [])
+  const allTags = (conv.tags || [])
     .map((id) => tagsCatalog.find((t) => t.id === id))
-    .filter(Boolean)
-    .slice(0, 3);
+    .filter(Boolean);
+  // Mostramos las etiquetas con su nombre; si hay muchas, las primeras + "+N".
+  const tags = allTags.slice(0, conv.client?.name ? 1 : 2);
+  const extraTags = allTags.length - tags.length;
   // Próxima cita embebida (opcional — si la query de conversaciones la trae).
   const cita = conv.next_appointment || null;
 
@@ -39,9 +41,6 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
             {conv.is_group ? <Users size={17} /> : initials(name)}
           </div>
         )}
-        <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#22C55E] border-2 border-white flex items-center justify-center">
-          <MessageCircle size={9} className="text-white" />
-        </span>
       </div>
 
       <div className="flex-1 min-w-0">
@@ -69,27 +68,32 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
           </span>
         </div>
 
-        {/* Fila 3: vínculo + etiquetas + cita + no leídos */}
+        {/* Fila 3: cliente vinculado + etiquetas (con nombre) + cita + no leídos */}
         <div className="flex items-center gap-1 mt-1">
           {conv.client?.name ? (
-            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[110px]">
+            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[120px] shrink-0">
               {conv.client.name}
             </span>
           ) : conv.contact?.full_name ? (
-            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#ECFEFF] text-[#0E7490] truncate max-w-[110px]">
+            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#ECFEFF] text-[#0E7490] truncate max-w-[120px] shrink-0">
               {conv.contact.full_name}
             </span>
           ) : !conv.is_group ? (
-            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full border border-dashed border-[#F5D9A8] text-[#B45309] flex items-center gap-0.5">
+            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full border border-dashed border-[#F5D9A8] text-[#B45309] flex items-center gap-0.5 shrink-0">
               <Link2 size={8} /> Vincular
             </span>
           ) : null}
 
           {tags.map((t) => (
             <span key={t.id} title={t.label}
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ background: t.color }} />
+                  className="text-[9.5px] font-semibold px-1.5 py-px rounded-full truncate max-w-[96px] shrink min-w-0"
+                  style={{ background: t.color + '1f', color: t.color }}>
+              {t.label}
+            </span>
           ))}
+          {extraTags > 0 && (
+            <span className="text-[9px] font-bold px-1 py-px rounded-full bg-surface2 text-text3 shrink-0">+{extraTags}</span>
+          )}
 
           {cita && (
             <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#DCFCE7] text-[#15803D] flex items-center gap-0.5 shrink-0">
