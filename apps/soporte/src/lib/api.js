@@ -123,7 +123,7 @@ let teamCache = null;
 export async function fetchTeamMembers() {
   if (teamCache) return teamCache;
   const rows = await sbFetch(
-    'team_members?select=id,name,role,color,initials,email,availability&order=position.asc&limit=50',
+    'team_members?select=id,name,role,color,initials,avatar_url,email,whatsapp,availability&order=position.asc&limit=50',
     { headers: { Prefer: 'return=representation' } },
   );
   teamCache = Array.isArray(rows) ? rows : [];
@@ -148,7 +148,7 @@ export async function fetchSoporteTeam() {
 
 // Email / disponibilidad de un miembro (pestaña Disponibilidad, solo admin).
 export async function updateTeamMember(id, patch) {
-  const rows = await sbFetch(`team_members?id=eq.${encodeURIComponent(id)}&select=id,name,role,color,initials,email,availability`, {
+  const rows = await sbFetch(`team_members?id=eq.${encodeURIComponent(id)}&select=id,name,role,color,initials,avatar_url,email,whatsapp,availability`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
     headers: { Prefer: 'return=representation' },

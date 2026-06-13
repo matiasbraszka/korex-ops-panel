@@ -1,4 +1,4 @@
-// supabase/functions/agenda-publica/index.ts — v3
+// supabase/functions/agenda-publica/index.ts — v4
 // Backend de la página pública /agendar[/<slug>] (leads reservan solos).
 //
 // v3: cada calendario lleva sus propios textos (description/host) y un
@@ -6,6 +6,11 @@
 // en appointments.answers y van a la descripción del evento. Los horarios se
 // siguen calculando en hora de Argentina; la página los muestra en la zona
 // horaria del visitante.
+// v4: ventana de reserva (booking_window_days) y anticipación mínima
+// (min_notice_hours) por calendario; instrucciones de confirmación
+// configurables (confirm_instructions); la reserva queda confirmada por
+// defecto (rsvp accepted) y avisa por WhatsApp a los miembros del calendario
+// que tengan número cargado.
 //
 //   POST { action: 'slots', year, month, slug? } → días/horarios libres del mes
 //     para ese calendario de reserva (booking_calendars): intersección de la
@@ -32,9 +37,10 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const TZ_OFFSET = "-03:00"; // Argentina (sin horario de verano)
-const MIN_NOTICE_MS = 2 * 3600_000; // no se puede reservar con menos de 2h
 const MAX_FUTURE_PER_PHONE = 3;
-const MAX_MONTHS_AHEAD = 3;
+// Tope duro de meses que se pueden consultar (la ventana real la define cada
+// calendario con booking_window_days; esto solo acota requests absurdos).
+const HARD_MAX_MONTHS = 12;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,6 +82,9 @@ interface BookingCalendar {
   host_name: string | null;
   host_role: string | null;
   questions: unknown;
+  booking_window_days: number | null;
+  min_notice_hours: number | null;
+  confirm_instructions: unknown;
 }
 
 interface Question {
@@ -100,14 +109,33 @@ function sanitizeQuestions(raw: unknown): Question[] {
   })).filter((q) => q.id && q.label && (q.type === "text" || q.options.length > 0));
 }
 
+// Instrucciones de la página de confirmación (lista de viñetas). [] = ocultar.
+function sanitizeInstructions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s) => String(s).trim().slice(0, 300)).filter(Boolean).slice(0, 10);
+}
+
 interface Member {
   id: string;
   name: string;
   email: string | null;
+  whatsapp: string | null;
   availability: {
     days?: Record<string, { enabled?: boolean; ranges?: { from?: string; to?: string }[]; from?: string; to?: string }>;
   } | null;
 }
+
+// Normaliza un número de WhatsApp del equipo a solo dígitos (Matias lo carga
+// con código de país). Devuelve null si es muy corto.
+function teamWa(raw: string | null): string | null {
+  const d = String(raw || "").replace(/\D/g, "");
+  return d.length >= 8 ? d : null;
+}
+
+const clampInt = (v: unknown, def: number, min: number, max: number) => {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+};
 
 async function getCfg(): Promise<Cfg> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
@@ -117,7 +145,7 @@ async function getCfg(): Promise<Cfg> {
 // Calendario de reserva: por slug, o el primero activo (link viejo /agendar).
 async function getCalendar(slug: string | null): Promise<BookingCalendar | null> {
   let q = admin.from("booking_calendars")
-    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions")
+    .select("id, slug, name, purpose, duration_min, gcal_title_template, gcal_color_id, member_ids, active, description, host_name, host_role, questions, booking_window_days, min_notice_hours, confirm_instructions")
     .eq("active", true);
   if (slug) q = q.eq("slug", slug);
   else q = q.order("created_at", { ascending: true }).limit(1);
@@ -128,7 +156,7 @@ async function getCalendar(slug: string | null): Promise<BookingCalendar | null>
 async function getMembers(cal: BookingCalendar): Promise<Member[]> {
   if (!cal.member_ids?.length) return [];
   const { data } = await admin.from("team_members")
-    .select("id, name, email, availability")
+    .select("id, name, email, whatsapp, availability")
     .in("id", cal.member_ids);
   // Mantener el orden y exigir que estén todos (si falta uno, no hay agenda).
   return cal.member_ids.map((id) => (data || []).find((m) => m.id === id)).filter(Boolean) as Member[];
@@ -262,14 +290,17 @@ async function computeMonth(cfg: Cfg, cal: BookingCalendar, members: Member[], y
     e: a.end_at ? new Date(a.end_at).getTime() : new Date(a.start_at).getTime() + 3600_000,
   })).concat(gbusy);
 
-  const minStart = Date.now() + MIN_NOTICE_MS;
+  // Anticipación mínima y ventana de reserva, por calendario.
+  const minStart = Date.now() + clampInt(cal.min_notice_hours, 2, 0, 168) * 3600_000;
+  const maxStart = Date.now() + clampInt(cal.booking_window_days, 60, 1, 365) * 86400_000;
   const days: Record<string, string[]> = {};
   for (let d = new Date(first); d < next; d.setUTCDate(d.getUTCDate() + 1)) {
     const dateStr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
     const slots = rawSlotsForDay(members, step, d).filter((t) => {
       const s = toUTC(dateStr, t).getTime();
-      if (s < minStart) return false;
+      if (s < minStart || s > maxStart) return false;
       const e = s + step * 60000;
+      // El turno completo tiene que caber libre (sin pisar ningún ocupado).
       return !busy.some((b) => s < b.e && e > b.s);
     });
     if (slots.length) days[dateStr] = slots;
@@ -353,6 +384,21 @@ async function sendWhatsApp(cfg: Cfg, conversation: { id: string; wa_jid: string
   return true;
 }
 
+// Envío simple de WhatsApp (sin persistir en la bandeja): para avisar a los
+// miembros del equipo que les agendaron una reunión.
+async function sendRawWhatsApp(cfg: Cfg, jid: string, text: string): Promise<void> {
+  const serverUrl = (cfg.server_url || "").replace(/\/$/, "");
+  const apiKey = cfg.evolution_api_key || "";
+  const instance = cfg.instance_name || "korex-soporte";
+  if (!serverUrl || !apiKey) return;
+  await fetch(`${serverUrl}/message/sendText/${instance}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: apiKey },
+    body: JSON.stringify({ number: jid, text }),
+    signal: AbortSignal.timeout(25000),
+  });
+}
+
 // Teléfono de WhatsApp normalizado: dial + número. Para +54 (Argentina) los
 // celulares llevan el 9 después del 54.
 function waPhoneFrom(dial: string, phone: string): string | null {
@@ -392,7 +438,7 @@ Deno.serve(async (req: Request) => {
     const now = new Date();
     const monthsAhead = (year - now.getUTCFullYear()) * 12 + (month - now.getUTCMonth());
     if (!Number.isInteger(year) || !Number.isInteger(month) || month < 0 || month > 11 ||
-        monthsAhead < 0 || monthsAhead > MAX_MONTHS_AHEAD) {
+        monthsAhead < 0 || monthsAhead > HARD_MAX_MONTHS) {
       return jsonResp(400, { error: "bad_month" });
     }
     const days = (cal && configured) ? await computeMonth(cfg, cal, members, year, month) : {};
@@ -407,6 +453,9 @@ Deno.serve(async (req: Request) => {
         host_role: cal ? (cal.host_role || "") : (pub.host_role || ""),
         slot_minutes: slotMin,
         questions: sanitizeQuestions(cal?.questions),
+        confirm_instructions: sanitizeInstructions(cal?.confirm_instructions),
+        booking_window_days: clampInt(cal?.booking_window_days, 60, 1, 365),
+        min_notice_hours: clampInt(cal?.min_notice_hours, 2, 0, 168),
       },
       configured,
     });
@@ -533,7 +582,9 @@ Deno.serve(async (req: Request) => {
       meeting_link: meetingLink,
       zoom_meeting_id: zoom?.meetingId ?? null,
       invite_email: email,
-      rsvp_status: "needs_action",
+      // Reserva pública: damos por confirmada nuestra asistencia (verde en el
+      // panel). El sync de RSVP no la baja a pendiente (ver crear-cita).
+      rsvp_status: "accepted",
       calendar_id: cal.id,
       member_ids: cal.member_ids,
       created_by: null,
@@ -570,9 +621,24 @@ Deno.serve(async (req: Request) => {
     let waSent = false;
     if (convId) waSent = await sendWhatsApp(cfg, { id: convId, wa_jid: waJid }, confirmText);
 
+    // Aviso por WhatsApp a los miembros del calendario (los que tengan número).
+    // En hora de Argentina (el equipo está acá). No bloquea la respuesta.
+    const argFecha = slotDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" });
+    const argHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" }).format(slotDate);
+    const teamMsg = [
+      `📅 Nueva reunión agendada — ${cal.name}`,
+      `${name} · +${waDigits}`,
+      `🗓️ ${argFecha} a las ${argHora} (hora Argentina)`,
+      notesText || null,
+      meetingLink ? `🔗 ${meetingLink}` : null,
+    ].filter(Boolean).join("\n");
+    const teamJids = [...new Set(members.map((m) => teamWa(m.whatsapp)).filter(Boolean))]
+      .map((d) => `${d}@s.whatsapp.net`);
+    const notifyTeam = Promise.allSettled(teamJids.map((jid) => sendRawWhatsApp(cfg, jid, teamMsg)));
+
     try {
       // deno-lint-ignore no-explicit-any
-      (globalThis as any).EdgeRuntime?.waitUntil?.(contactPromise);
+      (globalThis as any).EdgeRuntime?.waitUntil?.(Promise.allSettled([contactPromise, notifyTeam]));
     } catch { /* best-effort */ }
 
     return jsonResp(200, {

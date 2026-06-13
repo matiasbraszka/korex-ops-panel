@@ -47,12 +47,6 @@ function StepDot({ n, step }) {
   );
 }
 
-const ASISTIR = [
-  'Conéctate desde un lugar tranquilo, sin ruido de fondo, para dedicarle máxima atención a la reunión.',
-  'Mantén la cámara encendida durante toda la reunión — la de todos los integrantes.',
-  'Si tienes socios, también deben participar de la reunión; de lo contrario, deberemos cancelarla.',
-];
-
 export default function AgendaPublica() {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   // Calendario elegido por la URL: /agendar/<slug> (sin slug = el principal).
@@ -128,6 +122,8 @@ export default function AgendaPublica() {
 
   const cur = monthsData[monthKey(month)] || { days: {}, configured: true };
   const slotMinutes = eventMeta?.slot_minutes || 30;
+  const windowDays = eventMeta?.booking_window_days || 60;
+  const instructions = Array.isArray(eventMeta?.confirm_instructions) ? eventMeta.confirm_instructions : [];
 
   // ── Calendario ──
   const y = month.getFullYear();
@@ -136,7 +132,9 @@ export default function AgendaPublica() {
   const totalDays = new Date(y, m + 1, 0).getDate();
   const monthLabel = cap(month.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }));
   const minMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const maxMonth = new Date(today.getFullYear(), today.getMonth() + 3, 1);
+  // El último mes navegable depende de la ventana de reserva del calendario.
+  const maxDate = new Date(today); maxDate.setDate(today.getDate() + windowDays);
+  const maxMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
   const prevOk = month > minMonth;
   const nextOk = month < maxMonth;
 
@@ -575,15 +573,17 @@ export default function AgendaPublica() {
                 </a>
               </div>
 
-              <div className="w-full max-w-[420px] bg-[#FAFBFC] border border-[#F0F2F5] rounded-2xl p-4 flex flex-col gap-2.5 text-left">
-                <span className="text-[13px] font-bold">¿Cómo asistir a la reunión?</span>
-                {ASISTIR.map((t, i) => (
-                  <span key={i} className="flex gap-[9px] text-[12.5px] text-[#5D6678] leading-[1.55]">
-                    <span className="shrink-0 mt-0.5">{Icon.check(BLUE, 14, 2.25)}</span>
-                    <span>{t}</span>
-                  </span>
-                ))}
-              </div>
+              {instructions.length > 0 && (
+                <div className="w-full max-w-[420px] bg-[#FAFBFC] border border-[#F0F2F5] rounded-2xl p-4 flex flex-col gap-2.5 text-left">
+                  <span className="text-[13px] font-bold">¿Cómo asistir a la reunión?</span>
+                  {instructions.map((t, i) => (
+                    <span key={i} className="flex gap-[9px] text-[12.5px] text-[#5D6678] leading-[1.55]">
+                      <span className="shrink-0 mt-0.5">{Icon.check(BLUE, 14, 2.25)}</span>
+                      <span>{t}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <span className="text-[12px] text-[#98A2B3] leading-[1.6] max-w-[380px]">
                 Te enviamos el link a <b className="text-[#5D6678]">{email}</b> y por WhatsApp al{' '}

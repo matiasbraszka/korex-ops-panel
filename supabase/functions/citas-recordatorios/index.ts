@@ -209,6 +209,8 @@ Deno.serve(async (req: Request) => {
       .find((g) => g.email?.toLowerCase() === String(a.invite_email).toLowerCase());
     const status = guest ? (RSVP_MAP[guest.status] || "needs_action") : null;
     if (status && status !== a.rsvp_status) {
+      // No degradar a "pendiente" una cita ya confirmada (reservas públicas).
+      if (status === "needs_action" && a.rsvp_status === "accepted") continue;
       await admin.from("appointments").update({ rsvp_status: status }).eq("id", a.id);
       rsvpChanged++;
     }

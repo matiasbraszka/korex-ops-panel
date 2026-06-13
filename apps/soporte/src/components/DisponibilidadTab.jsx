@@ -32,6 +32,12 @@ function toAvailability(days) {
 
 function MemberAvatar({ member, size = 36 }) {
   const color = member.color || colorFromString(member.id || member.name);
+  if (member.avatar_url) {
+    return (
+      <img src={member.avatar_url} alt={member.name} title={member.name}
+           className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />
+    );
+  }
   return (
     <span className="rounded-full flex items-center justify-center font-bold shrink-0"
           style={{ width: size, height: size, background: color + '1d', color, fontSize: size * 0.33 }}>
@@ -91,6 +97,8 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
   const [days, setDays] = useState(null);
   const [email, setEmail] = useState('');
   const [editingEmail, setEditingEmail] = useState(false);
+  const [whatsapp, setWhatsapp] = useState('');
+  const [waFlash, setWaFlash] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState('');
@@ -114,6 +122,7 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
     setDays(normalizeDays(member.availability));
     setEmail(member.email || '');
     setEditingEmail(!member.email);
+    setWhatsapp(member.whatsapp || '');
     setError('');
   }, [member?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -175,6 +184,22 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
     }
   };
 
+  const saveWhatsapp = async () => {
+    if (!member) return;
+    setError('');
+    const digits = whatsapp.replace(/\D/g, '');
+    if (digits && digits.length < 8) { setError('Ese WhatsApp parece muy corto (poné el código de país).'); return; }
+    try {
+      const updated = await updateTeamMember(member.id, { whatsapp: digits || null });
+      if (updated) setTeam((prev) => prev.map((m) => (m.id === member.id ? { ...m, ...updated } : m)));
+      setWaFlash(true);
+      setTimeout(() => setWaFlash(false), 2000);
+    } catch (e) {
+      console.error('soporte: fallo el guardado del WhatsApp', e);
+      setError('No se pudo guardar el WhatsApp. ¿Tenés permiso de administrador?');
+    }
+  };
+
   // GcalCard y WeekEditor se invocan como funciones (no como <Componente/>)
   // para no remontar los inputs en cada tecleo (perderían el foco).
   // ── Card de conexión a Google Calendar (columna derecha / banner mobile) ──
@@ -212,6 +237,31 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
           Leemos los eventos ocupados para bloquear esos horarios en los calendarios públicos.
           Sólo creamos eventos cuando alguien reserva — no tocamos nada más.
         </span>
+      </div>
+    );
+  };
+
+  // Card del WhatsApp del miembro: lo avisamos cuando le agendan una reunión.
+  const WaCard = () => {
+    if (!member) return null;
+    return (
+      <div className="bg-white border border-border rounded-[14px] p-3.5 flex flex-col gap-2">
+        <span className="text-[12.5px] font-bold">Aviso por WhatsApp</span>
+        <span className="text-[11px] text-text2 leading-[1.5]">
+          Cuando alguien agenda una reunión de un calendario donde está {member.name.split(' ')[0]}, le llega un aviso a este número.
+        </span>
+        <span className="flex items-center gap-1.5">
+          <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value.replace(/[^\d\s+-]/g, ''))}
+                 placeholder="549 11 2345 6789" disabled={!isAdmin}
+                 className="flex-1 min-w-0 h-8 px-2.5 text-[12px] rounded-lg border border-border outline-none focus:border-[#F59E0B]" />
+          {isAdmin && (
+            <button onClick={saveWhatsapp}
+                    className="h-8 px-3 rounded-lg border-0 bg-[#F59E0B] text-white text-[11.5px] font-bold cursor-pointer hover:bg-[#E08C0B] shrink-0">
+              {waFlash ? '✓' : 'Guardar'}
+            </button>
+          )}
+        </span>
+        <span className="text-[10.5px] text-text3">Con código de país, sin "+". Ej: 549 + número (Argentina).</span>
       </div>
     );
   };
@@ -321,6 +371,7 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
         <div className="w-[320px] shrink-0 border-l border-surface2 p-[18px] flex flex-col gap-3.5 overflow-y-auto" style={{ background: '#FAFBFC' }}>
           <span className="text-[10px] font-bold tracking-[0.1em] text-text3">GOOGLE CALENDAR</span>
           {GcalCard()}
+          {WaCard()}
         </div>
       </div>
 
@@ -360,8 +411,9 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
           )
         )}
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-1.5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-1.5 flex flex-col gap-3">
           {WeekEditor({ mobile: true })}
+          {WaCard()}
           {error && <div className="text-[12px] font-medium py-2" style={{ color: '#DC2626' }}>{error}</div>}
         </div>
 

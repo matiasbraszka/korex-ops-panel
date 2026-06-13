@@ -39,19 +39,35 @@ export const hasAvailability = (m) => {
 
 function MemberAvatar({ member, size = 32, ring = 'white' }) {
   const color = member.color || colorFromString(member.id || member.name);
+  const borderStyle = ring ? `2px solid ${ring}` : undefined;
+  if (member.avatar_url) {
+    return (
+      <img src={member.avatar_url} alt={member.name} title={member.name}
+           className="rounded-full object-cover shrink-0"
+           style={{ width: size, height: size, border: borderStyle }} />
+    );
+  }
   return (
     <span className="rounded-full flex items-center justify-center font-bold shrink-0"
-          style={{ width: size, height: size, background: color + '1d', color, fontSize: size * 0.34, border: ring ? `2px solid ${ring}` : undefined }}>
+          style={{ width: size, height: size, background: color + '1d', color, fontSize: size * 0.34, border: borderStyle }}>
       {member.initials || initialsOf(member.name)}
     </span>
   );
 }
+
+const DEFAULT_INSTRUCTIONS = [
+  'Conéctate desde un lugar tranquilo, sin ruido de fondo, para dedicarle máxima atención a la reunión.',
+  'Mantén la cámara encendida durante toda la reunión — la de todos los integrantes.',
+  'Si tienes socios, también deben participar de la reunión; de lo contrario, deberemos cancelarla.',
+];
 
 const NEW_DRAFT = {
   id: null, slug: '', name: '', purpose: 'ventas', duration_min: 30,
   gcal_title_template: '', gcal_color_id: '7', member_ids: [], active: true,
   description: '', host_name: '', host_role: '',
   questions: [{ id: 'q1', label: '¿Qué te gustaría resolver?', type: 'text', required: false, options: [] }],
+  booking_window_days: 60, min_notice_hours: 2,
+  confirm_instructions: [...DEFAULT_INSTRUCTIONS],
 };
 
 let qSeq = 0;
@@ -75,6 +91,9 @@ function draftFromCal(cal) {
     host_name: cal.host_name || '',
     host_role: cal.host_role || '',
     questions,
+    booking_window_days: cal.booking_window_days ?? 60,
+    min_notice_hours: cal.min_notice_hours ?? 2,
+    confirm_instructions: Array.isArray(cal.confirm_instructions) ? [...cal.confirm_instructions] : [],
   };
 }
 
@@ -179,6 +198,11 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const addOption = (qi) => setQuestion(qi, { options: [...draft.questions[qi].options, ''] });
   const removeOption = (qi, oi) => setQuestion(qi, { options: draft.questions[qi].options.filter((_, i) => i !== oi) });
 
+  // ── Instrucciones de la página de confirmación ──
+  const setInstruction = (i, val) => set({ confirm_instructions: draft.confirm_instructions.map((s, j) => (j === i ? val : s)) });
+  const addInstruction = () => set({ confirm_instructions: [...draft.confirm_instructions, ''] });
+  const removeInstruction = (i) => set({ confirm_instructions: draft.confirm_instructions.filter((_, j) => j !== i) });
+
   const uniqueSlug = (name, ownId) => {
     const base = slugify(name) || 'calendario';
     let slug = base;
@@ -227,6 +251,9 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
       host_name: draft.host_name?.trim() || null,
       host_role: draft.host_role?.trim() || null,
       questions: cleanQuestions,
+      booking_window_days: Math.min(365, Math.max(1, Number(draft.booking_window_days) || 60)),
+      min_notice_hours: Math.min(168, Math.max(0, Number(draft.min_notice_hours) || 0)),
+      confirm_instructions: draft.confirm_instructions.map((s) => s.trim()).filter(Boolean),
     };
     setSaving(true);
     try {
@@ -358,33 +385,58 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           </span>
         )}
 
-        {/* General: nombre · motivo · duración */}
-        <div className={mobile ? 'flex flex-col gap-3.5' : 'grid gap-2.5'} style={mobile ? undefined : { gridTemplateColumns: '1fr 1fr 160px' }}>
-          <label className="flex flex-col gap-[5px]">
-            <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Nombre público</span>
-            <input value={draft.name} onChange={(e) => set({ name: e.target.value })}
-                   placeholder="Ej: Demo del sistema" disabled={!isAdmin}
-                   className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 font-medium outline-none focus:border-[#F59E0B] transition-colors`} />
-          </label>
-          <div className={mobile ? 'grid grid-cols-[1fr_120px] gap-2.5' : 'contents'}>
+        {/* Datos generales */}
+        <div className={`flex flex-col gap-3 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+          {!mobile && <span className="text-[10px] font-bold tracking-[0.1em] text-text3">DATOS GENERALES</span>}
+          {mobile && <span className="text-[12px] font-semibold text-[#3D4659]">Datos generales</span>}
+          <div className={mobile ? 'flex flex-col gap-3.5' : 'grid gap-2.5'} style={mobile ? undefined : { gridTemplateColumns: '1fr 1fr 160px' }}>
             <label className="flex flex-col gap-[5px]">
-              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Motivo</span>
-              <span className={`flex bg-surface2 p-0.5 ${mobile ? 'h-[46px] rounded-xl' : 'h-9 rounded-[10px]'}`}>
-                {[['ventas', 'Ventas'], ['servicio', 'Servicio']].map(([id, label]) => (
-                  <button key={id} onClick={() => isAdmin && set({ purpose: id })}
-                          className={`flex-1 border-0 cursor-pointer flex items-center justify-center transition-all duration-150 ${mobile ? 'rounded-[10px] text-[12.5px]' : 'rounded-lg text-[12px]'} ${
-                            draft.purpose === id ? 'bg-white font-bold text-[#B45309] shadow-[0_1px_2px_rgba(10,22,40,.08)]' : 'bg-transparent font-semibold text-text3'}`}>
-                    {label}
-                  </button>
-                ))}
+              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Nombre público</span>
+              <input value={draft.name} onChange={(e) => set({ name: e.target.value })}
+                     placeholder="Ej: Demo del sistema" disabled={!isAdmin}
+                     className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 font-medium outline-none focus:border-[#F59E0B] transition-colors`} />
+            </label>
+            <div className={mobile ? 'grid grid-cols-[1fr_120px] gap-2.5' : 'contents'}>
+              <label className="flex flex-col gap-[5px]">
+                <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Motivo</span>
+                <span className={`flex bg-surface2 p-0.5 ${mobile ? 'h-[46px] rounded-xl' : 'h-9 rounded-[10px]'}`}>
+                  {[['ventas', 'Ventas'], ['servicio', 'Servicio']].map(([id, label]) => (
+                    <button key={id} onClick={() => isAdmin && set({ purpose: id })}
+                            className={`flex-1 border-0 cursor-pointer flex items-center justify-center transition-all duration-150 ${mobile ? 'rounded-[10px] text-[12.5px]' : 'rounded-lg text-[12px]'} ${
+                              draft.purpose === id ? 'bg-white font-bold text-[#B45309] shadow-[0_1px_2px_rgba(10,22,40,.08)]' : 'bg-transparent font-semibold text-text3'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </span>
+              </label>
+              <label className="flex flex-col gap-[5px]">
+                <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Duración</span>
+                <select value={draft.duration_min} onChange={(e) => set({ duration_min: Number(e.target.value) })} disabled={!isAdmin}
+                        className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 bg-white outline-none cursor-pointer`}>
+                  {DURACIONES.map((m) => <option key={m} value={m}>{m} min</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+          {/* Ventana de reserva + anticipación mínima */}
+          <div className={mobile ? 'grid grid-cols-2 gap-2.5' : 'grid grid-cols-2 gap-2.5 max-w-[420px]'}>
+            <label className="flex flex-col gap-[5px]">
+              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Se puede agendar hasta</span>
+              <span className="flex items-center gap-2">
+                <input type="number" min={1} max={365} value={draft.booking_window_days}
+                       onChange={(e) => set({ booking_window_days: e.target.value })} disabled={!isAdmin}
+                       className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px] w-[80px]' : 'h-9 rounded-[10px] text-[12.5px] w-[72px]'} border border-border px-3 outline-none focus:border-[#F59E0B] transition-colors`} />
+                <span className="text-[12px] text-text2">días adelante</span>
               </span>
             </label>
             <label className="flex flex-col gap-[5px]">
-              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Duración</span>
-              <select value={draft.duration_min} onChange={(e) => set({ duration_min: Number(e.target.value) })} disabled={!isAdmin}
-                      className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px]' : 'h-9 rounded-[10px] text-[12.5px]'} border border-border px-3 bg-white outline-none cursor-pointer`}>
-                {DURACIONES.map((m) => <option key={m} value={m}>{m} min</option>)}
-              </select>
+              <span className={`font-semibold ${mobile ? 'text-[12px] text-[#3D4659]' : 'text-[11px] text-text2'}`}>Anticipación mínima</span>
+              <span className="flex items-center gap-2">
+                <input type="number" min={0} max={168} value={draft.min_notice_hours}
+                       onChange={(e) => set({ min_notice_hours: e.target.value })} disabled={!isAdmin}
+                       className={`${mobile ? 'h-[46px] rounded-xl text-[13.5px] w-[80px]' : 'h-9 rounded-[10px] text-[12.5px] w-[72px]'} border border-border px-3 outline-none focus:border-[#F59E0B] transition-colors`} />
+                <span className="text-[12px] text-text2">horas antes</span>
+              </span>
             </label>
           </div>
         </div>
@@ -578,6 +630,40 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           <span className="text-[11px] text-text3">
             Sólo se ofrecen horarios donde todos los marcados están libres (su disponibilidad + su Google Calendar).
           </span>
+        </div>
+
+        {/* Instrucciones de la página de confirmación */}
+        <div className={`flex flex-col gap-2.5 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
+          <span className={mobile ? 'text-[12px] font-semibold text-[#3D4659]' : 'text-[10px] font-bold tracking-[0.1em] text-text3'}>
+            {mobile ? 'Instrucciones al confirmar' : 'INSTRUCCIONES AL CONFIRMAR'}
+          </span>
+          <span className="text-[11px] text-text3 -mt-1">
+            Lo que ve el prospecto en la pantalla final ("¿Cómo asistir a la reunión?"). Si lo dejás vacío, esa sección no aparece.
+          </span>
+          <div className="flex flex-col gap-1.5">
+            {draft.confirm_instructions.map((ins, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#BBF7D0] shrink-0 mt-3" />
+                <textarea value={ins} onChange={(e) => setInstruction(i, e.target.value)}
+                          placeholder={`Instrucción ${i + 1}`} rows={2} disabled={!isAdmin}
+                          className="flex-1 min-w-0 rounded-[10px] border border-border px-3 py-2 text-[12.5px] bg-white outline-none focus:border-[#F59E0B] resize-y transition-colors" />
+                {isAdmin && (
+                  <button onClick={() => removeInstruction(i)} className="bg-transparent border-0 cursor-pointer p-1.5 text-text3 hover:text-[#DC2626] shrink-0 mt-1">
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {draft.confirm_instructions.length === 0 && (
+              <span className="text-[11.5px] text-text3 italic">Sin instrucciones: la pantalla final no muestra "¿Cómo asistir?".</span>
+            )}
+            {isAdmin && draft.confirm_instructions.length < 10 && (
+              <button onClick={addInstruction}
+                      className="self-start h-8 px-3 rounded-[10px] border border-dashed border-[#D0D5DD] bg-transparent text-[12px] font-semibold text-text3 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] transition-colors duration-150 flex items-center gap-1.5">
+                <Plus size={13} /> Agregar instrucción
+              </button>
+            )}
+          </div>
         </div>
 
         {error && <div className="text-[12px] font-medium" style={{ color: '#DC2626' }}>{error}</div>}
