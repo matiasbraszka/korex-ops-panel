@@ -63,12 +63,16 @@ const EGRESO_STYLE = {
 };
 const egStyle = (c) => EGRESO_STYLE[c] || EGRESO_STYLE['Otros'];
 
-// Período → fecha "desde" (ISO) para filtrar egresos. null = todo.
-function sinceOf(period) {
+// Período → rango {from, to} en ISO para filtrar egresos. null = sin límite.
+function rangeOf(period, from, to) {
   const now = new Date();
-  if (period === 'mes') return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  if (period === '30d') return new Date(now.getTime() - 30 * 86400000).toISOString();
-  return null;
+  if (period === 'mes') return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to: null };
+  if (period === '30d') return { from: new Date(now.getTime() - 30 * 86400000).toISOString(), to: null };
+  if (period === 'custom') return {
+    from: from ? new Date(`${from}T00:00:00`).toISOString() : null,
+    to: to ? new Date(`${to}T23:59:59`).toISOString() : null,
+  };
+  return { from: null, to: null }; // todo
 }
 
 export default function MercuryPage() {
@@ -83,7 +87,9 @@ export default function MercuryPage() {
   const [metaByAccount, setMetaByAccount] = useState({}); // account_id -> gasto Meta (anuncios)
   // Egresos (gastos categorizados)
   const [egresos, setEgresos] = useState([]);
-  const [egPeriod, setEgPeriod] = useState('mes');     // mes | 30d | todo
+  const [egPeriod, setEgPeriod] = useState('mes');     // mes | 30d | todo | custom
+  const [egFrom, setEgFrom] = useState('');            // fecha desde (custom, YYYY-MM-DD)
+  const [egTo, setEgTo] = useState('');                // fecha hasta (custom, YYYY-MM-DD)
   const [egCat, setEgCat] = useState(null);            // categoría seleccionada (filtro)
   const [egLoading, setEgLoading] = useState(false);
 
@@ -116,24 +122,25 @@ export default function MercuryPage() {
     return () => { supabase.removeChannel(ch); };
   }, [load]);
 
-  // Carga de egresos (vista mercury_egresos) según el período elegido.
-  const loadEgresos = useCallback(async (period) => {
+  // Carga de egresos (vista mercury_egresos) según el rango elegido.
+  const loadEgresos = useCallback(async (range) => {
     setEgLoading(true);
     let q = supabase.from('mercury_egresos')
       .select('id, fund_label, category, counterparty_name, amount, currency, tx_created_at, kind')
       .order('tx_created_at', { ascending: false })
-      .limit(1000);
-    const since = sinceOf(period);
-    if (since) q = q.gte('tx_created_at', since);
+      .limit(2000);
+    if (range.from) q = q.gte('tx_created_at', range.from);
+    if (range.to) q = q.lte('tx_created_at', range.to);
     const { data } = await q;
     setEgresos(data || []);
     setEgLoading(false);
   }, []);
 
-  // Cargar egresos al entrar a la pestaña o cambiar el período.
+  // Cargar egresos al entrar a la pestaña o cambiar el período/rango.
   useEffect(() => {
-    if (tab === 'egresos') loadEgresos(egPeriod);
-  }, [tab, egPeriod, loadEgresos]);
+    if (tab !== 'egresos') return;
+    loadEgresos(rangeOf(egPeriod, egFrom, egTo));
+  }, [tab, egPeriod, egFrom, egTo, loadEgresos]);
 
   // Resumen por categoría + totales del período.
   const egSummary = useMemo(() => {
@@ -384,8 +391,8 @@ export default function MercuryPage() {
         <div>
           {/* Selector de período */}
           <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-            <div className="inline-flex rounded-lg border border-border overflow-hidden">
-              {[{ id: 'mes', label: 'Este mes' }, { id: '30d', label: 'Últimos 30 días' }, { id: 'todo', label: 'Todo' }].map((p) => (
+            <div className="inline-flex rounded-lg border border-border overflow-hidden flex-wrap">
+              {[{ id: 'mes', label: 'Este mes' }, { id: '30d', label: 'Últimos 30 días' }, { id: 'todo', label: 'Todo' }, { id: 'custom', label: 'Personalizado' }].map((p) => (
                 <button key={p.id} onClick={() => { setEgPeriod(p.id); setEgCat(null); }}
                   className="text-[12px] font-semibold px-3 py-1.5 cursor-pointer border-0"
                   style={{ background: egPeriod === p.id ? 'var(--color-blue)' : '#fff', color: egPeriod === p.id ? '#fff' : 'var(--color-text2)' }}>
@@ -398,6 +405,18 @@ export default function MercuryPage() {
               <div className="text-[20px] font-extrabold text-text leading-tight">{money(egSummary.real)}</div>
             </div>
           </div>
+
+          {/* Rango de fechas personalizado */}
+          {egPeriod === 'custom' && (
+            <div className="flex items-center gap-2 mb-3 text-[12px] text-text2">
+              <span>Desde</span>
+              <input type="date" value={egFrom} onChange={(e) => { setEgFrom(e.target.value); setEgCat(null); }}
+                className="border border-border rounded-lg px-2 py-1 text-[12px]" />
+              <span>hasta</span>
+              <input type="date" value={egTo} onChange={(e) => { setEgTo(e.target.value); setEgCat(null); }}
+                className="border border-border rounded-lg px-2 py-1 text-[12px]" />
+            </div>
+          )}
 
           {egLoading ? (
             <div className="text-text3 text-center py-12 text-sm">Cargando egresos…</div>

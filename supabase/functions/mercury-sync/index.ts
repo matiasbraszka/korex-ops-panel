@@ -18,7 +18,9 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const MERCURY_API = "https://api.mercury.com/api/v1";
-const TX_PER_ACCOUNT = 500; // historial por cuenta (para totales "en total", ej. gasto Meta)
+const TX_PAGE = 500;                 // tamaño de página al paginar transacciones
+const TX_START_DATE = "2024-01-01";  // sin `start`, Mercury devuelve solo ~30 días → pedimos todo el histórico
+const TX_MAX_PAGES = 20;             // tope de seguridad (hasta 10k movimientos por cuenta)
 
 interface MercuryConfig {
   api_token?: string;
@@ -235,8 +237,19 @@ Deno.serve(async (req: Request) => {
       if (!error) cardUpserts++;
     }
 
-    const txResp = await mercuryGet(token, `/account/${encodeURIComponent(accId)}/transactions?limit=${TX_PER_ACCOUNT}&order=desc`);
-    for (const t of arr(txResp, "transactions")) {
+    // Histórico completo de la cuenta, paginando (start fija el inicio; sin él
+    // Mercury sólo devuelve ~30 días).
+    const txAll: Record<string, any>[] = [];
+    for (let page = 0; page < TX_MAX_PAGES; page++) {
+      const txResp = await mercuryGet(
+        token,
+        `/account/${encodeURIComponent(accId)}/transactions?limit=${TX_PAGE}&offset=${page * TX_PAGE}&order=desc&start=${TX_START_DATE}`,
+      );
+      const batch = arr(txResp, "transactions");
+      txAll.push(...batch);
+      if (batch.length < TX_PAGE) break;
+    }
+    for (const t of txAll) {
       const row = txRow(t);
       if (!row.id) continue;
       const { error } = await admin.from("mercury_transactions").upsert(row, { onConflict: "id" });
