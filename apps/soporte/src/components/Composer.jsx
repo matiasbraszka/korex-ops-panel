@@ -249,7 +249,7 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
         <div className="absolute bottom-full left-3.5 mb-1.5 w-[min(430px,calc(100%-28px))] bg-white border border-border rounded-[14px] shadow-lg p-1.5 z-20">
           <div className="flex items-center justify-between px-2.5 pt-1.5 pb-2">
             <span className="text-[10px] font-bold tracking-widest text-text3">RESPUESTAS RÁPIDAS</span>
-            <Link to="/soporte/plantillas" className="text-[10.5px] font-semibold text-[#B45309] no-underline hover:underline">
+            <Link to="/soporte/recursos?tab=plantillas" className="text-[10.5px] font-semibold text-[#B45309] no-underline hover:underline">
               Gestionar plantillas
             </Link>
           </div>
