@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@korex/db';
-import { X, Plus, Trash2, Pencil, Paperclip, Check } from 'lucide-react';
+import { X, Plus, Trash2, Pencil, Paperclip, Check, IdCard } from 'lucide-react';
 import PagoModal from './PagoModal';
 import ContratoModal from './ContratoModal';
 import {
@@ -40,6 +40,8 @@ export default function FichaPersonal({ member, hr, payments, contracts, onClose
 
         <div className="p-5 space-y-6">
           <DatosSalario member={member} hr={hr} onChanged={onChanged} />
+
+          <DatosPersonales member={member} hr={hr} onChanged={onChanged} />
 
           <Pagos
             payments={payments}
@@ -162,6 +164,129 @@ function DatosSalario({ member, hr, onChanged }) {
         {error && <span className="text-[12px] text-red">{error}</span>}
       </div>
     </section>
+  );
+}
+
+// ---------- Sección 1b: datos personales y contacto ----------
+
+const PERSONAL_FIELDS = [
+  'gender', 'document_number',
+  'address_street', 'address_city', 'address_zip', 'address_state', 'address_country',
+  'whatsapp', 'personal_email', 'emergency_contact', 'payment_info',
+];
+
+function DatosPersonales({ member, hr, onChanged }) {
+  const [form, setForm] = useState(() =>
+    Object.fromEntries(PERSONAL_FIELDS.map((k) => [k, hr?.[k] || ''])));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setSaved(false); };
+
+  const save = async () => {
+    setSaving(true); setError('');
+    const patch = { member_id: member.id, updated_at: new Date().toISOString() };
+    PERSONAL_FIELDS.forEach((k) => { patch[k] = form[k] || null; });
+    const { error: err } = await supabase.from('staff_hr').upsert(patch);
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setSaved(true);
+    await onChanged();
+  };
+
+  return (
+    <section>
+      <SectionTitle>Datos personales y contacto</SectionTitle>
+
+      {/* Fotos cargadas en el onboarding */}
+      {(hr?.profile_photo_path || hr?.document_photo_path) && (
+        <div className="flex items-center gap-4 mb-3">
+          {hr?.profile_photo_path && (
+            <SignedImg path={hr.profile_photo_path} label="Foto de perfil" />
+          )}
+          {hr?.document_photo_path && (
+            <button onClick={() => openStaffDoc(hr.document_photo_path)}
+                    className="flex items-center gap-2 text-[12px] text-blue hover:underline border border-border rounded-lg px-3 py-2">
+              <IdCard size={15} /> Ver documento de identidad
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Género">
+          <input value={form.gender} onChange={(e) => set('gender', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Documento de identidad (número)">
+          <input value={form.document_number} onChange={(e) => set('document_number', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="WhatsApp">
+          <input value={form.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Mail personal">
+          <input value={form.personal_email} onChange={(e) => set('personal_email', e.target.value)} className={inputCls} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Dirección — calle y número">
+            <input value={form.address_street} onChange={(e) => set('address_street', e.target.value)} className={inputCls} />
+          </Field>
+        </div>
+        <Field label="Ciudad">
+          <input value={form.address_city} onChange={(e) => set('address_city', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Código postal">
+          <input value={form.address_zip} onChange={(e) => set('address_zip', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Provincia / Estado">
+          <input value={form.address_state} onChange={(e) => set('address_state', e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="País">
+          <input value={form.address_country} onChange={(e) => set('address_country', e.target.value)} className={inputCls} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Contacto de emergencia">
+            <input value={form.emergency_contact} onChange={(e) => set('emergency_contact', e.target.value)}
+                   placeholder="Nombre, vínculo y teléfono" className={inputCls} />
+          </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="Datos para el pago">
+            <textarea value={form.payment_info} onChange={(e) => set('payment_info', e.target.value)} rows={2}
+                      placeholder="CBU / Alias / cuenta, PayPal, Wise…" className={inputCls + ' resize-y'} />
+          </Field>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-3">
+        <button onClick={save} disabled={saving}
+                className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark disabled:opacity-60">
+          {saving ? 'Guardando…' : 'Guardar datos personales'}
+        </button>
+        {saved && <span className="text-[12px] text-green-600 flex items-center gap-1"><Check size={13} /> Guardado</span>}
+        {error && <span className="text-[12px] text-red">{error}</span>}
+      </div>
+    </section>
+  );
+}
+
+// Miniatura de una imagen del bucket privado (resuelve un signed URL al montar).
+function SignedImg({ path, label }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.storage.from('staff-docs').createSignedUrl(path, 3600).then(({ data }) => {
+      if (alive) setUrl(data?.signedUrl || null);
+    });
+    return () => { alive = false; };
+  }, [path]);
+  return (
+    <button onClick={() => openStaffDoc(path)} title={label} className="shrink-0">
+      {url ? (
+        <img src={url} alt={label} className="w-14 h-14 rounded-full object-cover border border-border" />
+      ) : (
+        <div className="w-14 h-14 rounded-full bg-surface2 animate-pulse" />
+      )}
+    </button>
   );
 }
 

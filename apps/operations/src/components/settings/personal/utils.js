@@ -104,3 +104,64 @@ export const TONE_CLS = {
 
 export const inputCls =
   'w-full bg-bg border border-border rounded-md py-[9px] px-3 text-text text-[13px] outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]';
+
+function slugify(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 40);
+}
+
+// id único de team_member a partir del nombre (evita choques con los existentes).
+export function buildMemberId(name, existingIds = []) {
+  const base = slugify(name) || 'persona';
+  if (!existingIds.includes(base)) return base;
+  let i = 2;
+  while (existingIds.includes(`${base}-${i}`)) i++;
+  return `${base}-${i}`;
+}
+
+export function initialsOf(name) {
+  return (name || '').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+// Convierte una respuesta de onboarding en ficha del miembro: crea el
+// team_member (sin cuenta) y vuelca todos los datos personales a staff_hr.
+export async function approveOnboarding(sub, existingIds, addTeamMember) {
+  const memberId = buildMemberId(sub.name, existingIds);
+  await addTeamMember({
+    id: memberId,
+    name: sub.name,
+    role: sub.role || '',
+    initials: initialsOf(sub.name),
+    can_access_settings: false,
+  });
+
+  const { error: hrErr } = await supabase.from('staff_hr').upsert({
+    member_id: memberId,
+    birth_date: sub.birth_date || null,
+    gender: sub.gender || null,
+    document_number: sub.document_number || null,
+    document_photo_path: sub.document_photo_path || null,
+    profile_photo_path: sub.profile_photo_path || null,
+    address_street: sub.address_street || null,
+    address_city: sub.address_city || null,
+    address_zip: sub.address_zip || null,
+    address_state: sub.address_state || null,
+    address_country: sub.address_country || null,
+    whatsapp: sub.whatsapp || null,
+    personal_email: sub.personal_email || null,
+    emergency_contact: sub.emergency_contact || null,
+    payment_info: sub.payment_info || null,
+    onboarding_submitted_at: sub.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  if (hrErr) throw hrErr;
+
+  await supabase.from('staff_onboarding')
+    .update({ status: 'approved', member_id: memberId })
+    .eq('id', sub.id);
+
+  return memberId;
+}

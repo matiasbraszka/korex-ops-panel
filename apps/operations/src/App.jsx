@@ -37,6 +37,7 @@ const SoporteRoutes = lazy(() =>
 // abre el link /cargar-kpis.
 const PublicKpisForm = lazy(() => import('./pages/PublicKpisForm'));
 const AgendaPublica = lazy(() => import('./pages/AgendaPublica'));
+const OnboardingForm = lazy(() => import('./pages/OnboardingForm'));
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -740,6 +741,16 @@ function App() {
     return (
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
         <PublicKpisForm />
+      </Suspense>
+    );
+  }
+
+  // Ruta PUBLICA: formulario de onboarding del equipo (sin login). Cada persona
+  // que entra a Korex carga sus datos; caen en staff_onboarding para revisión.
+  if (location.pathname.startsWith('/onboarding')) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
+        <OnboardingForm />
       </Suspense>
     );
   }

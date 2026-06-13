@@ -1,34 +1,42 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@korex/db';
 import { useAuth } from '@korex/auth';
-import { CalendarDays, FileText, Wallet } from 'lucide-react';
+import { CalendarDays, FileText, Wallet, Link2, Check, UserPlus, Trash2, Inbox } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 import FichaPersonal from './personal/FichaPersonal';
-import { fmtMoney, fmtPeriod, antiguedadLabel, contractStatus, TONE_CLS } from './personal/utils';
+import {
+  fmtMoney, fmtPeriod, fmtDate, antiguedadLabel, contractStatus, TONE_CLS,
+  approveOnboarding, openStaffDoc, deleteStaffDoc,
+} from './personal/utils';
 
 // Pestaña Personal: ficha HR de cada miembro del equipo (datos, salarios,
 // pagos con factura y contratos). Solo admins — además del guard de UI, las
 // tablas staff_* y el bucket staff-docs tienen RLS admin-only.
 export default function PersonalEditor() {
   const { isAdmin } = useAuth();
+  const { addTeamMember } = useApp();
 
   const [members, setMembers] = useState([]);
   const [hrById, setHrById] = useState({});
   const [paymentsById, setPaymentsById] = useState({});
   const [contractsById, setContractsById] = useState({});
+  const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
 
   const load = useCallback(async () => {
-    const [m, hr, pay, con] = await Promise.all([
+    const [m, hr, pay, con, onb] = await Promise.all([
       supabase.from('team_members').select('*').order('position'),
       supabase.from('staff_hr').select('*'),
       supabase.from('staff_payments').select('*').order('period', { ascending: false }),
       supabase.from('staff_contracts').select('*').order('created_at', { ascending: false }),
+      supabase.from('staff_onboarding').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
     ]);
     setMembers(m.data || []);
     setHrById(Object.fromEntries((hr.data || []).map((x) => [x.member_id, x])));
     setPaymentsById(groupBy(pay.data || [], 'member_id'));
     setContractsById(groupBy(con.data || [], 'member_id'));
+    setPending(onb.data || []);
     setLoading(false);
   }, []);
 
@@ -41,13 +49,25 @@ export default function PersonalEditor() {
 
   return (
     <div>
-      <div className="mb-3">
-        <h2 className="text-[14px] font-bold text-text">Personal</h2>
-        <p className="text-[11px] text-text3 mt-0.5">
-          Ficha completa de cada miembro: fechas, salarios, historial de pagos con facturas y contratos.
-          Solo visible para admins. El alta de gente sigue siendo en "Equipo y usuarios".
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[14px] font-bold text-text">Personal</h2>
+          <p className="text-[11px] text-text3 mt-0.5">
+            Ficha completa de cada miembro: datos personales, salarios, pagos con facturas y contratos.
+            Solo visible para admins. El alta de gente sigue siendo en "Equipo y usuarios".
+          </p>
+        </div>
+        <CopyOnboardingLink />
       </div>
+
+      {pending.length > 0 && (
+        <PendingOnboardings
+          pending={pending}
+          existingIds={members.map((m) => m.id)}
+          addTeamMember={addTeamMember}
+          onChanged={load}
+        />
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {members.map((m) => (
@@ -143,6 +163,99 @@ function MemberCard({ member, hr, payments, contracts, onOpen }) {
         )}
       </div>
     </button>
+  );
+}
+
+// Botón para copiar el link del formulario público de onboarding.
+function CopyOnboardingLink() {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/onboarding`;
+  const copy = () => {
+    navigator.clipboard?.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button onClick={copy}
+            title={url}
+            className="py-1.5 px-3 rounded-md border border-border bg-white text-text2 text-[12px] hover:bg-surface2 flex items-center gap-1.5 shrink-0">
+      {copied ? <Check size={13} className="text-green-600" /> : <Link2 size={13} />}
+      {copied ? '¡Link copiado!' : 'Copiar link de onboarding'}
+    </button>
+  );
+}
+
+// Onboardings recibidos del formulario público, esperando que el admin los
+// convierta en ficha del miembro.
+function PendingOnboardings({ pending, existingIds, addTeamMember, onChanged }) {
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+
+  const approve = async (sub) => {
+    setBusy(sub.id); setError('');
+    try {
+      await approveOnboarding(sub, existingIds, addTeamMember);
+      await onChanged();
+    } catch (e) {
+      setError(`No se pudo crear la ficha de ${sub.name}: ${e.message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const discard = async (sub) => {
+    if (!confirm(`¿Descartar el onboarding de "${sub.name}"? Se borran también sus fotos.`)) return;
+    setBusy(sub.id);
+    await deleteStaffDoc(sub.profile_photo_path);
+    await deleteStaffDoc(sub.document_photo_path);
+    await supabase.from('staff_onboarding').delete().eq('id', sub.id);
+    await onChanged();
+    setBusy(null);
+  };
+
+  return (
+    <div className="mb-4 border border-amber-200 bg-amber-50/60 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-2.5">
+        <Inbox size={15} className="text-amber-600" />
+        <h3 className="text-[13px] font-bold text-amber-800">
+          Onboardings recibidos ({pending.length})
+        </h3>
+      </div>
+      <p className="text-[11px] text-amber-700/80 mb-3">
+        Personas que completaron el formulario y todavía no son ficha. Revisalas y creá su ficha.
+      </p>
+      {error && <div className="text-red text-[12px] bg-red/5 rounded-md p-2 mb-2">{error}</div>}
+      <div className="space-y-2">
+        {pending.map((sub) => (
+          <div key={sub.id} className="bg-white border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-bold text-text">{sub.name}</div>
+              <div className="text-[11px] text-text3">
+                {sub.role || 'Sin rol'} · {sub.personal_email || 's/ email'} · recibido {fmtDate((sub.created_at || '').slice(0, 10))}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                {sub.profile_photo_path && (
+                  <button onClick={() => openStaffDoc(sub.profile_photo_path)} className="text-[11px] text-blue hover:underline">Ver foto</button>
+                )}
+                {sub.document_photo_path && (
+                  <button onClick={() => openStaffDoc(sub.document_photo_path)} className="text-[11px] text-blue hover:underline">Ver documento</button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => approve(sub)} disabled={busy === sub.id}
+                      className="py-1.5 px-3 rounded-md bg-blue text-white text-[12px] hover:bg-blue-dark disabled:opacity-60 flex items-center gap-1.5">
+                <UserPlus size={13} /> {busy === sub.id ? 'Creando…' : 'Crear ficha'}
+              </button>
+              <button onClick={() => discard(sub)} disabled={busy === sub.id}
+                      className="text-text3 hover:text-red p-1.5 rounded hover:bg-red/10">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
