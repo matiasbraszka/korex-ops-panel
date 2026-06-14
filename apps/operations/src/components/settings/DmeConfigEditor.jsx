@@ -44,7 +44,11 @@ export default function DmeConfigEditor() {
 
   // Agrupar las metricas configurables por bloque (orden CONFIG_BLOQUES).
   const keysByBloque = {};
-  Object.keys(draft).forEach((k) => { const b = draft[k].bloque || 'Otros'; (keysByBloque[b] ||= []).push(k); });
+  Object.keys(draft).forEach((k) => {
+    if (METRIC_BY_KEY[k]?.hidden) return; // metricas ocultas no se configuran
+    const b = draft[k].bloque || 'Otros';
+    (keysByBloque[b] ||= []).push(k);
+  });
   const bloques = [...CONFIG_BLOQUES.filter((b) => keysByBloque[b]), ...Object.keys(keysByBloque).filter((b) => !CONFIG_BLOQUES.includes(b))];
 
   return (

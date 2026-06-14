@@ -13,7 +13,7 @@ function todayISO() {
 // Form vacio: campos en blanco ('') -> lo que no se carga queda en blanco, no 0.
 const EMPTY_STR = Object.fromEntries(INPUT_KEYS.map((k) => [k, '']));
 // Metricas derivadas (para mostrarlas calculadas en vivo, read-only).
-const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type === 'derived'));
+const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type === 'derived' && !m.hidden));
 
 // Modal para cargar / editar el DME de un dia (de un cliente fijo). Solo se cargan
 // los INPUTS; los derivados (%, CPL, ROI...) se muestran calculados en vivo.
@@ -115,7 +115,7 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
                 {g.fields.map((f) => (
                   <div key={f.key} className="flex items-center gap-2.5 border border-border rounded-lg px-3 py-1.5">
                     <span className="flex-1 text-[12px] text-text">{f.label}</span>
-                    {(f.kind === 'money' || f.kind === 'cpl') && <span className="text-[11px] text-text3">US$</span>}
+                    {(f.kind === 'money' || f.kind === 'cpl') && <span className="text-[11px] text-text3">$</span>}
                     {f.kind === 'pct' && <span className="text-[11px] text-text3">%</span>}
                     <input type="number" step={f.kind === 'money' || f.kind === 'cpl' ? '0.01' : f.kind === 'pct' ? '0.01' : '1'}
                            value={form[f.key]}

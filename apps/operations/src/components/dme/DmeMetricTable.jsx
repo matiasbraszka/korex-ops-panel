@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import DmeCell from './DmeCell.jsx';
 import { metricTone } from '../../lib/dme/color.js';
 
@@ -15,7 +15,7 @@ import { metricTone } from '../../lib/dme/color.js';
 //   totalCol : { key, label, bag } | null
 //   config   : config de umbrales resuelta
 //   onCellClick(columnKey, metric) : opcional (para editar un dia)
-export default function DmeMetricTable({ sections, columns, totalCol, config, onCellClick }) {
+export default function DmeMetricTable({ sections, columns, totalCol, config, onCellClick, funnelLinks = {}, onEditFunnelLink }) {
   const [collapsed, setCollapsed] = useState({});
   const toggle = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
   const colCount = 1 + columns.length + (totalCol ? 1 : 0);
@@ -31,12 +31,12 @@ export default function DmeMetricTable({ sections, columns, totalCol, config, on
               </th>
               {columns.map((c) => (
                 <th key={c.key} title={c.title}
-                    className="text-right font-bold px-2.5 py-2 sticky top-0 z-20 bg-white border-b border-l border-[#F1F3F7] whitespace-nowrap">
+                    className="text-left font-bold px-2.5 py-2 sticky top-0 z-20 bg-white border-b border-l border-[#F1F3F7] whitespace-nowrap">
                   {c.label}
                 </th>
               ))}
               {totalCol && (
-                <th className="text-right font-bold px-2.5 py-2 sticky top-0 right-0 z-20 bg-[#F8FAFC] border-b border-l border-border whitespace-nowrap">
+                <th className="text-left font-bold px-2.5 py-2 sticky top-0 right-0 z-20 bg-[#F8FAFC] border-b border-l border-border whitespace-nowrap">
                   {totalCol.label}
                 </th>
               )}
@@ -52,11 +52,27 @@ export default function DmeMetricTable({ sections, columns, totalCol, config, on
                       <span className="inline-flex items-center gap-1">
                         {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                         {sec.title}
+                        {(sec.id === 'embudo1' || sec.id === 'embudo2') && (
+                          <span className="inline-flex items-center gap-1.5 ml-1.5 normal-case" onClick={(e) => e.stopPropagation()}>
+                            {funnelLinks[sec.id] && (
+                              <a href={funnelLinks[sec.id]} target="_blank" rel="noreferrer"
+                                 className="text-blue hover:underline inline-flex items-center" title="Abrir embudo de este cliente">
+                                <ExternalLink size={12} />
+                              </a>
+                            )}
+                            {onEditFunnelLink && (
+                              <button type="button" onClick={() => onEditFunnelLink(sec.id)}
+                                      className="text-[9px] font-medium text-text3 hover:text-blue cursor-pointer bg-transparent border-0 p-0">
+                                {funnelLinks[sec.id] ? 'editar link' : '+ link'}
+                              </button>
+                            )}
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td colSpan={colCount - 1} className="bg-surface2 border-b border-border" />
                   </tr>
-                  {!isCollapsed && sec.metrics.map((m) => (
+                  {!isCollapsed && sec.metrics.filter((m) => !m.hidden).map((m) => (
                     <tr key={m.key} className="border-b border-[#F1F3F7] hover:bg-surface2/40">
                       <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap text-text" title={m.help || undefined}>
                         <span className={`${m.type === 'derived' ? 'text-text2' : 'text-text'} ${m.help ? 'border-b border-dotted border-text3/50 cursor-help' : ''}`}>

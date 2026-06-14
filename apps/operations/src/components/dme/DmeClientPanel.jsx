@@ -14,8 +14,17 @@ const VIEWS = [{ id: 'diario', label: 'Diario' }, { id: 'semanal', label: 'Seman
 // Vista DME embebida dentro del detalle de un cliente. Misma maquinaria que la
 // seccion DME pero con el cliente fijado y sin selector.
 export default function DmeClientPanel({ clientId, clientName }) {
-  const { currentUser, appSettings } = useApp();
+  const { currentUser, appSettings, updateAppSettings } = useApp();
   const today = new Date();
+  const funnelLinks = appSettings?.dme_funnel_links?.[clientId] || {};
+  const onEditFunnelLink = (funnelId) => {
+    const label = funnelId === 'embudo1' ? 'Embudo 1' : 'Embudo 2';
+    const url = window.prompt(`Pegá el link del ${label} de ${clientName || 'este cliente'}:`, funnelLinks[funnelId] || '');
+    if (url === null) return;
+    const all = { ...(appSettings?.dme_funnel_links || {}) };
+    all[clientId] = { ...(all[clientId] || {}), [funnelId]: url.trim() };
+    updateAppSettings({ dme_funnel_links: all });
+  };
   const [viewMode, setViewMode] = useState('diario');
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -82,7 +91,7 @@ export default function DmeClientPanel({ clientId, clientName }) {
       {loading && rows.length === 0 ? (
         <div className="text-text3 text-center py-10 text-[12px]">Cargando DME…</div>
       ) : (
-        <DmeMetricTable sections={SECTIONS} columns={columns} totalCol={totalCol} config={dmeConfig} onCellClick={onCellClick} />
+        <DmeMetricTable sections={SECTIONS} columns={columns} totalCol={totalCol} config={dmeConfig} onCellClick={onCellClick} funnelLinks={funnelLinks} onEditFunnelLink={onEditFunnelLink} />
       )}
 
       <DmeDayModal

@@ -42,8 +42,6 @@ const CMP = [
   { label: '% WhatsApp enviado',   suffix: 'pct_whatsapp',      kind: 'pct',   d: true },
   { label: 'Cierres',              suffix: 'cierres',           kind: 'int',   d: false },
   { label: '% de cierres',         suffix: 'pct_cierres',       kind: 'pct',   d: true },
-  { label: 'Total facturado',      suffix: 'facturado',         kind: 'money', d: false },
-  { label: 'ROI',                  suffix: 'roi',               kind: 'roi',   d: true },
 ];
 
 // Recalcula los derivados del embudo combinado (Embudo 1 + 2) a partir de los inputs sumados.
@@ -60,7 +58,7 @@ function combinedDerived(ci) {
 }
 
 export default function DmePage() {
-  const { clients, currentUser, selectedId, appSettings } = useApp();
+  const { clients, currentUser, selectedId, appSettings, updateAppSettings } = useApp();
   const isAdmin = !!currentUser?.isAdmin;
   const today = new Date();
 
@@ -114,6 +112,17 @@ export default function DmePage() {
 
   const clientName = isCombined ? 'Todos combinados' : (clients.find((c) => c.id === clientId)?.name || '—');
   const tone = (key, val) => metricTone(key, val, dmeConfig);
+
+  // Links de embudo por cliente (guardados en app_settings.dme_funnel_links).
+  const funnelLinks = isCombined ? {} : (appSettings?.dme_funnel_links?.[clientId] || {});
+  const onEditFunnelLink = isCombined ? undefined : (funnelId) => {
+    const label = funnelId === 'embudo1' ? 'Embudo 1' : 'Embudo 2';
+    const url = window.prompt(`Pegá el link del ${label} de ${clientName}:`, funnelLinks[funnelId] || '');
+    if (url === null) return;
+    const all = { ...(appSettings?.dme_funnel_links || {}) };
+    all[clientId] = { ...(all[clientId] || {}), [funnelId]: url.trim() };
+    updateAppSettings({ dme_funnel_links: all });
+  };
 
   // Click en una celda-dia (solo Diario, cliente real) -> editar ese dia.
   const onCellClick = (!isCombined && viewMode === 'diario')
@@ -186,6 +195,8 @@ export default function DmePage() {
           totalCol={totalCol}
           config={dmeConfig}
           onCellClick={onCellClick}
+          funnelLinks={funnelLinks}
+          onEditFunnelLink={onEditFunnelLink}
         />
       )}
 
@@ -269,20 +280,20 @@ function DashboardView({ bag, tone, periodLabel }) {
             <thead>
               <tr className="text-text3 text-[10px] uppercase tracking-wider">
                 <th className="text-left font-bold px-3 py-2">Métrica</th>
-                <th className="text-right font-bold px-3 py-2">Embudo 1</th>
-                <th className="text-right font-bold px-3 py-2">Embudo 2</th>
-                <th className="text-right font-bold px-3 py-2">TOTAL</th>
-                <th className="text-right font-bold px-3 py-2">Diferencia</th>
+                <th className="text-left font-bold px-3 py-2">Embudo 1</th>
+                <th className="text-left font-bold px-3 py-2">Embudo 2</th>
+                <th className="text-left font-bold px-3 py-2">TOTAL</th>
+                <th className="text-left font-bold px-3 py-2">Diferencia</th>
               </tr>
             </thead>
             <tbody>
               {cmpRows.map((r) => (
                 <tr key={r.suffix} className="border-t border-[#F1F3F7]">
                   <td className="text-left px-3 py-1.5 text-text whitespace-nowrap">{r.label}</td>
-                  <td className="text-right px-3 py-1.5 tabular-nums">{fmtMetric(r.kind, r.e1)}</td>
-                  <td className="text-right px-3 py-1.5 tabular-nums">{fmtMetric(r.kind, r.e2)}</td>
-                  <td className="text-right px-3 py-1.5 tabular-nums font-bold">{fmtMetric(r.kind, r.total)}</td>
-                  <td className="text-right px-3 py-1.5 tabular-nums text-text3">{r.d ? '—' : fmtMetric(r.kind, r.diff)}</td>
+                  <td className="text-left px-3 py-1.5 tabular-nums">{fmtMetric(r.kind, r.e1)}</td>
+                  <td className="text-left px-3 py-1.5 tabular-nums">{fmtMetric(r.kind, r.e2)}</td>
+                  <td className="text-left px-3 py-1.5 tabular-nums font-bold">{fmtMetric(r.kind, r.total)}</td>
+                  <td className="text-left px-3 py-1.5 tabular-nums text-text3">{r.d ? '—' : fmtMetric(r.kind, r.diff)}</td>
                 </tr>
               ))}
             </tbody>

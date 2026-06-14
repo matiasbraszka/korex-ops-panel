@@ -10,7 +10,7 @@ export default function DmeCell({ kind, value, tone, onClick, bold = false, clic
     <td
       onClick={onClick}
       title={clickable ? 'Tocá para cargar/editar este día' : undefined}
-      className={`text-right px-2.5 py-1.5 tabular-nums whitespace-nowrap border-l border-[#F1F3F7] ${clickable ? 'cursor-pointer hover:ring-1 hover:ring-blue/40' : ''} ${bold ? 'font-bold' : ''}`}
+      className={`text-left px-2.5 py-1.5 tabular-nums whitespace-nowrap border-l border-[#F1F3F7] ${clickable ? 'cursor-pointer hover:ring-1 hover:ring-blue/40' : ''} ${bold ? 'font-bold' : ''}`}
       style={!blank && tone ? { background: tone.bg, color: tone.fg, fontWeight: 600 } : undefined}
     >
       {blank ? '' : fmtMetric(kind, value)}

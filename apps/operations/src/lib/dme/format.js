@@ -4,9 +4,9 @@
 export function fmtMoney(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
-  if (v === 0) return 'US$ 0';
-  if (Math.abs(v) >= 1000) return 'US$ ' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
-  return 'US$ ' + (Number.isInteger(v) ? v : v.toFixed(2));
+  if (v === 0) return '$ 0';
+  if (Math.abs(v) >= 1000) return '$ ' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'k';
+  return '$ ' + (Number.isInteger(v) ? v : v.toFixed(2));
 }
 
 // Porcentajes: el valor crudo es un ratio (0.20 = 20%).

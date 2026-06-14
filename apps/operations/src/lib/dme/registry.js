@@ -22,8 +22,8 @@ const GENERAL = {
     { key: 'usuarios_total',           label: 'TOTAL de usuarios',                type: 'derived', kind: 'int', help: 'Usuarios activos con publicidad + sin publicidad.' },
     { key: 'pct_activos_con_pub',      label: '% de usuarios activos con publicidad', type: 'derived', kind: 'pct', help: 'Activos con publicidad ÷ TOTAL de usuarios.' },
     { key: 'pct_activos_sin_pub',      label: '% de usuarios activos sin publicidad', type: 'derived', kind: 'pct', help: 'Activos sin publicidad ÷ TOTAL de usuarios.' },
-    { key: 'usuarios_baja',            label: 'Usuarios que se dieron de baja',   type: 'input',   kind: 'int', agg: 'sum' },
-    { key: 'pct_bajas',                label: '% de bajas',                       type: 'derived', kind: 'pct', help: 'Usuarios que se dieron de baja ÷ TOTAL de usuarios.' },
+    { key: 'usuarios_baja',            label: 'Usuarios que se dieron de baja',   type: 'input',   kind: 'int', agg: 'sum', hidden: true },
+    { key: 'pct_bajas',                label: '% de bajas',                       type: 'derived', kind: 'pct', hidden: true, help: 'Usuarios que se dieron de baja ÷ TOTAL de usuarios.' },
   ],
 };
 
@@ -34,7 +34,7 @@ const FINANZAS = {
     { key: 'comisiones_setups',    label: 'Comisiones SETUPS',             type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'cashcollect_setups',   label: 'CashCollect SETUPs',            type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'pct_comisiones_setups',label: '% en comisiones de SETUPS',     type: 'derived', kind: 'pct', help: 'Comisiones SETUPS ÷ Facturación SETUPS.' },
-    { key: 'recargas_pub',         label: 'Recargas en publicidad',        type: 'input',   kind: 'money', agg: 'sum' },
+    { key: 'recargas_pub',         label: 'Recargas en publicidad',        type: 'input',   kind: 'int', agg: 'sum', help: 'Cantidad de recargas hechas ese día (no es un monto).' },
     { key: 'invertido_pub',        label: 'Invertido por los usuarios en publicidad', type: 'input', kind: 'money', agg: 'sum' },
     { key: 'comisiones_pub',       label: 'Comisiones publicidad',         type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'cashcollect_pub',      label: 'CashCollect Publicidad',        type: 'input',   kind: 'money', agg: 'sum' },
@@ -105,7 +105,7 @@ const FUNNEL_INPUTS = [
   { suffix: 'quiz_terminado',    label: 'Quiz terminado',         kind: 'int',   agg: 'sum' },
   { suffix: 'whatsapp',          label: 'WhatsApp enviado',       kind: 'int',   agg: 'sum' },
   { suffix: 'cierres',           label: 'Cierres',                kind: 'int',   agg: 'sum' },
-  { suffix: 'facturado',         label: 'Total facturado clientes', kind: 'money', agg: 'sum' },
+  { suffix: 'facturado',         label: 'Total facturado clientes', kind: 'money', agg: 'sum', hidden: true },
 ];
 
 // Help de los derivados del embudo (formula por sufijo).
@@ -129,9 +129,9 @@ const FUNNEL_DERIVED_HELP = {
 function funnelSection(prefix, title) {
   const k = (s) => `${prefix}_${s}`;
   const inp = Object.fromEntries(
-    FUNNEL_INPUTS.map((f) => [f.suffix, { key: k(f.suffix), label: f.label, type: 'input', kind: f.kind, agg: f.agg }])
+    FUNNEL_INPUTS.map((f) => [f.suffix, { key: k(f.suffix), label: f.label, type: 'input', kind: f.kind, agg: f.agg, hidden: f.hidden }])
   );
-  const der = (suffix, label, kind) => ({ key: k(suffix), label, type: 'derived', kind, help: FUNNEL_DERIVED_HELP[suffix] });
+  const der = (suffix, label, kind, hidden) => ({ key: k(suffix), label, type: 'derived', kind, hidden, help: FUNNEL_DERIVED_HELP[suffix] });
   const metrics = [
     inp.total_gastado,
     inp.total_leads,
@@ -159,7 +159,7 @@ function funnelSection(prefix, title) {
     inp.cierres,
     der('pct_cierres', '% de cierres', 'pct'),
     inp.facturado,
-    der('roi', 'ROI', 'roi'),
+    der('roi', 'ROI', 'roi', true),
   ];
   return { id: prefix, title, metrics };
 }
@@ -178,7 +178,7 @@ export const SNAPSHOT_KEYS = INPUT_METRICS.filter((m) => m.agg === 'last').map((
 export const EMPTY_ROW     = Object.fromEntries(INPUT_KEYS.map((k) => [k, 0]));
 
 export const INPUT_GROUPS = SECTIONS
-  .map((s) => ({ title: s.title, fields: s.metrics.filter((m) => m.type === 'input') }))
+  .map((s) => ({ title: s.title, fields: s.metrics.filter((m) => m.type === 'input' && !m.hidden) }))
   .filter((g) => g.fields.length > 0);
 
 // ── Semilla del semaforo (pestana Config de la planilla canonica) ────────────
