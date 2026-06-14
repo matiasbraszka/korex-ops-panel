@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, Receipt, Coins } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -32,6 +32,11 @@ const SalesRoutes = lazy(() =>
 // Lazy-load del modulo Soporte (bandeja WhatsApp, citas, recordatorios).
 const SoporteRoutes = lazy(() =>
   import('@korex/soporte').then((m) => ({ default: m.SoporteRoutes }))
+);
+
+// Lazy-load del modulo Finanzas (ingresos, comisiones — espejo del Sheet).
+const FinanceRoutes = lazy(() =>
+  import('@korex/finance').then((m) => ({ default: m.FinanceRoutes }))
 );
 
 // Formulario publico de carga de KPIs (sin login). Se baja solo si alguien
@@ -273,6 +278,7 @@ function MainLayout() {
   const canAccessOperations = useCan('operations', 'read');
   const canAccessSales = useCan('sales', 'read');
   const canAccessSoporte = useCan('soporte', 'read');
+  const canAccessFinance = useCan('finance', 'read');
   // Mensajes de WhatsApp sin leer (badge del area Soporte en el nav).
   const waUnread = useSoporteUnread(canAccessSoporte);
   const location = useLocation();
@@ -304,17 +310,25 @@ function MainLayout() {
     { id: 'recursos', label: 'Recursos', Icon: FolderOpen, path: '/soporte/recursos' },
     ...(currentUser?.isAdmin ? [{ id: 'cuentas', label: 'Cuentas', Icon: Wallet, path: '/soporte/cuentas' }] : []),
   ];
+  // Items de Finanzas (mismo criterio que Soporte: definidos aca para mantener
+  // el modulo en su propio chunk lazy). F1 = solo lectura.
+  const financeItems = [
+    { id: 'ingresos',   label: 'Ingresos',   Icon: Receipt, path: '/finance/ingresos' },
+    { id: 'comisiones', label: 'Comisiones', Icon: Coins,   path: '/finance/comisiones' },
+  ];
   // Tokens de color por area (mantienen consistencia con la paleta Korex).
   const areaTokens = {
     operations: { color: '#22C55E', bg: '#ECFDF5', short: 'Ops',     icon: ClipboardList,  base: '/operations' },
     sales:      { color: '#5B7CF5', bg: '#EEF2FF', short: 'Ventas',  icon: Users,          base: '/sales' },
     soporte:    { color: '#F59E0B', bg: '#FFFBEB', short: 'Soporte', icon: Headphones,     base: '/soporte' },
+    finance:    { color: '#0EA5A4', bg: '#F0FDFA', short: 'Finanzas', icon: Wallet,        base: '/finance' },
     admin:      { color: '#8B5CF6', bg: '#F5F3FF', short: 'Admin',   icon: Shield,         base: '/admin' },
   };
   const areas = [
     canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,        ...areaTokens.operations },
     canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems,      ...areaTokens.sales },
     canAccessSoporte    && { id: 'soporte',    label: 'Soporte',        items: soporteItems,    ...areaTokens.soporte },
+    canAccessFinance    && { id: 'finance',    label: 'Finanzas',       items: financeItems,    ...areaTokens.finance },
     currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems,      ...areaTokens.admin },
   ].filter(Boolean);
 
@@ -410,6 +424,18 @@ function MainLayout() {
           canAccessSoporte ? (
             <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
               <SoporteRoutes />
+            </Suspense>
+          ) : (
+            <Navigate to={homePath} replace />
+          )
+        }
+      />
+      <Route
+        path="/finance/*"
+        element={
+          canAccessFinance ? (
+            <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
+              <FinanceRoutes />
             </Suspense>
           ) : (
             <Navigate to={homePath} replace />
