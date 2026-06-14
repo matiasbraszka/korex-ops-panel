@@ -108,7 +108,12 @@ export default function StripePage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [ch, re, du, po, it, cl] = await Promise.all([
-      supabase.from('stripe_charges').select('*').order('created_at', { ascending: false }).limit(2000),
+      // Solo las columnas que usa la pantalla (sin el JSON crudo) → liviano aunque crezca.
+      supabase.from('stripe_charges').select(
+        'id,amount,currency,status,net_usd,fee_usd,fee_fx_usd,gross_usd,customer_name,customer_email,customer_phone,' +
+        'product_name,category,category_auto,client_id,client_locked,disputed,refunded,risk_level,failure_message,' +
+        'checkout_answers,receipt_url,created_at,payout_id,mercury_arrived_at,trace_id',
+      ).order('created_at', { ascending: false }).limit(2000),
       supabase.from('stripe_refunds').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_disputes').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_payouts_x').select('*').order('created_at', { ascending: false }).limit(500),
