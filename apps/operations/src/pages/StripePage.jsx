@@ -69,6 +69,7 @@ function catMeta(cat) {
   const c = (cat || '').toLowerCase();
   if (c === 'crm') return { label: 'CRM', color: '#2563EB', bg: '#EFF6FF' };
   if (c === 'publicidad' || c === 'ads' || c === 'meta') return { label: 'Publicidad', color: '#9333EA', bg: '#F5F3FF' };
+  if (c === 'setup') return { label: 'SETUP', color: '#C2410C', bg: '#FFF7ED' };
   if (c) return { label: cat, color: '#6B7280', bg: '#F3F4F6' };
   return null;
 }
@@ -107,7 +108,7 @@ export default function StripePage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [ch, re, du, po, it, cl] = await Promise.all([
-      supabase.from('stripe_charges').select('*').order('created_at', { ascending: false }).limit(2000),
+      supabase.from('stripe_charges_x').select('*').order('created_at', { ascending: false }).limit(2000),
       supabase.from('stripe_refunds').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_disputes').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_payouts_x').select('*').order('created_at', { ascending: false }).limit(500),
@@ -170,17 +171,6 @@ export default function StripePage() {
   }, [clients]);
   const selectedCharge = selected ? chargeById.get(selected) : null;
 
-  // Mapa: cobro -> ¿su payout llegó a Mercury? (vía items del payout + payouts cruzados)
-  const chargeArrival = useMemo(() => {
-    const payoutArrived = new Map();
-    for (const p of payouts) payoutArrived.set(p.id, p.mercury_arrived_at || null);
-    const m = new Map();
-    for (const it of items) {
-      if (it.source && it.payout_id) m.set(it.source, { payoutId: it.payout_id, arrivedAt: payoutArrived.get(it.payout_id) || null });
-    }
-    return m;
-  }, [items, payouts]);
-
   // Agrupar pagos por persona (email) → "Clientes / usuarios".
   const customers = useMemo(() => {
     const map = new Map();
@@ -200,11 +190,12 @@ export default function StripePage() {
       total: o.charges.reduce((s, c) => s + (Number(c.net_usd) || 0), 0),
       crm: o.charges.filter((c) => (c.category || c.category_auto) === 'crm').length,
       pub: o.charges.filter((c) => (c.category || c.category_auto) === 'publicidad').length,
-      arrived: o.charges.filter((c) => chargeArrival.get(c.id)?.arrivedAt).length,
+      setup: o.charges.filter((c) => (c.category || c.category_auto) === 'setup').length,
+      arrived: o.charges.filter((c) => c.mercury_arrived_at).length,
     }));
     arr.sort((a, b) => b.total - a.total);
     return arr;
-  }, [charges, chargeArrival]);
+  }, [charges]);
 
   const filteredCustomers = useMemo(() => {
     const term = norm(q.trim());
@@ -301,7 +292,7 @@ export default function StripePage() {
       ) : tab === 'clientes' ? (
         <>
           <SearchBar q={q} setQ={setQ} placeholder="Buscar cliente por nombre, email o teléfono…" />
-          <ClientesTab customers={filteredCustomers.slice(0, visibleCli)} chargeArrival={chargeArrival} clientById={clientById} open={openCli} setOpen={setOpenCli} onSelectCharge={setSelected} />
+          <ClientesTab customers={filteredCustomers.slice(0, visibleCli)} clientById={clientById} open={openCli} setOpen={setOpenCli} onSelectCharge={setSelected} />
           <LoadMore shown={Math.min(visibleCli, filteredCustomers.length)} total={filteredCustomers.length} onMore={() => setVisibleCli((v) => v + 40)} />
         </>
       ) : tab === 'reembolsos' ? (
@@ -393,7 +384,7 @@ function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, o
   const answers = c.checkout_answers && typeof c.checkout_answers === 'object' ? c.checkout_answers : {};
   const answerKeys = Object.keys(answers);
   const effCat = c.category || c.category_auto || '';
-  const cats = [{ v: 'crm', label: 'CRM' }, { v: 'publicidad', label: 'Publicidad' }, { v: '', label: 'Sin categoría' }];
+  const cats = [{ v: 'setup', label: 'SETUP' }, { v: 'crm', label: 'CRM' }, { v: 'publicidad', label: 'Publicidad' }, { v: '', label: 'Sin categoría' }];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-[520px] max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -471,6 +462,19 @@ function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, o
                 <MessageCircle size={15} /> Escribir por WhatsApp
               </button>
             )}
+          </div>
+
+          {/* trazabilidad: llegada a Mercury */}
+          <div>
+            <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">Llegada a Mercury</div>
+            {c.mercury_arrived_at ? (
+              <div className="text-[12.5px] font-medium inline-flex items-center gap-2" style={{ color: '#15803D' }}>
+                <Landmark size={13} /> Llegó a Mercury el {fmtDate(c.mercury_arrived_at)}
+              </div>
+            ) : (
+              <div className="text-[12.5px] text-text3 inline-flex items-center gap-2"><Clock size={13} /> Aún no llegó a Mercury (se transfiere pronto)</div>
+            )}
+            {c.trace_id && <div className="text-[10.5px] text-text3 mt-1">ID de transferencia: <span className="font-mono">{c.trace_id}</span></div>}
           </div>
 
           {/* meta */}
@@ -663,7 +667,7 @@ function LoadMore({ shown, total, onMore }) {
 }
 
 // ---------- Clientes / usuarios ----------
-function ClientesTab({ customers, chargeArrival, clientById, open, setOpen, onSelectCharge }) {
+function ClientesTab({ customers, clientById, open, setOpen, onSelectCharge }) {
   if (!customers.length) return <Empty text="No hay clientes que coincidan." />;
   return (
     <div className="flex flex-col gap-2.5">
@@ -687,6 +691,7 @@ function ClientesTab({ customers, chargeArrival, clientById, open, setOpen, onSe
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <Stat label={`${cu.count} pago${cu.count === 1 ? '' : 's'}`} />
+                  {cu.setup > 0 && <Stat label={`SETUP ${cu.setup}`} color="#C2410C" bg="#FFF7ED" />}
                   {cu.crm > 0 && <Stat label={`CRM ${cu.crm}`} color="#2563EB" bg="#EFF6FF" />}
                   {cu.pub > 0 && <Stat label={`Publicidad ${cu.pub}`} color="#9333EA" bg="#F5F3FF" />}
                   <Stat label={`${cu.arrived}/${cu.count} en Mercury`} color={pendientes ? '#A16207' : '#15803D'} bg={pendientes ? '#FEFCE8' : '#F0FDF4'} Icon={pendientes ? Clock : CheckCircle2} />
@@ -713,7 +718,7 @@ function ClientesTab({ customers, chargeArrival, clientById, open, setOpen, onSe
                   <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-1.5">Pagos ({cu.count})</div>
                   <div className="border border-border rounded-lg bg-white overflow-hidden">
                     {cu.charges.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).map((c) => {
-                      const arr = chargeArrival.get(c.id)?.arrivedAt;
+                      const arr = c.mercury_arrived_at;
                       return (
                         <button key={c.id} onClick={() => onSelectCharge(c.id)} className="w-full text-left flex items-center gap-3 px-3 py-2 border-b border-border last:border-0 hover:bg-surface2 cursor-pointer bg-transparent">
                           <CreditCard size={13} className="shrink-0" style={{ color: STRIPE }} />
