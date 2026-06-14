@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Lock } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
-import { useDmeData, ALL_CLIENTS } from '../hooks/useDmeData.js';
+import { useDmeData, useDmeAllClients, ALL_CLIENTS } from '../hooks/useDmeData.js';
 import { SECTIONS } from '../lib/dme/registry.js';
 import {
   monthBounds, yearBounds, columnsByDay, columnsByWeek, columnsByMonth, flattenBag,
@@ -12,6 +12,7 @@ import { fmtMetric } from '../lib/dme/format.js';
 import DmeMetricTable from '../components/dme/DmeMetricTable.jsx';
 import DmeDayModal from '../components/dme/DmeDayModal.jsx';
 import DmeKpiCard from '../components/dme/DmeKpiCard.jsx';
+import DmeClientCompareTable from '../components/dme/DmeClientCompareTable.jsx';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const VIEWS = [
@@ -121,6 +122,20 @@ export default function DmePage() {
   // Bag del rango completo (para Dashboard).
   const rangeBag = useMemo(() => flattenBag(rows), [rows]);
 
+  // Datos por cliente para la comparativa del Dashboard. En Maestro = todos los
+  // clientes; con un cliente seleccionado = solo ese (una fila).
+  const showDashboard = viewMode === 'dashboard';
+  const { byClient } = useDmeAllClients(from, to, showDashboard && isCombined);
+  const perClient = useMemo(() => {
+    if (!showDashboard) return [];
+    const ids = isCombined ? Object.keys(byClient) : [clientId].filter(Boolean);
+    return ids.map((cid) => ({
+      id: cid,
+      name: clients.find((c) => c.id === cid)?.name || '—',
+      bag: isCombined ? flattenBag(byClient[cid] || []) : rangeBag,
+    }));
+  }, [showDashboard, isCombined, byClient, clientId, clients, rangeBag]);
+
   const shiftMonth = (delta) => {
     let m = month + delta, y = year;
     while (m < 1) { m += 12; y -= 1; }
@@ -205,7 +220,15 @@ export default function DmePage() {
       {loading && rows.length === 0 ? (
         <div className="text-text3 text-center py-12 text-[12px]">Cargando DME…</div>
       ) : viewMode === 'dashboard' ? (
-        <DashboardView bag={rangeBag} tone={tone} periodLabel={`${MONTH_NAMES[month - 1]} ${year}`} isAdmin={isAdmin} />
+        <DashboardView
+          bag={rangeBag}
+          tone={tone}
+          periodLabel={byYear ? String(year) : `${MONTH_NAMES[month - 1]} ${year}`}
+          isAdmin={isAdmin}
+          perClient={perClient}
+          config={dmeConfig}
+          onSelectClient={setClientId}
+        />
       ) : (
         <DmeMetricTable
           sections={sections}
@@ -241,7 +264,7 @@ export default function DmePage() {
 }
 
 // ── Dashboard (resumen del rango) ────────────────────────────────────────────
-function DashboardView({ bag, tone, periodLabel, isAdmin }) {
+function DashboardView({ bag, tone, periodLabel, isAdmin, perClient = [], config, onSelectClient }) {
   const g = (k) => bag[k];
   // Suma de dos métricas; queda en blanco si ninguna tiene dato (no muestra 0).
   const sum2 = (a, b) => (bag[a] == null && bag[b] == null ? undefined : num(bag[a]) + num(bag[b]));
@@ -307,6 +330,8 @@ function DashboardView({ bag, tone, periodLabel, isAdmin }) {
         <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Inversión y leads</div>
         <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{invCards.map(card)}</div>
       </div>
+
+      <DmeClientCompareTable rows={perClient} config={config} isAdmin={isAdmin} onSelectClient={onSelectClient} />
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
         <div className="px-4 pt-3.5 pb-3 border-b border-border">

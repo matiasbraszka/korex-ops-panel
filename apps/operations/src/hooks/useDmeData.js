@@ -66,3 +66,32 @@ export function useDmeData(clientId, from, to, updatedBy = null) {
 
   return { rows, loading, error, reload: load, saveDay, deleteDay };
 }
+
+// Trae TODAS las filas del DME en [from, to] y las agrupa por cliente
+// ({ client_id: rows[] }). Se usa en la comparativa por cliente del Dashboard.
+// `enabled` evita la consulta cuando no se necesita.
+export function useDmeAllClients(from, to, enabled = true) {
+  const [byClient, setByClient] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !from || !to) { setByClient({}); return; }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const { data, error: e } = await supabase
+        .from('dme_daily').select('*').gte('date', from).lte('date', to).order('date');
+      if (cancelled) return;
+      if (e) { console.error('[dme] all-clients error', e); setByClient({}); }
+      else {
+        const grouped = {};
+        for (const r of data || []) (grouped[r.client_id] ||= []).push(r);
+        setByClient(grouped);
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [from, to, enabled]);
+
+  return { byClient, loading };
+}
