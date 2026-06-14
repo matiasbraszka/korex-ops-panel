@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Lock } from 'lucide-react';
+import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
 import { useDmeData, ALL_CLIENTS } from '../hooks/useDmeData.js';
-import { SECTIONS } from '../lib/dme/registry.js';
+import { SECTIONS, ADMIN_ONLY_KEYS } from '../lib/dme/registry.js';
 import {
   monthBounds, yearBounds, columnsByDay, columnsByWeek, columnsByMonth, flattenBag,
 } from '../lib/dme/aggregate.js';
@@ -68,6 +69,21 @@ export default function DmePage() {
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editDate, setEditDate] = useState(null);
+  const [activeIds, setActiveIds] = useState(() => new Set());
+
+  // Bloques General/Finanzas solo para admins.
+  const sections = useMemo(() => (isAdmin ? SECTIONS : SECTIONS.filter((s) => !s.adminOnly)), [isAdmin]);
+
+  // Clientes "DME activo": con datos cargados en los ultimos 5 dias.
+  useEffect(() => {
+    (async () => {
+      const d = new Date(); d.setDate(d.getDate() - 5);
+      const pad = (n) => String(n).padStart(2, '0');
+      const cutoff = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const { data } = await supabase.from('dme_daily').select('client_id').gte('date', cutoff);
+      setActiveIds(new Set((data || []).map((r) => r.client_id)));
+    })();
+  }, []);
 
   // Cliente por defecto: el seleccionado en el contexto o el primero de la lista.
   useEffect(() => {
@@ -136,7 +152,7 @@ export default function DmePage() {
         <select value={clientId} onChange={(e) => setClientId(e.target.value)}
                 className="text-[13px] border border-border rounded-lg px-2.5 py-2 outline-none focus:border-blue bg-white max-w-[240px]">
           {isAdmin && <option value={ALL_CLIENTS}>★ Todos combinados (Maestro)</option>}
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {clients.map((c) => <option key={c.id} value={c.id}>{(activeIds.has(c.id) ? '🟢 ' : '◦ ')}{c.name}</option>)}
         </select>
 
         <div className="flex items-center gap-0.5 bg-surface2 rounded-lg p-0.5">
@@ -187,10 +203,10 @@ export default function DmePage() {
       {loading && rows.length === 0 ? (
         <div className="text-text3 text-center py-12 text-[12px]">Cargando DME…</div>
       ) : viewMode === 'dashboard' ? (
-        <DashboardView bag={rangeBag} tone={tone} periodLabel={`${MONTH_NAMES[month - 1]} ${year}`} />
+        <DashboardView bag={rangeBag} tone={tone} periodLabel={`${MONTH_NAMES[month - 1]} ${year}`} isAdmin={isAdmin} />
       ) : (
         <DmeMetricTable
-          sections={SECTIONS}
+          sections={sections}
           columns={columns}
           totalCol={totalCol}
           config={dmeConfig}
@@ -215,6 +231,7 @@ export default function DmePage() {
           clientName={clientName}
           config={dmeConfig}
           initialDate={editDate}
+          isAdmin={isAdmin}
         />
       )}
     </div>
@@ -222,7 +239,7 @@ export default function DmePage() {
 }
 
 // ── Dashboard (resumen del rango) ────────────────────────────────────────────
-function DashboardView({ bag, tone, periodLabel }) {
+function DashboardView({ bag, tone, periodLabel, isAdmin }) {
   const g = (k) => bag[k];
 
   const cards = [
@@ -231,10 +248,10 @@ function DashboardView({ bag, tone, periodLabel }) {
     { key: 'nuevos_usuarios',    label: 'Nuevos usuarios',     kind: 'int' },
     { key: 'invertido_pub',      label: 'Inversión en publicidad', kind: 'money' },
     { key: 'cashcollect_pub',    label: 'CashCollect Publicidad', kind: 'money' },
-    { key: 'leads_obtenidos',    label: 'Leads obtenidos',     kind: 'int' },
+    { key: 'leads_obtenidos',    label: 'Leads Obtenidos (Meta)', kind: 'int' },
     { key: 'cpl',                label: 'CPL promedio',        kind: 'cpl' },
     { key: 'pct_renovaciones',   label: '% Renovaciones',      kind: 'pct' },
-  ];
+  ].filter((c) => isAdmin || !ADMIN_ONLY_KEYS.has(c.key));
   const results = [
     { key: 'nuevos_testimonios',       label: 'Nuevos testimonios',     kind: 'int' },
     { key: 'networkers_cerraron',      label: 'Networkers que cerraron', kind: 'int' },

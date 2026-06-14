@@ -17,7 +17,7 @@ const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type =
 
 // Modal para cargar / editar el DME de un dia (de un cliente fijo). Solo se cargan
 // los INPUTS; los derivados (%, CPL, ROI...) se muestran calculados en vivo.
-export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientName, config, initialDate }) {
+export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientName, config, initialDate, isAdmin = false }) {
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState({ ...EMPTY_STR });
   const [note, setNote] = useState('');
@@ -108,10 +108,10 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {INPUT_GROUPS.map((g) => (
+          {INPUT_GROUPS.filter((g) => isAdmin || !g.adminOnly).map((g) => (
             <div key={g.title}>
               <div className="text-[10px] font-bold uppercase tracking-wider text-text3 mb-2">{g.title}</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 gap-1.5">
                 {g.fields.map((f) => (
                   <div key={f.key} className="flex items-center gap-2.5 border border-border rounded-lg px-3 py-1.5">
                     <span className="flex-1 text-[12px] text-text">{f.label}</span>

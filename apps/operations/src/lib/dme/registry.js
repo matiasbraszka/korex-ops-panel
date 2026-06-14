@@ -14,7 +14,7 @@
 const SNAP_HELP = 'Foto del día: en semanal/mensual se toma el último día cargado del período (no se suma ni promedia).';
 
 const GENERAL = {
-  id: 'general', title: 'General — Negocio Korex',
+  id: 'general', title: 'General — Negocio Korex', adminOnly: true,
   metrics: [
     { key: 'usuarios_activos_con_pub', label: 'Usuarios activos con publicidad', type: 'input',   kind: 'int', agg: 'last', help: SNAP_HELP },
     { key: 'usuarios_activos_sin_pub', label: 'Usuarios activos sin publicidad', type: 'input',   kind: 'int', agg: 'last', help: SNAP_HELP },
@@ -28,7 +28,7 @@ const GENERAL = {
 };
 
 const FINANZAS = {
-  id: 'finanzas', title: 'Finanzas',
+  id: 'finanzas', title: 'Finanzas', adminOnly: true,
   metrics: [
     { key: 'facturacion_setups',   label: 'Facturación SETUPS',            type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'comisiones_setups',    label: 'Comisiones SETUPS',             type: 'input',   kind: 'money', agg: 'sum' },
@@ -41,8 +41,8 @@ const FINANZAS = {
     { key: 'comisiones_pub',       label: 'Comisiones publicidad',         type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'cashcollect_pub',      label: 'CashCollect Publicidad',        type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'pct_comisiones_pub',   label: '% en comisiones de publicidad', type: 'derived', kind: 'pct', help: 'Comisiones publicidad ÷ Invertido por los usuarios en publicidad.' },
-    { key: 'pct_renovaciones',     label: '% Renovaciones',                type: 'input',   kind: 'pct', agg: 'last', help: 'Se carga a mano. En semanal/mensual se toma el último día.' },
-    { key: 'avg_inversion_usuario',label: 'AVG inversión publicitaria por usuario', type: 'derived', kind: 'money', help: 'Invertido en publicidad ÷ Usuarios activos con publicidad.' },
+    { key: 'pct_renovaciones',     label: '% Renovaciones',                type: 'derived', kind: 'pct', help: 'Recargas en publicidad ÷ Usuarios activos con publicidad.' },
+    { key: 'avg_inversion_usuario',label: 'AVG inversión en publicidad',   type: 'derived', kind: 'money', help: 'Invertido en publicidad ÷ Cargas en publicidad totales.' },
   ],
 };
 
@@ -51,7 +51,7 @@ const SALDOS = {
   metrics: [
     { key: 'saldo_final',                 label: 'Saldo disponible final del día',            type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
     { key: 'saldo_con_invertido',         label: 'Saldo disponible con lo invertido del día', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
-    { key: 'total_gastado_acumulado',     label: 'Total gastado acumulado',                   type: 'input',   kind: 'money', agg: 'sum', help: 'Gasto del día; en semanal/mensual se suma.' },
+    { key: 'total_gastado_acumulado',     label: 'Total Gasto en Meta Ads',                   type: 'input',   kind: 'money', agg: 'sum', help: 'Gasto en Meta Ads del día; en semanal/mensual se suma.' },
     { key: 'pct_queda_saldo',             label: '% que me queda del saldo disponible',       type: 'derived', kind: 'pct', help: 'Saldo disponible ÷ (saldo disponible + total gastado acumulado).' },
     { key: 'pct_queda_saldo_invertido',   label: '% que me queda del saldo con lo invertido hoy', type: 'derived', kind: 'pct', help: 'Saldo con lo invertido ÷ (saldo con lo invertido + total gastado acumulado).' },
     { key: 'dias_proyectados',            label: 'Días proyectados con publicidad activa',    type: 'derived', kind: 'num', help: 'Saldo con lo invertido ÷ inversión diaria promedio del período.' },
@@ -61,8 +61,10 @@ const SALDOS = {
 const LEADS = {
   id: 'leads', title: 'Leads — Visión agregada',
   metrics: [
-    { key: 'leads_obtenidos',     label: 'Leads obtenidos',         type: 'input',   kind: 'int',   agg: 'sum' },
-    { key: 'cpl',                 label: 'Costo por lead (CPL)',    type: 'derived', kind: 'cpl', help: 'Inversión total de los embudos ÷ Leads obtenidos.' },
+    { key: 'leads_obtenidos',     label: 'Leads Obtenidos (Meta)',  type: 'input',   kind: 'int',   agg: 'sum' },
+    { key: 'leads_obtenidos_crm', label: 'Leads Obtenidos (CRM)',   type: 'input',   kind: 'int',   agg: 'sum' },
+    { key: 'leads_diferencia',    label: 'Leads Obtenidos (Diferencia)', type: 'derived', kind: 'int', help: 'Leads Obtenidos (Meta) − Leads Obtenidos (CRM).' },
+    { key: 'cpl',                 label: 'Costo por lead (CPL)',    type: 'derived', kind: 'cpl', help: 'Inversión total de los embudos ÷ Leads obtenidos (Meta).' },
     { key: 'leads_por_networker', label: 'Leads promedio por networker', type: 'derived', kind: 'num', help: 'Leads obtenidos ÷ Networkers que recibieron leads.' },
     { key: 'cpl_mas_alto',        label: 'Costo por lead más alto', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
     { key: 'cpl_mas_bajo',        label: 'Costo por lead más bajo', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
@@ -180,21 +182,27 @@ export const SNAPSHOT_KEYS = INPUT_METRICS.filter((m) => m.agg === 'last').map((
 export const EMPTY_ROW     = Object.fromEntries(INPUT_KEYS.map((k) => [k, 0]));
 
 export const INPUT_GROUPS = SECTIONS
-  .map((s) => ({ title: s.title, fields: s.metrics.filter((m) => m.type === 'input' && !m.hidden) }))
+  .map((s) => ({ title: s.title, adminOnly: !!s.adminOnly, fields: s.metrics.filter((m) => m.type === 'input' && !m.hidden) }))
   .filter((g) => g.fields.length > 0);
+
+// metricas que solo ven los admins (bloques General y Finanzas).
+export const ADMIN_ONLY_KEYS = new Set(
+  SECTIONS.filter((s) => s.adminOnly).flatMap((s) => s.metrics.map((m) => m.key))
+);
 
 // ── Semilla del semaforo (pestana Config de la planilla canonica) ────────────
 const t = (bloque, direction, verde, amarillo, critico, notas, activo = true) =>
   ({ bloque, direction, verde, amarillo, critico, notas, activo });
 
 export const DEFAULT_DME_CONFIG = {
-  pct_activos_con_pub:       t('General', 'mayor', 0.80, 0.60, 0.40, 'Salud de la cartera con pauta', false),
+  pct_activos_con_pub:       t('General', 'mayor', 0.70, 0.50, 0.0, 'Abajo de 50% rojo, 50-70% amarillo, 70%+ verde'),
   pct_bajas:                 t('General', 'menor', 0.03, 0.06, 0.10, 'Cuánto se está yendo del sistema'),
   pct_comisiones_setups:     t('Finanzas', 'menor', 0.40, 0.60, 0.75, 'Costo de la venta inicial'),
   pct_comisiones_pub:        t('Finanzas', 'menor', 0.10, 0.20, 0.30, 'Costo de la venta recurrente'),
   pct_renovaciones:          t('Finanzas', 'mayor', 0.80, 0.60, 0.40, 'Satisfacción real con el producto'),
   dias_proyectados:          t('Saldos', 'mayor', 15, 7, 3, 'Cuánto aguanta el saldo'),
   dispersion_cpl:            t('Leads', 'menor', 0.40, 0.80, 1.50, 'Qué tan desigual es el reparto'),
+  leads_diferencia:          t('Leads', 'menor', 0, 0, 0, 'Debe ser 0 (Meta = CRM); si es mayor a 0, rojo'),
   pct_recibiendo_prospectos: t('Networkers', 'mayor', 0.90, 0.70, 0.50, 'Salud del reparto'),
   tasa_testimonios:          t('Cualitativo', 'mayor', 0.30, 0.10, 0.05, 'Captura de prueba social'),
   pct_referidos:             t('Cualitativo', 'mayor', 0.20, 0.10, 0.05, 'Boca a boca y satisfacción'),

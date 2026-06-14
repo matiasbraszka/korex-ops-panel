@@ -15,6 +15,8 @@ const VIEWS = [{ id: 'diario', label: 'Diario' }, { id: 'semanal', label: 'Seman
 // seccion DME pero con el cliente fijado y sin selector.
 export default function DmeClientPanel({ clientId, clientName }) {
   const { currentUser, appSettings, updateAppSettings } = useApp();
+  const isAdmin = !!currentUser?.isAdmin;
+  const sections = isAdmin ? SECTIONS : SECTIONS.filter((s) => !s.adminOnly);
   const today = new Date();
   const funnelLinks = appSettings?.dme_funnel_links?.[clientId] || {};
   const onEditFunnelLink = (funnelId) => {
@@ -91,7 +93,7 @@ export default function DmeClientPanel({ clientId, clientName }) {
       {loading && rows.length === 0 ? (
         <div className="text-text3 text-center py-10 text-[12px]">Cargando DME…</div>
       ) : (
-        <DmeMetricTable sections={SECTIONS} columns={columns} totalCol={totalCol} config={dmeConfig} onCellClick={onCellClick} funnelLinks={funnelLinks} onEditFunnelLink={onEditFunnelLink} />
+        <DmeMetricTable sections={sections} columns={columns} totalCol={totalCol} config={dmeConfig} onCellClick={onCellClick} funnelLinks={funnelLinks} onEditFunnelLink={onEditFunnelLink} />
       )}
 
       <DmeDayModal
@@ -104,6 +106,7 @@ export default function DmeClientPanel({ clientId, clientName }) {
         clientName={clientName}
         config={dmeConfig}
         initialDate={editDate}
+        isAdmin={isAdmin}
       />
     </div>
   );
