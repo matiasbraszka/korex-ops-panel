@@ -98,6 +98,10 @@ export default function StripePage() {
   const [clients, setClients] = useState([]);
   const [selected, setSelected] = useState(null); // charge id abierto en la ficha
   const [savingId, setSavingId] = useState(null);
+  const [visible, setVisible] = useState(60);     // paginación de Pagos
+  const [visibleCli, setVisibleCli] = useState(40); // paginación de Clientes
+  const [openCli, setOpenCli] = useState(null);   // cliente expandido
+  useEffect(() => { setVisible(60); }, [q]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,6 +169,48 @@ export default function StripePage() {
   }, [clients]);
   const selectedCharge = selected ? chargeById.get(selected) : null;
 
+  // Mapa: cobro -> ¿su payout llegó a Mercury? (vía items del payout + payouts cruzados)
+  const chargeArrival = useMemo(() => {
+    const payoutArrived = new Map();
+    for (const p of payouts) payoutArrived.set(p.id, p.mercury_arrived_at || null);
+    const m = new Map();
+    for (const it of items) {
+      if (it.source && it.payout_id) m.set(it.source, { payoutId: it.payout_id, arrivedAt: payoutArrived.get(it.payout_id) || null });
+    }
+    return m;
+  }, [items, payouts]);
+
+  // Agrupar pagos por persona (email) → "Clientes / usuarios".
+  const customers = useMemo(() => {
+    const map = new Map();
+    for (const c of charges) {
+      if (c.status !== 'succeeded') continue;
+      const key = (c.customer_email || c.customer_name || c.id).toLowerCase();
+      if (!map.has(key)) map.set(key, { key, name: c.customer_name, email: c.customer_email, phone: c.customer_phone, answers: c.checkout_answers, charges: [] });
+      const o = map.get(key);
+      o.charges.push(c);
+      if (!o.name && c.customer_name) o.name = c.customer_name;
+      if (!o.phone && c.customer_phone) o.phone = c.customer_phone;
+      if ((!o.answers || Object.keys(o.answers || {}).length === 0) && c.checkout_answers) o.answers = c.checkout_answers;
+    }
+    const arr = [...map.values()].map((o) => ({
+      ...o,
+      count: o.charges.length,
+      total: o.charges.reduce((s, c) => s + (Number(c.net_usd) || 0), 0),
+      crm: o.charges.filter((c) => (c.category || c.category_auto) === 'crm').length,
+      pub: o.charges.filter((c) => (c.category || c.category_auto) === 'publicidad').length,
+      arrived: o.charges.filter((c) => chargeArrival.get(c.id)?.arrivedAt).length,
+    }));
+    arr.sort((a, b) => b.total - a.total);
+    return arr;
+  }, [charges, chargeArrival]);
+
+  const filteredCustomers = useMemo(() => {
+    const term = norm(q.trim());
+    if (!term) return customers;
+    return customers.filter((c) => norm(c.name).includes(term) || norm(c.email).includes(term) || norm(c.phone).includes(term));
+  }, [customers, q]);
+
   // búsqueda por nombre / email / teléfono / producto
   const filteredCharges = useMemo(() => {
     const term = norm(q.trim());
@@ -188,6 +234,7 @@ export default function StripePage() {
 
   const TABS = [
     { id: 'pagos', label: 'Pagos', count: charges.length },
+    { id: 'clientes', label: 'Clientes', count: customers.length },
     { id: 'reembolsos', label: 'Reembolsos y disputas', count: refunds.length + disputes.length },
     { id: 'payouts', label: 'Payouts a Mercury', count: payouts.length },
   ];
@@ -247,7 +294,14 @@ export default function StripePage() {
         <>
           <SearchBar q={q} setQ={setQ} placeholder="Buscar por nombre, email, teléfono o producto…" />
           {q && <div className="text-[11.5px] text-text3 mb-2">{filteredCharges.length} resultado{filteredCharges.length === 1 ? '' : 's'}</div>}
-          <PagosTab groups={byDay(filteredCharges)} clientById={clientById} onSelect={setSelected} />
+          <PagosTab groups={byDay(filteredCharges.slice(0, visible))} clientById={clientById} onSelect={setSelected} />
+          <LoadMore shown={Math.min(visible, filteredCharges.length)} total={filteredCharges.length} onMore={() => setVisible((v) => v + 60)} />
+        </>
+      ) : tab === 'clientes' ? (
+        <>
+          <SearchBar q={q} setQ={setQ} placeholder="Buscar cliente por nombre, email o teléfono…" />
+          <ClientesTab customers={filteredCustomers.slice(0, visibleCli)} chargeArrival={chargeArrival} clientById={clientById} open={openCli} setOpen={setOpenCli} onSelectCharge={setSelected} />
+          <LoadMore shown={Math.min(visibleCli, filteredCustomers.length)} total={filteredCustomers.length} onMore={() => setVisibleCli((v) => v + 40)} />
         </>
       ) : tab === 'reembolsos' ? (
         <ReembolsosTab refunds={refunds} disputes={disputes} chargeById={chargeById} />
@@ -586,4 +640,104 @@ function PayoutsTab({ groups, itemsByPayout, open, setOpen }) {
 
 function Empty({ text }) {
   return <div className="text-[13px] text-text3 border border-dashed border-border rounded-xl p-6 text-center">{text}</div>;
+}
+
+function LoadMore({ shown, total, onMore }) {
+  if (shown >= total) return null;
+  return (
+    <div className="text-center mt-3">
+      <button onClick={onMore} className="text-[12.5px] font-semibold text-text2 hover:text-text bg-white border border-border rounded-lg px-4 py-2 cursor-pointer">
+        Cargar más · mostrando {shown} de {total}
+      </button>
+    </div>
+  );
+}
+
+// ---------- Clientes / usuarios ----------
+function ClientesTab({ customers, chargeArrival, clientById, open, setOpen, onSelectCharge }) {
+  if (!customers.length) return <Empty text="No hay clientes que coincidan." />;
+  return (
+    <div className="flex flex-col gap-2.5">
+      {customers.map((cu) => {
+        const isOpen = open === cu.key;
+        const answers = cu.answers && typeof cu.answers === 'object' ? cu.answers : {};
+        const answerKeys = Object.keys(answers);
+        const pendientes = cu.count - cu.arrived;
+        return (
+          <div key={cu.key} className="border border-border rounded-xl bg-white overflow-hidden">
+            <button onClick={() => setOpen(isOpen ? null : cu.key)} className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-surface2 cursor-pointer bg-transparent border-0">
+              <span className="w-9 h-9 rounded-full bg-surface2 flex items-center justify-center shrink-0 text-text2"><User size={16} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[14px] font-bold text-text truncate">{cu.name || cu.email || 'Sin nombre'}</span>
+                  <span className="text-[13.5px] font-extrabold" style={{ color: '#15803D' }}>{usd(cu.total)}</span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-text3">
+                  {cu.email && <span className="inline-flex items-center gap-1"><Mail size={11} /> {cu.email}</span>}
+                  {cu.phone && <span className="inline-flex items-center gap-1"><Phone size={11} /> {cu.phone}</span>}
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <Stat label={`${cu.count} pago${cu.count === 1 ? '' : 's'}`} />
+                  {cu.crm > 0 && <Stat label={`CRM ${cu.crm}`} color="#2563EB" bg="#EFF6FF" />}
+                  {cu.pub > 0 && <Stat label={`Publicidad ${cu.pub}`} color="#9333EA" bg="#F5F3FF" />}
+                  <Stat label={`${cu.arrived}/${cu.count} en Mercury`} color={pendientes ? '#A16207' : '#15803D'} bg={pendientes ? '#FEFCE8' : '#F0FDF4'} Icon={pendientes ? Clock : CheckCircle2} />
+                </div>
+              </div>
+              {isOpen ? <ChevronDown size={16} className="text-text3 shrink-0 mt-1" /> : <ChevronRight size={16} className="text-text3 shrink-0 mt-1" />}
+            </button>
+            {isOpen && (
+              <div className="border-t border-border bg-surface2/30 p-4 flex flex-col gap-4">
+                {answerKeys.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-1.5">Datos que completó</div>
+                    <div className="border border-border rounded-lg bg-white overflow-hidden">
+                      {answerKeys.map((k) => (
+                        <div key={k} className="flex items-start gap-3 px-3 py-1.5 border-b border-border last:border-0">
+                          <span className="text-[11.5px] text-text3 shrink-0 w-[42%]">{k}</span>
+                          <span className="text-[12px] text-text font-medium min-w-0 break-words">{answers[k]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-1.5">Pagos ({cu.count})</div>
+                  <div className="border border-border rounded-lg bg-white overflow-hidden">
+                    {cu.charges.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).map((c) => {
+                      const arr = chargeArrival.get(c.id)?.arrivedAt;
+                      return (
+                        <button key={c.id} onClick={() => onSelectCharge(c.id)} className="w-full text-left flex items-center gap-3 px-3 py-2 border-b border-border last:border-0 hover:bg-surface2 cursor-pointer bg-transparent">
+                          <CreditCard size={13} className="shrink-0" style={{ color: STRIPE }} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[12.5px] font-bold text-text">{fmtMoney(c.amount, c.currency)}</span>
+                              <CatChip cat={c.category || c.category_auto} />
+                              {c.client_id && clientById.get(c.client_id) && <span className="text-[10px] text-text3">· {clientById.get(c.client_id)}</span>}
+                            </div>
+                            {c.product_name && <div className="text-[11px] text-text3 truncate">{c.product_name}</div>}
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-[10.5px] text-text3">{fmtDate(c.created_at)}</div>
+                            {arr ? <span className="text-[10px] font-bold" style={{ color: '#15803D' }}>✓ en Mercury</span> : <span className="text-[10px] text-text3">pendiente</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Stat({ label, color = '#6B7280', bg = '#F3F4F6', Icon }) {
+  return (
+    <span className="text-[10.5px] font-bold px-1.5 py-px rounded-full inline-flex items-center gap-1" style={{ background: bg, color }}>
+      {Icon && <Icon size={9} />} {label}
+    </span>
+  );
 }
