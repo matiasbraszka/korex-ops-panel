@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { INPUT_GROUPS, INPUT_KEYS, EMPTY_ROW, SECTIONS } from '../../lib/dme/registry.js';
+import { INPUT_GROUPS, INPUT_KEYS, SECTIONS } from '../../lib/dme/registry.js';
 import { computeDerived } from '../../lib/dme/derive.js';
 import { metricTone } from '../../lib/dme/color.js';
 import { fmtMetric } from '../../lib/dme/format.js';
@@ -10,6 +10,8 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Form vacio: campos en blanco ('') -> lo que no se carga queda en blanco, no 0.
+const EMPTY_STR = Object.fromEntries(INPUT_KEYS.map((k) => [k, '']));
 // Metricas derivadas (para mostrarlas calculadas en vivo, read-only).
 const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type === 'derived'));
 
@@ -17,15 +19,18 @@ const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type =
 // los INPUTS; los derivados (%, CPL, ROI...) se muestran calculados en vivo.
 export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientName, config, initialDate }) {
   const [date, setDate] = useState(todayISO());
-  const [form, setForm] = useState({ ...EMPTY_ROW });
+  const [form, setForm] = useState({ ...EMPTY_STR });
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const loadFor = (d) => {
     const existing = rows.find((r) => r.date === d);
-    const next = { ...EMPTY_ROW };
-    if (existing?.metrics) INPUT_KEYS.forEach((k) => { next[k] = Number(existing.metrics[k] ?? 0); });
+    const next = { ...EMPTY_STR };
+    if (existing?.metrics) INPUT_KEYS.forEach((k) => {
+      const v = existing.metrics[k];
+      if (v != null && v !== '') next[k] = Number(v); // campos sin dato quedan en blanco
+    });
     setForm(next);
     setNote(existing?.note || '');
   };
@@ -43,7 +48,12 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
     if (rows.some((r) => r.date === date)) loadFor(date);
   }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const derived = useMemo(() => computeDerived(form, { days: 1 }), [form]);
+  // Solo los campos cargados entran al calculo (los '' se omiten -> blanco).
+  const derived = useMemo(() => {
+    const nums = {};
+    for (const k of INPUT_KEYS) { const v = form[k]; if (v !== '' && v != null) nums[k] = Number(v); }
+    return computeDerived(nums, { days: 1 });
+  }, [form]);
 
   if (!open) return null;
 
@@ -108,9 +118,9 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
                     {(f.kind === 'money' || f.kind === 'cpl') && <span className="text-[11px] text-text3">US$</span>}
                     {f.kind === 'pct' && <span className="text-[11px] text-text3">%</span>}
                     <input type="number" step={f.kind === 'money' || f.kind === 'cpl' ? '0.01' : f.kind === 'pct' ? '0.01' : '1'}
-                           value={form[f.key] === 0 ? '' : form[f.key]}
-                           onChange={(e) => set(f.key, e.target.value === '' ? 0 : Number(e.target.value))}
-                           placeholder="0" className={inputClass} />
+                           value={form[f.key]}
+                           onChange={(e) => set(f.key, e.target.value === '' ? '' : Number(e.target.value))}
+                           placeholder="—" className={inputClass} />
                   </div>
                 ))}
               </div>
@@ -125,7 +135,8 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
                 const v = derived[m.key];
                 const tone = metricTone(m.key, v, config);
                 return (
-                  <div key={m.key} className="flex items-center justify-between gap-2 bg-surface2/60 rounded-md px-2.5 py-1.5">
+                  <div key={m.key} title={m.help || undefined}
+                       className={`flex items-center justify-between gap-2 bg-surface2/60 rounded-md px-2.5 py-1.5 ${m.help ? 'cursor-help' : ''}`}>
                     <span className="text-[11px] text-text3 truncate">{m.label}</span>
                     <span className="text-[12px] font-semibold tabular-nums px-1.5 rounded"
                           style={tone ? { background: tone.bg, color: tone.fg } : undefined}>

@@ -32,6 +32,7 @@ function funnelDerived(p, n, totalGastadoBoth) {
 
 export function computeDerived(t = {}, { days = 1 } = {}) {
   const n = (k) => Number(t[k] || 0);
+  const has = (...ks) => ks.some((k) => t[k] != null); // hay algun dato cargado?
 
   const usuariosTotal = n('usuarios_activos_con_pub') + n('usuarios_activos_sin_pub');
   const gastadoBoth   = n('embudo1_total_gastado') + n('embudo2_total_gastado');
@@ -39,8 +40,8 @@ export function computeDerived(t = {}, { days = 1 } = {}) {
   const cierresTotal  = n('embudo1_cierres') + n('embudo2_cierres');
 
   const out = {
-    // Usuarios
-    usuarios_total:      usuariosTotal,
+    // Usuarios (TOTAL en blanco si no hay ningun dato de usuarios cargado)
+    usuarios_total:      has('usuarios_activos_con_pub', 'usuarios_activos_sin_pub') ? usuariosTotal : NaN,
     pct_activos_con_pub: div(n('usuarios_activos_con_pub'), usuariosTotal),
     pct_activos_sin_pub: div(n('usuarios_activos_sin_pub'), usuariosTotal),
     pct_bajas:           div(n('usuarios_baja'), usuariosTotal),
@@ -66,6 +67,6 @@ export function computeDerived(t = {}, { days = 1 } = {}) {
   Object.assign(out, funnelDerived('embudo1', n, gastadoBoth));
   Object.assign(out, funnelDerived('embudo2', n, gastadoBoth));
   // Total de cierres (Embudo 1 + 2) — usado por el Dashboard.
-  out.cierres_total = cierresTotal;
+  out.cierres_total = has('embudo1_cierres', 'embudo2_cierres') ? cierresTotal : NaN;
   return out;
 }

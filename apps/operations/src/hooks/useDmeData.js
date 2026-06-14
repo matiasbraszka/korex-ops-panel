@@ -34,12 +34,17 @@ export function useDmeData(clientId, from, to, updatedBy = null) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Guarda (upsert) un dia. `inputs` trae solo las keys de INPUT_KEYS; se limpian
-  // a numero y se persiste el bag completo en metrics (jsonb).
+  // Guarda (upsert) un dia. Solo se persisten las metricas REALMENTE cargadas
+  // (campos vacios se omiten -> quedan en blanco, no como 0).
   const saveDay = useCallback(async (date, inputs, note = null) => {
     if (isCombined) return { error: 'El Maestro combinado es de solo lectura.' };
     const metrics = {};
-    INPUT_KEYS.forEach((k) => { metrics[k] = Number(inputs[k] || 0); });
+    for (const k of INPUT_KEYS) {
+      const v = inputs?.[k];
+      if (v === '' || v == null) continue;
+      const num = Number(v);
+      if (Number.isFinite(num)) metrics[k] = num;
+    }
     const row = { client_id: clientId, date, metrics, note, updated_by: updatedBy, updated_at: new Date().toISOString() };
     const { data, error: e } = await supabase
       .from('dme_daily').upsert(row, { onConflict: 'client_id,date' }).select().single();

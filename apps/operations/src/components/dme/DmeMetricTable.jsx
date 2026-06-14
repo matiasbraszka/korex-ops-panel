@@ -58,8 +58,10 @@ export default function DmeMetricTable({ sections, columns, totalCol, config, on
                   </tr>
                   {!isCollapsed && sec.metrics.map((m) => (
                     <tr key={m.key} className="border-b border-[#F1F3F7] hover:bg-surface2/40">
-                      <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap text-text">
-                        <span className={m.type === 'derived' ? 'text-text2' : 'text-text'}>{m.label}</span>
+                      <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap text-text" title={m.help || undefined}>
+                        <span className={`${m.type === 'derived' ? 'text-text2' : 'text-text'} ${m.help ? 'border-b border-dotted border-text3/50 cursor-help' : ''}`}>
+                          {m.label}
+                        </span>
                         {m.type === 'derived' && <span className="ml-1.5 text-[9px] text-text3">(auto)</span>}
                       </td>
                       {columns.map((c) => {

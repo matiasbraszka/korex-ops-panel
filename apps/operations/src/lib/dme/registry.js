@@ -3,26 +3,27 @@
 // (tabla, modal de carga, agregacion semanal/mensual, semaforo, Maestro) lee de aca.
 //
 //  - SECTIONS: bloques y metricas en el orden de la planilla canonica (Diario).
-//  - metric: { key, label, section, type, kind, agg, sheetLabel }
+//  - metric: { key, label, section, type, kind, agg, help }
 //      type: 'input'   -> se carga a mano y se guarda en dme_daily.metrics
 //            'derived' -> se calcula en derive.js, NUNCA se guarda
 //      kind: 'int'|'money'|'pct'|'cpl'|'roi'|'num'  (formato)
-//      agg:  'sum'(default) | 'last'(snapshot/stock) | 'max' | 'min'  (agregacion en el tiempo)
-//      sheetLabel: nombre exacto de la fila en el Sheet (para el importador por nombre)
-//  - DEFAULT_DME_CONFIG: semilla de umbrales del semaforo (pestana Config de la planilla).
+//      agg:  'sum'(default) | 'last'(snapshot: se toma el ultimo dia del periodo)
+//      help: nota corta que se ve al pasar el mouse sobre la metrica (formula).
+//  - DEFAULT_DME_CONFIG: semilla de umbrales del semaforo (pestana Config).
 
-// ── Bloques que NO son embudos ───────────────────────────────────────────────
+const SNAP_HELP = 'Foto del día: en semanal/mensual se toma el último día cargado del período (no se suma ni promedia).';
+
 const GENERAL = {
   id: 'general', title: 'General — Negocio Korex',
   metrics: [
-    { key: 'usuarios_activos_con_pub', label: 'Usuarios activos con publicidad', type: 'input',   kind: 'int', agg: 'last' },
-    { key: 'usuarios_activos_sin_pub', label: 'Usuarios activos sin publicidad', type: 'input',   kind: 'int', agg: 'last' },
+    { key: 'usuarios_activos_con_pub', label: 'Usuarios activos con publicidad', type: 'input',   kind: 'int', agg: 'last', help: SNAP_HELP },
+    { key: 'usuarios_activos_sin_pub', label: 'Usuarios activos sin publicidad', type: 'input',   kind: 'int', agg: 'last', help: SNAP_HELP },
     { key: 'nuevos_usuarios',          label: 'Nuevos usuarios',                  type: 'input',   kind: 'int', agg: 'sum' },
-    { key: 'usuarios_total',           label: 'TOTAL de usuarios',                type: 'derived', kind: 'int' },
-    { key: 'pct_activos_con_pub',      label: '% de usuarios activos con publicidad', type: 'derived', kind: 'pct' },
-    { key: 'pct_activos_sin_pub',      label: '% de usuarios activos sin publicidad', type: 'derived', kind: 'pct' },
+    { key: 'usuarios_total',           label: 'TOTAL de usuarios',                type: 'derived', kind: 'int', help: 'Usuarios activos con publicidad + sin publicidad.' },
+    { key: 'pct_activos_con_pub',      label: '% de usuarios activos con publicidad', type: 'derived', kind: 'pct', help: 'Activos con publicidad ÷ TOTAL de usuarios.' },
+    { key: 'pct_activos_sin_pub',      label: '% de usuarios activos sin publicidad', type: 'derived', kind: 'pct', help: 'Activos sin publicidad ÷ TOTAL de usuarios.' },
     { key: 'usuarios_baja',            label: 'Usuarios que se dieron de baja',   type: 'input',   kind: 'int', agg: 'sum' },
-    { key: 'pct_bajas',                label: '% de bajas',                       type: 'derived', kind: 'pct' },
+    { key: 'pct_bajas',                label: '% de bajas',                       type: 'derived', kind: 'pct', help: 'Usuarios que se dieron de baja ÷ TOTAL de usuarios.' },
   ],
 };
 
@@ -32,26 +33,26 @@ const FINANZAS = {
     { key: 'facturacion_setups',   label: 'Facturación SETUPS',            type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'comisiones_setups',    label: 'Comisiones SETUPS',             type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'cashcollect_setups',   label: 'CashCollect SETUPs',            type: 'input',   kind: 'money', agg: 'sum' },
-    { key: 'pct_comisiones_setups',label: '% en comisiones de SETUPS',     type: 'derived', kind: 'pct' },
+    { key: 'pct_comisiones_setups',label: '% en comisiones de SETUPS',     type: 'derived', kind: 'pct', help: 'Comisiones SETUPS ÷ Facturación SETUPS.' },
     { key: 'recargas_pub',         label: 'Recargas en publicidad',        type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'invertido_pub',        label: 'Invertido por los usuarios en publicidad', type: 'input', kind: 'money', agg: 'sum' },
     { key: 'comisiones_pub',       label: 'Comisiones publicidad',         type: 'input',   kind: 'money', agg: 'sum' },
     { key: 'cashcollect_pub',      label: 'CashCollect Publicidad',        type: 'input',   kind: 'money', agg: 'sum' },
-    { key: 'pct_comisiones_pub',   label: '% en comisiones de publicidad', type: 'derived', kind: 'pct' },
-    { key: 'pct_renovaciones',     label: '% Renovaciones',                type: 'input',   kind: 'pct', agg: 'last' },
-    { key: 'avg_inversion_usuario',label: 'AVG inversión publicitaria por usuario', type: 'derived', kind: 'money' },
+    { key: 'pct_comisiones_pub',   label: '% en comisiones de publicidad', type: 'derived', kind: 'pct', help: 'Comisiones publicidad ÷ Invertido por los usuarios en publicidad.' },
+    { key: 'pct_renovaciones',     label: '% Renovaciones',                type: 'input',   kind: 'pct', agg: 'last', help: 'Se carga a mano. En semanal/mensual se toma el último día.' },
+    { key: 'avg_inversion_usuario',label: 'AVG inversión publicitaria por usuario', type: 'derived', kind: 'money', help: 'Invertido en publicidad ÷ Usuarios activos con publicidad.' },
   ],
 };
 
 const SALDOS = {
   id: 'saldos', title: 'Saldos y Runway',
   metrics: [
-    { key: 'saldo_final',                 label: 'Saldo disponible final del día',            type: 'input',   kind: 'money', agg: 'last' },
-    { key: 'saldo_con_invertido',         label: 'Saldo disponible con lo invertido del día', type: 'input',   kind: 'money', agg: 'last' },
-    { key: 'total_gastado_acumulado',     label: 'Total gastado acumulado',                   type: 'input',   kind: 'money', agg: 'last' },
-    { key: 'pct_queda_saldo',             label: '% que me queda del saldo disponible',       type: 'derived', kind: 'pct' },
-    { key: 'pct_queda_saldo_invertido',   label: '% que me queda del saldo con lo invertido hoy', type: 'derived', kind: 'pct' },
-    { key: 'dias_proyectados',            label: 'Días proyectados con publicidad activa',    type: 'derived', kind: 'num' },
+    { key: 'saldo_final',                 label: 'Saldo disponible final del día',            type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
+    { key: 'saldo_con_invertido',         label: 'Saldo disponible con lo invertido del día', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
+    { key: 'total_gastado_acumulado',     label: 'Total gastado acumulado',                   type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
+    { key: 'pct_queda_saldo',             label: '% que me queda del saldo disponible',       type: 'derived', kind: 'pct', help: 'Saldo disponible ÷ (saldo disponible + total gastado acumulado).' },
+    { key: 'pct_queda_saldo_invertido',   label: '% que me queda del saldo con lo invertido hoy', type: 'derived', kind: 'pct', help: 'Saldo con lo invertido ÷ (saldo con lo invertido + total gastado acumulado).' },
+    { key: 'dias_proyectados',            label: 'Días proyectados con publicidad activa',    type: 'derived', kind: 'num', help: 'Saldo con lo invertido ÷ inversión diaria promedio del período.' },
   ],
 };
 
@@ -59,20 +60,20 @@ const LEADS = {
   id: 'leads', title: 'Leads — Visión agregada',
   metrics: [
     { key: 'leads_obtenidos',     label: 'Leads obtenidos',         type: 'input',   kind: 'int',   agg: 'sum' },
-    { key: 'cpl',                 label: 'Costo por lead (CPL)',    type: 'derived', kind: 'cpl' },
-    { key: 'leads_por_networker', label: 'Leads promedio por networker', type: 'derived', kind: 'num' },
-    { key: 'cpl_mas_alto',        label: 'Costo por lead más alto', type: 'input',   kind: 'money', agg: 'max' },
-    { key: 'cpl_mas_bajo',        label: 'Costo por lead más bajo', type: 'input',   kind: 'money', agg: 'min' },
-    { key: 'dispersion_cpl',      label: 'Dispersión de CPL',       type: 'derived', kind: 'pct' },
+    { key: 'cpl',                 label: 'Costo por lead (CPL)',    type: 'derived', kind: 'cpl', help: 'Inversión total de los embudos ÷ Leads obtenidos.' },
+    { key: 'leads_por_networker', label: 'Leads promedio por networker', type: 'derived', kind: 'num', help: 'Leads obtenidos ÷ Networkers que recibieron leads.' },
+    { key: 'cpl_mas_alto',        label: 'Costo por lead más alto', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
+    { key: 'cpl_mas_bajo',        label: 'Costo por lead más bajo', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
+    { key: 'dispersion_cpl',      label: 'Dispersión de CPL',       type: 'derived', kind: 'pct', help: '(CPL más alto − CPL más bajo) ÷ CPL más bajo.' },
   ],
 };
 
 const NETWORKERS = {
   id: 'networkers', title: 'Networkers — Avance del grupo',
   metrics: [
-    { key: 'networkers_recibieron',     label: 'Networkers que recibieron leads',                type: 'input',   kind: 'int', agg: 'last' },
-    { key: 'networkers_sin_leads',      label: 'Networkers sin leads (que deberían haber recibido)', type: 'input', kind: 'int', agg: 'last' },
-    { key: 'pct_recibiendo_prospectos', label: '% que están recibiendo prospectos',              type: 'derived', kind: 'pct' },
+    { key: 'networkers_recibieron',     label: 'Networkers que recibieron leads',                type: 'input',   kind: 'int', agg: 'last', help: SNAP_HELP },
+    { key: 'networkers_sin_leads',      label: 'Networkers sin leads (que deberían haber recibido)', type: 'input', kind: 'int', agg: 'last', help: SNAP_HELP },
+    { key: 'pct_recibiendo_prospectos', label: '% que están recibiendo prospectos',              type: 'derived', kind: 'pct', help: 'Networkers que recibieron leads ÷ (recibieron + sin leads).' },
     { key: 'networkers_cerraron',       label: 'Networkers que cerraron',                        type: 'input',   kind: 'int', agg: 'sum' },
     { key: 'networkers_primer_cierre',  label: 'Networkers con primer cierre',                   type: 'input',   kind: 'int', agg: 'sum' },
   ],
@@ -83,15 +84,14 @@ const CUALITATIVO = {
   metrics: [
     { key: 'nuevos_testimonios',  label: 'Nuevos testimonios',          type: 'input',   kind: 'int', agg: 'sum' },
     { key: 'nuevos_referidos',    label: 'Nuevos referidos',            type: 'input',   kind: 'int', agg: 'sum' },
-    { key: 'tasa_testimonios',    label: 'Tasa de testimonios',         type: 'derived', kind: 'pct' },
-    { key: 'pct_referidos',       label: '% de referidos',              type: 'derived', kind: 'pct' },
+    { key: 'tasa_testimonios',    label: 'Tasa de testimonios',         type: 'derived', kind: 'pct', help: 'Nuevos testimonios ÷ Nuevos usuarios.' },
+    { key: 'pct_referidos',       label: '% de referidos',              type: 'derived', kind: 'pct', help: 'Nuevos referidos ÷ Nuevos usuarios.' },
     { key: 'problemas_tecnicos',  label: 'Problemas técnicos reportados', type: 'input', kind: 'int', agg: 'sum' },
     { key: 'quejas',              label: 'Quejas o feedback negativo',  type: 'input',   kind: 'int', agg: 'sum' },
   ],
 };
 
 // ── Embudos (mismo esquema para Embudo 1 y Embudo 2) ─────────────────────────
-// Inputs en orden de la planilla; entre cada cantidad va su % y costo derivados.
 const FUNNEL_INPUTS = [
   { suffix: 'total_gastado',     label: 'Total gastado',          kind: 'money', agg: 'sum' },
   { suffix: 'total_leads',       label: 'Total de leads',         kind: 'int',   agg: 'sum' },
@@ -108,13 +108,30 @@ const FUNNEL_INPUTS = [
   { suffix: 'facturado',         label: 'Total facturado clientes', kind: 'money', agg: 'sum' },
 ];
 
-// Filas del embudo en el orden visual de la planilla (cantidad -> % -> costo).
+// Help de los derivados del embudo (formula por sufijo).
+const FUNNEL_DERIVED_HELP = {
+  pct_inversion:    '% de la inversión total de ambos embudos asignada a este embudo.',
+  cpl:              'Total gastado del embudo ÷ Total de leads del embudo.',
+  pct_curiosos:     'Leads curiosos ÷ Total de leads.',
+  costo_curioso:    'Total gastado ÷ Leads curiosos.',
+  pct_interesados:  'Leads interesados ÷ Total de leads.',
+  costo_interesado: 'Total gastado ÷ Leads interesados.',
+  pct_calificados:  'Leads calificados ÷ Total de leads.',
+  costo_calificado: 'Total gastado ÷ Leads calificados.',
+  pct_registro:     'Leads registrados ÷ Visitas en la landing.',
+  pct_vsl:          'Miran el VSL completo ÷ Leads registrados.',
+  pct_quiz:         'Quiz terminado ÷ Quiz iniciado.',
+  pct_whatsapp:     'WhatsApp enviado ÷ Quiz terminado.',
+  pct_cierres:      'Cierres ÷ Leads registrados.',
+  roi:              '(Total facturado − Total gastado) ÷ Total gastado.',
+};
+
 function funnelSection(prefix, title) {
   const k = (s) => `${prefix}_${s}`;
   const inp = Object.fromEntries(
     FUNNEL_INPUTS.map((f) => [f.suffix, { key: k(f.suffix), label: f.label, type: 'input', kind: f.kind, agg: f.agg }])
   );
-  const der = (suffix, label, kind) => ({ key: k(suffix), label, type: 'derived', kind });
+  const der = (suffix, label, kind) => ({ key: k(suffix), label, type: 'derived', kind, help: FUNNEL_DERIVED_HELP[suffix] });
   const metrics = [
     inp.total_gastado,
     inp.total_leads,
@@ -153,25 +170,18 @@ export const EMBUDO2 = funnelSection('embudo2', 'Embudo 2');
 export const SECTIONS = [GENERAL, FINANZAS, SALDOS, LEADS, NETWORKERS, CUALITATIVO, EMBUDO1, EMBUDO2]
   .map((s) => ({ ...s, metrics: s.metrics.map((m) => ({ ...m, section: s.id })) }));
 
-// Indices utiles.
-export const ALL_METRICS  = SECTIONS.flatMap((s) => s.metrics);
+export const ALL_METRICS   = SECTIONS.flatMap((s) => s.metrics);
 export const METRIC_BY_KEY = Object.fromEntries(ALL_METRICS.map((m) => [m.key, m]));
 export const INPUT_METRICS = ALL_METRICS.filter((m) => m.type === 'input');
 export const INPUT_KEYS    = INPUT_METRICS.map((m) => m.key);
 export const SNAPSHOT_KEYS = INPUT_METRICS.filter((m) => m.agg === 'last').map((m) => m.key);
-export const MAX_KEYS      = INPUT_METRICS.filter((m) => m.agg === 'max').map((m) => m.key);
-export const MIN_KEYS      = INPUT_METRICS.filter((m) => m.agg === 'min').map((m) => m.key);
 export const EMPTY_ROW     = Object.fromEntries(INPUT_KEYS.map((k) => [k, 0]));
 
-// Grupos para el formulario de carga (solo inputs), en el orden de las secciones.
 export const INPUT_GROUPS = SECTIONS
   .map((s) => ({ title: s.title, fields: s.metrics.filter((m) => m.type === 'input') }))
   .filter((g) => g.fields.length > 0);
 
 // ── Semilla del semaforo (pestana Config de la planilla canonica) ────────────
-// direction: 'mayor' (mas es mejor) | 'menor' (menos es mejor). umbrales como
-// ratio para %/roi (0.80 = 80%) y numero crudo para no-%. Solo las metricas con
-// `activo:true` se pintan; agregar una metrica nueva + su fila aca la suma al panel.
 const t = (bloque, direction, verde, amarillo, critico, notas, activo = true) =>
   ({ bloque, direction, verde, amarillo, critico, notas, activo });
 
@@ -202,5 +212,4 @@ export const DEFAULT_DME_CONFIG = {
   embudo2_roi:               t('Embudo 2', 'mayor', 2.00, 1.00, 0.00, 'Rentabilidad del embudo'),
 };
 
-// Bloques disponibles para el editor de Config (orden de aparicion).
 export const CONFIG_BLOQUES = ['General', 'Finanzas', 'Saldos', 'Leads', 'Networkers', 'Cualitativo', 'Embudo 1', 'Embudo 2'];

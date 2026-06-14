@@ -1,10 +1,12 @@
 // Agregacion del DME en el tiempo (Diario -> Semanal -> Mensual) y armado de
 // columnas para la tabla. Reglas (igual que la planilla):
 //   - inputs 'sum'  -> se suman
-//   - inputs 'last' -> ultimo valor del periodo (snapshots: saldos, usuarios activos)
-//   - inputs 'max'/'min' -> extremos del periodo (CPL mas alto / mas bajo)
+//   - inputs 'last' -> ultimo dia cargado del periodo (snapshots: saldos, usuarios
+//                      activos con/sin pub, CPL mas alto/mas bajo, % renovaciones)
 //   - derivados -> se recalculan sobre los totales (NUNCA se promedian)
-import { INPUT_KEYS, SNAPSHOT_KEYS, MAX_KEYS, MIN_KEYS, EMPTY_ROW } from './registry.js';
+//   - si una metrica NO tiene ningun dato en el periodo -> queda `undefined`
+//     (celda en blanco), NO 0.
+import { INPUT_KEYS, SNAPSHOT_KEYS } from './registry.js';
 import { computeDerived } from './derive.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -30,27 +32,23 @@ function mondayOf(date) {
 
 // Agrega un conjunto de filas diarias { date, metrics } a un objeto de totales +
 // derivados. `rows` son las filas de UN periodo (un dia, una semana, un mes...).
+// Las metricas sin ningun dato quedan `undefined` (celda en blanco), no 0.
+const SNAP = new Set(SNAPSHOT_KEYS);
 export function aggregateRows(rows = []) {
-  const totals = { ...EMPTY_ROW };
+  const totals = {};
   const sorted = [...rows].filter(Boolean).sort((a, b) => (a.date < b.date ? -1 : 1));
   const has = (m, k) => m && m[k] != null && m[k] !== '';
 
   for (const k of INPUT_KEYS) {
-    if (SNAPSHOT_KEYS.includes(k)) {
-      // ultimo valor cargado (cronologico)
+    if (SNAP.has(k)) {
+      // ultimo dia cargado del periodo (no se suma ni promedia)
       const last = [...sorted].reverse().find((r) => has(r.metrics, k));
-      totals[k] = last ? Number(last.metrics[k]) : 0;
-    } else if (MAX_KEYS.includes(k)) {
-      const vals = sorted.filter((r) => has(r.metrics, k)).map((r) => Number(r.metrics[k]));
-      totals[k] = vals.length ? Math.max(...vals) : 0;
-    } else if (MIN_KEYS.includes(k)) {
-      const vals = sorted.filter((r) => has(r.metrics, k)).map((r) => Number(r.metrics[k]));
-      totals[k] = vals.length ? Math.min(...vals) : 0;
+      totals[k] = last ? Number(last.metrics[k]) : undefined;
     } else {
-      // suma
-      let s = 0;
-      for (const r of sorted) if (has(r.metrics, k)) s += Number(r.metrics[k]);
-      totals[k] = s;
+      // suma; si ningun dia tiene dato -> undefined (blanco)
+      let s = 0, any = false;
+      for (const r of sorted) if (has(r.metrics, k)) { s += Number(r.metrics[k]); any = true; }
+      totals[k] = any ? s : undefined;
     }
   }
   const days = sorted.length || 1;
