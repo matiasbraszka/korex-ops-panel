@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import {
   CreditCard, RefreshCw, TrendingUp, Undo2, ShieldAlert, Landmark, ArrowDownLeft,
-  ChevronDown, ChevronRight, CheckCircle2, Clock, AlertTriangle, Mail, Banknote,
+  ChevronDown, ChevronRight, CheckCircle2, Clock, AlertTriangle, Mail, Phone, Banknote, Search, Tag,
 } from 'lucide-react';
 
 const STRIPE = '#635BFF';
@@ -35,6 +35,7 @@ function fmtTime(iso) {
   try { return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }); }
   catch { return ''; }
 }
+const norm = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 // ---- etiquetas de estado ----
 const CHARGE_ST = {
@@ -43,7 +44,7 @@ const CHARGE_ST = {
   failed:    { label: 'Fallido', color: '#BE123C', Icon: AlertTriangle },
 };
 const PAYOUT_ST = {
-  paid:       { label: 'Llegó a Mercury', color: '#15803D' },
+  paid:       { label: 'Pagado', color: '#15803D' },
   in_transit: { label: 'En camino', color: '#2563EB' },
   pending:    { label: 'Pendiente', color: '#A16207' },
   canceled:   { label: 'Cancelado', color: '#BE123C' },
@@ -60,6 +61,20 @@ const DISPUTE_ST = {
   warning_closed:         { label: 'Cerrada', color: '#6B7280' },
 };
 const DISPUTE_OPEN = new Set(['needs_response', 'warning_needs_response', 'under_review', 'warning_under_review']);
+
+// Categoría (CRM / Publicidad) con color.
+function catMeta(cat) {
+  const c = (cat || '').toLowerCase();
+  if (c === 'crm') return { label: 'CRM', color: '#2563EB', bg: '#EFF6FF' };
+  if (c === 'publicidad' || c === 'ads' || c === 'meta') return { label: 'Publicidad', color: '#9333EA', bg: '#F5F3FF' };
+  if (c) return { label: cat, color: '#6B7280', bg: '#F3F4F6' };
+  return null;
+}
+function CatChip({ cat }) {
+  const m = catMeta(cat);
+  if (!m) return null;
+  return <span className="text-[10px] font-bold px-1.5 py-px rounded-full inline-flex items-center gap-1" style={{ background: m.bg, color: m.color }}><Tag size={9} /> {m.label}</span>;
+}
 
 function Pill({ label, color, Icon }) {
   return (
@@ -78,14 +93,15 @@ export default function StripePage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('pagos');
   const [openPayout, setOpenPayout] = useState(null);
+  const [q, setQ] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     const [ch, re, du, po, it] = await Promise.all([
-      supabase.from('stripe_charges').select('*').order('created_at', { ascending: false }).limit(1000),
+      supabase.from('stripe_charges').select('*').order('created_at', { ascending: false }).limit(2000),
       supabase.from('stripe_refunds').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_disputes').select('*').order('created_at', { ascending: false }).limit(500),
-      supabase.from('stripe_payouts').select('*').order('created_at', { ascending: false }).limit(500),
+      supabase.from('stripe_payouts_x').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_payout_items').select('*'),
     ]);
     setCharges(ch.data || []);
@@ -112,7 +128,6 @@ export default function StripePage() {
     return paid.length ? { p: paid[0], future: false } : null;
   }, [payouts]);
 
-  // items por payout (trazabilidad)
   const itemsByPayout = useMemo(() => {
     const m = new Map();
     for (const it of items) {
@@ -122,17 +137,27 @@ export default function StripePage() {
     return m;
   }, [items]);
 
-  // mapa charge_id -> charge (para enriquecer reembolsos/disputas con el cliente)
   const chargeById = useMemo(() => {
     const m = new Map();
     for (const c of charges) m.set(c.id, c);
     return m;
   }, [charges]);
 
-  const byDay = (list) => {
+  // búsqueda por nombre / email / teléfono / producto
+  const filteredCharges = useMemo(() => {
+    const term = norm(q.trim());
+    if (!term) return charges;
+    return charges.filter((c) =>
+      norm(c.customer_name).includes(term) ||
+      norm(c.customer_email).includes(term) ||
+      norm(c.customer_phone).includes(term) ||
+      norm(c.product_name).includes(term));
+  }, [charges, q]);
+
+  const byDay = (list, field = 'created_at') => {
     const map = new Map();
     for (const t of list) {
-      const day = t.created_at ? t.created_at.slice(0, 10) : 'sin-fecha';
+      const day = t[field] ? t[field].slice(0, 10) : 'sin-fecha';
       if (!map.has(day)) map.set(day, { day, items: [] });
       map.get(day).items.push(t);
     }
@@ -197,19 +222,33 @@ export default function StripePage() {
       {loading && charges.length === 0 && payouts.length === 0 ? (
         <div className="text-text3 text-center py-16 text-sm">Cargando…</div>
       ) : tab === 'pagos' ? (
-        <PagosTab groups={byDay(charges)} />
+        <>
+          <SearchBar q={q} setQ={setQ} placeholder="Buscar por nombre, email, teléfono o producto…" />
+          {q && <div className="text-[11.5px] text-text3 mb-2">{filteredCharges.length} resultado{filteredCharges.length === 1 ? '' : 's'}</div>}
+          <PagosTab groups={byDay(filteredCharges)} />
+        </>
       ) : tab === 'reembolsos' ? (
         <ReembolsosTab refunds={refunds} disputes={disputes} chargeById={chargeById} />
       ) : (
-        <PayoutsTab payouts={payouts} itemsByPayout={itemsByPayout} open={openPayout} setOpen={setOpenPayout} />
+        <PayoutsTab groups={byDay(payouts, 'arrival_date')} itemsByPayout={itemsByPayout} open={openPayout} setOpen={setOpenPayout} />
       )}
+    </div>
+  );
+}
+
+function SearchBar({ q, setQ, placeholder }) {
+  return (
+    <div className="relative mb-3">
+      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text3" />
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder}
+        className="w-full pl-9 pr-3 py-2.5 text-[13px] rounded-xl border border-border bg-white outline-none focus:border-blue" />
     </div>
   );
 }
 
 // ---------- Pagos ----------
 function PagosTab({ groups }) {
-  if (!groups.length) return <Empty text="Todavía no hay pagos." />;
+  if (!groups.length) return <Empty text="No hay pagos que coincidan." />;
   return (
     <div className="flex flex-col gap-3">
       {groups.map((d) => (
@@ -229,13 +268,16 @@ function PagosTab({ groups }) {
                       {c.net_usd != null && c.currency && c.currency.toLowerCase() !== 'usd' && (
                         <span className="text-[11px] text-text3">≈ {usd(c.net_usd)} neto</span>
                       )}
+                      <CatChip cat={c.category || c.category_auto} />
                       {c.disputed && <span className="text-[10px] font-bold px-1.5 py-px rounded-full" style={{ background: '#FEE2E2', color: '#BE123C' }}>en disputa</span>}
                       {c.refunded && <span className="text-[10px] font-bold px-1.5 py-px rounded-full" style={{ background: '#FEF3C7', color: '#A16207' }}>reembolsado</span>}
                     </div>
                     <div className="mt-0.5 text-[13px] text-text2 font-medium truncate">{c.customer_name || c.customer_email || 'Sin nombre'}</div>
+                    {c.product_name && <div className="text-[11.5px] text-text3 truncate">{c.product_name}</div>}
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-text2">
                       <Pill {...st} />
                       {c.customer_email && c.customer_name && <span className="inline-flex items-center gap-1 text-text3"><Mail size={11} /> {c.customer_email}</span>}
+                      {c.customer_phone && <span className="inline-flex items-center gap-1 text-text3"><Phone size={11} /> {c.customer_phone}</span>}
                       <span className="text-text3">{fmtTime(c.created_at)}</span>
                       {c.risk_level && c.risk_level !== 'normal' && <span className="text-[10.5px] font-semibold" style={{ color: '#A16207' }}>riesgo {c.risk_level}</span>}
                       {c.status === 'failed' && c.failure_message && <span className="text-[11px]" style={{ color: '#BE123C' }}>{c.failure_message}</span>}
@@ -318,72 +360,96 @@ function ReembolsosTab({ refunds, disputes, chargeById }) {
   );
 }
 
-// ---------- Payouts a Mercury ----------
-function PayoutsTab({ payouts, itemsByPayout, open, setOpen }) {
-  if (!payouts.length) return <Empty text="Todavía no hay payouts." />;
+// ---------- Payouts a Mercury (agrupados por día, como Pagos) ----------
+function PayoutsTab({ groups, itemsByPayout, open, setOpen }) {
+  if (!groups.length) return <Empty text="Todavía no hay payouts." />;
   return (
-    <div className="flex flex-col gap-2.5">
-      {payouts.map((p) => {
-        const st = PAYOUT_ST[p.status] || { label: p.status || '—', color: '#6B7280' };
-        const future = p.status === 'pending' || p.status === 'in_transit';
-        const its = (itemsByPayout.get(p.id) || []).slice().sort((a, b) => (b.net_usd || 0) - (a.net_usd || 0));
-        const isOpen = open === p.id;
-        return (
-          <div key={p.id} className="border rounded-xl bg-white overflow-hidden" style={{ borderColor: future ? '#BFDBFE' : 'var(--color-border)' }}>
-            <button onClick={() => setOpen(isOpen ? null : p.id)} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface2 cursor-pointer bg-transparent border-0">
-              <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: future ? '#EFF6FF' : '#F0FDF4', color: st.color }}>
-                <Landmark size={15} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[15px] font-bold text-text">{usd(p.amount)}</span>
-                  <Pill label={st.label} color={st.color} />
-                </div>
-                <div className="mt-0.5 text-[11.5px] text-text3">
-                  {future ? 'Llega' : 'Llegó'} el {fmtDate(p.arrival_date)} · {its.length} {its.length === 1 ? 'pago' : 'pagos'}
-                  {p.automatic === false && ' · manual'}
-                </div>
-              </div>
-              {isOpen ? <ChevronDown size={16} className="text-text3 shrink-0" /> : <ChevronRight size={16} className="text-text3 shrink-0" />}
-            </button>
-            {isOpen && (
-              <div className="border-t border-border bg-surface2/30">
-                {its.length === 0 ? (
-                  <div className="px-4 py-3 text-[12px] text-text3">Sin detalle de pagos para este payout todavía (se completa en la próxima sincronización).</div>
-                ) : (
-                  its.map((it) => {
-                    const isCharge = it.reporting_category === 'charge' || it.type === 'charge';
-                    const label = isCharge ? (it.customer_name || it.customer_email || 'Pago')
-                      : it.reporting_category === 'refund' ? 'Reembolso'
-                      : it.reporting_category === 'dispute' ? 'Disputa'
-                      : it.reporting_category === 'fee' ? 'Comisión'
-                      : (it.reporting_category || it.type || 'Ajuste');
-                    return (
-                      <div key={it.balance_tx_id} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0">
-                        <ArrowDownLeft size={14} className="shrink-0" style={{ color: isCharge ? '#15803D' : '#9CA3AF' }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-medium text-text truncate">{label}</div>
-                          <div className="text-[11px] text-text3">
-                            {isCharge && it.charge_amount != null ? fmtMoney(it.charge_amount, it.charge_currency) : (it.reporting_category || '')}
-                            {it.fee_usd ? ` · comisión ${usd(it.fee_usd)}` : ''}
-                          </div>
-                        </div>
-                        <span className="text-[13px] font-bold shrink-0" style={{ color: (it.net_usd || 0) < 0 ? '#BE123C' : '#15803D' }}>
-                          {(it.net_usd || 0) < 0 ? '−' : ''}{usd(it.net_usd)}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-                <div className="px-4 py-2 flex items-center justify-between bg-white">
-                  <span className="text-[11.5px] text-text3 inline-flex items-center gap-1"><Banknote size={12} /> Total enviado a Mercury</span>
-                  <span className="text-[13.5px] font-extrabold text-text">{usd(p.amount)}</span>
-                </div>
-              </div>
-            )}
+    <div className="flex flex-col gap-3">
+      {groups.map((d) => (
+        <div key={d.day} className="border border-border rounded-xl bg-white overflow-hidden">
+          <div className="px-4 py-2 bg-surface2/60 border-b border-border">
+            <span className="text-[12px] font-bold text-text capitalize">{fmtDay(d.day)}</span>
           </div>
-        );
-      })}
+          <div>
+            {d.items.map((p) => {
+              const st = PAYOUT_ST[p.status] || { label: p.status || '—', color: '#6B7280' };
+              const future = p.status === 'pending' || p.status === 'in_transit';
+              const its = (itemsByPayout.get(p.id) || []).slice().sort((a, b) => (b.net_usd || 0) - (a.net_usd || 0));
+              const isOpen = open === p.id;
+              const arrived = p.mercury_arrived_at;
+              return (
+                <div key={p.id}>
+                  <button onClick={() => setOpen(isOpen ? null : p.id)} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface2 cursor-pointer bg-transparent border-0 border-b border-border last:border-0">
+                    <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: future ? '#EFF6FF' : '#F0FDF4', color: st.color }}>
+                      <Landmark size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[15px] font-bold text-text">{usd(p.amount)}</span>
+                        <Pill label={st.label} color={st.color} />
+                        {arrived ? (
+                          <span className="text-[10px] font-bold px-1.5 py-px rounded-full inline-flex items-center gap-1" style={{ background: '#F0FDF4', color: '#15803D' }}>
+                            <CheckCircle2 size={9} /> Llegó a Mercury
+                          </span>
+                        ) : future ? (
+                          <span className="text-[10px] font-bold px-1.5 py-px rounded-full inline-flex items-center gap-1" style={{ background: '#EFF6FF', color: '#2563EB' }}>
+                            En camino a Mercury
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-text3">
+                        {arrived ? `Llegó a Mercury el ${fmtDate(arrived)}` : future ? `Llega ~${fmtDate(p.arrival_date)}` : `Disponible el ${fmtDate(p.arrival_date)}`}
+                        {' · '}{its.length} {its.length === 1 ? 'pago' : 'pagos'}
+                      </div>
+                    </div>
+                    {isOpen ? <ChevronDown size={16} className="text-text3 shrink-0" /> : <ChevronRight size={16} className="text-text3 shrink-0" />}
+                  </button>
+                  {isOpen && (
+                    <div className="border-b border-border bg-surface2/30">
+                      {its.length === 0 ? (
+                        <div className="px-4 py-3 text-[12px] text-text3">Sin detalle de pagos todavía (se completa en la próxima sincronización).</div>
+                      ) : (
+                        its.map((it) => {
+                          const isCharge = it.reporting_category === 'charge' || it.type === 'charge';
+                          const label = isCharge ? (it.customer_name || it.customer_email || 'Pago')
+                            : it.reporting_category === 'refund' ? 'Reembolso'
+                            : it.reporting_category === 'dispute' ? 'Disputa'
+                            : it.reporting_category === 'fee' ? 'Comisión'
+                            : (it.reporting_category || it.type || 'Ajuste');
+                          return (
+                            <div key={it.balance_tx_id} className="flex items-start gap-3 px-4 py-2.5 border-b border-border last:border-0">
+                              <ArrowDownLeft size={14} className="shrink-0 mt-0.5" style={{ color: isCharge ? '#15803D' : '#9CA3AF' }} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[13px] font-medium text-text truncate">{label}</span>
+                                  <CatChip cat={it.category || it.category_auto} />
+                                </div>
+                                {isCharge && it.customer_email && <div className="text-[11px] text-text3 truncate inline-flex items-center gap-1"><Mail size={10} /> {it.customer_email}</div>}
+                                {it.product_name && <div className="text-[11px] text-text3 truncate">{it.product_name}</div>}
+                                <div className="text-[11px] text-text3">
+                                  {isCharge && it.charge_amount != null ? fmtMoney(it.charge_amount, it.charge_currency) : (it.reporting_category || '')}
+                                  {it.fee_usd ? ` · comisión ${usd(it.fee_usd)}` : ''}
+                                </div>
+                              </div>
+                              <span className="text-[13px] font-bold shrink-0" style={{ color: (it.net_usd || 0) < 0 ? '#BE123C' : '#15803D' }}>
+                                {(it.net_usd || 0) < 0 ? '−' : ''}{usd(it.net_usd)}
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
+                      <div className="px-4 py-2 flex items-center justify-between bg-white">
+                        <span className="text-[11.5px] text-text3 inline-flex items-center gap-1"><Banknote size={12} /> Total enviado a Mercury</span>
+                        <span className="text-[13.5px] font-extrabold text-text">{usd(p.amount)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
