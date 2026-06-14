@@ -26,7 +26,9 @@ function ThresholdInput({ keyName, value, onChange }) {
 
 export default function DmeConfigEditor() {
   const { appSettings, updateAppSettings } = useApp();
-  const base = () => clone(appSettings?.dme_config || DEFAULT_DME_CONFIG);
+  // Merge con los defaults para que aparezcan las métricas nuevas aunque ya
+  // exista una config guardada (lo guardado pisa al default, no al revés).
+  const base = () => clone({ ...DEFAULT_DME_CONFIG, ...(appSettings?.dme_config || {}) });
   const [draft, setDraft] = useState(base);
   const [dirty, setDirty] = useState(false);
 

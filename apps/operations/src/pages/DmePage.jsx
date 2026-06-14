@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Lock } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
 import { useDmeData, ALL_CLIENTS } from '../hooks/useDmeData.js';
-import { SECTIONS, ADMIN_ONLY_KEYS } from '../lib/dme/registry.js';
+import { SECTIONS } from '../lib/dme/registry.js';
 import {
   monthBounds, yearBounds, columnsByDay, columnsByWeek, columnsByMonth, flattenBag,
 } from '../lib/dme/aggregate.js';
@@ -39,8 +39,9 @@ const CMP = [
   { label: 'Quiz iniciado',        suffix: 'quiz_iniciado',     kind: 'int',   d: false },
   { label: 'Quiz terminado',       suffix: 'quiz_terminado',    kind: 'int',   d: false },
   { label: '% termina quiz',       suffix: 'pct_quiz',          kind: 'pct',   d: true },
-  { label: 'WhatsApp enviado',     suffix: 'whatsapp',          kind: 'int',   d: false },
-  { label: '% WhatsApp enviado',   suffix: 'pct_whatsapp',      kind: 'pct',   d: true },
+  { label: 'WhatsApp enviado',         suffix: 'whatsapp',           kind: 'int', d: false },
+  { label: '% WhatsApp (sobre quiz)',  suffix: 'pct_whatsapp',       kind: 'pct', d: true },
+  { label: '% WhatsApp (sobre leads)', suffix: 'pct_whatsapp_leads', kind: 'pct', d: true },
   { label: 'Cierres',              suffix: 'cierres',           kind: 'int',   d: false },
   { label: '% de cierres',         suffix: 'pct_cierres',       kind: 'pct',   d: true },
 ];
@@ -51,8 +52,9 @@ function combinedDerived(ci) {
     cpl:          div(ci.total_gastado, ci.total_leads),
     pct_registro: div(ci.leads_registrados, ci.visitas_landing),
     pct_vsl:      div(ci.miran_vsl, ci.leads_registrados),
-    pct_quiz:     div(ci.quiz_terminado, ci.quiz_iniciado),
-    pct_whatsapp: div(ci.whatsapp, ci.quiz_terminado),
+    pct_quiz:           div(ci.quiz_terminado, ci.quiz_iniciado),
+    pct_whatsapp:       div(ci.whatsapp, ci.quiz_terminado),
+    pct_whatsapp_leads: div(ci.whatsapp, ci.total_leads),
     pct_cierres:  div(ci.cierres, ci.leads_registrados),
     roi:          div(ci.facturado - ci.total_gastado, ci.total_gastado),
   };
@@ -241,22 +243,33 @@ export default function DmePage() {
 // ── Dashboard (resumen del rango) ────────────────────────────────────────────
 function DashboardView({ bag, tone, periodLabel, isAdmin }) {
   const g = (k) => bag[k];
+  // Suma de dos métricas; queda en blanco si ninguna tiene dato (no muestra 0).
+  const sum2 = (a, b) => (bag[a] == null && bag[b] == null ? undefined : num(bag[a]) + num(bag[b]));
 
-  const cards = [
-    { key: 'facturacion_setups', label: 'Facturación SETUPS', kind: 'money' },
-    { key: 'cashcollect_setups', label: 'CashCollect SETUPs', kind: 'money' },
-    { key: 'nuevos_usuarios',    label: 'Nuevos usuarios',     kind: 'int' },
-    { key: 'invertido_pub',      label: 'Inversión en publicidad', kind: 'money' },
-    { key: 'cashcollect_pub',    label: 'CashCollect Publicidad', kind: 'money' },
-    { key: 'leads_obtenidos',    label: 'Leads Obtenidos (Meta)', kind: 'int' },
-    { key: 'cpl',                label: 'CPL promedio',        kind: 'cpl' },
-    { key: 'pct_renovaciones',   label: '% Renovaciones',      kind: 'pct' },
-  ].filter((c) => isAdmin || !ADMIN_ONLY_KEYS.has(c.key));
+  // Resumen principal: CashCollect, usuarios, cargas, % invirtiendo y AVG inversión.
+  const mainCards = [
+    { label: 'CashCollect Publicidad',       kind: 'money', value: g('cashcollect_pub'),    adminOnly: true },
+    { label: 'CashCollect SETUPs',           kind: 'money', value: g('cashcollect_setups'), adminOnly: true },
+    { label: 'CashCollect Total',            kind: 'money', value: sum2('cashcollect_pub', 'cashcollect_setups'), adminOnly: true },
+    { label: 'Usuarios nuevos',              kind: 'int',   value: g('nuevos_usuarios'),    adminOnly: true },
+    { label: 'Cargas en publicidad totales', kind: 'int',   value: g('cargas_totales_pub'), adminOnly: true },
+    { label: '% usuarios invirtiendo en publicidad', kind: 'pct', value: g('pct_activos_con_pub'), toneKey: 'pct_activos_con_pub', sub: 'Último día del período', adminOnly: true },
+    { label: 'AVG inversión publicitaria',   kind: 'money', value: g('avg_inversion_usuario'), adminOnly: true },
+  ].filter((c) => isAdmin || !c.adminOnly);
+
+  // Resultados (se mantiene como estaba).
   const results = [
-    { key: 'nuevos_testimonios',       label: 'Nuevos testimonios',     kind: 'int' },
-    { key: 'networkers_cerraron',      label: 'Networkers que cerraron', kind: 'int' },
-    { key: 'networkers_primer_cierre', label: 'Networkers con primer cierre', kind: 'int' },
-    { key: 'cierres_total',            label: 'Total cierres (Emb. 1 + 2)', kind: 'int' },
+    { label: 'Nuevos testimonios',           kind: 'int', value: g('nuevos_testimonios') },
+    { label: 'Networkers que cerraron',      kind: 'int', value: g('networkers_cerraron') },
+    { label: 'Networkers con primer cierre', kind: 'int', value: g('networkers_primer_cierre') },
+    { label: 'Total cierres (Emb. 1 + 2)',   kind: 'int', value: g('cierres_total') },
+  ];
+
+  // Inversión y leads (CPL = Gasto total ÷ Leads totales, coherente entre sí).
+  const invCards = [
+    { label: 'Gasto total',   kind: 'money', value: sum2('embudo1_total_gastado', 'embudo2_total_gastado') },
+    { label: 'Leads totales', kind: 'int',   value: g('leads_obtenidos') },
+    { label: 'CPL promedio',  kind: 'cpl',   value: g('cpl') },
   ];
 
   // Comparativo de embudos.
@@ -271,20 +284,28 @@ function DashboardView({ bag, tone, periodLabel, isAdmin }) {
     return { ...r, e1, e2, total, diff };
   });
 
+  const card = (c) => (
+    <DmeKpiCard key={c.label} label={c.label} value={fmtMetric(c.kind, c.value)}
+                sub={c.sub} tone={c.toneKey ? tone(c.toneKey, c.value) : undefined} />
+  );
+
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Resumen principal · {periodLabel}</div>
-        <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">
-          {cards.map((c) => <DmeKpiCard key={c.key} label={c.label} value={fmtMetric(c.kind, g(c.key))} tone={tone(c.key, g(c.key))} />)}
+      {mainCards.length > 0 && (
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Resumen principal · {periodLabel}</div>
+          <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{mainCards.map(card)}</div>
         </div>
-      </div>
+      )}
 
       <div>
         <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Resultados</div>
-        <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">
-          {results.map((c) => <DmeKpiCard key={c.key} label={c.label} value={fmtMetric(c.kind, g(c.key))} tone={tone(c.key, g(c.key))} />)}
-        </div>
+        <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{results.map(card)}</div>
+      </div>
+
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Inversión y leads</div>
+        <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{invCards.map(card)}</div>
       </div>
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">

@@ -23,8 +23,9 @@ function funnelDerived(p, n, totalGastadoBoth) {
     [`${p}_costo_calificado`]: div(gastado, g('leads_calificados')),
     [`${p}_pct_registro`]:     div(g('leads_registrados'), g('visitas_landing')),
     [`${p}_pct_vsl`]:          div(g('miran_vsl'), g('leads_registrados')),
-    [`${p}_pct_quiz`]:         div(g('quiz_terminado'), g('quiz_iniciado')),
-    [`${p}_pct_whatsapp`]:     div(g('whatsapp'), g('quiz_terminado')),
+    [`${p}_pct_quiz`]:           div(g('quiz_terminado'), g('quiz_iniciado')),
+    [`${p}_pct_whatsapp`]:       div(g('whatsapp'), g('quiz_terminado')),
+    [`${p}_pct_whatsapp_leads`]: div(g('whatsapp'), g('total_leads')),
     [`${p}_pct_cierres`]:      div(g('cierres'), g('leads_registrados')),
     [`${p}_roi`]:              div(g('facturado') - gastado, gastado),
   };
