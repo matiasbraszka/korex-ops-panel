@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@korex/db';
 import {
   CreditCard, RefreshCw, TrendingUp, Undo2, ShieldAlert, Landmark, ArrowDownLeft,
   ChevronDown, ChevronRight, CheckCircle2, Clock, AlertTriangle, Mail, Phone, Banknote, Search, Tag,
-  X, User, Check, Loader2,
+  X, User, Check, Loader2, MessageCircle,
 } from 'lucide-react';
 
 const STRIPE = '#635BFF';
@@ -387,6 +388,7 @@ function PagosTab({ groups, clientById, onSelect }) {
 
 // ---------- Ficha de transacción (detalle + asignar cliente/categoría) ----------
 function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, onSetClient, onClose }) {
+  const navigate = useNavigate();
   const st = CHARGE_ST[c.status] || { label: c.status || '—', color: '#6B7280', Icon: Clock };
   const answers = c.checkout_answers && typeof c.checkout_answers === 'object' ? c.checkout_answers : {};
   const answerKeys = Object.keys(answers);
@@ -462,6 +464,13 @@ function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, o
               {c.customer_phone && <span className="inline-flex items-center gap-2"><Phone size={13} className="text-text3" /> {c.customer_phone}</span>}
               {!c.customer_email && !c.customer_phone && <span className="text-text3">Sin datos de contacto.</span>}
             </div>
+            {c.customer_phone && (
+              <button onClick={() => { onClose(); navigate(`/soporte/inbox?wa=${encodeURIComponent(c.customer_phone)}`); }}
+                className="mt-2.5 inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white cursor-pointer border-0"
+                style={{ background: '#25D366' }}>
+                <MessageCircle size={15} /> Escribir por WhatsApp
+              </button>
+            )}
           </div>
 
           {/* meta */}

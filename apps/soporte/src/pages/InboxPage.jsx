@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import ConversationList from '../components/ConversationList.jsx';
 import ChatThread from '../components/ChatThread.jsx';
@@ -8,11 +9,34 @@ import ScheduleModal from '../components/ScheduleModal.jsx';
 // Bandeja de WhatsApp: master-detail (lista | hilo | drawer de detalles).
 // Mobile: lista O hilo según haya conversación seleccionada (back en el header).
 export default function InboxPage() {
-  const { selectedId, selectConversation } = useSoporte();
+  const { selectedId, selectConversation, allConversations, setFilters } = useSoporte();
+  const [params, setParams] = useSearchParams();
   const [panelOpen, setPanelOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   // null = agendar nueva; una cita = reagendarla.
   const [editingAppt, setEditingAppt] = useState(null);
+
+  // Deep-link desde otra parte del panel (ej. ficha de pago de Stripe):
+  // /soporte/inbox?wa=<telefono> → filtra y abre ese contacto si existe.
+  const waApplied = useRef(false);
+  useEffect(() => {
+    const wa = params.get('wa');
+    if (!wa) return;
+    const digits = wa.replace(/\D/g, '');
+    if (!digits) return;
+    if (!waApplied.current) {
+      setFilters((f) => ({ ...f, search: digits, scope: 'all' }));
+      waApplied.current = true;
+    }
+    const match = (allConversations || []).find((c) => {
+      const p = (c.wa_phone || '').replace(/\D/g, '');
+      return p && (p.endsWith(digits) || digits.endsWith(p));
+    });
+    if (match) {
+      selectConversation(match.id);
+      setParams((sp) => { sp.delete('wa'); return sp; }, { replace: true });
+    }
+  }, [params, allConversations, setFilters, selectConversation, setParams]);
 
   const openSchedule = (appt = null) => {
     setEditingAppt(appt);
