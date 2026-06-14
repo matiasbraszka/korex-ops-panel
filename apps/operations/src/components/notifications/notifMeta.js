@@ -1,4 +1,4 @@
-import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTriangle, Bell, CreditCard, AtSign, FileSignature, FileWarning, CalendarClock, Landmark } from 'lucide-react';
+import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTriangle, Bell, CreditCard, AtSign, FileSignature, FileWarning, CalendarClock, Landmark, Bitcoin } from 'lucide-react';
 
 // Mapeo tipo de notificación -> ícono + color. Centralizado para que el panel
 // y el toast se vean consistentes. Los colores siguen la paleta del panel.
@@ -17,6 +17,7 @@ const META = {
   task_overdue:          { Icon: AlertTriangle,   color: '#F59E0B' },
   meta_account_error:    { Icon: CreditCard,      color: '#DC2626' },
   mercury_failed_transaction: { Icon: Landmark,   color: '#DC2626' },
+  kraken_deposit:        { Icon: Bitcoin,        color: '#15803D' },
   contract_signed:       { Icon: FileSignature,   color: '#16A34A' },
   contract_unlinked:     { Icon: FileWarning,     color: '#F59E0B' },
   contract_renewal:      { Icon: CalendarClock,   color: '#F97316' },

@@ -221,7 +221,6 @@ export default function MercuryPage() {
   // La cuenta de crédito no es efectivo (es deuda): se excluye del saldo total y
   // de los fondos, pero sus cargos sí cuentan en Egresos.
   const cashAccounts = useMemo(() => accounts.filter((a) => a.kind !== 'credit'), [accounts]);
-  const creditAcc = useMemo(() => accounts.find((a) => a.kind === 'credit'), [accounts]);
 
   const grandTotal = useMemo(
     () => cashAccounts.reduce((s, a) => s + (Number(a.current_balance) || 0), 0),
@@ -375,17 +374,6 @@ export default function MercuryPage() {
             <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#4F5BD5' }}>{money(totalMeta)}</div>
             <div className="text-[12px] text-text3 mt-1.5">gasto en anuncios procesado</div>
           </div>
-          {creditAcc && (
-            <div>
-              <div className="text-[12px] font-semibold text-text3 uppercase tracking-wide flex items-center gap-1.5">
-                <CreditCard size={14} /> Tarjeta de crédito
-              </div>
-              <div className="text-[30px] font-extrabold mt-1 leading-none" style={{ color: '#BE123C' }}>
-                {money(creditAcc.current_balance, creditAcc.currency)}
-              </div>
-              <div className="text-[12px] text-text3 mt-1.5">deuda actual</div>
-            </div>
-          )}
         </div>
         <button onClick={load} title="Actualizar"
           className="inline-flex items-center gap-1.5 text-[12px] text-text2 hover:text-text bg-white border border-border rounded-lg px-3 py-2 cursor-pointer">
