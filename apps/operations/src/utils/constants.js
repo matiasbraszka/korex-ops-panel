@@ -109,7 +109,7 @@ export const CLIENT_ADS_DATA = {
     metaAds: [
       { id: 'act_1585613345849627', name: 'MONICA VOZMEDIANO 2', currency: 'USD', spent: '$1,300', status: 'activa' }
     ],
-    metaMetrics: { adsActive: true, lastUpdated: '2026-06-09', currency: 'USD', conversionEvent: 'visita-pagina-vsl-monica', totalSpend7d: 1394.15, totalConversions7d: 327, avgCpl7d: 4.26, spendYesterday: 241.30, conversionsYesterday: 59, impressions7d: 91669, clicks7d: 3259, ctr7d: 3.56 }
+    metaMetrics: { adsActive: true, lastUpdated: '2026-06-09', currency: 'USD', conversionEvent: 'visita-pagina-vsl-monica', totalSpend7d: 1399.80, totalConversions7d: 327, avgCpl7d: 4.28, spendYesterday: 242.25, conversionsYesterday: 59, impressions7d: 91669, clicks7d: 3259, ctr7d: 3.56 }
   },
   'Oscar Palayo': {
     metaAds: [
