@@ -456,7 +456,7 @@ function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, o
               {!c.customer_email && !c.customer_phone && <span className="text-text3">Sin datos de contacto.</span>}
             </div>
             {c.customer_phone && (
-              <button onClick={() => { onClose(); navigate(`/soporte/inbox?wa=${encodeURIComponent(c.customer_phone)}`); }}
+              <button onClick={() => { onClose(); navigate(`/soporte/inbox?wa=${encodeURIComponent(c.customer_phone)}${c.customer_name ? `&name=${encodeURIComponent(c.customer_name)}` : ''}`); }}
                 className="mt-2.5 inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white cursor-pointer border-0"
                 style={{ background: '#25D366' }}>
                 <MessageCircle size={15} /> Escribir por WhatsApp
