@@ -5,11 +5,12 @@ import { Landmark, Bitcoin, CreditCard } from 'lucide-react';
 // (Mercury / Kraken / Stripe) y controlar movimientos, fugas o fallos.
 const MercuryView = lazy(() => import('./MercuryPage'));
 const KrakenView = lazy(() => import('./KrakenPage'));
+const StripeView = lazy(() => import('./StripePage'));
 
 const TABS = [
   { id: 'mercury', label: 'Mercury', sub: 'Banco',  Icon: Landmark,   color: '#0F766E' },
   { id: 'kraken',  label: 'Kraken',  sub: 'Cripto', Icon: Bitcoin,    color: '#15803D' },
-  { id: 'stripe',  label: 'Stripe',  sub: 'Pagos',  Icon: CreditCard, color: '#635BFF', soon: true },
+  { id: 'stripe',  label: 'Stripe',  sub: 'Pagos',  Icon: CreditCard, color: '#635BFF' },
 ];
 
 export default function CuentasPage() {
@@ -49,7 +50,7 @@ export default function CuentasPage() {
 
       {/* Vista seleccionada */}
       <Suspense fallback={<div className="text-text3 text-center py-16 text-sm">Cargando…</div>}>
-        {view === 'mercury' ? <MercuryView /> : view === 'kraken' ? <KrakenView /> : null}
+        {view === 'mercury' ? <MercuryView /> : view === 'kraken' ? <KrakenView /> : view === 'stripe' ? <StripeView /> : null}
       </Suspense>
     </div>
   );

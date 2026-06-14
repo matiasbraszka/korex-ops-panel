@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
-import { Landmark, CreditCard, AlertTriangle, CheckCircle2, RefreshCw, Users, Wallet, PiggyBank, Megaphone, ArrowDownCircle } from 'lucide-react';
+import { Landmark, CreditCard, AlertTriangle, CheckCircle2, RefreshCw, Users, Wallet, PiggyBank, Megaphone, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight, Mail } from 'lucide-react';
+
+const STRIPE = '#635BFF';
+const usd = (n) => (n === null || n === undefined || Number.isNaN(Number(n)) ? '—' : `USD ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 function money(amount, currency = 'USD') {
@@ -106,6 +109,15 @@ export default function MercuryPage() {
   const [egTo, setEgTo] = useState('');                // fecha hasta (custom, YYYY-MM-DD)
   const [egCat, setEgCat] = useState(null);            // categoría seleccionada (filtro)
   const [egLoading, setEgLoading] = useState(false);
+  // Ingresos (todo lo que entra; marca los pagos de Stripe)
+  const [ingresos, setIngresos] = useState([]);
+  const [stripeItems, setStripeItems] = useState([]); // items de cada payout de Stripe
+  const [ingPeriod, setIngPeriod] = useState('mes');
+  const [ingFrom, setIngFrom] = useState('');
+  const [ingTo, setIngTo] = useState('');
+  const [ingLoading, setIngLoading] = useState(false);
+  const [openIng, setOpenIng] = useState(null);
+  const [visibleIng, setVisibleIng] = useState(80);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -214,6 +226,58 @@ export default function MercuryPage() {
     await supabase.from('mercury_transactions').update({ category_override: value }).eq('id', e.id);
     loadEgresos(rangeOf(egPeriod, egFrom, egTo));
   };
+
+  // ── Ingresos (vista mercury_ingresos) + items de los payouts de Stripe ──
+  const loadIngresos = useCallback(async (range) => {
+    setIngLoading(true);
+    let q = supabase.from('mercury_ingresos')
+      .select('id, account_id, amount, counterparty_name, kind, status, posted_at, is_stripe_payout, stripe_payout_id')
+      .order('posted_at', { ascending: false }).limit(3000);
+    if (range.from) q = q.gte('posted_at', range.from);
+    if (range.to) q = q.lte('posted_at', range.to);
+    const [ingRes, itRes] = await Promise.all([
+      q,
+      supabase.from('stripe_payout_items')
+        .select('payout_id, customer_name, customer_email, product_name, category, category_auto, client_id, charge_amount, charge_currency, net_usd, type'),
+    ]);
+    setIngresos(ingRes.data || []);
+    setStripeItems(itRes.data || []);
+    setIngLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'ingresos') return;
+    loadIngresos(rangeOf(ingPeriod, ingFrom, ingTo));
+  }, [tab, ingPeriod, ingFrom, ingTo, loadIngresos]);
+
+  const stripeItemsByPayout = useMemo(() => {
+    const m = new Map();
+    for (const it of stripeItems) {
+      if (it.type === 'payout') continue;
+      if (!m.has(it.payout_id)) m.set(it.payout_id, []);
+      m.get(it.payout_id).push(it);
+    }
+    return m;
+  }, [stripeItems]);
+
+  const ingSummary = useMemo(() => {
+    let total = 0, stripe = 0, nStripe = 0;
+    for (const i of ingresos) {
+      const a = Number(i.amount) || 0; total += a;
+      if (i.is_stripe_payout) { stripe += a; nStripe++; }
+    }
+    return { total, stripe, nStripe, count: ingresos.length };
+  }, [ingresos]);
+
+  const ingByDay = useMemo(() => {
+    const map = new Map();
+    for (const i of ingresos.slice(0, visibleIng)) {
+      const day = i.posted_at ? i.posted_at.slice(0, 10) : 'sin-fecha';
+      if (!map.has(day)) map.set(day, { day, items: [], total: 0 });
+      const g = map.get(day); g.items.push(i); g.total += Number(i.amount) || 0;
+    }
+    return [...map.values()].sort((a, b) => b.day.localeCompare(a.day));
+  }, [ingresos, visibleIng]);
 
   const fundName = (a) => (a?.nickname || a?.name || a?.id || '—');
   const accountById = (id) => accounts.find((a) => a.id === id);
@@ -385,6 +449,7 @@ export default function MercuryPage() {
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {[
           { id: 'fondos', label: 'Fondos', count: accounts.length },
+          { id: 'ingresos', label: 'Ingresos', count: 0 },
           { id: 'egresos', label: 'Egresos', count: 0 },
           { id: 'fallidos', label: 'Pagos fallidos', count: pending.length, alert: pending.length > 0 },
         ].map((t) => (
@@ -442,6 +507,123 @@ export default function MercuryPage() {
               );
             })}
           </div>
+        </div>
+      ) : tab === 'ingresos' ? (
+        <div>
+          {/* Selector de período */}
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <div className="inline-flex rounded-lg border border-border overflow-hidden flex-wrap">
+              {[{ id: 'mes', label: 'Este mes' }, { id: '30d', label: 'Últimos 30 días' }, { id: 'todo', label: 'Todo' }, { id: 'custom', label: 'Personalizado' }].map((p) => (
+                <button key={p.id} onClick={() => { setIngPeriod(p.id); setVisibleIng(80); }}
+                  className="text-[12px] font-semibold px-3 py-1.5 cursor-pointer border-0"
+                  style={{ background: ingPeriod === p.id ? 'var(--color-blue)' : '#fff', color: ingPeriod === p.id ? '#fff' : 'var(--color-text2)' }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="text-right">
+              <div className="text-[12px] text-text3">Total ingresos del período</div>
+              <div className="text-[20px] font-extrabold text-text leading-tight">{money(ingSummary.total)}</div>
+            </div>
+          </div>
+
+          {ingPeriod === 'custom' && (
+            <div className="flex items-center gap-2 mb-3 text-[12px] text-text2">
+              <span>Desde</span>
+              <input type="date" value={ingFrom} onChange={(e) => { setIngFrom(e.target.value); setVisibleIng(80); }} className="border border-border rounded-lg px-2 py-1 text-[12px]" />
+              <span>hasta</span>
+              <input type="date" value={ingTo} onChange={(e) => { setIngTo(e.target.value); setVisibleIng(80); }} className="border border-border rounded-lg px-2 py-1 text-[12px]" />
+            </div>
+          )}
+
+          {ingLoading ? (
+            <div className="text-text3 text-center py-12 text-sm">Cargando ingresos…</div>
+          ) : ingresos.length === 0 ? (
+            <div className="text-[13px] text-text3 border border-dashed border-border rounded-xl p-6 text-center">No hay ingresos en este período.</div>
+          ) : (
+            <>
+              {/* Resumen: cuánto vino de Stripe */}
+              <div className="rounded-xl border border-border bg-surface2/40 p-3 mb-3 flex items-center gap-4 flex-wrap">
+                <span className="inline-flex items-center gap-2 text-[12.5px] text-text2">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: STRIPE }} />
+                  De Stripe: <b className="text-text">{money(ingSummary.stripe)}</b> · {ingSummary.nStripe} pagos
+                </span>
+                <span className="text-[12px] text-text3">{ingSummary.count} ingresos en total</span>
+              </div>
+
+              {/* Listado agrupado por día */}
+              <div className="flex flex-col gap-3">
+                {ingByDay.map((d) => (
+                  <div key={d.day} className="border border-border rounded-xl bg-white overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-4 py-2 bg-surface2/60 border-b border-border">
+                      <span className="text-[12px] font-bold text-text capitalize">{fmtDay(d.day)}</span>
+                      <span className="text-[12px] font-bold text-text3">{money(d.total)} · {d.items.length} mov.</span>
+                    </div>
+                    <div>
+                      {d.items.map((i) => {
+                        const isStripe = i.is_stripe_payout;
+                        const items = i.stripe_payout_id ? (stripeItemsByPayout.get(i.stripe_payout_id) || []) : [];
+                        const isOpen = openIng === i.id;
+                        return (
+                          <div key={i.id}>
+                            <button onClick={() => isStripe && setOpenIng(isOpen ? null : i.id)}
+                              className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-surface2 bg-transparent"
+                              style={{ cursor: isStripe ? 'pointer' : 'default' }}>
+                              <ArrowUpCircle size={15} className="shrink-0" style={{ color: '#15803D' }} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[13px] font-semibold text-text truncate">{i.counterparty_name || 'Ingreso'}</span>
+                                  {isStripe && (
+                                    <span className="text-[10px] font-bold px-1.5 py-px rounded-full inline-flex items-center gap-1" style={{ background: '#EEF0FF', color: STRIPE }}>
+                                      <CreditCard size={9} /> Pago de Stripe{items.length ? ` · ${items.length}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-text3">{fmtDate(i.posted_at)}</div>
+                              </div>
+                              <span className="text-[13.5px] font-bold shrink-0 w-[110px] text-right" style={{ color: '#15803D' }}>{money(i.amount)}</span>
+                              {isStripe ? (isOpen ? <ChevronDown size={15} className="text-text3 shrink-0" /> : <ChevronRight size={15} className="text-text3 shrink-0" />) : <span className="w-[15px] shrink-0" />}
+                            </button>
+                            {isStripe && isOpen && (
+                              <div className="bg-surface2/40 border-b border-border">
+                                {items.length === 0 ? (
+                                  <div className="px-4 py-2 text-[11.5px] text-text3 pl-12">El detalle de pagos se completa en la próxima sincronización.</div>
+                                ) : items.slice().sort((a, b) => (b.net_usd || 0) - (a.net_usd || 0)).map((it, idx) => (
+                                  <div key={idx} className="flex items-start gap-3 px-4 py-2 border-b border-border last:border-0 pl-12">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-[12.5px] font-medium text-text truncate">{it.customer_name || it.customer_email || 'Pago'}</span>
+                                        {(it.category || it.category_auto) && (
+                                          <span className="text-[9.5px] font-bold px-1.5 py-px rounded-full" style={{ background: (it.category || it.category_auto) === 'crm' ? '#EFF6FF' : '#F5F3FF', color: (it.category || it.category_auto) === 'crm' ? '#2563EB' : '#9333EA' }}>
+                                            {(it.category || it.category_auto) === 'crm' ? 'CRM' : 'Publicidad'}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {it.customer_email && <div className="text-[10.5px] text-text3 truncate inline-flex items-center gap-1"><Mail size={9} /> {it.customer_email}</div>}
+                                      {it.product_name && <div className="text-[10.5px] text-text3 truncate">{it.product_name}</div>}
+                                    </div>
+                                    <span className="text-[12px] font-bold text-text shrink-0">{usd(it.net_usd)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {ingresos.length > visibleIng && (
+                <div className="text-center mt-3">
+                  <button onClick={() => setVisibleIng((v) => v + 80)} className="text-[12.5px] font-semibold text-text2 hover:text-text bg-white border border-border rounded-lg px-4 py-2 cursor-pointer">
+                    Cargar más · mostrando {visibleIng} de {ingresos.length}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       ) : tab === 'egresos' ? (
         <div>
