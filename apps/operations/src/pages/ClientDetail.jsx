@@ -11,6 +11,7 @@ import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
 import BillingTab from '../components/clientes/BillingTab';
+import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
 import MetaAdAccountsManager from '../components/clientes/MetaAdAccountsManager';
 import ClientRoadmapPanel from '../components/tareas/ClientRoadmapPanel';
@@ -174,6 +175,7 @@ export default function ClientDetail({ client: c }) {
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Facturación', count: invoicesCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
+          { key: 'dme', label: 'DME' },
           { key: 'historial', label: 'Historial' },
         ].filter(t => !(restricted && t.key === 'facturacion'));
         return (
@@ -250,6 +252,8 @@ export default function ClientDetail({ client: c }) {
             })()}
 
             {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
+
+            {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 
             {activeTab === 'facturacion' && !restricted && <BillingTab client={c} />}
 

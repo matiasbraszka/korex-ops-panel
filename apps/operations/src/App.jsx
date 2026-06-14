@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3 } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -14,6 +14,7 @@ const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
+const DmePage = lazy(() => import('./pages/DmePage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 const CuentasPage = lazy(() => import('./pages/CuentasPage'));
 import SearchBar from './components/SearchBar';
@@ -284,6 +285,7 @@ function MainLayout() {
     { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
+    { id: 'dme',       label: 'DME',           Icon: BarChart3,      path: '/operations/dme' },
     { id: 'equipo',    label: 'Accountability',  Icon: Sparkles,    path: '/operations/equipo' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
@@ -335,6 +337,7 @@ function MainLayout() {
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
     tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
     llamadas: ['Llamadas', 'Registro de llamadas procesadas por IA'],
+    dme: ['DME', 'Métricas diarias, semanales y mensuales por cliente'],
     equipo: ['Accountability', 'Informes diarios y semanales, bloqueos e ideas'],
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
@@ -367,6 +370,7 @@ function MainLayout() {
       <Route path="/operations/clients" element={opsGuarded(<ClientsPage />)} />
       <Route path="/operations/tasks" element={opsGuarded(<TareasPage />)} />
       <Route path="/operations/llamadas" element={opsGuarded(<LlamadasPage />)} />
+      <Route path="/operations/dme" element={opsGuarded(<DmePage />)} />
       <Route path="/operations/equipo" element={opsGuarded(<EquipoPage />)} />
       {/* Compat: rutas viejas → /operations/equipo */}
       <Route path="/operations/informes" element={<Navigate to="/operations/equipo" replace />} />
