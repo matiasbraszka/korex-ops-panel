@@ -3,6 +3,7 @@ import { supabase } from '@korex/db';
 import {
   CreditCard, RefreshCw, TrendingUp, Undo2, ShieldAlert, Landmark, ArrowDownLeft,
   ChevronDown, ChevronRight, CheckCircle2, Clock, AlertTriangle, Mail, Phone, Banknote, Search, Tag,
+  X, User, Check, Loader2,
 } from 'lucide-react';
 
 const STRIPE = '#635BFF';
@@ -94,24 +95,39 @@ export default function StripePage() {
   const [tab, setTab] = useState('pagos');
   const [openPayout, setOpenPayout] = useState(null);
   const [q, setQ] = useState('');
+  const [clients, setClients] = useState([]);
+  const [selected, setSelected] = useState(null); // charge id abierto en la ficha
+  const [savingId, setSavingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [ch, re, du, po, it] = await Promise.all([
+    const [ch, re, du, po, it, cl] = await Promise.all([
       supabase.from('stripe_charges').select('*').order('created_at', { ascending: false }).limit(2000),
       supabase.from('stripe_refunds').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_disputes').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_payouts_x').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_payout_items').select('*'),
+      supabase.from('clients').select('id, name').order('name'),
     ]);
     setCharges(ch.data || []);
     setRefunds(re.data || []);
     setDisputes(du.data || []);
     setPayouts(po.data || []);
     setItems(it.data || []);
+    setClients(cl.data || []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Actualiza un cobro en la DB y en el estado local (override manual de Matias).
+  const patchCharge = useCallback(async (id, patch) => {
+    setSavingId(id);
+    const { error } = await supabase.from('stripe_charges').update(patch).eq('id', id);
+    if (!error) setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setSavingId(null);
+  }, []);
+  const setCategory = useCallback((id, cat) => patchCharge(id, { category: cat }), [patchCharge]);
+  const setClient = useCallback((id, clientId) => patchCharge(id, { client_id: clientId || null, client_locked: true }), [patchCharge]);
 
   // ---- métricas de cabecera ----
   const cobradoNeto = useMemo(
@@ -142,6 +158,12 @@ export default function StripePage() {
     for (const c of charges) m.set(c.id, c);
     return m;
   }, [charges]);
+  const clientById = useMemo(() => {
+    const m = new Map();
+    for (const c of clients) m.set(c.id, c.name);
+    return m;
+  }, [clients]);
+  const selectedCharge = selected ? chargeById.get(selected) : null;
 
   // búsqueda por nombre / email / teléfono / producto
   const filteredCharges = useMemo(() => {
@@ -225,12 +247,24 @@ export default function StripePage() {
         <>
           <SearchBar q={q} setQ={setQ} placeholder="Buscar por nombre, email, teléfono o producto…" />
           {q && <div className="text-[11.5px] text-text3 mb-2">{filteredCharges.length} resultado{filteredCharges.length === 1 ? '' : 's'}</div>}
-          <PagosTab groups={byDay(filteredCharges)} />
+          <PagosTab groups={byDay(filteredCharges)} clientById={clientById} onSelect={setSelected} />
         </>
       ) : tab === 'reembolsos' ? (
         <ReembolsosTab refunds={refunds} disputes={disputes} chargeById={chargeById} />
       ) : (
         <PayoutsTab groups={byDay(payouts, 'arrival_date')} itemsByPayout={itemsByPayout} open={openPayout} setOpen={setOpenPayout} />
+      )}
+
+      {selectedCharge && (
+        <ChargeDetail
+          charge={selectedCharge}
+          clients={clients}
+          clientById={clientById}
+          saving={savingId === selectedCharge.id}
+          onSetCategory={setCategory}
+          onSetClient={setClient}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   );
@@ -247,7 +281,7 @@ function SearchBar({ q, setQ, placeholder }) {
 }
 
 // ---------- Pagos ----------
-function PagosTab({ groups }) {
+function PagosTab({ groups, clientById, onSelect }) {
   if (!groups.length) return <Empty text="No hay pagos que coincidan." />;
   return (
     <div className="flex flex-col gap-3">
@@ -259,8 +293,10 @@ function PagosTab({ groups }) {
           <div>
             {d.items.map((c) => {
               const st = CHARGE_ST[c.status] || { label: c.status || '—', color: '#6B7280', Icon: Clock };
+              const cliName = c.client_id ? clientById.get(c.client_id) : null;
               return (
-                <div key={c.id} className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-surface2">
+                <button key={c.id} onClick={() => onSelect(c.id)}
+                  className="w-full text-left flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-surface2 cursor-pointer bg-transparent">
                   <CreditCard size={16} className="shrink-0 mt-0.5" style={{ color: STRIPE }} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -269,6 +305,7 @@ function PagosTab({ groups }) {
                         <span className="text-[11px] text-text3">≈ {usd(c.net_usd)} neto</span>
                       )}
                       <CatChip cat={c.category || c.category_auto} />
+                      {cliName && <span className="text-[10px] font-bold px-1.5 py-px rounded-full inline-flex items-center gap-1" style={{ background: '#ECFEFF', color: '#0E7490' }}><User size={9} /> {cliName}</span>}
                       {c.disputed && <span className="text-[10px] font-bold px-1.5 py-px rounded-full" style={{ background: '#FEE2E2', color: '#BE123C' }}>en disputa</span>}
                       {c.refunded && <span className="text-[10px] font-bold px-1.5 py-px rounded-full" style={{ background: '#FEF3C7', color: '#A16207' }}>reembolsado</span>}
                     </div>
@@ -283,12 +320,105 @@ function PagosTab({ groups }) {
                       {c.status === 'failed' && c.failure_message && <span className="text-[11px]" style={{ color: '#BE123C' }}>{c.failure_message}</span>}
                     </div>
                   </div>
-                </div>
+                  <ChevronRight size={15} className="text-text3 shrink-0 mt-1" />
+                </button>
               );
             })}
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------- Ficha de transacción (detalle + asignar cliente/categoría) ----------
+function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, onSetClient, onClose }) {
+  const st = CHARGE_ST[c.status] || { label: c.status || '—', color: '#6B7280', Icon: Clock };
+  const answers = c.checkout_answers && typeof c.checkout_answers === 'object' ? c.checkout_answers : {};
+  const answerKeys = Object.keys(answers);
+  const effCat = c.category || c.category_auto || '';
+  const cats = [{ v: 'crm', label: 'CRM' }, { v: 'publicidad', label: 'Publicidad' }, { v: '', label: 'Sin categoría' }];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-[520px] max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* header */}
+        <div className="flex items-start justify-between gap-3 p-5 border-b border-border sticky top-0 bg-white">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[22px] font-extrabold text-text">{fmtMoney(c.amount, c.currency)}</span>
+              <Pill {...st} />
+            </div>
+            <div className="text-[13px] text-text2 mt-0.5">{c.customer_name || c.customer_email || 'Sin nombre'}</div>
+            {c.product_name && <div className="text-[12px] text-text3 mt-0.5">{c.product_name}</div>}
+          </div>
+          <button onClick={onClose} className="shrink-0 text-text3 hover:text-text bg-surface2 rounded-lg p-1.5 cursor-pointer"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-5">
+          {/* asignación manual */}
+          <div>
+            <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              Categoría {saving && <Loader2 size={11} className="animate-spin" />}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {cats.map((opt) => {
+                const active = effCat === opt.v || (opt.v === '' && !effCat);
+                return (
+                  <button key={opt.label} onClick={() => onSetCategory(c.id, opt.v || null)}
+                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border cursor-pointer inline-flex items-center gap-1"
+                    style={{ borderColor: active ? STRIPE : 'var(--color-border)', background: active ? `${STRIPE}12` : '#fff', color: active ? STRIPE : 'var(--color-text2)' }}>
+                    {active && <Check size={12} />} {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            {c.category_auto && !c.category && <div className="text-[10.5px] text-text3 mt-1">Detectado automáticamente del producto.</div>}
+          </div>
+
+          <div>
+            <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">Cliente del sistema</div>
+            <select value={c.client_id || ''} onChange={(e) => onSetClient(c.id, e.target.value)}
+              className="w-full px-3 py-2 text-[13px] rounded-lg border border-border bg-white outline-none focus:border-blue cursor-pointer">
+              <option value="">— Sin asignar —</option>
+              {clients.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
+            </select>
+            {c.client_id && !c.client_locked && <div className="text-[10.5px] text-text3 mt-1">Asignado automáticamente; podés cambiarlo.</div>}
+          </div>
+
+          {/* respuestas del checkout */}
+          {answerKeys.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">Datos que completó al pagar</div>
+              <div className="border border-border rounded-xl overflow-hidden">
+                {answerKeys.map((k) => (
+                  <div key={k} className="flex items-start gap-3 px-3 py-2 border-b border-border last:border-0">
+                    <span className="text-[12px] text-text3 shrink-0 w-[42%]">{k}</span>
+                    <span className="text-[12.5px] text-text font-medium min-w-0 break-words">{answers[k]}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* contacto */}
+          <div>
+            <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">Contacto</div>
+            <div className="flex flex-col gap-1.5 text-[12.5px] text-text2">
+              {c.customer_email && <span className="inline-flex items-center gap-2"><Mail size={13} className="text-text3" /> {c.customer_email}</span>}
+              {c.customer_phone && <span className="inline-flex items-center gap-2"><Phone size={13} className="text-text3" /> {c.customer_phone}</span>}
+              {!c.customer_email && !c.customer_phone && <span className="text-text3">Sin datos de contacto.</span>}
+            </div>
+          </div>
+
+          {/* meta */}
+          <div className="text-[11px] text-text3 flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t border-border">
+            <span>Fecha: {fmtDate(c.created_at)} {fmtTime(c.created_at)}</span>
+            {c.net_usd != null && <span>Neto: {usd(c.net_usd)}</span>}
+            {c.fee_usd != null && <span>Comisión: {usd(c.fee_usd)}</span>}
+            {c.receipt_url && <a href={c.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue">Ver recibo</a>}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
