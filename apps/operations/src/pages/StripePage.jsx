@@ -108,7 +108,7 @@ export default function StripePage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [ch, re, du, po, it, cl] = await Promise.all([
-      supabase.from('stripe_charges_x').select('*').order('created_at', { ascending: false }).limit(2000),
+      supabase.from('stripe_charges').select('*').order('created_at', { ascending: false }).limit(2000),
       supabase.from('stripe_refunds').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_disputes').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('stripe_payouts_x').select('*').order('created_at', { ascending: false }).limit(500),
