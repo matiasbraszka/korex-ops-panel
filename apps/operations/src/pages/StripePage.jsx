@@ -464,6 +464,26 @@ function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, o
             )}
           </div>
 
+          {/* desglose del cobro: pagó → comisiones → neto */}
+          {c.net_usd != null && (
+            <div>
+              <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">Desglose del cobro</div>
+              <div className="border border-border rounded-xl overflow-hidden text-[12.5px]">
+                <DescRow label="Pagó el cliente" value={fmtMoney(c.amount, c.currency)} />
+                {c.gross_usd != null && c.currency && c.currency.toLowerCase() !== 'usd' && (
+                  <DescRow label="Convertido a USD" value={usd(c.gross_usd)} sub />
+                )}
+                {c.fee_usd != null && (
+                  <DescRow label="Comisión de Stripe" value={`−${usd((Number(c.fee_usd) || 0) - (Number(c.fee_fx_usd) || 0))}`} neg />
+                )}
+                {Number(c.fee_fx_usd) > 0 && (
+                  <DescRow label="Comisión por cambio de divisa" value={`−${usd(c.fee_fx_usd)}`} neg />
+                )}
+                <DescRow label="Neto acreditado" value={usd(c.net_usd)} strong />
+              </div>
+            </div>
+          )}
+
           {/* trazabilidad: llegada a Mercury */}
           <div>
             <div className="text-[11px] font-bold text-text3 uppercase tracking-wide mb-2">Llegada a Mercury</div>
@@ -480,8 +500,6 @@ function ChargeDetail({ charge: c, clients, clientById, saving, onSetCategory, o
           {/* meta */}
           <div className="text-[11px] text-text3 flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t border-border">
             <span>Fecha: {fmtDate(c.created_at)} {fmtTime(c.created_at)}</span>
-            {c.net_usd != null && <span>Neto: {usd(c.net_usd)}</span>}
-            {c.fee_usd != null && <span>Comisión: {usd(c.fee_usd)}</span>}
             {c.receipt_url && <a href={c.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue">Ver recibo</a>}
           </div>
         </div>
@@ -653,6 +671,16 @@ function PayoutsTab({ groups, itemsByPayout, open, setOpen }) {
 
 function Empty({ text }) {
   return <div className="text-[13px] text-text3 border border-dashed border-border rounded-xl p-6 text-center">{text}</div>;
+}
+
+// Fila del desglose del cobro.
+function DescRow({ label, value, neg, strong, sub }) {
+  return (
+    <div className={`flex items-center justify-between gap-3 px-3 py-2 border-b border-border last:border-0 ${strong ? 'bg-surface2/60' : ''}`}>
+      <span className={sub ? 'text-text3' : strong ? 'font-bold text-text' : 'text-text2'}>{label}</span>
+      <span className="font-semibold" style={{ color: neg ? '#BE123C' : strong ? '#15803D' : 'var(--color-text)' }}>{value}</span>
+    </div>
+  );
 }
 
 function LoadMore({ shown, total, onMore }) {
