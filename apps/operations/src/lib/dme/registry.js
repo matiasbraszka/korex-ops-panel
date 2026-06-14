@@ -49,7 +49,7 @@ const SALDOS = {
   metrics: [
     { key: 'saldo_final',                 label: 'Saldo disponible final del día',            type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
     { key: 'saldo_con_invertido',         label: 'Saldo disponible con lo invertido del día', type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
-    { key: 'total_gastado_acumulado',     label: 'Total gastado acumulado',                   type: 'input',   kind: 'money', agg: 'last', help: SNAP_HELP },
+    { key: 'total_gastado_acumulado',     label: 'Total gastado acumulado',                   type: 'input',   kind: 'money', agg: 'sum', help: 'Gasto del día; en semanal/mensual se suma.' },
     { key: 'pct_queda_saldo',             label: '% que me queda del saldo disponible',       type: 'derived', kind: 'pct', help: 'Saldo disponible ÷ (saldo disponible + total gastado acumulado).' },
     { key: 'pct_queda_saldo_invertido',   label: '% que me queda del saldo con lo invertido hoy', type: 'derived', kind: 'pct', help: 'Saldo con lo invertido ÷ (saldo con lo invertido + total gastado acumulado).' },
     { key: 'dias_proyectados',            label: 'Días proyectados con publicidad activa',    type: 'derived', kind: 'num', help: 'Saldo con lo invertido ÷ inversión diaria promedio del período.' },
