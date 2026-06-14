@@ -76,6 +76,8 @@ export default function DmePage() {
 
   // Bloques General/Finanzas solo para admins.
   const sections = useMemo(() => (isAdmin ? SECTIONS : SECTIONS.filter((s) => !s.adminOnly)), [isAdmin]);
+  // La pestaña Dashboard es solo para admins.
+  const views = useMemo(() => (isAdmin ? VIEWS : VIEWS.filter((v) => v.id !== 'dashboard')), [isAdmin]);
 
   // Clientes "DME activo": con datos cargados en los ultimos 5 dias.
   useEffect(() => {
@@ -99,6 +101,11 @@ export default function DmePage() {
   useEffect(() => {
     if (clientId === ALL_CLIENTS && !isAdmin && clients.length) setClientId(clients[0].id);
   }, [clientId, isAdmin, clients]);
+
+  // Defensa: la pestaña Dashboard es admin-only; un no-admin cae a Diario.
+  useEffect(() => {
+    if (!isAdmin && viewMode === 'dashboard') setViewMode('diario');
+  }, [isAdmin, viewMode]);
 
   const isCombined = clientId === ALL_CLIENTS;
   const byYear = viewMode === 'mensual';
@@ -173,7 +180,7 @@ export default function DmePage() {
         </select>
 
         <div className="flex items-center gap-0.5 bg-surface2 rounded-lg p-0.5">
-          {VIEWS.map((v) => (
+          {views.map((v) => (
             <button key={v.id} onClick={() => setViewMode(v.id)}
                     className={`text-[12.5px] font-semibold px-2.5 py-1.5 rounded-md cursor-pointer ${viewMode === v.id ? 'bg-white text-text shadow-sm' : 'text-text3 hover:text-text'}`}>
               {v.label}
