@@ -12,23 +12,11 @@ import { computeDerived } from './derive.js';
 const pad = (n) => String(n).padStart(2, '0');
 const MONTH_ABBR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
-// 'YYYY-MM-DD' -> Date local (sin corrimiento de zona horaria).
-function parseISO(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); }
-function toISO(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
-
 export function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
 export function monthBounds(year, month) {
   return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-${pad(daysInMonth(year, month))}` };
 }
 export function yearBounds(year) { return { from: `${year}-01-01`, to: `${year}-12-31` }; }
-
-// Lunes de la semana de una fecha (semana lun-dom).
-function mondayOf(date) {
-  const off = (date.getDay() + 6) % 7;
-  const m = new Date(date);
-  m.setDate(date.getDate() - off);
-  return m;
-}
 
 // Agrega un conjunto de filas diarias { date, metrics } a un objeto de totales +
 // derivados. `rows` son las filas de UN periodo (un dia, una semana, un mes...).
@@ -78,26 +66,28 @@ export function columnsByDay(rows, year, month) {
   return cols;
 }
 
-// Semanal: una columna por semana (lun-dom) que toca el mes.
+// Semanal: bloques fijos del mes (1 al 7, 8 al 14, 15 al 21, 22 al 28, 29 al fin).
+// Asi todos los dias del mes entran en exactamente una semana (no se pierde data).
 export function columnsByWeek(rows, year, month) {
   const n = daysInMonth(year, month);
-  const order = [];
-  const byWeek = {};
-  for (let d = 1; d <= n; d++) {
-    const date = new Date(year, month - 1, d);
-    const wk = toISO(mondayOf(date));
-    if (!byWeek[wk]) { byWeek[wk] = []; order.push(wk); }
-  }
   const rowsByDate = {};
   for (const r of rows) (rowsByDate[r.date] ||= []).push(r);
-  return order.map((wkStart) => {
-    const start = parseISO(wkStart);
-    const end = new Date(start); end.setDate(start.getDate() + 6);
+  const cols = [];
+  for (let start = 1; start <= n; start += 7) {
+    const end = Math.min(start + 6, n);
     const wkRows = [];
-    for (const r of rows) { const dt = parseISO(r.date); if (dt >= start && dt <= end) wkRows.push(r); }
-    const label = `${pad(start.getDate())} ${MONTH_ABBR[start.getMonth()]}`;
-    return { key: wkStart, label, title: `Semana ${toISO(start)} a ${toISO(end)}`, rows: wkRows };
-  });
+    for (let d = start; d <= end; d++) {
+      const iso = `${year}-${pad(month)}-${pad(d)}`;
+      if (rowsByDate[iso]) wkRows.push(...rowsByDate[iso]);
+    }
+    cols.push({
+      key: `${year}-${pad(month)}-w${start}`,
+      label: `${start} al ${end}`,
+      title: `${start} al ${end} de ${MONTH_ABBR[month - 1]}`,
+      rows: wkRows,
+    });
+  }
+  return cols;
 }
 
 // Mensual: 12 columnas (ene..dic) del ano.

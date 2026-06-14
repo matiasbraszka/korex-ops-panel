@@ -46,6 +46,7 @@ export function computeDerived(t = {}, { days = 1 } = {}) {
     pct_activos_sin_pub: div(n('usuarios_activos_sin_pub'), usuariosTotal),
     pct_bajas:           div(n('usuarios_baja'), usuariosTotal),
     // Finanzas
+    cargas_totales_pub:    has('cargas_nuevas_pub', 'recargas_pub') ? n('cargas_nuevas_pub') + n('recargas_pub') : NaN,
     pct_comisiones_setups: div(n('comisiones_setups'), n('facturacion_setups')),
     pct_comisiones_pub:    div(n('comisiones_pub'), n('invertido_pub')),
     avg_inversion_usuario: div(n('invertido_pub'), n('usuarios_activos_con_pub')),
