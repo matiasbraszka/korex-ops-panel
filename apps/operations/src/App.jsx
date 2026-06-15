@@ -347,7 +347,7 @@ function MainLayout() {
     dashboard: ['Dashboard', 'Panel ejecutivo de operaciones'],
     clients: ['Clientes', 'Perfiles, ads, feedback y recursos'],
     publicidad: ['Publicidad', 'Métricas de Meta Ads por cliente'],
-    tasks: ['Tareas', 'Roadmap, Timeline y Lista unificados'],
+    tasks: ['Tareas', 'Objetivos, Tablero Sprint, Rendimiento y To-Do'],
     llamadas: ['Llamadas', 'Registro de llamadas procesadas por IA'],
     equipo: ['Accountability', 'Informes diarios y semanales, bloqueos e ideas'],
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],

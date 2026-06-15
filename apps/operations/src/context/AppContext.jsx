@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffTaskFields, diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
@@ -20,6 +20,24 @@ function enrichBulletsWithMentions(progressByClient, teamMembers, excludeId) {
       : block?.bullets,
   }));
 }
+
+// Utilidades de fecha para construir un sprint a partir del lunes de su semana.
+const pad2 = (n) => String(n).padStart(2, '0');
+const addDaysStr = (dateStr, n) => {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+const isoWeekNumber = (dateStr) => {
+  const d = new Date(dateStr + 'T00:00:00');
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  return 1 + Math.ceil((firstThursday - target) / 604800000);
+};
 
 const AppContext = createContext(null);
 
@@ -52,6 +70,7 @@ export function AppProvider({ children }) {
   const [taskClientFilter, setTaskClientFilter] = useState('all');
   const [taskPriority, setTaskPriority] = useState('all');
   const [taskDueFilter, setTaskDueFilter] = useState('all'); // all | this-week | next-week | this-month
+  const [taskDepartment, setTaskDepartment] = useState('all'); // all | ventas | operaciones | programacion | marketing
   // currentUser deriva de Supabase Auth + team_members (ver derivacion mas abajo).
   const { user: authUser, profile, isAdmin } = useCurrentUser();
   const currentUser = useMemo(() => {
@@ -82,6 +101,10 @@ export function AppProvider({ children }) {
   const [teamMembers, setTeamMembers] = useState([]); // [{ id, name, role, ... }]
   // Weekly to-do list (personal por usuario)
   const [weeklyTodos, setWeeklyTodos] = useState([]); // [{ id, userId, taskId, date, position }]
+  // Sprints (Kanban ágil) — semana de trabajo del equipo
+  const [sprints, setSprints] = useState([]); // [{ id, number, name, startDate, endDate, goal, status }]
+  const sprintsRef = useRef([]);
+  sprintsRef.current = sprints;
   // Loom videos (tutoriales y actualizaciones)
   const [loomVideos, setLoomVideos] = useState([]);
   // Llamadas procesadas (desde Fathom via /procesa-llamadas)
@@ -233,8 +256,30 @@ export function AppProvider({ children }) {
         timer_started_at: t.timerStartedAt || null,
         enabled_date: t.enabledDate || null,
         position: t.position ?? 0,
+        sprint_id: t.sprintId || null,
+        sprint_priority: t.sprintPriority != null ? t.sprintPriority : null,
+        estimated_hours: t.estimatedHours != null ? t.estimatedHours : null,
+        department: t.department || null,
+        checklist: Array.isArray(t.checklist) ? t.checklist : [],
         last_actor_id: currentUserIdRef.current,
       })
+    });
+  }, []);
+
+  const dbSaveSprint = useCallback(async (s) => {
+    if (!dbReady.current) return;
+    return sbFetch('sprints', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+      body: JSON.stringify({
+        id: s.id, number: s.number ?? null, name: s.name || null,
+        start_date: s.startDate || null, end_date: s.endDate || null,
+        goal: s.goal || null, status: s.status || 'active',
+        monday_call_url: s.mondayCallUrl || null, friday_call_url: s.fridayCallUrl || null,
+        conclusion: s.conclusion || null,
+        worked_hours: s.workedHours && typeof s.workedHours === 'object' ? s.workedHours : {},
+        summary: s.summary || null,
+      }),
     });
   }, []);
 
@@ -298,6 +343,11 @@ export function AppProvider({ children }) {
         timer_started_at: t.timerStartedAt || null,
         enabled_date: t.enabledDate || null,
         position: t.position ?? 0,
+        sprint_id: t.sprintId || null,
+        sprint_priority: t.sprintPriority != null ? t.sprintPriority : null,
+        estimated_hours: t.estimatedHours != null ? t.estimatedHours : null,
+        department: t.department || null,
+        checklist: Array.isArray(t.checklist) ? t.checklist : [],
         last_actor_id: currentUserIdRef.current,
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
@@ -586,6 +636,118 @@ export function AppProvider({ children }) {
     });
   }, [save, dbSaveTask]);
 
+  // ── Sprints (Kanban ágil) ───────────────────────────────────────────────────
+  const activeSprint = useMemo(() => getActiveSprint(sprints), [sprints]);
+
+  const mkSprintForMonday = useCallback((mondayStr) => {
+    const week = isoWeekNumber(mondayStr);
+    const year = new Date(mondayStr + 'T00:00:00').getFullYear();
+    return {
+      id: `sp_${year}_${pad2(week)}`,
+      number: week,
+      name: `Sprint ${week}`,
+      startDate: mondayStr,
+      endDate: addDaysStr(mondayStr, 6),
+      goal: null,
+      status: 'active',
+    };
+  }, []);
+
+  // Refresca los sprints desde Supabase (lo usa el load inicial y el poll).
+  const loadSprints = useCallback(async () => {
+    if (!dbReady.current) return;
+    try {
+      const rows = await sbFetch('sprints?select=*&order=start_date.desc', { headers: { 'Prefer': 'return=representation' } });
+      if (Array.isArray(rows)) {
+        setSprints(rows.map(r => ({
+          id: r.id, number: r.number, name: r.name,
+          startDate: r.start_date, endDate: r.end_date,
+          goal: r.goal, status: r.status,
+          mondayCallUrl: r.monday_call_url || null, fridayCallUrl: r.friday_call_url || null,
+          conclusion: r.conclusion || null,
+          workedHours: r.worked_hours && typeof r.worked_hours === 'object' ? r.worked_hours : {},
+          summary: r.summary || null,
+        })));
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  // Crea (o reusa) el sprint de la semana en curso y lo deja activo.
+  const createSprint = useCallback((mondayStr) => {
+    const monday = mondayStr || mondayOf(today());
+    const existing = sprintsRef.current.find(s => s.startDate === monday);
+    if (existing) {
+      if (existing.status !== 'active') {
+        const upd = { ...existing, status: 'active' };
+        setSprints(prev => prev.map(s => s.id === existing.id ? upd : s));
+        dbSaveSprint(upd);
+      }
+      return existing;
+    }
+    const sprint = mkSprintForMonday(monday);
+    setSprints(prev => [sprint, ...prev]);
+    dbSaveSprint(sprint);
+    return sprint;
+  }, [dbSaveSprint, mkSprintForMonday]);
+
+  // Actualiza campos de un sprint (ej: goal, status).
+  const updateSprint = useCallback((id, updates) => {
+    setSprints(prev => {
+      const next = prev.map(s => (s.id === id ? { ...s, ...updates } : s));
+      const updated = next.find(s => s.id === id);
+      if (updated) dbSaveSprint(updated);
+      return next;
+    });
+  }, [dbSaveSprint]);
+
+  // Mete una tarea al sprint activo (o al que se indique). Setea responsable,
+  // prioridad y el estado de entrada (por defecto 'priorizado' si hay
+  // responsable, 'backlog' si no). Reusa updateTask para persistir.
+  const addTaskToSprint = useCallback((taskId, { sprintId, assignee, sprintPriority, status } = {}) => {
+    const sid = sprintId || (getActiveSprint(sprintsRef.current)?.id);
+    if (!sid) return;
+    const updates = { sprintId: sid };
+    if (assignee != null) updates.assignee = assignee;
+    if (sprintPriority != null) updates.sprintPriority = sprintPriority;
+    updates.status = status || (assignee ? 'priorizado' : 'backlog');
+    updateTask(taskId, updates);
+  }, [updateTask]);
+
+  // Saca una tarea del sprint (vuelve a estar solo en Objetivos).
+  const removeTaskFromSprint = useCallback((taskId) => {
+    updateTask(taskId, { sprintId: null, sprintPriority: null });
+  }, [updateTask]);
+
+  // Cierra el sprint activo: lo marca 'closed', crea el de la semana siguiente
+  // y arrastra (carry-over) las tareas sin terminar al nuevo sprint. Las
+  // validadas (done) quedan archivadas con el sprint cerrado.
+  // Cierra el sprint activo. `extra` permite adjuntar campos (ej. conclusion).
+  // Siempre guarda un snapshot del resumen (summary) para el historial.
+  const closeSprint = useCallback((extra = {}) => {
+    const active = getActiveSprint(sprintsRef.current);
+    if (!active) return null;
+    const summary = buildSprintSummary(tasksRef.current, teamMembersRef.current, active);
+    const nextMonday = active.endDate ? addDaysStr(active.endDate, 1) : mondayOf(today());
+    const next = mkSprintForMonday(nextMonday);
+    // 1) cerrar el sprint (con snapshot) + crear el nuevo
+    setSprints(prev => {
+      const closed = { ...active, status: 'closed', summary, ...extra };
+      const withNew = prev.some(s => s.id === next.id)
+        ? prev.map(s => s.id === active.id ? closed : s)
+        : [next, ...prev.map(s => s.id === active.id ? closed : s)];
+      dbSaveSprint(closed);
+      if (!prev.some(s => s.id === next.id)) dbSaveSprint(next);
+      return withNew;
+    });
+    // 2) carry-over de tareas no terminadas
+    const carry = tasksRef.current.filter(t => t.sprintId === active.id && t.status !== 'done');
+    carry.forEach(t => updateTask(t.id, { sprintId: next.id, _skipHistory: true }));
+    return next;
+  }, [dbSaveSprint, mkSprintForMonday, updateTask]);
+
+  // Finalizar sprint con la conclusión de la semana (botón de Rendimiento).
+  const finalizeSprint = useCallback((conclusion) => closeSprint({ conclusion: conclusion || null }), [closeSprint]);
+
   // ── Auth ──
   // doLogin vive ahora en @korex/auth (Supabase Auth).
   // AppContext solo expone doLogout para que el sidebar siga funcionando igual.
@@ -643,6 +805,9 @@ export function AppProvider({ children }) {
       dbFields.can_access_settings = fields.can_access_settings ?? fields.canAccessSettings;
     }
     if (fields.position !== undefined) dbFields.position = fields.position;
+    if (fields.weekly_capacity !== undefined || fields.weeklyCapacity !== undefined) {
+      dbFields.weekly_capacity = fields.weekly_capacity ?? fields.weeklyCapacity;
+    }
     await sbFetch('team_members?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
@@ -1583,8 +1748,8 @@ export function AppProvider({ children }) {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
       const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,drive_folder_url,contract_signer_email,korex_code';
-      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position';
-      const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam] = await Promise.all([
+      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist';
+      const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
         sbFetch(`tasks?select=${TASK_COLS}&order=created_at.asc&limit=2000`, { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('briefings?id=eq.latest&select=*', { headers: { 'Prefer': 'return=representation' } }),
@@ -1593,7 +1758,20 @@ export function AppProvider({ children }) {
         sbFetch('dashboard_alerts?select=*&dismissed=eq.false&order=days_old.desc&limit=100', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('app_settings?key=eq.global&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('team_members?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } }),
+        sbFetch('sprints?select=*&order=start_date.desc', { headers: { 'Prefer': 'return=representation' } }),
       ]);
+
+      if (Array.isArray(sbSprints)) {
+        setSprints(sbSprints.map(r => ({
+          id: r.id, number: r.number, name: r.name,
+          startDate: r.start_date, endDate: r.end_date,
+          goal: r.goal, status: r.status,
+          mondayCallUrl: r.monday_call_url || null, fridayCallUrl: r.friday_call_url || null,
+          conclusion: r.conclusion || null,
+          workedHours: r.worked_hours && typeof r.worked_hours === 'object' ? r.worked_hours : {},
+          summary: r.summary || null,
+        })));
+      }
 
       if (briefings && briefings.length) setBriefing(briefings[0]);
       if (feedbacks && feedbacks.length) setReportFeedbacks(feedbacks);
@@ -1766,7 +1944,12 @@ export function AppProvider({ children }) {
           accumulatedDays: t.accumulated_days || 0,
           timerStartedAt: t.timer_started_at || null,
           enabledDate: t.enabled_date || null,
-          position: t.position ?? 0
+          position: t.position ?? 0,
+          sprintId: t.sprint_id || null,
+          sprintPriority: t.sprint_priority != null ? Number(t.sprint_priority) : null,
+          estimatedHours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
+          department: t.department || null,
+          checklist: Array.isArray(t.checklist) ? t.checklist : [],
         }));
 
         // Backfill: normalizar startedDate usando createdDate como aproximaci\u00f3n.
@@ -1859,8 +2042,10 @@ export function AppProvider({ children }) {
       // tareas nuevas detectadas por el poll lleguen completas (con phase,
       // depends_on, due_date, etc.). Si solo trajéramos un subset, una tarea
       // nueva se agregaría sin fase y caería en "Sin fase" en el roadmap.
-      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,updated_at';
+      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,updated_at';
       const remoteTasks = await sbFetch('tasks?select=' + POLL_TASK_COLS + '&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
+      // Refrescar sprints en el mismo poll (livianito: lista corta).
+      loadSprints();
       if (!remoteTasks || !remoteTasks.length) return;
 
       const mapPollTask = (t) => ({
@@ -1875,7 +2060,12 @@ export function AppProvider({ children }) {
         accumulatedDays: t.accumulated_days || 0,
         timerStartedAt: t.timer_started_at || null,
         enabledDate: t.enabled_date || null,
-        position: t.position ?? 0
+        position: t.position ?? 0,
+        sprintId: t.sprint_id || null,
+        sprintPriority: t.sprint_priority != null ? Number(t.sprint_priority) : null,
+        estimatedHours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
+        department: t.department || null,
+        checklist: Array.isArray(t.checklist) ? t.checklist : [],
       });
 
       setTasks(prev => {
@@ -1885,11 +2075,15 @@ export function AppProvider({ children }) {
           const existingIdx = newTasks.findIndex(x => x.id === t.id);
           if (existingIdx >= 0) {
             const existing = newTasks[existingIdx];
-            if (t.title !== existing.title || t.status !== existing.status || t.assignee !== existing.assignee || t.priority !== existing.priority || (t.phase || null) !== (existing.phase || null)) {
+            const sid = t.sprint_id || null;
+            const sprio = t.sprint_priority != null ? Number(t.sprint_priority) : null;
+            const dept = t.department || null;
+            if (t.title !== existing.title || t.status !== existing.status || t.assignee !== existing.assignee || t.priority !== existing.priority || (t.phase || null) !== (existing.phase || null) || sid !== (existing.sprintId || null) || sprio !== (existing.sprintPriority ?? null) || dept !== (existing.department || null)) {
               newTasks[existingIdx] = {
                 ...existing,
                 title: t.title, status: t.status, assignee: t.assignee,
-                priority: t.priority, notes: t.notes, phase: t.phase || null
+                priority: t.priority, notes: t.notes, phase: t.phase || null,
+                sprintId: sid, sprintPriority: sprio, department: dept,
               };
               changed = true;
             }
@@ -1908,7 +2102,7 @@ export function AppProvider({ children }) {
     } catch {
       /* silent fail on poll */
     }
-  }, []);
+  }, [loadSprints]);
 
   // ── Migrate old clients to roadmap tasks ──
   const migrateAllClients = useCallback(() => {
@@ -2068,6 +2262,7 @@ export function AppProvider({ children }) {
     taskClientFilter, setTaskClientFilter,
     taskPriority, setTaskPriority,
     taskDueFilter, setTaskDueFilter,
+    taskDepartment, setTaskDepartment,
     currentUser,
     authUser,
     isAdmin,
@@ -2112,6 +2307,16 @@ export function AppProvider({ children }) {
     addWeeklyNote,
     removeWeeklyTodo,
     updateWeeklyTodo,
+    // Sprints (Kanban ágil)
+    sprints,
+    activeSprint,
+    loadSprints,
+    createSprint,
+    updateSprint,
+    addTaskToSprint,
+    removeTaskFromSprint,
+    closeSprint,
+    finalizeSprint,
     // Loom videos
     loomVideos,
     addLoomVideo,
@@ -2208,10 +2413,11 @@ export function AppProvider({ children }) {
   }), [
     // Estado (los setters de useState son estables y no necesitan estar aca)
     clients, tasks, view, setView, selectedId, phase, filter, taskFilter,
-    taskAssignee, taskClientFilter, taskPriority, taskDueFilter,
+    taskAssignee, taskClientFilter, taskPriority, taskDueFilter, taskDepartment,
     currentUser, authUser, isAdmin, briefing, reportFeedbacks, taskProposals,
     dashboardAlerts, hideCompleted, hideCompletedTasks, hideBlockedTasks,
     collapsedGroups, syncStatus, appSettings, teamMembers, weeklyTodos,
+    sprints, activeSprint,
     loomVideos, llamadas, pendingCallsCount, teamReports, teamBlockers,
     ideas, notas, taskComments, bulletComments, ideaComments, blockerComments,
     taskUserPositions, clientUserPositions, commentsTarget, unreadCommentTaskIds,
@@ -2223,7 +2429,9 @@ export function AppProvider({ children }) {
     deleteTask, reorderTask, doLogout, injectMetaMetrics, recalculateTimers,
     updateAppSettings, addTeamMember, updateTeamMember, deleteTeamMember,
     loadWeeklyTodos, addWeeklyTodo, addWeeklyNote, removeWeeklyTodo,
-    updateWeeklyTodo, addLoomVideo, updateLoomVideo, deleteLoomVideo,
+    updateWeeklyTodo, loadSprints, createSprint, updateSprint, addTaskToSprint,
+    removeTaskFromSprint, closeSprint, finalizeSprint,
+    addLoomVideo, updateLoomVideo, deleteLoomVideo,
     updateLlamada, deleteLlamada, addLlamadaInbox, addTeamReport,
     updateTeamReport, deleteTeamReport, resolveBlocker, unresolveBlocker,
     addIdea, updateIdea, deleteIdea, addNota, updateNota, deleteNota,

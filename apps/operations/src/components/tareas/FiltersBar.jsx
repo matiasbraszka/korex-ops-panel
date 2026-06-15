@@ -1,4 +1,5 @@
 import { useApp } from '../../context/AppContext';
+import { DEPARTMENTS, DEPARTMENT_ORDER } from '../../utils/constants';
 
 export default function FiltersBar() {
   const {
@@ -7,6 +8,7 @@ export default function FiltersBar() {
     taskAssignee, setTaskAssignee,
     taskPriority, setTaskPriority,
     taskDueFilter, setTaskDueFilter,
+    taskDepartment, setTaskDepartment,
     teamMembers,
     hideCompletedTasks, setHideCompletedTasks,
     hideBlockedTasks, setHideBlockedTasks,
@@ -55,6 +57,18 @@ export default function FiltersBar() {
           {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
         </select>
       )}
+
+      <select
+        value={taskDepartment}
+        onChange={(e) => setTaskDepartment(e.target.value)}
+        className={selectBase}
+        title="Filtrar por departamento"
+      >
+        <option value="all">Todas las áreas</option>
+        {DEPARTMENT_ORDER.map(k => (
+          <option key={k} value={k}>{DEPARTMENTS[k].label}</option>
+        ))}
+      </select>
 
       <select
         value={taskDueFilter}
