@@ -41,8 +41,17 @@ export default function SprintBoardView({ scope = 'cli' }) {
   const [overCol, setOverCol] = useState(null);
   const [wipMsg, setWipMsg] = useState('');
   const [openTaskId, setOpenTaskId] = useState(null);
+  const [query, setQuery] = useState('');
 
   const clientById = (id) => (clients || []).find(c => c.id === id);
+  const matchesQuery = (t) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const c = clientById(t.clientId);
+    const phaseLabel = c && t.phase ? (getAllPhases(c)[t.phase]?.label || '') : '';
+    const dept = t.department ? (DEPARTMENTS[t.department]?.label || '') : '';
+    return `${t.title} ${c?.name || ''} ${phaseLabel} ${dept}`.toLowerCase().includes(q);
+  };
   const matchesAssignee = (t) => {
     if (taskAssignee === 'all') return true;
     if (!t.assignee) return false;
@@ -51,6 +60,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
   const visible = (t) => {
     if (restricted && !userOwnsTask(t, currentUser, teamMembers)) return false;
     if (!matchesAssignee(t)) return false;
+    if (!matchesQuery(t)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
     const c = clientById(t.clientId);
@@ -104,8 +114,15 @@ export default function SprintBoardView({ scope = 'cli' }) {
 
   return (
     <div>
-      <div className="kx-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>
+      <div className="kx-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
         {kpis.map(k => <Kpi key={k.label} {...k} />)}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, padding: '8px 12px', width: 320, maxWidth: '100%', marginBottom: 16 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar tarea, objetivo o cliente…"
+          style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1A1D26', fontFamily: 'inherit' }} />
+        {query && <span onClick={() => setQuery('')} title="Limpiar" style={{ cursor: 'pointer', color: '#9CA3AF', display: 'flex' }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg></span>}
       </div>
 
       {wipMsg && (
