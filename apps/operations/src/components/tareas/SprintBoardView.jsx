@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, SPRINT_WIP_DEFAULT, DEPARTMENTS } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -130,6 +130,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
                 const c = clientById(t.clientId);
                 const m = memberOf(t.assignee);
                 const area = t.department ? DEPARTMENTS[t.department] : null;
+                const phase = c && t.phase ? getAllPhases(c)[t.phase] : null;
                 const checklist = Array.isArray(t.checklist) ? t.checklist : [];
                 const subTotal = checklist.length;
                 const subDone = checklist.filter(s => s.done).length;
@@ -145,6 +146,14 @@ export default function SprintBoardView({ scope = 'cli' }) {
                       {area && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={area.color} strokeWidth="1.9" style={{ flexShrink: 0 }}><title>{area.label}</title><path d={area.path} /></svg>}
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: '#1A1D26', lineHeight: 1.4 }}>{t.title}</div>
+                    {phase && (
+                      <div style={{ marginTop: 8 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: phase.color, background: phase.color + '1A', borderRadius: 6, padding: '2px 8px', maxWidth: '100%', overflow: 'hidden' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{phase.label}</span>
+                        </span>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 11 }}>
                       {m
                         ? <span style={{ width: 24, height: 24, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initialsFor(m)}</span>
