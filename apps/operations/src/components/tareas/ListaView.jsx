@@ -39,6 +39,8 @@ export default function ListaView({ scope = 'cli' }) {
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [draggedClientId, setDraggedClientId] = useState(null);
   const [overClientId, setOverClientId] = useState(null);
+  const [collapsed, setCollapsed] = useState(() => { try { return JSON.parse(localStorage.getItem('tareas_lista_collapsed') || '{}'); } catch { return {}; } });
+  const toggleClient = (id) => setCollapsed(prev => { const n = { ...prev, [id]: !prev[id] }; try { localStorage.setItem('tareas_lista_collapsed', JSON.stringify(n)); } catch { /* ignore */ } return n; });
   const busyRef = useRef(false);
 
   // Usuario cuyo orden personalizado usamos (el del filtro por persona).
@@ -141,17 +143,19 @@ export default function ListaView({ scope = 'cli' }) {
               onDrop={() => dropClient(c)}
               style={{ background: '#fff', border: `1px solid ${overClientId === c.id ? '#5B7CF5' : '#E2E5EB'}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(10,22,40,.05)', overflow: 'hidden', opacity: draggedClientId === c.id ? 0.5 : 1 }}>
               {/* header cliente */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid #F0F2F5' }}>
+              <div onClick={() => toggleClient(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: collapsed[c.id] ? 'none' : '1px solid #F0F2F5', cursor: 'pointer' }}>
                 {canDragClient && (
-                  <span draggable onDragStart={(e) => { e.stopPropagation(); setDraggedClientId(c.id); startDragScroll(); }} onDragEnd={() => { setDraggedClientId(null); setOverClientId(null); stopDragScroll(); }}
+                  <span draggable onClick={(e) => e.stopPropagation()} onDragStart={(e) => { e.stopPropagation(); setDraggedClientId(c.id); startDragScroll(); }} onDragEnd={() => { setDraggedClientId(null); setOverClientId(null); stopDragScroll(); }}
                     title="Arrastrar para priorizar este cliente" style={{ display: 'flex', color: '#C7CBD3', cursor: 'grab', flexShrink: 0 }}><GripVertical size={15} /></span>
                 )}
+                <span style={{ color: '#9CA3AF', flexShrink: 0, display: 'flex' }}>{collapsed[c.id] ? <ChevronRight size={16} /> : <ChevronDown size={16} />}</span>
                 {c.avatarUrl ? <img src={c.avatarUrl} alt={c.name} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                   : <span style={{ width: 30, height: 30, borderRadius: '50%', background: isKorexClient(c) ? '#0D1117' : (c.color || '#5B7CF5'), color: '#fff', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(c)}</span>}
                 <span style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</span>
                 <span style={{ fontSize: 12, color: '#9CA3AF' }}>{done}/{g.tasks.length}</span>
               </div>
               {/* tareas */}
+              {!collapsed[c.id] && (
               <div onDragOver={(e) => { if (draggedTaskId) e.preventDefault(); }} onDrop={(e) => dropTask(e, g.tasks, c.id)}>
                 {g.tasks.map((t, i) => {
                   const d = dotStyle(t.status);
@@ -192,6 +196,7 @@ export default function ListaView({ scope = 'cli' }) {
                   );
                 })}
               </div>
+              )}
             </div>
           );
         })}
