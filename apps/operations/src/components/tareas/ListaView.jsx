@@ -6,6 +6,7 @@ import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
 import AssigneePicker from './AssigneePicker';
+import StatusPicker from './StatusPicker';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
 function dotStyle(status) {
@@ -182,6 +183,7 @@ export default function ListaView({ scope = 'cli' }) {
                           <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Eliminar la tarea «${t.title}»?`)) deleteTask(t.id); }} title="Eliminar tarea" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Trash2 size={12} /></span>
                         </>
                       )}
+                      <StatusPicker value={t.status} onChange={(s) => updateTask(t.id, { status: s })} />
                       {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
                       <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="Horas estimadas" onClick={(e) => e.stopPropagation()}>
