@@ -9,6 +9,7 @@ import TimelineView from '../components/tareas/TimelineView';
 import WeeklyTodoView from '../components/tareas/WeeklyTodoView';
 import ObjetivosView from '../components/tareas/ObjetivosView';
 import SprintBoardView from '../components/tareas/SprintBoardView';
+import ListaView from '../components/tareas/ListaView';
 import RendimientoView from '../components/tareas/RendimientoView';
 import TasksPage from './TasksPage';
 
@@ -18,6 +19,7 @@ const SPRINT_VIEWS = [
   { id: 'rendimiento', label: 'Rendimiento' },
   { id: 'objetivos', label: 'Objetivos' },
   { id: 'sprint', label: 'Tablero Sprint' },
+  { id: 'lista', label: 'Lista', icon: 'todo' },
   { id: 'todo', label: 'To-Do diario' },
 ];
 const LEGACY_VIEWS = [
@@ -64,7 +66,7 @@ export default function TareasPage() {
     setView('lista');
   };
 
-  const showBar = isSprint && (view === 'objetivos' || view === 'sprint');
+  const showBar = isSprint && (view === 'objetivos' || view === 'sprint' || view === 'lista');
 
   return (
     <div className="space-y-4">
@@ -81,6 +83,7 @@ export default function TareasPage() {
       {isSprint && view === 'rendimiento' && <RendimientoView />}
       {isSprint && view === 'objetivos' && <ObjetivosView scope={scope} onlySprint={onlySprint} />}
       {isSprint && view === 'sprint' && <SprintBoardView scope={scope} />}
+      {isSprint && view === 'lista' && <ListaView scope={scope} />}
       {isSprint && view === 'todo' && <WeeklyTodoView />}
 
       {/* Vistas legacy */}
