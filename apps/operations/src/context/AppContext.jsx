@@ -521,8 +521,9 @@ export function AppProvider({ children }) {
   }, [dbSaveTask]);
 
   // ── CRUD: Tasks ──
-  const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx) => {
+  const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx, phase) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
+    if (phase) t.phase = phase; // crear ya con su objetivo/fase (sin paso intermedio)
     // Assign position: max of sibling tasks + 1
     const siblings = tasksRef.current.filter(x => x.clientId === clientId);
     t.position = siblings.length > 0 ? Math.max(...siblings.map(x => x.position ?? 0)) + 1 : 0;
