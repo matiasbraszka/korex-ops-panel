@@ -9,6 +9,7 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
   const { activeSprint, teamMembers, clients, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, closeSprint, hideCompletedTasks, setHideCompletedTasks } = useApp();
   const isObj = view === 'objetivos';
   const isSprint = view === 'sprint';
+  const showSprintInfo = view === 'sprint' || view === 'lista';
 
   const [personOpen, setPersonOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
@@ -47,7 +48,7 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
           <span style={navBtn}><ChevronRight size={15} /></span>
         </div>
       )}
-      {isSprint && (
+      {showSprintInfo && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>{activeSprint?.name || 'Sin sprint'}</span>
           {activeSprint && <span style={{ fontSize: 13, color: '#9CA3AF' }}>{activeSprint.startDate} → {activeSprint.endDate}</span>}
