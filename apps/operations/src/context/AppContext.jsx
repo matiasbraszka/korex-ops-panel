@@ -155,6 +155,10 @@ export function AppProvider({ children }) {
   // excluir auto-notificaciones (no notificarte por tu propia edición).
   const currentUserIdRef = useRef(null);
   currentUserIdRef.current = currentUser?.id || null;
+  // Tareas escritas localmente hace poco (id -> timestamp). El poll NO las pisa
+  // durante unos segundos, para evitar que un fetch viejo revierta un cambio
+  // optimista (ej: agregar al sprint y que "se desagregue" un instante).
+  const recentWriteRef = useRef(new Map());
   const teamMembersRef = useRef([]);
   teamMembersRef.current = teamMembers;
   const taskCommentsRef = useRef([]);
@@ -240,6 +244,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const dbSaveTask = useCallback(async (t) => {
+    try { recentWriteRef.current.set(t.id, Date.now()); } catch { /* ignore */ }
     return sbFetch('tasks', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
@@ -2075,6 +2080,10 @@ export function AppProvider({ children }) {
         remoteTasks.forEach(t => {
           const existingIdx = newTasks.findIndex(x => x.id === t.id);
           if (existingIdx >= 0) {
+            // No pisar una tarea recién escrita localmente (el remoto puede venir viejo).
+            const rw = recentWriteRef.current.get(t.id);
+            if (rw && Date.now() - rw < 15000) return;
+            if (rw) recentWriteRef.current.delete(t.id);
             const existing = newTasks[existingIdx];
             const sid = t.sprint_id || null;
             const sprio = t.sprint_priority != null ? Number(t.sprint_priority) : null;
