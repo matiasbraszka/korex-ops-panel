@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
 import AddToSprintButton from './AddToSprintButton';
@@ -8,6 +8,16 @@ import AssigneePicker from './AssigneePicker';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
 const EXPANDED_KEY = 'tareas_objetivos_expanded';
+
+// Índice de inserción según la posición vertical del cursor dentro del grupo.
+function taskInsertIndex(containerEl, clientY, draggedId) {
+  const rows = Array.from(containerEl.querySelectorAll('[data-task-id]')).filter(el => el.getAttribute('data-task-id') !== draggedId);
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) return i;
+  }
+  return rows.length;
+}
 
 // Estado → estilo del puntito de la tarea (igual que el diseño).
 function dotStyle(status) {
@@ -18,7 +28,7 @@ function dotStyle(status) {
 
 export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const {
-    clients, tasks, teamMembers, currentUser, updateTask, createTask, activeSprint,
+    clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, activeSprint,
     taskAssignee, hideCompletedTasks, reorderClient, setSelectedId, setView,
     taskComments, unreadCommentTaskIds,
   } = useApp();
@@ -29,6 +39,22 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const [openTaskId, setOpenTaskId] = useState(null);
   const [adding, setAdding] = useState(null); // clave clientId::phaseKey
   const [newTitle, setNewTitle] = useState('');
+  const [draggedTaskId, setDraggedTaskId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+
+  // Reordenar tareas dentro de una fase (drag). Setea position = orden.
+  const dropTask = (e, groupTasks) => {
+    e.preventDefault(); e.stopPropagation();
+    const id = draggedTaskId; setDraggedTaskId(null);
+    if (!id) return;
+    const dragged = groupTasks.find(t => t.id === id);
+    if (!dragged) return; // arrastrada desde otra fase → no reordenar acá
+    const base = groupTasks.filter(t => t.id !== id);
+    const index = taskInsertIndex(e.currentTarget, e.clientY, id);
+    reorderTask([...base.slice(0, index), dragged, ...base.slice(index)]);
+  };
+  const saveTitle = (t) => { const v = editTitle.trim(); if (v && v !== t.title) updateTask(t.id, { title: v }); setEditingId(null); };
 
   // Crear una tarea nueva en un cliente/fase (como antes). phaseKey 'otras' => sin fase.
   const createInPhase = (clientId, phaseKey) => {
@@ -111,7 +137,7 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     const byPhase = new Map();
     cTasks.forEach(t => { const k = phaseMap[t.phase] ? t.phase : 'otras'; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(t); });
     const groups = order.filter(k => byPhase.has(k)).map(k => {
-      const list = byPhase.get(k);
+      const list = byPhase.get(k).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
       const meta = phaseMap[k] || { label: 'Otras tareas', color: '#9CA3AF' };
       const gdone = list.filter(t => t.status === 'done').length;
       const gEst = list.reduce((s, t) => s + hoursOf(t), 0);
@@ -210,15 +236,33 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                         <span style={{ flex: 1 }} />
                         <span style={{ height: 6, width: 90, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden', display: 'inline-block' }}><span style={{ display: 'block', height: '100%', background: '#22C55E', width: g.pctw }} /></span>
                       </div>
-                      <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, overflow: 'hidden' }}>
+                      <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, overflow: 'hidden' }}
+                        onDragOver={(e) => { if (draggedTaskId) e.preventDefault(); }}
+                        onDrop={(e) => dropTask(e, g.tasks)}>
                         {g.tasks.map((t, i) => {
                           const d = dotStyle(t.status);
                           const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
                           const unread = unreadCommentTaskIds?.has?.(t.id);
+                          const editing = editingId === t.id;
                           return (
-                            <div key={t.id} onClick={() => setOpenTaskId(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer' }}>
+                            <div key={t.id} data-task-id={t.id} draggable={!editing}
+                              onDragStart={(e) => { e.stopPropagation(); setDraggedTaskId(t.id); }}
+                              onDragEnd={() => setDraggedTaskId(null)}
+                              onClick={() => { if (!editing) setOpenTaskId(t.id); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
                               <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada'} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
-                              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
+                              {editing ? (
+                                <input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(t); if (e.key === 'Escape') setEditingId(null); }}
+                                  onBlur={() => saveTitle(t)}
+                                  style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid #C7D2FE', borderRadius: 7, padding: '5px 9px', outline: 'none', fontFamily: 'inherit' }} />
+                              ) : (
+                                <>
+                                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
+                                  <span onClick={(e) => { e.stopPropagation(); setEditTitle(t.title); setEditingId(t.id); }} title="Editar título" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>
+                                </>
+                              )}
                               {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }} title={`${cCount} comentario${cCount === 1 ? '' : 's'}${unread ? ' · sin leer' : ''}`}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
                               <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="Horas estimadas" onClick={(e) => e.stopPropagation()}>
