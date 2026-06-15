@@ -714,3 +714,88 @@ export function migrateClientToRoadmap(client) {
     };
   });
 }
+
+// ── Sprint (Kanban ágil) ─────────────────────────────────────────────────────
+
+// El sprint "activo" es el que el equipo está corriendo ahora. Preferimos el
+// que tenga status 'active'; si hubiera varios, el de fecha de inicio más
+// reciente; si ninguno está 'active', el último por start_date.
+export function getActiveSprint(sprints) {
+  const list = Array.isArray(sprints) ? sprints : [];
+  if (list.length === 0) return null;
+  const byStart = (a, b) => String(b.startDate || '').localeCompare(String(a.startDate || ''));
+  const actives = list.filter(s => s.status === 'active').sort(byStart);
+  if (actives.length) return actives[0];
+  return [...list].sort(byStart)[0] || null;
+}
+
+export function isInSprint(task, sprint) {
+  if (!task || !sprint) return false;
+  return task.sprintId === sprint.id;
+}
+
+// Tareas que pertenecen a un sprint dado.
+export function sprintTasks(tasks, sprint) {
+  if (!sprint) return [];
+  return (tasks || []).filter(t => t.sprintId === sprint.id);
+}
+
+// Cuántas tareas del sprint están en una columna/estado (para el tope de WIP).
+export function wipCount(tasks, sprint, status) {
+  return sprintTasks(tasks, sprint).filter(t => t.status === status).length;
+}
+
+// Resumen del sprint para el panel de cabecera.
+export function sprintProgress(tasks, sprint) {
+  const list = sprintTasks(tasks, sprint);
+  const total = list.length;
+  const done = list.filter(t => t.status === 'done').length;
+  const wip = list.filter(t => t.status === 'in-progress').length;
+  const blocked = list.filter(t => t.status === 'blocked').length;
+  const td = today();
+  const overdue = list.filter(t =>
+    t.dueDate && t.dueDate < td && t.status !== 'done',
+  ).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return { total, done, wip, blocked, overdue, pct };
+}
+
+// Días restantes del sprint (hasta end_date, inclusive).
+export function sprintDaysLeft(sprint) {
+  if (!sprint || !sprint.endDate) return null;
+  const d = daysBetween(today(), sprint.endDate);
+  return d == null ? null : Math.max(0, d);
+}
+
+// ¿La tarea está asignada a este miembro? assignee es texto CSV ("David, Matias").
+export function isAssignedTo(task, member) {
+  if (!task?.assignee || !member) return false;
+  const parts = task.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const names = [member.name?.toLowerCase(), member.name?.toLowerCase().split(' ')[0], member.id?.toLowerCase()].filter(Boolean);
+  return parts.some(p => names.includes(p));
+}
+
+// Resumen por persona del sprint (para la tabla en vivo y el snapshot al cerrar).
+export function buildSprintSummary(tasks, teamMembers, sprint) {
+  const st = (tasks || []).filter(t => t.sprintId === sprint?.id);
+  const worked = (sprint && sprint.workedHours && typeof sprint.workedHours === 'object') ? sprint.workedHours : {};
+  const perPerson = (teamMembers || []).map(m => {
+    const mt = st.filter(t => isAssignedTo(t, m));
+    if (!mt.length && !worked[m.id]) return null; // omitir gente sin nada esta semana
+    return {
+      memberId: m.id,
+      name: m.name,
+      assigned: mt.length,
+      inProgress: mt.filter(t => t.status === 'in-progress').length,
+      inReview: mt.filter(t => t.status === 'en-revision').length,
+      done: mt.filter(t => t.status === 'done').length,
+      loadedHours: mt.reduce((s, t) => s + (Number(t.estimatedHours) || 0), 0),
+      workedHours: Number(worked[m.id]) || 0,
+      capacity: m.weekly_capacity != null ? Number(m.weekly_capacity) : null,
+    };
+  }).filter(Boolean);
+  const proposed = st.length;
+  const done = st.filter(t => t.status === 'done').length;
+  const blockers = st.filter(t => t.status === 'blocked').map(t => t.title);
+  return { proposed, done, perPerson, blockers };
+}

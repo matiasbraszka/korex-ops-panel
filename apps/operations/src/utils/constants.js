@@ -43,6 +43,7 @@ export const PRIO_CLIENT = {
 
 export const TASK_STATUS = {
   backlog:       { label: 'BACKLOG',      color: '#9CA3AF', bg: '#F3F4F6',  icon: '\u25CB' },
+  priorizado:    { label: 'PRIORIZADO',   color: '#2563EB', bg: '#E6F1FB',  icon: '\u25CE' },
   'in-progress': { label: 'EN PROGRESO',  color: '#5B7CF5', bg: '#EEF2FF',  icon: '\u25C9' },
   'en-revision': { label: 'EN REVISIÓN',  color: '#EAB308', bg: '#FEFCE8',  icon: '\u25C8', pausesTimer: true },
   paused:        { label: 'PAUSADA',      color: '#A855F7', bg: '#F5F3FF',  icon: '\u23F8', pausesTimer: true },
@@ -51,7 +52,44 @@ export const TASK_STATUS = {
   retrasadas:    { label: 'RETRASADA',    color: '#EF4444', bg: '#FEF2F2',  icon: '\u2298' },
 };
 
-export const TASK_STATUS_ORDER = ['backlog', 'in-progress', 'en-revision', 'paused', 'done', 'blocked', 'retrasadas'];
+export const TASK_STATUS_ORDER = ['backlog', 'priorizado', 'in-progress', 'en-revision', 'paused', 'done', 'blocked', 'retrasadas'];
+
+// ── Modelo Sprint (Kanban ágil) ──────────────────────────────────────────────
+// Layout de la sección Tareas. 'sprint' = nuevo modelo (Objetivos + Tablero
+// Sprint + To-Do). 'legacy' = vistas viejas (roadmap/timeline/lista/mi-semana).
+// Sirve de backup reversible: con un solo valor se vuelve al estilo anterior.
+export const TAREAS_LAYOUT = 'sprint';
+
+// Columnas del Tablero Sprint, en orden. Cada una mapea a un `status` real de
+// tasks. OJO: "Validado" es el estado `done` de siempre (solo cambia la
+// etiqueta) → no se rompe nada de lo que ya cuenta `done`.
+export const SPRINT_WIP_DEFAULT = 8; // tope de "En curso"
+export const SPRINT_COLUMNS = [
+  { status: 'backlog',     label: 'Backlog',      bg: '#F0F2F5', tx: '#1A1D26' },
+  { status: 'priorizado',  label: 'Priorizado',   bg: '#EEF2FF', tx: '#5B7CF5' },
+  { status: 'in-progress', label: 'En curso',     bg: '#FFF7ED', tx: '#B45309', wip: SPRINT_WIP_DEFAULT },
+  { status: 'en-revision', label: 'En revisión',  bg: '#FDF2F8', tx: '#BE185D' },
+  { status: 'done',        label: 'Validado',     bg: '#ECFDF5', tx: '#15803D' },
+];
+
+// Áreas / departamento responsable de la tarea. Ícono SVG (path) + color, según
+// el diseño. Se usa en Objetivos, Tablero Sprint y la ficha (selector de Área).
+export const DEPARTMENTS = {
+  ventas:       { label: 'Ventas',       color: '#16A34A', bg: '#ECFDF5', path: 'M3 17l7-7 4 4 7-7 M17 7h4v4' },
+  marketing:    { label: 'Marketing',    color: '#DB2777', bg: '#FDF2F8', path: 'M3 11l16-5v12L3 14z M8 15v3a2 2 0 0 0 4 0v-1' },
+  programacion: { label: 'Programación', color: '#2563EB', bg: '#EEF2FF', path: 'M9 8l-5 4 5 4 M15 8l5 4-5 4' },
+  operaciones:  { label: 'Operaciones',  color: '#F59E0B', bg: '#FFF7ED', path: 'M12 3 2 8l10 5 10-5z M2 13l10 5 10-5' },
+};
+export const DEPARTMENT_ORDER = ['ventas', 'marketing', 'programacion', 'operaciones'];
+
+// Prioridad dentro del sprint (badge 1-5 en Priorizado).
+export const SPRINT_PRIORITY = {
+  1: { label: 'P1', color: '#EF4444', bg: '#FEF2F2' },
+  2: { label: 'P2', color: '#F97316', bg: '#FFF7ED' },
+  3: { label: 'P3', color: '#EAB308', bg: '#FEFCE8' },
+  4: { label: 'P4', color: '#22C55E', bg: '#ECFDF5' },
+  5: { label: 'P5', color: '#9CA3AF', bg: '#F3F4F6' },
+};
 
 export const TEAM = [
   { id: 'josem',     name: 'Jose Martin',          role: 'CMO',              color: '#EAB308', initials: 'JM', avatar: 'https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38c2ea7dcb4cff0d974ec.png' },
