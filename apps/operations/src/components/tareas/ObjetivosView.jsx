@@ -177,6 +177,8 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     // grupos por fase: mostramos TODOS los objetivos (fases) del cliente, aunque
     // estén vacíos, para poder gestionarlos (como el roadmap viejo).
     const phaseMap = getAllPhases(c);
+    const allClientTasks = tasks.filter(t => t.clientId === c.id);
+    const phaseHasAnyTask = (k) => allClientTasks.some(t => (phaseMap[t.phase] ? t.phase : 'otras') === k);
     const byPhase = new Map();
     cTasks.forEach(t => { const k = phaseMap[t.phase] ? t.phase : 'otras'; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(t); });
     const order = [...Object.keys(phaseMap), ...(byPhase.has('otras') ? ['otras'] : [])];
@@ -187,6 +189,13 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
       const gEst = list.reduce((s, t) => s + hoursOf(t), 0);
       const isCustom = k !== 'otras' && (c.customPhases || []).some(cp => cp.id === k);
       return { key: k, label: meta.label, dot: meta.color, count: `${gdone}/${list.length}`, est: gEst, pctw: list.length ? Math.round(gdone / list.length * 100) + '%' : '0%', tasks: list, isCustom, manageable: k !== 'otras' };
+    }).filter(g => {
+      if (g.key === 'otras') return g.tasks.length > 0;     // unphased solo si hay
+      if (g.tasks.length > 0) return true;                   // tiene tareas visibles
+      // sin tareas visibles: mostrar solo objetivos personalizados aún vacíos
+      // (recién creados) para poder cargarles tareas; ocultar fases estándar
+      // vacías y las que quedaron todas completadas/filtradas.
+      return g.isCustom && !phaseHasAnyTask(g.key);
     });
     return {
       c, done, prog, pend, total: cTasks.length, estH, team, groups,
