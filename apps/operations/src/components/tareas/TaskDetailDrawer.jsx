@@ -9,7 +9,7 @@ const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
 
 export default function TaskDetailDrawer({ taskId, onClose }) {
   const {
-    tasks, clients, teamMembers, updateTask, removeTaskFromSprint,
+    tasks, clients, teamMembers, updateTask, removeTaskFromSprint, deleteTask,
     openTaskComments, taskComments,
   } = useApp();
   const task = useMemo(() => (tasks || []).find(t => t.id === taskId) || null, [tasks, taskId]);
@@ -124,7 +124,8 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
           <span onClick={() => { updateTask(task.id, { status: 'done' }); onClose(); }} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: '#22C55E', borderRadius: 10, padding: 11, cursor: 'pointer' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><path d="M20 6 9 17l-5-5" /></svg>Marcar validada
           </span>
-          {task.sprintId && <span onClick={() => { removeTaskFromSprint(task.id); onClose(); }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, color: '#6B7280', border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 18px', cursor: 'pointer' }}>Quitar</span>}
+          {task.sprintId && <span onClick={() => { removeTaskFromSprint(task.id); onClose(); }} title="Quitar del sprint" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, color: '#6B7280', border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 16px', cursor: 'pointer' }}>Quitar</span>}
+          <span onClick={() => { if (window.confirm(`Eliminar la tarea «${task.title}»? Esta acción no se puede deshacer.`)) { deleteTask(task.id); onClose(); } }} title="Eliminar tarea" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626', border: '1px solid #FBD5D5', borderRadius: 10, padding: '11px 14px', cursor: 'pointer' }}><Trash2 size={16} /></span>
         </div>
       </div>
     </>
