@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { X, Plus, Trash2, MessageSquare } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Pencil } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases } from '../../utils/helpers';
@@ -15,6 +15,8 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const task = useMemo(() => (tasks || []).find(t => t.id === taskId) || null, [tasks, taskId]);
   const client = task ? (clients || []).find(c => c.id === task.clientId) : null;
   const [newItem, setNewItem] = useState('');
+  const [editItemId, setEditItemId] = useState(null);
+  const [editItemText, setEditItemText] = useState('');
   if (!task) return null;
 
   const st = TASK_STATUS[task.status] || TASK_STATUS.backlog;
@@ -29,6 +31,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const addItem = () => { const t = newItem.trim(); if (!t) return; saveChecklist([...checklist, { id: mkId(), text: t, done: false }]); setNewItem(''); };
   const toggleItem = (id) => saveChecklist(checklist.map(i => i.id === id ? { ...i, done: !i.done } : i));
   const removeItem = (id) => saveChecklist(checklist.filter(i => i.id !== id));
+  const saveItem = (id) => { const v = editItemText.trim(); if (v) saveChecklist(checklist.map(i => i.id === id ? { ...i, text: v } : i)); setEditItemId(null); };
 
   const metaRow = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 14px', borderBottom: '1px solid #F0F2F5' };
   const metaLabel = { fontSize: 13, color: '#9CA3AF', flexShrink: 0 };
@@ -94,8 +97,18 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                   <span onClick={() => toggleItem(it.id)} style={{ width: 19, height: 19, borderRadius: 6, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? '#22C55E' : 'transparent', border: it.done ? 'none' : '1.5px solid #D0D5DD' }}>
                     {it.done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M20 6 9 17l-5-5" /></svg>}
                   </span>
-                  <span onClick={() => toggleItem(it.id)} style={{ flex: 1, fontSize: 13, cursor: 'pointer', color: it.done ? '#9CA3AF' : '#1A1D26', textDecoration: it.done ? 'line-through' : 'none' }}>{it.text}</span>
-                  <span onClick={() => removeItem(it.id)} style={{ cursor: 'pointer', color: '#C7CBD3', flexShrink: 0 }}><Trash2 size={13} /></span>
+                  {editItemId === it.id ? (
+                    <input autoFocus value={editItemText} onChange={(e) => setEditItemText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveItem(it.id); if (e.key === 'Escape') setEditItemId(null); }}
+                      onBlur={() => saveItem(it.id)}
+                      style={{ flex: 1, fontSize: 13, border: '1px solid #C7D2FE', borderRadius: 6, padding: '4px 8px', outline: 'none', fontFamily: 'inherit' }} />
+                  ) : (
+                    <>
+                      <span onClick={() => toggleItem(it.id)} style={{ flex: 1, fontSize: 13, cursor: 'pointer', color: it.done ? '#9CA3AF' : '#1A1D26', textDecoration: it.done ? 'line-through' : 'none' }}>{it.text}</span>
+                      <span onClick={() => { setEditItemText(it.text); setEditItemId(it.id); }} title="Editar" style={{ cursor: 'pointer', color: '#C7CBD3', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>
+                    </>
+                  )}
+                  <span onClick={() => removeItem(it.id)} title="Eliminar" style={{ cursor: 'pointer', color: '#C7CBD3', flexShrink: 0, display: 'flex' }}><Trash2 size={13} /></span>
                 </div>
               ))}
             </div>
