@@ -32,7 +32,7 @@ function Kpi({ label, value, sub, color, barw }) {
 export default function SprintBoardView({ scope = 'cli' }) {
   const {
     activeSprint, tasks, updateTask, reorderTask, teamMembers, clients, currentUser,
-    taskAssignee, taskComments, hideCompletedTasks,
+    taskAssignee, taskClientFilter, taskComments, hideCompletedTasks,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
@@ -50,6 +50,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
   const visible = (t) => {
     if (restricted && !userOwnsTask(t, currentUser, teamMembers)) return false;
     if (!matchesAssignee(t)) return false;
+    if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
     const c = clientById(t.clientId);
     if (c) { const interno = isKorexClient(c); if (scope === 'int' ? !interno : interno) return false; }

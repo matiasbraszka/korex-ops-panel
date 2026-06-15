@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil } from 'lucide-react';
+import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
 import AddToSprintButton from './AddToSprintButton';
@@ -28,11 +28,44 @@ function dotStyle(status) {
 
 export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const {
-    clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, activeSprint,
-    taskAssignee, hideCompletedTasks, reorderClient, setSelectedId, setView,
+    clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, updateClient, activeSprint,
+    taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
     taskComments, unreadCommentTaskIds,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+
+  const [editingPhase, setEditingPhase] = useState(null); // `${clientId}::${phaseKey}`
+  const [editPhaseText, setEditPhaseText] = useState('');
+  const [addingPhase, setAddingPhase] = useState(null); // clientId
+  const [newPhaseText, setNewPhaseText] = useState('');
+
+  // ── Gestión de objetivos (fases) por cliente, como en el roadmap viejo ──
+  const renamePhase = (c, phaseKey) => {
+    const label = editPhaseText.trim();
+    if (label) {
+      const isCustom = (c.customPhases || []).some(cp => cp.id === phaseKey);
+      if (isCustom) updateClient(c.id, { customPhases: (c.customPhases || []).map(cp => cp.id === phaseKey ? { ...cp, label } : cp) });
+      else updateClient(c.id, { phaseNameOverrides: { ...(c.phaseNameOverrides || {}), [phaseKey]: label } });
+    }
+    setEditingPhase(null);
+  };
+  const addPhase = (c) => {
+    const label = newPhaseText.trim();
+    if (label) {
+      const id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+      updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color: '#5B7CF5' }] });
+    }
+    setNewPhaseText(''); setAddingPhase(null);
+  };
+  const deletePhase = (c, phaseKey, label, taskCount) => {
+    const msg = taskCount > 0
+      ? `Eliminar el objetivo «${label}»: sus ${taskCount} tarea${taskCount === 1 ? '' : 's'} pasan a «Otras tareas». ¿Continuar?`
+      : `Eliminar el objetivo «${label}»?`;
+    if (!window.confirm(msg)) return;
+    const isCustom = (c.customPhases || []).some(cp => cp.id === phaseKey);
+    if (isCustom) updateClient(c.id, { customPhases: (c.customPhases || []).filter(cp => cp.id !== phaseKey) });
+    else updateClient(c.id, { phaseNameOverrides: { ...(c.phaseNameOverrides || {}), [phaseKey]: '__HIDDEN__' } });
+  };
 
   const [dragClientId, setDragClientId] = useState(null);
   const [dragOverClientId, setDragOverClientId] = useState(null);
@@ -89,7 +122,8 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
 
   let clientList = clients.filter(c => c.status !== 'completed');
   clientList = clientList.filter(c => (scope === 'int' ? isKorexClient(c) : !isKorexClient(c)));
-  clientList = clientList.filter(c => tasks.some(t => t.clientId === c.id && visibleTask(t)));
+  if (taskClientFilter !== 'all') clientList = clientList.filter(c => c.id === taskClientFilter);
+  clientList = clientList.filter(c => tasks.some(t => t.clientId === c.id && visibleTask(t)) || (c.customPhases || []).length > 0);
   clientList = [...clientList].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   useEffect(() => {
@@ -131,17 +165,19 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     const teamIds = [];
     cTasks.forEach(t => { const m = memberOf(t.assignee); if (m && !teamIds.includes(m.id)) teamIds.push(m.id); });
     const team = teamIds.map(id => (teamMembers || []).find(m => m.id === id)).filter(Boolean).slice(0, 4);
-    // grupos por fase
+    // grupos por fase: mostramos TODOS los objetivos (fases) del cliente, aunque
+    // estén vacíos, para poder gestionarlos (como el roadmap viejo).
     const phaseMap = getAllPhases(c);
-    const order = [...Object.keys(phaseMap), 'otras'];
     const byPhase = new Map();
     cTasks.forEach(t => { const k = phaseMap[t.phase] ? t.phase : 'otras'; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(t); });
-    const groups = order.filter(k => byPhase.has(k)).map(k => {
-      const list = byPhase.get(k).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const order = [...Object.keys(phaseMap), ...(byPhase.has('otras') ? ['otras'] : [])];
+    const groups = order.map(k => {
+      const list = (byPhase.get(k) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
       const meta = phaseMap[k] || { label: 'Otras tareas', color: '#9CA3AF' };
       const gdone = list.filter(t => t.status === 'done').length;
       const gEst = list.reduce((s, t) => s + hoursOf(t), 0);
-      return { key: k, label: meta.label, dot: meta.color, count: `${gdone}/${list.length}`, est: gEst, pctw: Math.round(gdone / list.length * 100) + '%', tasks: list };
+      const isCustom = k !== 'otras' && (c.customPhases || []).some(cp => cp.id === k);
+      return { key: k, label: meta.label, dot: meta.color, count: `${gdone}/${list.length}`, est: gEst, pctw: list.length ? Math.round(gdone / list.length * 100) + '%' : '0%', tasks: list, isCustom, manageable: k !== 'otras' };
     });
     return {
       c, done, prog, pend, total: cTasks.length, estH, team, groups,
@@ -227,12 +263,25 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
               {open && (
                 <div style={{ borderTop: '1px solid #E2E5EB', background: '#FBFBFD', padding: '6px 18px 14px' }}>
                   {o.groups.map(g => (
-                    <div key={g.key} style={{ padding: '12px 0 4px' }}>
+                    <div key={g.key} className="kx-obj-group" style={{ padding: '12px 0 4px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
                         <span style={{ width: 9, height: 9, borderRadius: '50%', background: g.dot }} />
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{g.label}</span>
+                        {editingPhase === `${o.c.id}::${g.key}` ? (
+                          <input autoFocus value={editPhaseText} onChange={(e) => setEditPhaseText(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') renamePhase(o.c, g.key); if (e.key === 'Escape') setEditingPhase(null); }}
+                            onBlur={() => renamePhase(o.c, g.key)}
+                            style={{ fontSize: 13, fontWeight: 600, border: '1px solid #C7D2FE', borderRadius: 6, padding: '3px 8px', outline: 'none', fontFamily: 'inherit' }} />
+                        ) : (
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{g.label}</span>
+                        )}
                         <span style={{ fontSize: 12, color: '#9CA3AF' }}>{g.count}</span>
                         <span style={{ fontSize: 11, color: '#6B7280', background: '#F0F2F5', borderRadius: 5, padding: '1px 7px' }}>{g.est}h</span>
+                        {!restricted && g.manageable && editingPhase !== `${o.c.id}::${g.key}` && (
+                          <span className="kx-obj-actions" style={{ display: 'inline-flex', gap: 6 }}>
+                            <span onClick={() => { setEditPhaseText(g.label); setEditingPhase(`${o.c.id}::${g.key}`); }} title="Renombrar objetivo" style={{ color: '#C7CBD3', cursor: 'pointer', display: 'flex' }}><Pencil size={13} /></span>
+                            <span onClick={() => deletePhase(o.c, g.key, g.label, g.tasks.length)} title="Eliminar objetivo" style={{ color: '#C7CBD3', cursor: 'pointer', display: 'flex' }}><Trash2 size={13} /></span>
+                          </span>
+                        )}
                         <span style={{ flex: 1 }} />
                         <span style={{ height: 6, width: 90, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden', display: 'inline-block' }}><span style={{ display: 'block', height: '100%', background: '#22C55E', width: g.pctw }} /></span>
                       </div>
@@ -296,6 +345,15 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                     </div>
                   ))}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingTop: 12 }}>
+                    {!restricted && (addingPhase === o.c.id ? (
+                      <input autoFocus value={newPhaseText} onChange={(e) => setNewPhaseText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') addPhase(o.c); if (e.key === 'Escape') { setNewPhaseText(''); setAddingPhase(null); } }}
+                        onBlur={() => addPhase(o.c)}
+                        placeholder="Nombre del objetivo…  (Enter para crear)"
+                        style={{ fontSize: 12.5, border: '1px solid #C7D2FE', borderRadius: 8, padding: '6px 10px', outline: 'none', fontFamily: 'inherit', minWidth: 260 }} />
+                    ) : (
+                      <span onClick={() => { setNewPhaseText(''); setAddingPhase(o.c.id); }} style={{ fontSize: 12, fontWeight: 600, color: '#5B7CF5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Plus size={13} /> Nuevo objetivo</span>
+                    ))}
                     <span onClick={() => { setSelectedId(o.c.id); setView('clients'); }} style={{ fontSize: 12, fontWeight: 500, color: '#9CA3AF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Abrir ficha del cliente <ArrowUpRight size={12} /></span>
                   </div>
                 </div>
