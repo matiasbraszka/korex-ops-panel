@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { X, Plus, Trash2, MessageSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { TASK_STATUS, SPRINT_PRIORITY } from '../../utils/constants';
+import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
 
@@ -18,7 +18,6 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   if (!task) return null;
 
   const st = TASK_STATUS[task.status] || TASK_STATUS.backlog;
-  const prio = SPRINT_PRIORITY[task.sprintPriority];
   const checklist = Array.isArray(task.checklist) ? task.checklist : [];
   const subDone = checklist.filter(i => i.done).length;
   const subPct = checklist.length ? Math.round(subDone / checklist.length * 100) : 0;
@@ -44,7 +43,6 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: st.color, background: st.bg, borderRadius: 999, padding: '3px 11px' }}>{st.label}</span>
-              {prio && <span style={{ fontSize: 10, fontWeight: 700, color: prio.color, background: prio.bg, borderRadius: 5, padding: '3px 8px' }}>{prio.label}</span>}
             </div>
             <span onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6B7280', flexShrink: 0 }}><X size={18} /></span>
           </div>
