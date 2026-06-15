@@ -29,7 +29,7 @@ function dotStyle(status) {
 
 export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const {
-    clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, updateClient, activeSprint,
+    clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
     taskComments, unreadCommentTaskIds,
   } = useApp();
@@ -77,15 +77,19 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
 
-  // Reordenar tareas dentro de una fase (drag). Setea position = orden.
-  const dropTask = (e, groupTasks) => {
+  // Drag de tareas: reordenar dentro de una fase o MOVER a otro objetivo del
+  // mismo cliente (cambia su fase). Setea position = orden.
+  const dropTask = (e, group, clientId) => {
     e.preventDefault(); e.stopPropagation();
     const id = draggedTaskId; setDraggedTaskId(null);
     if (!id) return;
-    const dragged = groupTasks.find(t => t.id === id);
-    if (!dragged) return; // arrastrada desde otra fase → no reordenar acá
-    const base = groupTasks.filter(t => t.id !== id);
+    const dragged = tasks.find(t => t.id === id);
+    if (!dragged || dragged.clientId !== clientId) return; // mismo cliente
+    const inGroup = group.tasks.some(t => t.id === id);
+    const newPhase = group.key === 'otras' ? null : group.key;
+    const base = group.tasks.filter(t => t.id !== id);
     const index = taskInsertIndex(e.currentTarget, e.clientY, id);
+    if (!inGroup) updateTask(id, { phase: newPhase });   // cambió de objetivo
     reorderTask([...base.slice(0, index), dragged, ...base.slice(index)]);
   };
   const saveTitle = (t) => { const v = editTitle.trim(); if (v && v !== t.title) updateTask(t.id, { title: v }); setEditingId(null); };
@@ -303,9 +307,9 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                         <span style={{ flex: 1 }} />
                         <span style={{ height: 6, width: 90, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden', display: 'inline-block' }}><span style={{ display: 'block', height: '100%', background: '#22C55E', width: g.pctw }} /></span>
                       </div>
-                      <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, overflow: 'hidden' }}
+                      <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, overflow: 'hidden', outline: draggedTaskId ? '1px dashed #C7D2FE' : 'none', outlineOffset: -1 }}
                         onDragOver={(e) => { if (draggedTaskId) e.preventDefault(); }}
-                        onDrop={(e) => dropTask(e, g.tasks)}>
+                        onDrop={(e) => dropTask(e, g, o.c.id)}>
                         {g.tasks.map((t, i) => {
                           const d = dotStyle(t.status);
                           const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
@@ -328,6 +332,7 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                                 <>
                                   <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
                                   <span onClick={(e) => { e.stopPropagation(); setEditTitle(t.title); setEditingId(t.id); }} title="Editar título" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>
+                                  <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Eliminar la tarea «${t.title}»?`)) deleteTask(t.id); }} title="Eliminar tarea" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Trash2 size={12} /></span>
                                 </>
                               )}
                               {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }} title={`${cCount} comentario${cCount === 1 ? '' : 's'}${unread ? ' · sin leer' : ''}`}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
