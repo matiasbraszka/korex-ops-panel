@@ -124,7 +124,15 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   let clientList = clients.filter(c => c.status !== 'completed');
   clientList = clientList.filter(c => (scope === 'int' ? isKorexClient(c) : !isKorexClient(c)));
   if (taskClientFilter !== 'all') clientList = clientList.filter(c => c.id === taskClientFilter);
-  clientList = clientList.filter(c => tasks.some(t => t.clientId === c.id && visibleTask(t)) || (c.customPhases || []).length > 0);
+  clientList = clientList.filter(c => {
+    // Mostrar si tiene al menos una tarea visible (respeta ocultar completadas,
+    // en el sprint, persona, etc.).
+    if (tasks.some(t => t.clientId === c.id && visibleTask(t))) return true;
+    // Sin tareas visibles: solo mostrar si NO tiene ninguna tarea pero sí
+    // objetivos personalizados para gestionar (cliente recién creado).
+    const hasAnyTask = tasks.some(t => t.clientId === c.id);
+    return !hasAnyTask && (c.customPhases || []).length > 0;
+  });
   clientList = [...clientList].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   useEffect(() => {
