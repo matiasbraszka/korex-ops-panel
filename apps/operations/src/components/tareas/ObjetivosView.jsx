@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
+import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
 import AssigneePicker from './AssigneePicker';
@@ -217,8 +218,8 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
               <div onClick={() => toggle(o.c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer' }}>
                 {!restricted && (
                   <span draggable
-                    onDragStart={(e) => { e.stopPropagation(); setDragClientId(o.c.id); }}
-                    onDragEnd={() => { setDragClientId(null); setDragOverClientId(null); }}
+                    onDragStart={(e) => { e.stopPropagation(); setDragClientId(o.c.id); startDragScroll(); }}
+                    onDragEnd={() => { setDragClientId(null); setDragOverClientId(null); stopDragScroll(); }}
                     onClick={(e) => e.stopPropagation()}
                     title="Arrastrar para ordenar la prioridad"
                     style={{ display: 'flex', color: '#C7CBD3', cursor: 'grab', flexShrink: 0 }}><GripVertical size={15} /></span>
@@ -295,8 +296,8 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                           const editing = editingId === t.id;
                           return (
                             <div key={t.id} data-task-id={t.id} draggable={!editing}
-                              onDragStart={(e) => { e.stopPropagation(); setDraggedTaskId(t.id); }}
-                              onDragEnd={() => setDraggedTaskId(null)}
+                              onDragStart={(e) => { e.stopPropagation(); setDraggedTaskId(t.id); startDragScroll(); }}
+                              onDragEnd={() => { setDraggedTaskId(null); stopDragScroll(); }}
                               onClick={() => { if (!editing) setOpenTaskId(t.id); }}
                               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
                               <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada'} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
