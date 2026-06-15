@@ -19,7 +19,8 @@ const SPRINT_VIEWS = [
   { id: 'rendimiento', label: 'Rendimiento' },
   { id: 'objetivos', label: 'Objetivos' },
   { id: 'sprint', label: 'Tablero Sprint' },
-  { id: 'lista', label: 'Lista', icon: 'todo' },
+  // Vista "Lista" oculta: resultaba repetitiva con el Tablero Sprint.
+  // El componente sigue disponible (ListaView) por si se quiere reactivar.
   { id: 'todo', label: 'To-Do diario' },
 ];
 const LEGACY_VIEWS = [
