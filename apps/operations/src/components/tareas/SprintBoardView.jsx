@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SPRINT_COLUMNS, SPRINT_PRIORITY, SPRINT_WIP_DEFAULT, DEPARTMENTS } from '../../utils/constants';
+import { SPRINT_COLUMNS, SPRINT_WIP_DEFAULT, DEPARTMENTS } from '../../utils/constants';
 import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress } from '../../utils/helpers';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -127,7 +127,6 @@ export default function SprintBoardView({ scope = 'cli' }) {
               {list.map(t => {
                 const c = clientById(t.clientId);
                 const m = memberOf(t.assignee);
-                const prio = SPRINT_PRIORITY[t.sprintPriority];
                 const area = t.department ? DEPARTMENTS[t.department] : null;
                 const checklist = Array.isArray(t.checklist) ? t.checklist : [];
                 const subTotal = checklist.length;
@@ -140,7 +139,6 @@ export default function SprintBoardView({ scope = 'cli' }) {
                     onClick={() => setOpenTaskId(t.id)}
                     style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      {prio && <span style={{ fontSize: 10, fontWeight: 700, color: prio.color, background: prio.bg, borderRadius: 5, padding: '2px 6px', flexShrink: 0 }}>{prio.label}</span>}
                       <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#9CA3AF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c?.name || ''}</span>
                       {area && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={area.color} strokeWidth="1.9" style={{ flexShrink: 0 }}><title>{area.label}</title><path d={area.path} /></svg>}
                     </div>
