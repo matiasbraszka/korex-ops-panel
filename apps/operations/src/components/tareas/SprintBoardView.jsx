@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, SPRINT_WIP_DEFAULT, DEPARTMENTS } from '../../utils/constants';
 import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress } from '../../utils/helpers';
+import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
 const COL_STATUSES = SPRINT_COLUMNS.map(c => c.status);
@@ -135,8 +136,8 @@ export default function SprintBoardView({ scope = 'cli' }) {
                 const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
                 return (
                   <div key={t.id} data-card-id={t.id} draggable
-                    onDragStart={() => setDraggedId(t.id)}
-                    onDragEnd={() => { setDraggedId(null); setOverCol(null); }}
+                    onDragStart={() => { setDraggedId(t.id); startDragScroll(); }}
+                    onDragEnd={() => { setDraggedId(null); setOverCol(null); stopDragScroll(); }}
                     onClick={() => setOpenTaskId(t.id)}
                     style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
