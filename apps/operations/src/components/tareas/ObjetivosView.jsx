@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isKorexClient, userOwnsTask, getAllPhases, daysBetween, today } from '../../utils/helpers';
+import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
+import AssigneePicker from './AssigneePicker';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
 const EXPANDED_KEY = 'tareas_objetivos_expanded';
@@ -17,14 +18,28 @@ function dotStyle(status) {
 
 export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const {
-    clients, tasks, teamMembers, currentUser, updateTask, activeSprint,
+    clients, tasks, teamMembers, currentUser, updateTask, createTask, activeSprint,
     taskAssignee, hideCompletedTasks, reorderClient, setSelectedId, setView,
+    taskComments, unreadCommentTaskIds,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
   const [dragClientId, setDragClientId] = useState(null);
   const [dragOverClientId, setDragOverClientId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
+  const [adding, setAdding] = useState(null); // clave clientId::phaseKey
+  const [newTitle, setNewTitle] = useState('');
+
+  // Crear una tarea nueva en un cliente/fase (como antes). phaseKey 'otras' => sin fase.
+  const createInPhase = (clientId, phaseKey) => {
+    const title = newTitle.trim();
+    if (!title) { setAdding(null); return; }
+    const saved = createTask(title, clientId, '', 'normal', 'backlog', '', null);
+    if (saved && phaseKey && phaseKey !== 'otras') updateTask(saved.id, { phase: phaseKey });
+    setNewTitle(''); setAdding(null);
+  };
+  // Marcar/desmarcar completada desde la fila (sin abrir la ficha).
+  const toggleDone = (t) => updateTask(t.id, { status: t.status === 'done' ? 'backlog' : 'done' });
   const [expanded, setExpanded] = useState(() => {
     try { const raw = localStorage.getItem(EXPANDED_KEY); return raw ? JSON.parse(raw) : {}; }
     catch { return {}; }
@@ -198,13 +213,13 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                       <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, overflow: 'hidden' }}>
                         {g.tasks.map((t, i) => {
                           const d = dotStyle(t.status);
-                          const m = memberOf(t.assignee);
-                          const dl = t.dueDate ? daysBetween(today(), t.dueDate) : null;
-                          const late = dl != null && dl < 0;
+                          const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
+                          const unread = unreadCommentTaskIds?.has?.(t.id);
                           return (
                             <div key={t.id} onClick={() => setOpenTaskId(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer' }}>
-                              <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11 }}>{d.icon}</span>
+                              <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada'} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
                               <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
+                              {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }} title={`${cCount} comentario${cCount === 1 ? '' : 's'}${unread ? ' · sin leer' : ''}`}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
                               <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="Horas estimadas" onClick={(e) => e.stopPropagation()}>
                                 <input type="number" min="0" step="0.5" defaultValue={t.estimatedHours ?? ''} placeholder="–"
@@ -212,12 +227,27 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                                   style={{ width: 40, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: '#3F4653', textAlign: 'right', border: '1px solid #E2E5EB', borderRadius: 6, padding: '3px 5px', background: '#fff', outline: 'none' }} />
                                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
                               </span>
-                              {dl != null && <span style={{ fontSize: 11, fontWeight: 600, color: late ? '#EF4444' : '#6B7280', background: late ? '#FEF2F2' : '#F0F2F5', borderRadius: 6, padding: '2px 8px', flexShrink: 0 }}>{late ? `${Math.abs(dl)}d tarde` : `${dl}d`}</span>}
-                              {m && <span style={{ width: 24, height: 24, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initialsFor(m)}</span>}
+                              <AssigneePicker value={t.assignee} onChange={(name) => updateTask(t.id, { assignee: name })} />
                               {t.status !== 'done' && <AddToSprintButton task={t} />}
                             </div>
                           );
                         })}
+                        {(() => {
+                          const key = `${o.c.id}::${g.key}`;
+                          return adding === key ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: '1px solid #F0F2F5' }} onClick={(e) => e.stopPropagation()}>
+                              <input autoFocus value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') createInPhase(o.c.id, g.key); if (e.key === 'Escape') { setNewTitle(''); setAdding(null); } }}
+                                onBlur={() => createInPhase(o.c.id, g.key)}
+                                placeholder="Nombre de la tarea…  (Enter para crear)"
+                                style={{ flex: 1, fontSize: 13, border: '1px solid #C7D2FE', borderRadius: 8, padding: '6px 10px', outline: 'none', fontFamily: 'inherit' }} />
+                            </div>
+                          ) : (
+                            <div onClick={(e) => { e.stopPropagation(); setNewTitle(''); setAdding(key); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderTop: '1px solid #F0F2F5', fontSize: 12.5, fontWeight: 500, color: '#9CA3AF', cursor: 'pointer' }}>
+                              <Plus size={14} /> Agregar tarea
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}
