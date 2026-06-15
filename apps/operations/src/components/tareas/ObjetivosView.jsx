@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
@@ -50,14 +50,13 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     }
     setEditingPhase(null);
   };
-  const addPhase = (c) => {
+  const addPhase = (c) => runOnce(() => {
     const label = newPhaseText.trim();
-    if (label) {
-      const id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-      updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color: '#5B7CF5' }] });
-    }
     setNewPhaseText(''); setAddingPhase(null);
-  };
+    if (!label) return;
+    const id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    updateClient(c.id, { customPhases: [...(c.customPhases || []), { id, label, color: '#5B7CF5' }] });
+  });
   const deletePhase = (c, phaseKey, label, taskCount) => {
     const msg = taskCount > 0
       ? `Eliminar el objetivo «${label}»: sus ${taskCount} tarea${taskCount === 1 ? '' : 's'} pasan a «Otras tareas». ¿Continuar?`
@@ -94,14 +93,18 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   };
   const saveTitle = (t) => { const v = editTitle.trim(); if (v && v !== t.title) updateTask(t.id, { title: v }); setEditingId(null); };
 
-  // Crear una tarea nueva en un cliente/fase (como antes). phaseKey 'otras' => sin fase.
-  const createInPhase = (clientId, phaseKey) => {
+  // Guard anti-doble: Enter + blur pueden disparar el mismo handler dos veces.
+  const busyRef = useRef(false);
+  const runOnce = (fn) => { if (busyRef.current) return; busyRef.current = true; try { fn(); } finally { setTimeout(() => { busyRef.current = false; }, 0); } };
+
+  // Crear una tarea nueva en un cliente/fase, ya con su fase (un solo paso, sin
+  // que "desaparezca y vuelva"). phaseKey 'otras' => sin fase.
+  const createInPhase = (clientId, phaseKey) => runOnce(() => {
     const title = newTitle.trim();
-    if (!title) { setAdding(null); return; }
-    const saved = createTask(title, clientId, '', 'normal', 'backlog', '', null);
-    if (saved && phaseKey && phaseKey !== 'otras') updateTask(saved.id, { phase: phaseKey });
     setNewTitle(''); setAdding(null);
-  };
+    if (!title) return;
+    createTask(title, clientId, '', 'normal', 'backlog', '', null, phaseKey === 'otras' ? null : phaseKey);
+  });
   // Marcar/desmarcar completada desde la fila (sin abrir la ficha).
   const toggleDone = (t) => updateTask(t.id, { status: t.status === 'done' ? 'backlog' : 'done' });
   const [expanded, setExpanded] = useState(() => {
