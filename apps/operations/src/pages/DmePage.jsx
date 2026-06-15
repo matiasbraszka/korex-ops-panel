@@ -7,12 +7,10 @@ import { SECTIONS } from '../lib/dme/registry.js';
 import {
   monthBounds, yearBounds, columnsByDay, columnsByWeek, columnsByMonth, flattenBag,
 } from '../lib/dme/aggregate.js';
-import { resolveDmeConfig, metricTone } from '../lib/dme/color.js';
-import { fmtMetric } from '../lib/dme/format.js';
+import { resolveDmeConfig } from '../lib/dme/color.js';
 import DmeMetricTable from '../components/dme/DmeMetricTable.jsx';
 import DmeDayModal from '../components/dme/DmeDayModal.jsx';
-import DmeKpiCard from '../components/dme/DmeKpiCard.jsx';
-import DmeClientCompareTable from '../components/dme/DmeClientCompareTable.jsx';
+import DmeDashboard from '../components/dme/DmeDashboard.jsx';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const VIEWS = [
@@ -21,45 +19,6 @@ const VIEWS = [
   { id: 'semanal',   label: 'Semanal' },
   { id: 'mensual',   label: 'Mensual' },
 ];
-const num = (x) => Number(x || 0);
-const div = (a, b) => (num(b) > 0 ? num(a) / num(b) : NaN);
-
-// Filas del comparativo de embudos (Dashboard). d=true -> derivada (se recalcula).
-const CMP = [
-  { label: 'Inversión',            suffix: 'total_gastado',     kind: 'money', d: false },
-  { label: 'Total de leads',       suffix: 'total_leads',       kind: 'int',   d: false },
-  { label: 'CPL',                  suffix: 'cpl',               kind: 'cpl',   d: true },
-  { label: 'Leads curiosos',       suffix: 'leads_curiosos',    kind: 'int',   d: false },
-  { label: 'Leads interesados',    suffix: 'leads_interesados', kind: 'int',   d: false },
-  { label: 'Leads calificados',    suffix: 'leads_calificados', kind: 'int',   d: false },
-  { label: 'Visitas a la landing', suffix: 'visitas_landing',   kind: 'int',   d: false },
-  { label: 'Leads registrados',    suffix: 'leads_registrados', kind: 'int',   d: false },
-  { label: '% de registro',        suffix: 'pct_registro',      kind: 'pct',   d: true },
-  { label: 'Miran VSL completo',   suffix: 'miran_vsl',         kind: 'int',   d: false },
-  { label: '% mira VSL completo',  suffix: 'pct_vsl',           kind: 'pct',   d: true },
-  { label: 'Quiz iniciado',        suffix: 'quiz_iniciado',     kind: 'int',   d: false },
-  { label: 'Quiz terminado',       suffix: 'quiz_terminado',    kind: 'int',   d: false },
-  { label: '% termina quiz',       suffix: 'pct_quiz',          kind: 'pct',   d: true },
-  { label: 'WhatsApp enviado',         suffix: 'whatsapp',           kind: 'int', d: false },
-  { label: '% WhatsApp (sobre quiz)',  suffix: 'pct_whatsapp',       kind: 'pct', d: true },
-  { label: '% WhatsApp (sobre leads)', suffix: 'pct_whatsapp_leads', kind: 'pct', d: true },
-  { label: 'Cierres',              suffix: 'cierres',           kind: 'int',   d: false },
-  { label: '% de cierres',         suffix: 'pct_cierres',       kind: 'pct',   d: true },
-];
-
-// Recalcula los derivados del embudo combinado (Embudo 1 + 2) a partir de los inputs sumados.
-function combinedDerived(ci) {
-  return {
-    cpl:          div(ci.total_gastado, ci.total_leads),
-    pct_registro: div(ci.leads_registrados, ci.visitas_landing),
-    pct_vsl:      div(ci.miran_vsl, ci.leads_registrados),
-    pct_quiz:           div(ci.quiz_terminado, ci.quiz_iniciado),
-    pct_whatsapp:       div(ci.whatsapp, ci.quiz_terminado),
-    pct_whatsapp_leads: div(ci.whatsapp, ci.total_leads),
-    pct_cierres:  div(ci.cierres, ci.leads_registrados),
-    roi:          div(ci.facturado - ci.total_gastado, ci.total_gastado),
-  };
-}
 
 export default function DmePage() {
   const { clients, currentUser, selectedId, appSettings, updateAppSettings } = useApp();
@@ -151,7 +110,6 @@ export default function DmePage() {
   };
 
   const clientName = isCombined ? 'Todos combinados' : (clients.find((c) => c.id === clientId)?.name || '—');
-  const tone = (key, val) => metricTone(key, val, dmeConfig);
 
   // Links de embudo por cliente (guardados en app_settings.dme_funnel_links).
   const funnelLinks = isCombined ? {} : (appSettings?.dme_funnel_links?.[clientId] || {});
@@ -227,13 +185,13 @@ export default function DmePage() {
       {loading && rows.length === 0 ? (
         <div className="text-text3 text-center py-12 text-[12px]">Cargando DME…</div>
       ) : viewMode === 'dashboard' ? (
-        <DashboardView
+        <DmeDashboard
           bag={rangeBag}
-          tone={tone}
-          periodLabel={byYear ? String(year) : `${MONTH_NAMES[month - 1]} ${year}`}
-          isAdmin={isAdmin}
+          dailyColumns={columns}
           perClient={perClient}
-          config={dmeConfig}
+          periodLabel={byYear ? String(year) : `${MONTH_NAMES[month - 1]} ${year}`}
+          footerLabel={clientName}
+          isCombined={isCombined}
           onSelectClient={setClientId}
         />
       ) : (
@@ -266,110 +224,6 @@ export default function DmePage() {
           isAdmin={isAdmin}
         />
       )}
-    </div>
-  );
-}
-
-// ── Dashboard (resumen del rango) ────────────────────────────────────────────
-function DashboardView({ bag, tone, periodLabel, isAdmin, perClient = [], config, onSelectClient }) {
-  const g = (k) => bag[k];
-  // Suma de dos métricas; queda en blanco si ninguna tiene dato (no muestra 0).
-  const sum2 = (a, b) => (bag[a] == null && bag[b] == null ? undefined : num(bag[a]) + num(bag[b]));
-
-  // Resumen principal: CashCollect, usuarios, cargas, % invirtiendo y AVG inversión.
-  const mainCards = [
-    { label: 'CashCollect Publicidad',       kind: 'money', value: g('cashcollect_pub'),    adminOnly: true },
-    { label: 'CashCollect SETUPs',           kind: 'money', value: g('cashcollect_setups'), adminOnly: true },
-    { label: 'CashCollect Total',            kind: 'money', value: sum2('cashcollect_pub', 'cashcollect_setups'), adminOnly: true },
-    { label: 'Usuarios nuevos',              kind: 'int',   value: g('nuevos_usuarios'),    adminOnly: true },
-    { label: 'Cargas en publicidad totales', kind: 'int',   value: g('cargas_totales_pub'), adminOnly: true },
-    { label: '% usuarios invirtiendo en publicidad', kind: 'pct', value: g('pct_activos_con_pub'), toneKey: 'pct_activos_con_pub', sub: 'Último día del período', adminOnly: true },
-    { label: 'AVG inversión publicitaria',   kind: 'money', value: g('avg_inversion_usuario'), adminOnly: true },
-  ].filter((c) => isAdmin || !c.adminOnly);
-
-  // Resultados (se mantiene como estaba).
-  const results = [
-    { label: 'Nuevos testimonios',           kind: 'int', value: g('nuevos_testimonios') },
-    { label: 'Networkers que cerraron',      kind: 'int', value: g('networkers_cerraron') },
-    { label: 'Networkers con primer cierre', kind: 'int', value: g('networkers_primer_cierre') },
-    { label: 'Total cierres (Emb. 1 + 2)',   kind: 'int', value: g('cierres_total') },
-  ];
-
-  // Inversión y leads (CPL = Gasto total ÷ Leads totales, coherente entre sí).
-  const invCards = [
-    { label: 'Gasto total',   kind: 'money', value: sum2('embudo1_total_gastado', 'embudo2_total_gastado') },
-    { label: 'Leads totales', kind: 'int',   value: g('leads_obtenidos') },
-    { label: 'CPL promedio',  kind: 'cpl',   value: g('cpl') },
-  ];
-
-  // Comparativo de embudos.
-  const ci = {};
-  CMP.filter((r) => !r.d).forEach((r) => { ci[r.suffix] = num(g(`embudo1_${r.suffix}`)) + num(g(`embudo2_${r.suffix}`)); });
-  const cd = combinedDerived(ci);
-  const cmpRows = CMP.map((r) => {
-    const e1 = g(`embudo1_${r.suffix}`);
-    const e2 = g(`embudo2_${r.suffix}`);
-    const total = r.d ? cd[r.suffix] : ci[r.suffix];
-    const diff = num(e1) - num(e2);
-    return { ...r, e1, e2, total, diff };
-  });
-
-  const card = (c) => (
-    <DmeKpiCard key={c.label} label={c.label} value={fmtMetric(c.kind, c.value)}
-                sub={c.sub} tone={c.toneKey ? tone(c.toneKey, c.value) : undefined} />
-  );
-
-  return (
-    <div className="flex flex-col gap-4">
-      {mainCards.length > 0 && (
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Resumen principal · {periodLabel}</div>
-          <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{mainCards.map(card)}</div>
-        </div>
-      )}
-
-      <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Resultados</div>
-        <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{results.map(card)}</div>
-      </div>
-
-      <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-text3 mb-2">Inversión y leads</div>
-        <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3">{invCards.map(card)}</div>
-      </div>
-
-      <DmeClientCompareTable rows={perClient} config={config} isAdmin={isAdmin} onSelectClient={onSelectClient} />
-
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="px-4 pt-3.5 pb-3 border-b border-border">
-          <div className="text-[13px] font-bold text-text">Embudo comparativo al detalle</div>
-          <div className="text-[10.5px] text-text3 mt-0.5">Embudo 1 vs Embudo 2 · TOTAL · Diferencia</div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12px] border-collapse">
-            <thead>
-              <tr className="text-text3 text-[10px] uppercase tracking-wider">
-                <th className="text-left font-bold px-3 py-2">Métrica</th>
-                <th className="text-left font-bold px-3 py-2">Embudo 1</th>
-                <th className="text-left font-bold px-3 py-2">Embudo 2</th>
-                <th className="text-left font-bold px-3 py-2">TOTAL</th>
-                <th className="text-left font-bold px-3 py-2">Diferencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cmpRows.map((r) => (
-                <tr key={r.suffix} className="border-t border-[#F1F3F7]">
-                  <td className="text-left px-3 py-1.5 text-text whitespace-nowrap">{r.label}</td>
-                  <td className="text-left px-3 py-1.5 tabular-nums">{fmtMetric(r.kind, r.e1)}</td>
-                  <td className="text-left px-3 py-1.5 tabular-nums">{fmtMetric(r.kind, r.e2)}</td>
-                  <td className="text-left px-3 py-1.5 tabular-nums font-bold">{fmtMetric(r.kind, r.total)}</td>
-                  <td className="text-left px-3 py-1.5 tabular-nums text-text3">{r.d ? '—' : fmtMetric(r.kind, r.diff)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
