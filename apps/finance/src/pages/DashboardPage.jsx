@@ -134,20 +134,21 @@ export default function DashboardPage() {
       const o = clMap[r.client_name_sheet || '—'] || (clMap[r.client_name_sheet || '—'] = { fact: 0, cash: 0, crm: 0, publi: 0, con: 0, clt: 0, mkt: 0 });
       const { comm } = commOf(r); const net = Number(r.net_usd) || 0;
       o.fact += net; o.cash += Number(r.korex_real) || 0;
-      if ((r.income_type || '').toUpperCase() === 'CRM') o.crm += net;
-      if ((r.income_type || '').toUpperCase() === 'PUBLICIDAD') o.publi += net;
+      // CashCollect (korex_real) desglosado por producto: lo que le quedó a Korex de CRM y de Publicidad.
+      if ((r.income_type || '').toUpperCase() === 'CRM') o.crm += Number(r.korex_real) || 0;
+      if ((r.income_type || '').toUpperCase() === 'PUBLICIDAD') o.publi += Number(r.korex_real) || 0;
       o.con += comm.conector || 0; o.clt += comm.cliente || 0; o.mkt += comm.marketing || 0;
     });
     const pcCols = [
       { key: 'fact', hbg: '#ECFDF3', hfg: '#15803d', cbg: '#F4FCF6', bl: '1px solid #F1F5F9', green: false },
       { key: 'cash', hbg: '#EAFCFA', hfg: '#0d9488', cbg: '#F2FCFB', bl: '1px solid #F1F5F9', green: true },
-      { key: 'crm', hbg: '#EAF1FE', hfg: '#1d4ed8', cbg: '#F5F8FE', bl: '2px solid #E2E5EB', green: false },
-      { key: 'publi', hbg: '#FEF8EC', hfg: '#b45309', cbg: '#FEFBF3', bl: '1px solid #F1F5F9', green: false },
+      { key: 'crm', hbg: '#EAF1FE', hfg: '#1d4ed8', cbg: '#F5F8FE', bl: '2px solid #E2E5EB', green: true },
+      { key: 'publi', hbg: '#FEF8EC', hfg: '#b45309', cbg: '#FEFBF3', bl: '1px solid #F1F5F9', green: true },
       { key: 'con', hbg: '#EAF6FE', hfg: '#0369a1', cbg: '#F4FAFE', bl: '2px solid #E2E5EB', green: false },
       { key: 'clt', hbg: '#EAF1FE', hfg: '#1d4ed8', cbg: '#F5F8FE', bl: '1px solid #F1F5F9', green: false },
       { key: 'mkt', hbg: '#FDF0F6', hfg: '#be185d', cbg: '#FEF6FA', bl: '1px solid #F1F5F9', green: false },
     ];
-    const pcLabel = { fact: 'Facturación', cash: 'CashCollect', crm: 'CRM', publi: 'Publicidad', con: 'Com. Conector', clt: 'Com. Cliente', mkt: 'Com. Marketing' };
+    const pcLabel = { fact: 'Facturación', cash: 'CashCollect', crm: 'CashColl. CRM', publi: 'CashColl. Publi', con: 'Com. Conector', clt: 'Com. Cliente', mkt: 'Com. Marketing' };
     const pcList = Object.entries(clMap).map(([name, o]) => ({ name, ...o })).sort((a, b) => b.fact - a.fact);
     const pcHeads = [{ label: 'Cliente', bg: '#F8FAFC', fg: '#64748B', bl: 'none' }, ...pcCols.map((c) => ({ label: pcLabel[c.key], bg: c.hbg, fg: c.hfg, bl: c.bl }))];
     const pcT = {}; pcCols.forEach((c) => (pcT[c.key] = pcList.reduce((a, o) => a + o[c.key], 0)));
