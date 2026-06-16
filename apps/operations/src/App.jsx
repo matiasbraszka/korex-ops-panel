@@ -280,6 +280,7 @@ function MainLayout() {
   const canAccessOperations = useCan('operations', 'read');
   const canAccessSales = useCan('sales', 'read');
   const canAccessSoporte = useCan('soporte', 'read');
+  const canAccessMarketing = useCan('marketing', 'read');
   // Finanzas: SOLO admins (datos sensibles del negocio).
   const canAccessFinance = currentUser?.isAdmin === true;
   // Mensajes de WhatsApp sin leer (badge del area Soporte en el nav).
@@ -340,7 +341,7 @@ function MainLayout() {
   };
   const areas = [
     canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,        ...areaTokens.operations },
-    canAccessOperations && { id: 'marketing',  label: 'Marketing',      items: marketingItems,  ...areaTokens.marketing },
+    canAccessMarketing && { id: 'marketing',  label: 'Marketing',      items: marketingItems,  ...areaTokens.marketing },
     canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems,      ...areaTokens.sales },
     canAccessSoporte    && { id: 'soporte',    label: 'Soporte',        items: soporteItems,    ...areaTokens.soporte },
     canAccessFinance    && { id: 'finance',    label: 'Finanzas',       items: financeItems,    ...areaTokens.finance },
@@ -379,13 +380,14 @@ function MainLayout() {
   // ClientsPage sin permisos.
   const homePath = canAccessOperations
     ? '/operations/clients'
-    : (canAccessSales ? '/sales/kpis' : (canAccessSoporte ? '/soporte/inbox' : '/operations/clients'));
+    : (canAccessSales ? '/sales/kpis' : (canAccessSoporte ? '/soporte/inbox' : (canAccessMarketing ? '/marketing/vsl' : '/operations/clients')));
   // Guard: si el user NO tiene acceso a operaciones, redirigimos cualquier
   // /operations/* a su home. Antes solo se gateaba el sidebar y la ruta de
   // /admin/settings — las rutas /operations/* quedaban abiertas y un vendedor
   // que llegaba con una URL de operaciones (link compartido o caché) veia
   // momentaneamente el modulo Clientes/Tareas hasta refrescar.
   const opsGuarded = (node) => (canAccessOperations ? node : <Navigate to={homePath} replace />);
+  const marketingGuarded = (node) => (canAccessMarketing ? node : <Navigate to={homePath} replace />);
 
   // Rutas del modulo Operaciones bajo el prefix /operations. El shell a
   // futuro (Fase 1+) va a agregar mas prefixes como /sales.
@@ -405,7 +407,7 @@ function MainLayout() {
       <Route path="/operations/videos" element={opsGuarded(<VideosPage />)} />
       {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
       <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
-      <Route path="/marketing/vsl" element={opsGuarded(<VslPage />)} />
+      <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
       <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
