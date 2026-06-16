@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { sbFetch } from '@korex/db';
+import { sbFetch, supabase } from '@korex/db';
 import { facConcepto, facFormaPago, facHtmlFactura, facImprimir, facPad4, facMiles, facFechaStr } from '../lib/factura.js';
 
 // Genera la factura de un ingreso dentro del sistema (reemplaza el popup del Sheet):
@@ -15,6 +15,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [sent, setSent] = useState(null);   // resultado del envío por email: {ok,sent_to,test_mode} | {error}
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -76,10 +77,11 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   const imprimir = () => { if (!bill) return; facImprimir(facHtmlFactura(docData())); };
 
-  const guardar = async () => {
+  const guardar = async (sendEmail) => {
     if (!bill || !monto || !num) return;
-    setBusy(true); setErr('');
+    setBusy(true); setErr(''); setSent(null);
     try {
+      // 1) Registrar la factura y marcar el ingreso como facturado.
       await sbFetch('invoices', {
         method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
         body: JSON.stringify({
@@ -89,8 +91,21 @@ export default function FacturaModal({ income, onClose, onDone }) {
         }),
       });
       await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true }), throwOnError: true });
-      setDone(true);
       onDone?.(income.id, numeroFmt);
+      // 2) Enviar por email (opcional). La factura ya quedó registrada pase lo que pase.
+      if (sendEmail && bill.email) {
+        try {
+          const { data, error } = await supabase.functions.invoke('enviar-factura', {
+            body: { to: bill.email, html: facHtmlFactura(docData()), numeroFmt, nombreFactura: bill.nombreFactura },
+          });
+          if (error) setSent({ error: error.message || String(error) });
+          else if (data?.ok) setSent({ ok: true, sent_to: data.sent_to, test_mode: data.test_mode });
+          else setSent({ error: data?.error || 'No se pudo enviar el email' });
+        } catch (e) {
+          setSent({ error: String(e) });
+        }
+      }
+      setDone(true);
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -121,10 +136,22 @@ export default function FacturaModal({ income, onClose, onDone }) {
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#9AA4B2', fontSize: 13 }}>Cargando datos fiscales…</div>
         ) : done ? (
-          <div style={{ padding: '34px 22px', textAlign: 'center' }}>
+          <div style={{ padding: '30px 22px', textAlign: 'center' }}>
             <div style={{ fontSize: 34, marginBottom: 8 }}>✅</div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Factura N° {numeroFmt} registrada</div>
-            <div style={{ fontSize: 12.5, color: '#6B7585', marginTop: 5, lineHeight: 1.5 }}>El ingreso quedó marcado como <b>facturado</b> y la factura se guardó en el sistema.<br />Si todavía no lo hiciste, descargá el PDF para enviarlo.</div>
+            <div style={{ fontSize: 12.5, color: '#6B7585', marginTop: 5, lineHeight: 1.5 }}>El ingreso quedó marcado como <b>facturado</b> y la factura se guardó en el sistema.</div>
+            {sent?.ok && (
+              <div style={{ margin: '14px auto 0', maxWidth: 420, background: sent.test_mode ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${sent.test_mode ? '#FDE68A' : '#BBF7D0'}`, borderRadius: 10, padding: '10px 12px', fontSize: 12, color: sent.test_mode ? '#b45309' : '#15803d', lineHeight: 1.5 }}>
+                {sent.test_mode
+                  ? <>✉ <b>Modo prueba:</b> el email se envió a <b>{sent.sent_to}</b> (no al cliente). Para enviar a clientes reales, verificá el dominio en Resend y poné <code>test_mode: false</code>.</>
+                  : <>✉ Factura <b>enviada por email</b> a <b>{sent.sent_to}</b>.</>}
+              </div>
+            )}
+            {sent?.error && (
+              <div style={{ margin: '14px auto 0', maxWidth: 420, background: '#FFF1F2', border: '1px solid #FBC9CF', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#be123c', lineHeight: 1.5 }}>
+                No se pudo enviar el email: {sent.error}.<br />La factura quedó registrada igual — descargá el PDF y envialo manualmente.
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
               <button onClick={imprimir} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Descargar PDF</button>
               <button onClick={onClose} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer' }}>Listo</button>
@@ -185,9 +212,13 @@ export default function FacturaModal({ income, onClose, onDone }) {
             </div>
             <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={imprimir} disabled={!monto} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: monto ? 1 : 0.5 }}>Ver / Descargar PDF</button>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={guardar} disabled={!monto || !num || busy || !bill.nombreFactura} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura) ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Generar y marcar facturado'}</button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={() => guardar(false)} disabled={!monto || !num || busy || !bill.nombreFactura} style={{ border: '1px solid #CBD5E1', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura) ? 0.6 : 1 }}>{busy ? '…' : 'Solo registrar'}</button>
+                <button onClick={() => guardar(true)} disabled={!monto || !num || busy || !bill.nombreFactura || !bill.email} title={!bill.email ? 'Cargá un e-mail para enviar' : 'Registra, marca facturado y envía por email'} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura || !bill.email) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="m22 6-10 7L2 6" /></svg>
+                  {busy ? 'Enviando…' : 'Generar y enviar'}
+                </button>
               </div>
             </div>
           </>
