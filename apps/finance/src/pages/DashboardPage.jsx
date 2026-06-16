@@ -21,11 +21,9 @@ export default function DashboardPage() {
       sbFetch('fin_incomes?select=id,income_date,client_name_sheet,payer_name,conector_name_sheet,collected_by,income_type,net_usd,amount_usd,korex_real,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000'),
       sbFetch('fin_expenses?select=expense_date,amount,category,reason,detail,project,paid_by&order=expense_date.desc.nullslast&limit=6000'),
       sbFetch('fin_fondo_vs_deuda?select=cliente,diff,debe_apartar,fondo_comisiones,tiene_fondo&limit=500'),
-      // "Se fue a meta": gasto real de Meta Ads en Mercury (counterparty Facebook).
-      sbFetch(`mercury_egresos?select=amount,posted_at&category=eq.${encodeURIComponent('Publicidad (Meta)')}&limit=20000`),
     ])
-      .then(([inc, exp, fvd, meta]) => {
-        setD({ inc: inc || [], exp: exp || [], fvd: fvd || [], meta: meta || [] });
+      .then(([inc, exp, fvd]) => {
+        setD({ inc: inc || [], exp: exp || [], fvd: fvd || [] });
         // Rango por defecto = todo el período con datos (inputs poblados).
         const ds = (inc || []).map((r) => r.income_date).filter(Boolean).sort();
         if (ds.length) { setDStart(ds[0]); setDEnd(ds[ds.length - 1]); }
@@ -59,20 +57,19 @@ export default function DashboardPage() {
     inc.forEach((r) => {
       const k = (r.income_date || '').slice(0, 7); if (!k) return;
       const o = touch(k); const { comm } = commOf(r);
+      const commTotal = Object.values(comm).reduce((a, b) => a + b, 0);
       o.fact += Number(r.net_usd) || 0;          // Facturación = neto (definición del Sheet)
       o.cash += Number(r.korex_real) || 0;        // CashCollect = korex_real (definición del Sheet)
-      o.comis += Object.values(comm).reduce((a, b) => a + b, 0);
+      o.comis += commTotal;
+      // Se fue a meta = facturación publicidad − comisiones de esos ingresos − ganancia Korex.
+      // Es lo que realmente se fue a Meta de la inversión del cliente (solo ingresos de Publicidad).
+      if ((r.income_type || '').toUpperCase() === 'PUBLICIDAD')
+        o.meta += (Number(r.amount_usd) || Number(r.net_usd) || 0) - commTotal - (Number(r.korex_real) || 0);
     });
     exp.forEach((e) => {
       const k = (e.expense_date || '').slice(0, 7); if (!k) return;
       const o = touch(k); const a = Number(e.amount) || 0;
       o.egTot += a; if (isRetiro(e.category)) o.retiro += a; else o.egEmp += a;
-    });
-    // "Se fue a meta": gasto Meta Ads desde Mercury, por mes (sin atribución por cliente,
-    // así que con un cliente filtrado no se cuenta).
-    if (!cli) (d.meta || []).forEach((m) => {
-      const day = (m.posted_at || '').slice(0, 10); if (!inRange(day)) return;
-      const k = day.slice(0, 7); if (!k) return; touch(k).meta += Number(m.amount) || 0;
     });
     // Ganancia = CashCollect − egresos empresa (sin retiros) · Se dejó = CashCollect − todos los egresos.
     const months = [...mm.values()].sort((a, b) => a.m.localeCompare(b.m)).map((o) => {
