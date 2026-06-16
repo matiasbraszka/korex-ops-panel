@@ -35,9 +35,7 @@ export default function IngresosPage() {
   const [mes, setMes] = useState('');
   const [openId, setOpenId] = useState(null);
   const [hover, setHover] = useState(null);
-  const [modal, setModal] = useState(null);   // form de alta (null = cerrado)
-  const [editId, setEditId] = useState(null);  // fila en edición
-  const [draft, setDraft] = useState({});
+  const [modal, setModal] = useState(null);   // form de alta/edición (null = cerrado)
   const [busy, setBusy] = useState(false);
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
 
@@ -76,21 +74,19 @@ export default function IngresosPage() {
     } catch { load(); }
   };
 
-  const startEdit = (r) => { setEditId(r.id); setDraft({ income_date: r.income_date || '', client_name_sheet: r.client_name_sheet || '', payer_name: r.payer_name || '', conector_name_sheet: r.conector_name_sheet || '', collected_by: r.collected_by || 'Korex', payment_method: r.payment_method || '', income_type: r.income_type || 'CRM', net_usd: r.net_usd == null ? '' : String(r.net_usd), facturado: !!r.facturado, organizado_finanzas: !!r.organizado_finanzas }); };
-  const saveEdit = async () => {
-    const d = draft;
-    await patchIncome(editId, {
-      income_date: d.income_date || null,
-      client_name_sheet: (d.client_name_sheet || '').trim() || null,
-      payer_name: (d.payer_name || '').trim() || null,
-      conector_name_sheet: (d.conector_name_sheet || '').trim() || null,
-      payment_method: d.payment_method || null,
-      income_type: d.income_type,
-      net_usd: num(d.net_usd),
-      facturado: !!d.facturado, organizado_finanzas: !!d.organizado_finanzas,
-      llego_mercury: autoMercury(d.payment_method, d.collected_by),  // automático
-    }, { recompute: true, recon: true });
-    setEditId(null);
+  // Abrir el MISMO formulario para editar (no edición en la fila).
+  const openEdit = (r) => {
+    const usd = Number(r.amount_usd) || 0, eur = Number(r.amount_eur) || 0;
+    const divisa = (usd || !eur) ? 'USD' : 'EUR';
+    setModal({
+      mode: 'edit', id: r.id,
+      income_date: r.income_date || '', income_type: r.income_type || 'CRM',
+      payer_name: r.payer_name || '', client_name_sheet: r.client_name_sheet || '', conector_name: r.conector_name_sheet || '',
+      payment_method: r.payment_method || PAY_OPTS[0], divisa,
+      bruto: String(divisa === 'USD' ? (r.amount_usd ?? '') : (r.amount_eur ?? '')),
+      amount_usd: r.amount_usd == null ? '' : String(r.amount_usd), amount_eur: r.amount_eur == null ? '' : String(r.amount_eur),
+      net_usd: r.net_usd == null ? '' : String(r.net_usd), netTouched: true,
+    });
   };
 
   const saveModal = async () => {
@@ -99,19 +95,23 @@ export default function IngresosPage() {
     setBusy(true);
     try {
       const collected = collectedFromMethod(f.payment_method);
-      const maxRows = await sbFetch('fin_incomes?select=sheet_row&order=sheet_row.desc.nullslast&limit=1');
-      const nextRow = ((Array.isArray(maxRows) && maxRows[0]?.sheet_row) || 0) + 1;
-      await sbFetch('fin_incomes', {
-        method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
-        body: JSON.stringify({
-          sheet_row: nextRow, income_date: f.income_date || null, month_date: f.income_date ? f.income_date.slice(0, 7) + '-01' : null,
-          client_name_sheet: f.client_name_sheet.trim(), payer_name: f.payer_name.trim() || f.client_name_sheet.trim(),
-          conector_name_sheet: f.conector_name.trim() || null, collected_by: collected, income_type: f.income_type,
-          amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
-          // Flags por defecto: sin facturar, sin organizar; "llegó a Mercury" automático.
-          facturado: false, organizado_finanzas: false, llego_mercury: autoMercury(f.payment_method, collected),
-        }),
-      });
+      const common = {
+        income_date: f.income_date || null, month_date: f.income_date ? f.income_date.slice(0, 7) + '-01' : null,
+        client_name_sheet: f.client_name_sheet.trim(), payer_name: (f.payer_name || '').trim() || f.client_name_sheet.trim(),
+        conector_name_sheet: (f.conector_name || '').trim() || null, collected_by: collected, income_type: f.income_type,
+        amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
+        llego_mercury: autoMercury(f.payment_method, collected),
+      };
+      if (f.mode === 'edit') {
+        await sbFetch(`fin_incomes?id=eq.${f.id}`, { method: 'PATCH', body: JSON.stringify(common), throwOnError: true });
+      } else {
+        const maxRows = await sbFetch('fin_incomes?select=sheet_row&order=sheet_row.desc.nullslast&limit=1');
+        const nextRow = ((Array.isArray(maxRows) && maxRows[0]?.sheet_row) || 0) + 1;
+        await sbFetch('fin_incomes', {
+          method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
+          body: JSON.stringify({ sheet_row: nextRow, ...common, facturado: false, organizado_finanzas: false }),
+        });
+      }
       await sbFetch('rpc/fin_recompute', { method: 'POST', body: '{}', throwOnError: true });
       await sbFetch('rpc/fin_recon_run', { method: 'POST', body: '{}' }).catch(() => {});
       setModal(null); setBusy(false); load();
@@ -194,7 +194,7 @@ export default function IngresosPage() {
 
       {/* toolbar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
-        <button onClick={() => setModal({ income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', payment_method: PAY_OPTS[0], amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
+        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
@@ -234,7 +234,6 @@ export default function IngresosPage() {
           </thead>
           <tbody>
             {filtered.map((r) => {
-              if (editId === r.id) return <EditRow key={r.id} draft={draft} setDraft={setDraft} cliOpts={cliOpts} onSave={saveEdit} onCancel={() => setEditId(null)} />;
               const [pago, pbg, pfg] = pagoChip(r.payment_method);
               const hov = hover === r.id;
               const sticky = hov ? '#F6FBFB' : '#fff';
@@ -250,7 +249,7 @@ export default function IngresosPage() {
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
                           </button>
                         )}
-                        <button onClick={() => startEdit(r)} title="Editar fila" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
+                        <button onClick={() => openEdit(r)} title="Editar ingreso" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                         </button>
                       </span>
@@ -301,106 +300,140 @@ export default function IngresosPage() {
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
 
-      {modal && <NuevoIngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} busy={busy} onClose={() => setModal(null)} />}
+      {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} busy={busy} onClose={() => setModal(null)} />}
       {factura && <FacturaModal income={factura} onClose={() => setFactura(null)} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
   );
 }
 
-/* ---------- fila en edición ---------- */
-function EditRow({ draft, setDraft, cliOpts, onSave, onCancel }) {
-  const set = (k, v) => setDraft((s) => ({ ...s, [k]: v }));
-  const ed = 'width:100%'; // placeholder
-  const inp = { border: '1px solid #99E6E3', borderRadius: 6, padding: '5px 6px', fontSize: 11, outline: 'none' };
-  const payList = [...new Set([draft.payment_method, ...PAY_OPTS].filter(Boolean))];
-  return (
-    <tr style={{ background: '#F0FDFA' }}>
-      <td style={{ position: 'sticky', left: 0, zIndex: 2, background: '#F0FDFA', borderBottom: '1px solid #EEF1F5', padding: '5px 8px' }}><input type="date" value={draft.income_date} onChange={(e) => set('income_date', e.target.value)} style={{ ...inp, width: 120 }} /></td>
-      <td style={{ position: 'sticky', left: 96, zIndex: 2, background: '#F0FDFA', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #E2E5EB', padding: '5px 8px' }}><input list="ing-cli-dl" value={draft.client_name_sheet} onChange={(e) => set('client_name_sheet', e.target.value)} placeholder="cliente" style={{ ...inp, width: 140 }} /><datalist id="ing-cli-dl">{cliOpts.map((c) => <option key={c} value={c} />)}</datalist></td>
-      <td style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5' }}><input value={draft.payer_name} onChange={(e) => set('payer_name', e.target.value)} placeholder="pagador" style={{ ...inp, width: 150 }} /></td>
-      <td colSpan={2} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5' }}><input value={draft.conector_name_sheet} onChange={(e) => set('conector_name_sheet', e.target.value)} placeholder="conector" style={{ ...inp, width: '100%' }} /></td>
-      <td colSpan={2} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5' }}><select value={draft.payment_method} onChange={(e) => set('payment_method', e.target.value)} style={{ ...inp, width: '100%', background: '#fff' }}>{payList.map((p) => <option key={p} value={p}>{pagoChip(p)[0]}</option>)}</select></td>
-      <td style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5' }}><select value={draft.income_type} onChange={(e) => set('income_type', e.target.value)} style={{ ...inp, width: '100%', background: '#fff' }}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></td>
-      <td colSpan={3} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5', textAlign: 'center' }}>
-        <ChkMini label="Fact" v={draft.facturado} on={(v) => set('facturado', v)} />
-        <ChkMini label="Fin" v={draft.organizado_finanzas} on={(v) => set('organizado_finanzas', v)} />
-        <span style={{ fontSize: 10, color: '#475569', marginRight: 6, whiteSpace: 'nowrap' }} title="Llegó a Mercury (automático: Korex + Stripe/Mercury)"><span style={{ color: autoMercury(draft.payment_method, draft.collected_by) ? '#16a34a' : '#cbd5e1' }}>●</span> Merc auto</span>
-      </td>
-      <td colSpan={3} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5' }}><input inputMode="decimal" value={draft.net_usd} onChange={(e) => set('net_usd', e.target.value)} placeholder="neto US$" style={{ ...inp, width: 90 }} /></td>
-      <td colSpan={5} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5', textAlign: 'center', color: '#9AA4B2', fontSize: 10 }}>comisiones se recalculan al guardar</td>
-      <td style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #EEF1F5', color: '#9AA4B2', fontSize: 10 }}>auto</td>
-      <td style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', textAlign: 'center', whiteSpace: 'nowrap' }}>
-        <button onClick={onSave} title="Guardar" style={{ border: 0, background: '#16a34a', color: '#fff', borderRadius: 6, width: 24, height: 24, cursor: 'pointer', fontWeight: 700, marginRight: 3 }}>✓</button>
-        <button onClick={onCancel} title="Cancelar" style={{ border: 0, background: '#e2e8f0', color: '#64748B', borderRadius: 6, width: 24, height: 24, cursor: 'pointer', fontWeight: 700 }}>✕</button>
-      </td>
-    </tr>
-  );
-}
-
-/* ---------- modal de alta (pagador → cliente/conector automáticos) ---------- */
-function NuevoIngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, busy, onClose }) {
-  const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+/* ---------- modal de alta/edición (6 campos; el resto automático) ---------- */
+function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, busy, onClose }) {
+  const [rate, setRate] = useState(null);   // cotización EUR → USD (en vivo)
+  const [adv, setAdv] = useState(false);     // ajustar cliente/conector
+  const isEdit = form.mode === 'edit';
+  const RATE = rate || 1.08;                 // fallback si no carga la cotización
   const isStripe = isStripeMethod(form.payment_method);
   const collected = collectedFromMethod(form.payment_method);
   const merc = autoMercury(form.payment_method, collected);
-  const ok = form.client_name_sheet.trim() && form.net_usd;
-  const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
-  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+  const r2 = (n) => Math.round(n * 100) / 100;
 
-  // Al elegir el pagador del directorio: completa cliente (cliente_padre) y conector (del acuerdo).
+  useEffect(() => {
+    let alive = true;
+    fetch('https://api.frankfurter.app/latest?from=EUR&to=USD')
+      .then((r) => r.json()).then((d) => { if (alive && d?.rates?.USD) setRate(d.rates.USD); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Recalcula ambos montos (USD/EUR) y el neto según divisa + bruto + método.
+  const recompute = (s, rt) => {
+    const b = num(s.bruto);
+    let usd = '', eur = '';
+    if (b != null) {
+      if (s.divisa === 'USD') { usd = b; eur = r2(b / rt); }
+      else { eur = b; usd = r2(b * rt); }
+    }
+    const usdStr = usd === '' ? '' : String(usd);
+    // Mercury/USDT no tienen comisión → neto = bruto USD. Stripe conserva su neto (lookup/manual).
+    const net = isStripeMethod(s.payment_method) ? s.net_usd : usdStr;
+    return { ...s, amount_usd: usdStr, amount_eur: eur === '' ? '' : String(eur), net_usd: net };
+  };
+  const setBruto = (v) => setForm((s) => recompute({ ...s, bruto: v }, RATE));
+  const setDivisa = (d) => setForm((s) => recompute({ ...s, divisa: d }, RATE));
+  const setMethod = (m) => setForm((s) => recompute({ ...s, payment_method: m }, RATE));
+  // Si la cotización llega después de tipear (alta nueva), recalcula con el valor real.
+  useEffect(() => { if (rate && !isEdit && form.bruto) setForm((s) => recompute(s, rate)); }, [rate]); // eslint-disable-line
+
+  // Pagador → autocompleta cliente (cliente_padre) y conector (acuerdo del cliente).
   const pickPayer = (p) => setForm((s) => ({
-    ...s,
-    payer_name: p.nombre,
+    ...s, payer_name: p.nombre,
     client_name_sheet: p.cliente_padre || (p.tipo === 'Cliente' ? p.nombre : s.client_name_sheet),
     conector_name: conByClient[(p.cliente_padre || p.nombre || '').trim().toLowerCase()] || '',
   }));
-  // Neto automático: Mercury/USDT no tienen comisión → neto = bruto. Stripe descuenta su fee (se carga aparte).
-  const setMethod = (m) => setForm((s) => ({ ...s, payment_method: m, net_usd: s.netTouched ? s.net_usd : (isStripeMethod(m) ? '' : (s.amount_usd || '')) }));
-  const setGrossUsd = (v) => setForm((s) => ({ ...s, amount_usd: v, net_usd: (s.netTouched || isStripeMethod(s.payment_method)) ? s.net_usd : v }));
+
+  // Stripe: trae el neto real del cargo (best-effort) si el neto está vacío.
+  useEffect(() => {
+    if (!isStripe || !form.payer_name || !num(form.amount_usd) || form.net_usd) return;
+    let alive = true;
+    const enc = encodeURIComponent(form.payer_name.trim());
+    sbFetch(`stripe_charges?customer_name=ilike.${enc}&paid=eq.true&select=gross_usd,net_usd&order=created_at.desc&limit=10`)
+      .then((cs) => {
+        if (!alive || !Array.isArray(cs) || !cs.length) return;
+        const target = num(form.amount_usd);
+        const best = cs.map((c) => ({ g: Number(c.gross_usd) || null, n: c.net_usd != null ? Number(c.net_usd) : null }))
+          .filter((x) => x.g).sort((a, b) => Math.abs(a.g - target) - Math.abs(b.g - target))[0];
+        const v = best ? (best.n != null ? best.n : best.g) : null;
+        if (v != null) setForm((s) => ({ ...s, net_usd: String(r2(v)) }));
+      }).catch(() => {});
+    return () => { alive = false; };
+  }, [isStripe, form.payer_name, form.amount_usd, form.net_usd]); // eslint-disable-line
+
+  const otherCur = form.divisa === 'USD'
+    ? (form.amount_eur ? `≈ € ${form.amount_eur}` : '')
+    : (form.amount_usd ? `≈ US$ ${form.amount_usd}` : '');
+  const ok = form.client_name_sheet.trim() && (form.payer_name || '').trim() && num(form.net_usd) != null;
+  const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
+  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 580, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 540, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
-          <div><div style={{ fontSize: 16, fontWeight: 800 }}>Nuevo ingreso</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Elegí quién pagó y el resto se completa solo.</div></div>
+          <div><div style={{ fontSize: 16, fontWeight: 800 }}>{isEdit ? 'Editar ingreso' : 'Nuevo ingreso'}</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Cargá lo básico; cliente, conector, conversión y neto se completan solos.</div></div>
           <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
         </div>
         <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><label style={lab}>Fecha</label><input type="date" value={form.income_date} onChange={(e) => setForm((s) => ({ ...s, income_date: e.target.value }))} style={inp} /></div>
+          <div><label style={lab}>Tipo</label><select value={form.income_type} onChange={(e) => setForm((s) => ({ ...s, income_type: e.target.value }))} style={inp}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lab}>Pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· buscalo en el directorio</span></label>
-            <PayerSelect value={form.payer_name} dir={dir} inp={inp} onPick={pickPayer} onType={(v) => set('payer_name', v)} />
+            <label style={lab}>Usuario / pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>
+            <PayerSelect value={form.payer_name} dir={dir} inp={inp} onPick={pickPayer} onType={(v) => setForm((s) => ({ ...s, payer_name: v }))} />
+            <div style={{ marginTop: 7, fontSize: 11.5, color: '#6B7585', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>Cliente: <b style={{ color: form.client_name_sheet ? '#0c8584' : '#cbd5e1' }}>{form.client_name_sheet || 'sin asignar'}</b></span>
+              <span>· Conector: <b style={{ color: form.conector_name ? '#0c8584' : '#cbd5e1' }}>{form.conector_name || '—'}</b></span>
+              <button type="button" onClick={() => setAdv((a) => !a)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: '#0EA5A4', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>{adv ? 'listo' : 'ajustar'}</button>
+            </div>
+            {(adv || !form.client_name_sheet) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+                <div><label style={lab}>Cliente <span style={{ color: '#e11d48' }}>*</span></label><input list="modal-cli-dl" value={form.client_name_sheet} onChange={(e) => setForm((s) => ({ ...s, client_name_sheet: e.target.value }))} placeholder="cliente del acuerdo" style={inp} /><datalist id="modal-cli-dl">{cliOpts.map((c) => <option key={c} value={c} />)}</datalist></div>
+                <div><label style={lab}>Conector</label><input value={form.conector_name} onChange={(e) => setForm((s) => ({ ...s, conector_name: e.target.value }))} placeholder="(opcional)" style={inp} /></div>
+              </div>
+            )}
           </div>
           <div>
-            <label style={lab}>Cliente <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· auto</span></label>
-            <input list="modal-cli-dl" value={form.client_name_sheet} onChange={(e) => set('client_name_sheet', e.target.value)} placeholder="se completa al elegir pagador" style={{ ...inp, background: form.client_name_sheet ? '#F0FDFA' : '#fff' }} />
-            <datalist id="modal-cli-dl">{cliOpts.map((c) => <option key={c} value={c} />)}</datalist>
+            <label style={lab}>Divisa</label>
+            <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 8, padding: 3 }}>
+              {['USD', 'EUR'].map((c) => (
+                <button key={c} type="button" onClick={() => setDivisa(c)} style={{ flex: 1, border: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: form.divisa === c ? 700 : 500, padding: '7px 0', borderRadius: 6, background: form.divisa === c ? '#fff' : 'transparent', color: form.divisa === c ? '#0c8584' : '#64748B', boxShadow: form.divisa === c ? '0 1px 2px rgba(0,0,0,.08)' : 'none' }}>{c}</button>
+              ))}
+            </div>
           </div>
           <div>
-            <label style={lab}>Conector <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· auto</span></label>
-            <input value={form.conector_name} onChange={(e) => set('conector_name', e.target.value)} placeholder="del acuerdo del cliente" style={{ ...inp, background: form.conector_name ? '#F0FDFA' : '#fff' }} />
+            <label style={lab}>Monto bruto <span style={{ color: '#e11d48' }}>*</span></label>
+            <input inputMode="decimal" value={form.bruto} onChange={(e) => setBruto(e.target.value)} placeholder="0" style={inp} />
+            {otherCur && <div style={{ fontSize: 10.5, color: '#9AA4B2', marginTop: 3 }}>{otherCur} <span style={{ color: '#cbd5e1' }}>· cotización {RATE.toFixed(3)}</span></div>}
           </div>
-          <div><label style={lab}>Fecha</label><input type="date" value={form.income_date} onChange={(e) => set('income_date', e.target.value)} style={inp} /></div>
-          <div><label style={lab}>Tipo</label><select value={form.income_type} onChange={(e) => set('income_type', e.target.value)} style={inp}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Método de pago</label><select value={form.payment_method} onChange={(e) => setMethod(e.target.value)} style={inp}>{PAY_OPTS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
-          <div><label style={lab}>Bruto €</label><input inputMode="decimal" value={form.amount_eur} onChange={(e) => set('amount_eur', e.target.value)} placeholder="0" style={inp} /></div>
-          <div><label style={lab}>Bruto US$</label><input inputMode="decimal" value={form.amount_usd} onChange={(e) => setGrossUsd(e.target.value)} placeholder="0" style={inp} /></div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lab}>Neto US$ <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· base de comisiones{isStripe ? '' : ' · sin comisión = bruto'}</span></label>
-            <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value, netTouched: true }))} placeholder={isStripe ? 'lo que llegó neto de Stripe' : 'igual al bruto'} style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
-            {isStripe && <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 4 }}>Stripe descuenta comisión. Los cobros de Stripe entran solos con su neto real; si lo cargás a mano, poné lo que llegó a la cuenta.</div>}
-          </div>
+          <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Cobro <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· cómo entró el dinero</span></label><select value={form.payment_method} onChange={(e) => setMethod(e.target.value)} style={inp}>{PAY_OPTS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
+          {isStripe ? (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lab}>Neto US$ <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· lo que llegó de Stripe (descuenta comisión)</span></label>
+              <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value }))} placeholder="lo trae Stripe; ajustá si hace falta" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
+            </div>
+          ) : (
+            <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: '#6B7585' }}>Neto US$: <b style={{ color: '#0c8584' }}>{form.net_usd ? `$ ${form.net_usd}` : '—'}</b> <span style={{ color: '#9AA4B2' }}>· sin comisión (= bruto)</span></div>
+          )}
         </div>
         <div style={{ padding: '0 22px 6px', display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#6B7585', alignItems: 'center' }}>
           <span>Cobró: <b style={{ color: collected === 'Cliente' ? '#c2410c' : '#0c8584' }}>{collected}</b></span>
-          <span>Llegó a Mercury: <b style={{ color: merc ? '#16a34a' : '#9AA4B2' }}>{merc ? 'sí (auto)' : 'no'}</b></span>
-          <span style={{ color: '#9AA4B2' }}>Se guarda sin facturar; lo marcás cuando emitas la factura.</span>
+          <span>Mercury: <b style={{ color: merc ? '#16a34a' : '#9AA4B2' }}>{merc ? 'sí (auto)' : 'no'}</b></span>
+          {!isEdit && <span style={{ color: '#9AA4B2' }}>Se guarda sin facturar.</span>}
         </div>
         <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Pagador/Cliente y Neto US$ son obligatorios'}</span>
+          <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Usuario, cliente y monto son obligatorios'}</span>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={onSave} disabled={!ok || busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!ok || busy) ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Guardar ingreso'}</button>
+            <button onClick={onSave} disabled={!ok || busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!ok || busy) ? 0.6 : 1 }}>{busy ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Guardar ingreso')}</button>
           </div>
         </div>
       </div>
@@ -466,8 +499,6 @@ const Foot = ({ children, br2, bg, color }) => (
 );
 const Chip = ({ children, bg, fg, round }) => <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: round ? 20 : 6, background: bg, color: fg }}>{children}</span>;
 const Dot = ({ on, title, onClick }) => <button type="button" title={title} onClick={onClick} style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: on ? '#16a34a' : '#e2e8f0', border: 0, padding: 0, cursor: 'pointer' }} />;
-const ChkMini = ({ label, v, on }) => <label style={{ fontSize: 10, color: '#475569', marginRight: 6 }}><input type="checkbox" checked={v} onChange={(e) => on(e.target.checked)} style={{ accentColor: '#0EA5A4' }} /> {label}</label>;
-const ChkBig = ({ label, v, on }) => <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#475569', cursor: 'pointer' }}><input type="checkbox" checked={v} onChange={(e) => on(e.target.checked)} style={{ accentColor: '#0EA5A4', width: 15, height: 15 }} /> {label}</label>;
 function Clickable({ name, id, onOpen, dashed, muted }) {
   if (!name) return <span style={{ color: '#9AA4B2' }}>—</span>;
   if (!id) return <span style={{ color: muted ? '#475569' : undefined }}>{name}</span>;
