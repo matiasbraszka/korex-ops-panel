@@ -131,13 +131,13 @@ export default function DashboardPage() {
     // ---- por cliente ----
     const clMap = {};
     inc.forEach((r) => {
-      const o = clMap[r.client_name_sheet || '—'] || (clMap[r.client_name_sheet || '—'] = { fact: 0, cash: 0, crm: 0, publi: 0, con: 0, clt: 0, mkt: 0 });
+      const o = clMap[r.client_name_sheet || '—'] || (clMap[r.client_name_sheet || '—'] = { fact: 0, cash: 0, crm: 0, publi: 0, con: 0, clt: 0, afi: 0, cons: 0, mkt: 0 });
       const { comm } = commOf(r); const net = Number(r.net_usd) || 0;
       o.fact += net; o.cash += Number(r.korex_real) || 0;
       // CashCollect (korex_real) desglosado por producto: lo que le quedó a Korex de CRM y de Publicidad.
       if ((r.income_type || '').toUpperCase() === 'CRM') o.crm += Number(r.korex_real) || 0;
       if ((r.income_type || '').toUpperCase() === 'PUBLICIDAD') o.publi += Number(r.korex_real) || 0;
-      o.con += comm.conector || 0; o.clt += comm.cliente || 0; o.mkt += comm.marketing || 0;
+      o.con += comm.conector || 0; o.clt += comm.cliente || 0; o.afi += comm.afiliado || 0; o.cons += comm.consultor || 0; o.mkt += comm.marketing || 0;
     });
     const pcCols = [
       { key: 'fact', hbg: '#ECFDF3', hfg: '#15803d', cbg: '#F4FCF6', bl: '1px solid #F1F5F9', green: false },
@@ -146,9 +146,11 @@ export default function DashboardPage() {
       { key: 'publi', hbg: '#FEF8EC', hfg: '#b45309', cbg: '#FEFBF3', bl: '1px solid #F1F5F9', green: true },
       { key: 'con', hbg: '#EAF6FE', hfg: '#0369a1', cbg: '#F4FAFE', bl: '2px solid #E2E5EB', green: false },
       { key: 'clt', hbg: '#EAF1FE', hfg: '#1d4ed8', cbg: '#F5F8FE', bl: '1px solid #F1F5F9', green: false },
+      { key: 'afi', hbg: '#FEF8EC', hfg: '#b45309', cbg: '#FEFBF3', bl: '1px solid #F1F5F9', green: false },
+      { key: 'cons', hbg: '#EDE9FE', hfg: '#6d28d9', cbg: '#F6F4FE', bl: '1px solid #F1F5F9', green: false },
       { key: 'mkt', hbg: '#FDF0F6', hfg: '#be185d', cbg: '#FEF6FA', bl: '1px solid #F1F5F9', green: false },
     ];
-    const pcLabel = { fact: 'Facturación', cash: 'CashCollect', crm: 'CashColl. CRM', publi: 'CashColl. Publi', con: 'Com. Conector', clt: 'Com. Cliente', mkt: 'Com. Marketing' };
+    const pcLabel = { fact: 'Facturación', cash: 'CashCollect', crm: 'CashColl. CRM', publi: 'CashColl. Publi', con: 'Com. Conector', clt: 'Com. Cliente', afi: 'Com. Afiliado', cons: 'Com. Consultor', mkt: 'Com. Marketing' };
     const pcList = Object.entries(clMap).map(([name, o]) => ({ name, ...o })).sort((a, b) => b.fact - a.fact);
     const pcHeads = [{ label: 'Cliente', bg: '#F8FAFC', fg: '#64748B', bl: 'none' }, ...pcCols.map((c) => ({ label: pcLabel[c.key], bg: c.hbg, fg: c.hfg, bl: c.bl }))];
     const pcT = {}; pcCols.forEach((c) => (pcT[c.key] = pcList.reduce((a, o) => a + o[c.key], 0)));
@@ -168,6 +170,10 @@ export default function DashboardPage() {
     inc.forEach((r) => { const { comm } = commOf(r); Object.entries(comm).forEach(([k, v]) => (rolTot[k] = (rolTot[k] || 0) + v)); });
     const rolMax = Math.max(1, ...Object.values(rolTot));
     const porRol = Object.entries(rolTot).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: ROLE_LABEL[k] || k, color: ROLE[k] || '#64748B', barW: Math.round(v / rolMax * 100), val: money(v) }));
+    // Donut de comisiones por rol (mismo estilo que el donut de producto).
+    const comTotalRaw = Object.values(rolTot).reduce((a, b) => a + b, 0) || 1;
+    let accR = 0;
+    const comDonut = Object.entries(rolTot).sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([k, v]) => { const frac = v / comTotalRaw; const len = frac * C; const seg = { label: ROLE_LABEL[k] || k, color: ROLE[k] || '#64748B', dash: `${len.toFixed(1)} ${(C - len).toFixed(1)}`, off: (-accR * C).toFixed(1), pct: Math.round(frac * 100), val: money(v) }; accR += frac; return seg; });
 
     // egresos al detalle
     let egTotal = 0; const byCatMap = {};
@@ -191,7 +197,7 @@ export default function DashboardPage() {
       kpis, monthly: { heads: mHeads, rows: mRows, totals: mTotals },
       evoMonths, egresoLine, donut, donutTotal: kfmt(donutTotal),
       porCliente: { heads: pcHeads, cols: pcCols, list: pcList, totals: pcCols.map((c) => ({ v: money(pcT[c.key]), color: c.green ? '#15803d' : '#1e293b', bl: c.bl })) },
-      topClientes, topConectores, topUsuarios, porRol, alerts,
+      topClientes, topConectores, topUsuarios, porRol, comDonut, comTotal: kfmt(comTotalRaw), alerts,
       eg: { total: money(egTotal), byCat: egByCat, cats: egCats, motivos: egMotivos },
     };
   }, [d, cli, dStart, dEnd, egCat]);
@@ -424,16 +430,24 @@ export default function DashboardPage() {
       {/* comisiones por rol + alertas */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 13.5, fontWeight: 700 }}>Comisiones por rol</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {agg.porRol.map((r, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 80, fontSize: 11.5, fontWeight: 600, color: r.color }}>{r.label}</span>
-                <div style={{ flex: 1, height: 14, background: '#EEF1F5', borderRadius: 5, overflow: 'hidden' }}><div style={{ height: '100%', width: `${r.barW}%`, background: r.color, borderRadius: 5 }} /></div>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#3B4453', width: 62, textAlign: 'left' }}>{r.val}</span>
-              </div>
-            ))}
-            {!agg.porRol.length && <span style={{ fontSize: 12, color: '#9AA4B2' }}>Sin comisiones</span>}
+          <h3 style={{ margin: '0 0 6px', fontSize: 13.5, fontWeight: 700 }}>Comisiones por rol</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 8 }}>
+            <svg width="128" height="128" viewBox="0 0 128 128" style={{ flexShrink: 0 }}>
+              {agg.comDonut.map((s, i) => <circle key={i} cx="64" cy="64" r="54" fill="none" stroke={s.color} strokeWidth="20" strokeDasharray={s.dash} strokeDashoffset={s.off} transform="rotate(-90 64 64)" />)}
+              <text x="64" y="59" textAnchor="middle" fontSize="13" fontWeight="800" fill="#0D1117">{agg.comTotal}</text>
+              <text x="64" y="74" textAnchor="middle" fontSize="9" fontWeight="600" fill="#8A93A2">comisiones</text>
+            </svg>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {agg.comDonut.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: '#3B4453', flex: 1 }}>{s.label}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#3B4453' }}>{s.val}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#9AA4B2', width: 34, textAlign: 'right' }}>{s.pct}%</span>
+                </div>
+              ))}
+              {!agg.comDonut.length && <span style={{ fontSize: 12, color: '#9AA4B2' }}>Sin comisiones</span>}
+            </div>
           </div>
         </div>
         <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '16px 18px' }}>
