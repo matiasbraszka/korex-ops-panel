@@ -19,10 +19,15 @@ const isReservado = (e) => e.role_key === 'afiliado' && /reserv/i.test(e.notes |
 // "Llegó a Mercury" automático: si lo cobró Korex por Stripe o Mercury (Empresa),
 // el dinero termina depositado en Mercury. Se calcula solo, sin tilde manual.
 const autoMercury = (method, collected) => (collected || 'Korex') === 'Korex' && /stripe|mercury/i.test(method || '');
+// "Quién cobró" se deduce del método: los "- Cliente" los cobra el cliente; el resto, Korex.
+const collectedFromMethod = (m) => /cliente/i.test(m || '') ? 'Cliente' : 'Korex';
+const isStripeMethod = (m) => /stripe/i.test(m || '');
 
 export default function IngresosPage() {
   const [rows, setRows] = useState(null);
   const [dirMap, setDirMap] = useState({});
+  const [dir, setDir] = useState([]);          // roster del directorio para el desplegable de pagador
+  const [conByClient, setConByClient] = useState({}); // cliente → conector (del acuerdo)
   const [reconMap, setReconMap] = useState({});
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
@@ -44,6 +49,19 @@ export default function IngresosPage() {
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.id] = r; }); setDirMap(m); }).catch(() => {});
     sbFetch('fin_income_recon?select=income_id,source,ref_id,amount,dt,who,receipt_url,confidence&limit=6000')
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.income_id] = r; }); setReconMap(m); }).catch(() => {});
+    // Roster del directorio (para elegir el pagador) — dedup por nombre, preferimos el que tenga cliente_padre.
+    sbFetch('fin_directory?select=nombre,tipo,cliente_padre,email&order=nombre.asc&limit=2000')
+      .then((d) => {
+        const seen = new Map();
+        (Array.isArray(d) ? d : []).forEach((p) => {
+          if (!p.nombre) return; const k = p.nombre.trim().toLowerCase(); const prev = seen.get(k);
+          if (!prev || (!prev.cliente_padre && p.cliente_padre)) seen.set(k, p);
+        });
+        setDir([...seen.values()]);
+      }).catch(() => {});
+    // Mapa cliente → conector (del acuerdo) para autocompletar al elegir el pagador.
+    sbFetch('fin_client_terms?select=sheet_client_name,conector_name&limit=2000')
+      .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((t) => { if (t.sheet_client_name && t.conector_name) m[t.sheet_client_name.trim().toLowerCase()] = t.conector_name; }); setConByClient(m); }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -80,6 +98,7 @@ export default function IngresosPage() {
     if (!f.client_name_sheet.trim() || net == null) return;
     setBusy(true);
     try {
+      const collected = collectedFromMethod(f.payment_method);
       const maxRows = await sbFetch('fin_incomes?select=sheet_row&order=sheet_row.desc.nullslast&limit=1');
       const nextRow = ((Array.isArray(maxRows) && maxRows[0]?.sheet_row) || 0) + 1;
       await sbFetch('fin_incomes', {
@@ -87,9 +106,10 @@ export default function IngresosPage() {
         body: JSON.stringify({
           sheet_row: nextRow, income_date: f.income_date || null, month_date: f.income_date ? f.income_date.slice(0, 7) + '-01' : null,
           client_name_sheet: f.client_name_sheet.trim(), payer_name: f.payer_name.trim() || f.client_name_sheet.trim(),
-          conector_name_sheet: f.conector_name.trim() || null, collected_by: f.collected_by, income_type: f.income_type,
+          conector_name_sheet: f.conector_name.trim() || null, collected_by: collected, income_type: f.income_type,
           amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
-          facturado: f.fact, organizado_finanzas: f.fin, llego_mercury: autoMercury(f.payment_method, f.collected_by),
+          // Flags por defecto: sin facturar, sin organizar; "llegó a Mercury" automático.
+          facturado: false, organizado_finanzas: false, llego_mercury: autoMercury(f.payment_method, collected),
         }),
       });
       await sbFetch('rpc/fin_recompute', { method: 'POST', body: '{}', throwOnError: true });
@@ -174,7 +194,7 @@ export default function IngresosPage() {
 
       {/* toolbar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
-        <button onClick={() => setModal({ income_date: todayStr(), income_type: 'CRM', client_name_sheet: '', payer_name: '', conector_name: '', collected_by: 'Korex', payment_method: PAY_OPTS[0], amount_eur: '', amount_usd: '', net_usd: '', fact: false, fin: false, merc: false })}
+        <button onClick={() => setModal({ income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', payment_method: PAY_OPTS[0], amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
@@ -281,7 +301,7 @@ export default function IngresosPage() {
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
 
-      {modal && <NuevoIngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} onSave={saveModal} busy={busy} onClose={() => setModal(null)} />}
+      {modal && <NuevoIngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} busy={busy} onClose={() => setModal(null)} />}
       {factura && <FacturaModal income={factura} onClose={() => setFactura(null)} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
@@ -318,47 +338,99 @@ function EditRow({ draft, setDraft, cliOpts, onSave, onCancel }) {
   );
 }
 
-/* ---------- modal de alta ---------- */
-function NuevoIngresoModal({ form, setForm, cliOpts, onSave, busy, onClose }) {
+/* ---------- modal de alta (pagador → cliente/conector automáticos) ---------- */
+function NuevoIngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, busy, onClose }) {
   const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const isStripe = isStripeMethod(form.payment_method);
+  const collected = collectedFromMethod(form.payment_method);
+  const merc = autoMercury(form.payment_method, collected);
   const ok = form.client_name_sheet.trim() && form.net_usd;
   const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
-  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff' };
+  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+
+  // Al elegir el pagador del directorio: completa cliente (cliente_padre) y conector (del acuerdo).
+  const pickPayer = (p) => setForm((s) => ({
+    ...s,
+    payer_name: p.nombre,
+    client_name_sheet: p.cliente_padre || (p.tipo === 'Cliente' ? p.nombre : s.client_name_sheet),
+    conector_name: conByClient[(p.cliente_padre || p.nombre || '').trim().toLowerCase()] || '',
+  }));
+  // Neto automático: Mercury/USDT no tienen comisión → neto = bruto. Stripe descuenta su fee (se carga aparte).
+  const setMethod = (m) => setForm((s) => ({ ...s, payment_method: m, net_usd: s.netTouched ? s.net_usd : (isStripeMethod(m) ? '' : (s.amount_usd || '')) }));
+  const setGrossUsd = (v) => setForm((s) => ({ ...s, amount_usd: v, net_usd: (s.netTouched || isStripeMethod(s.payment_method)) ? s.net_usd : v }));
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 580, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 580, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
-          <div><div style={{ fontSize: 16, fontWeight: 800 }}>Nuevo ingreso</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Se guarda y el motor recalcula las comisiones al instante.</div></div>
+          <div><div style={{ fontSize: 16, fontWeight: 800 }}>Nuevo ingreso</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Elegí quién pagó y el resto se completa solo.</div></div>
           <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
         </div>
         <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lab}>Pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· buscalo en el directorio</span></label>
+            <PayerSelect value={form.payer_name} dir={dir} inp={inp} onPick={pickPayer} onType={(v) => set('payer_name', v)} />
+          </div>
+          <div>
+            <label style={lab}>Cliente <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· auto</span></label>
+            <input list="modal-cli-dl" value={form.client_name_sheet} onChange={(e) => set('client_name_sheet', e.target.value)} placeholder="se completa al elegir pagador" style={{ ...inp, background: form.client_name_sheet ? '#F0FDFA' : '#fff' }} />
+            <datalist id="modal-cli-dl">{cliOpts.map((c) => <option key={c} value={c} />)}</datalist>
+          </div>
+          <div>
+            <label style={lab}>Conector <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· auto</span></label>
+            <input value={form.conector_name} onChange={(e) => set('conector_name', e.target.value)} placeholder="del acuerdo del cliente" style={{ ...inp, background: form.conector_name ? '#F0FDFA' : '#fff' }} />
+          </div>
           <div><label style={lab}>Fecha</label><input type="date" value={form.income_date} onChange={(e) => set('income_date', e.target.value)} style={inp} /></div>
           <div><label style={lab}>Tipo</label><select value={form.income_type} onChange={(e) => set('income_type', e.target.value)} style={inp}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div><label style={lab}>Cliente <span style={{ color: '#e11d48' }}>*</span></label><input list="modal-cli-dl" value={form.client_name_sheet} onChange={(e) => set('client_name_sheet', e.target.value)} placeholder="Cliente del acuerdo" style={inp} /><datalist id="modal-cli-dl">{cliOpts.map((c) => <option key={c} value={c} />)}</datalist></div>
-          <div><label style={lab}>Pagador</label><input value={form.payer_name} onChange={(e) => set('payer_name', e.target.value)} placeholder="Quién pagó" style={inp} /></div>
-          <div><label style={lab}>Conector</label><input value={form.conector_name} onChange={(e) => set('conector_name', e.target.value)} placeholder="(opcional)" style={inp} /></div>
-          <div><label style={lab}>¿Quién cobró?</label><select value={form.collected_by} onChange={(e) => set('collected_by', e.target.value)} style={inp}><option value="Korex">Korex</option><option value="Cliente">Cliente</option></select></div>
-          <div><label style={lab}>Método de pago</label><select value={form.payment_method} onChange={(e) => set('payment_method', e.target.value)} style={inp}>{PAY_OPTS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
+          <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Método de pago</label><select value={form.payment_method} onChange={(e) => setMethod(e.target.value)} style={inp}>{PAY_OPTS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
           <div><label style={lab}>Bruto €</label><input inputMode="decimal" value={form.amount_eur} onChange={(e) => set('amount_eur', e.target.value)} placeholder="0" style={inp} /></div>
-          <div><label style={lab}>Bruto US$</label><input inputMode="decimal" value={form.amount_usd} onChange={(e) => set('amount_usd', e.target.value)} placeholder="0" style={inp} /></div>
-          <div><label style={lab}>Neto US$ <span style={{ color: '#e11d48' }}>*</span></label><input inputMode="decimal" value={form.net_usd} onChange={(e) => set('net_usd', e.target.value)} placeholder="base de comisiones" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} /></div>
-          <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 18, paddingTop: 2, alignItems: 'center' }}>
-            <ChkBig label="Facturado" v={form.fact} on={(v) => set('fact', v)} />
-            <ChkBig label="Organizado en finanzas" v={form.fin} on={(v) => set('fin', v)} />
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#475569' }} title="Se calcula solo: Korex + Stripe/Mercury → llega a Mercury">
-              <span style={{ width: 15, height: 15, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: autoMercury(form.payment_method, form.collected_by) ? '#16a34a' : '#e2e8f0', color: '#fff', fontSize: 10, fontWeight: 800 }}>{autoMercury(form.payment_method, form.collected_by) ? '✓' : ''}</span>
-              Llegó a Mercury <span style={{ fontSize: 10.5, color: '#9AA4B2' }}>· automático</span>
-            </span>
+          <div><label style={lab}>Bruto US$</label><input inputMode="decimal" value={form.amount_usd} onChange={(e) => setGrossUsd(e.target.value)} placeholder="0" style={inp} /></div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lab}>Neto US$ <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· base de comisiones{isStripe ? '' : ' · sin comisión = bruto'}</span></label>
+            <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value, netTouched: true }))} placeholder={isStripe ? 'lo que llegó neto de Stripe' : 'igual al bruto'} style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
+            {isStripe && <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 4 }}>Stripe descuenta comisión. Los cobros de Stripe entran solos con su neto real; si lo cargás a mano, poné lo que llegó a la cuenta.</div>}
           </div>
         </div>
+        <div style={{ padding: '0 22px 6px', display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#6B7585', alignItems: 'center' }}>
+          <span>Cobró: <b style={{ color: collected === 'Cliente' ? '#c2410c' : '#0c8584' }}>{collected}</b></span>
+          <span>Llegó a Mercury: <b style={{ color: merc ? '#16a34a' : '#9AA4B2' }}>{merc ? 'sí (auto)' : 'no'}</b></span>
+          <span style={{ color: '#9AA4B2' }}>Se guarda sin facturar; lo marcás cuando emitas la factura.</span>
+        </div>
         <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Cliente y Neto US$ son obligatorios'}</span>
+          <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Pagador/Cliente y Neto US$ son obligatorios'}</span>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
             <button onClick={onSave} disabled={!ok || busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!ok || busy) ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Guardar ingreso'}</button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Desplegable de búsqueda del pagador sobre el directorio (nombre + tipo · cliente).
+function PayerSelect({ value, dir, onPick, onType, inp }) {
+  const [open, setOpen] = useState(false);
+  const [qq, setQq] = useState(value || '');
+  useEffect(() => { setQq(value || ''); }, [value]);
+  const list = useMemo(() => {
+    const s = qq.trim().toLowerCase();
+    return (dir || []).filter((p) => !s || (p.nombre || '').toLowerCase().includes(s) || (p.cliente_padre || '').toLowerCase().includes(s)).slice(0, 60);
+  }, [qq, dir]);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input value={qq} onChange={(e) => { setQq(e.target.value); onType(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} placeholder="Buscá la persona que pagó…" style={inp} />
+      {open && (
+        <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, maxHeight: 240, overflowY: 'auto', boxShadow: '0 10px 28px rgba(13,17,23,.16)' }}>
+          {list.length === 0 ? <div style={{ padding: '10px 12px', fontSize: 12, color: '#9AA4B2' }}>Sin coincidencias — se usa el nombre escrito.</div>
+            : list.map((p, i) => (
+              <div key={i} onMouseDown={() => { onPick(p); setOpen(false); }} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #F4F6F9' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nombre}</div>
+                <div style={{ fontSize: 10.5, color: '#9AA4B2' }}>{p.tipo || '—'}{p.cliente_padre ? ' · ' + p.cliente_padre : ''}</div>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }

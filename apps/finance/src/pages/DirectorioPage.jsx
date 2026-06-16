@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
 import { Search, Msg } from '../components/bits.jsx';
@@ -16,12 +16,14 @@ export default function DirectorioPage() {
   const [tipo, setTipo] = useState('');
   const [hover, setHover] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [editId, setEditId] = useState(null);   // persona en edición (id de fin_directory)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     sbFetch('fin_person_activity?select=id,nombre,tipo,cli,ref,email,telefono,contrato_firmado,ingreso_date,pagos_count,pagos_net_usd,com_count,com_amount,referidos_count&order=ingreso_date.desc.nullslast&limit=2000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
   }, []);
+  useEffect(() => { load(); }, [load]);
 
   const counts = useMemo(() => {
     const c = {}; (rows || []).forEach((r) => { if (r.tipo) c[r.tipo] = (c[r.tipo] || 0) + 1; });
@@ -62,8 +64,8 @@ export default function DirectorioPage() {
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: 12.5, whiteSpace: 'nowrap' }}>
           <thead>
             <tr style={{ textAlign: 'left', color: '#64748B' }}>
-              {['Persona', 'Rol', 'Cliente', 'Referente', 'Pagó', 'Cobró', 'Trajo', 'Contrato', 'Ingreso'].map((h, i) => (
-                <th key={h} style={{ position: 'sticky', top: 0, background: '#F8FAFC', borderBottom: '1px solid #E2E5EB', padding: '10px 14px', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: (i >= 4 && i <= 6) || i === 7 ? (i === 4 || i === 5 ? 'left' : 'center') : 'left' }}>{h}</th>
+              {['Persona', 'Rol', 'Cliente', 'Referente', 'Pagó', 'Cobró', 'Trajo', 'Contrato', 'Ingreso', ''].map((h, i) => (
+                <th key={i} style={{ position: 'sticky', top: 0, background: '#F8FAFC', borderBottom: '1px solid #E2E5EB', padding: '10px 14px', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: (i >= 4 && i <= 6) || i === 7 ? (i === 4 || i === 5 ? 'left' : 'center') : 'left' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -87,16 +89,92 @@ export default function DirectorioPage() {
                   <Td center style={{ color: r.referidos_count ? '#0369a1' : '#cbd5e1', fontWeight: 600 }}>{r.referidos_count || '—'}</Td>
                   <Td center style={{ color: firmado ? '#16a34a' : '#cbd5e1', fontWeight: 700 }}>{firmado ? '✓' : '✕'}</Td>
                   <Td style={{ color: '#9AA4B2' }}>{fdate(r.ingreso_date)}</Td>
+                  <Td center>
+                    <button onClick={(e) => { e.stopPropagation(); setEditId(r.id); }} title="Editar datos y facturación" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: hov ? '#0EA5A4' : '#C4CCD6', padding: 0, display: 'inline-flex' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                    </button>
+                  </Td>
                 </tr>
               );
             })}
-            {!filtered.length && <tr><td colSpan={9} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin resultados.</td></tr>}
+            {!filtered.length && <tr><td colSpan={10} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin resultados.</td></tr>}
           </tbody>
         </table>
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
 
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
+      {editId && <EditPersonModal id={editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
+    </div>
+  );
+}
+
+/* ---------- editor de persona (datos de contacto + facturación) ---------- */
+const FACTURAR_OPTS = ['', 'Persona', 'Empresa'];
+function EditPersonModal({ id, onClose, onSaved }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa&limit=1`)
+      .then((d) => { if (alive) { setData((Array.isArray(d) ? d[0] : null) || {}); setLoading(false); } })
+      .catch((e) => { if (alive) { setErr(String(e)); setLoading(false); } });
+    return () => { alive = false; };
+  }, [id]);
+
+  const set = (k, v) => setData((s) => ({ ...s, [k]: v }));
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      await sbFetch(`fin_directory?id=eq.${id}`, {
+        method: 'PATCH', throwOnError: true,
+        body: JSON.stringify({
+          tipo: data.tipo || null, cliente_padre: (data.cliente_padre || '').trim() || null, conector: (data.conector || '').trim() || null,
+          email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
+          dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
+          facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
+        }),
+      });
+      onSaved?.();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+
+  const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
+  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 560, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
+          <div><div style={{ fontSize: 16, fontWeight: 800 }}>{loading ? 'Editar persona' : (data?.nombre || 'Editar persona')}</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Datos de contacto y facturación (se usan al emitir la factura)</div></div>
+          <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
+        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#9AA4B2', fontSize: 13 }}>Cargando…</div>
+        ) : (
+          <>
+            <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div><label style={lab}>Rol</label><select value={data.tipo || ''} onChange={(e) => set('tipo', e.target.value)} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
+              <div><label style={lab}>Cliente (al que pertenece)</label><input value={data.cliente_padre || ''} onChange={(e) => set('cliente_padre', e.target.value)} placeholder="cliente padre" style={inp} /></div>
+              <div><label style={lab}>Conector</label><input value={data.conector || ''} onChange={(e) => set('conector', e.target.value)} placeholder="(opcional)" style={inp} /></div>
+              <div><label style={lab}>E-mail</label><input value={data.email || ''} onChange={(e) => set('email', e.target.value)} placeholder="—" style={inp} /></div>
+              <div><label style={lab}>Teléfono</label><input value={data.telefono || ''} onChange={(e) => set('telefono', e.target.value)} placeholder="—" style={inp} /></div>
+              <div><label style={lab}>Facturar a</label><select value={data.facturar_a || ''} onChange={(e) => set('facturar_a', e.target.value)} style={inp}>{FACTURAR_OPTS.map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={lab}>ID fiscal o DNI</label><input value={data.id_fiscal || ''} onChange={(e) => set('id_fiscal', e.target.value)} placeholder="—" style={inp} /></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Dirección de facturación</label><input value={data.dir_facturacion || ''} onChange={(e) => set('dir_facturacion', e.target.value)} placeholder="—" style={inp} /></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Empresa <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· se factura a este nombre si "Facturar a" = Empresa</span></label><input value={data.empresa || ''} onChange={(e) => set('empresa', e.target.value)} placeholder="—" style={inp} /></div>
+              {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
+            </div>
+            <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={save} disabled={busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Guardar'}</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
