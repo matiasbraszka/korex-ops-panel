@@ -11,10 +11,13 @@ export default function DashboardPage() {
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
   const [cli, setCli] = useState('');
-  const [dStart, setDStart] = useState('');
-  const [dEnd, setDEnd] = useState('');
+  // Filtro de período: arranca en enero 2026 y se recuerda (no se resetea al volver a entrar).
+  const [dStart, setDStart] = useState(() => { try { return localStorage.getItem('fin_dash_dStart') || '2026-01-01'; } catch { return '2026-01-01'; } });
+  const [dEnd, setDEnd] = useState(() => { try { return localStorage.getItem('fin_dash_dEnd') || ''; } catch { return ''; } });
   const [egCat, setEgCat] = useState('');
   const [pcHover, setPcHover] = useState(null);
+  useEffect(() => { try { localStorage.setItem('fin_dash_dStart', dStart || ''); } catch { /* noop */ } }, [dStart]);
+  useEffect(() => { try { localStorage.setItem('fin_dash_dEnd', dEnd || ''); } catch { /* noop */ } }, [dEnd]);
 
   useEffect(() => {
     Promise.all([
@@ -24,9 +27,9 @@ export default function DashboardPage() {
     ])
       .then(([inc, exp, fvd]) => {
         setD({ inc: inc || [], exp: exp || [], fvd: fvd || [] });
-        // Rango por defecto = todo el período con datos (inputs poblados).
-        const ds = (inc || []).map((r) => r.income_date).filter(Boolean).sort();
-        if (ds.length) { setDStart(ds[0]); setDEnd(ds[ds.length - 1]); }
+        // dStart queda fijo en enero 2026 (o lo último guardado). dEnd: si no hay uno
+        // recordado, lo poblamos con la última fecha con datos (acotado y el input lleno).
+        if (!dEnd) { const ds = (inc || []).map((r) => r.income_date).filter(Boolean).sort(); if (ds.length) setDEnd(ds[ds.length - 1]); }
       })
       .catch((e) => setError(String(e)));
   }, []);
