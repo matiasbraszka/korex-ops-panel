@@ -34,7 +34,7 @@ export default function AcuerdosPage() {
       sbFetch('fin_client_terms?select=id,sheet_client_name,client_id,service_value,umbral_base,conector_name,consultor_name,marketing_name,conector_start_date,consultor_start_date,marketing_start_date&order=agreement_date.desc.nullslast'),
       sbFetch('fin_commission_rules?select=id,sheet_client_name,client_id,income_type,role_key,pct'),
       sbFetch('fin_directory?select=nombre,tipo&limit=1000'),
-      sbFetch('fin_incomes?select=conector_name_sheet,client_name_sheet,collected_by,net_usd,amount_usd,fin_commission_entries(role_key,amount)&limit=6000'),
+      sbFetch('fin_incomes?select=conector_name_sheet,client_name_sheet,collected_by,net_usd,korex_real,fin_commission_entries(role_key,amount)&limit=6000'),
     ])
       .then(([t, r, dd, inc]) => { setTerms(t || []); setRules(r || []); setDir(dd || []); setIncomes(inc || []); })
       .catch((e) => setError(String(e)));
@@ -60,9 +60,10 @@ export default function AcuerdosPage() {
       const n = r.conector_name_sheet; if (!n) return;
       const con = (r.fin_commission_entries || []).filter((e) => e.role_key === 'conector').reduce((a, e) => a + (Number(e.amount) || 0), 0);
       const g = m[n] || (m[n] = { ventas: 0, fact: 0, cash: 0, comision: 0, clients: {} });
-      g.ventas++; g.fact += Number(r.amount_usd) || 0; if (r.collected_by === 'Korex') g.cash += Number(r.net_usd) || 0; g.comision += con;
+      // Facturación = neto · CashCollect = korex_real (mismas definiciones validadas del dashboard).
+      g.ventas++; g.fact += Number(r.net_usd) || 0; g.cash += Number(r.korex_real) || 0; g.comision += con;
       const c = g.clients[r.client_name_sheet || '—'] || (g.clients[r.client_name_sheet || '—'] = { ventas: 0, fact: 0, cash: 0, comision: 0 });
-      c.ventas++; c.fact += Number(r.amount_usd) || 0; if (r.collected_by === 'Korex') c.cash += Number(r.net_usd) || 0; c.comision += con;
+      c.ventas++; c.fact += Number(r.net_usd) || 0; c.cash += Number(r.korex_real) || 0; c.comision += con;
     });
     return Object.entries(m).sort((a, b) => b[1].cash - a[1].cash).map(([name, g]) => ({ name, ...g, clients: Object.entries(g.clients).sort((a, b) => b[1].fact - a[1].fact).map(([cli, c]) => ({ cli, ...c })) }));
   }, [incomes]);

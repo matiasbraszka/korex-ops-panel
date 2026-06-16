@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
+import FacturaModal from '../components/FacturaModal.jsx';
 import { Search } from '../components/bits.jsx';
 import { money, money2, fdate, pagoChip, TYPE_BG, TYPE_FG, TYPE_RAIL, ROLE } from '../lib/format.js';
 
@@ -15,6 +16,9 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const feePct = (g, n) => { const gg = Number(g), nn = Number(n); return (gg > 0 && nn > 0 && gg > nn) ? ((gg - nn) / gg) * 100 : null; };
 const isAdBudget = (e) => e.role_key === 'cliente' && /publicidad/i.test(e.notes || '');
 const isReservado = (e) => e.role_key === 'afiliado' && /reserv/i.test(e.notes || '');
+// "Llegó a Mercury" automático: si lo cobró Korex por Stripe o Mercury (Empresa),
+// el dinero termina depositado en Mercury. Se calcula solo, sin tilde manual.
+const autoMercury = (method, collected) => (collected || 'Korex') === 'Korex' && /stripe|mercury/i.test(method || '');
 
 export default function IngresosPage() {
   const [rows, setRows] = useState(null);
@@ -30,9 +34,10 @@ export default function IngresosPage() {
   const [editId, setEditId] = useState(null);  // fila en edición
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState(false);
+  const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_name_sheet,payer_name,conector_name_sheet,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
     sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id&limit=6000')
@@ -53,7 +58,7 @@ export default function IngresosPage() {
     } catch { load(); }
   };
 
-  const startEdit = (r) => { setEditId(r.id); setDraft({ income_date: r.income_date || '', client_name_sheet: r.client_name_sheet || '', payer_name: r.payer_name || '', conector_name_sheet: r.conector_name_sheet || '', payment_method: r.payment_method || '', income_type: r.income_type || 'CRM', net_usd: r.net_usd == null ? '' : String(r.net_usd), facturado: !!r.facturado, organizado_finanzas: !!r.organizado_finanzas, llego_mercury: !!r.llego_mercury }); };
+  const startEdit = (r) => { setEditId(r.id); setDraft({ income_date: r.income_date || '', client_name_sheet: r.client_name_sheet || '', payer_name: r.payer_name || '', conector_name_sheet: r.conector_name_sheet || '', collected_by: r.collected_by || 'Korex', payment_method: r.payment_method || '', income_type: r.income_type || 'CRM', net_usd: r.net_usd == null ? '' : String(r.net_usd), facturado: !!r.facturado, organizado_finanzas: !!r.organizado_finanzas }); };
   const saveEdit = async () => {
     const d = draft;
     await patchIncome(editId, {
@@ -64,7 +69,8 @@ export default function IngresosPage() {
       payment_method: d.payment_method || null,
       income_type: d.income_type,
       net_usd: num(d.net_usd),
-      facturado: !!d.facturado, organizado_finanzas: !!d.organizado_finanzas, llego_mercury: !!d.llego_mercury,
+      facturado: !!d.facturado, organizado_finanzas: !!d.organizado_finanzas,
+      llego_mercury: autoMercury(d.payment_method, d.collected_by),  // automático
     }, { recompute: true, recon: true });
     setEditId(null);
   };
@@ -83,7 +89,7 @@ export default function IngresosPage() {
           client_name_sheet: f.client_name_sheet.trim(), payer_name: f.payer_name.trim() || f.client_name_sheet.trim(),
           conector_name_sheet: f.conector_name.trim() || null, collected_by: f.collected_by, income_type: f.income_type,
           amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
-          facturado: f.fact, organizado_finanzas: f.fin, llego_mercury: f.merc,
+          facturado: f.fact, organizado_finanzas: f.fin, llego_mercury: autoMercury(f.payment_method, f.collected_by),
         }),
       });
       await sbFetch('rpc/fin_recompute', { method: 'POST', body: '{}', throwOnError: true });
@@ -116,7 +122,9 @@ export default function IngresosPage() {
     const qq = q.trim().toLowerCase();
     return data.filter((r) =>
       (!qq || (r.client_name_sheet || '').toLowerCase().includes(qq) || (r.payer_name || '').toLowerCase().includes(qq) || (r.conector_name_sheet || '').toLowerCase().includes(qq)) &&
-      (!tipo || (r.income_type || '') === tipo) && (!mes || r.mes === mes));
+      // El chip compara contra el tipo MOSTRADO (effective_type, siempre en mayúsculas);
+      // income_type viene del Sheet con mayúsc/minúsc ("Publicidad") y rompía el filtro.
+      (!tipo || (r.effective_type || r.income_type || '').toUpperCase() === tipo) && (!mes || r.mes === mes));
   }, [data, q, tipo, mes]);
 
   const totals = useMemo(() => {
@@ -216,9 +224,16 @@ export default function IngresosPage() {
                   <td style={{ position: 'sticky', left: 0, zIndex: 2, background: sticky, borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', padding: 0, color: '#64748B' }}>
                     <div style={{ borderLeft: `3px solid ${TYPE_RAIL[r.effective_type] || '#cbd5e1'}`, padding: '8px 10px 8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                       <span>{fdate(r.income_date)}</span>
-                      <button onClick={() => startEdit(r)} title="Editar fila" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                      </button>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {r.collected_by !== 'Cliente' && (
+                          <button onClick={() => setFactura(r)} title={r.facturado ? 'Factura emitida — ver / reimprimir' : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? '#16a34a' : '#B6BFCC', padding: 0, display: 'flex' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
+                          </button>
+                        )}
+                        <button onClick={() => startEdit(r)} title="Editar fila" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                        </button>
+                      </span>
                     </div>
                   </td>
                   <td style={{ position: 'sticky', left: 96, zIndex: 2, background: sticky, borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #E2E5EB', padding: '8px 12px', fontWeight: 600, boxShadow: '2px 0 4px -2px rgba(13,17,23,.07)' }}>
@@ -267,6 +282,7 @@ export default function IngresosPage() {
       <div style={{ height: 14, flexShrink: 0 }} />
 
       {modal && <NuevoIngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} onSave={saveModal} busy={busy} onClose={() => setModal(null)} />}
+      {factura && <FacturaModal income={factura} onClose={() => setFactura(null)} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
   );
@@ -289,7 +305,7 @@ function EditRow({ draft, setDraft, cliOpts, onSave, onCancel }) {
       <td colSpan={3} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5', textAlign: 'center' }}>
         <ChkMini label="Fact" v={draft.facturado} on={(v) => set('facturado', v)} />
         <ChkMini label="Fin" v={draft.organizado_finanzas} on={(v) => set('organizado_finanzas', v)} />
-        <ChkMini label="Merc" v={draft.llego_mercury} on={(v) => set('llego_mercury', v)} />
+        <span style={{ fontSize: 10, color: '#475569', marginRight: 6, whiteSpace: 'nowrap' }} title="Llegó a Mercury (automático: Korex + Stripe/Mercury)"><span style={{ color: autoMercury(draft.payment_method, draft.collected_by) ? '#16a34a' : '#cbd5e1' }}>●</span> Merc auto</span>
       </td>
       <td colSpan={3} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5' }}><input inputMode="decimal" value={draft.net_usd} onChange={(e) => set('net_usd', e.target.value)} placeholder="neto US$" style={{ ...inp, width: 90 }} /></td>
       <td colSpan={5} style={{ padding: '5px 8px', borderBottom: '1px solid #EEF1F5', borderRight: '2px solid #EEF1F5', textAlign: 'center', color: '#9AA4B2', fontSize: 10 }}>comisiones se recalculan al guardar</td>
@@ -326,10 +342,13 @@ function NuevoIngresoModal({ form, setForm, cliOpts, onSave, busy, onClose }) {
           <div><label style={lab}>Bruto €</label><input inputMode="decimal" value={form.amount_eur} onChange={(e) => set('amount_eur', e.target.value)} placeholder="0" style={inp} /></div>
           <div><label style={lab}>Bruto US$</label><input inputMode="decimal" value={form.amount_usd} onChange={(e) => set('amount_usd', e.target.value)} placeholder="0" style={inp} /></div>
           <div><label style={lab}>Neto US$ <span style={{ color: '#e11d48' }}>*</span></label><input inputMode="decimal" value={form.net_usd} onChange={(e) => set('net_usd', e.target.value)} placeholder="base de comisiones" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} /></div>
-          <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 18, paddingTop: 2 }}>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 18, paddingTop: 2, alignItems: 'center' }}>
             <ChkBig label="Facturado" v={form.fact} on={(v) => set('fact', v)} />
             <ChkBig label="Organizado en finanzas" v={form.fin} on={(v) => set('fin', v)} />
-            <ChkBig label="Llegó a Mercury" v={form.merc} on={(v) => set('merc', v)} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#475569' }} title="Se calcula solo: Korex + Stripe/Mercury → llega a Mercury">
+              <span style={{ width: 15, height: 15, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: autoMercury(form.payment_method, form.collected_by) ? '#16a34a' : '#e2e8f0', color: '#fff', fontSize: 10, fontWeight: 800 }}>{autoMercury(form.payment_method, form.collected_by) ? '✓' : ''}</span>
+              Llegó a Mercury <span style={{ fontSize: 10.5, color: '#9AA4B2' }}>· automático</span>
+            </span>
           </div>
         </div>
         <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>

@@ -416,9 +416,16 @@ export default function DashboardPage() {
           </div>
         </div>
         <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 4px', fontSize: 13.5, fontWeight: 700 }}>Top usuarios en publicidad <span style={{ fontWeight: 500, color: '#9AA4B2', fontSize: 11 }}>· {agg.topUsuarios.length}</span></h3>
-          <div style={{ fontSize: 10, color: '#9AA4B2', marginBottom: 10, display: 'flex', justifyContent: 'flex-end', gap: 14 }}><span>invirtió · %</span><span style={{ color: '#16a34a' }}>cashcollect</span></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 270, overflowY: 'auto', paddingRight: 4 }}>
+          <h3 style={{ margin: '0 0 2px', fontSize: 13.5, fontWeight: 700 }}>Top usuarios en publicidad <span style={{ fontWeight: 500, color: '#9AA4B2', fontSize: 11 }}>· {agg.topUsuarios.length} · quién más invirtió en ads</span></h3>
+          <div style={{ fontSize: 10.5, color: '#9AA4B2', marginBottom: 8 }}>El usuario final que paga su saldo de publicidad · <b style={{ color: '#b45309' }}>Invirtió</b> = total que pagó · <b style={{ color: '#16a34a' }}>A Korex</b> = lo que le quedó a Korex (~14%; el resto va a Meta + comisiones)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#9AA4B2', padding: '0 4px 6px 0', borderBottom: '1px solid #EEF1F5', marginBottom: 6 }}>
+            <span style={{ width: 24, flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>Usuario</span>
+            <span style={{ width: 52, textAlign: 'right', color: '#b45309' }}>Invirtió</span>
+            <span style={{ width: 30, textAlign: 'right' }}>%</span>
+            <span style={{ width: 52, textAlign: 'right', color: '#16a34a' }}>A Korex</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 248, overflowY: 'auto', paddingRight: 4 }}>
             {agg.topUsuarios.map((u, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, paddingBottom: 8, borderBottom: '1px solid #F4F6F9' }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: u.avBg, color: u.avFg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{u.ini}</div>

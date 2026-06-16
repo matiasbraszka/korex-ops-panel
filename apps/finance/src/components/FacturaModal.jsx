@@ -1,0 +1,198 @@
+import { useEffect, useState } from 'react';
+import { sbFetch } from '@korex/db';
+import { facConcepto, facFormaPago, facHtmlFactura, facImprimir, facPad4, facMiles, facFechaStr } from '../lib/factura.js';
+
+// Genera la factura de un ingreso dentro del sistema (reemplaza el popup del Sheet):
+// trae los datos fiscales del Directorio, arma el N° continuo, muestra el preview,
+// imprime el PDF (Guardar como PDF) y registra la factura en `invoices` + marca Facturado.
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const uuid = () => (crypto?.randomUUID ? crypto.randomUUID() : 'inv-' + Date.now() + '-' + Math.round(Math.random() * 1e6));
+
+export default function FacturaModal({ income, onClose, onDone }) {
+  const [bill, setBill] = useState(null);          // datos fiscales del Directorio
+  const [num, setNum] = useState('');              // número de factura (editable)
+  const [moneda, setMoneda] = useState('USD');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        // 1) Datos fiscales: por el id de Directorio del pagador; si no, por nombre.
+        let dir = null;
+        if (income.payer_dir_id) {
+          const r = await sbFetch(`fin_directory?id=eq.${income.payer_dir_id}&select=nombre,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa&limit=1`);
+          dir = Array.isArray(r) ? r[0] : null;
+        }
+        if (!dir && income.payer_name) {
+          const enc = encodeURIComponent(income.payer_name.trim());
+          const r = await sbFetch(`fin_directory?nombre=ilike.${enc}&select=nombre,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa&limit=1`).catch(() => null);
+          dir = Array.isArray(r) ? r[0] : null;
+        }
+        const esEmpresa = String(dir?.facturar_a || '').trim().toLowerCase() === 'empresa';
+        if (alive) setBill({
+          nombreFactura: (esEmpresa ? dir?.empresa : dir?.nombre) || income.payer_name || income.client_name_sheet || '',
+          idFiscal: dir?.id_fiscal || '',
+          direccion: dir?.dir_facturacion || '',
+          email: dir?.email || '',
+        });
+        // 2) Próximo número: máximo numérico de invoices + 1 (continuo y global).
+        const inv = await sbFetch('invoices?select=number&limit=10000').catch(() => []);
+        const max = (Array.isArray(inv) ? inv : []).reduce((mx, r) => {
+          const n = parseInt(String(r.number || '').replace(/[^\d]/g, ''), 10);
+          return isFinite(n) && n > mx ? n : mx;
+        }, 0);
+        if (alive) setNum(String(max + 1));
+      } catch (e) {
+        if (alive) setErr(String(e));
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [income]);
+
+  if (!income) return null;
+  // Concepto según el tipo del ingreso (col H del Sheet = income_type), igual que el Apps Script.
+  const tipo = (income.income_type || income.effective_type || '').toUpperCase();
+  const concepto = facConcepto(tipo);
+  const formaPago = facFormaPago(income.payment_method);
+  const monto = moneda === 'EUR' ? (Number(income.amount_eur) || 0) : (Number(income.amount_usd) || 0);
+  const sym = moneda === 'EUR' ? '€' : 'US$';
+  const numeroFmt = facPad4(num);
+  const faltan = bill ? [
+    !bill.nombreFactura && 'Nombre / empresa',
+    !bill.idFiscal && 'ID fiscal o DNI',
+    !bill.direccion && 'Dirección',
+  ].filter(Boolean) : [];
+
+  const docData = () => ({
+    nombreFactura: bill.nombreFactura, idFiscal: bill.idFiscal, direccion: bill.direccion,
+    numeroFmt, fecha: new Date(), concepto, monto, moneda, formaPago,
+  });
+
+  const imprimir = () => { if (!bill) return; facImprimir(facHtmlFactura(docData())); };
+
+  const guardar = async () => {
+    if (!bill || !monto || !num) return;
+    setBusy(true); setErr('');
+    try {
+      await sbFetch('invoices', {
+        method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
+        body: JSON.stringify({
+          id: uuid(), number: numeroFmt, client_id: income.client_id || null,
+          issue_date: todayISO(), amount: monto, currency: moneda, concept: concepto,
+          status: 'emitida', payment_method: income.payment_method || null, kind: 'ingreso',
+        }),
+      });
+      await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true }), throwOnError: true });
+      setDone(true);
+      onDone?.(income.id, numeroFmt);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
+  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 600, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
+        {/* header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 32, height: 32, borderRadius: 9, background: '#EAF1FE', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
+            </span>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>Generar factura</div>
+              <div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 1 }}>{income.payer_name || income.client_name_sheet} · {facFechaStr(income.income_date)}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#9AA4B2', fontSize: 13 }}>Cargando datos fiscales…</div>
+        ) : done ? (
+          <div style={{ padding: '34px 22px', textAlign: 'center' }}>
+            <div style={{ fontSize: 34, marginBottom: 8 }}>✅</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Factura N° {numeroFmt} registrada</div>
+            <div style={{ fontSize: 12.5, color: '#6B7585', marginTop: 5, lineHeight: 1.5 }}>El ingreso quedó marcado como <b>facturado</b> y la factura se guardó en el sistema.<br />Si todavía no lo hiciste, descargá el PDF para enviarlo.</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
+              <button onClick={imprimir} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Descargar PDF</button>
+              <button onClick={onClose} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer' }}>Listo</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div>
+                <label style={lab}>N° de factura</label>
+                <input value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d]/g, ''))} style={{ ...inp, fontWeight: 700 }} />
+                <div style={{ fontSize: 10.5, color: '#9AA4B2', marginTop: 4 }}>Se mostrará como <b>{numeroFmt}</b>. En el primer uso, ponelo igual al que sigue del último de Drive.</div>
+              </div>
+              <div>
+                <label style={lab}>Moneda · importe</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 8, padding: 3 }}>
+                    {['USD', 'EUR'].map((m) => (
+                      <button key={m} onClick={() => setMoneda(m)} disabled={m === 'EUR' && !Number(income.amount_eur)} style={{ border: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: moneda === m ? 700 : 500, padding: '6px 12px', borderRadius: 6, background: moneda === m ? '#fff' : 'transparent', color: moneda === m ? '#1d4ed8' : '#64748B', opacity: (m === 'EUR' && !Number(income.amount_eur)) ? 0.4 : 1, boxShadow: moneda === m ? '0 1px 2px rgba(0,0,0,.08)' : 'none' }}>{m}</button>
+                    ))}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 15, fontWeight: 800, color: monto ? '#1d4ed8' : '#cbd5e1' }}>{sym} {facMiles(monto)}</div>
+                </div>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={lab}>Facturado a</label>
+                <input value={bill.nombreFactura} onChange={(e) => setBill((b) => ({ ...b, nombreFactura: e.target.value }))} placeholder="Nombre o empresa" style={inp} />
+              </div>
+              <div>
+                <label style={lab}>ID fiscal o DNI</label>
+                <input value={bill.idFiscal} onChange={(e) => setBill((b) => ({ ...b, idFiscal: e.target.value }))} placeholder="—" style={inp} />
+              </div>
+              <div>
+                <label style={lab}>E-mail</label>
+                <input value={bill.email} onChange={(e) => setBill((b) => ({ ...b, email: e.target.value }))} placeholder="—" style={inp} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={lab}>Dirección de facturación</label>
+                <input value={bill.direccion} onChange={(e) => setBill((b) => ({ ...b, direccion: e.target.value }))} placeholder="—" style={inp} />
+              </div>
+              <div style={{ gridColumn: '1 / -1', background: '#F8FAFC', border: '1px solid #EEF1F5', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ fontSize: 11, color: '#9AA4B2', fontWeight: 600 }}>Concepto <span style={{ color: '#cbd5e1' }}>· según tipo {tipo || '—'}</span></div>
+                <div style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.4 }}>{concepto}</div>
+                <div style={{ fontSize: 11, color: '#9AA4B2', fontWeight: 600, marginTop: 8 }}>Forma de pago</div>
+                <div style={{ fontSize: 12.5, marginTop: 2 }}>{formaPago}</div>
+              </div>
+              {faltan.length > 0 && (
+                <div style={{ gridColumn: '1 / -1', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 9, padding: '9px 12px', fontSize: 12, color: '#b45309' }}>
+                  Faltan datos fiscales: <b>{faltan.join(', ')}</b>. Completalos arriba antes de generar (quedan solo en esta factura; conviene cargarlos también en el Directorio).
+                </div>
+              )}
+              {income.collected_by === 'Cliente' && (
+                <div style={{ gridColumn: '1 / -1', background: '#FFF1F2', border: '1px solid #FBC9CF', borderRadius: 9, padding: '9px 12px', fontSize: 12, color: '#be123c' }}>
+                  Ojo: este ingreso lo cobró el <b>cliente</b>, no Korex. En el Sheet estas ventas no las factura Korex.
+                </div>
+              )}
+              {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
+            </div>
+            <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={imprimir} disabled={!monto} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: monto ? 1 : 0.5 }}>Ver / Descargar PDF</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={guardar} disabled={!monto || !num || busy || !bill.nombreFactura} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura) ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Generar y marcar facturado'}</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
