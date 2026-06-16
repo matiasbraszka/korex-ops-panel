@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@korex/auth": "*",
     "@korex/db": "*",
+    "@korex/finance": "*",
     "@korex/sales": "*",
     "@korex/soporte": "*",
     "@korex/ui": "*",
