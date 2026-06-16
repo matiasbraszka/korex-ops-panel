@@ -16,6 +16,7 @@ const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const DmePage = lazy(() => import('./pages/DmePage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
+const VslPage = lazy(() => import('./pages/VslPage'));
 const CuentasPage = lazy(() => import('./pages/CuentasPage'));
 import SearchBar from './components/SearchBar';
 import useSoporteUnread from './hooks/useSoporteUnread';
@@ -296,6 +297,10 @@ function MainLayout() {
     { id: 'equipo',    label: 'Accountability',  Icon: Sparkles,    path: '/operations/equipo' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
+  // Marketing — área aparte (métricas de VSL de Voomly). Visible para quien ve Operaciones.
+  const marketingItems = [
+    { id: 'vsl', label: 'VSL', Icon: BarChart3, path: '/marketing/vsl' },
+  ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
   const salesItems = currentUser?.isAdmin
     ? salesNavItems
@@ -331,9 +336,11 @@ function MainLayout() {
     soporte:    { color: '#F59E0B', bg: '#FFFBEB', short: 'Soporte', icon: Headphones,     base: '/soporte' },
     finance:    { color: '#0EA5A4', bg: '#F0FDFA', short: 'Finanzas', icon: Wallet,        base: '/finance' },
     admin:      { color: '#8B5CF6', bg: '#F5F3FF', short: 'Admin',   icon: Shield,         base: '/admin' },
+    marketing:  { color: '#EC4899', bg: '#FDF2F8', short: 'Mkt',     icon: BarChart3,      base: '/marketing' },
   };
   const areas = [
     canAccessOperations && { id: 'operations', label: 'Operaciones',    items: opsItems,        ...areaTokens.operations },
+    canAccessOperations && { id: 'marketing',  label: 'Marketing',      items: marketingItems,  ...areaTokens.marketing },
     canAccessSales      && { id: 'sales',      label: 'Ventas',         items: salesItems,      ...areaTokens.sales },
     canAccessSoporte    && { id: 'soporte',    label: 'Soporte',        items: soporteItems,    ...areaTokens.soporte },
     canAccessFinance    && { id: 'finance',    label: 'Finanzas',       items: financeItems,    ...areaTokens.finance },
@@ -396,6 +403,10 @@ function MainLayout() {
       <Route path="/operations/informes" element={<Navigate to="/operations/equipo" replace />} />
       <Route path="/operations/ideas" element={<Navigate to="/operations/equipo" replace />} />
       <Route path="/operations/videos" element={opsGuarded(<VideosPage />)} />
+      {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
+      <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
+      <Route path="/marketing/vsl" element={opsGuarded(<VslPage />)} />
+      <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
       <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
       <Route path="/operations/dashboard" element={opsGuarded(<DashboardPage />)} />

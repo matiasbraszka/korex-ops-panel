@@ -1,0 +1,234 @@
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@korex/db';
+import { ChevronDown, ChevronUp, FlaskConical, ArrowLeft } from 'lucide-react';
+
+const GREEN = '#22C55E';
+const DARK = '#15803D';
+
+const RANGES = [
+  { key: 'all', label: 'Todo' },
+  { key: '90d', label: '90 días' },
+  { key: '30d', label: '30 días' },
+  { key: '7d', label: '7 días' },
+  { key: 'today', label: 'Hoy' },
+];
+
+const fmtTime = (sec) => {
+  sec = Math.max(0, Math.round(sec || 0));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+const fmt = (n) => (n ?? 0).toLocaleString('es-AR');
+const cleanName = (n) => (n || '').replace(/\.(mp4|mov|m4v)$/i, '').replace(/_?vsl/i, '').trim() || (n || '');
+// Color por % (verde bien / ámbar medio / rojo mal) — para que los fallos salten.
+const pctColor = (v) => (v == null ? '#9AA5B1' : v >= 50 ? GREEN : v >= 25 ? '#D97706' : '#DC2626');
+
+// Gráfico grande interactivo: eje de tiempo (mm:ss) + personas reales + hover.
+function RetentionChart({ ret }) {
+  const [hover, setHover] = useState(null);
+  const data = ret?.viewers?.length ? ret.viewers : ret?.watchers;
+  if (!Array.isArray(data) || data.length < 2) return <div className="text-text3 text-[12px] py-6 text-center">Sin reproducciones en este rango → no hay curva de retención.</div>;
+  const dur = ret.duration || data.length;
+  const n = data.length, maxV = Math.max(...data, 1), base = data[0] || maxV;
+  const W = 900, H = 220, padL = 36, padR = 8, padT = 12, padB = 24;
+  const x = (i) => padL + (i / (n - 1)) * (W - padL - padR);
+  const y = (v) => padT + (1 - v / maxV) * (H - padT - padB);
+  const line = data.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(n - 1).toFixed(1)},${H - padB} L${x(0).toFixed(1)},${H - padB} Z`;
+  const onMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    setHover(Math.max(0, Math.min(n - 1, Math.round(((px - padL) / (W - padL - padR)) * (n - 1)))));
+  };
+  return (
+    <div className="relative w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ cursor: 'crosshair' }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+        {[0, 0.5, 1].map((f) => { const v = Math.round(maxV * f), yy = y(v); return <g key={f}><line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="#F0F2F5" /><text x={2} y={yy + 3} fontSize="10" fill="#9AA5B1">{v}</text></g>; })}
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => { const i = Math.round(f * (n - 1)); return <g key={f}><line x1={x(i)} y1={padT} x2={x(i)} y2={H - padB} stroke="#F7F8FA" /><text x={x(i)} y={H - 7} fontSize="10" fill="#9AA5B1" textAnchor="middle">{fmtTime((i / (n - 1)) * dur)}</text></g>; })}
+        <path d={area} fill={GREEN} opacity={0.1} />
+        <path d={line} fill="none" stroke={GREEN} strokeWidth={2} />
+        {hover != null && (<g><line x1={x(hover)} y1={padT} x2={x(hover)} y2={H - padB} stroke={DARK} strokeWidth={1} strokeDasharray="3 3" /><circle cx={x(hover)} cy={y(data[hover])} r={4} fill={DARK} /></g>)}
+      </svg>
+      {hover != null && (
+        <div className="absolute -top-1 bg-[#15803D] text-white text-[12px] font-semibold rounded px-2 py-1 pointer-events-none whitespace-nowrap" style={{ left: `${(x(hover) / W) * 100}%`, transform: 'translateX(-50%)' }}>
+          {fmtTime((hover / (n - 1)) * dur)} · {data[hover]} personas · {Math.round((data[hover] / base) * 100)}%
+        </div>
+      )}
+      <div className="text-[11px] text-text3 mt-1.5">Horizontal = minuto:segundo del video · vertical = personas mirando. Pasá el mouse para ver el segundo exacto donde se caen.</div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, sub, color, hint }) {
+  return (
+    <div className="bg-white border border-border rounded-xl py-4 px-5">
+      <div className="text-[11px] text-text3 font-medium flex items-center gap-1" title={hint}>{label}{hint && <span className="text-text3/60 cursor-help">ⓘ</span>}</div>
+      <div className="text-[30px] font-extrabold my-0.5 tracking-tight" style={{ color: color || '#1A1A2E' }}>{value}</div>
+      {sub && <div className="text-[11px] text-text3">{sub}</div>}
+    </div>
+  );
+}
+
+export default function VslPage() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [range, setRange] = useState('all');
+  const [selected, setSelected] = useState('all'); // 'all' = tabla comparativa | voomly_id = detalle
+  const [sort, setSort] = useState({ key: 'engagement', dir: 'desc' });
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data, error } = await supabase.from('vsl_voomly').select('*').eq('kind', 'VSL').order('total_plays', { ascending: false });
+      if (!active) return;
+      if (error) setErr(error.message); else setRows(data || []);
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const lastSync = useMemo(() => {
+    const ts = rows.map((r) => r.synced_at).filter(Boolean).sort().pop();
+    return ts ? new Date(ts) : null;
+  }, [rows]);
+
+  // Métricas del rango seleccionado (fallback all-time si el VSL no tiene rangos).
+  const metricsFor = (r) => {
+    const fr = r.ranges && r.ranges[range];
+    const base = fr || {
+      total_plays: r.total_plays, uniq_plays: r.uniq_plays, total_views: r.total_views, uniq_views: r.uniq_views,
+      play_rate: r.play_rate, engagement: r.engagement, completion: r.retention?.points?.p100 ?? null, retention: r.retention || null,
+    };
+    return { ...base, _row: r };
+  };
+
+  const all = useMemo(() => rows.map(metricsFor), [rows, range]);
+  const sorted = useMemo(() => {
+    const arr = [...all];
+    arr.sort((a, b) => {
+      const av = a.key === 'name' ? 0 : (a[sort.key] ?? -1), bv = b[sort.key] ?? -1;
+      if (sort.key === 'name') return (sort.dir === 'asc' ? 1 : -1) * cleanName(a._row.name).localeCompare(cleanName(b._row.name));
+      return (sort.dir === 'asc' ? 1 : -1) * (av - bv);
+    });
+    return arr;
+  }, [all, sort]);
+
+  const rangeLabel = RANGES.find((r) => r.key === range)?.label || 'Todo';
+  const current = selected !== 'all' ? all.find((m) => m._row.voomly_id === selected) : null;
+
+  const setSortKey = (key) => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }));
+  const SortHead = ({ k, children, right }) => (
+    <button onClick={() => setSortKey(k)} className={`flex items-center gap-1 ${right ? 'justify-end w-full' : ''} hover:text-text`}>
+      {children}{sort.key === k && (sort.dir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />)}
+    </button>
+  );
+
+  return (
+    <div className="max-w-[1180px] mx-auto px-4 py-6">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-[22px] font-extrabold text-text flex items-center gap-2">
+            VSL · Métricas de Voomly
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full" style={{ background: '#FEF3C7', color: '#B45309' }}><FlaskConical size={11} /> Experimental</span>
+          </h1>
+          <p className="text-[13px] text-text3 mt-0.5">
+            Elegí un VSL para verlo en detalle, o "Comparar todos" para encontrar puntos de fallo.
+            {lastSync && <> · Actualizado {lastSync.toLocaleDateString('es-AR')} {lastSync.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</>}
+          </p>
+        </div>
+        <div className="flex gap-1 bg-[#F3F4F6] p-1 rounded-xl">
+          {RANGES.map((r) => (
+            <button key={r.key} onClick={() => setRange(r.key)} className="text-[12px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
+              style={range === r.key ? { background: GREEN, color: '#fff', boxShadow: '0 1px 3px rgba(34,197,94,0.45)' } : { color: '#6B7280' }}>{r.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? <div className="text-text3 text-center py-20">Cargando…</div>
+        : err ? <div className="text-red-500 text-center py-20">Error: {err}</div>
+        : rows.length === 0 ? <div className="text-text3 text-center py-20">Todavía no hay datos. Corré el exportador (<code>npm run pull</code>).</div>
+        : (
+          <>
+            {/* Selector de VSL */}
+            <div className="flex items-center gap-2 my-5 flex-wrap">
+              {current && <button onClick={() => setSelected('all')} className="flex items-center gap-1 text-[13px] font-semibold text-text3 hover:text-text"><ArrowLeft size={15} /> Comparar todos</button>}
+              <div className="relative">
+                <select value={selected} onChange={(e) => setSelected(e.target.value)}
+                  className="appearance-none bg-white border border-border rounded-xl pl-4 pr-9 py-2.5 text-[14px] font-semibold text-text outline-none focus:border-blue cursor-pointer min-w-[280px]">
+                  <option value="all">📊 Comparar todos los VSL ({rows.length})</option>
+                  {sorted.map((m) => <option key={m._row.voomly_id} value={m._row.voomly_id}>{cleanName(m._row.name)}</option>)}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-text3 pointer-events-none" />
+              </div>
+              <span className="text-[12px] text-text3">Rango: <b className="text-text">{rangeLabel}</b></span>
+            </div>
+
+            {current ? <VslDetail m={current} rangeLabel={rangeLabel} />
+              : <CompareTable sorted={sorted} SortHead={SortHead} onPick={setSelected} rangeLabel={rangeLabel} />}
+          </>
+        )}
+    </div>
+  );
+}
+
+// ── Detalle de UN VSL (ocupa todo el panel) ──────────────────────────────────
+function VslDetail({ m, rangeLabel }) {
+  const r = m._row, ret = m.retention, pts = ret?.points;
+  return (
+    <div>
+      <div className="flex items-baseline gap-3 mb-1 flex-wrap">
+        <h2 className="text-[20px] font-extrabold text-text">{cleanName(r.name)}</h2>
+        {ret?.duration && <span className="text-[13px] text-text3">Duración {fmtTime(ret.duration)}</span>}
+      </div>
+      <div className="grid grid-cols-5 gap-3 my-4 max-md:grid-cols-2">
+        <MetricCard label="Visitas" value={fmt(m.uniq_views)} sub="personas que cargaron" />
+        <MetricCard label="Reproducciones" value={fmt(m.total_plays)} sub={`${fmt(m.uniq_plays)} únicas`} color={GREEN} />
+        <MetricCard label="Tasa de reproducción" value={(m.play_rate ?? 0) + '%'} sub="dieron play / visitas" color={pctColor(m.play_rate)} hint="De los que cargaron la página, cuántos le dieron play." />
+        <MetricCard label="Retención" value={(m.engagement ?? 0) + '%'} sub="% del video visto, en prom." color={pctColor(m.engagement)} hint="En promedio, qué parte del video completo mira cada reproducción." />
+        <MetricCard label="Vieron completo" value={(m.completion ?? 0) + '%'} sub="llegaron al final" color={pctColor(m.completion)} hint="De los que arrancaron, cuántos seguían mirando en el último segundo." />
+      </div>
+      <div className="bg-white border border-border rounded-xl p-4">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <h3 className="text-[14px] font-bold text-text">Retención — dónde se cae la gente</h3>
+          {pts && <div className="text-[12px] text-text3">Quedan: 25%→<b className="text-text">{pts.p25}%</b> · 50%→<b className="text-text">{pts.p50}%</b> · 75%→<b className="text-text">{pts.p75}%</b> · fin→<b className="text-text">{pts.p100}%</b></div>}
+        </div>
+        <RetentionChart ret={ret} />
+      </div>
+    </div>
+  );
+}
+
+// ── Tabla comparativa de todos los VSL ───────────────────────────────────────
+function CompareTable({ sorted, SortHead, onPick, rangeLabel }) {
+  const cell = (v) => <span className="font-bold" style={{ color: pctColor(v) }}>{v ?? 0}%</span>;
+  return (
+    <div className="bg-white border border-border rounded-xl overflow-hidden">
+      <div className="grid grid-cols-[1.5fr_84px_100px_92px_100px_104px] gap-2 px-4 py-2.5 text-[11px] font-semibold text-text3 uppercase tracking-wide border-b border-border max-md:grid-cols-[1fr_70px_84px]">
+        <div><SortHead k="name">Video ({rangeLabel})</SortHead></div>
+        <div className="text-right"><SortHead k="uniq_views" right>Visitas</SortHead></div>
+        <div className="text-right"><SortHead k="total_plays" right>Reprod.</SortHead></div>
+        <div className="text-right max-md:hidden"><SortHead k="play_rate" right>Tasa repr.</SortHead></div>
+        <div className="text-right max-md:hidden"><SortHead k="engagement" right>Retención</SortHead></div>
+        <div className="text-right"><SortHead k="completion" right>Completo</SortHead></div>
+      </div>
+      {sorted.map((m) => (
+        <div key={m._row.voomly_id} onClick={() => onPick(m._row.voomly_id)}
+          className="grid grid-cols-[1.5fr_84px_100px_92px_100px_104px] gap-2 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-[#FAFBFC] cursor-pointer max-md:grid-cols-[1fr_70px_84px]">
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-text truncate">{cleanName(m._row.name)}</div>
+            {m.retention?.duration && <div className="text-[10px] text-text3">{fmtTime(m.retention.duration)}</div>}
+          </div>
+          <div className="text-right text-[13px] text-text">{fmt(m.uniq_views)}</div>
+          <div className="text-right text-[13px] font-semibold text-text">{fmt(m.total_plays)}</div>
+          <div className="text-right text-[13px] max-md:hidden">{cell(m.play_rate)}</div>
+          <div className="text-right text-[13px] max-md:hidden">{cell(m.engagement)}</div>
+          <div className="text-right text-[13px]">{cell(m.completion)}</div>
+        </div>
+      ))}
+      <div className="px-4 py-2.5 text-[11px] text-text3 bg-[#FAFBFC]">
+        Clic en una columna para ordenar · clic en un VSL para verlo en detalle · <span style={{ color: GREEN }}>verde</span> bien / <span style={{ color: '#D97706' }}>ámbar</span> medio / <span style={{ color: '#DC2626' }}>rojo</span> flojo.
+      </div>
+    </div>
+  );
+}
