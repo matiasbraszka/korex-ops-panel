@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [dEnd, setDEnd] = useState(() => { try { return localStorage.getItem('fin_dash_dEnd') || ''; } catch { return ''; } });
   const [egCat, setEgCat] = useState('');
   const [pcHover, setPcHover] = useState(null);
+  const [evoHover, setEvoHover] = useState(null);
   useEffect(() => { try { localStorage.setItem('fin_dash_dStart', dStart || ''); } catch { /* noop */ } }, [dStart]);
   useEffect(() => { try { localStorage.setItem('fin_dash_dEnd', dEnd || ''); } catch { /* noop */ } }, [dEnd]);
 
@@ -117,7 +118,7 @@ export default function DashboardPage() {
 
     // ---- evolución (barras + línea egresos) ----
     const maxBar = Math.max(1, ...safeMonths.map((m) => Math.max(m.fact, m.cash)));
-    const evoMonths = safeMonths.map((m) => ({ label: mlabel(m.m), netoStr: money(m.fact), korexStr: money(m.cash), netoH: Math.round(m.fact / maxBar * 178), korexH: Math.round(m.cash / maxBar * 178) }));
+    const evoMonths = safeMonths.map((m) => ({ label: mlabel(m.m), netoStr: money(m.fact), korexStr: money(m.cash), egStr: money(m.egTot), factPct: totFact ? Math.round(m.fact / totFact * 100) : 0, netoH: Math.round(m.fact / maxBar * 178), korexH: Math.round(m.cash / maxBar * 178) }));
     const maxEg = Math.max(1, ...safeMonths.map((m) => m.egTot));
     const egresoLine = safeMonths.map((m, i) => { const x = safeMonths.length > 1 ? i / (safeMonths.length - 1) * 100 : 50; const y = 100 - (m.egTot / maxEg) * 78; return `${x.toFixed(1)},${y.toFixed(1)}`; }).join(' ');
 
@@ -155,15 +156,15 @@ export default function DashboardPage() {
     const pcHeads = [{ label: 'Cliente', bg: '#F8FAFC', fg: '#64748B', bl: 'none' }, ...pcCols.map((c) => ({ label: pcLabel[c.key], bg: c.hbg, fg: c.hfg, bl: c.bl }))];
     const pcT = {}; pcCols.forEach((c) => (pcT[c.key] = pcList.reduce((a, o) => a + o[c.key], 0)));
 
-    // ---- rankings ----
-    const topMax = Math.max(1, ...pcList.slice(0, 6).map((o) => o.fact));
-    const topClientes = pcList.slice(0, 6).map((o) => { const [bg, fg] = avatarColor(o.name); return { label: o.name, ini: ini(o.name), avBg: bg, avFg: fg, barW: Math.round(o.fact / topMax * 100), val: kfmt(o.fact) }; });
+    // ---- rankings (sin tope: scroll en la UI) ----
     const conMap = {};
     inc.forEach((r) => { const n = r.conector_name_sheet; if (!n) return; const { comm } = commOf(r); const o = conMap[n] || (conMap[n] = { ventas: 0, cash: 0, com: 0 }); o.ventas++; o.cash += Number(r.korex_real) || 0; o.com += comm.conector || 0; });
-    const topConectores = Object.entries(conMap).map(([label, o]) => ({ label, ...o })).sort((a, b) => b.cash - a.cash).slice(0, 5).map((c) => { const [bg, fg] = avatarColor(c.label); return { label: c.label, ini: ini(c.label), avBg: bg, avFg: fg, ventas: c.ventas, cash: kfmt(c.cash) }; });
+    const conCashTot = Object.values(conMap).reduce((a, o) => a + o.cash, 0) || 1;
+    const topConectores = Object.entries(conMap).map(([label, o]) => ({ label, ...o })).sort((a, b) => b.cash - a.cash).map((c) => { const [bg, fg] = avatarColor(c.label); return { label: c.label, ini: ini(c.label), avBg: bg, avFg: fg, ventas: c.ventas, cash: kfmt(c.cash), pct: Math.round(c.cash / conCashTot * 100) }; });
     const usrMap = {};
     inc.forEach((r) => { if ((r.income_type || '').toUpperCase() !== 'PUBLICIDAD') return; const n = r.payer_name || '—'; const o = usrMap[n] || (usrMap[n] = { inv: 0, cash: 0 }); o.inv += Number(r.amount_usd) || 0; o.cash += Number(r.korex_real) || 0; });
-    const topUsuarios = Object.entries(usrMap).map(([label, o]) => ({ label, ...o })).sort((a, b) => b.inv - a.inv).slice(0, 5).map((u) => { const [bg, fg] = avatarColor(u.label); return { label: u.label, ini: ini(u.label), avBg: bg, avFg: fg, inv: kfmt(u.inv), cash: kfmt(u.cash) }; });
+    const usrInvTot = Object.values(usrMap).reduce((a, o) => a + o.inv, 0) || 1;
+    const topUsuarios = Object.entries(usrMap).map(([label, o]) => ({ label, ...o })).sort((a, b) => b.inv - a.inv).map((u) => { const [bg, fg] = avatarColor(u.label); return { label: u.label, ini: ini(u.label), avBg: bg, avFg: fg, inv: kfmt(u.inv), cash: kfmt(u.cash), pct: Math.round(u.inv / usrInvTot * 100) }; });
 
     // comisiones por rol
     const rolTot = {};
@@ -179,10 +180,18 @@ export default function DashboardPage() {
     let egTotal = 0; const byCatMap = {};
     exp.forEach((e) => { egTotal += Number(e.amount) || 0; if (e.category) byCatMap[e.category] = (byCatMap[e.category] || 0) + (Number(e.amount) || 0); });
     const byCatMax = Math.max(1, ...Object.values(byCatMap));
-    const egByCat = Object.entries(byCatMap).sort((a, b) => b[1] - a[1]).map(([k, v]) => { const [, fg] = catChip(k); return { label: k, val: money(v), barW: Math.round(v / byCatMax * 100), color: catColor(k), fg }; });
+    const egByCat = Object.entries(byCatMap).sort((a, b) => b[1] - a[1]).map(([k, v]) => { const [, fg] = catChip(k); return { label: k, val: money(v), pct: egTotal ? Math.round(v / egTotal * 100) : 0, barW: Math.round(v / byCatMax * 100), color: catColor(k), fg }; });
     const egCats = Object.keys(byCatMap).sort((a, b) => byCatMap[b] - byCatMap[a]);
-    const egMotivos = exp.filter((e) => !egCat || e.category === egCat).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)).slice(0, 60)
-      .map((e, i) => ({ reason: e.reason || '—', cat: e.category || '—', project: e.project || '—', date: fdate(e.expense_date), amt: money(e.amount), color: catColor(e.category), bg: i % 2 ? '#FBFCFE' : '#fff' }));
+    // Por motivo AGRUPADO: suma por persona/motivo (no una fila por transacción) + % del total mostrado.
+    const motMap = {};
+    exp.filter((e) => !egCat || e.category === egCat).forEach((e) => {
+      const key = e.reason || '—';
+      const g = motMap[key] || (motMap[key] = { reason: key, cat: e.category || '—', project: e.project || '—', total: 0, n: 0 });
+      g.total += Number(e.amount) || 0; g.n += 1;
+    });
+    const motTotal = Object.values(motMap).reduce((a, m) => a + m.total, 0) || 1;
+    const egMotivos = Object.values(motMap).sort((a, b) => b.total - a.total).slice(0, 100)
+      .map((m, i) => ({ reason: m.reason, cat: m.cat, project: m.project, n: m.n, amt: money(m.total), pct: Math.round(m.total / motTotal * 100), color: catColor(m.cat), bg: i % 2 ? '#FBFCFE' : '#fff' }));
 
     // alertas (reales)
     const alerts = [];
@@ -197,7 +206,7 @@ export default function DashboardPage() {
       kpis, monthly: { heads: mHeads, rows: mRows, totals: mTotals },
       evoMonths, egresoLine, donut, donutTotal: kfmt(donutTotal),
       porCliente: { heads: pcHeads, cols: pcCols, list: pcList, totals: pcCols.map((c) => ({ v: money(pcT[c.key]), color: c.green ? '#15803d' : '#1e293b', bl: c.bl })) },
-      topClientes, topConectores, topUsuarios, porRol, comDonut, comTotal: kfmt(comTotalRaw), alerts,
+      topConectores, topUsuarios, porRol, comDonut, comTotal: kfmt(comTotalRaw), alerts,
       eg: { total: money(egTotal), byCat: egByCat, cats: egCats, motivos: egMotivos },
     };
   }, [d, cli, dStart, dEnd, egCat]);
@@ -282,12 +291,20 @@ export default function DashboardPage() {
               <polyline points={agg.egresoLine} fill="none" stroke="#e11d48" strokeWidth="0.9" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             {agg.evoMonths.map((m, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <div key={i} onMouseEnter={() => setEvoHover(i)} onMouseLeave={() => setEvoHover(null)} style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, cursor: 'default' }}>
+                {evoHover === i && (
+                  <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6, background: '#0D1117', color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 6, boxShadow: '0 6px 16px rgba(13,17,23,.25)', lineHeight: 1.55 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>{m.label}</div>
+                    <div><span style={{ color: '#5eead4' }}>Facturación</span> {m.netoStr} · {m.factPct}%</div>
+                    <div><span style={{ color: '#86efac' }}>CashCollect</span> {m.korexStr}</div>
+                    <div><span style={{ color: '#fda4af' }}>Egresos</span> {m.egStr}</div>
+                  </div>
+                )}
                 <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 5, height: 178 }}>
-                  <div title={`Facturación ${m.netoStr}`} style={{ width: '40%', maxWidth: 22, height: m.netoH, background: 'linear-gradient(#15c0bf,#0EA5A4)', borderRadius: '5px 5px 0 0' }} />
-                  <div title={`CashCollect ${m.korexStr}`} style={{ width: '40%', maxWidth: 22, height: m.korexH, background: 'linear-gradient(#22c55e,#16a34a)', borderRadius: '5px 5px 0 0' }} />
+                  <div style={{ width: '40%', maxWidth: 22, height: m.netoH, background: 'linear-gradient(#15c0bf,#0EA5A4)', borderRadius: '5px 5px 0 0', opacity: evoHover == null || evoHover === i ? 1 : 0.4, transition: 'opacity .1s' }} />
+                  <div style={{ width: '40%', maxWidth: 22, height: m.korexH, background: 'linear-gradient(#22c55e,#16a34a)', borderRadius: '5px 5px 0 0', opacity: evoHover == null || evoHover === i ? 1 : 0.4, transition: 'opacity .1s' }} />
                 </div>
-                <span style={{ fontSize: 10.5, color: '#8A93A2', fontWeight: 600 }}>{m.label}</span>
+                <span style={{ fontSize: 10.5, color: evoHover === i ? '#0D1117' : '#8A93A2', fontWeight: evoHover === i ? 700 : 600 }}>{m.label}</span>
               </div>
             ))}
           </div>
@@ -332,7 +349,8 @@ export default function DashboardPage() {
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <span style={{ width: 96, fontSize: 11.5, fontWeight: 600, color: b.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.label}</span>
                 <div style={{ flex: 1, height: 12, background: '#EEF1F5', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: `${b.barW}%`, background: b.color, borderRadius: 4 }} /></div>
-                <span style={{ fontSize: 11.5, fontWeight: 700, width: 74, textAlign: 'left' }}>{b.val}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, width: 72, textAlign: 'right' }}>{b.val}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9AA4B2', width: 34, textAlign: 'right' }}>{b.pct}%</span>
               </div>
             ))}
             {!agg.eg.byCat.length && <span style={{ fontSize: 12, color: '#9AA4B2' }}>Sin egresos</span>}
@@ -344,8 +362,9 @@ export default function DashboardPage() {
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: m.bg, borderBottom: '1px solid #F4F6F9' }}>
                   <span style={{ width: 3, height: 24, borderRadius: 2, background: m.color, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.reason}</div><div style={{ fontSize: 10.5, color: '#9AA4B2' }}>{m.cat} · {m.project}</div></div>
-                  <span style={{ fontSize: 10.5, color: '#9AA4B2', whiteSpace: 'nowrap' }}>{m.date}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#be123c', width: 78, textAlign: 'left' }}>{m.amt}</span>
+                  <span style={{ fontSize: 10.5, color: '#9AA4B2', whiteSpace: 'nowrap' }} title={`${m.n} movimiento${m.n === 1 ? '' : 's'}`}>×{m.n}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#be123c', width: 78, textAlign: 'right' }}>{m.amt}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9AA4B2', width: 34, textAlign: 'right' }}>{m.pct}%</span>
                 </div>
               ))}
               {!agg.eg.motivos.length && <div style={{ padding: 14, fontSize: 12, color: '#9AA4B2' }}>Sin egresos</div>}
@@ -381,45 +400,32 @@ export default function DashboardPage() {
       </Card>
 
       {/* rankings */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 13.5, fontWeight: 700 }}>Top clientes <span style={{ fontWeight: 500, color: '#9AA4B2', fontSize: 11 }}>· facturación</span></h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {agg.topClientes.map((c, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <div style={{ width: 24, height: 24, borderRadius: 7, background: c.avBg, color: c.avFg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{c.ini}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</div>
-                  <div style={{ height: 5, background: '#EEF1F5', borderRadius: 3, marginTop: 3, overflow: 'hidden' }}><div style={{ height: '100%', width: `${c.barW}%`, background: '#0EA5A4', borderRadius: 3 }} /></div>
-                </div>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#3B4453' }}>{c.val}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 13.5, fontWeight: 700 }}>Top conectores</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: 13.5, fontWeight: 700 }}>Top conectores <span style={{ fontWeight: 500, color: '#9AA4B2', fontSize: 11 }}>· {agg.topConectores.length} · CashCollect</span></h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
             {agg.topConectores.map((c, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, paddingBottom: 8, borderBottom: '1px solid #F4F6F9' }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: c.avBg, color: c.avFg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{c.ini}</div>
                 <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</div><div style={{ fontSize: 10, color: '#9AA4B2' }}>{c.ventas} ventas</div></div>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1' }}>{c.cash}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 48, textAlign: 'right' }}>{c.cash}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9AA4B2', width: 30, textAlign: 'right' }}>{c.pct}%</span>
               </div>
             ))}
             {!agg.topConectores.length && <span style={{ fontSize: 12, color: '#9AA4B2' }}>Sin datos</span>}
           </div>
         </div>
         <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '16px 18px' }}>
-          <h3 style={{ margin: '0 0 4px', fontSize: 13.5, fontWeight: 700 }}>Top usuarios en publicidad</h3>
-          <div style={{ fontSize: 10, color: '#9AA4B2', marginBottom: 10, display: 'flex', justifyContent: 'flex-end', gap: 14 }}><span>invirtió</span><span style={{ color: '#16a34a' }}>cashcollect</span></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 13.5, fontWeight: 700 }}>Top usuarios en publicidad <span style={{ fontWeight: 500, color: '#9AA4B2', fontSize: 11 }}>· {agg.topUsuarios.length}</span></h3>
+          <div style={{ fontSize: 10, color: '#9AA4B2', marginBottom: 10, display: 'flex', justifyContent: 'flex-end', gap: 14 }}><span>invirtió · %</span><span style={{ color: '#16a34a' }}>cashcollect</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 270, overflowY: 'auto', paddingRight: 4 }}>
             {agg.topUsuarios.map((u, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, paddingBottom: 8, borderBottom: '1px solid #F4F6F9' }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: u.avBg, color: u.avFg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{u.ini}</div>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.label}</span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', width: 62, textAlign: 'left' }}>{u.inv}</span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#16a34a', width: 62, textAlign: 'left' }}>{u.cash}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', width: 52, textAlign: 'right' }}>{u.inv}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9AA4B2', width: 30, textAlign: 'right' }}>{u.pct}%</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#16a34a', width: 52, textAlign: 'right' }}>{u.cash}</span>
               </div>
             ))}
             {!agg.topUsuarios.length && <span style={{ fontSize: 12, color: '#9AA4B2' }}>Sin datos</span>}
