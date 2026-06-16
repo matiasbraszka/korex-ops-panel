@@ -76,7 +76,7 @@ export default function DashboardPage() {
     });
     // Ganancia = CashCollect − egresos empresa (sin retiros) · Se dejó = CashCollect − todos los egresos.
     const months = [...mm.values()].sort((a, b) => a.m.localeCompare(b.m)).map((o) => {
-      o.ganancia = o.cash - o.egEmp; o.dejo = o.cash - o.egTot; return o;
+      o.ganancia = o.cash - o.egEmp; o.dejo = o.ganancia - o.retiro; return o;
     });
     const safeMonths = months.length ? months : [blank('—')];
     const sum = (key) => months.reduce((a, m) => a + m[key], 0);
