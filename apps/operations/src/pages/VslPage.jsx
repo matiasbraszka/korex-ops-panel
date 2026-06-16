@@ -118,11 +118,6 @@ export default function VslPage() {
   const current = selected !== 'all' ? all.find((m) => m._row.voomly_id === selected) : null;
 
   const setSortKey = (key) => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }));
-  const SortHead = ({ k, children, right }) => (
-    <button onClick={() => setSortKey(k)} className={`flex items-center gap-1 ${right ? 'justify-end w-full' : ''} hover:text-text`}>
-      {children}{sort.key === k && (sort.dir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />)}
-    </button>
-  );
 
   return (
     <div className="max-w-[1180px] mx-auto px-4 py-6">
@@ -165,7 +160,7 @@ export default function VslPage() {
             </div>
 
             {current ? <VslDetail m={current} rangeLabel={rangeLabel} />
-              : <CompareTable sorted={sorted} SortHead={SortHead} onPick={setSelected} rangeLabel={rangeLabel} />}
+              : <CompareTable sorted={sorted} sort={sort} onSort={setSortKey} onPick={setSelected} rangeLabel={rangeLabel} />}
           </>
         )}
     </div>
@@ -200,34 +195,63 @@ function VslDetail({ m, rangeLabel }) {
 }
 
 // ── Tabla comparativa de todos los VSL ───────────────────────────────────────
-function CompareTable({ sorted, SortHead, onPick, rangeLabel }) {
-  const cell = (v) => <span className="font-bold" style={{ color: pctColor(v) }}>{v ?? 0}%</span>;
+function CompareTable({ sorted, sort, onSort, onPick, rangeLabel }) {
+  // Títulos claros (2 líneas) para que se entienda sin saber del tema.
+  const cols = [
+    { k: 'name',        label: 'Video',          sub: 'nombre del VSL' },
+    { k: 'uniq_views',  label: 'Visitas',        sub: 'personas que vieron la página' },
+    { k: 'total_plays', label: 'Reproducciones', sub: 'le dieron play' },
+    { k: 'play_rate',   label: 'Tasa de play',   sub: '% que reprodujo', pct: true },
+    { k: 'engagement',  label: 'Retención',      sub: '% del video que ven', pct: true },
+    { k: 'completion',  label: 'Completo',       sub: '% que llega al final', pct: true },
+  ];
+  const GRID = 'grid grid-cols-[2fr_1fr_1.2fr_1fr_1.1fr_1fr]';
   return (
     <div className="bg-white border border-border rounded-xl overflow-hidden">
-      <div className="grid grid-cols-[1.5fr_84px_100px_92px_100px_104px] gap-2 px-4 py-2.5 text-[11px] font-semibold text-text3 uppercase tracking-wide border-b border-border max-md:grid-cols-[1fr_70px_84px]">
-        <div><SortHead k="name">Video ({rangeLabel})</SortHead></div>
-        <div className="text-right"><SortHead k="uniq_views" right>Visitas</SortHead></div>
-        <div className="text-right"><SortHead k="total_plays" right>Reprod.</SortHead></div>
-        <div className="text-right max-md:hidden"><SortHead k="play_rate" right>Tasa repr.</SortHead></div>
-        <div className="text-right max-md:hidden"><SortHead k="engagement" right>Retención</SortHead></div>
-        <div className="text-right"><SortHead k="completion" right>Completo</SortHead></div>
-      </div>
-      {sorted.map((m) => (
-        <div key={m._row.voomly_id} onClick={() => onPick(m._row.voomly_id)}
-          className="grid grid-cols-[1.5fr_84px_100px_92px_100px_104px] gap-2 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-[#FAFBFC] cursor-pointer max-md:grid-cols-[1fr_70px_84px]">
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-text truncate">{cleanName(m._row.name)}</div>
-            {m.retention?.duration && <div className="text-[10px] text-text3">{fmtTime(m.retention.duration)}</div>}
+      <div className="text-[12px] text-text3 px-4 pt-3 pb-1">Mostrando rango: <b className="text-text">{rangeLabel}</b></div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[680px]">
+          {/* Encabezado — clic para ordenar */}
+          <div className={`${GRID} bg-[#FAFBFC] border-y border-border`}>
+            {cols.map((c, i) => {
+              const active = sort.key === c.k;
+              return (
+                <button key={c.k} onClick={() => onSort(c.k)}
+                  className={`text-left px-3 py-2.5 hover:bg-[#F1F3F5] transition-colors ${i ? 'border-l border-border' : ''}`}>
+                  <div className="flex items-center gap-1 text-[12.5px] font-bold text-text leading-tight">
+                    {c.label}
+                    {active && (sort.dir === 'desc' ? <ChevronDown size={13} /> : <ChevronUp size={13} />)}
+                  </div>
+                  <div className="text-[10px] text-text3 font-normal leading-tight mt-0.5">{c.sub}</div>
+                </button>
+              );
+            })}
           </div>
-          <div className="text-right text-[13px] text-text">{fmt(m.uniq_views)}</div>
-          <div className="text-right text-[13px] font-semibold text-text">{fmt(m.total_plays)}</div>
-          <div className="text-right text-[13px] max-md:hidden">{cell(m.play_rate)}</div>
-          <div className="text-right text-[13px] max-md:hidden">{cell(m.engagement)}</div>
-          <div className="text-right text-[13px]">{cell(m.completion)}</div>
+          {/* Filas — todo a la izquierda, columnas separadas */}
+          {sorted.map((m) => (
+            <div key={m._row.voomly_id} onClick={() => onPick(m._row.voomly_id)}
+              className={`${GRID} border-b border-border last:border-0 hover:bg-[#FAFBFC] cursor-pointer`}>
+              {cols.map((c, i) => (
+                <div key={c.k} className={`px-3 py-3 text-[13px] flex flex-col justify-center ${i ? 'border-l border-border' : ''}`}>
+                  {c.k === 'name' ? (
+                    <>
+                      <span className="font-semibold text-text truncate">{cleanName(m._row.name)}</span>
+                      {m.retention?.duration && <span className="text-[10px] text-text3 mt-0.5">{fmtTime(m.retention.duration)} de duración</span>}
+                    </>
+                  ) : c.pct ? (
+                    <span className="font-bold" style={{ color: pctColor(m[c.k]) }}>{m[c.k] ?? 0}%</span>
+                  ) : (
+                    <span className="font-semibold text-text">{fmt(m[c.k])}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
-      ))}
-      <div className="px-4 py-2.5 text-[11px] text-text3 bg-[#FAFBFC]">
-        Clic en una columna para ordenar · clic en un VSL para verlo en detalle · <span style={{ color: GREEN }}>verde</span> bien / <span style={{ color: '#D97706' }}>ámbar</span> medio / <span style={{ color: '#DC2626' }}>rojo</span> flojo.
+      </div>
+      <div className="px-4 py-2.5 text-[11px] text-text3 bg-[#FAFBFC] border-t border-border flex items-center gap-3 flex-wrap">
+        <span>Clic en un título para ordenar · clic en un VSL para abrir su detalle.</span>
+        <span className="flex items-center gap-1"><span style={{ color: GREEN }}>●</span> bien <span style={{ color: '#D97706' }}>●</span> medio <span style={{ color: '#DC2626' }}>●</span> flojo</span>
       </div>
     </div>
   );
