@@ -238,9 +238,10 @@ function VslDetail({ m, rangeLabel }) {
         <RetentionChart ret={ret} drops={drops} />
         {drops.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border">
-            <h4 className="text-[13px] font-bold text-text mb-2 flex items-center gap-1.5">
+            <h4 className="text-[13px] font-bold text-text mb-0.5 flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#DC2626' }} /> Mayores caídas — dónde se va más gente
             </h4>
+            <p className="text-[11px] text-text3 mb-2">El % es sobre el total de personas que arrancaron el video.</p>
             <div className="space-y-2">
               {drops.map((d, k) => {
                 const phrase = transcriptAt(r.transcript, d.sec);
@@ -248,7 +249,7 @@ function VslDetail({ m, rangeLabel }) {
                   <div key={k} className="text-[13px]">
                     <div className="flex items-center gap-2 flex-wrap">
                       <b className="text-text tabular-nums">{fmtTime(d.sec)}</b>
-                      <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}%)</span>
+                      <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}% del total)</span>
                     </div>
                     {phrase
                       ? <div className="text-[13px] text-text2 italic mt-0.5 pl-2 border-l-2 border-[#FBCFE8]">“{phrase}”</div>
