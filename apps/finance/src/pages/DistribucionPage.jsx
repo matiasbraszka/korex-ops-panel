@@ -29,7 +29,7 @@ export default function DistribucionPage() {
   useEffect(() => { try { localStorage.setItem('fin_dist_desde', desde || ''); } catch { /* noop */ } }, [desde]);
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_name_sheet,payer_name,income_type,effective_type,net_usd,korex_real,collected_by,llego_mercury,organizado_finanzas,fin_commission_entries(role_key,amount,notes)&llego_mercury=eq.true&organizado_finanzas=eq.false&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_name_sheet,payer_name,income_type,effective_type,amount_usd,net_usd,korex_real,collected_by,llego_mercury,organizado_finanzas,fin_commission_entries(role_key,amount,notes)&llego_mercury=eq.true&organizado_finanzas=eq.false&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
   }, []);
@@ -138,11 +138,22 @@ export default function DistribucionPage() {
                 </div>
                 {isOpen && (
                   <div style={{ borderTop: '1px solid #EEF1F5', background: '#FBFCFE' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 16px', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#9AA4B2', borderBottom: '1px solid #EEF1F5' }}>
+                      <span style={{ width: 64 }}>Fecha</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>Pagador</span>
+                      <span style={{ width: 84 }}>Tipo</span>
+                      <span style={{ width: 76, textAlign: 'right', color: '#0c8584' }}>Bruto US$</span>
+                      <span style={{ width: 80, textAlign: 'right', color: '#4338ca' }}>Comis.</span>
+                      <span style={{ width: 80, textAlign: 'right', color: '#b45309' }}>Publi.</span>
+                      <span style={{ width: 80, textAlign: 'right', color: '#15803d' }}>Korex</span>
+                      <span style={{ width: 24, flexShrink: 0 }} />
+                    </div>
                     {g.incomes.map((r) => (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', borderBottom: '1px solid #F4F6F9', fontSize: 12 }}>
                         <span style={{ width: 64, color: '#9AA4B2' }}>{fdate(r.income_date)}</span>
                         <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.payer_name || '—'}</span>
-                        <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: TYPE_BG[r.effective_type] || '#f1f5f9', color: TYPE_FG[r.effective_type] || '#64748B' }}>{r.effective_type || '—'}</span>
+                        <span style={{ width: 84 }}><span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: TYPE_BG[r.effective_type] || '#f1f5f9', color: TYPE_FG[r.effective_type] || '#64748B' }}>{r.effective_type || '—'}</span></span>
+                        <span style={{ width: 76, textAlign: 'right', color: '#0c8584', fontWeight: 600 }} title="Bruto US$ (lo que pagó)">{money(r.amount_usd)}</span>
                         <span style={{ width: 80, textAlign: 'right', color: '#4338ca' }} title="a comisiones">{r.comis ? money(r.comis) : '—'}</span>
                         <span style={{ width: 80, textAlign: 'right', color: '#b45309' }} title="a publicidad">{r.publi ? money(r.publi) : '—'}</span>
                         <span style={{ width: 80, textAlign: 'right', color: '#15803d', fontWeight: 600 }} title="Korex">{money(r.korex)}</span>
