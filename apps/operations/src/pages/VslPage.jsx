@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { ChevronDown, ChevronUp, FlaskConical, ArrowLeft } from 'lucide-react';
+import { ChevronDown, ChevronUp, FlaskConical, ArrowLeft, ExternalLink } from 'lucide-react';
 
 const GREEN = '#22C55E';
 const DARK = '#15803D';
@@ -23,8 +23,38 @@ const cleanName = (n) => (n || '').replace(/\.(mp4|mov|m4v)$/i, '').replace(/_?v
 // Color por % (verde bien / ámbar medio / rojo mal) — para que los fallos salten.
 const pctColor = (v) => (v == null ? '#9AA5B1' : v >= 50 ? GREEN : v >= 25 ? '#D97706' : '#DC2626');
 
-// Gráfico grande interactivo: eje de tiempo (mm:ss) + personas reales + hover.
-function RetentionChart({ ret }) {
+// Detecta los N mayores quiebres de retención (las caídas más bruscas, en ventana corta).
+function topDrops(ret, n = 3) {
+  const data = ret?.viewers?.length ? ret.viewers : ret?.watchers;
+  if (!Array.isArray(data) || data.length < 6) return [];
+  const len = data.length, dur = ret.duration || len, base = data[0] || Math.max(...data) || 1;
+  const W = Math.max(2, Math.round(len * 0.03)); // ventana ~3% del largo del video
+  const cand = [];
+  for (let i = 0; i + W < len; i++) cand.push({ i, lost: data[i] - data[i + W] });
+  cand.sort((a, b) => b.lost - a.lost);
+  const minGap = Math.max(W, Math.round(len * 0.06));
+  const picked = [];
+  for (const c of cand) {
+    if (c.lost <= 0) break;
+    if (picked.every((p) => Math.abs(p.i - c.i) >= minGap)) {
+      picked.push(c);
+      if (picked.length >= n) break;
+    }
+  }
+  return picked
+    .map((c) => ({ idx: c.i, sec: Math.round((c.i / (len - 1)) * dur), lost: Math.round(c.lost), pct: Math.round((c.lost / base) * 100) }))
+    .sort((a, b) => a.idx - b.idx);
+}
+// Frase de la transcripción en un segundo dado (cuando exista la transcripción).
+function transcriptAt(transcript, sec) {
+  if (!Array.isArray(transcript) || !transcript.length) return null;
+  const seg = transcript.find((s) => sec >= s.start && sec <= s.end) ||
+    transcript.find((s) => Math.abs((s.start ?? 0) - sec) <= 4);
+  return seg?.text?.trim() || null;
+}
+
+// Gráfico grande interactivo: eje de tiempo (mm:ss) + personas reales + hover + puntos rojos de caída.
+function RetentionChart({ ret, drops = [] }) {
   const [hover, setHover] = useState(null);
   const data = ret?.viewers?.length ? ret.viewers : ret?.watchers;
   if (!Array.isArray(data) || data.length < 2) return <div className="text-text3 text-[12px] py-6 text-center">Sin reproducciones en este rango → no hay curva de retención.</div>;
@@ -47,6 +77,12 @@ function RetentionChart({ ret }) {
         {[0, 0.25, 0.5, 0.75, 1].map((f) => { const i = Math.round(f * (n - 1)); return <g key={f}><line x1={x(i)} y1={padT} x2={x(i)} y2={H - padB} stroke="#F7F8FA" /><text x={x(i)} y={H - 7} fontSize="10" fill="#9AA5B1" textAnchor="middle">{fmtTime((i / (n - 1)) * dur)}</text></g>; })}
         <path d={area} fill={GREEN} opacity={0.1} />
         <path d={line} fill="none" stroke={GREEN} strokeWidth={2} />
+        {drops.map((d, k) => (
+          <g key={k}>
+            <circle cx={x(d.idx)} cy={y(data[d.idx])} r={5.5} fill="#DC2626" stroke="#fff" strokeWidth={2} />
+            <text x={x(d.idx)} y={y(data[d.idx]) - 9} fontSize="10" fontWeight="700" fill="#DC2626" textAnchor="middle">{fmtTime(d.sec)}</text>
+          </g>
+        ))}
         {hover != null && (<g><line x1={x(hover)} y1={padT} x2={x(hover)} y2={H - padB} stroke={DARK} strokeWidth={1} strokeDasharray="3 3" /><circle cx={x(hover)} cy={y(data[hover])} r={4} fill={DARK} /></g>)}
       </svg>
       {hover != null && (
@@ -170,11 +206,18 @@ export default function VslPage() {
 // ── Detalle de UN VSL (ocupa todo el panel) ──────────────────────────────────
 function VslDetail({ m, rangeLabel }) {
   const r = m._row, ret = m.retention, pts = ret?.points;
+  const drops = topDrops(ret);
   return (
     <div>
       <div className="flex items-baseline gap-3 mb-1 flex-wrap">
         <h2 className="text-[20px] font-extrabold text-text">{cleanName(r.name)}</h2>
         {ret?.duration && <span className="text-[13px] text-text3">Duración {fmtTime(ret.duration)}</span>}
+        {r.embed_id && (
+          <a href={`https://embed.voomly.com/b/${r.embed_id}`} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border hover:bg-[#FAFBFC] transition-colors" style={{ color: '#EC4899' }}>
+            <ExternalLink size={13} /> Ver en Voomly
+          </a>
+        )}
       </div>
       <div className="grid grid-cols-5 gap-3 my-4 max-md:grid-cols-2">
         <MetricCard label="Visitas" value={fmt(m.uniq_views)} sub="personas que cargaron" />
@@ -188,7 +231,30 @@ function VslDetail({ m, rangeLabel }) {
           <h3 className="text-[14px] font-bold text-text">Retención — dónde se cae la gente</h3>
           {pts && <div className="text-[12px] text-text3">Quedan: 25%→<b className="text-text">{pts.p25}%</b> · 50%→<b className="text-text">{pts.p50}%</b> · 75%→<b className="text-text">{pts.p75}%</b> · fin→<b className="text-text">{pts.p100}%</b></div>}
         </div>
-        <RetentionChart ret={ret} />
+        <RetentionChart ret={ret} drops={drops} />
+        {drops.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <h4 className="text-[13px] font-bold text-text mb-2 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#DC2626' }} /> Mayores caídas — dónde se va más gente
+            </h4>
+            <div className="space-y-2">
+              {drops.map((d, k) => {
+                const phrase = transcriptAt(r.transcript, d.sec);
+                return (
+                  <div key={k} className="text-[13px]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <b className="text-text tabular-nums">{fmtTime(d.sec)}</b>
+                      <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}%)</span>
+                    </div>
+                    {phrase
+                      ? <div className="text-[13px] text-text2 italic mt-0.5 pl-2 border-l-2 border-[#FBCFE8]">“{phrase}”</div>
+                      : <div className="text-[11px] text-text3 mt-0.5 pl-2">— transcripción pendiente (se completa con Whisper) —</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
