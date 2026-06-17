@@ -17,6 +17,7 @@ const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const DmePage = lazy(() => import('./pages/DmePage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 const VslPage = lazy(() => import('./pages/VslPage'));
+const EmbudoPage = lazy(() => import('./pages/EmbudoPage'));
 const CuentasPage = lazy(() => import('./pages/CuentasPage'));
 import SearchBar from './components/SearchBar';
 import useSoporteUnread from './hooks/useSoporteUnread';
@@ -300,6 +301,7 @@ function MainLayout() {
   // Marketing — área aparte (métricas de VSL de Voomly). Visible para quien ve Operaciones.
   const marketingItems = [
     { id: 'vsl', label: 'VSL', Icon: BarChart3, path: '/marketing/vsl' },
+    { id: 'embudo', label: 'Embudo', Icon: TrendingDown, path: '/marketing/embudo' },
   ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
   const salesItems = currentUser?.isAdmin
@@ -406,6 +408,7 @@ function MainLayout() {
       {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
       <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/marketing/vsl" element={opsGuarded(<VslPage />)} />
+      <Route path="/marketing/embudo" element={opsGuarded(<EmbudoPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
       <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
