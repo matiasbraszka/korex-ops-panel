@@ -7,7 +7,7 @@ import { money, ROLE, ROLE_LABEL } from '../lib/format.js';
 
 // Deuda (diseño Claude Design): 5 vistas — Por rol, Afiliados, Cliente→Korex,
 // Fondos Mercury y Especiales. Cada una con tarjetas resumen + tabla.
-const VIEWS = [['rol', 'Por rol'], ['afiliado', 'Afiliados'], ['cliente', 'Cliente → Korex'], ['fondos', 'Fondos Mercury'], ['especiales', 'Especiales']];
+const VIEWS = [['cuadre', 'Cuadre'], ['rol', 'Por rol'], ['afiliado', 'Afiliados'], ['cliente', 'Cliente → Korex'], ['fondos', 'Fondos Mercury'], ['especiales', 'Especiales']];
 const ROLES = ['cliente', 'conector', 'consultor', 'marketing', 'afiliado'];
 const red = (v) => v > 1 ? '#dc2626' : v < -1 ? '#059669' : '#94a3b8';
 
@@ -17,8 +17,10 @@ export default function DeudaPage() {
   const [cli, setCli] = useState(null);
   const [esp, setEsp] = useState(null);
   const [fondos, setFondos] = useState(null);
+  const [resCom, setResCom] = useState(null);
+  const [resPub, setResPub] = useState(null);
   const [error, setError] = useState('');
-  const [view, setView] = useState('rol');
+  const [view, setView] = useState('cuadre');
   const [q, setQ] = useState('');
   const [hover, setHover] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -31,8 +33,10 @@ export default function DeudaPage() {
       sbFetch('fin_cliente_debe_korex?select=cliente,debe_korex,transferido,saldo&order=saldo.desc.nullslast&limit=3000'),
       sbFetch('fin_special_debts?select=direction,party,amount,currency,reason,detail,notes&order=amount.desc.nullslast&limit=200'),
       sbFetch('fin_fondo_vs_deuda?select=cliente,generado,pagado,deuda,reservado,debe_apartar,fondo_comisiones,diff,tiene_fondo&limit=500'),
+      sbFetch('fin_resumen_comisiones?select=role_key,generado,reservado,pagado,deuda&limit=20'),
+      sbFetch('fin_resumen_publicidad?select=fondo,neto,gastado&limit=1'),
     ])
-      .then(([r, a, c, s, f]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); })
+      .then(([r, a, c, s, f, rc, rp]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); })
       .catch((e) => setError(String(e)));
   }, []);
 
@@ -48,6 +52,7 @@ export default function DeudaPage() {
   }, [rol]);
 
   const vm = useMemo(() => {
+    if (view === 'cuadre') return null; // tiene render propio (dos tablas)
     if (!rolByClient || !afi || !cli || !esp || !fondos) return null;
     const qq = q.trim().toLowerCase();
     const m = (n, cur) => (cur === 'EUR' ? '€ ' : 'US$ ') + Math.round(Number(n) || 0).toLocaleString('es-AR');
@@ -111,7 +116,9 @@ export default function DeudaPage() {
   }, [view, q, rolByClient, afi, cli, esp, fondos]);
 
   if (error) return <Msg>Error cargando deuda: {error}</Msg>;
-  if (!vm) return <Msg>Calculando deuda…</Msg>;
+  const ready = rolByClient && afi && cli && esp && fondos && resCom && resPub;
+  if (!ready) return <Msg>Calculando deuda…</Msg>;
+  const fondoCom = (fondos || []).reduce((a, r) => a + (+r.fondo_comisiones || 0), 0);
 
   const cardBg = { red: ['#FFF1F2', '#FBC9CF', '#e11d48', '#be123c'], green: ['#F0FDF4', '#B6E8C5', '#16a34a', '#15803d'], amber: ['#FFFBEB', '#FDE68A', '#b45309', '#b45309'], sky: ['#F0F9FF', '#BAE6FD', '#0369a1', '#0369a1'], plain: ['#fff', '#E2E5EB', '#8A93A2', '#0D1117'] };
 
@@ -126,6 +133,10 @@ export default function DeudaPage() {
         <Search value={q} onChange={setQ} placeholder="Buscar…" width={200} />
       </div>
 
+      {view === 'cuadre' ? (
+        <Cuadre com={resCom} pub={resPub} fondoCom={fondoCom} />
+      ) : (
+      <>
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0, flexWrap: 'wrap' }}>
         {vm.cards.map(([label, value, accent], i) => { const [bg, bd, lc, vc] = cardBg[accent || 'plain']; return (
           <div key={i} style={{ background: bg, border: `1px solid ${bd}`, borderRadius: 12, padding: '11px 16px', minWidth: 175 }}>
@@ -162,6 +173,8 @@ export default function DeudaPage() {
         </table>
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
+      </>
+      )}
 
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
@@ -173,4 +186,85 @@ function Clickable({ name, id, onOpen }) {
   if (!name) return <span style={{ color: '#9AA4B2' }}>—</span>;
   if (!id) return <span>{name}</span>;
   return <span onClick={() => onOpen(id)} style={{ cursor: 'pointer', borderBottom: '1px dashed #C4CCD6' }}>{name}</span>;
+}
+
+/* ---------- Cuadre: trazabilidad de fondos (comisiones + publicidad) ---------- */
+function Cuadre({ com, pub, fondoCom }) {
+  const [exp, setExp] = useState({});
+  const m = (n) => money(n);
+  const byRole = {}; (com || []).forEach((r) => { byRole[r.role_key] = r; });
+  const ROLES5 = ['conector', 'cliente', 'afiliado', 'consultor', 'marketing'];
+  const partner = ROLES5.map((k) => byRole[k]).filter(Boolean);
+  const S = (f) => partner.reduce((a, r) => a + (+r[f] || 0), 0);
+  const generado = S('generado'), reserva = S('reservado'), pagado = S('pagado'), deudaNeta = S('deuda');
+  const adeudado = deudaNeta + reserva;
+  const dif = fondoCom - adeudado;
+  const korexGen = +(byRole.korex || {}).generado || 0;
+  const r = (k) => byRole[k] || {};
+
+  const bdGen = [...ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m((+r(k).generado || 0) + (k === 'afiliado' ? (+r(k).reservado || 0) : 0)) })), { label: 'Korex', value: m(korexGen), muted: true }];
+  const bdPag = ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m(+r(k).pagado || 0) }));
+  const bdAde = ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m((+r(k).deuda || 0) + (k === 'afiliado' ? (+r(k).reservado || 0) : 0)) }));
+
+  const pf = +(pub || {}).fondo || 0, pn = +(pub || {}).neto || 0, pg = +(pub || {}).gastado || 0;
+  const deberia = pn - pg, pdif = pf - deberia;
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', gap: 16, flexWrap: 'wrap', alignContent: 'flex-start', paddingBottom: 16 }}>
+      <Panel title="Comisiones" subtitle="Lo que debería estar apartado para partners vs el saldo del fondo de Mercury" tint="#0EA5A4">
+        <MetricRow label="En el fondo de Mercury (ahora)" value={m(fondoCom)} color="#0369a1" />
+        <MetricRow label="Comisiones generadas" value={m(generado + reserva)} kk="g" exp={exp} setExp={setExp} breakdown={bdGen} />
+        <MetricRow label="— de eso, reserva afiliado" value={m(reserva)} muted />
+        <MetricRow label="Comisiones pagadas" value={m(pagado)} color="#059669" kk="p" exp={exp} setExp={setExp} breakdown={bdPag} />
+        <MetricRow label="Adeudado (debería estar apartado)" value={m(adeudado)} bold kk="a" exp={exp} setExp={setExp} breakdown={bdAde} />
+        <MetricRow label="Diferencia (fondo − adeudado)" value={m(dif)} bold color={dif < -1 ? '#dc2626' : '#059669'} hint={dif < -1 ? 'falta plata en el fondo' : 'ok'} />
+      </Panel>
+
+      <Panel title="Publicidad" subtitle="Lo que entró para ads menos lo gastado debería igualar el fondo" tint="#b45309">
+        <MetricRow label="En el fondo de Mercury (ahora)" value={m(pf)} color="#0369a1" />
+        <MetricRow label="Publicidad neta total (entró para ads)" value={m(pn)} />
+        <MetricRow label="Publicidad gastada (Meta, real)" value={m(pg)} color="#dc2626" />
+        <MetricRow label="Debería quedar (neto − gastado)" value={m(deberia)} bold />
+        <MetricRow label="Diferencia (fondo − debería)" value={m(pdif)} bold color={pdif < -1 ? '#dc2626' : pdif > 1 ? '#b45309' : '#059669'} hint={pdif < -1 ? 'fuga: falta plata' : pdif > 1 ? 'hay de más: revisar de dónde salió' : 'cuadra'} />
+      </Panel>
+    </div>
+  );
+}
+function Panel({ title, subtitle, tint, children }) {
+  return (
+    <div style={{ flex: '1 1 380px', minWidth: 320, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, overflow: 'hidden', boxShadow: '0 1px 3px rgba(13,17,23,.04)' }}>
+      <div style={{ padding: '13px 16px', borderBottom: '1px solid #EEF1F5', borderTop: `3px solid ${tint}` }}>
+        <div style={{ fontSize: 14, fontWeight: 800 }}>{title}</div>
+        <div style={{ fontSize: 11.5, color: '#9AA4B2', marginTop: 2 }}>{subtitle}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+function MetricRow({ label, value, color, bold, muted, hint, kk, exp, setExp, breakdown }) {
+  const open = exp && kk && exp[kk];
+  const clickable = !!breakdown;
+  return (
+    <>
+      <div onClick={clickable ? () => setExp((s) => ({ ...s, [kk]: !s[kk] })) : undefined}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: muted ? '5px 16px 5px 26px' : '11px 16px', borderTop: '1px solid #F1F5F9', cursor: clickable ? 'pointer' : 'default' }}>
+        <span style={{ fontSize: muted ? 11.5 : 13, fontWeight: bold ? 700 : muted ? 400 : 500, color: muted ? '#9AA4B2' : '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {clickable && <span style={{ color: '#94a3b8', fontSize: 9 }}>{open ? '▼' : '▶'}</span>}{label}
+        </span>
+        <span style={{ fontSize: bold ? 17 : muted ? 12 : 14, fontWeight: bold ? 800 : 600, color: color || (muted ? '#9AA4B2' : '#0D1117'), whiteSpace: 'nowrap' }}>
+          {value}{hint && <span style={{ fontSize: 10, fontWeight: 500, color: '#9AA4B2', marginLeft: 6 }}>· {hint}</span>}
+        </span>
+      </div>
+      {clickable && open && (
+        <div style={{ background: '#F8FAFC', padding: '6px 16px 8px 34px' }}>
+          {breakdown.map((b, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12 }}>
+              <span style={{ color: b.muted ? '#b0b8c4' : '#64748B' }}>{b.label}{b.muted ? ' · va a cuenta principal, no al fondo' : ''}</span>
+              <span style={{ fontWeight: 600, color: b.muted ? '#b0b8c4' : '#475569' }}>{b.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
 }
