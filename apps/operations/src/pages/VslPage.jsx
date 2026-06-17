@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { ChevronDown, ChevronUp, FlaskConical, ArrowLeft, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, FlaskConical, ArrowLeft, ExternalLink } from 'lucide-react';
 
 const GREEN = '#22C55E';
 const DARK = '#15803D';
@@ -23,26 +23,28 @@ const cleanName = (n) => (n || '').replace(/\.(mp4|mov|m4v)$/i, '').replace(/_?v
 // Color por % (verde bien / ámbar medio / rojo mal) — para que los fallos salten.
 const pctColor = (v) => (v == null ? '#9AA5B1' : v >= 50 ? GREEN : v >= 25 ? '#D97706' : '#DC2626');
 
-// Detecta los N mayores quiebres de retención (las caídas más bruscas, en ventana corta).
+// Detecta los N mayores quiebres de retención y los ubica en el punto MÁS EMPINADO
+// de cada caída (donde la línea baja), no al inicio. Usa pendiente centrada.
 function topDrops(ret, n = 3) {
   const data = ret?.viewers?.length ? ret.viewers : ret?.watchers;
-  if (!Array.isArray(data) || data.length < 6) return [];
+  if (!Array.isArray(data) || data.length < 8) return [];
   const len = data.length, dur = ret.duration || len, base = data[0] || Math.max(...data) || 1;
-  const W = Math.max(2, Math.round(len * 0.03)); // ventana ~3% del largo del video
+  const h = Math.max(1, Math.round(len * 0.02)); // medio-ventana ~2% (la caída se mide a ambos lados)
+  // Pendiente de bajada centrada en cada punto: cuánto se cae entre i-h e i+h.
   const cand = [];
-  for (let i = 0; i + W < len; i++) cand.push({ i, lost: data[i] - data[i + W] });
-  cand.sort((a, b) => b.lost - a.lost);
-  const minGap = Math.max(W, Math.round(len * 0.06));
+  for (let i = h; i < len - h; i++) cand.push({ i, drop: data[i - h] - data[i + h] });
+  cand.sort((a, b) => b.drop - a.drop);
+  const minGap = Math.max(2 * h, Math.round(len * 0.06));
   const picked = [];
   for (const c of cand) {
-    if (c.lost <= 0) break;
+    if (c.drop <= 0) break;
     if (picked.every((p) => Math.abs(p.i - c.i) >= minGap)) {
       picked.push(c);
       if (picked.length >= n) break;
     }
   }
   return picked
-    .map((c) => ({ idx: c.i, sec: Math.round((c.i / (len - 1)) * dur), lost: Math.round(c.lost), pct: Math.round((c.lost / base) * 100) }))
+    .map((c) => ({ idx: c.i, sec: Math.round((c.i / (len - 1)) * dur), lost: Math.round(c.drop), pct: Math.round((c.drop / base) * 100) }))
     .sort((a, b) => a.idx - b.idx);
 }
 // Frase de la transcripción en un segundo dado (cuando exista la transcripción).
@@ -207,6 +209,8 @@ export default function VslPage() {
 function VslDetail({ m, rangeLabel }) {
   const r = m._row, ret = m.retention, pts = ret?.points;
   const drops = topDrops(ret);
+  const [showTr, setShowTr] = useState(false);
+  const transcript = Array.isArray(r.transcript) ? r.transcript : null;
   return (
     <div>
       <div className="flex items-baseline gap-3 mb-1 flex-wrap">
@@ -256,6 +260,30 @@ function VslDetail({ m, rangeLabel }) {
           </div>
         )}
       </div>
+
+      {/* Transcripción completa — desplegable, colapsado (minimalista). */}
+      {transcript && transcript.length > 0 && (
+        <div className="bg-white border border-border rounded-xl p-4 mt-4">
+          <button onClick={() => setShowTr((v) => !v)} className="flex items-center gap-1.5 text-[14px] font-bold text-text hover:text-text2">
+            {showTr ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            Transcripción completa
+            <span className="text-[12px] font-normal text-text3">({transcript.length} frases)</span>
+          </button>
+          {showTr && (
+            <div className="mt-3 max-h-[320px] overflow-y-auto pr-2 space-y-1.5">
+              {transcript.map((s, i) => {
+                const inDrop = drops.some((d) => Math.abs(d.sec - (s.start ?? 0)) <= 4);
+                return (
+                  <div key={i} className="flex gap-2.5 text-[13px] leading-snug">
+                    <span className="text-text3 tabular-nums shrink-0 w-10 text-right">{fmtTime(s.start)}</span>
+                    <span className={inDrop ? 'text-text font-semibold' : 'text-text2'}>{s.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
