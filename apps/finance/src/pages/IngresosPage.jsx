@@ -22,8 +22,6 @@ const autoMercury = (method, collected) => (collected || 'Korex') === 'Korex' &&
 // "Quién cobró" se deduce del método: los "- Cliente" los cobra el cliente; el resto, Korex.
 const collectedFromMethod = (m) => /cliente/i.test(m || '') ? 'Cliente' : 'Korex';
 const isStripeMethod = (m) => /stripe/i.test(m || '');
-// Normaliza un nombre igual que fin_norm (para mapear pagador → referente del directorio).
-const normName = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
 export default function IngresosPage() {
   const [rows, setRows] = useState(null);
@@ -42,7 +40,7 @@ export default function IngresosPage() {
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
     sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id&limit=6000')
@@ -83,7 +81,7 @@ export default function IngresosPage() {
     setModal({
       mode: 'edit', id: r.id,
       income_date: r.income_date || '', income_type: r.income_type || 'CRM',
-      payer_name: r.payer_name || '', client_name_sheet: r.client_name_sheet || '', conector_name: r.conector_name_sheet || '',
+      payer_name: r.payer_name || '', client_name_sheet: r.client_name_sheet || '', conector_name: r.conector_name_sheet || '', afiliado_name: r.afiliado_name || '',
       payment_method: r.payment_method || PAY_OPTS[0], divisa,
       bruto: String(divisa === 'USD' ? (r.amount_usd ?? '') : (r.amount_eur ?? '')),
       amount_usd: r.amount_usd == null ? '' : String(r.amount_usd), amount_eur: r.amount_eur == null ? '' : String(r.amount_eur),
@@ -100,7 +98,8 @@ export default function IngresosPage() {
       const common = {
         income_date: f.income_date || null, month_date: f.income_date ? f.income_date.slice(0, 7) + '-01' : null,
         client_name_sheet: f.client_name_sheet.trim(), payer_name: (f.payer_name || '').trim() || f.client_name_sheet.trim(),
-        conector_name_sheet: (f.conector_name || '').trim() || null, collected_by: collected, income_type: f.income_type,
+        conector_name_sheet: (f.conector_name || '').trim() || null, afiliado_name: (f.afiliado_name || '').trim() || null,
+        collected_by: collected, income_type: f.income_type,
         amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
         llego_mercury: autoMercury(f.payment_method, collected),
       };
@@ -150,17 +149,6 @@ export default function IngresosPage() {
 
   const meses = useMemo(() => (data ? [...new Set(data.map((r) => r.mes).filter(Boolean))].sort().reverse() : []), [data]);
   const cliOpts = useMemo(() => (data ? [...new Set(data.map((r) => r.client_name_sheet).filter(Boolean))].sort() : []), [data]);
-  // Mapa nombre/alias → referente (afiliado) del directorio, para mostrarlo por ingreso.
-  const refByName = useMemo(() => {
-    const m = {};
-    (dir || []).forEach((p) => {
-      if (p.tipo === 'Cliente') return;          // un cliente tiene CONECTOR, no afiliado/referente
-      const ref = (p.conector_e || '').trim(); if (!ref) return;   // referente = conector_e (no el conector)
-      const add = (n) => { const k = normName(n); if (k && !m[k]) m[k] = ref; };
-      add(p.nombre); (p.aliases || []).forEach(add);
-    });
-    return m;
-  }, [dir]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -200,7 +188,7 @@ export default function IngresosPage() {
   });
   const cols = [
     ['Pagador', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Cobró', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Conector', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
-    ['Referente', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
+    ['Afiliado', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
     ['Pago', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Banco', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Tipo', '#F8FAFC', '#64748B', '2px solid #E2E5EB'],
     ['Fact.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Fin.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Merc.', '#F0F9FF', '#0369a1', '2px solid #E2E5EB'],
     ['Bruto €', '#F0FDFA', '#0c8584', '1px solid #EEF1F5'], ['Bruto US$', '#F0FDFA', '#0c8584', '1px solid #EEF1F5'], ['Neto US$', '#F0FDFA', '#0c8584', '2px solid #E2E5EB'],
@@ -223,7 +211,7 @@ export default function IngresosPage() {
 
       {/* toolbar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
-        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
+        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
@@ -290,7 +278,7 @@ export default function IngresosPage() {
                   <Td><Clickable name={r.payer_name} id={r.payer_dir_id} onOpen={setOpenId} dashed muted /></Td>
                   <Td><Chip bg={r.collected_by === 'Cliente' ? '#ffedd5' : '#f1f5f9'} fg={r.collected_by === 'Cliente' ? '#c2410c' : '#64748B'} round>{r.collected_by || 'Korex'}</Chip></Td>
                   <Td muted>{r.conector_name_sheet || '—'}</Td>
-                  <Td muted>{refByName[normName(r.payer_name)] || '—'}</Td>
+                  <Td muted>{r.afiliado_name || '—'}</Td>
                   <Td><Chip bg={pbg} fg={pfg}>{pago}</Chip></Td>
                   <Td center>{banco.link
                     ? <a href={banco.link} target="_blank" rel="noopener noreferrer" title={banco.title} style={{ display: 'inline-flex', cursor: 'pointer' }}><BancoIcon color={banco.color} /></a>
@@ -390,6 +378,8 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
     ...s, payer_name: p.nombre,
     client_name_sheet: p.cliente_padre || (p.tipo === 'Cliente' ? p.nombre : s.client_name_sheet),
     conector_name: conByClient[(p.cliente_padre || p.nombre || '').trim().toLowerCase()] || '',
+    // Sugerir el afiliado del usuario (su referente del directorio); editable. Clientes/conectores no tienen afiliado.
+    afiliado_name: s.afiliado_name || ((p.tipo !== 'Cliente' && (p.conector_e || '').trim()) || ''),
   }));
 
   // Stripe: trae el neto real del cargo (best-effort) si el neto está vacío.
@@ -426,6 +416,10 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
         <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div><label style={lab}>Fecha</label><input type="date" value={form.income_date} onChange={(e) => setForm((s) => ({ ...s, income_date: e.target.value }))} style={inp} /></div>
           <div><label style={lab}>Tipo</label><select value={form.income_type} onChange={(e) => setForm((s) => ({ ...s, income_type: e.target.value }))} style={inp}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lab}>Afiliado <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· quién refirió al usuario (cobra comisión de Afiliados, solo en CRM)</span></label>
+            <input value={form.afiliado_name || ''} onChange={(e) => setForm((s) => ({ ...s, afiliado_name: e.target.value }))} placeholder="(opcional · cualquier persona puede ser afiliado)" style={inp} />
+          </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={lab}>Usuario / pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>
             <PayerSelect value={form.payer_name} dir={dir} inp={inp} onPick={pickPayer} onType={(v) => setForm((s) => ({ ...s, payer_name: v }))} />
