@@ -126,11 +126,13 @@ function EditPersonModal({ id, onClose, onSaved }) {
   // así solo se puede elegir gente ya registrada y no hay typos).
   const [roster, setRoster] = useState([]);
   useEffect(() => {
-    sbFetch('fin_directory?select=nombre,tipo&order=nombre.asc&limit=3000')
+    sbFetch('fin_directory?select=nombre,tipo,roles&order=nombre.asc&limit=3000')
       .then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
   const uniqSorted = (arr) => [...new Set(arr.filter(Boolean).map((s) => String(s).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const clientOpts = useMemo(() => uniqSorted(roster.filter((p) => p.tipo === 'Cliente').map((p) => p.nombre)), [roster]);
+  // Cliente = rol principal Cliente o que tenga 'Cliente' entre sus roles adicionales.
+  const isRole = (p, r) => p.tipo === r || (p.roles || []).includes(r);
+  const clientOpts = useMemo(() => uniqSorted(roster.filter((p) => isRole(p, 'Cliente')).map((p) => p.nombre)), [roster]);
   const personOpts = useMemo(() => uniqSorted(roster.map((p) => p.nombre).filter((n) => n !== (data?.nombre || ''))), [roster, data]);
   const addAlias = () => {
     const v = aliasInput.trim(); if (!v) return;
@@ -142,7 +144,7 @@ function EditPersonModal({ id, onClose, onSaved }) {
   useEffect(() => {
     if (isNew) return;
     let alive = true;
-    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,conector_e,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa,aliases&limit=1`)
+    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,conector_e,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa,aliases,roles&limit=1`)
       .then((d) => { if (alive) { const row = (Array.isArray(d) ? d[0] : null) || {}; row.conector_e = row.conector_e || row.conector || ''; setData(row); setLoading(false); } })
       .catch((e) => { if (alive) { setErr(String(e)); setLoading(false); } });
     return () => { alive = false; };
@@ -150,17 +152,24 @@ function EditPersonModal({ id, onClose, onSaved }) {
 
   const set = (k, v) => setData((s) => ({ ...s, [k]: v }));
   const esCliente = data?.tipo === 'Cliente';
-  const fields = () => ({
-    nombre: (data.nombre || '').trim() || null,
-    tipo: data.tipo || null,
-    // Si es Cliente, "pertenece a" = él mismo (no se pregunta).
-    cliente_padre: esCliente ? ((data.nombre || '').trim() || null) : ((data.cliente_padre || '').trim() || null),
-    conector_e: (data.conector_e || '').trim() || null,   // Referente / afiliado
-    email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
-    dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
-    facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
-    aliases: (data.aliases || []).map((a) => String(a).trim()).filter(Boolean),
-  });
+  // Roles adicionales (doble rol): etiqueta informativa, el motor de comisiones NO la usa.
+  const toggleRole = (r) => setData((s) => { const cur = s.roles || []; return { ...s, roles: cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r] }; });
+  const fields = () => {
+    const t = data.tipo || null;
+    return {
+      nombre: (data.nombre || '').trim() || null,
+      tipo: t,
+      // "Pertenece a un cliente" solo aplica a Usuarios. Cliente = él mismo; el resto (conector/
+      // consultor/marketing) no pertenece a un cliente.
+      cliente_padre: t === 'Cliente' ? ((data.nombre || '').trim() || null) : (t === 'Usuario' ? ((data.cliente_padre || '').trim() || null) : null),
+      conector_e: (data.conector_e || '').trim() || null,   // Conector (clientes) / Afiliado (usuarios)
+      email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
+      dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
+      facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
+      aliases: (data.aliases || []).map((a) => String(a).trim()).filter(Boolean),
+      roles: (data.roles || []).filter((r) => r && r !== t),
+    };
+  };
   const save = async () => {
     if (!(data.nombre || '').trim()) { setErr('El nombre es obligatorio.'); return; }
     setBusy(true); setErr('');
@@ -199,9 +208,18 @@ function EditPersonModal({ id, onClose, onSaved }) {
           <>
             <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Nombre <span style={{ color: '#e11d48' }}>*</span> {!isNew && <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· al cambiarlo se re-vinculan sus pagos</span>}</label><input value={data.nombre || ''} onChange={(e) => set('nombre', e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>
-              <div><label style={lab}>Rol</label><select value={data.tipo || ''} onChange={(e) => set('tipo', e.target.value)} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
-              {!esCliente && <div><label style={lab}>Cliente (al que pertenece)</label><Combo value={data.cliente_padre} onChange={(v) => set('cliente_padre', v)} options={clientOpts} placeholder="elegir cliente…" empty="Ese cliente no está en la base. Agregalo primero." /></div>}
+              <div><label style={lab}>Rol principal</label><select value={data.tipo || ''} onChange={(e) => setData((s) => ({ ...s, tipo: e.target.value, roles: (s.roles || []).filter((r) => r !== e.target.value) }))} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
+              {data.tipo === 'Usuario' && <div><label style={lab}>Cliente (al que pertenece)</label><Combo value={data.cliente_padre} onChange={(v) => set('cliente_padre', v)} options={clientOpts} placeholder="elegir cliente…" empty="Ese cliente no está en la base. Agregalo primero." /></div>}
               <div><label style={lab}>{esCliente ? 'Conector' : 'Afiliado'} <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· {esCliente ? 'quién trajo al cliente' : 'quién lo refirió (se sugiere al cargar su ingreso)'}</span></label><Combo value={data.conector_e} onChange={(v) => set('conector_e', v)} options={personOpts} placeholder={esCliente ? 'elegir conector…' : 'elegir afiliado…'} empty="No está en la base. Agregalo primero como persona." /></div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={lab}>También es <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· roles adicionales (solo lo clasifica, NO cambia las comisiones)</span></label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].filter((r) => r !== data.tipo).map((r) => {
+                    const on = (data.roles || []).includes(r);
+                    return <button key={r} type="button" onClick={() => toggleRole(r)} style={{ border: `1px solid ${on ? '#0EA5A4' : '#E2E5EB'}`, background: on ? '#0EA5A4' : '#fff', color: on ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer' }}>{r}</button>;
+                  })}
+                </div>
+              </div>
               <div><label style={lab}>E-mail</label><input value={data.email || ''} onChange={(e) => set('email', e.target.value)} placeholder="—" style={inp} /></div>
               <div><label style={lab}>Teléfono</label><input value={data.telefono || ''} onChange={(e) => set('telefono', e.target.value)} placeholder="—" style={inp} /></div>
               <div><label style={lab}>Facturar a</label><select value={data.facturar_a || ''} onChange={(e) => set('facturar_a', e.target.value)} style={inp}>{FACTURAR_OPTS.map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
