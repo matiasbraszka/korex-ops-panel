@@ -118,6 +118,18 @@ export default function IngresosPage() {
     } catch { setBusy(false); }
   };
 
+  // Borrar un ingreso (cascade borra sus comisiones y conciliación).
+  const deleteModal = async () => {
+    const f = modal;
+    if (!f || f.mode !== 'edit' || !f.id || busy) return;
+    setBusy(true);
+    try {
+      await sbFetch(`fin_incomes?id=eq.${f.id}`, { method: 'DELETE', throwOnError: true });
+      setRows((rs) => (rs || []).filter((r) => r.id !== f.id));
+      setModal(null); setBusy(false);
+    } catch { setBusy(false); }
+  };
+
   const data = useMemo(() => {
     if (!rows) return null;
     return rows.map((r) => {
@@ -312,7 +324,7 @@ export default function IngresosPage() {
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
 
-      {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} busy={busy} onClose={() => setModal(null)} />}
+      {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} onDelete={deleteModal} busy={busy} onClose={() => setModal(null)} />}
       {factura && <FacturaModal income={factura} onClose={() => setFactura(null)} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
@@ -320,9 +332,10 @@ export default function IngresosPage() {
 }
 
 /* ---------- modal de alta/edición (6 campos; el resto automático) ---------- */
-function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, busy, onClose }) {
+function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDelete, busy, onClose }) {
   const [rate, setRate] = useState(null);   // cotización EUR → USD (en vivo)
   const [adv, setAdv] = useState(false);     // ajustar cliente/conector
+  const [confirmDel, setConfirmDel] = useState(false);
   const isEdit = form.mode === 'edit';
   const RATE = rate || 1.08;                 // fallback si no carga la cotización
   const isStripe = isStripeMethod(form.payment_method);
@@ -441,8 +454,17 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, busy, 
           <span>Mercury: <b style={{ color: merc ? '#16a34a' : '#9AA4B2' }}>{merc ? 'sí (auto)' : 'no'}</b></span>
           {!isEdit && <span style={{ color: '#9AA4B2' }}>Se guarda sin facturar.</span>}
         </div>
-        <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Usuario, cliente y monto son obligatorios'}</span>
+        <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
+            {isEdit && (confirmDel
+              ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#be123c' }}>¿Borrar ingreso?
+                  <button onClick={onDelete} disabled={busy} style={{ border: 0, background: '#e11d48', color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>Sí, borrar</button>
+                  <button onClick={() => setConfirmDel(false)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>No</button>
+                </span>
+              : <button onClick={() => setConfirmDel(true)} title="Eliminar este ingreso" style={{ border: '1px solid #FBC9CF', background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Eliminar</button>
+            )}
+            {!confirmDel && <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Usuario, cliente y monto son obligatorios'}</span>}
+          </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
             <button onClick={onSave} disabled={!ok || busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!ok || busy) ? 0.6 : 1 }}>{busy ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Guardar ingreso')}</button>

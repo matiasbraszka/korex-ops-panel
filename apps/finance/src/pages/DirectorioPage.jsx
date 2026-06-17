@@ -51,6 +51,9 @@ export default function DirectorioPage() {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 11, flexShrink: 0 }}>
+        <button onClick={() => setEditId('new')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12h14M12 5v14" /></svg> Nueva persona
+        </button>
         <Search value={q} onChange={setQ} placeholder="Buscar nombre, email, cliente o referente…" width={300} />
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {ROLE_FILTERS.map(([v, label]) => { const sel = tipo === v; const [cbg, cfg] = v ? roleChip(v) : ['#0EA5A4', '#fff']; return (
@@ -104,42 +107,55 @@ export default function DirectorioPage() {
       <div style={{ height: 14, flexShrink: 0 }} />
 
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
-      {editId && <EditPersonModal id={editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
+      {editId && <EditPersonModal id={editId === 'new' ? null : editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
     </div>
   );
 }
 
-/* ---------- editor de persona (datos de contacto + facturación) ---------- */
+/* ---------- alta / edición / baja de persona ---------- */
 const FACTURAR_OPTS = ['', 'Persona', 'Empresa'];
 function EditPersonModal({ id, onClose, onSaved }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const isNew = !id;
+  const [data, setData] = useState(isNew ? {} : null);
+  const [loading, setLoading] = useState(!isNew);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [confirmDel, setConfirmDel] = useState(false);
 
   useEffect(() => {
+    if (isNew) return;
     let alive = true;
     sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa&limit=1`)
       .then((d) => { if (alive) { setData((Array.isArray(d) ? d[0] : null) || {}); setLoading(false); } })
       .catch((e) => { if (alive) { setErr(String(e)); setLoading(false); } });
     return () => { alive = false; };
-  }, [id]);
+  }, [id, isNew]);
 
   const set = (k, v) => setData((s) => ({ ...s, [k]: v }));
+  const fields = () => ({
+    nombre: (data.nombre || '').trim() || null,
+    tipo: data.tipo || null, cliente_padre: (data.cliente_padre || '').trim() || null, conector: (data.conector || '').trim() || null,
+    email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
+    dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
+    facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
+  });
   const save = async () => {
+    if (isNew && !(data.nombre || '').trim()) { setErr('El nombre es obligatorio.'); return; }
     setBusy(true); setErr('');
     try {
-      await sbFetch(`fin_directory?id=eq.${id}`, {
-        method: 'PATCH', throwOnError: true,
-        body: JSON.stringify({
-          tipo: data.tipo || null, cliente_padre: (data.cliente_padre || '').trim() || null, conector: (data.conector || '').trim() || null,
-          email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
-          dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
-          facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
-        }),
-      });
+      if (isNew) {
+        await sbFetch('fin_directory', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: JSON.stringify(fields()) });
+      } else {
+        const b = fields(); delete b.nombre;   // el nombre no se cambia (es la llave con la que matchean ingresos)
+        await sbFetch(`fin_directory?id=eq.${id}`, { method: 'PATCH', throwOnError: true, body: JSON.stringify(b) });
+      }
       onSaved?.();
     } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  const remove = async () => {
+    setBusy(true); setErr('');
+    try { await sbFetch(`fin_directory?id=eq.${id}`, { method: 'DELETE', throwOnError: true }); onSaved?.(); }
+    catch (e) { setErr(String(e)); setBusy(false); }
   };
 
   const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
@@ -149,7 +165,7 @@ function EditPersonModal({ id, onClose, onSaved }) {
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 560, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
-          <div><div style={{ fontSize: 16, fontWeight: 800 }}>{loading ? 'Editar persona' : (data?.nombre || 'Editar persona')}</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Datos de contacto y facturación (se usan al emitir la factura)</div></div>
+          <div><div style={{ fontSize: 16, fontWeight: 800 }}>{isNew ? 'Nueva persona' : (loading ? 'Editar persona' : (data?.nombre || 'Editar persona'))}</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Datos de contacto y facturación (se usan al emitir la factura)</div></div>
           <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
         </div>
         {loading ? (
@@ -157,6 +173,7 @@ function EditPersonModal({ id, onClose, onSaved }) {
         ) : (
           <>
             <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              {isNew && <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Nombre <span style={{ color: '#e11d48' }}>*</span></label><input value={data.nombre || ''} onChange={(e) => set('nombre', e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>}
               <div><label style={lab}>Rol</label><select value={data.tipo || ''} onChange={(e) => set('tipo', e.target.value)} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
               <div><label style={lab}>Cliente (al que pertenece)</label><input value={data.cliente_padre || ''} onChange={(e) => set('cliente_padre', e.target.value)} placeholder="cliente padre" style={inp} /></div>
               <div><label style={lab}>Conector</label><input value={data.conector || ''} onChange={(e) => set('conector', e.target.value)} placeholder="(opcional)" style={inp} /></div>
@@ -168,9 +185,20 @@ function EditPersonModal({ id, onClose, onSaved }) {
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Empresa <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· se factura a este nombre si "Facturar a" = Empresa</span></label><input value={data.empresa || ''} onChange={(e) => set('empresa', e.target.value)} placeholder="—" style={inp} /></div>
               {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
             </div>
-            <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={save} disabled={busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Guardar'}</button>
+            <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                {!isNew && (confirmDel
+                  ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#be123c' }}>¿Borrar del directorio?
+                      <button onClick={remove} disabled={busy} style={{ border: 0, background: '#e11d48', color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>Sí, borrar</button>
+                      <button onClick={() => setConfirmDel(false)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>No</button>
+                    </span>
+                  : <button onClick={() => setConfirmDel(true)} style={{ border: '1px solid #FBC9CF', background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Eliminar</button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={save} disabled={busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? 'Guardando…' : (isNew ? 'Crear persona' : 'Guardar')}</button>
+              </div>
             </div>
           </>
         )}
