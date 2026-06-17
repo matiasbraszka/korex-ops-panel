@@ -19,6 +19,7 @@ export default function DeudaPage() {
   const [fondos, setFondos] = useState(null);
   const [resCom, setResCom] = useState(null);
   const [resPub, setResPub] = useState(null);
+  const [cuadreCli, setCuadreCli] = useState(null);
   const [error, setError] = useState('');
   const [view, setView] = useState('cuadre');
   const [q, setQ] = useState('');
@@ -35,8 +36,9 @@ export default function DeudaPage() {
       sbFetch('fin_fondo_vs_deuda?select=cliente,generado,pagado,deuda,reservado,debe_apartar,fondo_comisiones,diff,tiene_fondo&limit=500'),
       sbFetch('fin_resumen_comisiones?select=role_key,generado,reservado,pagado,deuda&limit=20'),
       sbFetch('fin_resumen_publicidad?select=fondo,neto,gastado&limit=1'),
+      sbFetch('fin_cuadre_cliente?select=k,cliente,com_fondo,com_generado,com_reservado,com_pagado,com_deuda,pub_fondo,pub_neto,pub_gastado&limit=500'),
     ])
-      .then(([r, a, c, s, f, rc, rp]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); })
+      .then(([r, a, c, s, f, rc, rp, cc]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); setCuadreCli(cc || []); })
       .catch((e) => setError(String(e)));
   }, []);
 
@@ -116,7 +118,7 @@ export default function DeudaPage() {
   }, [view, q, rolByClient, afi, cli, esp, fondos]);
 
   if (error) return <Msg>Error cargando deuda: {error}</Msg>;
-  const ready = rolByClient && afi && cli && esp && fondos && resCom && resPub;
+  const ready = rolByClient && afi && cli && esp && fondos && resCom && resPub && cuadreCli;
   if (!ready) return <Msg>Calculando deuda…</Msg>;
   const fondoCom = (fondos || []).reduce((a, r) => a + (+r.fondo_comisiones || 0), 0);
 
@@ -134,7 +136,7 @@ export default function DeudaPage() {
       </div>
 
       {view === 'cuadre' ? (
-        <Cuadre com={resCom} pub={resPub} fondoCom={fondoCom} />
+        <Cuadre globalCom={resCom} globalPub={resPub} fondoComGlobal={fondoCom} perCliente={cuadreCli} rolRows={rol} />
       ) : (
       <>
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0, flexWrap: 'wrap' }}>
@@ -188,45 +190,68 @@ function Clickable({ name, id, onOpen }) {
   return <span onClick={() => onOpen(id)} style={{ cursor: 'pointer', borderBottom: '1px dashed #C4CCD6' }}>{name}</span>;
 }
 
-/* ---------- Cuadre: trazabilidad de fondos (comisiones + publicidad) ---------- */
-function Cuadre({ com, pub, fondoCom }) {
+/* ---------- Cuadre: trazabilidad de fondos por cliente (comisiones + publicidad) ---------- */
+function Cuadre({ globalCom, globalPub, fondoComGlobal, perCliente, rolRows }) {
   const [exp, setExp] = useState({});
+  const [selCli, setSelCli] = useState('');
   const m = (n) => money(n);
-  const byRole = {}; (com || []).forEach((r) => { byRole[r.role_key] = r; });
   const ROLES5 = ['conector', 'cliente', 'afiliado', 'consultor', 'marketing'];
+  const opts = useMemo(() => [...(perCliente || [])].sort((a, b) => (a.cliente || '').localeCompare(b.cliente || '')), [perCliente]);
+
+  let comRows, fondoCom, pub;
+  if (!selCli) {
+    comRows = globalCom || []; fondoCom = fondoComGlobal; pub = globalPub || {};
+  } else {
+    comRows = (rolRows || []).filter((x) => x.cliente === selCli);
+    const c = (perCliente || []).find((x) => x.cliente === selCli) || {};
+    fondoCom = +c.com_fondo || 0;
+    pub = { fondo: +c.pub_fondo || 0, neto: +c.pub_neto || 0, gastado: +c.pub_gastado || 0 };
+  }
+
+  const byRole = {}; comRows.forEach((x) => { byRole[x.role_key] = x; });
+  const r = (k) => byRole[k] || {};
   const partner = ROLES5.map((k) => byRole[k]).filter(Boolean);
-  const S = (f) => partner.reduce((a, r) => a + (+r[f] || 0), 0);
+  const S = (f) => partner.reduce((a, x) => a + (+x[f] || 0), 0);
   const generado = S('generado'), reserva = S('reservado'), pagado = S('pagado'), deudaNeta = S('deuda');
   const adeudado = deudaNeta + reserva;
   const dif = fondoCom - adeudado;
   const korexGen = +(byRole.korex || {}).generado || 0;
-  const r = (k) => byRole[k] || {};
 
-  const bdGen = [...ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m((+r(k).generado || 0) + (k === 'afiliado' ? (+r(k).reservado || 0) : 0)) })), { label: 'Korex', value: m(korexGen), muted: true }];
+  const bdGen = [...ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m((+r(k).generado || 0) + (k === 'afiliado' ? (+r(k).reservado || 0) : 0)) })), ...(byRole.korex ? [{ label: 'Korex', value: m(korexGen), muted: true }] : [])];
   const bdPag = ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m(+r(k).pagado || 0) }));
   const bdAde = ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m((+r(k).deuda || 0) + (k === 'afiliado' ? (+r(k).reservado || 0) : 0)) }));
 
-  const pf = +(pub || {}).fondo || 0, pn = +(pub || {}).neto || 0, pg = +(pub || {}).gastado || 0;
+  const pf = +pub.fondo || 0, pn = +pub.neto || 0, pg = +pub.gastado || 0;
   const deberia = pn - pg, pdif = pf - deberia;
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', gap: 16, flexWrap: 'wrap', alignContent: 'flex-start', paddingBottom: 16 }}>
-      <Panel title="Comisiones" subtitle="Lo que debería estar apartado para partners vs el saldo del fondo de Mercury" tint="#0EA5A4">
-        <MetricRow label="En el fondo de Mercury (ahora)" value={m(fondoCom)} color="#0369a1" />
-        <MetricRow label="Comisiones generadas" value={m(generado + reserva)} kk="g" exp={exp} setExp={setExp} breakdown={bdGen} />
-        <MetricRow label="— de eso, reserva afiliado" value={m(reserva)} muted />
-        <MetricRow label="Comisiones pagadas" value={m(pagado)} color="#059669" kk="p" exp={exp} setExp={setExp} breakdown={bdPag} />
-        <MetricRow label="Adeudado (debería estar apartado)" value={m(adeudado)} bold kk="a" exp={exp} setExp={setExp} breakdown={bdAde} />
-        <MetricRow label="Diferencia (fondo − adeudado)" value={m(dif)} bold color={dif < -1 ? '#dc2626' : '#059669'} hint={dif < -1 ? 'falta plata en el fondo' : 'ok'} />
-      </Panel>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', paddingBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Cliente:</span>
+        <select value={selCli} onChange={(e) => { setSelCli(e.target.value); setExp({}); }}
+          style={{ border: '1px solid #E2E5EB', borderRadius: 9, padding: '8px 12px', fontSize: 13, fontWeight: 600, background: '#fff', minWidth: 260, outline: 'none' }}>
+          <option value="">Todos los clientes (total)</option>
+          {opts.map((c) => <option key={c.k || c.cliente} value={c.cliente}>{c.cliente}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <Panel title="Comisiones" subtitle={selCli ? `Fondo de comisiones de ${selCli} vs lo adeudado a sus partners` : 'Total: lo que debería estar apartado para partners vs los fondos de comisiones'} tint="#0EA5A4">
+          <MetricRow label="En el fondo de Mercury (ahora)" value={m(fondoCom)} color="#0369a1" />
+          <MetricRow label="Comisiones generadas" value={m(generado + reserva)} kk="g" exp={exp} setExp={setExp} breakdown={bdGen} />
+          <MetricRow label="— de eso, reserva afiliado" value={m(reserva)} muted />
+          <MetricRow label="Comisiones pagadas" value={m(pagado)} color="#059669" kk="p" exp={exp} setExp={setExp} breakdown={bdPag} />
+          <MetricRow label="Adeudado (debería estar apartado)" value={m(adeudado)} bold kk="a" exp={exp} setExp={setExp} breakdown={bdAde} />
+          <MetricRow label="Diferencia (fondo − adeudado)" value={m(dif)} bold color={dif < -1 ? '#dc2626' : '#059669'} hint={dif < -1 ? 'falta plata en el fondo' : 'ok'} />
+        </Panel>
 
-      <Panel title="Publicidad" subtitle="Lo que entró para ads menos lo gastado debería igualar el fondo" tint="#b45309">
-        <MetricRow label="En el fondo de Mercury (ahora)" value={m(pf)} color="#0369a1" />
-        <MetricRow label="Publicidad neta total (entró para ads)" value={m(pn)} />
-        <MetricRow label="Publicidad gastada (Meta, real)" value={m(pg)} color="#dc2626" />
-        <MetricRow label="Debería quedar (neto − gastado)" value={m(deberia)} bold />
-        <MetricRow label="Diferencia (fondo − debería)" value={m(pdif)} bold color={pdif < -1 ? '#dc2626' : pdif > 1 ? '#b45309' : '#059669'} hint={pdif < -1 ? 'fuga: falta plata' : pdif > 1 ? 'hay de más: revisar de dónde salió' : 'cuadra'} />
-      </Panel>
+        <Panel title="Publicidad" subtitle={selCli ? `Fondo de publicidad de ${selCli}: lo que entró menos lo gastado` : 'Total: lo que entró para ads menos lo gastado debería igualar el fondo'} tint="#b45309">
+          <MetricRow label="En el fondo de Mercury (ahora)" value={m(pf)} color="#0369a1" />
+          <MetricRow label="Publicidad neta total (entró para ads)" value={m(pn)} />
+          <MetricRow label="Publicidad gastada (Meta, real)" value={m(pg)} color="#dc2626" />
+          <MetricRow label="Debería quedar (neto − gastado)" value={m(deberia)} bold />
+          <MetricRow label="Diferencia (fondo − debería)" value={m(pdif)} bold color={pdif < -1 ? '#dc2626' : pdif > 1 ? '#b45309' : '#059669'} hint={pdif < -1 ? 'fuga: falta plata' : pdif > 1 ? 'hay de más: revisar de dónde salió' : 'cuadra'} />
+        </Panel>
+      </div>
     </div>
   );
 }
