@@ -15,7 +15,7 @@ export const financeNavItems = [
   { id: 'dashboard',  label: 'Dashboard',  path: '/finance/dashboard',  dot: '#0EA5A4' },
   { id: 'ingresos',   label: 'Ingresos',   path: '/finance/ingresos',   dot: '#0EA5A4' },
   { id: 'acuerdos',   label: 'Acuerdos',   path: '/finance/acuerdos',   dot: '#6366f1' },
-  { id: 'directorio', label: 'Directorio', path: '/finance/directorio', dot: '#0ea5e9' },
+  { id: 'directorio', label: 'Base de datos', path: '/finance/directorio', dot: '#0ea5e9' },
   { id: 'distribucion', label: 'Distribución', path: '/finance/distribucion', dot: '#0d9488' },
   { id: 'pagos',      label: 'Pagos',      path: '/finance/pagos',      dot: '#16a34a' },
   { id: 'deuda',      label: 'Deuda',      path: '/finance/deuda',      dot: '#e11d48' },

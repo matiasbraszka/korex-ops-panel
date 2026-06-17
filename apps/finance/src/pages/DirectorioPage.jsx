@@ -38,8 +38,8 @@ export default function DirectorioPage() {
       (!tipo || r.tipo === tipo));
   }, [rows, q, tipo]);
 
-  if (error) return <Msg>Error cargando directorio: {error}</Msg>;
-  if (!rows) return <Msg>Cargando directorio…</Msg>;
+  if (error) return <Msg>Error cargando la base de datos: {error}</Msg>;
+  if (!rows) return <Msg>Cargando base de datos…</Msg>;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '16px 22px 0' }}>
@@ -121,11 +121,18 @@ function EditPersonModal({ id, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
+  const [aliasInput, setAliasInput] = useState('');
+  const addAlias = () => {
+    const v = aliasInput.trim(); if (!v) return;
+    setData((s) => { const cur = s.aliases || []; if (cur.some((a) => a.trim().toLowerCase() === v.toLowerCase())) return s; return { ...s, aliases: [...cur, v] }; });
+    setAliasInput('');
+  };
+  const removeAlias = (i) => setData((s) => ({ ...s, aliases: (s.aliases || []).filter((_, j) => j !== i) }));
 
   useEffect(() => {
     if (isNew) return;
     let alive = true;
-    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa&limit=1`)
+    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa,aliases&limit=1`)
       .then((d) => { if (alive) { setData((Array.isArray(d) ? d[0] : null) || {}); setLoading(false); } })
       .catch((e) => { if (alive) { setErr(String(e)); setLoading(false); } });
     return () => { alive = false; };
@@ -138,6 +145,7 @@ function EditPersonModal({ id, onClose, onSaved }) {
     email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
     dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
     facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
+    aliases: (data.aliases || []).map((a) => String(a).trim()).filter(Boolean),
   });
   const save = async () => {
     if (isNew && !(data.nombre || '').trim()) { setErr('El nombre es obligatorio.'); return; }
@@ -149,6 +157,8 @@ function EditPersonModal({ id, onClose, onSaved }) {
         const b = fields(); delete b.nombre;   // el nombre no se cambia (es la llave con la que matchean ingresos)
         await sbFetch(`fin_directory?id=eq.${id}`, { method: 'PATCH', throwOnError: true, body: JSON.stringify(b) });
       }
+      // Recalcula la conciliación: los alias nuevos hacen matchear pagos con nombre distinto.
+      await sbFetch('rpc/fin_recon_run', { method: 'POST', body: '{}' }).catch(() => {});
       onSaved?.();
     } catch (e) { setErr(String(e)); setBusy(false); }
   };
@@ -183,6 +193,17 @@ function EditPersonModal({ id, onClose, onSaved }) {
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>ID fiscal o DNI</label><input value={data.id_fiscal || ''} onChange={(e) => set('id_fiscal', e.target.value)} placeholder="—" style={inp} /></div>
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Dirección de facturación</label><input value={data.dir_facturacion || ''} onChange={(e) => set('dir_facturacion', e.target.value)} placeholder="—" style={inp} /></div>
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Empresa <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· se factura a este nombre si "Facturar a" = Empresa</span></label><input value={data.empresa || ''} onChange={(e) => set('empresa', e.target.value)} placeholder="—" style={inp} /></div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={lab}>Otros nombres (alias) <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· con qué otro nombre aparece en Stripe/Mercury — para vincular esos pagos</span></label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, border: '1px solid #E2E5EB', borderRadius: 8, padding: 6, background: '#fff' }}>
+                  {(data.aliases || []).map((a, i) => (
+                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, background: '#EEF0FF', color: '#4338ca', padding: '3px 8px', borderRadius: 20 }}>
+                      {a}<button type="button" onClick={() => removeAlias(i)} title="quitar" style={{ border: 0, background: 'transparent', color: '#6366f1', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                    </span>
+                  ))}
+                  <input value={aliasInput} onChange={(e) => setAliasInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addAlias(); } }} onBlur={addAlias} placeholder={(data.aliases || []).length ? 'agregar otro…' : 'ej. el nombre completo que figura en Stripe'} style={{ flex: 1, minWidth: 140, border: 0, outline: 'none', fontSize: 13, padding: '3px 4px', background: 'transparent' }} />
+                </div>
+              </div>
               {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
             </div>
             <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

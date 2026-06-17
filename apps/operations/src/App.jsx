@@ -325,7 +325,7 @@ function MainLayout() {
     { id: 'dashboard',  label: 'Dashboard',  Icon: LayoutDashboard, path: '/finance/dashboard' },
     { id: 'ingresos',   label: 'Ingresos',   Icon: Receipt,         path: '/finance/ingresos' },
     { id: 'acuerdos',   label: 'Acuerdos',   Icon: ClipboardList,   path: '/finance/acuerdos' },
-    { id: 'directorio', label: 'Directorio', Icon: Users,           path: '/finance/directorio' },
+    { id: 'directorio', label: 'Base de datos', Icon: Users,        path: '/finance/directorio' },
     { id: 'distribucion', label: 'Distribución', Icon: Wallet,      path: '/finance/distribucion' },
     { id: 'pagos',      label: 'Pagos',      Icon: Banknote,        path: '/finance/pagos' },
     { id: 'deuda',      label: 'Deuda',      Icon: Scale,           path: '/finance/deuda' },
