@@ -34,7 +34,7 @@ export default function IngresosPage() {
   const [tipo, setTipo] = useState('');
   const [mes, setMes] = useState('');
   const [openId, setOpenId] = useState(null);
-  const [hover, setHover] = useState(null);
+  const [shown, setShown] = useState(120);     // ventana de filas renderizadas (perf)
   const [modal, setModal] = useState(null);   // form de alta/edición (null = cerrado)
   const [busy, setBusy] = useState(false);
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
@@ -146,6 +146,9 @@ export default function IngresosPage() {
       // income_type viene del Sheet con mayúsc/minúsc ("Publicidad") y rompía el filtro.
       (!tipo || (r.effective_type || r.income_type || '').toUpperCase() === tipo) && (!mes || r.mes === mes));
   }, [data, q, tipo, mes]);
+  // Al cambiar el filtro, volver a la ventana inicial de filas (perf).
+  useEffect(() => { setShown(120); }, [q, tipo, mes]);
+  const visible = filtered.slice(0, shown);
 
   const totals = useMemo(() => {
     const t = { eur: 0, usd: 0, net: 0, korex: 0, ad: 0, comm: [0, 0, 0, 0, 0] };
@@ -208,12 +211,14 @@ export default function IngresosPage() {
           <option value="">Todos los meses</option>
           {meses.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
-        <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#9AA4B2' }}>mostrando <b style={{ color: '#3B4453' }}>{filtered.length}</b> de {data.length}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#9AA4B2' }}>mostrando <b style={{ color: '#3B4453' }}>{Math.min(visible.length, filtered.length)}</b>{filtered.length > visible.length ? ` de ${filtered.length}` : ''} · {data.length} total</span>
       </div>
 
+      {/* hover por CSS (sin re-render de toda la tabla) */}
+      <style>{`.fin-ing tbody tr:hover td{background:#F6FBFB}.fin-ing tbody tr:hover td.fin-stick{background:#F6FBFB!important}`}</style>
       {/* table */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, boxShadow: '0 1px 3px rgba(13,17,23,.04)' }}>
-        <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', fontSize: 12, whiteSpace: 'nowrap' }}>
+        <table className="fin-ing" style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', fontSize: 12, whiteSpace: 'nowrap' }}>
           <thead>
             <tr>
               <th colSpan={2} style={{ position: 'sticky', left: 0, top: 0, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '8px 12px', ...grpTh, color: '#0c8584' }}>Venta</th>
@@ -233,14 +238,12 @@ export default function IngresosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => {
+            {visible.map((r) => {
               const [pago, pbg, pfg] = pagoChip(r.payment_method);
-              const hov = hover === r.id;
-              const sticky = hov ? '#F6FBFB' : '#fff';
               const banco = bancoVisual(r.recon, r.payment_method);
               return (
-                <tr key={r.id} onMouseEnter={() => setHover(r.id)} onMouseLeave={() => setHover(null)} style={{ background: hov ? '#F6FBFB' : '#fff' }}>
-                  <td style={{ position: 'sticky', left: 0, zIndex: 2, background: sticky, borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', padding: 0, color: '#64748B' }}>
+                <tr key={r.id}>
+                  <td className="fin-stick" style={{ position: 'sticky', left: 0, zIndex: 2, background: '#fff', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', padding: 0, color: '#64748B' }}>
                     <div style={{ borderLeft: `3px solid ${TYPE_RAIL[r.effective_type] || '#cbd5e1'}`, padding: '8px 10px 8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                       <span>{fdate(r.income_date)}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -255,7 +258,7 @@ export default function IngresosPage() {
                       </span>
                     </div>
                   </td>
-                  <td style={{ position: 'sticky', left: 96, zIndex: 2, background: sticky, borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #E2E5EB', padding: '8px 12px', fontWeight: 600, boxShadow: '2px 0 4px -2px rgba(13,17,23,.07)' }}>
+                  <td className="fin-stick" style={{ position: 'sticky', left: 96, zIndex: 2, background: '#fff', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #E2E5EB', padding: '8px 12px', fontWeight: 600, boxShadow: '2px 0 4px -2px rgba(13,17,23,.07)' }}>
                     <Clickable name={r.client_name_sheet} id={r.client_dir_id} onOpen={setOpenId} dashed />
                   </td>
                   <Td><Clickable name={r.payer_name} id={r.payer_dir_id} onOpen={setOpenId} dashed muted /></Td>
@@ -283,6 +286,15 @@ export default function IngresosPage() {
                 </tr>
               );
             })}
+            {filtered.length > visible.length && (
+              <tr>
+                <td colSpan={19} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
+                  <button onClick={() => setShown((n) => n + 300)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#0c8584', fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 9, cursor: 'pointer' }}>
+                    Mostrar más · faltan {filtered.length - visible.length}
+                  </button>
+                </td>
+              </tr>
+            )}
           </tbody>
           <tfoot>
             <tr style={{ fontWeight: 800, fontSize: 11.5 }}>
