@@ -30,7 +30,7 @@ export default function DeudaPage() {
       sbFetch('fin_deuda_afiliado?select=persona,generado_total,generado_korex,pagado,deuda&order=deuda.desc.nullslast&limit=3000'),
       sbFetch('fin_cliente_debe_korex?select=cliente,debe_korex,transferido,saldo&order=saldo.desc.nullslast&limit=3000'),
       sbFetch('fin_special_debts?select=direction,party,amount,currency,reason,detail,notes&order=amount.desc.nullslast&limit=200'),
-      sbFetch('fin_fondo_vs_deuda?select=cliente,deuda,reservado,debe_apartar,fondo_comisiones,diff,tiene_fondo&limit=500'),
+      sbFetch('fin_fondo_vs_deuda?select=cliente,generado,pagado,deuda,reservado,debe_apartar,fondo_comisiones,diff,tiene_fondo&limit=500'),
     ])
       .then(([r, a, c, s, f]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); })
       .catch((e) => setError(String(e)));
@@ -87,14 +87,14 @@ export default function DeudaPage() {
       };
     }
     if (view === 'fondos') {
-      const list = fondos.filter((r) => (!qq || (r.cliente || '').toLowerCase().includes(qq)) && (Math.abs(+r.debe_apartar) > 1 || Math.abs(+r.fondo_comisiones) > 1)).sort((a, b) => (+a.diff) - (+b.diff));
-      const t = list.reduce((a, r) => ({ debe: a.debe + (+r.debe_apartar || 0), fondo: a.fondo + (+r.fondo_comisiones || 0), diff: a.diff + (+r.diff || 0) }), { debe: 0, fondo: 0, diff: 0 });
+      const list = fondos.filter((r) => (!qq || (r.cliente || '').toLowerCase().includes(qq)) && (Math.abs(+r.debe_apartar) > 1 || Math.abs(+r.fondo_comisiones) > 1 || Math.abs(+r.generado) > 1)).sort((a, b) => (+a.diff) - (+b.diff));
+      const t = list.reduce((a, r) => ({ gen: a.gen + (+r.generado || 0), pag: a.pag + (+r.pagado || 0), deuda: a.deuda + (+r.deuda || 0), res: a.res + (+r.reservado || 0), debe: a.debe + (+r.debe_apartar || 0), fondo: a.fondo + (+r.fondo_comisiones || 0), diff: a.diff + (+r.diff || 0) }), { gen: 0, pag: 0, deuda: 0, res: 0, debe: 0, fondo: 0, diff: 0 });
       return {
-        cards: [['Debe apartar', money(t.debe)], ['En fondos Mercury', money(t.fondo), 'sky'], ['Diferencia total', money(t.diff), t.diff < -1 ? 'red' : 'green']],
-        cols: [{ label: 'Cliente' }, { label: 'Deuda partners' }, { label: 'Reserva afi.' }, { label: 'Debe apartar' }, { label: 'Fondo Mercury' }, { label: 'Diferencia' }],
-        rows: list.map((r) => ({ name: r.cliente, cells: [{ v: money(r.deuda) }, { v: money(r.reservado), color: '#b45309' }, { v: money(r.debe_apartar), bold: true }, { v: r.tiene_fondo ? money(r.fondo_comisiones) : 'sin fondo', color: r.tiene_fondo ? '#0369a1' : '#cbd5e1' }, { v: money(r.diff), color: red(+r.diff), bold: true }] })),
-        totals: [{ v: '' }, { v: '' }, { v: money(t.debe) }, { v: money(t.fondo), color: '#0369a1' }, { v: money(t.diff), color: t.diff < -1 ? '#dc2626' : '#059669' }],
-        note: 'Lo que Korex debería tener apartado (deuda a partners + reserva) vs el saldo de su cuenta "… Comisiones" en Mercury. Rojo = falta plata en el fondo.', count: list.length,
+        cards: [['Generado', money(t.gen)], ['Pagado', money(t.pag), 'green'], ['Debe apartar', money(t.debe)], ['En fondos Mercury', money(t.fondo), 'sky'], ['Diferencia total', money(t.diff), t.diff < -1 ? 'red' : 'green']],
+        cols: [{ label: 'Cliente' }, { label: 'Generado' }, { label: 'Pagado' }, { label: 'Deuda pend.' }, { label: 'Reserva afi.' }, { label: 'Debe apartar' }, { label: 'Fondo Mercury' }, { label: 'Diferencia' }],
+        rows: list.map((r) => ({ name: r.cliente, cells: [{ v: money(r.generado) }, { v: money(r.pagado), color: '#059669' }, { v: money(r.deuda) }, { v: money(r.reservado), color: '#b45309' }, { v: money(r.debe_apartar), bold: true }, { v: r.tiene_fondo ? money(r.fondo_comisiones) : 'sin fondo', color: r.tiene_fondo ? '#0369a1' : '#cbd5e1' }, { v: money(r.diff), color: red(+r.diff), bold: true }] })),
+        totals: [{ v: money(t.gen) }, { v: money(t.pag), color: '#059669' }, { v: money(t.deuda) }, { v: money(t.res), color: '#b45309' }, { v: money(t.debe) }, { v: money(t.fondo), color: '#0369a1' }, { v: money(t.diff), color: t.diff < -1 ? '#dc2626' : '#059669' }],
+        note: 'Foto completa por cliente: lo que generó en comisiones, lo que ya se le pagó, lo que queda pendiente (Deuda = Generado − Pagado), la reserva de afiliado, lo que se debería tener apartado (Debe apartar = Deuda pend. + Reserva) y el saldo real de su cuenta "… Comisiones" en Mercury. Diferencia = Fondo − Debe apartar; rojo/negativo = falta plata en el fondo.', count: list.length,
       };
     }
     // especiales
