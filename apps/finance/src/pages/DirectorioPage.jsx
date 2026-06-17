@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
 import { Search, Msg } from '../components/bits.jsx';
@@ -122,6 +122,16 @@ function EditPersonModal({ id, onClose, onSaved }) {
   const [err, setErr] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
   const [aliasInput, setAliasInput] = useState('');
+  // Roster completo de la base (para los desplegables de Cliente / Conector / Afiliado:
+  // así solo se puede elegir gente ya registrada y no hay typos).
+  const [roster, setRoster] = useState([]);
+  useEffect(() => {
+    sbFetch('fin_directory?select=nombre,tipo&order=nombre.asc&limit=3000')
+      .then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+  const uniqSorted = (arr) => [...new Set(arr.filter(Boolean).map((s) => String(s).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const clientOpts = useMemo(() => uniqSorted(roster.filter((p) => p.tipo === 'Cliente').map((p) => p.nombre)), [roster]);
+  const personOpts = useMemo(() => uniqSorted(roster.map((p) => p.nombre).filter((n) => n !== (data?.nombre || ''))), [roster, data]);
   const addAlias = () => {
     const v = aliasInput.trim(); if (!v) return;
     setData((s) => { const cur = s.aliases || []; if (cur.some((a) => a.trim().toLowerCase() === v.toLowerCase())) return s; return { ...s, aliases: [...cur, v] }; });
@@ -190,8 +200,8 @@ function EditPersonModal({ id, onClose, onSaved }) {
             <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Nombre <span style={{ color: '#e11d48' }}>*</span> {!isNew && <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· al cambiarlo se re-vinculan sus pagos</span>}</label><input value={data.nombre || ''} onChange={(e) => set('nombre', e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>
               <div><label style={lab}>Rol</label><select value={data.tipo || ''} onChange={(e) => set('tipo', e.target.value)} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
-              {!esCliente && <div><label style={lab}>Cliente (al que pertenece)</label><input value={data.cliente_padre || ''} onChange={(e) => set('cliente_padre', e.target.value)} placeholder="cliente padre" style={inp} /></div>}
-              <div><label style={lab}>{esCliente ? 'Conector' : 'Afiliado'} <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· {esCliente ? 'quién trajo al cliente' : 'quién lo refirió (se sugiere al cargar su ingreso)'}</span></label><input value={data.conector_e || ''} onChange={(e) => set('conector_e', e.target.value)} placeholder="(opcional)" style={inp} /></div>
+              {!esCliente && <div><label style={lab}>Cliente (al que pertenece)</label><Combo value={data.cliente_padre} onChange={(v) => set('cliente_padre', v)} options={clientOpts} placeholder="elegir cliente…" empty="Ese cliente no está en la base. Agregalo primero." /></div>}
+              <div><label style={lab}>{esCliente ? 'Conector' : 'Afiliado'} <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· {esCliente ? 'quién trajo al cliente' : 'quién lo refirió (se sugiere al cargar su ingreso)'}</span></label><Combo value={data.conector_e} onChange={(v) => set('conector_e', v)} options={personOpts} placeholder={esCliente ? 'elegir conector…' : 'elegir afiliado…'} empty="No está en la base. Agregalo primero como persona." /></div>
               <div><label style={lab}>E-mail</label><input value={data.email || ''} onChange={(e) => set('email', e.target.value)} placeholder="—" style={inp} /></div>
               <div><label style={lab}>Teléfono</label><input value={data.telefono || ''} onChange={(e) => set('telefono', e.target.value)} placeholder="—" style={inp} /></div>
               <div><label style={lab}>Facturar a</label><select value={data.facturar_a || ''} onChange={(e) => set('facturar_a', e.target.value)} style={inp}>{FACTURAR_OPTS.map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
@@ -236,3 +246,48 @@ function EditPersonModal({ id, onClose, onSaved }) {
 const Td = ({ children, center, muted, style }) => (
   <td style={{ padding: '9px 14px', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', textAlign: center ? 'center' : 'left', color: muted ? '#475569' : undefined, ...style }}>{children}</td>
 );
+
+// Desplegable con búsqueda: SOLO se puede elegir gente ya registrada en la Base de datos
+// (evita typos y que se asigne a alguien que no existe). El texto tipeado solo filtra; el
+// valor se setea al hacer click en una opción. Si el valor actual no está registrado, lo
+// muestra arriba marcado para que se pueda mantener o reemplazar.
+function Combo({ value, onChange, options, placeholder = 'elegir…', empty }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(null); // null = muestra el value; string = buscando
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQuery(null); } };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  const q = (query || '').trim().toLowerCase();
+  const list = (q ? options.filter((o) => o.toLowerCase().includes(q)) : options).slice(0, 80);
+  const notReg = value && !options.some((o) => o.toLowerCase() === String(value).toLowerCase());
+  const pick = (v) => { onChange(v); setOpen(false); setQuery(null); };
+  const inpS = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+  const optS = { padding: '8px 10px', fontSize: 13, cursor: 'pointer', borderTop: '1px solid #F4F6F9' };
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input value={query == null ? (value || '') : query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        placeholder={placeholder} style={{ ...inpS, paddingRight: value ? 26 : 10 }} />
+      {value && <button type="button" onMouseDown={(e) => { e.preventDefault(); pick(null); }} title="quitar"
+        style={{ position: 'absolute', right: 7, top: 9, border: 0, background: 'transparent', color: '#9AA4B2', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>}
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 4, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 8, boxShadow: '0 10px 30px rgba(13,17,23,.14)', maxHeight: 220, overflowY: 'auto' }}>
+          {notReg && (
+            <div onMouseDown={(e) => { e.preventDefault(); pick(value); }} style={{ ...optS, borderTop: 0, color: '#b45309', background: '#FFFBEB' }}>
+              {value} <span style={{ fontSize: 11 }}>· actual (sin registrar)</span>
+            </div>
+          )}
+          {list.length === 0
+            ? <div style={{ padding: '10px', fontSize: 12, color: '#9AA4B2' }}>{empty || 'Sin coincidencias. Agregalo primero en Base de datos.'}</div>
+            : list.map((o) => <div key={o} onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#F6FBFB'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; }}
+                style={optS}>{o}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
