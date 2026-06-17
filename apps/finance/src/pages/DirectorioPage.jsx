@@ -132,30 +132,33 @@ function EditPersonModal({ id, onClose, onSaved }) {
   useEffect(() => {
     if (isNew) return;
     let alive = true;
-    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa,aliases&limit=1`)
-      .then((d) => { if (alive) { setData((Array.isArray(d) ? d[0] : null) || {}); setLoading(false); } })
+    sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,conector_e,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa,aliases&limit=1`)
+      .then((d) => { if (alive) { const row = (Array.isArray(d) ? d[0] : null) || {}; row.conector_e = row.conector_e || row.conector || ''; setData(row); setLoading(false); } })
       .catch((e) => { if (alive) { setErr(String(e)); setLoading(false); } });
     return () => { alive = false; };
   }, [id, isNew]);
 
   const set = (k, v) => setData((s) => ({ ...s, [k]: v }));
+  const esCliente = data?.tipo === 'Cliente';
   const fields = () => ({
     nombre: (data.nombre || '').trim() || null,
-    tipo: data.tipo || null, cliente_padre: (data.cliente_padre || '').trim() || null, conector: (data.conector || '').trim() || null,
+    tipo: data.tipo || null,
+    // Si es Cliente, "pertenece a" = él mismo (no se pregunta).
+    cliente_padre: esCliente ? ((data.nombre || '').trim() || null) : ((data.cliente_padre || '').trim() || null),
+    conector_e: (data.conector_e || '').trim() || null,   // Referente / afiliado
     email: (data.email || '').trim() || null, telefono: (data.telefono || '').trim() || null,
     dir_facturacion: (data.dir_facturacion || '').trim() || null, id_fiscal: (data.id_fiscal || '').trim() || null,
     facturar_a: data.facturar_a || null, empresa: (data.empresa || '').trim() || null,
     aliases: (data.aliases || []).map((a) => String(a).trim()).filter(Boolean),
   });
   const save = async () => {
-    if (isNew && !(data.nombre || '').trim()) { setErr('El nombre es obligatorio.'); return; }
+    if (!(data.nombre || '').trim()) { setErr('El nombre es obligatorio.'); return; }
     setBusy(true); setErr('');
     try {
       if (isNew) {
         await sbFetch('fin_directory', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: JSON.stringify(fields()) });
       } else {
-        const b = fields(); delete b.nombre;   // el nombre no se cambia (es la llave con la que matchean ingresos)
-        await sbFetch(`fin_directory?id=eq.${id}`, { method: 'PATCH', throwOnError: true, body: JSON.stringify(b) });
+        await sbFetch(`fin_directory?id=eq.${id}`, { method: 'PATCH', throwOnError: true, body: JSON.stringify(fields()) });
       }
       // Recalcula la conciliación: los alias nuevos hacen matchear pagos con nombre distinto.
       await sbFetch('rpc/fin_recon_run', { method: 'POST', body: '{}' }).catch(() => {});
@@ -183,10 +186,10 @@ function EditPersonModal({ id, onClose, onSaved }) {
         ) : (
           <>
             <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {isNew && <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Nombre <span style={{ color: '#e11d48' }}>*</span></label><input value={data.nombre || ''} onChange={(e) => set('nombre', e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>}
+              <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Nombre <span style={{ color: '#e11d48' }}>*</span> {!isNew && <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· al cambiarlo se re-vinculan sus pagos</span>}</label><input value={data.nombre || ''} onChange={(e) => set('nombre', e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>
               <div><label style={lab}>Rol</label><select value={data.tipo || ''} onChange={(e) => set('tipo', e.target.value)} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
-              <div><label style={lab}>Cliente (al que pertenece)</label><input value={data.cliente_padre || ''} onChange={(e) => set('cliente_padre', e.target.value)} placeholder="cliente padre" style={inp} /></div>
-              <div><label style={lab}>Conector</label><input value={data.conector || ''} onChange={(e) => set('conector', e.target.value)} placeholder="(opcional)" style={inp} /></div>
+              {!esCliente && <div><label style={lab}>Cliente (al que pertenece)</label><input value={data.cliente_padre || ''} onChange={(e) => set('cliente_padre', e.target.value)} placeholder="cliente padre" style={inp} /></div>}
+              <div><label style={lab}>Referente <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· quién lo trajo / afiliado</span></label><input value={data.conector_e || ''} onChange={(e) => set('conector_e', e.target.value)} placeholder="(opcional)" style={inp} /></div>
               <div><label style={lab}>E-mail</label><input value={data.email || ''} onChange={(e) => set('email', e.target.value)} placeholder="—" style={inp} /></div>
               <div><label style={lab}>Teléfono</label><input value={data.telefono || ''} onChange={(e) => set('telefono', e.target.value)} placeholder="—" style={inp} /></div>
               <div><label style={lab}>Facturar a</label><select value={data.facturar_a || ''} onChange={(e) => set('facturar_a', e.target.value)} style={inp}>{FACTURAR_OPTS.map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>

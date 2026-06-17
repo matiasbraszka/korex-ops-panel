@@ -22,6 +22,8 @@ const autoMercury = (method, collected) => (collected || 'Korex') === 'Korex' &&
 // "Quién cobró" se deduce del método: los "- Cliente" los cobra el cliente; el resto, Korex.
 const collectedFromMethod = (m) => /cliente/i.test(m || '') ? 'Cliente' : 'Korex';
 const isStripeMethod = (m) => /stripe/i.test(m || '');
+// Normaliza un nombre igual que fin_norm (para mapear pagador → referente del directorio).
+const normName = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
 export default function IngresosPage() {
   const [rows, setRows] = useState(null);
@@ -48,7 +50,7 @@ export default function IngresosPage() {
     sbFetch('fin_income_recon?select=income_id,source,ref_id,amount,dt,who,receipt_url,confidence&limit=6000')
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.income_id] = r; }); setReconMap(m); }).catch(() => {});
     // Roster del directorio (para elegir el pagador) — dedup por nombre, preferimos el que tenga cliente_padre.
-    sbFetch('fin_directory?select=nombre,tipo,cliente_padre,email&order=nombre.asc&limit=2000')
+    sbFetch('fin_directory?select=nombre,tipo,cliente_padre,conector_e,conector,email,aliases&order=nombre.asc&limit=2000')
       .then((d) => {
         const seen = new Map();
         (Array.isArray(d) ? d : []).forEach((p) => {
@@ -148,6 +150,16 @@ export default function IngresosPage() {
 
   const meses = useMemo(() => (data ? [...new Set(data.map((r) => r.mes).filter(Boolean))].sort().reverse() : []), [data]);
   const cliOpts = useMemo(() => (data ? [...new Set(data.map((r) => r.client_name_sheet).filter(Boolean))].sort() : []), [data]);
+  // Mapa nombre/alias → referente (afiliado) del directorio, para mostrarlo por ingreso.
+  const refByName = useMemo(() => {
+    const m = {};
+    (dir || []).forEach((p) => {
+      const ref = (p.conector_e || p.conector || '').trim(); if (!ref) return;
+      const add = (n) => { const k = normName(n); if (k && !m[k]) m[k] = ref; };
+      add(p.nombre); (p.aliases || []).forEach(add);
+    });
+    return m;
+  }, [dir]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -187,6 +199,7 @@ export default function IngresosPage() {
   });
   const cols = [
     ['Pagador', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Cobró', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Conector', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
+    ['Referente', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
     ['Pago', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Banco', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Tipo', '#F8FAFC', '#64748B', '2px solid #E2E5EB'],
     ['Fact.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Fin.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Merc.', '#F0F9FF', '#0369a1', '2px solid #E2E5EB'],
     ['Bruto €', '#F0FDFA', '#0c8584', '1px solid #EEF1F5'], ['Bruto US$', '#F0FDFA', '#0c8584', '1px solid #EEF1F5'], ['Neto US$', '#F0FDFA', '#0c8584', '2px solid #E2E5EB'],
@@ -234,7 +247,7 @@ export default function IngresosPage() {
           <thead>
             <tr>
               <th colSpan={2} style={{ position: 'sticky', left: 0, top: 0, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '8px 12px', ...grpTh, color: '#0c8584' }}>Venta</th>
-              <th colSpan={6} style={{ ...grpStick, background: '#F8FAFC', ...grpTh, color: '#64748B', borderRight: '2px solid #E2E5EB' }}>Detalle</th>
+              <th colSpan={7} style={{ ...grpStick, background: '#F8FAFC', ...grpTh, color: '#64748B', borderRight: '2px solid #E2E5EB' }}>Detalle</th>
               <th colSpan={3} style={{ ...grpStick, background: '#F0F9FF', ...grpTh, color: '#0369a1', textAlign: 'center', borderRight: '2px solid #E2E5EB' }}>Estado</th>
               <th colSpan={3} style={{ ...grpStick, background: '#F0FDFA', ...grpTh, color: '#0c8584', borderRight: '2px solid #E2E5EB' }}>Montos</th>
               <th colSpan={5} style={{ ...grpStick, background: '#EEF0FF', ...grpTh, color: '#4f46e5', textAlign: 'center', borderRight: '2px solid #E2E5EB' }}>Comisiones a repartir</th>
@@ -245,7 +258,7 @@ export default function IngresosPage() {
               <th style={{ position: 'sticky', left: 0, top: 33, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', textAlign: 'left', padding: '7px 12px', fontWeight: 600, color: '#64748B' }}>Fecha</th>
               <th style={{ position: 'sticky', left: 96, top: 33, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '7px 12px', fontWeight: 600, color: '#64748B', boxShadow: '2px 0 4px -2px rgba(13,17,23,.12)' }}>Cliente</th>
               {cols.map(([label, bg, fg, br], i) => (
-                <th key={i} style={{ position: 'sticky', top: 33, zIndex: 3, background: bg, borderBottom: '1px solid #E2E5EB', borderRight: br, textAlign: (i >= 6 && i <= 8) ? 'center' : 'left', padding: '7px 10px', fontWeight: 600, color: fg }}>{label}</th>
+                <th key={i} style={{ position: 'sticky', top: 33, zIndex: 3, background: bg, borderBottom: '1px solid #E2E5EB', borderRight: br, textAlign: (i >= 7 && i <= 9) ? 'center' : 'left', padding: '7px 10px', fontWeight: 600, color: fg }}>{label}</th>
               ))}
             </tr>
           </thead>
@@ -276,6 +289,7 @@ export default function IngresosPage() {
                   <Td><Clickable name={r.payer_name} id={r.payer_dir_id} onOpen={setOpenId} dashed muted /></Td>
                   <Td><Chip bg={r.collected_by === 'Cliente' ? '#ffedd5' : '#f1f5f9'} fg={r.collected_by === 'Cliente' ? '#c2410c' : '#64748B'} round>{r.collected_by || 'Korex'}</Chip></Td>
                   <Td muted>{r.conector_name_sheet || '—'}</Td>
+                  <Td muted>{refByName[normName(r.payer_name)] || '—'}</Td>
                   <Td><Chip bg={pbg} fg={pfg}>{pago}</Chip></Td>
                   <Td center>{banco.link
                     ? <a href={banco.link} target="_blank" rel="noopener noreferrer" title={banco.title} style={{ display: 'inline-flex', cursor: 'pointer' }}><BancoIcon color={banco.color} /></a>
@@ -300,7 +314,7 @@ export default function IngresosPage() {
             })}
             {filtered.length > visible.length && (
               <tr>
-                <td colSpan={19} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
+                <td colSpan={22} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
                   <button onClick={() => setShown((n) => n + 300)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#0c8584', fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 9, cursor: 'pointer' }}>
                     Mostrar más · faltan {filtered.length - visible.length}
                   </button>
@@ -311,7 +325,7 @@ export default function IngresosPage() {
           <tfoot>
             <tr style={{ fontWeight: 800, fontSize: 11.5 }}>
               <td colSpan={2} style={{ position: 'sticky', left: 0, bottom: 0, zIndex: 5, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', padding: '10px 12px' }}>TOTAL · {filtered.length}</td>
-              <td colSpan={9} style={{ position: 'sticky', bottom: 0, zIndex: 3, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', borderRight: '2px solid #E2E5EB' }} />
+              <td colSpan={10} style={{ position: 'sticky', bottom: 0, zIndex: 3, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', borderRight: '2px solid #E2E5EB' }} />
               <Foot>{money2(totals.eur, '€')}</Foot>
               <Foot>{money(totals.usd)}</Foot>
               <Foot br2>{money(totals.net)}</Foot>
