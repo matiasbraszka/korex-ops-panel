@@ -20,8 +20,12 @@ export default function PagosPage() {
   const [openId, setOpenId] = useState(null);
   const [hover, setHover] = useState(null);
   const [nf, setNf] = useState(null);
+  const [editId, setEditId] = useState(null);   // id del pago en edición
+  const [ef, setEf] = useState(null);            // form de edición
+  const [confirmId, setConfirmId] = useState(null); // id con confirmación de borrado
   const [busy, setBusy] = useState(false);
   const setF = (k, v) => setNf((s) => ({ ...s, [k]: v }));
+  const setEF = (k, v) => setEf((s) => ({ ...s, [k]: v }));
   const resolve = useDirectoryResolver();
 
   const load = useCallback(() => {
@@ -30,17 +34,29 @@ export default function PagosPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const startAdd = () => setNf({ paid_on: todayP(), category: 'egreso', person_type: 'Conector', person_name: '', client_name: '', concept: 'Liquidez', amount: '' });
+  const startAdd = () => { setEditId(null); setEf(null); setConfirmId(null); setNf({ paid_on: todayP(), category: 'egreso', person_type: 'Conector', person_name: '', client_name: '', concept: 'Liquidez', amount: '' }); };
+  const body = (f) => JSON.stringify({ paid_on: f.paid_on || null, category: f.category, person_type: f.person_type, person_name: f.person_name.trim(), client_name: f.client_name.trim() || null, concept: f.concept.trim() || null, amount: numP(f.amount), currency: 'US$' });
   const saveNew = async () => {
     if (!nf.person_name.trim() || !nf.amount) return;
     setBusy(true);
     try {
-      await sbFetch('fin_payouts', {
-        method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
-        body: JSON.stringify({ paid_on: nf.paid_on || null, category: nf.category, person_type: nf.person_type, person_name: nf.person_name.trim(), client_name: nf.client_name.trim() || null, concept: nf.concept.trim() || null, amount: numP(nf.amount), currency: 'US$' }),
-      });
+      await sbFetch('fin_payouts', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: body(nf) });
       setNf(null); setBusy(false); load();
     } catch { setBusy(false); }
+  };
+  const startEdit = (r) => { setNf(null); setConfirmId(null); setEditId(r.id); setEf({ paid_on: r.paid_on || '', category: r.category || 'egreso', person_type: r.person_type || 'Conector', person_name: r.person_name || '', client_name: r.client_name || '', concept: r.concept || '', amount: r.amount != null ? String(r.amount) : '' }); };
+  const saveEdit = async () => {
+    if (!ef.person_name.trim() || !ef.amount) return;
+    setBusy(true);
+    try {
+      await sbFetch(`fin_payouts?id=eq.${editId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: body(ef) });
+      setEditId(null); setEf(null); setBusy(false); load();
+    } catch { setBusy(false); }
+  };
+  const delRow = async (id) => {
+    setBusy(true);
+    try { await sbFetch(`fin_payouts?id=eq.${id}`, { method: 'DELETE', throwOnError: true }); setConfirmId(null); setEditId(null); setEf(null); setBusy(false); load(); }
+    catch { setBusy(false); }
   };
 
   const clientes = useMemo(() => (rows ? [...new Set(rows.map((r) => r.client_name).filter(Boolean))].sort() : []), [rows]);
@@ -97,38 +113,50 @@ export default function PagosPage() {
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, boxShadow: '0 1px 3px rgba(13,17,23,.04)' }}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: 12.5, whiteSpace: 'nowrap' }}>
           <thead><tr style={{ textAlign: 'left', color: '#64748B' }}>
-            {['Fecha', 'Cliente', 'Persona (cobra)', 'Rol', 'Concepto', 'Movimiento', 'Monto'].map((h) => <Th key={h}>{h}</Th>)}
+            {['Fecha', 'Cliente', 'Persona (cobra)', 'Rol', 'Concepto', 'Movimiento', 'Monto', ''].map((h, i) => <Th key={i}>{h}</Th>)}
           </tr></thead>
           <tbody>
             {nf && (
               <tr style={{ background: '#F0FDFA' }}>
-                <td style={cellPad}><input type="date" value={nf.paid_on} onChange={(e) => setF('paid_on', e.target.value)} style={inp} /></td>
-                <td style={cellPad}><input list="pgo-cli" value={nf.client_name} onChange={(e) => setF('client_name', e.target.value)} placeholder="cliente" style={inp} /><datalist id="pgo-cli">{clientes.map((c) => <option key={c} value={c} />)}</datalist></td>
-                <td style={cellPad}><input value={nf.person_name} onChange={(e) => setF('person_name', e.target.value)} placeholder="persona *" style={inp} /></td>
-                <td style={cellPad}><select value={nf.person_type} onChange={(e) => setF('person_type', e.target.value)} style={inp}>{['Cliente', 'Conector', 'Consultor', 'Marketing', 'Usuario'].map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}</select></td>
-                <td style={cellPad}><input list="pgo-con" value={nf.concept} onChange={(e) => setF('concept', e.target.value)} style={inp} /><datalist id="pgo-con"><option value="Liquidez" /><option value="Afiliados" /><option value="Publicidad" /></datalist></td>
-                <td style={cellPad}><select value={nf.category} onChange={(e) => setF('category', e.target.value)} style={inp}><option value="egreso">Egreso</option><option value="ingreso">Ingreso</option></select></td>
-                <td style={cellPad}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input inputMode="decimal" value={nf.amount} onChange={(e) => setF('amount', e.target.value)} placeholder="monto *" style={inp} />
-                    <button onClick={saveNew} disabled={busy || !nf.person_name.trim() || !nf.amount} title="Guardar" style={{ border: 0, background: '#16a34a', color: '#fff', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', fontWeight: 700, opacity: (busy || !nf.person_name.trim() || !nf.amount) ? 0.4 : 1 }}>✓</button>
-                    <button onClick={() => setNf(null)} title="Cancelar" style={{ border: 0, background: '#e2e8f0', color: '#64748B', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', fontWeight: 700 }}>✕</button>
-                  </div>
-                </td>
+                <FormCells f={nf} on={setF} clientes={clientes} />
+                <td style={cellPad}><Acts onSave={saveNew} onCancel={() => setNf(null)} busy={busy} disabled={!nf.person_name.trim() || !nf.amount} /></td>
               </tr>
             )}
-            {filtered.map((r) => { const [rbg, rfg] = roleChip(r.person_type); const hov = hover === r.id; return (
-              <tr key={r.id} onMouseEnter={() => setHover(r.id)} onMouseLeave={() => setHover(null)} style={{ background: hov ? '#F6FBFB' : '#fff' }}>
-                <Td muted>{fdate(r.paid_on)}</Td>
-                <Td muted><Clickable name={r.client_name} id={resolve(r.client_name)} onOpen={setOpenId} /></Td>
-                <Td style={{ fontWeight: 600 }}><Clickable name={r.person_name} id={resolve(r.person_name)} onOpen={setOpenId} dashed /></Td>
-                <Td><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: rbg, color: rfg }}>{roleLabel(r.person_type)}</span></Td>
-                <Td muted>{r.concept || '—'}</Td>
-                <Td><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: r.category === 'egreso' ? '#fee2e2' : '#dcfce7', color: r.category === 'egreso' ? '#dc2626' : '#15803d' }}>{r.category === 'egreso' ? 'Egreso' : 'Ingreso'}</span></Td>
-                <Td style={{ fontWeight: 700, color: r.category === 'egreso' ? '#dc2626' : '#15803d' }}>{money2(r.amount)}</Td>
-              </tr>
-            ); })}
-            {!filtered.length && !nf && <tr><td colSpan={7} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin movimientos.</td></tr>}
+            {filtered.map((r) => {
+              if (editId === r.id) return (
+                <tr key={r.id} style={{ background: '#FFFBEB' }}>
+                  <FormCells f={ef} on={setEF} clientes={clientes} />
+                  <td style={cellPad}><Acts onSave={saveEdit} onCancel={() => { setEditId(null); setEf(null); }} onDelete={() => delRow(r.id)} busy={busy} disabled={!ef.person_name.trim() || !ef.amount} /></td>
+                </tr>
+              );
+              const [rbg, rfg] = roleChip(r.person_type); const hov = hover === r.id;
+              return (
+                <tr key={r.id} onMouseEnter={() => setHover(r.id)} onMouseLeave={() => setHover(null)} style={{ background: hov ? '#F6FBFB' : '#fff' }}>
+                  <Td muted>{fdate(r.paid_on)}</Td>
+                  <Td muted><Clickable name={r.client_name} id={resolve(r.client_name)} onOpen={setOpenId} /></Td>
+                  <Td style={{ fontWeight: 600 }}><Clickable name={r.person_name} id={resolve(r.person_name)} onOpen={setOpenId} dashed /></Td>
+                  <Td><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: rbg, color: rfg }}>{roleLabel(r.person_type)}</span></Td>
+                  <Td muted>{r.concept || '—'}</Td>
+                  <Td><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: r.category === 'egreso' ? '#fee2e2' : '#dcfce7', color: r.category === 'egreso' ? '#dc2626' : '#15803d' }}>{r.category === 'egreso' ? 'Egreso' : 'Ingreso'}</span></Td>
+                  <Td style={{ fontWeight: 700, color: r.category === 'egreso' ? '#dc2626' : '#15803d' }}>{money2(r.amount)}</Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    {confirmId === r.id ? (
+                      <span style={{ display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 11, color: '#be123c' }}>¿Borrar?</span>
+                        <button onClick={() => delRow(r.id)} disabled={busy} style={{ border: 0, background: '#e11d48', color: '#fff', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Sí</button>
+                        <button onClick={() => setConfirmId(null)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>No</button>
+                      </span>
+                    ) : (
+                      <span style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', opacity: hov ? 1 : 0.3 }}>
+                        <button onClick={() => startEdit(r)} title="Editar" style={iconBtn}><PencilIcon /></button>
+                        <button onClick={() => setConfirmId(r.id)} title="Borrar" style={{ ...iconBtn, color: '#e11d48' }}><TrashIcon /></button>
+                      </span>
+                    )}
+                  </Td>
+                </tr>
+              );
+            })}
+            {!filtered.length && !nf && <tr><td colSpan={8} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin movimientos.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -140,6 +168,31 @@ export default function PagosPage() {
 }
 
 const cellPad = { padding: '5px 8px' };
+const iconBtn = { border: 0, background: 'transparent', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'inline-flex' };
+const PencilIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
+const TrashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>;
+function Acts({ onSave, onCancel, onDelete, busy, disabled }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+      <button onClick={onSave} disabled={busy || disabled} title="Guardar" style={{ border: 0, background: '#16a34a', color: '#fff', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', fontWeight: 700, opacity: (busy || disabled) ? 0.4 : 1 }}>✓</button>
+      <button onClick={onCancel} title="Cancelar" style={{ border: 0, background: '#e2e8f0', color: '#64748B', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', fontWeight: 700 }}>✕</button>
+      {onDelete && <button onClick={onDelete} disabled={busy} title="Borrar" style={{ border: 0, background: '#fee2e2', color: '#dc2626', borderRadius: 6, width: 24, height: 22, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><TrashIcon /></button>}
+    </div>
+  );
+}
+function FormCells({ f, on, clientes }) {
+  return (
+    <>
+      <td style={cellPad}><input type="date" value={f.paid_on} onChange={(e) => on('paid_on', e.target.value)} style={inp} /></td>
+      <td style={cellPad}><input list="pgo-cli" value={f.client_name} onChange={(e) => on('client_name', e.target.value)} placeholder="cliente" style={inp} /><datalist id="pgo-cli">{clientes.map((c) => <option key={c} value={c} />)}</datalist></td>
+      <td style={cellPad}><input value={f.person_name} onChange={(e) => on('person_name', e.target.value)} placeholder="persona *" style={inp} /></td>
+      <td style={cellPad}><select value={f.person_type} onChange={(e) => on('person_type', e.target.value)} style={inp}>{['Cliente', 'Conector', 'Consultor', 'Marketing', 'Usuario'].map((rk) => <option key={rk} value={rk}>{roleLabel(rk)}</option>)}</select></td>
+      <td style={cellPad}><input list="pgo-con" value={f.concept} onChange={(e) => on('concept', e.target.value)} style={inp} /><datalist id="pgo-con"><option value="Liquidez" /><option value="Afiliados" /><option value="Publicidad" /></datalist></td>
+      <td style={cellPad}><select value={f.category} onChange={(e) => on('category', e.target.value)} style={inp}><option value="egreso">Egreso</option><option value="ingreso">Ingreso</option></select></td>
+      <td style={cellPad}><input inputMode="decimal" value={f.amount} onChange={(e) => on('amount', e.target.value)} placeholder="monto *" style={inp} /></td>
+    </>
+  );
+}
 const Th = ({ children }) => <th style={{ position: 'sticky', top: 0, background: '#F8FAFC', borderBottom: '1px solid #E2E5EB', padding: '10px 14px', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'left' }}>{children}</th>;
 const Td = ({ children, muted, style }) => <td style={{ padding: '9px 14px', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', color: muted ? '#475569' : undefined, ...style }}>{children}</td>;
 function Clickable({ name, id, onOpen, dashed }) {
