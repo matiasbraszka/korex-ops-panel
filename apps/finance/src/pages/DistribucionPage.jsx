@@ -24,6 +24,9 @@ export default function DistribucionPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState({});   // cliente expandido
+  // El reparto con este sistema arrancó en abril 2026: lo anterior queda fuera de scope.
+  const [desde, setDesde] = useState(() => { try { return localStorage.getItem('fin_dist_desde') || '2026-04-01'; } catch { return '2026-04-01'; } });
+  useEffect(() => { try { localStorage.setItem('fin_dist_desde', desde || ''); } catch { /* noop */ } }, [desde]);
 
   const load = useCallback(() => {
     sbFetch('fin_incomes?select=id,income_date,client_name_sheet,payer_name,income_type,effective_type,net_usd,korex_real,collected_by,llego_mercury,organizado_finanzas,fin_commission_entries(role_key,amount,notes)&llego_mercury=eq.true&organizado_finanzas=eq.false&order=income_date.desc.nullslast&limit=6000')
@@ -49,9 +52,10 @@ export default function DistribucionPage() {
 
   const agg = useMemo(() => {
     if (!rows) return null;
+    const pend = rows.filter((r) => (r.income_date || '') >= desde);
     const cl = {};
     let comis = 0, publi = 0, korex = 0;
-    rows.forEach((r) => {
+    pend.forEach((r) => {
       const s = splitOf(r);
       comis += s.comis; publi += s.publi; korex += s.korex;
       const k = r.client_name_sheet || '—';
@@ -60,8 +64,8 @@ export default function DistribucionPage() {
       g.incomes.push({ ...r, ...s });
     });
     const list = Object.values(cl).sort((a, b) => (b.comis + b.publi + b.korex) - (a.comis + a.publi + a.korex));
-    return { list, comis, publi, korex, total: comis + publi + korex, n: rows.length, allIds: rows.map((r) => r.id) };
-  }, [rows]);
+    return { list, comis, publi, korex, total: comis + publi + korex, n: pend.length, allIds: pend.map((r) => r.id) };
+  }, [rows, desde]);
 
   if (error) return <Msg>Error cargando distribución: {error}</Msg>;
   if (!agg) return <Msg>Cargando distribución…</Msg>;
@@ -80,11 +84,17 @@ export default function DistribucionPage() {
           <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, letterSpacing: '-.02em' }}>Distribución a fondos</h1>
           <p style={{ margin: '3px 0 0', fontSize: 12.5, color: '#6B7585' }}>Plata que llegó a Mercury y falta repartir · mové a cada fondo y marcá <b>Fin</b></p>
         </div>
-        {agg.n > 0 && (
-          <button onClick={() => markFin(agg.allIds)} disabled={busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 10, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-            {busy ? 'Marcando…' : `Marcar todo repartido (${agg.n})`}
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, padding: '6px 10px' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#8A93A2', textTransform: 'uppercase', letterSpacing: '.06em' }}>Desde</span>
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ border: '1px solid #E2E5EB', borderRadius: 7, padding: '5px 8px', fontSize: 12, outline: 'none', color: '#3B4453' }} />
+          </div>
+          {agg.n > 0 && (
+            <button onClick={() => markFin(agg.allIds)} disabled={busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 10, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+              {busy ? 'Marcando…' : `Marcar todo repartido (${agg.n})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPIs */}
