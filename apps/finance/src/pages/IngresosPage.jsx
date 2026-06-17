@@ -378,8 +378,8 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
     ...s, payer_name: p.nombre,
     client_name_sheet: p.cliente_padre || (p.tipo === 'Cliente' ? p.nombre : s.client_name_sheet),
     conector_name: conByClient[(p.cliente_padre || p.nombre || '').trim().toLowerCase()] || '',
-    // Sugerir el afiliado del usuario (su referente del directorio); editable. Clientes/conectores no tienen afiliado.
-    afiliado_name: s.afiliado_name || ((p.tipo !== 'Cliente' && (p.conector_e || '').trim()) || ''),
+    // El afiliado SIEMPRE sale de la Base de datos del usuario (no se edita por venta).
+    afiliado_name: (p.tipo !== 'Cliente' && (p.conector_e || '').trim()) || '',
   }));
 
   // Stripe: trae el neto real del cargo (best-effort) si el neto está vacío.
@@ -417,8 +417,8 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
           <div><label style={lab}>Fecha</label><input type="date" value={form.income_date} onChange={(e) => setForm((s) => ({ ...s, income_date: e.target.value }))} style={inp} /></div>
           <div><label style={lab}>Tipo</label><select value={form.income_type} onChange={(e) => setForm((s) => ({ ...s, income_type: e.target.value }))} style={inp}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lab}>Afiliado <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· quién refirió al usuario (cobra comisión de Afiliados, solo en CRM)</span></label>
-            <input value={form.afiliado_name || ''} onChange={(e) => setForm((s) => ({ ...s, afiliado_name: e.target.value }))} placeholder="(opcional · cualquier persona puede ser afiliado)" style={inp} />
+            <label style={lab}>Afiliado <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· sale de la Base de datos del usuario · cobra comisión de Afiliados (solo CRM)</span></label>
+            <input value={form.afiliado_name || '—'} readOnly title="Para cambiarlo, editá el afiliado del usuario en Base de datos" style={{ ...inp, background: '#F8FAFC', color: form.afiliado_name ? '#475569' : '#9AA4B2', cursor: 'not-allowed' }} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={lab}>Usuario / pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>

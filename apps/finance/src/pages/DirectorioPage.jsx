@@ -159,6 +159,8 @@ function EditPersonModal({ id, onClose, onSaved }) {
         await sbFetch('fin_directory', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: JSON.stringify(fields()) });
       } else {
         await sbFetch(`fin_directory?id=eq.${id}`, { method: 'PATCH', throwOnError: true, body: JSON.stringify(fields()) });
+        // Propaga el afiliado de esta persona a todos sus ingresos + recalcula comisiones.
+        await sbFetch('rpc/fin_set_afiliado_for_person', { method: 'POST', body: JSON.stringify({ p_id: id }) }).catch(() => {});
       }
       // Recalcula la conciliación: los alias nuevos hacen matchear pagos con nombre distinto.
       await sbFetch('rpc/fin_recon_run', { method: 'POST', body: '{}' }).catch(() => {});
