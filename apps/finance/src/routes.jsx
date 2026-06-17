@@ -6,6 +6,7 @@ import PagosPage from './pages/PagosPage.jsx';
 import EgresosPage from './pages/EgresosPage.jsx';
 import DeudaPage from './pages/DeudaPage.jsx';
 import DirectorioPage from './pages/DirectorioPage.jsx';
+import DistribucionPage from './pages/DistribucionPage.jsx';
 
 // Navegación del área Finanzas. La navegación entre sub-pestañas la maneja el
 // sidebar del shell (apps/operations) — acá NO renderizamos un sidebar propio
@@ -15,6 +16,7 @@ export const financeNavItems = [
   { id: 'ingresos',   label: 'Ingresos',   path: '/finance/ingresos',   dot: '#0EA5A4' },
   { id: 'acuerdos',   label: 'Acuerdos',   path: '/finance/acuerdos',   dot: '#6366f1' },
   { id: 'directorio', label: 'Directorio', path: '/finance/directorio', dot: '#0ea5e9' },
+  { id: 'distribucion', label: 'Distribución', path: '/finance/distribucion', dot: '#0d9488' },
   { id: 'pagos',      label: 'Pagos',      path: '/finance/pagos',      dot: '#16a34a' },
   { id: 'deuda',      label: 'Deuda',      path: '/finance/deuda',      dot: '#e11d48' },
   { id: 'egresos',    label: 'Egresos',    path: '/finance/egresos',    dot: '#f43f5e' },
@@ -38,6 +40,7 @@ export function FinanceRoutes() {
           <Route path="ingresos" element={<IngresosPage />} />
           <Route path="acuerdos" element={<AcuerdosPage />} />
           <Route path="directorio" element={<DirectorioPage />} />
+          <Route path="distribucion" element={<DistribucionPage />} />
           <Route path="pagos" element={<PagosPage />} />
           <Route path="deuda" element={<DeudaPage />} />
           <Route path="egresos" element={<EgresosPage />} />

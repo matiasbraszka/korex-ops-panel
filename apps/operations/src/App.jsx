@@ -326,6 +326,7 @@ function MainLayout() {
     { id: 'ingresos',   label: 'Ingresos',   Icon: Receipt,         path: '/finance/ingresos' },
     { id: 'acuerdos',   label: 'Acuerdos',   Icon: ClipboardList,   path: '/finance/acuerdos' },
     { id: 'directorio', label: 'Directorio', Icon: Users,           path: '/finance/directorio' },
+    { id: 'distribucion', label: 'Distribución', Icon: Wallet,      path: '/finance/distribucion' },
     { id: 'pagos',      label: 'Pagos',      Icon: Banknote,        path: '/finance/pagos' },
     { id: 'deuda',      label: 'Deuda',      Icon: Scale,           path: '/finance/deuda' },
     { id: 'egresos',    label: 'Egresos',    Icon: TrendingDown,    path: '/finance/egresos' },
