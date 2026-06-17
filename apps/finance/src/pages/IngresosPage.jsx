@@ -154,7 +154,8 @@ export default function IngresosPage() {
   const refByName = useMemo(() => {
     const m = {};
     (dir || []).forEach((p) => {
-      const ref = (p.conector_e || p.conector || '').trim(); if (!ref) return;
+      if (p.tipo === 'Cliente') return;          // un cliente tiene CONECTOR, no afiliado/referente
+      const ref = (p.conector_e || '').trim(); if (!ref) return;   // referente = conector_e (no el conector)
       const add = (n) => { const k = normName(n); if (k && !m[k]) m[k] = ref; };
       add(p.nombre); (p.aliases || []).forEach(add);
     });
