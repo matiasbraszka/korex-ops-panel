@@ -50,6 +50,9 @@ function whatsappClicks(page) {
   return total;
 }
 
+// ¿es un CTA (botón de acción) o una opción de respuesta del quiz?
+const isCTA = (l) => /^[¡]?\s*(QUIERO|EMPEZAR|EMPIEZA|COMENZAR|COMIENZA|VER\b|COMUNICAR|VAMOS|CONTINUAR|SIGUIENTE|UNIRME|ÚNETE|UNETE|DESCUBRIR|GENERAR|AGENDAR|RESERVAR)/i.test(l) || (l === l.toUpperCase() && /[A-ZÁÉÍÓÚÑ]{3}/.test(l) && l.length <= 42);
+
 function Kpi({ label, value, sub, color }) {
   return (
     <div className="bg-white border border-border rounded-xl py-4 px-5">
@@ -160,9 +163,15 @@ export default function EmbudoPage() {
   const midPage = useMemo(() => findPage(clicks, /vsl|landing|register|focus/), [clicks]);
   const graciasPage = useMemo(() => findPage(clicks, /gracias|thank|thanks/), [clicks]);
   const prelandingPage = useMemo(() => findPage(clicks, /prelanding/), [clicks]);
-  const quiz = useMemo(() => readableClicks(midPage).slice(0, 9), [midPage]);
   const waClicks = useMemo(() => whatsappClicks(graciasPage), [graciasPage]);
   const preTop = useMemo(() => readableClicks(prelandingPage).slice(0, 5), [prelandingPage]);
+  // CTAs (prelanding + VSL) y opciones de respuesta del quiz, separados
+  const ctas = useMemo(() => {
+    const pre = readableClicks(prelandingPage).filter((q) => isCTA(q.label)).map((q) => ({ ...q, src: 'Prelanding' }));
+    const mid = readableClicks(midPage).filter((q) => isCTA(q.label)).map((q) => ({ ...q, src: 'VSL' }));
+    return [...pre, ...mid].sort((a, b) => b.clicks - a.clicks).slice(0, 8);
+  }, [prelandingPage, midPage]);
+  const quizOpts = useMemo(() => readableClicks(midPage).filter((q) => !isCTA(q.label) && q.label.includes(' ') && !/^[+▫]/.test(q.label)).slice(0, 9), [midPage]);
 
   return (
     <div className="p-6 max-w-[1180px] mx-auto">
@@ -249,7 +258,26 @@ export default function EmbudoPage() {
           </div>
 
           {/* COMPORTAMIENTO */}
-          <div className="mt-4 grid grid-cols-3 gap-4 items-start">
+          <div className="mt-4 grid grid-cols-2 gap-4 items-start">
+            {/* CTAs más clickeados (prelanding + VSL) */}
+            <div className="bg-white border border-border rounded-2xl p-5">
+              <div className="text-[13px] font-bold flex items-center gap-1.5"><TrendingDown size={14} className="text-[#7C3AED]" /> CTAs más clickeados</div>
+              <div className="text-[12px] text-text3 mt-0.5 mb-3">Botones de acción en prelanding y VSL.</div>
+              {ctas.length ? (
+                <div className="space-y-2">
+                  {ctas.map((q, i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-[12px] mb-0.5">
+                        <span className="truncate max-w-[78%]" title={q.label}><span className="text-[10px] font-bold uppercase text-text3 mr-1">{q.src}</span>{q.label}</span>
+                        <b>{fmt(q.clicks)}</b>
+                      </div>
+                      <div className="h-2 bg-[#F1F3F9] rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.max(6, (q.clicks / (ctas[0].clicks || 1)) * 100)}%`, background: '#7C3AED' }} /></div>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="text-text3 text-[12px] py-4">Sin CTAs detectados.</div>}
+            </div>
+
             {/* Compromiso con el VSL (Voomly) */}
             <div className="bg-white border border-border rounded-2xl p-5">
               <div className="text-[13px] font-bold flex items-center gap-1.5"><Play size={14} className="text-[#0EA5A5]" /> Compromiso con el VSL</div>
@@ -270,13 +298,13 @@ export default function EmbudoPage() {
             {/* Quiz */}
             <div className="bg-white border border-border rounded-2xl p-5">
               <div className="text-[13px] font-bold flex items-center gap-1.5"><ListChecks size={14} className="text-[#4F46E5]" /> Quiz · qué responden y dónde se quedan</div>
-              <div className="text-[12px] text-text3 mt-0.5 mb-3">Clicks por opción / CTA del paso (más clicks = más arriba en el quiz).</div>
-              {quiz.length ? (
+              <div className="text-[12px] text-text3 mt-0.5 mb-3">Respuestas más elegidas en el quiz (clicks por opción).</div>
+              {quizOpts.length ? (
                 <div className="space-y-2">
-                  {quiz.map((q, i) => (
+                  {quizOpts.map((q, i) => (
                     <div key={i}>
                       <div className="flex justify-between text-[12px] mb-0.5"><span className="truncate max-w-[80%]" title={q.label}>{q.label}</span><b>{fmt(q.clicks)}</b></div>
-                      <div className="h-2 bg-[#F1F3F9] rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.max(6, (q.clicks / (quiz[0].clicks || 1)) * 100)}%`, background: '#6366F1' }} /></div>
+                      <div className="h-2 bg-[#F1F3F9] rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.max(6, (q.clicks / (quizOpts[0].clicks || 1)) * 100)}%`, background: '#6366F1' }} /></div>
                     </div>
                   ))}
                 </div>
