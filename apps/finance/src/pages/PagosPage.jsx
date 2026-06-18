@@ -23,6 +23,8 @@ export default function PagosPage() {
   const [openId, setOpenId] = useState(null);
   const [hover, setHover] = useState(null);
   const [editing, setEditing] = useState(null); // 'new' | row | null
+  const [notas, setNotas] = useState('');
+  const [notasMsg, setNotasMsg] = useState('');
   const resolve = useDirectoryResolver();
 
   const load = useCallback(() => {
@@ -33,7 +35,16 @@ export default function PagosPage() {
   useEffect(() => {
     sbFetch('fin_directory?select=nombre,tipo,roles&order=nombre.asc&limit=3000')
       .then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {});
+    sbFetch('fin_notes?page=eq.pagos&select=body&limit=1')
+      .then((d) => setNotas((Array.isArray(d) && d[0] ? d[0].body : '') || '')).catch(() => {});
   }, []);
+  const saveNotas = async () => {
+    setNotasMsg('guardando…');
+    try {
+      await sbFetch('fin_notes?on_conflict=page', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, throwOnError: true, body: JSON.stringify({ page: 'pagos', body: notas, updated_at: new Date().toISOString() }) });
+      setNotasMsg('✓ guardado');
+    } catch { setNotasMsg('error al guardar'); }
+  };
 
   const filtered = useMemo(() => {
     if (!rows) return [];
@@ -111,7 +122,16 @@ export default function PagosPage() {
           </tbody>
         </table>
       </div>
-      <div style={{ height: 14, flexShrink: 0 }} />
+
+      <div style={{ flexShrink: 0, marginTop: 12, marginBottom: 14, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '12px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: '#8A93A2' }}>Notas</span>
+          <span style={{ fontSize: 10.5, color: notasMsg.startsWith('✓') ? '#16a34a' : notasMsg === 'error al guardar' ? '#dc2626' : '#9AA4B2' }}>{notasMsg}</span>
+        </div>
+        <textarea value={notas} onChange={(e) => { setNotas(e.target.value); if (notasMsg) setNotasMsg(''); }} onBlur={saveNotas}
+          placeholder="Anotá acá lo que necesites sobre los pagos (se guarda al salir del cuadro)…" rows={3}
+          style={{ width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', color: '#1e293b' }} />
+      </div>
 
       {editing && <PagoModal payout={editing === 'new' ? null : editing} roster={roster} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}

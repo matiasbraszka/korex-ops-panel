@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Fragment } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
 import { Search, Msg } from '../components/bits.jsx';
@@ -20,6 +20,7 @@ export default function DeudaPage() {
   const [resCom, setResCom] = useState(null);
   const [resPub, setResPub] = useState(null);
   const [cuadreCli, setCuadreCli] = useState(null);
+  const [afiCli, setAfiCli] = useState(null);
   const [error, setError] = useState('');
   const [view, setView] = useState('cuadre');
   const [q, setQ] = useState('');
@@ -37,8 +38,9 @@ export default function DeudaPage() {
       sbFetch('fin_resumen_comisiones?select=role_key,generado,reservado,pagado,deuda&limit=20'),
       sbFetch('fin_resumen_publicidad?select=fondo,neto,gastado&limit=1'),
       sbFetch('fin_cuadre_cliente?select=k,cliente,com_fondo,com_generado,com_reservado,com_pagado,com_deuda,pub_fondo,pub_neto,pub_gastado&limit=500'),
+      sbFetch('fin_deuda_afiliado_cliente?select=cliente,persona,generado,pagado,deuda&order=cliente.asc&limit=5000'),
     ])
-      .then(([r, a, c, s, f, rc, rp, cc]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); setCuadreCli(cc || []); })
+      .then(([r, a, c, s, f, rc, rp, cc, ac]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); setCuadreCli(cc || []); setAfiCli(ac || []); })
       .catch((e) => setError(String(e)));
   }, []);
 
@@ -54,7 +56,7 @@ export default function DeudaPage() {
   }, [rol]);
 
   const vm = useMemo(() => {
-    if (view === 'cuadre') return null; // tiene render propio (dos tablas)
+    if (view === 'cuadre' || view === 'afiliado') return null; // tienen render propio
     if (!rolByClient || !afi || !cli || !esp || !fondos) return null;
     const qq = q.trim().toLowerCase();
     const m = (n, cur) => (cur === 'EUR' ? '€ ' : 'US$ ') + Math.round(Number(n) || 0).toLocaleString('es-AR');
@@ -118,7 +120,7 @@ export default function DeudaPage() {
   }, [view, q, rolByClient, afi, cli, esp, fondos]);
 
   if (error) return <Msg>Error cargando deuda: {error}</Msg>;
-  const ready = rolByClient && afi && cli && esp && fondos && resCom && resPub && cuadreCli;
+  const ready = rolByClient && afi && cli && esp && fondos && resCom && resPub && cuadreCli && afiCli;
   if (!ready) return <Msg>Calculando deuda…</Msg>;
   const fondoCom = (fondos || []).reduce((a, r) => a + (+r.fondo_comisiones || 0), 0);
 
@@ -137,6 +139,8 @@ export default function DeudaPage() {
 
       {view === 'cuadre' ? (
         <Cuadre globalCom={resCom} globalPub={resPub} fondoComGlobal={fondoCom} perCliente={cuadreCli} rolRows={rol} />
+      ) : view === 'afiliado' ? (
+        <AfiliadosCli data={afiCli} q={q} onOpen={setOpenId} resolve={resolve} />
       ) : (
       <>
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0, flexWrap: 'wrap' }}>
@@ -188,6 +192,71 @@ function Clickable({ name, id, onOpen }) {
   if (!name) return <span style={{ color: '#9AA4B2' }}>—</span>;
   if (!id) return <span>{name}</span>;
   return <span onClick={() => onOpen(id)} style={{ cursor: 'pointer', borderBottom: '1px dashed #C4CCD6' }}>{name}</span>;
+}
+
+/* ---------- Afiliados agrupados por cliente ---------- */
+const afCellR = (w) => ({ padding: '9px 14px', borderBottom: '1px solid #E6ECF1', borderRight: '1px solid #EEF1F5', textAlign: 'left', fontWeight: w });
+const afCellSub = () => ({ padding: '8px 14px', borderBottom: '1px solid #F4F6F9', borderRight: '1px solid #F4F6F9', color: '#64748B' });
+function AfiliadosCli({ data, q, onOpen, resolve }) {
+  const [hover, setHover] = useState(null);
+  const qq = (q || '').trim().toLowerCase();
+  const groups = useMemo(() => {
+    const m = new Map();
+    (data || []).forEach((r) => {
+      if (qq && !(`${r.cliente} ${r.persona}`).toLowerCase().includes(qq)) return;
+      const k = r.cliente || '—';
+      if (!m.has(k)) m.set(k, { cliente: k, gen: 0, pag: 0, deuda: 0, afi: [] });
+      const g = m.get(k); g.gen += +r.generado || 0; g.pag += +r.pagado || 0; g.deuda += +r.deuda || 0; g.afi.push(r);
+    });
+    return [...m.values()].map((g) => ({ ...g, afi: g.afi.slice().sort((a, b) => (+b.deuda) - (+a.deuda)) })).sort((a, b) => b.deuda - a.deuda);
+  }, [data, qq]);
+  const t = groups.reduce((a, g) => ({ gen: a.gen + g.gen, pag: a.pag + g.pag, deuda: a.deuda + g.deuda }), { gen: 0, pag: 0, deuda: 0 });
+  const card = (label, val, color) => (
+    <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 12, padding: '11px 16px', minWidth: 160 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: color || '#8A93A2' }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, marginTop: 3, color: color || '#0D1117' }}>{val}</div>
+    </div>
+  );
+  const th = { position: 'sticky', top: 0, background: '#F8FAFC', borderBottom: '1px solid #E2E5EB', padding: '10px 14px', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'left' };
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0, flexWrap: 'wrap' }}>
+        {card('Generado (Korex debe)', money(t.gen))}
+        {card('Pagado', money(t.pag), '#16a34a')}
+        {card('Deuda a afiliados', money(t.deuda), '#e11d48')}
+      </div>
+      <div style={{ fontSize: 11.5, color: '#8A93A2', lineHeight: 1.45, marginBottom: 10, flexShrink: 0 }}>Afiliados agrupados por cliente: cuánto generó cada afiliado (solo de ingresos que cobró Korex), cuánto se le pagó y cuánto se le debe.</div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, boxShadow: '0 1px 3px rgba(13,17,23,.04)' }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: 12.5, whiteSpace: 'nowrap' }}>
+          <thead><tr style={{ textAlign: 'left', color: '#64748B' }}>
+            {['Cliente / Afiliado', 'Generado', 'Pagado', 'Deuda'].map((h, i) => <th key={i} style={th}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {groups.map((g) => (
+              <Fragment key={g.cliente}>
+                <tr style={{ background: '#F6FBFB' }}>
+                  <td style={afCellR(700)}>{g.cliente} <span style={{ color: '#9AA4B2', fontWeight: 500 }}>· {g.afi.length}</span></td>
+                  <td style={afCellR(700)}>{money(g.gen)}</td>
+                  <td style={{ ...afCellR(700), color: '#16a34a' }}>{money(g.pag)}</td>
+                  <td style={{ ...afCellR(700), color: g.deuda > 1 ? '#dc2626' : '#94a3b8', borderRight: 0 }}>{money(g.deuda)}</td>
+                </tr>
+                {g.afi.map((r, i) => { const hk = `${g.cliente}:${i}`; return (
+                  <tr key={i} onMouseEnter={() => setHover(hk)} onMouseLeave={() => setHover(null)} style={{ background: hover === hk ? '#F6FBFB' : '#fff' }}>
+                    <td style={{ padding: '8px 14px 8px 32px', borderBottom: '1px solid #F4F6F9', borderRight: '1px solid #F4F6F9', color: '#475569' }}><Clickable name={r.persona} id={resolve(r.persona)} onOpen={onOpen} dashed /></td>
+                    <td style={afCellSub()}>{money(r.generado)}</td>
+                    <td style={{ ...afCellSub(), color: '#16a34a' }}>{money(r.pagado)}</td>
+                    <td style={{ ...afCellSub(), color: (+r.deuda) > 1 ? '#dc2626' : '#94a3b8', fontWeight: 600, borderRight: 0 }}>{money(r.deuda)}</td>
+                  </tr>
+                ); })}
+              </Fragment>
+            ))}
+            {!groups.length && <tr><td colSpan={4} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin afiliados.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ height: 14, flexShrink: 0 }} />
+    </>
+  );
 }
 
 /* ---------- Cuadre: trazabilidad de fondos por cliente (comisiones + publicidad) ---------- */
