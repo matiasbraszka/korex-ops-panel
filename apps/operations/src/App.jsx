@@ -417,6 +417,7 @@ function MainLayout() {
       <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
       <Route path="/marketing/cambios" element={marketingGuarded(<CambiosPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
+      <Route path="/operations/cambios" element={<Navigate to="/marketing/cambios" replace />} />
       <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
       <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
       <Route path="/operations/dashboard" element={opsGuarded(<DashboardPage />)} />
