@@ -122,6 +122,7 @@ function EditPersonModal({ id, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
+  const [origName, setOrigName] = useState('');   // nombre antes de editar (para propagar el rename)
   const [aliasInput, setAliasInput] = useState('');
   // Roster completo de la base (para los desplegables de Cliente / Conector / Afiliado:
   // así solo se puede elegir gente ya registrada y no hay typos).
@@ -146,7 +147,7 @@ function EditPersonModal({ id, onClose, onSaved }) {
     if (isNew) return;
     let alive = true;
     sbFetch(`fin_directory?id=eq.${id}&select=nombre,tipo,cliente_padre,conector,conector_e,email,telefono,dir_facturacion,id_fiscal,facturar_a,empresa,aliases,roles&limit=1`)
-      .then((d) => { if (alive) { const row = (Array.isArray(d) ? d[0] : null) || {}; row.conector_e = row.conector_e || row.conector || ''; setData(row); setLoading(false); } })
+      .then((d) => { if (alive) { const row = (Array.isArray(d) ? d[0] : null) || {}; row.conector_e = row.conector_e || row.conector || ''; setData(row); setOrigName((row.nombre || '').trim()); setLoading(false); } })
       .catch((e) => { if (alive) { setErr(String(e)); setLoading(false); } });
     return () => { alive = false; };
   }, [id, isNew]);
@@ -178,7 +179,12 @@ function EditPersonModal({ id, onClose, onSaved }) {
       if (isNew) {
         await sbFetch('fin_directory', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: JSON.stringify(fields()) });
       } else {
+        const newName = (data.nombre || '').trim();
         await sbFetch(`fin_directory?id=eq.${id}`, { method: 'PATCH', throwOnError: true, body: JSON.stringify(fields()) });
+        // Si cambió el nombre, reescribirlo en TODOS lados (ingresos, pagos, acuerdos, reglas) + recalcular.
+        if (origName && newName && newName !== origName) {
+          await sbFetch('rpc/fin_rename_person_refs', { method: 'POST', body: JSON.stringify({ p_old: origName, p_new: newName }) }).catch(() => {});
+        }
         // Propaga el afiliado de esta persona a todos sus ingresos + recalcula comisiones.
         await sbFetch('rpc/fin_set_afiliado_for_person', { method: 'POST', body: JSON.stringify({ p_id: id }) }).catch(() => {});
       }
