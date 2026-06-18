@@ -14,6 +14,7 @@ const TIPO_OPTS = ['SETUP', 'CRM', 'PUBLICIDAD'];
 const num = (x) => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; };
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const feePct = (g, n) => { const gg = Number(g), nn = Number(n); return (gg > 0 && nn > 0 && gg > nn) ? ((gg - nn) / gg) * 100 : null; };
+const STRIPE_FEE = 0.045; // fee Stripe por defecto (4,5%, igual que crear-venta) para el neto baseline
 const isAdBudget = (e) => e.role_key === 'cliente' && /publicidad/i.test(e.notes || '');
 const isReservado = (e) => e.role_key === 'afiliado' && /reserv/i.test(e.notes || '');
 // "Llegó a Mercury" automático: si lo cobró Korex por Stripe o Mercury (Empresa),
@@ -368,8 +369,11 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
       else { eur = b; usd = r2(b * rt); }
     }
     const usdStr = usd === '' ? '' : String(usd);
-    // Mercury/USDT no tienen comisión → neto = bruto USD. Stripe conserva su neto (lookup/manual).
-    const net = isStripeMethod(s.payment_method) ? s.net_usd : usdStr;
+    // Mercury/USDT no tienen comisión → neto = bruto USD. Stripe: si no tocaron el neto a mano,
+    // baseline = bruto − fee (4,5%); el lookup de Stripe lo refina solo si hay un cargo cercano.
+    const net = isStripeMethod(s.payment_method)
+      ? (s.netTouched ? s.net_usd : (usd === '' ? '' : String(r2(usd * (1 - STRIPE_FEE)))))
+      : usdStr;
     return { ...s, amount_usd: usdStr, amount_eur: eur === '' ? '' : String(eur), net_usd: net };
   };
   const setBruto = (v) => setForm((s) => recompute({ ...s, bruto: v }, RATE));
@@ -387,9 +391,10 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
     afiliado_name: (p.tipo !== 'Cliente' && (p.conector_e || '').trim()) || '',
   }));
 
-  // Stripe: trae el neto real del cargo (best-effort) si el neto está vacío.
+  // Stripe: refina el neto con el cargo REAL de Stripe, pero SOLO si hay un cargo cercano
+  // al bruto (±12%). Si no, deja el baseline (bruto − fee). No pisa el neto si lo tocaron a mano.
   useEffect(() => {
-    if (!isStripe || !form.payer_name || !num(form.amount_usd) || form.net_usd) return;
+    if (!isStripe || !form.payer_name || !num(form.amount_usd) || form.netTouched) return;
     let alive = true;
     const enc = encodeURIComponent(form.payer_name.trim());
     sbFetch(`stripe_charges?customer_name=ilike.${enc}&paid=eq.true&select=gross_usd,net_usd&order=created_at.desc&limit=10`)
@@ -397,12 +402,13 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
         if (!alive || !Array.isArray(cs) || !cs.length) return;
         const target = num(form.amount_usd);
         const best = cs.map((c) => ({ g: Number(c.gross_usd) || null, n: c.net_usd != null ? Number(c.net_usd) : null }))
-          .filter((x) => x.g).sort((a, b) => Math.abs(a.g - target) - Math.abs(b.g - target))[0];
+          .filter((x) => x.g && Math.abs(x.g - target) / target <= 0.12)   // solo cargos cercanos al bruto
+          .sort((a, b) => Math.abs(a.g - target) - Math.abs(b.g - target))[0];
         const v = best ? (best.n != null ? best.n : best.g) : null;
-        if (v != null) setForm((s) => ({ ...s, net_usd: String(r2(v)) }));
+        if (v != null) setForm((s) => (s.netTouched ? s : { ...s, net_usd: String(r2(v)) }));
       }).catch(() => {});
     return () => { alive = false; };
-  }, [isStripe, form.payer_name, form.amount_usd, form.net_usd]); // eslint-disable-line
+  }, [isStripe, form.payer_name, form.amount_usd, form.netTouched]); // eslint-disable-line
 
   const otherCur = form.divisa === 'USD'
     ? (form.amount_eur ? `≈ € ${form.amount_eur}` : '')
@@ -457,7 +463,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
           {isStripe ? (
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={lab}>Neto US$ <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· lo que llegó de Stripe (descuenta comisión)</span></label>
-              <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value }))} placeholder="lo trae Stripe; ajustá si hace falta" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
+              <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value, netTouched: true }))} placeholder="baseline = bruto − 4,5%; ajustá si hace falta" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
             </div>
           ) : (
             <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: '#6B7585' }}>Neto US$: <b style={{ color: '#0c8584' }}>{form.net_usd ? `$ ${form.net_usd}` : '—'}</b> <span style={{ color: '#9AA4B2' }}>· sin comisión (= bruto)</span></div>

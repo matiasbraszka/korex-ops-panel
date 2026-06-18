@@ -97,20 +97,8 @@ export default function FacturaModal({ income, onClose, onDone }) {
       await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
       onDone?.(income.id, numeroFmt);
       const html = facHtmlFactura(docData());
-      // 2) Enviar por email (opcional). La factura ya quedó registrada pase lo que pase.
-      if (sendEmail && bill.email) {
-        try {
-          const { data, error } = await supabase.functions.invoke('enviar-factura', {
-            body: { to: bill.email, html, numeroFmt, nombreFactura: bill.nombreFactura },
-          });
-          if (error) setSent({ error: error.message || String(error) });
-          else if (data?.ok) setSent({ ok: true, sent_to: data.sent_to, test_mode: data.test_mode });
-          else setSent({ error: data?.error || 'No se pudo enviar el email' });
-        } catch (e) {
-          setSent({ error: String(e) });
-        }
-      }
-      // 3) Archivar el PDF en Google Drive (carpeta del mes). No bloquea: la factura ya quedó registrada.
+      // 2) Archivar el PDF en Drive PRIMERO: devuelve el link y el PDF (base64) para adjuntarlo al email.
+      let pdfB64 = null;
       try {
         const { data, error } = await supabase.functions.invoke('archivar-factura', {
           body: { html, numero: num, nombreFactura: bill.nombreFactura, fecha: todayISO() },
@@ -118,10 +106,25 @@ export default function FacturaModal({ income, onClose, onDone }) {
         if (error) setArchived({ error: error.message || String(error) });
         else if (data?.ok) {
           setArchived({ url: data.url, carpeta: data.carpeta });
+          pdfB64 = data.pdf_base64 || null;
           try { await sbFetch(`invoices?id=eq.${invId}`, { method: 'PATCH', body: JSON.stringify({ pdf_url: data.url }) }); } catch { /* noop */ }
         } else setArchived({ error: data?.error || 'No se pudo archivar en Drive' });
       } catch (e) {
         setArchived({ error: String(e) });
+      }
+      // 3) Enviar por email (opcional): mensaje formal simple + factura como PDF adjunto.
+      // Si no se pudo generar el PDF (pdfB64 null), cae al HTML inline para que el email salga igual.
+      if (sendEmail && bill.email) {
+        try {
+          const { data, error } = await supabase.functions.invoke('enviar-factura', {
+            body: { to: bill.email, numeroFmt, nombreFactura: bill.nombreFactura, pdf_base64: pdfB64, html },
+          });
+          if (error) setSent({ error: error.message || String(error) });
+          else if (data?.ok) setSent({ ok: true, sent_to: data.sent_to, test_mode: data.test_mode });
+          else setSent({ error: data?.error || 'No se pudo enviar el email' });
+        } catch (e) {
+          setSent({ error: String(e) });
+        }
       }
       setDone(true);
     } catch (e) {

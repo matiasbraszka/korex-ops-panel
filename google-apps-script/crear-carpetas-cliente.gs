@@ -55,6 +55,10 @@ function doPost(e) {
     // La llama la Edge Function `archivar-factura` cuando se genera una factura en el panel.
     if (b.action === 'guardar_factura') return facGuardarFactura(b);
 
+    // Acción nueva: listar TODAS las facturas archivadas (Nº, nombre, mes, link) para
+    // poder vincularlas a sus ingresos en el panel. Solo lectura.
+    if (b.action === 'listar_facturas') return facListarFacturas(b);
+
     const name = String(b.name || '').trim();
     if (!name) return json({ ok: false, error: 'missing_name' });
     const empresa = String(b.empresa || '').trim();
@@ -153,7 +157,42 @@ function facGuardarFactura(b) {
       .getAs('application/pdf')
       .setName((numero || '') + ' ' + limpio + '.pdf');
     var file = carpeta.createFile(pdf);
-    return json({ ok: true, url: file.getUrl(), carpeta: carpeta.getName() });
+    // Devolvemos también el PDF en base64 para que el panel lo adjunte al email de la factura.
+    return json({ ok: true, url: file.getUrl(), carpeta: carpeta.getName(), pdf_base64: Utilities.base64Encode(pdf.getBytes()) });
+  } catch (err) {
+    return json({ ok: false, error: String(err) });
+  }
+}
+
+// Lista todas las facturas (PDFs) de "Facturas | Ingresos | MK": las sueltas en la raíz
+// y las de cada subcarpeta de mes. Devuelve { number, name, month, file, url } por factura.
+// Parsea el nombre "<Nº> <Nombre>.pdf". Solo lectura — se usa para el cruce con ingresos.
+function facListarFacturas(b) {
+  try {
+    var raiz = DriveApp.getFolderById(FAC_FOLDER_ID);
+    var out = [];
+    function push(f, mes) {
+      var title = f.getName();
+      var base = title.replace(/\.pdf$/i, '');
+      var m = base.match(/^\s*(\d+)\s+([\s\S]*)$/); // "461 Nombre Apellido"
+      out.push({
+        number: m ? m[1] : '',
+        name: m ? m[2].trim() : base.trim(),
+        month: mes || '',
+        file: title,
+        url: f.getUrl(),
+      });
+    }
+    var rf = raiz.getFiles();
+    while (rf.hasNext()) push(rf.next(), '');
+    var fs = raiz.getFolders();
+    while (fs.hasNext()) {
+      var mf = fs.next();
+      var mes = mf.getName();
+      var files = mf.getFiles();
+      while (files.hasNext()) push(files.next(), mes);
+    }
+    return json({ ok: true, count: out.length, facturas: out });
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }
