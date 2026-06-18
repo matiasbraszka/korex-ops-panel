@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, FileText } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -17,6 +17,7 @@ const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const DmePage = lazy(() => import('./pages/DmePage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 const VslPage = lazy(() => import('./pages/VslPage'));
+const CambiosPage = lazy(() => import('./pages/CambiosPage'));
 const CuentasPage = lazy(() => import('./pages/CuentasPage'));
 import SearchBar from './components/SearchBar';
 import useSoporteUnread from './hooks/useSoporteUnread';
@@ -301,6 +302,7 @@ function MainLayout() {
   // Marketing — área aparte (métricas de VSL de Voomly). Visible para quien ve Operaciones.
   const marketingItems = [
     { id: 'vsl', label: 'VSL', Icon: BarChart3, path: '/marketing/vsl' },
+    { id: 'cambios', label: 'Cambios de Landings', Icon: FileText, path: '/marketing/cambios' },
   ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
   const salesItems = currentUser?.isAdmin
@@ -372,6 +374,7 @@ function MainLayout() {
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
     cuentas: ['Cuentas', 'Mercury, Kraken y más — control de cada cuenta'],
+    cambios: ['Cambios de Landings', 'Tickets de cambios, tests A/B y aprendizajes'],
   };
 
   const [title, subtitle] = titles[view] || ['', ''];
@@ -409,6 +412,7 @@ function MainLayout() {
       {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
       <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
+      <Route path="/marketing/cambios" element={marketingGuarded(<CambiosPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
       <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
