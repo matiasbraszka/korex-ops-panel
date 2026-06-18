@@ -749,19 +749,21 @@ function StrategyCard({ s, pages }) {
             <Folder size={11} /> Archivos
           </div>
           <div className="flex flex-col gap-1.5">
-            {archivos.map((a, ai) => {
-              const cat = ARCHIVO_CATS[a.category] || ARCHIVO_CATS.link;
-              const Icon = cat.Icon;
-              return (
-                <div key={ai} className="flex items-center gap-2 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk" style={{ color: '#1A1D26' }}>
-                  <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cat.bg }}><Icon size={12} style={{ color: cat.color }} /></span>
-                  <a href={a.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{a.label}</a>
-                  <CopyButton value={a.url} title="Copiar URL" />
-                  <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ initial: a, index: ai })} title="Editar / cambiar categoría"><Pencil size={11} /></button>
-                  <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${a.label}"?`)) saveArchivos(archivos.filter((_, i) => i !== ai)); }} title="Quitar"><X size={11} /></button>
-                </div>
-              );
-            })}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {archivos.map((a, ai) => {
+                const cat = ARCHIVO_CATS[a.category] || ARCHIVO_CATS.link;
+                const Icon = cat.Icon;
+                return (
+                  <div key={ai} className="flex items-center gap-1.5 text-[12px] py-1.5 px-2 rounded-md bg-white border border-[#E2E5EB] group/lk min-w-0" style={{ color: '#1A1D26' }}>
+                    <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cat.bg }}><Icon size={12} style={{ color: cat.color }} /></span>
+                    <a href={a.url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{a.label}</a>
+                    <CopyButton value={a.url} title="Copiar URL" />
+                    <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center shrink-0" onClick={() => setLinkModal({ initial: a, index: ai })} title="Editar / cambiar categoría"><Pencil size={11} /></button>
+                    <button className="opacity-0 group-hover/lk:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center shrink-0" onClick={() => { if (window.confirm(`¿Quitar "${a.label}"?`)) saveArchivos(archivos.filter((_, i) => i !== ai)); }} title="Quitar"><X size={11} /></button>
+                  </div>
+                );
+              })}
+            </div>
             {archivos.length === 0 && (
               <span className="text-[11.5px] italic" style={{ color: '#9CA3AF' }}>Sin archivos</span>
             )}
