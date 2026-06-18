@@ -88,11 +88,13 @@ export default function FacturaModal({ income, onClose, onDone }) {
         method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
         body: JSON.stringify({
           id: invId, number: numeroFmt, client_id: income.client_id || null,
+          income_id: income.id, // ← link factura → ingreso (trazabilidad 1:1)
           issue_date: todayISO(), amount: monto, currency: moneda, concept: concepto,
           status: 'emitida', payment_method: income.payment_method || null, kind: 'ingreso',
         }),
       });
-      await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true }), throwOnError: true });
+      // Link ingreso → factura (queda vinculado aunque falle el archivado en Drive).
+      await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
       onDone?.(income.id, numeroFmt);
       const html = facHtmlFactura(docData());
       // 2) Enviar por email (opcional). La factura ya quedó registrada pase lo que pase.

@@ -10,7 +10,7 @@ import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
-import BillingTab from '../components/clientes/BillingTab';
+import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
 import MetaAdAccountsManager from '../components/clientes/MetaAdAccountsManager';
@@ -20,7 +20,7 @@ const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, strategies, strategyPages, invoices } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, strategies, strategyPages, invoices, contracts } = useApp();
   const TEAM = teamMembers || [];
   const [editModal, setEditModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -169,11 +169,12 @@ export default function ClientDetail({ client: c }) {
         const visualesTotal = visualesArr.length;
         const clientInvoices = (invoices || []).filter(i => i.client_id === c.id);
         const invoicesCount = clientInvoices.length;
+        const contractsCount = (contracts || []).filter(ct => ct.client_id === c.id).length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Recursos', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
-          { key: 'facturacion', label: 'Facturación', count: invoicesCount },
+          { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
           { key: 'dme', label: 'DME' },
           { key: 'historial', label: 'Historial' },
@@ -255,7 +256,7 @@ export default function ClientDetail({ client: c }) {
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 
-            {activeTab === 'facturacion' && !restricted && <BillingTab client={c} />}
+            {activeTab === 'facturacion' && !restricted && <ContratoTab client={c} />}
 
             {activeTab === 'roadmap' && (
               <div className="mb-4">

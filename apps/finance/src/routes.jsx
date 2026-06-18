@@ -3,6 +3,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import IngresosPage from './pages/IngresosPage.jsx';
 import AcuerdosPage from './pages/AcuerdosPage.jsx';
 import PagosPage from './pages/PagosPage.jsx';
+import SeguimientoPagosPage from './pages/SeguimientoPagosPage.jsx';
 import EgresosPage from './pages/EgresosPage.jsx';
 import DeudaPage from './pages/DeudaPage.jsx';
 import DirectorioPage from './pages/DirectorioPage.jsx';
@@ -18,6 +19,7 @@ export const financeNavItems = [
   { id: 'directorio', label: 'Base de datos', path: '/finance/directorio', dot: '#0ea5e9' },
   { id: 'distribucion', label: 'Distribución', path: '/finance/distribucion', dot: '#0d9488' },
   { id: 'pagos',      label: 'Pagos',      path: '/finance/pagos',      dot: '#16a34a' },
+  { id: 'cuotas',     label: 'Cuotas',     path: '/finance/cuotas',     dot: '#16a34a' },
   { id: 'deuda',      label: 'Deuda',      path: '/finance/deuda',      dot: '#e11d48' },
   { id: 'egresos',    label: 'Egresos',    path: '/finance/egresos',    dot: '#f43f5e' },
 ];
@@ -42,6 +44,7 @@ export function FinanceRoutes() {
           <Route path="directorio" element={<DirectorioPage />} />
           <Route path="distribucion" element={<DistribucionPage />} />
           <Route path="pagos" element={<PagosPage />} />
+          <Route path="cuotas" element={<SeguimientoPagosPage />} />
           <Route path="deuda" element={<DeudaPage />} />
           <Route path="egresos" element={<EgresosPage />} />
           <Route path="*" element={<div style={{ color: '#9AA4B2', textAlign: 'center', padding: '80px 0' }}>Vista no encontrada</div>} />

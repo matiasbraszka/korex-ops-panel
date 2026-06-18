@@ -40,7 +40,7 @@ export default function IngresosPage() {
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
     sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id&limit=6000')
@@ -262,9 +262,14 @@ export default function IngresosPage() {
                       <span>{fdate(r.income_date)}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         {r.collected_by !== 'Cliente' && (
-                          <button onClick={() => setFactura(r)} title={r.facturado ? 'Factura emitida — ver / reimprimir' : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? '#16a34a' : '#B6BFCC', padding: 0, display: 'flex' }}>
+                          <button onClick={() => setFactura(r)} title={r.facturado ? `Factura ${r.invoices?.number || 'emitida'} — ver / reimprimir / reenviar` : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? '#16a34a' : '#B6BFCC', padding: 0, display: 'flex' }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
                           </button>
+                        )}
+                        {r.invoices?.pdf_url && (
+                          <a href={r.invoices.pdf_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title={`Factura ${r.invoices.number || ''} — abrir PDF en Drive`} style={{ display: 'flex', color: '#0EA5A4' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+                          </a>
                         )}
                         <button onClick={() => openEdit(r)} title="Editar ingreso" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -328,7 +333,7 @@ export default function IngresosPage() {
       <div style={{ height: 14, flexShrink: 0 }} />
 
       {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} onDelete={deleteModal} busy={busy} onClose={() => setModal(null)} />}
-      {factura && <FacturaModal income={factura} onClose={() => setFactura(null)} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
+      {factura && <FacturaModal income={factura} onClose={() => { setFactura(null); load(); }} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
   );
