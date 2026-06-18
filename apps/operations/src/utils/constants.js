@@ -63,7 +63,7 @@ export const TAREAS_LAYOUT = 'sprint';
 // Columnas del Tablero Sprint, en orden. Cada una mapea a un `status` real de
 // tasks. OJO: "Validado" es el estado `done` de siempre (solo cambia la
 // etiqueta) → no se rompe nada de lo que ya cuenta `done`.
-export const SPRINT_WIP_DEFAULT = 8; // tope de "En curso"
+export const SPRINT_WIP_DEFAULT = null; // sin tope de "En curso" (antes 8)
 export const SPRINT_COLUMNS = [
   { status: 'backlog',     label: 'Backlog',      bg: '#F0F2F5', tx: '#1A1D26' },
   { status: 'priorizado',  label: 'Priorizado',   bg: '#EEF2FF', tx: '#5B7CF5' },
