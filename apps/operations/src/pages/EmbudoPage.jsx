@@ -15,22 +15,33 @@ const stepInfo = (u) => {
 };
 const RANK = { prelanding: 0, vsl: 1, other: 2, gracias: 3 };
 
-// Arma el embudo a partir de las páginas (top_paths) del dominio principal.
-function buildFunnel(topPaths) {
+// Arma el embudo de un dominio puntual a partir de las páginas (top_paths).
+function buildFunnel(topPaths, domain) {
   const tp = (topPaths || []).map((x) => ({ url: x.url, count: Number(x.count) || 0, host: hostOf(x.url), ...stepInfo(x.url) }))
     .filter((x) => x.host);
   if (!tp.length) return null;
-  const primary = tp[0].host; // el de la página más visitada
-  const steps = tp.filter((s) => s.host === primary).sort((a, b) => (RANK[a.type] - RANK[b.type]) || (b.count - a.count));
-  const otherHosts = [...new Set(tp.filter((s) => s.host !== primary).map((s) => s.host))];
-  const secondary = otherHosts.map((h) => tp.filter((s) => s.host === h).sort((a, b) => (RANK[a.type] - RANK[b.type]) || (b.count - a.count)));
-  return { primary, steps, secondary };
+  const target = domain || tp.slice().sort((a, b) => b.count - a.count)[0].host;
+  const steps = tp.filter((s) => s.host === target).sort((a, b) => (RANK[a.type] - RANK[b.type]) || (b.count - a.count));
+  return { primary: target, steps };
 }
+
+// Dominios que son un funnel propio (tienen su prelanding con tráfico). Marta → beyond + madres.
+function domainsOf(topPaths) {
+  const tp = (topPaths || []).map((x) => ({ count: Number(x.count) || 0, host: hostOf(x.url), ...stepInfo(x.url) })).filter((x) => x.host);
+  const roots = {};
+  for (const s of tp) if (s.type === 'prelanding') roots[s.host] = Math.max(roots[s.host] || 0, s.count);
+  let doms = Object.entries(roots).filter(([, c]) => c >= 10).sort((a, b) => b[1] - a[1]).map(([h]) => h);
+  if (!doms.length) { const p = tp.slice().sort((a, b) => b.count - a.count)[0]?.host; if (p) doms = [p]; }
+  return doms;
+}
+const shortDom = (h) => (h || '').replace(/^www\./, '').replace(/\.metodokorex\.com$/, '').replace(/\.com$/, '');
 
 // ¿el texto es un selector CSS (sin texto legible) o una etiqueta humana?
 const isSelector = (l) => !l || l.length < 3 || l.includes('>') || /^[A-Z][A-Z0-9]*(\.|#|\[)/.test(l) || /^[A-Z]+(\[\d+\])?$/.test(l) || /^▫+/.test(l);
 const clicksPages = (clicks) => clicks?.pages || [];
 const findPage = (clicks, re) => clicksPages(clicks).find((p) => re.test(p.step || '')) || null;
+// filtra los clicks de una página al dominio elegido
+const clicksForDomain = (clicks, domain) => ({ pages: clicksPages(clicks).filter((p) => !domain || hostOf(p.url) === domain) });
 // opciones legibles del quiz / CTAs de la página intermedia, dedup por texto (máximo click)
 function readableClicks(page) {
   const map = new Map();
@@ -125,15 +136,25 @@ export default function EmbudoPage() {
       const rows = (data || []).filter((r) => r.range_30d);
       rows.sort((a, b) => (b.range_30d?.sessions || 0) - (a.range_30d?.sessions || 0));
       setFunnels(rows);
-      setSel(rows[0]?.id || '');
       setLoading(false);
     })();
     return () => { active = false; };
   }, []);
 
-  const cur = useMemo(() => funnels.find((f) => f.id === sel) || null, [funnels, sel]);
+  // vistas = funnel × dominio (un cliente con varios dominios = varios funnels separados)
+  const views = useMemo(() => {
+    const out = [];
+    for (const f of funnels) {
+      const doms = domainsOf(f.range_30d?.top_paths);
+      doms.forEach((d, i) => out.push({ key: `${f.id}|${d}`, funnel: f, domain: d, primary: i === 0, multi: doms.length > 1, label: doms.length > 1 ? `${f.client?.name || 'Cliente'} · ${shortDom(d)}` : (f.client?.name || f.label) }));
+    }
+    return out;
+  }, [funnels]);
+  const view = useMemo(() => views.find((v) => v.key === sel) || views[0] || null, [views, sel]);
+  const cur = view?.funnel || null;
+  const dom = view?.domain || null;
   const r = cur?.range_30d || null;
-  const funnel = useMemo(() => (r ? buildFunnel(r.top_paths) : null), [r]);
+  const funnel = useMemo(() => (r ? buildFunnel(r.top_paths, dom) : null), [r, dom]);
 
   // KPIs y cuellos
   const entrada = funnel?.steps?.[0]?.count || 0;
@@ -157,9 +178,9 @@ export default function EmbudoPage() {
     return worst;
   }, [funnel]);
 
-  // Comportamiento: quiz, WhatsApp, compromiso con el VSL
-  const clicks = cur?.clicks_30d || null;
-  const vsl = cur?.vsl_cross || null;
+  // Comportamiento: quiz, WhatsApp, compromiso con el VSL (clicks filtrados al dominio elegido)
+  const clicks = useMemo(() => clicksForDomain(cur?.clicks_30d, dom), [cur, dom]);
+  const vsl = (view?.primary && cur?.vsl_cross) ? cur.vsl_cross : null; // el cruce automático es del dominio principal
   const midPage = useMemo(() => findPage(clicks, /vsl|landing|register|focus/), [clicks]);
   const graciasPage = useMemo(() => findPage(clicks, /gracias|thank|thanks/), [clicks]);
   const prelandingPage = useMemo(() => findPage(clicks, /prelanding/), [clicks]);
@@ -179,10 +200,10 @@ export default function EmbudoPage() {
       <div className="flex items-end justify-between gap-4 mt-1 mb-5">
         <h1 className="text-[23px] font-bold tracking-tight flex items-center gap-2"><TrendingDown size={22} className="text-[#4F46E5]" /> Embudo &amp; Mapas de calor</h1>
         <div className="flex items-center gap-2">
-          {funnels.length > 0 && (
+          {views.length > 0 && (
             <div className="relative">
-              <select value={sel} onChange={(e) => setSel(e.target.value)} className="appearance-none bg-white border border-border rounded-xl pl-3 pr-8 py-2 text-[13.5px] font-semibold cursor-pointer">
-                {funnels.map((f) => <option key={f.id} value={f.id}>{f.client?.name || 'Cliente'} — {f.label}</option>)}
+              <select value={view?.key || ''} onChange={(e) => setSel(e.target.value)} className="appearance-none bg-white border border-border rounded-xl pl-3 pr-8 py-2 text-[13.5px] font-semibold cursor-pointer">
+                {views.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text3 pointer-events-none" />
             </div>
@@ -198,10 +219,10 @@ export default function EmbudoPage() {
       {cur && r && (
         <>
           <div className="grid grid-cols-4 gap-3.5 mb-5">
-            <Kpi label="Visitas (30 días)" value={fmt(r.sessions)} sub={`${botPct}% bots · ${fmt(humans)} personas reales`} color="#4F46E5" />
+            <Kpi label="Visitas a la prelanding" value={fmt(entrada)} sub={view?.multi ? `dominio ${shortDom(dom)} · ${fmt(r.sessions)} ses. proyecto` : `${botPct}% bots · ${fmt(humans)} reales (proyecto)`} color="#4F46E5" />
             <Kpi label="Registros (al VSL)" value={pct(toVsl)} sub={vslStep ? `${fmt(vslStep.count)} leads · de ${fmt(entrada)} visitas` : 'sin paso de VSL'} color="#0EA5A5" />
             <Kpi label="Registro final" value={pct(toGracias)} sub={graciasStep ? `${fmt(graciasStep.count)} llegan a "gracias"` : 'sin página de gracias'} color="#16A34A" />
-            <Kpi label="Scroll promedio" value={r.avg_scroll_depth != null ? pct(r.avg_scroll_depth) : '—'} sub="cuánto baja la página" color="#D97706" />
+            <Kpi label="Scroll promedio" value={r.avg_scroll_depth != null ? pct(r.avg_scroll_depth) : '—'} sub={view?.multi ? 'del proyecto (ambos dominios)' : 'cuánto baja la página'} color="#D97706" />
           </div>
 
           <div className="grid grid-cols-[1.5fr_1fr] gap-4 items-start">
@@ -212,21 +233,7 @@ export default function EmbudoPage() {
               </div>
               <div className="text-[12px] text-text3 mt-0.5 mb-3">El ancho de cada barra es proporcional a las visitas reales: se ve dónde se cae la gente.</div>
               <FunnelBars steps={funnel?.steps} tagId={cur.tag_id} />
-              {funnel?.secondary?.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-border">
-                  {funnel.secondary.map((sec, idx) => (
-                    <div key={idx} className="flex items-center gap-2 flex-wrap text-[12px] mb-1">
-                      <span className="text-text3 font-semibold">Otro dominio ({sec[0]?.host}):</span>
-                      {sec.map((s, i) => (
-                        <span key={s.url} className="flex items-center gap-2">
-                          {i > 0 && <span className="text-text3">→</span>}
-                          <span className="bg-[#F4F6FB] border border-border rounded-lg px-2 py-1 font-semibold">{s.label} {fmt(s.count)}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {view?.multi && <div className="mt-3 text-[11px] text-text3">Mostrando el dominio <b>{shortDom(dom)}</b>. Cambiá de funnel arriba para ver el otro dominio.</div>}
             </div>
 
             <div className="bg-white border border-border rounded-2xl p-5">
@@ -292,7 +299,7 @@ export default function EmbudoPage() {
                   ))}
                   <div className="text-[11px] text-text3">Fuente: Voomly · video "{vsl.name}".</div>
                 </div>
-              ) : <div className="text-text3 text-[12px] py-4">Sin datos del VSL.</div>}
+              ) : <div className="text-text3 text-[12px] py-4">{view?.multi ? 'El cruce automático del VSL es del dominio principal; para este dominio mirá Voomly.' : 'Sin datos del VSL.'}</div>}
             </div>
 
             {/* Quiz */}
