@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SPRINT_COLUMNS, SPRINT_WIP_DEFAULT, DEPARTMENTS } from '../../utils/constants';
+import { SPRINT_COLUMNS, DEPARTMENTS } from '../../utils/constants';
 import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
@@ -33,7 +33,7 @@ function Kpi({ label, value, sub, color, barw }) {
 export default function SprintBoardView({ scope = 'cli' }) {
   const {
     activeSprint, tasks, updateTask, reorderTask, teamMembers, clients, currentUser,
-    taskAssignee, taskClientFilter, taskComments, hideCompletedTasks,
+    taskAssignee, taskClientFilter, taskComments,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
@@ -62,7 +62,9 @@ export default function SprintBoardView({ scope = 'cli' }) {
     if (!matchesAssignee(t)) return false;
     if (!matchesQuery(t)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
-    if (hideCompletedTasks && t.status === 'done') return false;
+    // En el Tablero Sprint la columna "Validado" SIEMPRE muestra las tareas
+    // completadas del sprint (es su propósito). No aplicamos "ocultar
+    // completadas" acá: si no, al soltar una tarea en Validado desaparecía.
     const c = clientById(t.clientId);
     if (c) { const interno = isKorexClient(c); if (scope === 'int' ? !interno : interno) return false; }
     return true;
@@ -107,7 +109,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
   const prog = sprintProgress(tasks, activeSprint);
   const kpis = [
     { label: 'Avance del sprint', value: `${prog.done} / ${prog.total}`, sub: 'validadas', color: '#1A1D26', barw: prog.pct + '%' },
-    { label: 'En curso (WIP)', value: `${prog.wip} / ${SPRINT_WIP_DEFAULT}`, sub: prog.wip >= SPRINT_WIP_DEFAULT ? 'al tope' : 'con margen', color: '#1A1D26' },
+    { label: 'En curso', value: String(prog.wip), sub: prog.wip === 1 ? 'tarea activa' : 'tareas activas', color: '#1A1D26' },
     { label: 'Tareas vencidas', value: String(prog.overdue), sub: prog.overdue ? 'requieren atención' : 'sin vencidas', color: prog.overdue ? '#EF4444' : '#22C55E' },
     { label: 'Bloqueos abiertos', value: String(prog.blocked), sub: prog.blocked ? 'a destrabar' : 'todo fluye', color: prog.blocked ? '#EF4444' : '#22C55E' },
   ];
