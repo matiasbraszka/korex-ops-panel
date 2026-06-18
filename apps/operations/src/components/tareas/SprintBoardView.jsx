@@ -33,15 +33,29 @@ function Kpi({ label, value, sub, color, barw }) {
 export default function SprintBoardView({ scope = 'cli' }) {
   const {
     activeSprint, tasks, updateTask, reorderTask, teamMembers, clients, currentUser,
-    taskAssignee, taskClientFilter, taskComments,
+    taskAssignee, taskClientFilter, taskComments, appSettings, updateAppSettings,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+
+  // Tope de WIP de "En curso" configurable (app_settings.sprint_wip_limit).
+  // 0 (o null) = ilimitado. Si no hay valor guardado, usa el default histórico.
+  const rawWip = appSettings?.sprint_wip_limit;
+  const wipLimit = (rawWip === undefined || rawWip === null) ? SPRINT_WIP_DEFAULT : Number(rawWip);
+  const colWip = (col) => (col.status === 'in-progress' ? wipLimit : col.wip);
 
   const [draggedId, setDraggedId] = useState(null);
   const [overCol, setOverCol] = useState(null);
   const [wipMsg, setWipMsg] = useState('');
   const [openTaskId, setOpenTaskId] = useState(null);
   const [query, setQuery] = useState('');
+  const [editWip, setEditWip] = useState(false);
+  const [wipDraft, setWipDraft] = useState('');
+
+  const saveWip = () => {
+    const n = Math.max(0, parseInt(wipDraft, 10) || 0);
+    updateAppSettings({ sprint_wip_limit: n });
+    setEditWip(false);
+  };
 
   const clientById = (id) => (clients || []).find(c => c.id === id);
   const matchesQuery = (t) => {
@@ -89,8 +103,9 @@ export default function SprintBoardView({ scope = 'cli' }) {
     if (!task) return;
     const movingCol = boardColumn(task.status) !== colStatus;
     const col = SPRINT_COLUMNS.find(c => c.status === colStatus);
-    if (movingCol && col?.wip && columnTasks(colStatus).length >= col.wip) {
-      setWipMsg(`Tope de WIP en «${col.label}» (${col.wip}). Validá o cerrá una tarea antes de mover otra.`);
+    const effWip = colWip(col); // 0/undefined = sin tope
+    if (movingCol && effWip && columnTasks(colStatus).length >= effWip) {
+      setWipMsg(`Tope de WIP en «${col.label}» (${effWip}). Validá o cerrá una tarea, o subí el tope tocando el número de la columna.`);
       setTimeout(() => setWipMsg(''), 4000);
       return;
     }
@@ -108,7 +123,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
   const prog = sprintProgress(tasks, activeSprint);
   const kpis = [
     { label: 'Avance del sprint', value: `${prog.done} / ${prog.total}`, sub: 'validadas', color: '#1A1D26', barw: prog.pct + '%' },
-    { label: 'En curso (WIP)', value: `${prog.wip} / ${SPRINT_WIP_DEFAULT}`, sub: prog.wip >= SPRINT_WIP_DEFAULT ? 'al tope' : 'con margen', color: '#1A1D26' },
+    { label: 'En curso (WIP)', value: `${prog.wip} / ${wipLimit > 0 ? wipLimit : '∞'}`, sub: wipLimit > 0 ? (prog.wip >= wipLimit ? 'al tope' : 'con margen') : 'sin tope', color: '#1A1D26' },
     { label: 'Tareas vencidas', value: String(prog.overdue), sub: prog.overdue ? 'requieren atención' : 'sin vencidas', color: prog.overdue ? '#EF4444' : '#22C55E' },
     { label: 'Bloqueos abiertos', value: String(prog.blocked), sub: prog.blocked ? 'a destrabar' : 'todo fluye', color: prog.blocked ? '#EF4444' : '#22C55E' },
   ];
@@ -133,7 +148,10 @@ export default function SprintBoardView({ scope = 'cli' }) {
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 10 }}>
         {SPRINT_COLUMNS.map(col => {
           const list = columnTasks(col.status);
-          const atCap = col.wip && list.length >= col.wip;
+          const eff = colWip(col); // tope efectivo (0/undefined = sin tope)
+          const atCap = eff && list.length >= eff;
+          const isWipCol = col.status === 'in-progress';
+          const canEditWip = isWipCol && !restricted;
           return (
             <div key={col.status}
               onDragOver={(e) => { e.preventDefault(); setOverCol(col.status); }}
@@ -142,7 +160,24 @@ export default function SprintBoardView({ scope = 'cli' }) {
               style={{ flex: 1, minWidth: 238, background: col.bg, borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, alignSelf: 'flex-start', outline: overCol === col.status ? '2px dashed #5B7CF5' : 'none', outlineOffset: -3 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 0' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.01em', color: col.tx, whiteSpace: 'nowrap' }}>{col.name || col.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: atCap ? '#DC2626' : '#9CA3AF' }}>{col.wip ? `${list.length}/${col.wip}` : list.length}</span>
+                {isWipCol && editWip ? (
+                  <input
+                    type="number" min="0" autoFocus
+                    value={wipDraft}
+                    onChange={(e) => setWipDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveWip(); if (e.key === 'Escape') setEditWip(false); }}
+                    onBlur={saveWip}
+                    title="0 = ilimitado"
+                    style={{ width: 52, fontSize: 12, padding: '2px 5px', border: '1px solid #C7CDD6', borderRadius: 6, fontFamily: 'inherit', textAlign: 'right' }}
+                  />
+                ) : (
+                  <span
+                    onClick={canEditWip ? () => { setWipDraft(wipLimit > 0 ? String(wipLimit) : '0'); setEditWip(true); } : undefined}
+                    title={canEditWip ? 'Tocá para cambiar el tope (0 = ilimitado)' : undefined}
+                    style={{ fontSize: 12, fontWeight: 600, color: atCap ? '#DC2626' : '#9CA3AF', cursor: canEditWip ? 'pointer' : 'default' }}>
+                    {isWipCol ? `${list.length}/${wipLimit > 0 ? wipLimit : '∞'}` : (col.wip ? `${list.length}/${col.wip}` : list.length)}
+                  </span>
+                )}
               </div>
               {list.map(t => {
                 const c = clientById(t.clientId);
