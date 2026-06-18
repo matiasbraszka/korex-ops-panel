@@ -281,7 +281,10 @@ function MainLayout() {
   const canAccessOperations = useCan('operations', 'read');
   const canAccessSales = useCan('sales', 'read');
   const canAccessSoporte = useCan('soporte', 'read');
-  const canAccessMarketing = useCan('marketing', 'read');
+  // Marketing es visible para quien ve Operaciones (intención del área), para
+  // admins, o para quien tenga el permiso explícito de marketing.
+  const canMarketingOwn = useCan('marketing', 'read');
+  const canAccessMarketing = canAccessOperations || currentUser?.isAdmin || canMarketingOwn;
   // Finanzas: SOLO admins (datos sensibles del negocio).
   const canAccessFinance = currentUser?.isAdmin === true;
   // Mensajes de WhatsApp sin leer (badge del area Soporte en el nav).
