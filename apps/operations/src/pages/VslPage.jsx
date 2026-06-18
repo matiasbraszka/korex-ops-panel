@@ -211,6 +211,20 @@ function VslDetail({ m, rangeLabel }) {
   const drops = topDrops(ret);
   const [showTr, setShowTr] = useState(false);
   const transcript = Array.isArray(r.transcript) ? r.transcript : null;
+  // Rango personalizado (beta): lee de vsl_custom lo que trajo analyze.mjs de Voomly.
+  const [cStart, setCStart] = useState('2026-06-15');
+  const [cEnd, setCEnd] = useState('2026-06-17');
+  const [cData, setCData] = useState(null);
+  const [cMsg, setCMsg] = useState('');
+  const analyzeCustom = async () => {
+    if (!cStart || !cEnd) { setCMsg('Elegí las dos fechas.'); return; }
+    setCMsg('Buscando…'); setCData(null);
+    const { data } = await supabase.from('vsl_custom').select('metrics')
+      .eq('voomly_id', r.voomly_id).eq('start_date', cStart).eq('end_date', cEnd).maybeSingle();
+    if (data?.metrics) { setCData(data.metrics); setCMsg(''); }
+    else { setCMsg('Ese rango todavía no fue analizado. El exportador lo trae cuando se pide (node analyze.mjs).'); }
+  };
+  const cDrops = cData?.retention?.viewers?.length ? topDrops(cData.retention) : [];
   return (
     <div>
       <div className="flex items-baseline gap-3 mb-1 flex-wrap">
@@ -285,6 +299,50 @@ function VslDetail({ m, rangeLabel }) {
           )}
         </div>
       )}
+
+      {/* Rango personalizado (beta) — analiza un período exacto leyendo de vsl_custom. */}
+      <div className="bg-white border border-border rounded-xl p-4 mt-4">
+        <h3 className="text-[14px] font-bold text-text flex items-center gap-2">
+          Rango personalizado
+          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#B45309' }}>beta</span>
+        </h3>
+        <p className="text-[11px] text-text3 mt-0.5 mb-2">Analizá un período exacto. La curva por-segundo necesita ~2-3 días; para 1 solo día se ven solo los números.</p>
+        <div className="flex items-end gap-2 flex-wrap">
+          <label className="text-[11px] text-text3">Desde<input type="date" value={cStart} onChange={(e) => setCStart(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-blue" /></label>
+          <label className="text-[11px] text-text3">Hasta<input type="date" value={cEnd} onChange={(e) => setCEnd(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-blue" /></label>
+          <button onClick={analyzeCustom} className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: GREEN }}>Analizar</button>
+        </div>
+        {cMsg && <div className="text-[12px] text-text3 mt-2">{cMsg}</div>}
+        {cData && (
+          <div className="mt-3">
+            <div className="grid grid-cols-5 gap-2 max-md:grid-cols-2 mb-3">
+              <MetricCard label="Visitas" value={fmt(cData.uniq_views)} />
+              <MetricCard label="Reproducciones" value={fmt(cData.total_plays)} color={GREEN} />
+              <MetricCard label="Tasa de play" value={(cData.play_rate ?? 0) + '%'} color={pctColor(cData.play_rate)} />
+              <MetricCard label="Retención" value={(cData.engagement ?? 0) + '%'} color={pctColor(cData.engagement)} />
+              <MetricCard label="Vieron completo" value={cData.completion != null ? cData.completion + '%' : '—'} color={pctColor(cData.completion)} />
+            </div>
+            {cData.retention?.viewers?.length ? (
+              <>
+                <RetentionChart ret={cData.retention} drops={cDrops} />
+                <div className="mt-2 space-y-1.5">
+                  {cDrops.map((d, k) => {
+                    const ph = transcriptAt(r.transcript, d.sec);
+                    return (
+                      <div key={k} className="text-[13px]">
+                        <b className="tabular-nums">{fmtTime(d.sec)}</b> <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}% del total)</span>
+                        {ph && <div className="text-text2 italic text-[12px] pl-2 border-l-2 border-[#FBCFE8]">“{ph}”</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="text-[12px] text-text3">Voomly no da la curva por-segundo para este rango (probá un período de varios días).</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
