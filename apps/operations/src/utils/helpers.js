@@ -598,6 +598,23 @@ export function isTaskEnabled(task, allClientTasks) {
 }
 
 /**
+ * Tareas que bloquean a `task` y todavía NO están validadas (status !== 'done').
+ * "Bloqueada por" usa el mismo campo dependsOn (array de task.id) que el roadmap.
+ * Devuelve los objetos tarea bloqueadores pendientes (vacío = la tarea está libre).
+ */
+export function blockingTasks(task, allTasks) {
+  if (!task || !Array.isArray(task.dependsOn) || task.dependsOn.length === 0) return [];
+  return task.dependsOn
+    .map(depId => (allTasks || []).find(t => t.id === depId || t.templateId === depId))
+    .filter(dep => dep && dep.status !== 'done');
+}
+
+/** ¿La tarea está bloqueada por otra tarea sin validar? */
+export function isTaskBlocked(task, allTasks) {
+  return blockingTasks(task, allTasks).length > 0;
+}
+
+/**
  * Aplica la regla del plan de fechas:
  * - done → no toca startedDate (congelado)
  * - habilitada y sin startedDate → startedDate = hoy
@@ -751,7 +768,8 @@ export function sprintProgress(tasks, sprint) {
   const total = list.length;
   const done = list.filter(t => t.status === 'done').length;
   const wip = list.filter(t => t.status === 'in-progress').length;
-  const blocked = list.filter(t => t.status === 'blocked').length;
+  // Bloqueadas = trabadas por otra tarea sin validar (dependsOn) y aún sin completar.
+  const blocked = list.filter(t => t.status !== 'done' && isTaskBlocked(t, tasks)).length;
   const td = today();
   const overdue = list.filter(t =>
     t.dueDate && t.dueDate < td && t.status !== 'done',

@@ -594,6 +594,31 @@ export function AppProvider({ children }) {
         }
       }
 
+      // Cascada de desbloqueo: si esta tarea pasó a 'done', las tareas del sprint
+      // que dependían de ella y ya no tienen bloqueos pendientes saltan de
+      // 'backlog' a 'priorizado' (la siguiente columna), listas para trabajarse.
+      if (cleanUpdates.status === 'done') {
+        const prevTasks = finalTasks;
+        const promoted = [];
+        const newTasks = prevTasks.map(t => {
+          if (t.id === id) return t;
+          if (!t.sprintId || t.status !== 'backlog') return t;
+          if (!Array.isArray(t.dependsOn) || !t.dependsOn.includes(id)) return t;
+          const stillBlocked = t.dependsOn.some(depId => {
+            const dep = prevTasks.find(x => x.id === depId || x.templateId === depId);
+            return dep && dep.status !== 'done';
+          });
+          if (stillBlocked) return t;
+          const next = { ...t, status: 'priorizado' };
+          promoted.push(next);
+          return next;
+        });
+        if (promoted.length) {
+          finalTasks = newTasks;
+          if (dbReady.current) promoted.forEach(t => dbSaveTask(t));
+        }
+      }
+
       save(clientsRef.current, finalTasks);
       const updated = finalTasks.find(t => t.id === id);
       if (updated && dbReady.current) dbSaveTask(updated);

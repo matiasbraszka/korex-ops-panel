@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -89,6 +89,12 @@ export default function SprintBoardView({ scope = 'cli' }) {
     const task = inSprint.find(t => t.id === id);
     if (!task) return;
     const movingCol = boardColumn(task.status) !== colStatus;
+    // Tarea bloqueada por otra sin validar: solo puede estar en el Backlog.
+    if (movingCol && colStatus !== 'backlog' && isTaskBlocked(task, tasks)) {
+      setWipMsg('Tarea bloqueada por otra sin validar. Se queda en el Backlog hasta completar la que la bloquea.');
+      setTimeout(() => setWipMsg(''), 4500);
+      return;
+    }
     const col = SPRINT_COLUMNS.find(c => c.status === colStatus);
     if (movingCol && col?.wip && columnTasks(colStatus).length >= col.wip) {
       setWipMsg(`Tope de WIP en «${col.label}» (${col.wip}). Validá o cerrá una tarea antes de mover otra.`);
@@ -154,14 +160,21 @@ export default function SprintBoardView({ scope = 'cli' }) {
                 const subTotal = checklist.length;
                 const subDone = checklist.filter(s => s.done).length;
                 const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
+                const blocked = isTaskBlocked(t, tasks);
                 return (
                   <div key={t.id} data-card-id={t.id} draggable
                     onDragStart={() => { setDraggedId(t.id); startDragScroll(); }}
                     onDragEnd={() => { setDraggedId(null); setOverCol(null); stopDragScroll(); }}
                     onClick={() => setOpenTaskId(t.id)}
-                    style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
+                    style={{ background: blocked ? '#FFFBFB' : '#fff', border: blocked ? '1px solid #FECACA' : '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#9CA3AF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c?.name || ''}</span>
+                      {blocked && (
+                        <span title="Bloqueada por otra tarea sin validar" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 5, padding: '1px 5px', flexShrink: 0 }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                          Bloqueada
+                        </span>
+                      )}
                       {area && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={area.color} strokeWidth="1.9" style={{ flexShrink: 0 }}><title>{area.label}</title><path d={area.path} /></svg>}
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: '#1A1D26', lineHeight: 1.4 }}>{t.title}</div>

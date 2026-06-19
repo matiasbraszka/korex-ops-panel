@@ -19,7 +19,8 @@ const SPRINT_VIEWS = [
   { id: 'rendimiento', label: 'Rendimiento' },
   { id: 'objetivos', label: 'Objetivos' },
   { id: 'sprint', label: 'Tablero Sprint' },
-  { id: 'lista', label: 'Lista', icon: 'todo' },
+  // Pestaña "Lista" oculta: resultaba repetitiva con el Tablero Sprint.
+  // El componente sigue disponible (ListaView) por si se quiere reactivar.
   { id: 'todo', label: 'To-Do diario' },
 ];
 const LEGACY_VIEWS = [
@@ -63,7 +64,8 @@ export default function TareasPage() {
     if (taskId) {
       try { localStorage.setItem('tareas_highlight_task', taskId); } catch { /* ignore */ }
     }
-    setView('lista');
+    // En modo sprint la vista Lista está oculta → llevamos al Tablero Sprint.
+    setView(isSprint ? 'sprint' : 'lista');
   };
 
   const showBar = isSprint && (view === 'objetivos' || view === 'sprint' || view === 'lista');
