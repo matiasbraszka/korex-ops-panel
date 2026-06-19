@@ -103,6 +103,7 @@ export default function DmeClientPanel({ clientId, clientName }) {
         saveDay={saveDay}
         onDelete={deleteDay}
         rows={rows}
+        clientId={clientId}
         clientName={clientName}
         config={dmeConfig}
         initialDate={editDate}

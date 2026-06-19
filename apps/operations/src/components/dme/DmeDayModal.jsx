@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Sparkles } from 'lucide-react';
+import { supabase } from '@korex/db';
 import { INPUT_GROUPS, INPUT_KEYS, SECTIONS } from '../../lib/dme/registry.js';
 import { computeDerived } from '../../lib/dme/derive.js';
 import { metricTone } from '../../lib/dme/color.js';
@@ -17,12 +19,14 @@ const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type =
 
 // Modal para cargar / editar el DME de un dia (de un cliente fijo). Solo se cargan
 // los INPUTS; los derivados (%, CPL, ROI...) se muestran calculados en vivo.
-export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientName, config, initialDate, isAdmin = false }) {
+export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientId, clientName, config, initialDate, isAdmin = false }) {
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState({ ...EMPTY_STR });
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [autoMsg, setAutoMsg] = useState('');
+  const [autoLoading, setAutoLoading] = useState(false);
 
   const loadFor = (d) => {
     const existing = rows.find((r) => r.date === d);
@@ -40,7 +44,22 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
     const d = initialDate || todayISO();
     setDate(d);
     loadFor(d);
+    setAutoMsg('');
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Autocompleta las métricas de Finanzas (facturación, cashcollect, comisiones,
+  // invertido, cargas) para este cliente + día. Lo demás se carga a mano.
+  const handleAutofill = async () => {
+    if (!clientId || !date) return;
+    setAutoLoading(true); setAutoMsg('');
+    const { data, error: e } = await supabase.rpc('dme_autofill_finanzas', { p_client_id: clientId, p_date: date });
+    setAutoLoading(false);
+    if (e) { setAutoMsg('No se pudo traer de Finanzas: ' + e.message); return; }
+    const keys = Object.keys(data || {});
+    if (!keys.length) { setAutoMsg('Sin movimientos de Finanzas para ese día.'); return; }
+    setForm((f) => { const next = { ...f }; for (const k of keys) next[k] = Number(data[k]); return next; });
+    setAutoMsg(`✓ Traído de Finanzas: ${keys.length} ${keys.length === 1 ? 'campo' : 'campos'}.`);
+  };
 
   // Al cambiar la fecha: si ese dia ya tiene datos, los trae.
   useEffect(() => {
@@ -105,6 +124,15 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Nota del día (opcional)"
                    className="flex-1 min-w-[180px] text-[13px] border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-blue" />
           </div>
+          {isAdmin && clientId && (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <button onClick={handleAutofill} disabled={autoLoading}
+                      className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1.5 rounded-md border border-blue/30 bg-blue/5 text-blue hover:bg-blue/10 disabled:opacity-50 cursor-pointer">
+                <Sparkles size={13} /> {autoLoading ? 'Trayendo…' : 'Traer de Finanzas'}
+              </button>
+              {autoMsg && <span className="text-[11px] text-text2">{autoMsg}</span>}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
