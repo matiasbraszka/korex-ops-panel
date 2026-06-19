@@ -16,6 +16,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [sent, setSent] = useState(null);   // resultado del envío por email: {ok,sent_to,test_mode} | {error}
+  const [archived, setArchived] = useState(null); // archivado en Drive: {url,carpeta} | {error}
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -79,24 +80,44 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   const guardar = async (sendEmail) => {
     if (!bill || !monto || !num) return;
-    setBusy(true); setErr(''); setSent(null);
+    setBusy(true); setErr(''); setSent(null); setArchived(null);
     try {
       // 1) Registrar la factura y marcar el ingreso como facturado.
+      const invId = uuid();
       await sbFetch('invoices', {
         method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
         body: JSON.stringify({
-          id: uuid(), number: numeroFmt, client_id: income.client_id || null,
+          id: invId, number: numeroFmt, client_id: income.client_id || null,
+          income_id: income.id, // ← link factura → ingreso (trazabilidad 1:1)
           issue_date: todayISO(), amount: monto, currency: moneda, concept: concepto,
           status: 'emitida', payment_method: income.payment_method || null, kind: 'ingreso',
         }),
       });
-      await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true }), throwOnError: true });
+      // Link ingreso → factura (queda vinculado aunque falle el archivado en Drive).
+      await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
       onDone?.(income.id, numeroFmt);
-      // 2) Enviar por email (opcional). La factura ya quedó registrada pase lo que pase.
+      const html = facHtmlFactura(docData());
+      // 2) Archivar el PDF en Drive PRIMERO: devuelve el link y el PDF (base64) para adjuntarlo al email.
+      let pdfB64 = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('archivar-factura', {
+          body: { html, numero: num, nombreFactura: bill.nombreFactura, fecha: todayISO() },
+        });
+        if (error) setArchived({ error: error.message || String(error) });
+        else if (data?.ok) {
+          setArchived({ url: data.url, carpeta: data.carpeta });
+          pdfB64 = data.pdf_base64 || null;
+          try { await sbFetch(`invoices?id=eq.${invId}`, { method: 'PATCH', body: JSON.stringify({ pdf_url: data.url }) }); } catch { /* noop */ }
+        } else setArchived({ error: data?.error || 'No se pudo archivar en Drive' });
+      } catch (e) {
+        setArchived({ error: String(e) });
+      }
+      // 3) Enviar por email (opcional): mensaje formal simple + factura como PDF adjunto.
+      // Si no se pudo generar el PDF (pdfB64 null), cae al HTML inline para que el email salga igual.
       if (sendEmail && bill.email) {
         try {
           const { data, error } = await supabase.functions.invoke('enviar-factura', {
-            body: { to: bill.email, html: facHtmlFactura(docData()), numeroFmt, nombreFactura: bill.nombreFactura },
+            body: { to: bill.email, numeroFmt, nombreFactura: bill.nombreFactura, pdf_base64: pdfB64, html },
           });
           if (error) setSent({ error: error.message || String(error) });
           else if (data?.ok) setSent({ ok: true, sent_to: data.sent_to, test_mode: data.test_mode });
@@ -150,6 +171,16 @@ export default function FacturaModal({ income, onClose, onDone }) {
             {sent?.error && (
               <div style={{ margin: '14px auto 0', maxWidth: 420, background: '#FFF1F2', border: '1px solid #FBC9CF', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#be123c', lineHeight: 1.5 }}>
                 No se pudo enviar el email: {sent.error}.<br />La factura quedó registrada igual — descargá el PDF y envialo manualmente.
+              </div>
+            )}
+            {archived?.url && (
+              <div style={{ margin: '10px auto 0', maxWidth: 420, background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#0369a1', lineHeight: 1.5 }}>
+                🗂 Archivada en Drive{archived.carpeta ? <> en <b>{archived.carpeta}</b></> : ''}. <a href={archived.url} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>Ver PDF en Drive</a>
+              </div>
+            )}
+            {archived?.error && (
+              <div style={{ margin: '10px auto 0', maxWidth: 420, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#b45309', lineHeight: 1.5 }}>
+                No se pudo archivar en Drive: {archived.error}.<br />La factura quedó registrada igual — descargá el PDF y guardalo a mano.
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>

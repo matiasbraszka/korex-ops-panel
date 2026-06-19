@@ -14,6 +14,7 @@ const TIPO_OPTS = ['SETUP', 'CRM', 'PUBLICIDAD'];
 const num = (x) => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; };
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const feePct = (g, n) => { const gg = Number(g), nn = Number(n); return (gg > 0 && nn > 0 && gg > nn) ? ((gg - nn) / gg) * 100 : null; };
+const STRIPE_FEE = 0.045; // fee Stripe por defecto (4,5%, igual que crear-venta) para el neto baseline
 const isAdBudget = (e) => e.role_key === 'cliente' && /publicidad/i.test(e.notes || '');
 const isReservado = (e) => e.role_key === 'afiliado' && /reserv/i.test(e.notes || '');
 // "Llegó a Mercury" automático: si lo cobró Korex por Stripe o Mercury (Empresa),
@@ -40,7 +41,7 @@ export default function IngresosPage() {
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
     sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id&limit=6000')
@@ -262,9 +263,14 @@ export default function IngresosPage() {
                       <span>{fdate(r.income_date)}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         {r.collected_by !== 'Cliente' && (
-                          <button onClick={() => setFactura(r)} title={r.facturado ? 'Factura emitida — ver / reimprimir' : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? '#16a34a' : '#B6BFCC', padding: 0, display: 'flex' }}>
+                          <button onClick={() => setFactura(r)} title={r.facturado ? `Factura ${r.invoices?.number || 'emitida'} — ver / reimprimir / reenviar` : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? '#16a34a' : '#B6BFCC', padding: 0, display: 'flex' }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
                           </button>
+                        )}
+                        {r.invoices?.pdf_url && (
+                          <a href={r.invoices.pdf_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title={`Factura ${r.invoices.number || ''} — abrir PDF en Drive`} style={{ display: 'flex', color: '#0EA5A4' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+                          </a>
                         )}
                         <button onClick={() => openEdit(r)} title="Editar ingreso" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -328,7 +334,7 @@ export default function IngresosPage() {
       <div style={{ height: 14, flexShrink: 0 }} />
 
       {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} onDelete={deleteModal} busy={busy} onClose={() => setModal(null)} />}
-      {factura && <FacturaModal income={factura} onClose={() => setFactura(null)} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
+      {factura && <FacturaModal income={factura} onClose={() => { setFactura(null); load(); }} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
   );
@@ -363,8 +369,11 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
       else { eur = b; usd = r2(b * rt); }
     }
     const usdStr = usd === '' ? '' : String(usd);
-    // Mercury/USDT no tienen comisión → neto = bruto USD. Stripe conserva su neto (lookup/manual).
-    const net = isStripeMethod(s.payment_method) ? s.net_usd : usdStr;
+    // Mercury/USDT no tienen comisión → neto = bruto USD. Stripe: si no tocaron el neto a mano,
+    // baseline = bruto − fee (4,5%); el lookup de Stripe lo refina solo si hay un cargo cercano.
+    const net = isStripeMethod(s.payment_method)
+      ? (s.netTouched ? s.net_usd : (usd === '' ? '' : String(r2(usd * (1 - STRIPE_FEE)))))
+      : usdStr;
     return { ...s, amount_usd: usdStr, amount_eur: eur === '' ? '' : String(eur), net_usd: net };
   };
   const setBruto = (v) => setForm((s) => recompute({ ...s, bruto: v }, RATE));
@@ -378,13 +387,14 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
     ...s, payer_name: p.nombre,
     client_name_sheet: p.cliente_padre || (p.tipo === 'Cliente' ? p.nombre : s.client_name_sheet),
     conector_name: conByClient[(p.cliente_padre || p.nombre || '').trim().toLowerCase()] || '',
-    // Sugerir el afiliado del usuario (su referente del directorio); editable. Clientes/conectores no tienen afiliado.
-    afiliado_name: s.afiliado_name || ((p.tipo !== 'Cliente' && (p.conector_e || '').trim()) || ''),
+    // El afiliado SIEMPRE sale de la Base de datos del usuario (no se edita por venta).
+    afiliado_name: (p.tipo !== 'Cliente' && (p.conector_e || '').trim()) || '',
   }));
 
-  // Stripe: trae el neto real del cargo (best-effort) si el neto está vacío.
+  // Stripe: refina el neto con el cargo REAL de Stripe, pero SOLO si hay un cargo cercano
+  // al bruto (±12%). Si no, deja el baseline (bruto − fee). No pisa el neto si lo tocaron a mano.
   useEffect(() => {
-    if (!isStripe || !form.payer_name || !num(form.amount_usd) || form.net_usd) return;
+    if (!isStripe || !form.payer_name || !num(form.amount_usd) || form.netTouched) return;
     let alive = true;
     const enc = encodeURIComponent(form.payer_name.trim());
     sbFetch(`stripe_charges?customer_name=ilike.${enc}&paid=eq.true&select=gross_usd,net_usd&order=created_at.desc&limit=10`)
@@ -392,12 +402,13 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
         if (!alive || !Array.isArray(cs) || !cs.length) return;
         const target = num(form.amount_usd);
         const best = cs.map((c) => ({ g: Number(c.gross_usd) || null, n: c.net_usd != null ? Number(c.net_usd) : null }))
-          .filter((x) => x.g).sort((a, b) => Math.abs(a.g - target) - Math.abs(b.g - target))[0];
+          .filter((x) => x.g && Math.abs(x.g - target) / target <= 0.12)   // solo cargos cercanos al bruto
+          .sort((a, b) => Math.abs(a.g - target) - Math.abs(b.g - target))[0];
         const v = best ? (best.n != null ? best.n : best.g) : null;
-        if (v != null) setForm((s) => ({ ...s, net_usd: String(r2(v)) }));
+        if (v != null) setForm((s) => (s.netTouched ? s : { ...s, net_usd: String(r2(v)) }));
       }).catch(() => {});
     return () => { alive = false; };
-  }, [isStripe, form.payer_name, form.amount_usd, form.net_usd]); // eslint-disable-line
+  }, [isStripe, form.payer_name, form.amount_usd, form.netTouched]); // eslint-disable-line
 
   const otherCur = form.divisa === 'USD'
     ? (form.amount_eur ? `≈ € ${form.amount_eur}` : '')
@@ -417,8 +428,8 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
           <div><label style={lab}>Fecha</label><input type="date" value={form.income_date} onChange={(e) => setForm((s) => ({ ...s, income_date: e.target.value }))} style={inp} /></div>
           <div><label style={lab}>Tipo</label><select value={form.income_type} onChange={(e) => setForm((s) => ({ ...s, income_type: e.target.value }))} style={inp}>{TIPO_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lab}>Afiliado <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· quién refirió al usuario (cobra comisión de Afiliados, solo en CRM)</span></label>
-            <input value={form.afiliado_name || ''} onChange={(e) => setForm((s) => ({ ...s, afiliado_name: e.target.value }))} placeholder="(opcional · cualquier persona puede ser afiliado)" style={inp} />
+            <label style={lab}>Afiliado <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· sale de la Base de datos del usuario · cobra comisión de Afiliados (solo CRM)</span></label>
+            <input value={form.afiliado_name || '—'} readOnly title="Para cambiarlo, editá el afiliado del usuario en Base de datos" style={{ ...inp, background: '#F8FAFC', color: form.afiliado_name ? '#475569' : '#9AA4B2', cursor: 'not-allowed' }} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={lab}>Usuario / pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>
@@ -452,7 +463,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
           {isStripe ? (
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={lab}>Neto US$ <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· lo que llegó de Stripe (descuenta comisión)</span></label>
-              <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value }))} placeholder="lo trae Stripe; ajustá si hace falta" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
+              <input inputMode="decimal" value={form.net_usd} onChange={(e) => setForm((s) => ({ ...s, net_usd: e.target.value, netTouched: true }))} placeholder="baseline = bruto − 4,5%; ajustá si hace falta" style={{ ...inp, border: '1px solid #99E6E3', background: '#F0FDFA' }} />
             </div>
           ) : (
             <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: '#6B7585' }}>Neto US$: <b style={{ color: '#0c8584' }}>{form.net_usd ? `$ ${form.net_usd}` : '—'}</b> <span style={{ color: '#9AA4B2' }}>· sin comisión (= bruto)</span></div>

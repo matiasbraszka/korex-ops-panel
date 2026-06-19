@@ -33,7 +33,7 @@ export default function AcuerdosPage() {
     Promise.all([
       sbFetch('fin_client_terms?select=id,sheet_client_name,client_id,service_value,umbral_base,conector_name,consultor_name,marketing_name,conector_start_date,consultor_start_date,marketing_start_date&order=agreement_date.desc.nullslast'),
       sbFetch('fin_commission_rules?select=id,sheet_client_name,client_id,income_type,role_key,pct'),
-      sbFetch('fin_directory?select=nombre,tipo&limit=1000'),
+      sbFetch('fin_directory?select=nombre,tipo,roles&limit=1000'),
       sbFetch('fin_incomes?select=conector_name_sheet,client_name_sheet,collected_by,net_usd,korex_real,fin_commission_entries(role_key,amount)&limit=6000'),
     ])
       .then(([t, r, dd, inc]) => { setTerms(t || []); setRules(r || []); setDir(dd || []); setIncomes(inc || []); })
@@ -41,11 +41,11 @@ export default function AcuerdosPage() {
   }, []);
 
   const assignOpts = useMemo(() => {
-    const byTipo = (tp) => dir.filter((x) => (x.tipo || '').toLowerCase() === tp).map((x) => x.nombre);
-    const fromTerms = (k) => (terms || []).map((t) => t[k]);
+    // SOLO personas de la Base de datos con ese rol (principal o adicional). Nada de texto libre.
+    const byRole = (role) => dir.filter((x) => x.tipo === role || (x.roles || []).includes(role)).map((x) => x.nombre);
     const uniq = (arr) => [...new Set(arr.filter(Boolean).map((s) => String(s).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    return { conector: uniq([...byTipo('conector'), ...fromTerms('conector_name')]), consultor: uniq([...byTipo('consultor'), ...fromTerms('consultor_name')]), marketing: uniq([...byTipo('marketing'), ...fromTerms('marketing_name')]) };
-  }, [dir, terms]);
+    return { conector: uniq(byRole('Conector')), consultor: uniq(byRole('Consultor')), marketing: uniq(byRole('Marketing')) };
+  }, [dir]);
 
   const cards = useMemo(() => {
     if (!terms || !rules) return null;
@@ -183,14 +183,10 @@ function ClientCard({ c, assignOpts, onEdited }) {
 
   const nonKorex = (tipo) => ROLES.reduce((a, r) => a + (matrix[tipo]?.[r]?.pct || 0), 0);
   const korexOf = (tipo) => (tipo === 'PUBLICIDAD' ? 0.15 : 1 - nonKorex(tipo));
-  const ASSIGN = [['Conector', 'conector_name', 'conector_start_date', ROLE.conector, 'dl-con'], ['Consultor', 'consultor_name', 'consultor_start_date', ROLE.consultor, 'dl-cons'], ['Marketing', 'marketing_name', 'marketing_start_date', ROLE.marketing, 'dl-mkt']];
+  const ASSIGN = [['Conector', 'conector_name', 'conector_start_date', ROLE.conector, 'conector'], ['Consultor', 'consultor_name', 'consultor_start_date', ROLE.consultor, 'consultor'], ['Marketing', 'marketing_name', 'marketing_start_date', ROLE.marketing, 'marketing']];
 
   return (
     <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, overflow: 'hidden', boxShadow: '0 1px 2px rgba(13,17,23,.04)' }}>
-      <datalist id="dl-con">{assignOpts.conector.map((n) => <option key={n} value={n} />)}</datalist>
-      <datalist id="dl-cons">{assignOpts.consultor.map((n) => <option key={n} value={n} />)}</datalist>
-      <datalist id="dl-mkt">{assignOpts.marketing.map((n) => <option key={n} value={n} />)}</datalist>
-
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 15px', borderBottom: '1px solid #EEF1F5', background: `linear-gradient(90deg, ${bg}, #fff)` }}>
         <div style={{ width: 30, height: 30, borderRadius: 8, background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12 }}>{ini(c.sheet_client_name)}</div>
         <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{c.sheet_client_name}</span>
@@ -204,10 +200,10 @@ function ClientCard({ c, assignOpts, onEdited }) {
       </div>
 
       <div style={{ padding: '10px 15px', borderBottom: '1px solid #EEF1F5', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {ASSIGN.map(([rol, nameF, dateF, color, list]) => (
+        {ASSIGN.map(([rol, nameF, dateF, color, optsKey]) => (
           <div key={rol} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
             <span style={{ width: 64, fontWeight: 700, color }}>{rol}</span>
-            <Inp value={fields[nameF]} placeholder="sin asignar" list={list} flex onCommit={(v) => commitField(nameF, v, { recompute: true })} />
+            <RoleSelect value={fields[nameF]} options={assignOpts[optsKey] || []} onCommit={(v) => commitField(nameF, v, { recompute: true })} />
             <span style={{ color: '#9AA4B2', fontSize: 10.5, whiteSpace: 'nowrap' }}>desde</span>
             <Inp type="date" value={fields[dateF]} width={120} onCommit={(v) => commitField(dateF, v, { kind: 'date', recompute: true })} />
           </div>
@@ -249,6 +245,22 @@ function Inp({ value, type = 'text', kind = 'text', placeholder = '—', width, 
     onBlur={(e) => onCommit(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
     style={{ width: flex ? undefined : width, flex: flex ? 1 : undefined, minWidth: 0, fontSize: kind === 'num' ? 14 : 11.5, fontWeight: kind === 'num' ? 700 : 400, background: 'transparent', border: '1px solid transparent', borderRadius: 4, padding: '2px 4px', outline: 'none', color: init === '' ? '#cbd5e1' : '#1e293b' }}
     onFocus={(e) => { e.target.style.borderColor = '#99E6E3'; e.target.style.background = '#fff'; }} onBlurCapture={(e) => { e.target.style.borderColor = 'transparent'; }} />;
+}
+// Desplegable de asignación: SOLO personas con ese rol en la Base de datos (sin texto libre).
+// Si el valor actual no está registrado con ese rol, lo muestra igual marcado "sin ficha".
+function RoleSelect({ value, options, onCommit }) {
+  const cur = (value || '').trim();
+  const has = cur && options.some((o) => o === cur);
+  const sel = { flex: 1, minWidth: 0, fontSize: 11.5, border: '1px solid transparent', borderRadius: 4, padding: '2px 4px', background: 'transparent', outline: 'none', color: cur ? '#1e293b' : '#cbd5e1', cursor: 'pointer', fontWeight: 400 };
+  return (
+    <select value={cur} onChange={(e) => onCommit(e.target.value)} style={sel}
+      onFocus={(e) => { e.target.style.borderColor = '#99E6E3'; e.target.style.background = '#fff'; }}
+      onBlur={(e) => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'; }}>
+      <option value="">sin asignar</option>
+      {cur && !has && <option value={cur}>{cur} — sin ficha</option>}
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
 }
 function Pct({ value, color, onCommit }) {
   const init = value ? String(+(value * 100).toFixed(2)) : '';

@@ -1,27 +1,30 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
+import Combo from '../components/Combo.jsx';
 import { Search, AddButton, Msg } from '../components/bits.jsx';
 import { useDirectoryResolver } from '../lib/directory.js';
 import { money2, fdate, roleChip } from '../lib/format.js';
 
 // Pagos (diseño Claude Design): libro de movimientos del fondo de comisiones
-// (lo que realmente se pagó/entró), por persona/rol/cliente/concepto. Alta inline.
+// (lo que realmente se pagó/entró), por persona/rol/cliente/concepto. Alta/edición/
+// borrado por modal; persona y cliente se eligen de la Base de datos (sin texto libre).
 const numP = (x) => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; };
 const todayP = () => new Date().toISOString().slice(0, 10);
 const roleLabel = (t) => (t === 'Usuario' ? 'Afiliado' : (t || '—'));
-const inp = { width: '100%', border: '1px solid #99E6E3', borderRadius: 6, padding: '5px 6px', fontSize: 11, outline: 'none', background: '#fff' };
+const PT_OPTS = ['Cliente', 'Conector', 'Consultor', 'Marketing', 'Usuario'];
 
 export default function PagosPage() {
   const [rows, setRows] = useState(null);
+  const [roster, setRoster] = useState([]);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
   const [openId, setOpenId] = useState(null);
   const [hover, setHover] = useState(null);
-  const [nf, setNf] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const setF = (k, v) => setNf((s) => ({ ...s, [k]: v }));
+  const [editing, setEditing] = useState(null); // 'new' | row | null
+  const [notas, setNotas] = useState('');
+  const [notasMsg, setNotasMsg] = useState('');
   const resolve = useDirectoryResolver();
 
   const load = useCallback(() => {
@@ -29,21 +32,20 @@ export default function PagosPage() {
       .then((d) => setRows(Array.isArray(d) ? d : [])).catch((e) => setError(String(e)));
   }, []);
   useEffect(() => { load(); }, [load]);
-
-  const startAdd = () => setNf({ paid_on: todayP(), category: 'egreso', person_type: 'Conector', person_name: '', client_name: '', concept: 'Liquidez', amount: '' });
-  const saveNew = async () => {
-    if (!nf.person_name.trim() || !nf.amount) return;
-    setBusy(true);
+  useEffect(() => {
+    sbFetch('fin_directory?select=nombre,tipo,roles&order=nombre.asc&limit=3000')
+      .then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {});
+    sbFetch('fin_notes?page=eq.pagos&select=body&limit=1')
+      .then((d) => setNotas((Array.isArray(d) && d[0] ? d[0].body : '') || '')).catch(() => {});
+  }, []);
+  const saveNotas = async () => {
+    setNotasMsg('guardando…');
     try {
-      await sbFetch('fin_payouts', {
-        method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
-        body: JSON.stringify({ paid_on: nf.paid_on || null, category: nf.category, person_type: nf.person_type, person_name: nf.person_name.trim(), client_name: nf.client_name.trim() || null, concept: nf.concept.trim() || null, amount: numP(nf.amount), currency: 'US$' }),
-      });
-      setNf(null); setBusy(false); load();
-    } catch { setBusy(false); }
+      await sbFetch('fin_notes?on_conflict=page', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, throwOnError: true, body: JSON.stringify({ page: 'pagos', body: notas, updated_at: new Date().toISOString() }) });
+      setNotasMsg('✓ guardado');
+    } catch { setNotasMsg('error al guardar'); }
   };
 
-  const clientes = useMemo(() => (rows ? [...new Set(rows.map((r) => r.client_name).filter(Boolean))].sort() : []), [rows]);
   const filtered = useMemo(() => {
     if (!rows) return [];
     const qq = q.trim().toLowerCase();
@@ -84,7 +86,7 @@ export default function PagosPage() {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 11, flexShrink: 0 }}>
-        <AddButton active={!!nf} label={nf ? 'Cancelar' : 'Nuevo movimiento'} onClick={() => (nf ? setNf(null) : startAdd())} />
+        <AddButton active={false} label="Nuevo movimiento" onClick={() => setEditing('new')} />
         <Search value={q} onChange={setQ} placeholder="Buscar persona, cliente o concepto…" />
         <div style={{ display: 'flex', gap: 5 }}>
           {catChips.map(([v, label]) => { const sel = cat === v; const base = v === 'egreso' ? '#e11d48' : v === 'ingreso' ? '#16a34a' : '#0EA5A4'; return (
@@ -97,28 +99,11 @@ export default function PagosPage() {
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, boxShadow: '0 1px 3px rgba(13,17,23,.04)' }}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: 12.5, whiteSpace: 'nowrap' }}>
           <thead><tr style={{ textAlign: 'left', color: '#64748B' }}>
-            {['Fecha', 'Cliente', 'Persona (cobra)', 'Rol', 'Concepto', 'Movimiento', 'Monto'].map((h) => <Th key={h}>{h}</Th>)}
+            {['Fecha', 'Cliente', 'Persona (cobra)', 'Rol', 'Concepto', 'Movimiento', 'Monto', ''].map((h, i) => <Th key={i}>{h}</Th>)}
           </tr></thead>
           <tbody>
-            {nf && (
-              <tr style={{ background: '#F0FDFA' }}>
-                <td style={cellPad}><input type="date" value={nf.paid_on} onChange={(e) => setF('paid_on', e.target.value)} style={inp} /></td>
-                <td style={cellPad}><input list="pgo-cli" value={nf.client_name} onChange={(e) => setF('client_name', e.target.value)} placeholder="cliente" style={inp} /><datalist id="pgo-cli">{clientes.map((c) => <option key={c} value={c} />)}</datalist></td>
-                <td style={cellPad}><input value={nf.person_name} onChange={(e) => setF('person_name', e.target.value)} placeholder="persona *" style={inp} /></td>
-                <td style={cellPad}><select value={nf.person_type} onChange={(e) => setF('person_type', e.target.value)} style={inp}>{['Cliente', 'Conector', 'Consultor', 'Marketing', 'Usuario'].map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}</select></td>
-                <td style={cellPad}><input list="pgo-con" value={nf.concept} onChange={(e) => setF('concept', e.target.value)} style={inp} /><datalist id="pgo-con"><option value="Liquidez" /><option value="Afiliados" /><option value="Publicidad" /></datalist></td>
-                <td style={cellPad}><select value={nf.category} onChange={(e) => setF('category', e.target.value)} style={inp}><option value="egreso">Egreso</option><option value="ingreso">Ingreso</option></select></td>
-                <td style={cellPad}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input inputMode="decimal" value={nf.amount} onChange={(e) => setF('amount', e.target.value)} placeholder="monto *" style={inp} />
-                    <button onClick={saveNew} disabled={busy || !nf.person_name.trim() || !nf.amount} title="Guardar" style={{ border: 0, background: '#16a34a', color: '#fff', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', fontWeight: 700, opacity: (busy || !nf.person_name.trim() || !nf.amount) ? 0.4 : 1 }}>✓</button>
-                    <button onClick={() => setNf(null)} title="Cancelar" style={{ border: 0, background: '#e2e8f0', color: '#64748B', borderRadius: 6, width: 22, height: 22, cursor: 'pointer', fontWeight: 700 }}>✕</button>
-                  </div>
-                </td>
-              </tr>
-            )}
             {filtered.map((r) => { const [rbg, rfg] = roleChip(r.person_type); const hov = hover === r.id; return (
-              <tr key={r.id} onMouseEnter={() => setHover(r.id)} onMouseLeave={() => setHover(null)} style={{ background: hov ? '#F6FBFB' : '#fff' }}>
+              <tr key={r.id} onMouseEnter={() => setHover(r.id)} onMouseLeave={() => setHover(null)} onClick={() => setEditing(r)} style={{ background: hov ? '#F6FBFB' : '#fff', cursor: 'pointer' }}>
                 <Td muted>{fdate(r.paid_on)}</Td>
                 <Td muted><Clickable name={r.client_name} id={resolve(r.client_name)} onOpen={setOpenId} /></Td>
                 <Td style={{ fontWeight: 600 }}><Clickable name={r.person_name} id={resolve(r.person_name)} onOpen={setOpenId} dashed /></Td>
@@ -126,24 +111,123 @@ export default function PagosPage() {
                 <Td muted>{r.concept || '—'}</Td>
                 <Td><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: r.category === 'egreso' ? '#fee2e2' : '#dcfce7', color: r.category === 'egreso' ? '#dc2626' : '#15803d' }}>{r.category === 'egreso' ? 'Egreso' : 'Ingreso'}</span></Td>
                 <Td style={{ fontWeight: 700, color: r.category === 'egreso' ? '#dc2626' : '#15803d' }}>{money2(r.amount)}</Td>
+                <Td style={{ textAlign: 'right' }}>
+                  <button onClick={(e) => { e.stopPropagation(); setEditing(r); }} title="Editar" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: hov ? '#0EA5A4' : '#C4CCD6', padding: 0, display: 'inline-flex' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                  </button>
+                </Td>
               </tr>
             ); })}
-            {!filtered.length && !nf && <tr><td colSpan={7} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin movimientos.</td></tr>}
+            {!filtered.length && <tr><td colSpan={8} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin movimientos.</td></tr>}
           </tbody>
         </table>
       </div>
-      <div style={{ height: 14, flexShrink: 0 }} />
 
+      <div style={{ flexShrink: 0, marginTop: 12, marginBottom: 14, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, padding: '12px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: '#8A93A2' }}>Notas</span>
+          <span style={{ fontSize: 10.5, color: notasMsg.startsWith('✓') ? '#16a34a' : notasMsg === 'error al guardar' ? '#dc2626' : '#9AA4B2' }}>{notasMsg}</span>
+        </div>
+        <textarea value={notas} onChange={(e) => { setNotas(e.target.value); if (notasMsg) setNotasMsg(''); }} onBlur={saveNotas}
+          placeholder="Anotá acá lo que necesites sobre los pagos (se guarda al salir del cuadro)…" rows={3}
+          style={{ width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', color: '#1e293b' }} />
+      </div>
+
+      {editing && <PagoModal payout={editing === 'new' ? null : editing} roster={roster} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
   );
 }
 
-const cellPad = { padding: '5px 8px' };
+/* ---------- alta / edición / baja de un movimiento ---------- */
+function PagoModal({ payout, roster, onClose, onSaved }) {
+  const isNew = !payout;
+  const [f, setF] = useState(() => ({
+    paid_on: payout?.paid_on || todayP(),
+    category: payout?.category || 'egreso',
+    person_type: payout?.person_type || 'Conector',
+    person_name: payout?.person_name || '',
+    client_name: payout?.client_name || '',
+    concept: payout?.concept || 'Liquidez',
+    amount: payout?.amount != null ? String(payout.amount) : '',
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [confirmDel, setConfirmDel] = useState(false);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+
+  const uniqSorted = (arr) => [...new Set(arr.filter(Boolean).map((s) => String(s).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const clientOpts = useMemo(() => uniqSorted(roster.filter((p) => p.tipo === 'Cliente' || (p.roles || []).includes('Cliente')).map((p) => p.nombre)), [roster]);
+  const personOpts = useMemo(() => uniqSorted(roster.map((p) => p.nombre)), [roster]);
+
+  // Al elegir la persona, sugiere su rol principal de la Base de datos (editable).
+  const pickPerson = (name) => {
+    const p = roster.find((x) => (x.nombre || '').trim().toLowerCase() === String(name || '').trim().toLowerCase());
+    setF((s) => ({ ...s, person_name: name || '', person_type: (p && PT_OPTS.includes(p.tipo)) ? p.tipo : s.person_type }));
+  };
+
+  const body = () => JSON.stringify({ paid_on: f.paid_on || null, category: f.category, person_type: f.person_type, person_name: (f.person_name || '').trim(), client_name: (f.client_name || '').trim() || null, concept: (f.concept || '').trim() || null, amount: numP(f.amount), currency: 'US$' });
+  const save = async () => {
+    if (!(f.person_name || '').trim() || !f.amount) { setErr('Faltan la persona y el monto.'); return; }
+    setBusy(true); setErr('');
+    try {
+      if (isNew) await sbFetch('fin_payouts', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: body() });
+      else await sbFetch(`fin_payouts?id=eq.${payout.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: body() });
+      onSaved?.();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  const remove = async () => {
+    setBusy(true); setErr('');
+    try { await sbFetch(`fin_payouts?id=eq.${payout.id}`, { method: 'DELETE', throwOnError: true }); onSaved?.(); }
+    catch (e) { setErr(String(e)); setBusy(false); }
+  };
+
+  const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
+  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 560, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
+          <div><div style={{ fontSize: 16, fontWeight: 800 }}>{isNew ? 'Nuevo movimiento' : 'Editar movimiento'}</div><div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Pago/ingreso del fondo de comisiones</div></div>
+          <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
+        </div>
+
+        <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><label style={lab}>Fecha</label><input type="date" value={f.paid_on} onChange={(e) => set('paid_on', e.target.value)} style={inp} /></div>
+          <div><label style={lab}>Movimiento</label><select value={f.category} onChange={(e) => set('category', e.target.value)} style={inp}><option value="egreso">Egreso (pago)</option><option value="ingreso">Ingreso al fondo</option></select></div>
+          <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Cliente <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· de la Base de datos</span></label><Combo value={f.client_name} onChange={(v) => set('client_name', v)} options={clientOpts} placeholder="elegir cliente…" empty="No está en la base. Agregalo primero." /></div>
+          <div><label style={lab}>Persona que cobra <span style={{ color: '#e11d48' }}>*</span></label><Combo value={f.person_name} onChange={pickPerson} options={personOpts} placeholder="elegir persona…" empty="No está en la base. Agregalo primero." /></div>
+          <div><label style={lab}>Rol</label><select value={f.person_type} onChange={(e) => set('person_type', e.target.value)} style={inp}>{PT_OPTS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}</select></div>
+          <div><label style={lab}>Concepto</label><input list="pgo-con" value={f.concept} onChange={(e) => set('concept', e.target.value)} style={inp} /><datalist id="pgo-con"><option value="Liquidez" /><option value="Afiliados" /><option value="Publicidad" /></datalist></div>
+          <div><label style={lab}>Monto US$ <span style={{ color: '#e11d48' }}>*</span></label><input inputMode="decimal" value={f.amount} onChange={(e) => set('amount', e.target.value)} placeholder="0" style={inp} /></div>
+          {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
+        </div>
+
+        <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div>
+            {!isNew && (confirmDel
+              ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#be123c' }}>¿Borrar este movimiento?
+                  <button onClick={remove} disabled={busy} style={{ border: 0, background: '#e11d48', color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>Sí, borrar</button>
+                  <button onClick={() => setConfirmDel(false)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>No</button>
+                </span>
+              : <button onClick={() => setConfirmDel(true)} style={{ border: '1px solid #FBC9CF', background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Eliminar</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={save} disabled={busy || !(f.person_name || '').trim() || !f.amount} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (busy || !(f.person_name || '').trim() || !f.amount) ? 0.6 : 1 }}>{busy ? 'Guardando…' : (isNew ? 'Crear' : 'Guardar')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Th = ({ children }) => <th style={{ position: 'sticky', top: 0, background: '#F8FAFC', borderBottom: '1px solid #E2E5EB', padding: '10px 14px', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'left' }}>{children}</th>;
 const Td = ({ children, muted, style }) => <td style={{ padding: '9px 14px', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', color: muted ? '#475569' : undefined, ...style }}>{children}</td>;
 function Clickable({ name, id, onOpen, dashed }) {
   if (!name) return <span style={{ color: '#9AA4B2' }}>—</span>;
   if (!id) return <span>{name}</span>;
-  return <span onClick={() => onOpen(id)} style={{ cursor: 'pointer', borderBottom: dashed ? '1px dashed #C4CCD6' : undefined }}>{name}</span>;
+  return <span onClick={(e) => { e.stopPropagation(); onOpen(id); }} style={{ cursor: 'pointer', borderBottom: dashed ? '1px dashed #C4CCD6' : undefined }}>{name}</span>;
 }

@@ -328,6 +328,7 @@ function MainLayout() {
     { id: 'directorio', label: 'Base de datos', Icon: Users,        path: '/finance/directorio' },
     { id: 'distribucion', label: 'Distribución', Icon: Wallet,      path: '/finance/distribucion' },
     { id: 'pagos',      label: 'Pagos',      Icon: Banknote,        path: '/finance/pagos' },
+    { id: 'cuotas',     label: 'Cuotas',     Icon: CalendarDays,    path: '/finance/cuotas' },
     { id: 'deuda',      label: 'Deuda',      Icon: Scale,           path: '/finance/deuda' },
     { id: 'egresos',    label: 'Egresos',    Icon: TrendingDown,    path: '/finance/egresos' },
   ];

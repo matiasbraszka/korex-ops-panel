@@ -22,6 +22,13 @@ const PARENT_FOLDER_ID = '1aCLCSKHbtOSBhk-2pyKMT4SxmIodJfe3';        // "Cliente
 const TEMPLATE_DOC_ID  = '19wgaW_MbN7aT0NA2sAcI6slad2r9t-2UeuUB2nDGetw'; // template Onboarding
 const DEL_TEMPLATE_DOC_ID = '1n_1UOGy5pu8Hnkhh0L-Z0I64IS4r_hPk1D2TCp8ryWI'; // template "DEL" (doc de trabajo)
 
+// Facturas: carpeta raíz "Facturas | Ingresos | MK" (la misma que usaba la macro de la
+// planilla). Dentro se crea/usa una carpeta por mes "<Mes> <Año>" (ej. "Junio 2026").
+// IMPORTANTE: la cuenta de Google que DESPLIEGA este Web App debe tener acceso de Editor
+// a esta carpeta (es la misma cuenta que ya crea las carpetas de "Clientes NUEVOS").
+const FAC_FOLDER_ID = '1UVq5LhPr6s-6xnJ1PElXktSOKNI-pqPl';
+const FAC_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
 // Defaults (fallback si la Edge Function no manda la estructura desde la config).
 const DEFAULT_STRATEGY_FOLDER = 'Estrategia #1 | [A DEFINIR] | {FECHA}';
 const DEFAULT_DOC_TITLE       = 'Onboarding Korex y {LABEL}';
@@ -43,6 +50,14 @@ function doPost(e) {
   try {
     const b = JSON.parse(e.postData.contents);
     if (b.secret !== SHARED_SECRET) return json({ ok: false, error: 'unauthorized' });
+
+    // Acción nueva: archivar una factura (PDF) en la carpeta del mes en Drive.
+    // La llama la Edge Function `archivar-factura` cuando se genera una factura en el panel.
+    if (b.action === 'guardar_factura') return facGuardarFactura(b);
+
+    // Acción nueva: listar TODAS las facturas archivadas (Nº, nombre, mes, link) para
+    // poder vincularlas a sus ingresos en el panel. Solo lectura.
+    if (b.action === 'listar_facturas') return facListarFacturas(b);
 
     const name = String(b.name || '').trim();
     if (!name) return json({ ok: false, error: 'missing_name' });
@@ -119,6 +134,76 @@ function doPost(e) {
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }
+}
+
+// ---------- Facturas: archivar el PDF en la carpeta del mes ----------
+
+// Recibe el HTML de la factura (lo arma el panel, mismo template que el PDF descargable),
+// lo convierte a PDF y lo guarda en "Facturas | Ingresos | MK / <Mes> <Año>".
+// Nombre del archivo: "<Nº sin ceros> <Nombre>.pdf" (ej. "461 Aldazabal Clima Service.pdf"),
+// igual que la macro vieja, para que la numeración por archivo siga siendo consistente.
+function facGuardarFactura(b) {
+  try {
+    var html = String(b.html || '');
+    if (!html) return json({ ok: false, error: 'missing_html' });
+    var numero = parseInt(String(b.numero || '').replace(/[^0-9]/g, ''), 10) || 0;
+    var nombre = String(b.nombreFactura || '').trim() || 'Cliente';
+    var fecha = b.fecha ? new Date(b.fecha) : new Date();
+    if (isNaN(fecha.getTime())) fecha = new Date();
+
+    var carpeta = facCarpetaMes(fecha);
+    var limpio = nombre.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+    var pdf = Utilities.newBlob(html, 'text/html', 'factura.html')
+      .getAs('application/pdf')
+      .setName((numero || '') + ' ' + limpio + '.pdf');
+    var file = carpeta.createFile(pdf);
+    // Devolvemos también el PDF en base64 para que el panel lo adjunte al email de la factura.
+    return json({ ok: true, url: file.getUrl(), carpeta: carpeta.getName(), pdf_base64: Utilities.base64Encode(pdf.getBytes()) });
+  } catch (err) {
+    return json({ ok: false, error: String(err) });
+  }
+}
+
+// Lista todas las facturas (PDFs) de "Facturas | Ingresos | MK": las sueltas en la raíz
+// y las de cada subcarpeta de mes. Devuelve { number, name, month, file, url } por factura.
+// Parsea el nombre "<Nº> <Nombre>.pdf". Solo lectura — se usa para el cruce con ingresos.
+function facListarFacturas(b) {
+  try {
+    var raiz = DriveApp.getFolderById(FAC_FOLDER_ID);
+    var out = [];
+    function push(f, mes) {
+      var title = f.getName();
+      var base = title.replace(/\.pdf$/i, '');
+      var m = base.match(/^\s*(\d+)\s+([\s\S]*)$/); // "461 Nombre Apellido"
+      out.push({
+        number: m ? m[1] : '',
+        name: m ? m[2].trim() : base.trim(),
+        month: mes || '',
+        file: title,
+        url: f.getUrl(),
+      });
+    }
+    var rf = raiz.getFiles();
+    while (rf.hasNext()) push(rf.next(), '');
+    var fs = raiz.getFolders();
+    while (fs.hasNext()) {
+      var mf = fs.next();
+      var mes = mf.getName();
+      var files = mf.getFiles();
+      while (files.hasNext()) push(files.next(), mes);
+    }
+    return json({ ok: true, count: out.length, facturas: out });
+  } catch (err) {
+    return json({ ok: false, error: String(err) });
+  }
+}
+
+// Carpeta del mes "<Mes> <Año>" dentro de la raíz de Facturas; la crea si no existe.
+function facCarpetaMes(date) {
+  var nombre = FAC_MESES[date.getMonth()] + ' ' + date.getFullYear();
+  var raiz = DriveApp.getFolderById(FAC_FOLDER_ID);
+  var it = raiz.getFoldersByName(nombre);
+  return it.hasNext() ? it.next() : raiz.createFolder(nombre);
 }
 
 function json(o) {
