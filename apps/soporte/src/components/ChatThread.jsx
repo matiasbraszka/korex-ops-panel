@@ -221,9 +221,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   showAuthor={g.showAuthor}
                   onRetry={() => retrySend(selectedId, g.msg.id)}
                   onDiscard={() => discardFailed(selectedId, g.msg.id)}
-                  onForward={(m) => setForwardMsgs([m])}
+                  onForward={enterSelect}
                   onReply={setReplyTo}
-                  onSelect={enterSelect}
                   selectMode={selectMode}
                   selected={selected.has(g.msg.id)}
                   onToggleSelect={toggleSelect}

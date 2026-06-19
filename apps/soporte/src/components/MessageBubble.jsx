@@ -1,4 +1,4 @@
-import { Clock, AlertCircle, CheckCheck, Forward, Reply, ListChecks, CircleCheck, Circle } from 'lucide-react';
+import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle } from 'lucide-react';
 import { fmtClock, colorFromString, msgTypeLabel, initials } from '../lib/format.js';
 import MediaContent from './MediaContent.jsx';
 
@@ -24,7 +24,7 @@ function BodyText({ text }) {
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
-export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, onSelect, selectMode, selected, onToggleSelect, quotedMsg }) {
+export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, selectMode, selected, onToggleSelect, quotedMsg }) {
   const out = msg.direction === 'out';
   const isMedia = MEDIA_TYPES.has(msg.msg_type);
   const typeLabel = !isMedia ? msgTypeLabel(msg.msg_type) : null;
@@ -37,8 +37,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
   const actionable = !failed && !sending && !msg._temp && (msg.body || isMedia);
   const canForward = onForward && actionable;
   const canReply = onReply && actionable;
-  const canSelect = onSelect && actionable;
-  const actions = (canForward || canReply || canSelect) ? (
+  const actions = (canForward || canReply) ? (
     <div className="self-center flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-70 transition-opacity duration-150 shrink-0">
       {canReply && (
         <button onClick={() => onReply(msg)} title="Responder a este mensaje"
@@ -47,15 +46,9 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
         </button>
       )}
       {canForward && (
-        <button onClick={() => onForward(msg)} title="Reenviar a otro chat"
+        <button onClick={() => onForward(msg)} title="Reenviar a otro chat (podés elegir varios)"
                 className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
           <Forward size={13} />
-        </button>
-      )}
-      {canSelect && (
-        <button onClick={() => onSelect(msg)} title="Seleccionar varios para reenviar"
-                className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
-          <ListChecks size={13} />
         </button>
       )}
     </div>
