@@ -101,6 +101,7 @@ export default function MercuryPage() {
   const [savingId, setSavingId] = useState(null);
   const [tab, setTab] = useState('fondos');
   const [hideZero, setHideZero] = useState(true);
+  const [showReviewed, setShowReviewed] = useState(false); // ver las fallidas ya revisadas
   const [metaByAccount, setMetaByAccount] = useState({}); // account_id -> gasto Meta (anuncios)
   // Egresos (gastos categorizados)
   const [egresos, setEgresos] = useState([]);
@@ -756,17 +757,27 @@ export default function MercuryPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {pending.length > 0 && (
+              {pending.length > 0 ? (
                 <div className="flex items-center gap-2 mb-1">
                   <AlertTriangle size={15} className="text-red" />
                   <span className="text-[12px] font-bold text-text3 uppercase tracking-wide">Pendientes de revisar ({pending.length})</span>
                 </div>
+              ) : (
+                <div className="text-[13px] text-text3 border border-dashed border-border rounded-xl p-5 text-center">
+                  No hay fallidas pendientes. 🎉
+                </div>
               )}
               {pending.map((tx) => <TxCard key={tx.id} tx={tx} />)}
+
+              {/* Las revisadas se ocultan (ya están resueltas); botón para verlas. */}
               {reviewed.length > 0 && (
-                <div className="mt-4 mb-1 text-[11.5px] font-semibold text-text3 uppercase tracking-wide">Ya revisadas</div>
+                <button onClick={() => setShowReviewed((v) => !v)}
+                  className="self-start mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-text3 hover:text-text bg-transparent border-0 cursor-pointer">
+                  <CheckCircle2 size={13} className="text-green-600" />
+                  {showReviewed ? 'Ocultar revisadas' : `Ver ${reviewed.length} ya revisada${reviewed.length === 1 ? '' : 's'}`}
+                </button>
               )}
-              {reviewed.map((tx) => <TxCard key={tx.id} tx={tx} />)}
+              {showReviewed && reviewed.map((tx) => <TxCard key={tx.id} tx={tx} />)}
             </div>
           )}
         </div>
