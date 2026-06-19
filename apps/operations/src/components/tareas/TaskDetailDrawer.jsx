@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { X, Plus, Trash2, MessageSquare, Pencil } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Pencil, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases } from '../../utils/helpers';
@@ -33,6 +33,39 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const removeItem = (id) => saveChecklist(checklist.filter(i => i.id !== id));
   const saveItem = (id) => { const v = editItemText.trim(); if (v) saveChecklist(checklist.map(i => i.id === id ? { ...i, text: v } : i)); setEditItemId(null); };
 
+  // ── Bloqueo por dependencia ("Bloqueada por") ──
+  // Reutiliza el campo dependsOn (array de task.id). La tarea no se puede avanzar
+  // hasta que sus bloqueadoras estén validadas (status 'done').
+  const deps = Array.isArray(task.dependsOn) ? task.dependsOn : [];
+  const blockers = deps.map(id => (tasks || []).find(t => t.id === id)).filter(Boolean);
+  const pendingBlockers = blockers.filter(b => b.status !== 'done');
+  const taskLabel = (t) => {
+    const c = (clients || []).find(cl => cl.id === t.clientId);
+    return c?.name ? `${t.title} · ${c.name}` : t.title;
+  };
+  // Candidatas: tareas del mismo cliente o del mismo sprint, sin crear ciclo directo.
+  const candidates = (tasks || [])
+    .filter(t => t.id !== task.id && !deps.includes(t.id))
+    .filter(t => (t.clientId || null) === (task.clientId || null) || (task.sprintId && t.sprintId === task.sprintId))
+    .filter(t => !(Array.isArray(t.dependsOn) && t.dependsOn.includes(task.id)))
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+
+  const addBlocker = (depId) => {
+    if (!depId || deps.includes(depId)) return;
+    const next = [...deps, depId];
+    const blocker = (tasks || []).find(t => t.id === depId);
+    const updates = { dependsOn: next };
+    // Si queda bloqueada y está en el sprint, baja al Backlog (no se puede trabajar aún).
+    if (blocker && blocker.status !== 'done' && task.sprintId && task.status !== 'backlog' && task.status !== 'done') {
+      updates.status = 'backlog';
+    }
+    updateTask(task.id, updates);
+  };
+  const removeBlocker = (depId) => {
+    const next = deps.filter(d => d !== depId);
+    updateTask(task.id, { dependsOn: next.length ? next : null });
+  };
+
   const metaRow = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 14px', borderBottom: '1px solid #F0F2F5' };
   const metaLabel = { fontSize: 13, color: '#9CA3AF', flexShrink: 0 };
   const sectionLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: '#9CA3AF' };
@@ -46,6 +79,9 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: st.color, background: st.bg, borderRadius: 999, padding: '3px 11px' }}>{st.label}</span>
+              {pendingBlockers.length > 0 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: '#DC2626', background: '#FEF2F2', borderRadius: 999, padding: '3px 9px' }}><Lock size={11} />Bloqueada</span>
+              )}
             </div>
             <span onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6B7280', flexShrink: 0 }}><X size={18} /></span>
           </div>
@@ -82,6 +118,41 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 <span style={{ fontSize: 13, color: '#9CA3AF' }}>h</span>
               </span>
             </div>
+          </div>
+
+          {/* bloqueada por (dependencias) */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+              <Lock size={13} stroke="#9CA3AF" />
+              <span style={sectionLabel}>Bloqueada por</span>
+            </div>
+            {pendingBlockers.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#FEF2F2', color: '#B91C1C', fontSize: 12, lineHeight: 1.45, borderRadius: 9, padding: '9px 11px', marginBottom: 10 }}>
+                <Lock size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>No se puede avanzar hasta validar {pendingBlockers.length === 1 ? 'la tarea que la bloquea' : 'las tareas que la bloquean'}. Mientras tanto queda en el Backlog.</span>
+              </div>
+            )}
+            {blockers.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                {blockers.map(b => {
+                  const done = b.status === 'done';
+                  return (
+                    <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid #E2E5EB', borderRadius: 9, padding: '8px 11px' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: done ? '#22C55E' : '#F59E0B', flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={taskLabel(b)}>{taskLabel(b)}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: done ? '#15803D' : '#B45309', flexShrink: 0 }}>{done ? 'Validada' : 'Pendiente'}</span>
+                      <span onClick={() => removeBlocker(b.id)} title="Quitar bloqueo" style={{ cursor: 'pointer', color: '#C7CBD3', flexShrink: 0, display: 'flex' }}><X size={14} /></span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <select value="" onChange={(e) => { addBlocker(e.target.value); e.target.value = ''; }}
+              style={{ width: '100%', fontSize: 13, color: candidates.length ? '#1A1D26' : '#9CA3AF', border: '1px solid #E2E5EB', borderRadius: 9, padding: '9px 11px', outline: 'none', background: '#fff', cursor: candidates.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
+              disabled={!candidates.length}>
+              <option value="">{candidates.length ? '+ Agregar tarea que la bloquea…' : 'No hay otras tareas para bloquear'}</option>
+              {candidates.map(t => <option key={t.id} value={t.id}>{taskLabel(t)}</option>)}
+            </select>
           </div>
 
           {/* checklist */}
