@@ -33,7 +33,7 @@ function Kpi({ label, value, sub, color, barw }) {
 export default function SprintBoardView({ scope = 'cli' }) {
   const {
     activeSprint, tasks, updateTask, reorderTask, teamMembers, clients, currentUser,
-    taskAssignee, taskClientFilter, taskComments,
+    taskAssignee, taskClientFilter, taskComments, hideCompletedTasks,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
@@ -62,9 +62,9 @@ export default function SprintBoardView({ scope = 'cli' }) {
     if (!matchesAssignee(t)) return false;
     if (!matchesQuery(t)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
-    // En el Tablero Sprint la columna "Validado" SIEMPRE muestra las tareas
-    // completadas del sprint (es su propósito). No aplicamos "ocultar
-    // completadas" acá: si no, al soltar una tarea en Validado desaparecía.
+    // El "ocultar completadas" NO se aplica acá (sobre `inSprint`): así los KPIs
+    // de cabecera (sobre todo "Avance: X/Y validadas") siguen contando lo hecho.
+    // El ocultar se aplica solo al render del tablero, en `columnTasks`.
     const c = clientById(t.clientId);
     if (c) { const interno = isKorexClient(c); if (scope === 'int' ? !interno : interno) return false; }
     return true;
@@ -80,6 +80,9 @@ export default function SprintBoardView({ scope = 'cli' }) {
 
   const columnTasks = (status) => inSprint
     .filter(t => boardColumn(t.status) === status)
+    // "Ocultar completadas": vacía la columna Validado en el tablero (los KPIs
+    // de cabecera siguen contando lo validado, ver nota en `visible`).
+    .filter(t => !(hideCompletedTasks && t.status === 'done'))
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || (a.sprintPriority || 9) - (b.sprintPriority || 9));
 
   const onDrop = (colStatus, e) => {
