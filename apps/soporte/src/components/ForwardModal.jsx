@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Check, Users } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { useSoporte } from '../context/SoporteContext.jsx';
@@ -9,16 +9,26 @@ const PREVIEW = {
   videoMessage: '🎬 Video', documentMessage: '📄 Documento',
 };
 
-// Reenviar un mensaje (texto o media) a otro chat. Permite mandarlo a varios:
-// el modal queda abierto y marca "Enviado ✓" en cada uno.
-export default function ForwardModal({ msg, onClose }) {
+// Reenviar uno o varios mensajes (texto o media) a otro chat. Permite mandarlos
+// a varios contactos: el modal queda abierto y marca "Enviado ✓" en cada uno.
+// Acepta `msgs` (array) — también `msg` suelto por compatibilidad.
+export default function ForwardModal({ msgs, msg, onClose }) {
   const { allConversations, forwardMessage } = useSoporte();
   const [q, setQ] = useState('');
   const [sendingId, setSendingId] = useState(null);
-  const [sent, setSent] = useState([]);     // ids ya reenviados
+  const [sent, setSent] = useState([]);     // ids de chats ya reenviados
   const [error, setError] = useState('');
 
-  if (!msg) return null;
+  const items = (msgs && msgs.length ? msgs : (msg ? [msg] : []));
+  // Clave estable del set de mensajes, para resetear el estado al cambiar de selección
+  // (el modal queda montado entre reenvíos; sin esto el "Enviado" queda pegado).
+  const itemsKey = items.map((m) => m.id).join(',');
+
+  useEffect(() => {
+    setSent([]); setQ(''); setError(''); setSendingId(null);
+  }, [itemsKey]);
+
+  if (!items.length) return null;
 
   const term = q.trim().toLowerCase();
   const list = (allConversations || [])
@@ -26,14 +36,17 @@ export default function ForwardModal({ msg, onClose }) {
     .filter((c) => !term || `${convName(c)} ${c.wa_phone || ''} ${c.client?.name || ''}`.toLowerCase().includes(term))
     .slice(0, 40);
 
-  const preview = (msg.body && msg.body.trim()) || PREVIEW[msg.msg_type] || 'Mensaje';
+  const preview = items.length > 1
+    ? `${items.length} mensajes`
+    : ((items[0].body && items[0].body.trim()) || PREVIEW[items[0].msg_type] || 'Mensaje');
 
   const doForward = async (c) => {
     if (sendingId || sent.includes(c.id)) return;
     setError('');
     setSendingId(c.id);
     try {
-      await forwardMessage(msg, c.id);
+      // Reenvía todos los mensajes seleccionados, en orden.
+      for (const m of items) await forwardMessage(m, c.id);
       setSent((s) => [...s, c.id]);
     } catch (e) {
       console.error('soporte: fallo el reenvío', e);
@@ -65,9 +78,10 @@ export default function ForwardModal({ msg, onClose }) {
             const done = sent.includes(c.id);
             const sending = sendingId === c.id;
             return (
-              <button key={c.id} onClick={() => doForward(c)} disabled={done || sending}
+              <button key={c.id} onClick={() => doForward(c)} disabled={done || !!sendingId}
                       className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border text-left transition-all duration-150 ${
                         done ? 'border-[#BBF7D0] bg-[#F0FDF4] cursor-default'
+                             : sendingId ? 'border-border/70 bg-white opacity-60 cursor-default'
                              : 'border-border/70 bg-white hover:border-[#F59E0B]/45 cursor-pointer'}`}>
                 <span className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[11.5px] shrink-0"
                       style={{ background: color + '1d', color }}>
