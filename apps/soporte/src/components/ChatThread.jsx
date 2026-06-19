@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users } from 'lucide-react';
+import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
@@ -21,8 +21,16 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, groupDirByConv, loadGroupDirectory } = useSoporte();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
-  const [forwardMsg, setForwardMsg] = useState(null);
+  const [forwardMsgs, setForwardMsgs] = useState(null); // array de mensajes a reenviar (null = modal cerrado)
+  const [selectMode, setSelectMode] = useState(false);  // selección múltiple para reenviar
+  const [selected, setSelected] = useState(() => new Set());
   const [replyTo, setReplyTo] = useState(null);
+
+  const exitSelect = useCallback(() => { setSelectMode(false); setSelected(new Set()); }, []);
+  const enterSelect = useCallback((m) => { setSelectMode(true); setSelected(new Set([m.id])); }, []);
+  const toggleSelect = useCallback((m) => {
+    setSelected((prev) => { const n = new Set(prev); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; });
+  }, []);
   const stickToBottom = useRef(true);
   const prevHeightRef = useRef(null);
 
@@ -60,6 +68,9 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     return m;
   }, [thread.items]);
 
+  // Mensajes seleccionados para reenviar (en orden del hilo).
+  const selectedMsgs = useMemo(() => thread.items.filter((m) => selected.has(m.id)), [thread.items, selected]);
+
   const isNearBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return true;
@@ -76,6 +87,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     stickToBottom.current = true;
     setShowJump(false);
     setReplyTo(null);
+    setSelectMode(false);
+    setSelected(new Set());
   }, [selectedId]);
 
   // En grupos, el sub del header lista a los participantes con nombre
@@ -208,8 +221,11 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   showAuthor={g.showAuthor}
                   onRetry={() => retrySend(selectedId, g.msg.id)}
                   onDiscard={() => discardFailed(selectedId, g.msg.id)}
-                  onForward={setForwardMsg}
+                  onForward={enterSelect}
                   onReply={setReplyTo}
+                  selectMode={selectMode}
+                  selected={selected.has(g.msg.id)}
+                  onToggleSelect={toggleSelect}
                   quotedMsg={g.msg.reply_to ? byWaId[g.msg.reply_to] : null}
                 />
               )
@@ -227,10 +243,28 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
         </div>
       )}
 
-      <Composer replyTo={replyTo} onClearReply={() => setReplyTo(null)}
-                onSent={() => { stickToBottom.current = true; }} />
+      {selectMode ? (
+        <div className="bg-white border-t border-border px-3 py-2.5 flex items-center gap-3 shrink-0">
+          <button onClick={exitSelect} title="Cancelar"
+                  className="w-8 h-8 rounded-full border border-border text-text2 hover:bg-surface2 flex items-center justify-center cursor-pointer shrink-0">
+            <X size={16} />
+          </button>
+          <span className="text-[12.5px] font-semibold text-text2">
+            {selected.size} seleccionado{selected.size === 1 ? '' : 's'}
+          </span>
+          <div className="flex-1" />
+          <button onClick={() => selected.size && setForwardMsgs(selectedMsgs)} disabled={!selected.size}
+                  className={`py-2 px-4 rounded-[10px] border-0 text-[12.5px] font-bold flex items-center gap-1.5 transition-colors duration-150 ${
+                    selected.size ? 'bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]' : 'bg-surface2 text-text3 cursor-default'}`}>
+            <Forward size={14} /> Reenviar
+          </button>
+        </div>
+      ) : (
+        <Composer replyTo={replyTo} onClearReply={() => setReplyTo(null)}
+                  onSent={() => { stickToBottom.current = true; }} />
+      )}
 
-      <ForwardModal msg={forwardMsg} onClose={() => setForwardMsg(null)} />
+      <ForwardModal msgs={forwardMsgs} onClose={() => { setForwardMsgs(null); exitSelect(); }} />
     </div>
   );
 }
