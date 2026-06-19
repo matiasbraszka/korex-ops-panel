@@ -37,7 +37,7 @@ function buildQuickDates() {
   ];
 }
 
-export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 14, className = '' }) {
+export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 14, className = '', alwaysShow = false, label = '' }) {
   const { currentUser, weeklyTodos, addWeeklyTodo, removeWeeklyTodo, teamMembers } = useApp();
   // Backwards compat: si el caller paso taskId suelto en vez del task entero,
   // no podemos chequear assignee — en ese caso mostramos el boton de todas
@@ -129,28 +129,46 @@ export default function AddToWeeklyButton({ task, taskId: legacyTaskId, size = 1
     setOpen(false);
   };
 
-  // Gate: si no es mi tarea, no rendereamos el boton.
-  if (!isAssignedToMe) return null;
+  // Gate: si no es mi tarea, no rendereamos el boton — salvo alwaysShow, que se
+  // usa en el detalle de la tarea (uno mismo puede mandar cualquier tarea que
+  // abre a su propio To-Do personal).
+  if (!isAssignedToMe && !alwaysShow) return null;
 
   const quick = buildQuickDates();
 
   return (
-    <div ref={ref} className={`relative inline-block ${className}`} onClick={(e) => e.stopPropagation()}>
-      <button
-        ref={triggerRef}
-        type="button"
-        title={alreadyIn ? 'Ya está en tu To-Do — elegí otro día o quitala' : 'Agregar a mi To-Do'}
-        onClick={() => setOpen((v) => !v)}
-        className={`flex items-center justify-center w-6 h-6 rounded bg-transparent border-none cursor-pointer transition-colors ${
-          justAdded
-            ? 'text-green-600'
-            : alreadyIn
-              ? 'text-blue-500 hover:bg-blue-50'
-              : 'text-text3 hover:text-blue hover:bg-blue-50'
-        }`}
-      >
-        {justAdded ? <Check size={size} strokeWidth={2.5} /> : <ListTodo size={size} strokeWidth={alreadyIn ? 2.25 : 1.75} />}
-      </button>
+    <div ref={ref} className={`relative ${label ? 'block' : 'inline-block'} ${className}`} onClick={(e) => e.stopPropagation()}>
+      {label ? (
+        // Variante "fila": botón ancho con etiqueta, para el detalle de la tarea.
+        <button
+          ref={triggerRef}
+          type="button"
+          title={alreadyIn ? 'Ya está en tu To-Do — elegí otro día o quitala' : 'Agregar a mi To-Do'}
+          onClick={() => setOpen((v) => !v)}
+          className={`w-full flex items-center gap-2.5 rounded-[10px] border px-3.5 py-[11px] text-[13px] font-medium cursor-pointer bg-white transition-colors ${
+            alreadyIn ? 'border-blue-200 text-blue-600 hover:bg-blue-50' : 'border-border text-[#3F4653] hover:bg-blue-50 hover:text-blue'
+          }`}
+        >
+          {justAdded ? <Check size={16} strokeWidth={2.5} className="text-green-600" /> : <ListTodo size={16} strokeWidth={1.85} />}
+          <span>{alreadyIn ? `En tu To-Do (${myExisting.length} ${myExisting.length === 1 ? 'día' : 'días'})` : label}</span>
+        </button>
+      ) : (
+        <button
+          ref={triggerRef}
+          type="button"
+          title={alreadyIn ? 'Ya está en tu To-Do — elegí otro día o quitala' : 'Agregar a mi To-Do'}
+          onClick={() => setOpen((v) => !v)}
+          className={`flex items-center justify-center w-6 h-6 rounded bg-transparent border-none cursor-pointer transition-colors ${
+            justAdded
+              ? 'text-green-600'
+              : alreadyIn
+                ? 'text-blue-500 hover:bg-blue-50'
+                : 'text-text3 hover:text-blue hover:bg-blue-50'
+          }`}
+        >
+          {justAdded ? <Check size={size} strokeWidth={2.5} /> : <ListTodo size={size} strokeWidth={alreadyIn ? 2.25 : 1.75} />}
+        </button>
+      )}
 
       {open && popPos && (
         <div

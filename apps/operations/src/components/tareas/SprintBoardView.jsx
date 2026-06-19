@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, isKorexClient, progressOf, getAllPhases, isTaskBlocked } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -112,9 +112,13 @@ export default function SprintBoardView({ scope = 'cli' }) {
     return <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 14, padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No hay un sprint activo todavía.</div>;
   }
 
-  const prog = sprintProgress(tasks, activeSprint);
+  // KPIs sobre el set visible (inSprint) → se adaptan al filtro por persona,
+  // cliente, búsqueda y scope. `tasks` se pasa para resolver bloqueos aunque la
+  // tarea bloqueadora esté fuera del filtro actual.
+  const prog = progressOf(inSprint, tasks);
+  const filtered = taskAssignee !== 'all' || taskClientFilter !== 'all' || !!query.trim();
   const kpis = [
-    { label: 'Avance del sprint', value: `${prog.done} / ${prog.total}`, sub: 'validadas', color: '#1A1D26', barw: prog.pct + '%' },
+    { label: filtered ? 'Avance (filtrado)' : 'Avance del sprint', value: `${prog.done} / ${prog.total}`, sub: 'validadas', color: '#1A1D26', barw: prog.pct + '%' },
     { label: 'En curso', value: String(prog.wip), sub: prog.wip === 1 ? 'tarea activa' : 'tareas activas', color: '#1A1D26' },
     { label: 'Tareas vencidas', value: String(prog.overdue), sub: prog.overdue ? 'requieren atención' : 'sin vencidas', color: prog.overdue ? '#EF4444' : '#22C55E' },
     { label: 'Bloqueos abiertos', value: String(prog.blocked), sub: prog.blocked ? 'a destrabar' : 'todo fluye', color: prog.blocked ? '#EF4444' : '#22C55E' },

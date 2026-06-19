@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
+import AddToWeeklyButton from './AddToWeeklyButton';
 
 const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
 
@@ -43,12 +44,31 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     const c = (clients || []).find(cl => cl.id === t.clientId);
     return c?.name ? `${t.title} · ${c.name}` : t.title;
   };
-  // Candidatas: tareas del mismo cliente o del mismo sprint, sin crear ciclo directo.
+  // Candidatas a bloquear: tareas del MISMO cliente que todavía NO están
+  // validadas (excluye la propia, las ya elegidas y las que crearían un ciclo
+  // directo). Es la "vista organizada" de antes: solo lo que tiene sentido
+  // marcar como bloqueante de este cliente.
   const candidates = (tasks || [])
     .filter(t => t.id !== task.id && !deps.includes(t.id))
-    .filter(t => (t.clientId || null) === (task.clientId || null) || (task.sprintId && t.sprintId === task.sprintId))
+    .filter(t => t.status !== 'done')
+    .filter(t => (t.clientId || null) === (task.clientId || null))
     .filter(t => !(Array.isArray(t.dependsOn) && t.dependsOn.includes(task.id)))
     .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+
+  // Agrupadas por objetivo (fase) para elegir de forma organizada. El orden de
+  // los grupos sigue al de getAllPhases (las fases del cliente); las tareas sin
+  // objetivo quedan al final.
+  const phaseMap = getAllPhases(client);
+  const candidatesByPhase = (() => {
+    const groups = [];
+    Object.keys(phaseMap).forEach(key => {
+      const list = candidates.filter(t => t.phase === key);
+      if (list.length) groups.push({ key, label: phaseMap[key].label, list });
+    });
+    const noPhase = candidates.filter(t => !t.phase || !phaseMap[t.phase]);
+    if (noPhase.length) groups.push({ key: '__none', label: 'Sin objetivo', list: noPhase });
+    return groups;
+  })();
 
   const addBlocker = (depId) => {
     if (!depId || deps.includes(depId)) return;
@@ -150,8 +170,12 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <select value="" onChange={(e) => { addBlocker(e.target.value); e.target.value = ''; }}
               style={{ width: '100%', fontSize: 13, color: candidates.length ? '#1A1D26' : '#9CA3AF', border: '1px solid #E2E5EB', borderRadius: 9, padding: '9px 11px', outline: 'none', background: '#fff', cursor: candidates.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
               disabled={!candidates.length}>
-              <option value="">{candidates.length ? '+ Agregar tarea que la bloquea…' : 'No hay otras tareas para bloquear'}</option>
-              {candidates.map(t => <option key={t.id} value={t.id}>{taskLabel(t)}</option>)}
+              <option value="">{candidates.length ? '+ Agregar tarea que la bloquea…' : 'No hay otras tareas sin completar de este cliente'}</option>
+              {candidatesByPhase.map(g => (
+                <optgroup key={g.key} label={g.label}>
+                  {g.list.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </optgroup>
+              ))}
             </select>
           </div>
 
@@ -196,6 +220,11 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <textarea defaultValue={task.description || ''} placeholder="Describí la tarea para que no quede lugar a dudas…"
               onBlur={(e) => { const v = e.target.value; if (v !== (task.description || '')) updateTask(task.id, { description: v }); }}
               style={{ width: '100%', fontSize: 13, color: '#1A1D26', border: '1px solid #E2E5EB', borderRadius: 10, padding: '12px 13px', minHeight: 74, lineHeight: 1.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
+          </div>
+
+          {/* Llevar al To-Do personal del usuario actual */}
+          <div style={{ marginBottom: 10 }}>
+            <AddToWeeklyButton task={task} alwaysShow label="Agregar a mi To-Do" />
           </div>
 
           <div onClick={() => { onClose(); openTaskComments(task.id); }} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 500, color: '#3F4653', border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 13px', cursor: 'pointer' }}>

@@ -762,20 +762,30 @@ export function wipCount(tasks, sprint, status) {
   return sprintTasks(tasks, sprint).filter(t => t.status === status).length;
 }
 
-// Resumen del sprint para el panel de cabecera.
-export function sprintProgress(tasks, sprint) {
-  const list = sprintTasks(tasks, sprint);
-  const total = list.length;
-  const done = list.filter(t => t.status === 'done').length;
-  const wip = list.filter(t => t.status === 'in-progress').length;
+// Resumen calculado sobre una lista de tareas YA filtrada. Se separa de
+// sprintProgress para poder pasarle el set que realmente se ve en el tablero
+// (filtrado por persona/cliente/búsqueda) y que los KPIs de cabecera lo reflejen.
+// `allTasks` se usa solo para resolver bloqueos: una tarea bloqueadora puede
+// estar fuera del filtro y aún así bloquear.
+export function progressOf(list, allTasks) {
+  const arr = Array.isArray(list) ? list : [];
+  const lookup = Array.isArray(allTasks) ? allTasks : arr;
+  const total = arr.length;
+  const done = arr.filter(t => t.status === 'done').length;
+  const wip = arr.filter(t => t.status === 'in-progress').length;
   // Bloqueadas = trabadas por otra tarea sin validar (dependsOn) y aún sin completar.
-  const blocked = list.filter(t => t.status !== 'done' && isTaskBlocked(t, tasks)).length;
+  const blocked = arr.filter(t => t.status !== 'done' && isTaskBlocked(t, lookup)).length;
   const td = today();
-  const overdue = list.filter(t =>
+  const overdue = arr.filter(t =>
     t.dueDate && t.dueDate < td && t.status !== 'done',
   ).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   return { total, done, wip, blocked, overdue, pct };
+}
+
+// Resumen del sprint completo (sin filtros) para el panel de cabecera.
+export function sprintProgress(tasks, sprint) {
+  return progressOf(sprintTasks(tasks, sprint), tasks);
 }
 
 // Días restantes del sprint (hasta end_date, inclusive).
