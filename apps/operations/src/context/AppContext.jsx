@@ -1795,7 +1795,11 @@ export function AppProvider({ children }) {
       const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
-        sbFetch(`tasks?select=${TASK_COLS}&order=created_at.asc&limit=2000`, { headers: { 'Prefer': 'return=representation' } }),
+        // order=created_at.DESC: si algún día se supera el límite, se descartan
+        // las MÁS VIEJAS (probablemente done/archivadas) y nunca las recién
+        // creadas. Con asc + límite, una tarea nueva podía "desaparecer" al
+        // recargar una vez pasado el tope. Límite amplio para no recortar.
+        sbFetch(`tasks?select=${TASK_COLS}&order=created_at.desc&limit=10000`, { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('briefings?id=eq.latest&select=*', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('report_feedback?select=*&order=created_at.desc&limit=20', { headers: { 'Prefer': 'return=representation' } }),
         sbFetch('task_proposals?select=*&order=created_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } }),
