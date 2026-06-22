@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Gauge, Zap, FolderOpen, FileText, Folder, Link2, ExternalLink,
-  Plus, Trash2, AlertTriangle, RefreshCw,
+  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check,
 } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { fetchBriefings } from '../lib/api.js';
@@ -12,6 +12,7 @@ const TABS = [
   { id: 'resumen', label: 'Resumen de grupos', Icon: Gauge },
   { id: 'plantillas', label: 'Plantillas', Icon: Zap },
   { id: 'enlaces', label: 'Enlaces y carpetas', Icon: FolderOpen },
+  { id: 'walink', label: 'Link de WhatsApp', Icon: MessageCircle },
 ];
 
 // ── Chip de score 0-100 con color ────────────────────────────────────────────
@@ -179,6 +180,117 @@ function EnlacesCarpetas() {
   );
 }
 
+// ── Generador de links de WhatsApp (wa.me) con el número de soporte ───────────
+// Arma un link tipo https://wa.me/<numero>?text=<mensaje> para que, al abrirlo,
+// se inicie un chat con el WhatsApp de soporte y el mensaje ya escrito. El
+// número se guarda en la config para no tener que reescribirlo cada vez.
+function GeneradorWaLink() {
+  const { supportNumber, saveSupportNumber } = useSoporte();
+  const [number, setNumber] = useState(supportNumber || '');
+  const [message, setMessage] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [savedHint, setSavedHint] = useState(false);
+
+  // Si la config carga/llega después de montar, reflejar el número guardado
+  // (sin pisar lo que el usuario esté tipeando: solo cuando aún está vacío).
+  useEffect(() => { setNumber((n) => (n ? n : supportNumber || '')); }, [supportNumber]);
+
+  const digits = number.replace(/\D/g, '');
+  const link = digits
+    ? `https://wa.me/${digits}${message.trim() ? `?text=${encodeURIComponent(message)}` : ''}`
+    : '';
+
+  // Persistir el número (solo dígitos) cuando cambió respecto del guardado.
+  const persistNumber = async () => {
+    if (digits === (supportNumber || '')) return;
+    await saveSupportNumber(digits);
+    setSavedHint(true);
+    setTimeout(() => setSavedHint(false), 1600);
+  };
+
+  const copy = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* clipboard no disponible */ }
+  };
+
+  return (
+    <div className="p-4 max-md:p-3 max-w-[760px]">
+      <div className="text-[12px] text-text3 mb-3">
+        Generá un link de WhatsApp con el número de soporte y el mensaje que quieras. Quien lo abra inicia el chat con el texto ya escrito.
+      </div>
+
+      {/* Número de soporte (se recuerda) */}
+      <div className="rounded-[12px] border border-border bg-surface p-3 mb-3 flex flex-col gap-1.5">
+        <label className="text-[12px] font-semibold text-text2">Número de soporte</label>
+        <div className="flex items-center gap-2 max-md:flex-col max-md:items-stretch">
+          <input
+            value={number}
+            onChange={(e) => setNumber(e.target.value)}
+            onBlur={persistNumber}
+            inputMode="tel"
+            placeholder="Ej. 5492915056739 (código de país, sin + ni espacios)"
+            className="flex-1 h-9 px-3 text-[13px] rounded-[10px] border border-border outline-none focus:border-[#F59E0B]"
+          />
+          {savedHint && (
+            <span className="text-[11.5px] text-[#15803D] font-semibold flex items-center gap-1 shrink-0">
+              <Check size={13} /> Guardado
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-text3">Se guarda para la próxima vez. Incluí el código de país (ej. 54 para Argentina).</div>
+      </div>
+
+      {/* Mensaje */}
+      <div className="rounded-[12px] border border-border bg-surface p-3 mb-3 flex flex-col gap-1.5">
+        <label className="text-[12px] font-semibold text-text2">Mensaje (opcional)</label>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={4}
+          placeholder="Hola! Quería consultar por…"
+          className="px-3 py-2 text-[13px] rounded-[10px] border border-border outline-none focus:border-[#F59E0B] resize-y leading-snug"
+        />
+      </div>
+
+      {/* Link generado + acciones */}
+      <div className="rounded-[12px] border border-border bg-white p-3 flex flex-col gap-2.5">
+        <label className="text-[12px] font-semibold text-text2">Link generado</label>
+        {link ? (
+          <div className="text-[12.5px] text-[#1D4ED8] bg-surface2 rounded-[10px] px-3 py-2 break-all font-mono leading-snug">
+            {link}
+          </div>
+        ) : (
+          <div className="text-[12.5px] text-text3 bg-surface2 rounded-[10px] px-3 py-2">
+            Cargá el número de soporte para generar el link.
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={copy}
+            disabled={!link}
+            className={`py-2 px-3.5 rounded-[10px] border-0 text-[12.5px] font-bold flex items-center gap-1.5 ${link ? 'bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]' : 'bg-surface2 text-text3 cursor-default'}`}
+          >
+            {copied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+          </button>
+          <a
+            href={link || undefined}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => { if (!link) e.preventDefault(); }}
+            className={`py-2 px-3 rounded-[10px] border text-[12.5px] font-semibold flex items-center gap-1.5 ${link ? 'border-border bg-white text-text2 cursor-pointer hover:bg-surface2' : 'border-border bg-white text-text3 cursor-default pointer-events-none opacity-60'}`}
+          >
+            <ExternalLink size={13} /> Probar
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página Recursos ───────────────────────────────────────────────────────────
 export default function RecursosPage() {
   const [params, setParams] = useSearchParams();
@@ -216,6 +328,7 @@ export default function RecursosPage() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'resumen' && <ResumenGrupos />}
         {tab === 'enlaces' && <EnlacesCarpetas />}
+        {tab === 'walink' && <GeneradorWaLink />}
         {tab === 'plantillas' && (
           <div className="h-full min-h-0 p-3 max-md:p-0">
             <div className="h-full min-h-0"><PlantillasPage /></div>
