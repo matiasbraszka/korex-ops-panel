@@ -76,6 +76,33 @@ export async function patchSoporteConfig(partial) {
   });
 }
 
+// Acorta un link de WhatsApp con el acortador propio (go.metodokorex.com).
+// Devuelve el code corto (string) o lanza si la URL no es válida.
+export async function createShortLink(url) {
+  const res = await sbFetch('rpc/short_link_create', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ p_url: url }),
+  });
+  const code = Array.isArray(res) ? res[0] : res;
+  if (typeof code === 'string' && code) return code;
+  if (code && typeof code.short_link_create === 'string') return code.short_link_create;
+  throw new Error('no_code');
+}
+
+// Clicks de varios links cortos a la vez → { [code]: clicks }.
+export async function fetchShortLinkClicks(codes) {
+  const list = [...new Set((codes || []).filter(Boolean))];
+  if (!list.length) return {};
+  const rows = await sbFetch(
+    `short_links?select=code,clicks&code=in.(${list.map((c) => encodeURIComponent(c)).join(',')})`,
+    { headers: { Prefer: 'return=representation' } },
+  ).catch(() => []);
+  const map = {};
+  for (const r of Array.isArray(rows) ? rows : []) map[r.code] = r.clicks;
+  return map;
+}
+
 // Briefings vivos por cliente (sección Recursos → Resumen de grupos).
 export async function fetchBriefings() {
   const rows = await sbFetch(
