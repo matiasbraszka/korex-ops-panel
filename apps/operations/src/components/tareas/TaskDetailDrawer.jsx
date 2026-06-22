@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
+import PriorityPicker from './PriorityPicker';
 
 const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
 
@@ -25,7 +26,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const subPct = checklist.length ? Math.round(subDone / checklist.length * 100) : 0;
   const phaseLabel = (getAllPhases(client)[task.phase] || {}).label || '—';
   const owner = (() => { const f = String(task.assignee || '').split(',')[0]?.trim().toLowerCase(); return (teamMembers || []).find(m => m.name?.toLowerCase() === f || m.name?.toLowerCase().split(' ')[0] === f); })();
-  const commentCount = (taskComments || []).filter(c => c.task_id === task.id && !c.parent_id).length;
+  const commentCount = (taskComments || []).filter(c => c.task_id === task.id && !c.parent_id && (!c.kind || c.kind === 'user')).length;
 
   const saveChecklist = (next) => updateTask(task.id, { checklist: next });
   const addItem = () => { const t = newItem.trim(); if (!t) return; saveChecklist([...checklist, { id: mkId(), text: t, done: false }]); setNewItem(''); };
@@ -105,6 +106,10 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             </div>
             <div style={metaRow}><span style={metaLabel}>Cliente</span><span style={{ fontSize: 13, fontWeight: 600, color: '#1A1D26', textAlign: 'right', whiteSpace: 'nowrap' }}>{client?.name || '—'}</span></div>
             <div style={metaRow}><span style={metaLabel}>Objetivo / fase</span><span style={{ fontSize: 13, fontWeight: 600, color: '#1A1D26', textAlign: 'right' }}>{phaseLabel}</span></div>
+            <div style={metaRow}>
+              <span style={metaLabel}>Prioridad</span>
+              <PriorityPicker value={task.priority} onChange={(p) => updateTask(task.id, { priority: p || 'normal' })} variant="chip" />
+            </div>
             <div style={metaRow}>
               <span style={metaLabel}>Área</span>
               <DepartmentPicker value={task.department} onChange={(d) => updateTask(task.id, { department: d })} variant="chip" />

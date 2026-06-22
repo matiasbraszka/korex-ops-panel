@@ -350,7 +350,7 @@ function MainLayout() {
     currentUser?.isAdmin && { id: 'admin',     label: 'Administración', items: adminItems,      ...areaTokens.admin },
   ].filter(Boolean);
 
-  const urgentCount = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length;
+  const urgentCount = tasks.filter(t => t.priority === 'super-alta' && t.status !== 'done').length;
   const pathPrefix = location.pathname.split('/').filter(Boolean)[0] || 'operations';
   const activeArea = areas.find((a) => a.id === pathPrefix) || areas[0];
   const mobileItems = activeArea?.items || [];
