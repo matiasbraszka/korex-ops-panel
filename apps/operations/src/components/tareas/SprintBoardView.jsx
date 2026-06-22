@@ -154,7 +154,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
               onDragOver={(e) => { e.preventDefault(); setOverCol(col.status); }}
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOverCol(null); }}
               onDrop={(e) => onDrop(col.status, e)}
-              style={{ flex: 1, minWidth: 238, background: col.bg, borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, alignSelf: 'flex-start', outline: overCol === col.status ? '2px dashed #5B7CF5' : 'none', outlineOffset: -3 }}>
+              style={{ flex: 1, minWidth: 238, background: col.bg, borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, alignSelf: draggedId ? 'stretch' : 'flex-start', outline: overCol === col.status ? '2px dashed #5B7CF5' : 'none', outlineOffset: -3 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 0' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.01em', color: col.tx, whiteSpace: 'nowrap' }}>{col.name || col.label}</span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: atCap ? '#DC2626' : '#9CA3AF' }}>{col.wip ? `${list.length}/${col.wip}` : list.length}</span>
