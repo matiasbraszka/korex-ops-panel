@@ -595,6 +595,10 @@ Deno.serve(async (req: Request) => {
         guests: guestEmails.join(","),
         location: meetingLink || undefined,
         colorId: cal.gcal_color_id || undefined,
+        // La cuenta organizadora (admin@) confirma su asistencia con un "sí"
+        // automáticamente, así la reserva le aparece confirmada en su
+        // calendario sin tener que aceptar la invitación a mano.
+        acceptSelf: true,
       });
       if (!calRes?.ok) {
         console.error("agenda-publica: fallo el Apps Script", calRes);
