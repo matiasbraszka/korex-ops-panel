@@ -69,10 +69,11 @@ export const SPRINT_COLUMNS = [
   { status: 'priorizado',  label: 'Priorizado',   bg: '#EEF2FF', tx: '#5B7CF5' },
   { status: 'in-progress', label: 'En curso',     bg: '#FFF7ED', tx: '#B45309', wip: SPRINT_WIP_DEFAULT },
   { status: 'en-revision', label: 'En revisión',  bg: '#FDF2F8', tx: '#BE185D' },
-  { status: 'done',        label: 'Validado',     bg: '#ECFDF5', tx: '#15803D' },
   // Columna de bloqueos: tareas que no pueden avanzar (bloqueadas a mano o por
   // una dependencia sin validar). El tablero las manda acá automáticamente.
+  // Va antes de "Validado" para que el flujo termine en validado.
   { status: 'blocked',     label: 'Bloqueos',     bg: '#FEF2F2', tx: '#DC2626' },
+  { status: 'done',        label: 'Validado',     bg: '#ECFDF5', tx: '#15803D' },
 ];
 
 // Áreas / departamento responsable de la tarea. Ícono SVG (path) + color, según
