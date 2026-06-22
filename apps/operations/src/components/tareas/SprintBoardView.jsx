@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
@@ -111,29 +111,34 @@ export default function SprintBoardView({ scope = 'cli' }) {
 
   const prog = sprintProgress(tasks, activeSprint);
   const remaining = Math.max(0, prog.total - prog.done); // tareas que faltan terminar
+  const daysLeft = sprintDaysLeft(activeSprint);
 
   return (
     <div>
-      {/* KPIs minimalistas: solo Avance y En curso, en una tira compacta. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 12, padding: '11px 16px', marginBottom: 16, boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+      {/* Fila 2: info del sprint + KPIs (Avance / En curso) + buscador, todo junto. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 12, padding: '9px 14px', marginBottom: 16, boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF' }}>Avance</span>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{prog.done}<span style={{ color: '#9CA3AF', fontWeight: 600 }}>/{prog.total}</span></span>
-          <span style={{ display: 'block', width: 84, height: 6, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', background: '#5B7CF5', width: prog.pct + '%' }} /></span>
+          <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{activeSprint?.name || 'Sprint'}</span>
+          {daysLeft != null && <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>{daysLeft === 0 ? 'cierra hoy' : `quedan ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`}</span>}
         </div>
         <span style={{ width: 1, height: 20, background: '#E2E5EB' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF' }}>En curso</span>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{prog.wip}<span style={{ color: '#9CA3AF', fontWeight: 600 }}>/{remaining}</span></span>
-          <span style={{ fontSize: 12, color: '#9CA3AF' }}>por terminar</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF' }}>Avance</span>
+          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{prog.done}<span style={{ color: '#9CA3AF', fontWeight: 600 }}>/{prog.total}</span></span>
+          <span style={{ display: 'block', width: 70, height: 6, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', background: '#5B7CF5', width: prog.pct + '%' }} /></span>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, padding: '8px 12px', width: 320, maxWidth: '100%', marginBottom: 16 }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar tarea, objetivo o cliente…"
-          style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1A1D26', fontFamily: 'inherit' }} />
-        {query && <span onClick={() => setQuery('')} title="Limpiar" style={{ cursor: 'pointer', color: '#9CA3AF', display: 'flex' }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg></span>}
+        <span style={{ width: 1, height: 20, background: '#E2E5EB' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF' }}>En curso</span>
+          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{prog.wip}<span style={{ color: '#9CA3AF', fontWeight: 600 }}>/{remaining}</span></span>
+        </div>
+        <span style={{ flex: 1, minWidth: 16 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F7F8FA', border: '1px solid #E2E5EB', borderRadius: 9, padding: '6px 11px', width: 240, maxWidth: '100%' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar tarea o cliente…"
+            style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1A1D26', fontFamily: 'inherit' }} />
+          {query && <span onClick={() => setQuery('')} title="Limpiar" style={{ cursor: 'pointer', color: '#9CA3AF', display: 'flex' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg></span>}
+        </div>
       </div>
 
       {wipMsg && (

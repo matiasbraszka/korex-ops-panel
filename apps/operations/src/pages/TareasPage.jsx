@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { TAREAS_LAYOUT } from '../utils/constants';
 import ViewToggle from '../components/tareas/ViewToggle';
 import FiltersBar from '../components/tareas/FiltersBar';
-import TareasBar from '../components/tareas/TareasBar';
+import TareasToolbar from '../components/tareas/TareasToolbar';
 import RoadmapView from '../components/tareas/RoadmapView';
 import TimelineView from '../components/tareas/TimelineView';
 import WeeklyTodoView from '../components/tareas/WeeklyTodoView';
@@ -68,15 +68,14 @@ export default function TareasPage() {
     setView(isSprint ? 'sprint' : 'lista');
   };
 
-  const showBar = isSprint && (view === 'objetivos' || view === 'sprint' || view === 'lista');
-
   return (
     <div className="space-y-4">
-      <ViewToggle value={view} onChange={setView} views={VIEWS} />
-
-      {/* Barra de contexto del diseño (Objetivos + Sprint) */}
-      {showBar && (
-        <TareasBar view={view} scope={scope} setScope={setScope} onlySprint={onlySprint} setOnlySprint={setOnlySprint} />
+      {/* Sprint: toolbar unificado (pestañas + filtros en una sola fila).
+          Legacy: pestañas + barra de filtros vieja. */}
+      {isSprint ? (
+        <TareasToolbar view={view} setView={setView} views={VIEWS} scope={scope} setScope={setScope} onlySprint={onlySprint} setOnlySprint={setOnlySprint} />
+      ) : (
+        <ViewToggle value={view} onChange={setView} views={VIEWS} />
       )}
       {/* Layout legacy usa la barra de filtros vieja */}
       {!isSprint && view !== 'mi-semana' && <FiltersBar />}
