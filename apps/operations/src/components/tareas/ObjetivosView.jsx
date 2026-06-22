@@ -32,7 +32,7 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   const {
     clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
-    taskComments, unreadCommentTaskIds,
+    taskComments, unreadCommentTaskIds, addTaskToSprint,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
@@ -104,7 +104,17 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     const title = newTitle.trim();
     setNewTitle(''); setAdding(null);
     if (!title) return;
-    createTask(title, clientId, '', 'normal', 'backlog', '', null, phaseKey === 'otras' ? null : phaseKey);
+    // Bugfix: un usuario no-admin solo ve las tareas que le pertenecen
+    // (userOwnsTask). Si crea una tarea SIN responsable, queda invisible para él
+    // y "desaparece" apenas la crea. La asignamos a quien la crea por defecto;
+    // puede reasignarla desde la fila. Los admin siguen creando sin responsable.
+    const me = (teamMembers || []).find(m => m.id === currentUser?.id);
+    const defaultAssignee = restricted ? (me?.name || currentUser?.name || '') : '';
+    const created = createTask(title, clientId, defaultAssignee, 'normal', 'backlog', '', null, phaseKey === 'otras' ? null : phaseKey);
+    // Bugfix: con el filtro "solo sprint" activo, una tarea recién creada (que
+    // todavía no está en el sprint) quedaría oculta y "desaparece". Si estamos
+    // en esa vista, la metemos al sprint activo para que se mantenga visible.
+    if (onlySprint && activeSprint && created?.id) addTaskToSprint(created.id, { assignee: defaultAssignee || undefined });
   });
   // Marcar/desmarcar completada desde la fila (sin abrir la ficha).
   const toggleDone = (t) => updateTask(t.id, { status: t.status === 'done' ? 'backlog' : 'done' });
