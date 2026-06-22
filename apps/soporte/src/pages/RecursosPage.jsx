@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Gauge, Zap, FolderOpen, FileText, Folder, Link2, ExternalLink,
-  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check,
+  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check, Save,
 } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { fetchBriefings } from '../lib/api.js';
@@ -180,25 +180,31 @@ function EnlacesCarpetas() {
   );
 }
 
+// Número de soporte por defecto (predefinido). Si la config tiene uno guardado,
+// ese tiene prioridad; si no, se usa este. Solo dígitos, con código de país.
+const DEFAULT_SUPPORT_NUMBER = '5492915056739';
+
 // ── Generador de links de WhatsApp (wa.me) con el número de soporte ───────────
 // Arma un link tipo https://wa.me/<numero>?text=<mensaje> para que, al abrirlo,
 // se inicie un chat con el WhatsApp de soporte y el mensaje ya escrito. El
-// número se guarda en la config para no tener que reescribirlo cada vez.
+// número viene predefinido (o el guardado en config) y los links que se generan
+// se pueden guardar en un historial para reutilizarlos.
 function GeneradorWaLink() {
-  const { supportNumber, saveSupportNumber } = useSoporte();
-  const [number, setNumber] = useState(supportNumber || '');
+  const { supportNumber, saveSupportNumber, waLinks, saveWaLinks } = useSoporte();
+  const [number, setNumber] = useState(supportNumber || DEFAULT_SUPPORT_NUMBER);
   const [message, setMessage] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState('');
   const [savedHint, setSavedHint] = useState(false);
 
-  // Si la config carga/llega después de montar, reflejar el número guardado
-  // (sin pisar lo que el usuario esté tipeando: solo cuando aún está vacío).
-  useEffect(() => { setNumber((n) => (n ? n : supportNumber || '')); }, [supportNumber]);
+  // Si la config llega después de montar, reflejar el número guardado (sin pisar
+  // lo que el usuario esté tipeando). Si no hay guardado, queda el predefinido.
+  useEffect(() => { if (supportNumber) setNumber((n) => (n ? n : supportNumber)); }, [supportNumber]);
 
   const digits = number.replace(/\D/g, '');
-  const link = digits
-    ? `https://wa.me/${digits}${message.trim() ? `?text=${encodeURIComponent(message)}` : ''}`
-    : '';
+  const buildLink = (d, msg) => (d ? `https://wa.me/${d}${msg.trim() ? `?text=${encodeURIComponent(msg)}` : ''}` : '');
+  const link = buildLink(digits, message);
+  const saved = waLinks || [];
+  const alreadySaved = link && saved.some((l) => l.url === link);
 
   // Persistir el número (solo dígitos) cuando cambió respecto del guardado.
   const persistNumber = async () => {
@@ -208,14 +214,24 @@ function GeneradorWaLink() {
     setTimeout(() => setSavedHint(false), 1600);
   };
 
-  const copy = async () => {
-    if (!link) return;
+  const copy = async (text) => {
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      await navigator.clipboard.writeText(text);
+      setCopiedUrl(text);
+      setTimeout(() => setCopiedUrl(''), 1600);
     } catch { /* clipboard no disponible */ }
   };
+
+  // Guardar el link actual en el historial (al principio, sin duplicar).
+  const saveLink = async () => {
+    if (!link || alreadySaved) return;
+    const item = { url: link, message: message.trim(), number: digits, created_at: new Date().toISOString() };
+    await saveWaLinks([item, ...saved]);
+    setMessage('');
+  };
+
+  const removeLink = async (url) => saveWaLinks(saved.filter((l) => l.url !== url));
 
   return (
     <div className="p-4 max-md:p-3 max-w-[760px]">
@@ -223,7 +239,7 @@ function GeneradorWaLink() {
         Generá un link de WhatsApp con el número de soporte y el mensaje que quieras. Quien lo abra inicia el chat con el texto ya escrito.
       </div>
 
-      {/* Número de soporte (se recuerda) */}
+      {/* Número de soporte (predefinido, se recuerda) */}
       <div className="rounded-[12px] border border-border bg-surface p-3 mb-3 flex flex-col gap-1.5">
         <label className="text-[12px] font-semibold text-text2">Número de soporte</label>
         <div className="flex items-center gap-2 max-md:flex-col max-md:items-stretch">
@@ -241,7 +257,7 @@ function GeneradorWaLink() {
             </span>
           )}
         </div>
-        <div className="text-[11px] text-text3">Se guarda para la próxima vez. Incluí el código de país (ej. 54 para Argentina).</div>
+        <div className="text-[11px] text-text3">Viene predefinido y se recuerda. Incluí el código de país (ej. 54 para Argentina).</div>
       </div>
 
       {/* Mensaje */}
@@ -268,13 +284,20 @@ function GeneradorWaLink() {
             Cargá el número de soporte para generar el link.
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={copy}
+            onClick={() => copy(link)}
             disabled={!link}
             className={`py-2 px-3.5 rounded-[10px] border-0 text-[12.5px] font-bold flex items-center gap-1.5 ${link ? 'bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]' : 'bg-surface2 text-text3 cursor-default'}`}
           >
-            {copied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+            {copiedUrl === link && link ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+          </button>
+          <button
+            onClick={saveLink}
+            disabled={!link || alreadySaved}
+            className={`py-2 px-3 rounded-[10px] border text-[12.5px] font-semibold flex items-center gap-1.5 ${link && !alreadySaved ? 'border-[#F59E0B]/50 bg-[#FEF0D7] text-[#B45309] cursor-pointer hover:bg-[#FDE6BC]' : 'border-border bg-white text-text3 cursor-default'}`}
+          >
+            <Save size={13} /> {alreadySaved ? 'Guardado' : 'Guardar'}
           </button>
           <a
             href={link || undefined}
@@ -287,6 +310,40 @@ function GeneradorWaLink() {
           </a>
         </div>
       </div>
+
+      {/* Historial de links guardados */}
+      {saved.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[12px] font-semibold text-text2 mb-2">Links guardados ({saved.length})</div>
+          <div className="flex flex-col gap-2">
+            {saved.map((l) => (
+              <div key={l.url} className="group flex items-center gap-3 rounded-[12px] border border-border bg-white p-3 hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)] transition-all duration-150">
+                <span className="w-9 h-9 rounded-[10px] bg-[#FEF0D7] flex items-center justify-center shrink-0">
+                  <MessageCircle size={16} className="text-[#B45309]" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold truncate">{l.message || 'Sin mensaje'}</div>
+                  <div className="text-[11px] text-text3 truncate font-mono">{l.url}</div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => copy(l.url)} title="Copiar"
+                          className="border border-border bg-white rounded-[9px] text-text3 hover:text-[#B45309] hover:border-[#F59E0B]/45 cursor-pointer p-2">
+                    {copiedUrl === l.url ? <Check size={14} className="text-[#15803D]" /> : <Copy size={14} />}
+                  </button>
+                  <a href={l.url} target="_blank" rel="noreferrer" title="Abrir"
+                     className="border border-border bg-white rounded-[9px] text-text3 hover:text-text2 hover:bg-surface2 cursor-pointer p-2 flex items-center">
+                    <ExternalLink size={14} />
+                  </a>
+                  <button onClick={() => removeLink(l.url)} title="Eliminar"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity border border-border bg-white rounded-[9px] text-text3 hover:text-[#DC2626] hover:border-[#DC2626]/40 cursor-pointer p-2">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
