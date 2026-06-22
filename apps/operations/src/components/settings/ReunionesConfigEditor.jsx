@@ -33,6 +33,8 @@ export default function ReunionesConfigEditor() {
 
   const [grupos, setGrupos] = useState(DEFAULT_GRUPOS);
   const [slackIds, setSlackIds] = useState({}); // member_id -> slack_id
+  const [testMode, setTestMode] = useState(false);
+  const [testDmTo, setTestDmTo] = useState('matias');
   const [dirty, setDirty] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -42,8 +44,12 @@ export default function ReunionesConfigEditor() {
     (async () => {
       try {
         const rows = await sbFetch('app_settings?key=eq.reuniones_config&select=value');
-        const cfg = Array.isArray(rows) && rows[0]?.value?.grupos ? rows[0].value.grupos : {};
-        if (alive) setGrupos({ ...DEFAULT_GRUPOS, ...cfg });
+        const val = (Array.isArray(rows) && rows[0]?.value) || {};
+        if (alive) {
+          setGrupos({ ...DEFAULT_GRUPOS, ...(val.grupos || {}) });
+          setTestMode(val.test_mode === true);
+          setTestDmTo(val.test_dm_to || 'matias');
+        }
       } catch { /* usa defaults */ }
       if (alive) setLoaded(true);
     })();
@@ -70,11 +76,11 @@ export default function ReunionesConfigEditor() {
   };
 
   const handleSave = async () => {
-    // 1) Guardar canales (upsert de la key reuniones_config).
+    // 1) Guardar canales + flags (upsert de la key reuniones_config).
     await sbFetch('app_settings', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-      body: JSON.stringify({ key: 'reuniones_config', value: { grupos } }),
+      body: JSON.stringify({ key: 'reuniones_config', value: { grupos, test_mode: testMode, test_dm_to: testDmTo } }),
     });
     // 2) Guardar solo los slack_id que cambiaron.
     const changed = TEAM.filter((m) => (slackIds[m.id] || '') !== (m.slack_id || ''));
@@ -87,10 +93,12 @@ export default function ReunionesConfigEditor() {
     for (const m of TEAM) map[m.id] = m.slack_id || '';
     setSlackIds(map);
     setDirty(false);
-    // recargar canales
+    // recargar config
     sbFetch('app_settings?key=eq.reuniones_config&select=value').then((rows) => {
-      const cfg = Array.isArray(rows) && rows[0]?.value?.grupos ? rows[0].value.grupos : {};
-      setGrupos({ ...DEFAULT_GRUPOS, ...cfg });
+      const val = (Array.isArray(rows) && rows[0]?.value) || {};
+      setGrupos({ ...DEFAULT_GRUPOS, ...(val.grupos || {}) });
+      setTestMode(val.test_mode === true);
+      setTestDmTo(val.test_dm_to || 'matias');
     }).catch(() => {});
   };
 
@@ -106,6 +114,41 @@ export default function ReunionesConfigEditor() {
           de reunión y el Slack de cada persona para el DM.
         </p>
       </div>
+
+      {/* Modo prueba */}
+      <Section title="Modo prueba">
+        <div className={`rounded-lg border p-3 ${testMode ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={testMode}
+              onChange={(e) => { setTestMode(e.target.checked); setDirty(true); }}
+              className="mt-0.5 w-4 h-4 accent-amber-500 cursor-pointer"
+            />
+            <div className="flex-1">
+              <div className="text-[12.5px] font-semibold text-gray-800">Activar modo prueba</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Mientras esté activo, al "Enviar" <b>no</b> se modifican tareas, <b>no</b> se mandan DMs al equipo y <b>no</b> se postea a los canales.
+                En su lugar se manda un único mensaje con el preview completo a la persona elegida abajo. Apagalo cuando quieras que salga de verdad.
+              </div>
+            </div>
+          </label>
+          {testMode && (
+            <div className="flex items-center gap-2 mt-2.5 ml-6">
+              <span className="text-[11px] text-gray-600">Mandar el preview a:</span>
+              <select
+                value={testDmTo}
+                onChange={(e) => { setTestDmTo(e.target.value); setDirty(true); }}
+                className="py-1.5 px-2.5 text-[12px] border border-gray-200 rounded outline-none focus:border-amber-500 bg-white"
+              >
+                {TEAM.filter((m) => m.slack_id).map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </Section>
 
       {/* Canales por grupo */}
       <Section title="Canal de Slack por tipo de reunión">
