@@ -288,11 +288,16 @@ async function handleSend(llamadaId: string): Promise<Response> {
   const subtipo = String(payload.subtipo || llamada.equipo_subtipo || "equipo");
   const recordingUrl = llamada.recording_url || payload.recording_url || "";
 
-  // Config de grupos + token de slack
+  // Config de grupos + flags + token de slack
   const { data: cfgRow } = await supabase
     .from("app_settings").select("value").eq("key", "reuniones_config").maybeSingle();
-  const grupos = (cfgRow?.value as any)?.grupos || {};
+  const cfg = (cfgRow?.value as any) || {};
+  const grupos = cfg.grupos || {};
   const groupChannel = String(grupos?.[subtipo]?.channel || "");
+  // Modo prueba: NO toca tareas, NO DMea al equipo, NO postea al canal. En su lugar
+  // manda un unico DM con el preview completo a test_dm_to (por defecto Matias).
+  const testMode = cfg.test_mode === true;
+  const testDmTo = String(cfg.test_dm_to || "matias");
   const token = await slackToken(supabase);
 
   // Roster (slack_id por persona)
@@ -300,73 +305,98 @@ async function handleSend(llamadaId: string): Promise<Response> {
   const memberById: Record<string, any> = {};
   for (const m of team || []) memberById[m.id] = m;
 
-  const applied: any[] = [];      // resumen de mutaciones para devolver a la UI
-  const channelMentions: string[] = []; // fallbacks que se mencionan en el canal
-
+  // 1) Armar el reporte por persona (sin aplicar nada todavia).
+  const reportes: any[] = [];
   for (const persona of payload.personas as any[]) {
     const member = persona.member_id ? memberById[persona.member_id] : null;
     const nombre = persona.nombre || member?.name || "Equipo";
     const lines: string[] = [];
-
-    // 1) Aplicar mutaciones a tareas
+    const muts: any[] = [];
     for (const acc of persona.accionables || []) {
       const taskId = acc.match_task_id || null;
       const detalle = acc.detalle || acc.texto || "";
-
       if (taskId && acc.modo === "subtask") {
-        const { data: tk } = await supabase.from("tasks").select("checklist").eq("id", taskId).maybeSingle();
-        if (tk) {
-          const checklist = Array.isArray(tk.checklist) ? tk.checklist : [];
-          checklist.push({ id: rndId("cl"), text: detalle, done: false });
-          await supabase.from("tasks").update({ checklist }).eq("id", taskId);
-          applied.push({ member_id: persona.member_id, task_id: taskId, modo: "subtask" });
-          lines.push(`• [subtarea agregada] ${detalle}`);
-        }
+        muts.push({ taskId, modo: "subtask", detalle });
+        lines.push(`• [subtarea] ${detalle}`);
       } else if (taskId && acc.modo === "comment") {
-        await supabase.from("task_comments").insert({
-          id: rndId("tc"),
-          task_id: taskId,
-          parent_id: null,
-          author_id: "matias",
-          body: `📋 *De la reunión "${llamada.titulo}":*\n${detalle}`,
-          kind: "report",
-        });
-        applied.push({ member_id: persona.member_id, task_id: taskId, modo: "comment" });
+        muts.push({ taskId, modo: "comment", detalle, texto: acc.texto });
         lines.push(`• [comentario en tarea] ${acc.texto}`);
       } else {
-        // accionable suelto (sin tarea del sprint)
         lines.push(`• ${acc.texto}${acc.cliente ? ` _(${acc.cliente})_` : ""}`);
       }
     }
+    if (lines.length) reportes.push({ persona, member, nombre, lines, muts });
+  }
 
-    if (!lines.length) continue;
+  // ── MODO PRUEBA: preview consolidado a una sola persona, sin efectos reales ──
+  if (testMode) {
+    const tester = memberById[testDmTo];
+    let preview =
+      `:test_tube: *MODO PRUEBA — Reporte de "${llamada.titulo}"*\n` +
+      `_(nada se envió al equipo ni se modificaron tareas)_\n`;
+    for (const r of reportes) {
+      preview += `\n*→ ${r.nombre}* (DM):\n${r.lines.join("\n")}\n`;
+    }
+    const bullets = String(payload.canal_post || "").trim();
+    preview +=
+      `\n*→ Iría al canal de ${SUBTIPO_LABEL[subtipo] || "Equipo"}${groupChannel ? "" : " (SIN canal configurado)"}*:\n` +
+      (bullets ? `${bullets}\n` : "(sin texto)\n") +
+      (recordingUrl ? `:movie_camera: ${recordingUrl}\n` : "");
 
-    // 2) Mensaje personal
+    let delivered = false;
+    if (tester?.slack_id && token) delivered = await postSlackDM(token, tester.slack_id, preview);
+    // En prueba NO se marca como enviado: queda en draft para el envío real luego.
+    return j(200, {
+      ok: true,
+      status: "draft",
+      test_mode: true,
+      preview_dm_to: testDmTo,
+      preview_delivered: delivered,
+      personas: reportes.length,
+    });
+  }
+
+  // ── ENVÍO REAL ──
+  const applied: any[] = [];
+  const channelMentions: string[] = [];
+  for (const r of reportes) {
+    const { persona, member, nombre, lines, muts } = r;
+    // 2) Aplicar mutaciones a tareas
+    for (const m of muts) {
+      if (m.modo === "subtask") {
+        const { data: tk } = await supabase.from("tasks").select("checklist").eq("id", m.taskId).maybeSingle();
+        if (tk) {
+          const checklist = Array.isArray(tk.checklist) ? tk.checklist : [];
+          checklist.push({ id: rndId("cl"), text: m.detalle, done: false });
+          await supabase.from("tasks").update({ checklist }).eq("id", m.taskId);
+          applied.push({ member_id: persona.member_id, task_id: m.taskId, modo: "subtask" });
+        }
+      } else {
+        await supabase.from("task_comments").insert({
+          id: rndId("tc"), task_id: m.taskId, parent_id: null, author_id: "matias",
+          body: `📋 *De la reunión "${llamada.titulo}":*\n${m.detalle}`, kind: "report",
+        });
+        applied.push({ member_id: persona.member_id, task_id: m.taskId, modo: "comment" });
+      }
+    }
+
+    // 3) DM personal (con fallback)
     const dmText =
       `:wave: *Reporte de la reunión: ${llamada.titulo}*\n` +
       `Estos son tus accionables:\n${lines.join("\n")}` +
       (recordingUrl ? `\n\n:movie_camera: Grabación: ${recordingUrl}` : "");
-
     let delivered = false;
-    if (member?.slack_id && token) {
-      delivered = await postSlackDM(token, member.slack_id, dmText);
-    }
-
-    // 3) Fallback: mencion en canal + notificacion de panel
+    if (member?.slack_id && token) delivered = await postSlackDM(token, member.slack_id, dmText);
     if (!delivered) {
       if (member?.slack_id) channelMentions.push(`<@${member.slack_id}>`);
       else channelMentions.push(`*${nombre}*`);
       if (persona.member_id) {
         await supabase.from("notifications").insert({
-          id: rndId("ntf"),
-          recipient_id: persona.member_id,
-          type: "reunion_reporte",
-          title: `Accionables de la reunión: ${llamada.titulo}`,
-          body: lines.join("\n").slice(0, 1000),
+          id: rndId("ntf"), recipient_id: persona.member_id, type: "reunion_reporte",
+          title: `Accionables de la reunión: ${llamada.titulo}`, body: lines.join("\n").slice(0, 1000),
         });
       }
     }
-
     applied.push({ member_id: persona.member_id, dm: delivered });
   }
 

@@ -21,6 +21,7 @@ export default function ReunionReporte({ llamada }) {
   const [draft, setDraft] = useState(l.reporte_payload || null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [note, setNote] = useState('');
 
   useEffect(() => { setDraft(l.reporte_payload || null); }, [l.id, l.reporte_payload]);
 
@@ -39,11 +40,14 @@ export default function ReunionReporte({ llamada }) {
   };
 
   const handleSend = async () => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setNote('');
     try {
       // Persistir cualquier edición antes de enviar.
       if (draft) await updateLlamada(l.id, { reporte_payload: draft });
-      await sendReunionReporte(l.id);
+      const res = await sendReunionReporte(l.id);
+      if (res?.test_mode) {
+        setNote('Modo prueba: se mandó el preview completo solo a tu Slack. No se tocó nada del equipo. (Apagá el modo prueba en Settings → Reuniones de equipo para enviar de verdad.)');
+      }
     } catch (e) { setError(String(e.message || e)); }
     setBusy(false);
   };
@@ -100,6 +104,11 @@ export default function ReunionReporte({ llamada }) {
       {error && (
         <div className="flex items-start gap-1.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-lg p-2 mb-2">
           <AlertCircle size={13} className="shrink-0 mt-0.5" /> {error}
+        </div>
+      )}
+      {note && (
+        <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">
+          <AlertCircle size={13} className="shrink-0 mt-0.5" /> {note}
         </div>
       )}
 
