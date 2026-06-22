@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Gauge, Zap, FolderOpen, FileText, Folder, Link2, ExternalLink,
-  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check, Save,
+  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check, Save, Scissors,
 } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { fetchBriefings } from '../lib/api.js';
+import { fetchBriefings, createShortLink, fetchShortLinkClicks } from '../lib/api.js';
 import PlantillasPage from './PlantillasPage.jsx';
 
 const TABS = [
@@ -183,18 +183,24 @@ function EnlacesCarpetas() {
 // Número de soporte por defecto (predefinido). Si la config tiene uno guardado,
 // ese tiene prioridad; si no, se usa este. Solo dígitos, con código de país.
 const DEFAULT_SUPPORT_NUMBER = '5492915056739';
+// Dominio del acortador propio (branded). El link corto queda go.metodokorex.com/<code>.
+const SHORT_BASE = 'https://go.metodokorex.com';
 
 // ── Generador de links de WhatsApp (wa.me) con el número de soporte ───────────
 // Arma un link tipo https://wa.me/<numero>?text=<mensaje> para que, al abrirlo,
 // se inicie un chat con el WhatsApp de soporte y el mensaje ya escrito. El
-// número viene predefinido (o el guardado en config) y los links que se generan
-// se pueden guardar en un historial para reutilizarlos.
+// número viene predefinido (o el guardado en config), se puede acortar con el
+// dominio propio (go.metodokorex.com) y guardar en un historial con sus clicks.
 function GeneradorWaLink() {
   const { supportNumber, saveSupportNumber, waLinks, saveWaLinks } = useSoporte();
   const [number, setNumber] = useState(supportNumber || DEFAULT_SUPPORT_NUMBER);
   const [message, setMessage] = useState('');
   const [copiedUrl, setCopiedUrl] = useState('');
   const [savedHint, setSavedHint] = useState(false);
+  const [short, setShort] = useState('');       // link corto del link actual
+  const [shortening, setShortening] = useState(false);
+  const [shortErr, setShortErr] = useState(false);
+  const [clicksByCode, setClicksByCode] = useState({});
 
   // Si la config llega después de montar, reflejar el número guardado (sin pisar
   // lo que el usuario esté tipeando). Si no hay guardado, queda el predefinido.
@@ -205,6 +211,16 @@ function GeneradorWaLink() {
   const link = buildLink(digits, message);
   const saved = waLinks || [];
   const alreadySaved = link && saved.some((l) => l.url === link);
+
+  // Si cambia el link generado (número/mensaje), el corto anterior ya no aplica.
+  useEffect(() => { setShort(''); setShortErr(false); }, [link]);
+
+  // Clicks de los links cortos guardados (los que tienen code).
+  useEffect(() => {
+    const codes = saved.map((l) => l.code).filter(Boolean);
+    if (!codes.length) { setClicksByCode({}); return; }
+    fetchShortLinkClicks(codes).then(setClicksByCode).catch(() => {});
+  }, [waLinks]);
 
   // Persistir el número (solo dígitos) cuando cambió respecto del guardado.
   const persistNumber = async () => {
@@ -223,12 +239,25 @@ function GeneradorWaLink() {
     } catch { /* clipboard no disponible */ }
   };
 
-  // Guardar el link actual en el historial (al principio, sin duplicar).
+  // Acortar el link actual con el dominio propio.
+  const acortar = async () => {
+    if (!link || shortening) return;
+    setShortening(true); setShortErr(false);
+    try {
+      const code = await createShortLink(link);
+      setShort(`${SHORT_BASE}/${code}`);
+    } catch { setShortErr(true); }
+    finally { setShortening(false); }
+  };
+
+  // Guardar el link actual en el historial (al principio, sin duplicar). Si ya
+  // se acortó, guarda también el link corto y su code (para mostrar clicks).
   const saveLink = async () => {
     if (!link || alreadySaved) return;
-    const item = { url: link, message: message.trim(), number: digits, created_at: new Date().toISOString() };
+    const code = short ? short.split('/').pop() : null;
+    const item = { url: link, short_url: short || null, code, message: message.trim(), number: digits, created_at: new Date().toISOString() };
     await saveWaLinks([item, ...saved]);
-    setMessage('');
+    setMessage(''); setShort('');
   };
 
   const removeLink = async (url) => saveWaLinks(saved.filter((l) => l.url !== url));
@@ -236,7 +265,7 @@ function GeneradorWaLink() {
   return (
     <div className="p-4 max-md:p-3 max-w-[760px]">
       <div className="text-[12px] text-text3 mb-3">
-        Generá un link de WhatsApp con el número de soporte y el mensaje que quieras. Quien lo abra inicia el chat con el texto ya escrito.
+        Generá un link de WhatsApp con el número de soporte y el mensaje que quieras. Quien lo abra inicia el chat con el texto ya escrito. Podés acortarlo con tu dominio.
       </div>
 
       {/* Número de soporte (predefinido, se recuerda) */}
@@ -284,13 +313,34 @@ function GeneradorWaLink() {
             Cargá el número de soporte para generar el link.
           </div>
         )}
+
+        {/* Link corto (si se acortó) */}
+        {short && (
+          <div className="flex items-center gap-2 rounded-[10px] border border-[#F59E0B]/40 bg-[#FEF0D7] px-3 py-2">
+            <Scissors size={13} className="text-[#B45309] shrink-0" />
+            <span className="flex-1 min-w-0 text-[13px] font-bold text-[#B45309] break-all font-mono">{short}</span>
+            <button onClick={() => copy(short)} title="Copiar link corto"
+                    className="shrink-0 border border-[#F59E0B]/50 bg-white rounded-[9px] text-[#B45309] hover:bg-[#FDE6BC] cursor-pointer p-1.5">
+              {copiedUrl === short ? <Check size={14} className="text-[#15803D]" /> : <Copy size={14} />}
+            </button>
+          </div>
+        )}
+        {shortErr && <div className="text-[11.5px] text-[#DC2626]">No se pudo acortar el link. Probá de nuevo.</div>}
+
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => copy(link)}
+            onClick={() => copy(short || link)}
             disabled={!link}
             className={`py-2 px-3.5 rounded-[10px] border-0 text-[12.5px] font-bold flex items-center gap-1.5 ${link ? 'bg-[#F59E0B] text-white cursor-pointer hover:bg-[#E08C0B] shadow-[0_2px_6px_rgba(245,158,11,.35)]' : 'bg-surface2 text-text3 cursor-default'}`}
           >
-            {copiedUrl === link && link ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+            {copiedUrl === (short || link) && link ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar {short ? 'corto' : 'link'}</>}
+          </button>
+          <button
+            onClick={acortar}
+            disabled={!link || shortening || Boolean(short)}
+            className={`py-2 px-3 rounded-[10px] border text-[12.5px] font-semibold flex items-center gap-1.5 ${link && !short ? 'border-[#F59E0B]/50 bg-white text-[#B45309] cursor-pointer hover:bg-[#FEF0D7]' : 'border-border bg-white text-text3 cursor-default'}`}
+          >
+            <Scissors size={13} /> {shortening ? 'Acortando…' : short ? 'Acortado' : 'Acortar'}
           </button>
           <button
             onClick={saveLink}
@@ -316,31 +366,40 @@ function GeneradorWaLink() {
         <div className="mt-4">
           <div className="text-[12px] font-semibold text-text2 mb-2">Links guardados ({saved.length})</div>
           <div className="flex flex-col gap-2">
-            {saved.map((l) => (
-              <div key={l.url} className="group flex items-center gap-3 rounded-[12px] border border-border bg-white p-3 hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)] transition-all duration-150">
-                <span className="w-9 h-9 rounded-[10px] bg-[#FEF0D7] flex items-center justify-center shrink-0">
-                  <MessageCircle size={16} className="text-[#B45309]" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold truncate">{l.message || 'Sin mensaje'}</div>
-                  <div className="text-[11px] text-text3 truncate font-mono">{l.url}</div>
+            {saved.map((l) => {
+              const display = l.short_url || l.url;       // copiar/mostrar prioriza el corto
+              const clicks = l.code ? clicksByCode[l.code] : undefined;
+              return (
+                <div key={l.url} className="group flex items-center gap-3 rounded-[12px] border border-border bg-white p-3 hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)] transition-all duration-150">
+                  <span className="w-9 h-9 rounded-[10px] bg-[#FEF0D7] flex items-center justify-center shrink-0">
+                    <MessageCircle size={16} className="text-[#B45309]" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold truncate flex items-center gap-2">
+                      {l.message || 'Sin mensaje'}
+                      {typeof clicks === 'number' && (
+                        <span className="shrink-0 text-[10px] font-bold text-[#B45309] bg-[#FEF0D7] rounded-md px-1.5 py-0.5">{clicks} clicks</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-text3 truncate font-mono">{display}</div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => copy(display)} title="Copiar"
+                            className="border border-border bg-white rounded-[9px] text-text3 hover:text-[#B45309] hover:border-[#F59E0B]/45 cursor-pointer p-2">
+                      {copiedUrl === display ? <Check size={14} className="text-[#15803D]" /> : <Copy size={14} />}
+                    </button>
+                    <a href={display} target="_blank" rel="noreferrer" title="Abrir"
+                       className="border border-border bg-white rounded-[9px] text-text3 hover:text-text2 hover:bg-surface2 cursor-pointer p-2 flex items-center">
+                      <ExternalLink size={14} />
+                    </a>
+                    <button onClick={() => removeLink(l.url)} title="Eliminar"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity border border-border bg-white rounded-[9px] text-text3 hover:text-[#DC2626] hover:border-[#DC2626]/40 cursor-pointer p-2">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => copy(l.url)} title="Copiar"
-                          className="border border-border bg-white rounded-[9px] text-text3 hover:text-[#B45309] hover:border-[#F59E0B]/45 cursor-pointer p-2">
-                    {copiedUrl === l.url ? <Check size={14} className="text-[#15803D]" /> : <Copy size={14} />}
-                  </button>
-                  <a href={l.url} target="_blank" rel="noreferrer" title="Abrir"
-                     className="border border-border bg-white rounded-[9px] text-text3 hover:text-text2 hover:bg-surface2 cursor-pointer p-2 flex items-center">
-                    <ExternalLink size={14} />
-                  </a>
-                  <button onClick={() => removeLink(l.url)} title="Eliminar"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity border border-border bg-white rounded-[9px] text-text3 hover:text-[#DC2626] hover:border-[#DC2626]/40 cursor-pointer p-2">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -3,6 +3,9 @@
   "outputDirectory": "apps/operations/dist",
   "framework": null,
   "rewrites": [
+    { "source": "/", "has": [{ "type": "host", "value": "go.metodokorex.com" }], "destination": "/api/r" },
+    { "source": "/:code", "has": [{ "type": "host", "value": "go.metodokorex.com" }], "destination": "/api/r?code=:code" },
+    { "source": "/r/:code", "destination": "/api/r?code=:code" },
     { "source": "/agendar", "destination": "/api/agendar" },
     { "source": "/agendar/p/:token", "destination": "/api/agendar?token=:token" },
     { "source": "/agendar/:slug", "destination": "/api/agendar?slug=:slug" },
