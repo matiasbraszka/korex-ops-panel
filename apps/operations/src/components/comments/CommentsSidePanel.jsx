@@ -91,7 +91,9 @@ export default function CommentsSidePanel() {
     if (kind === 'task') {
       if (!shownTask) return [];
       return (taskComments || [])
-        .filter(c => c.task_id === shownTask.id)
+        // Solo comentarios (de personas) e informes. Las entradas automáticas
+        // kind='system' (cambios de estado/responsable/fase/fecha) quedan ocultas.
+        .filter(c => c.task_id === shownTask.id && c.kind !== 'system')
         .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
     }
     if (kind === 'bullet') {
@@ -219,7 +221,8 @@ export default function CommentsSidePanel() {
     }
   };
 
-  const total = myComments.length;
+  // "N comentarios" cuenta solo comentarios de personas (no informes ni system).
+  const total = myComments.filter(c => !c.kind || c.kind === 'user').length;
   const phase = shownClient?.phaseNameOverrides && shownTask?.phase && shownClient.phaseNameOverrides[shownTask.phase];
 
   // StatusDot inline para el header del panel (chiquito).

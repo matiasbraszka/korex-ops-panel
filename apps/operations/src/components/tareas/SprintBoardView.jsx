@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SPRINT_COLUMNS, DEPARTMENTS } from '../../utils/constants';
+import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
 import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
+import PriorityPicker from './PriorityPicker';
+
+const prioRank = (t) => TASK_PRIORITY[t?.priority]?.rank ?? 9;
 
 const COL_STATUSES = SPRINT_COLUMNS.map(c => c.status);
 const boardColumn = (status) => (COL_STATUSES.includes(status) ? status : 'priorizado');
@@ -80,7 +83,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
 
   const columnTasks = (status) => inSprint
     .filter(t => boardColumn(t.status) === status)
-    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || (a.sprintPriority || 9) - (b.sprintPriority || 9));
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || prioRank(a) - prioRank(b) || (a.sprintPriority || 9) - (b.sprintPriority || 9));
 
   const onDrop = (colStatus, e) => {
     setOverCol(null);
@@ -159,7 +162,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
                 const checklist = Array.isArray(t.checklist) ? t.checklist : [];
                 const subTotal = checklist.length;
                 const subDone = checklist.filter(s => s.done).length;
-                const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
+                const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id && (!cc.kind || cc.kind === 'user')).length;
                 const blocked = isTaskBlocked(t, tasks);
                 return (
                   <div key={t.id} data-card-id={t.id} draggable
@@ -169,6 +172,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
                     style={{ background: blocked ? '#FFFBFB' : '#fff', border: blocked ? '1px solid #FECACA' : '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#9CA3AF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c?.name || ''}</span>
+                      <PriorityPicker value={t.priority} onChange={(p) => updateTask(t.id, { priority: p || 'normal' })} />
                       {blocked && (
                         <span title="Bloqueada por otra tarea sin validar" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 5, padding: '1px 5px', flexShrink: 0 }}>
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>

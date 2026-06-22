@@ -5,6 +5,7 @@ import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
+import PriorityPicker from './PriorityPicker';
 import AssigneePicker from './AssigneePicker';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -315,7 +316,7 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                         onDrop={(e) => dropTask(e, g, o.c.id)}>
                         {g.tasks.map((t, i) => {
                           const d = dotStyle(t.status);
-                          const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
+                          const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id && (!cc.kind || cc.kind === 'user')).length;
                           const unread = unreadCommentTaskIds?.has?.(t.id);
                           const editing = editingId === t.id;
                           return (
@@ -339,6 +340,7 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
                                 </>
                               )}
                               {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }} title={`${cCount} comentario${cCount === 1 ? '' : 's'}${unread ? ' · sin leer' : ''}`}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
+                              <PriorityPicker value={t.priority} onChange={(p) => updateTask(t.id, { priority: p || 'normal' })} />
                               <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="Horas estimadas" onClick={(e) => e.stopPropagation()}>
                                 <input type="number" min="0" step="0.5" defaultValue={t.estimatedHours ?? ''} placeholder="–"

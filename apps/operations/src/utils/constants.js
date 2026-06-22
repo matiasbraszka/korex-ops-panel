@@ -82,6 +82,18 @@ export const DEPARTMENTS = {
 };
 export const DEPARTMENT_ORDER = ['ventas', 'marketing', 'programacion', 'operaciones'];
 
+// Prioridad de la tarea (super alta / alta / media / baja). Se guarda en la
+// columna `tasks.priority` (texto) y se ve en Objetivos, Tablero Sprint y la
+// ficha. Una tarea sin una de estas claves (ej 'normal' legacy o null) = sin
+// prioridad → no muestra badge.
+export const TASK_PRIORITY = {
+  'super-alta': { label: 'Súper alta', short: 'Súper', color: '#DC2626', bg: '#FEF2F2', rank: 1 },
+  'alta':       { label: 'Alta',       short: 'Alta',  color: '#F97316', bg: '#FFF7ED', rank: 2 },
+  'media':      { label: 'Media',      short: 'Media', color: '#EAB308', bg: '#FEFCE8', rank: 3 },
+  'baja':       { label: 'Baja',       short: 'Baja',  color: '#9CA3AF', bg: '#F3F4F6', rank: 4 },
+};
+export const TASK_PRIORITY_ORDER = ['super-alta', 'alta', 'media', 'baja'];
+
 // Prioridad dentro del sprint (badge 1-5 en Priorizado).
 export const SPRINT_PRIORITY = {
   1: { label: 'P1', color: '#EF4444', bg: '#FEF2F2' },

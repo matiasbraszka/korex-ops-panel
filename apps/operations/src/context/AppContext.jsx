@@ -5,7 +5,7 @@ import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
-import { diffTaskFields, diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
+import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
 // Recorre progress_by_client y rellena mentioned_ids en cada bullet.
 function enrichBulletsWithMentions(progressByClient, teamMembers, excludeId) {
@@ -839,6 +839,9 @@ export function AppProvider({ children }) {
     if (fields.weekly_capacity !== undefined || fields.weeklyCapacity !== undefined) {
       dbFields.weekly_capacity = fields.weekly_capacity ?? fields.weeklyCapacity;
     }
+    if (fields.slack_id !== undefined || fields.slackId !== undefined) {
+      dbFields.slack_id = fields.slack_id ?? fields.slackId;
+    }
     await sbFetch('team_members?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
@@ -1336,24 +1339,12 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── Helpers: historial automatico de tareas ──
-  // Inserta entradas kind='system' por cada cambio detectado (status, dueDate,
-  // phase, assignee). Llamada desde updateTask. No bloquea la UI.
-  const recordTaskSystemEvents = useCallback((taskId, prev, next) => {
-    if (!taskId || !prev || !next) return;
-    const author = currentUserIdRef.current;
-    if (!author) return; // sin usuario logueado no registramos (ej: hidratacion inicial)
-    const events = diffTaskFields(prev, next);
-    events.forEach(ev => {
-      // Fire-and-forget; si falla queda log, no rompe el update.
-      addTaskComment({
-        task_id: taskId,
-        author_id: author,
-        body: '',
-        kind: 'system',
-        event_meta: ev,
-      }).catch(e => console.warn('recordTaskSystemEvents', e));
-    });
-  }, [addTaskComment]);
+  // DESACTIVADO (pedido de Matias, 2026-06): el feed de comentarios queda SOLO
+  // para comentarios de personas (e informes). Los "mínimos cambios" de la tarea
+  // (estado/responsable/fase/fecha) ya no se registran como entradas kind='system'
+  // ni notifican. Se deja como no-op para no tocar el call site de updateTask y
+  // poder reactivarlo fácil si hiciera falta.
+  const recordTaskSystemEvents = useCallback(() => {}, []);
   recordTaskSystemEventsRef.current = recordTaskSystemEvents;
   addTaskCommentRef.current = addTaskComment;
   updateTaskRef.current = updateTask;
@@ -1741,6 +1732,28 @@ export function AppProvider({ children }) {
     await sbFetch('llamadas_inbox', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(row) });
     setPendingCallsCount(prev => prev + 1);
     return row;
+  }, []);
+
+  // Reporte accionable de reunión de equipo (edge function reunion-reporte).
+  const prepareReunionReporte = useCallback(async (llamadaId) => {
+    const { data, error } = await supabase.functions.invoke('reunion-reporte', {
+      body: { action: 'prepare', llamada_id: llamadaId },
+    });
+    if (error) throw new Error(error.message || 'No se pudo preparar el reporte');
+    if (data?.error) throw new Error(data.error);
+    const payload = data.payload;
+    setLlamadas(prev => prev.map(l => l.id === llamadaId ? { ...l, reporte_payload: payload, reporte_status: 'draft' } : l));
+    return payload;
+  }, []);
+
+  const sendReunionReporte = useCallback(async (llamadaId) => {
+    const { data, error } = await supabase.functions.invoke('reunion-reporte', {
+      body: { action: 'send', llamada_id: llamadaId },
+    });
+    if (error) throw new Error(error.message || 'No se pudo enviar el reporte');
+    if (data?.error) throw new Error(data.error);
+    setLlamadas(prev => prev.map(l => l.id === llamadaId ? { ...l, reporte_status: 'sent', reporte_sent_at: new Date().toISOString() } : l));
+    return data;
   }, []);
 
   const updateWeeklyTodo = useCallback(async (todoId, fields) => {
@@ -2245,6 +2258,7 @@ export function AppProvider({ children }) {
     const set = new Set();
     (taskComments || []).forEach(c => {
       if (!c.task_id || c.author_id === uid) return;
+      if (c.kind && c.kind !== 'user') return; // ignorar entradas system/report
       const lastSeen = commentReads[c.task_id];
       if (!lastSeen || (c.created_at && c.created_at > lastSeen)) set.add(c.task_id);
     });
@@ -2362,6 +2376,8 @@ export function AppProvider({ children }) {
     updateLlamada,
     deleteLlamada,
     addLlamadaInbox,
+    prepareReunionReporte,
+    sendReunionReporte,
     pendingCallsCount,
     // Informes del equipo (v13)
     teamReports,
@@ -2467,7 +2483,8 @@ export function AppProvider({ children }) {
     updateWeeklyTodo, loadSprints, createSprint, updateSprint, addTaskToSprint,
     removeTaskFromSprint, closeSprint, finalizeSprint,
     addLoomVideo, updateLoomVideo, deleteLoomVideo,
-    updateLlamada, deleteLlamada, addLlamadaInbox, addTeamReport,
+    updateLlamada, deleteLlamada, addLlamadaInbox,
+    prepareReunionReporte, sendReunionReporte, addTeamReport,
     updateTeamReport, deleteTeamReport, resolveBlocker, unresolveBlocker,
     addIdea, updateIdea, deleteIdea, addNota, updateNota, deleteNota,
     reorderNota, addTaskComment, updateTaskComment, deleteTaskComment,
