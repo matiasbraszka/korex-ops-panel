@@ -195,6 +195,31 @@ export async function slackToken(admin: any): Promise<string> {
   return String((data?.value as any)?.slack_bot_token || "");
 }
 
+// DM a un usuario de Slack: abre la conversacion directa (conversations.open) y
+// postea en ese canal. Requiere scopes del bot: chat:write, im:write.
+// Devuelve true si se entrego. false si falta el id, falla el open, o falla el post.
+export async function postSlackDM(token: string, slackUserId: string, text: string): Promise<boolean> {
+  if (!token || !slackUserId) return false;
+  try {
+    const openRes = await fetch("https://slack.com/api/conversations.open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ users: slackUserId }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const openData = await openRes.json().catch(() => null);
+    const dmChannel = openData?.channel?.id as string | undefined;
+    if (!openData?.ok || !dmChannel) {
+      console.error("intel.postSlackDM conversations.open fallo", openData?.error || openRes.status);
+      return false;
+    }
+    return await postSlack(token, dmChannel, text);
+  } catch (e) {
+    console.error("intel.postSlackDM error", e);
+    return false;
+  }
+}
+
 // ── Misc ───────────────────────────────────────────────────────────────────────
 export function isoDaysAgo(n: number): string {
   return new Date(Date.now() - n * 86400000).toISOString();

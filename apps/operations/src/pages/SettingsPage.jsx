@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -11,11 +11,13 @@ import OnboardingConfigEditor from '../components/settings/OnboardingConfigEdito
 import FinanzasDefaultsEditor from '../components/settings/FinanzasDefaultsEditor';
 import PersonalEditor from '../components/settings/PersonalEditor';
 import DmeConfigEditor from '../components/settings/DmeConfigEditor';
+import ReunionesConfigEditor from '../components/settings/ReunionesConfigEditor';
 
 const TABS = [
   { id: 'team',          label: 'Equipo y usuarios',     Icon: Users },
   { id: 'personal',      label: 'Personal',              Icon: Contact },
   { id: 'onboarding',    label: 'Onboarding',            Icon: Workflow },
+  { id: 'reuniones',     label: 'Reuniones de equipo',   Icon: Phone },
   { id: 'template',      label: 'Plantilla de Roadmap',  Icon: LayoutGrid },
   { id: 'pending-res',   label: 'Recursos pendientes',   Icon: CheckSquare },
   { id: 'services',      label: 'Servicios',             Icon: Briefcase },
@@ -60,6 +62,7 @@ export default function SettingsPage() {
         {tab === 'team'        && <TeamUsersEditor />}
         {tab === 'personal'    && <PersonalEditor />}
         {tab === 'onboarding'  && <OnboardingConfigEditor />}
+        {tab === 'reuniones'   && <ReunionesConfigEditor />}
         {tab === 'template'    && <TemplateEditor />}
         {tab === 'pending-res' && <PendingResourcesTemplateEditor />}
         {tab === 'services'    && <ServicesEditor />}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pencil, Trash2, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import ReunionReporte from './ReunionReporte';
 
 const AREA_COLORS = {
   marketing: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Marketing' },
@@ -183,6 +184,11 @@ export default function CallDetailExpanded({ llamada, onUpdate, onCreateTask, cl
           <span className="text-[10px] text-green-600">Esta llamada se usara como contexto para el agente de ops</span>
         )}
       </div>
+
+      {/* Reporte de equipo (solo reuniones internas: equipo / mentoria) */}
+      {(l.categoria === 'equipo' || l.categoria === 'mentoria') && (
+        <ReunionReporte llamada={l} />
+      )}
 
       {/* Resumen */}
       {l.resumen && (
