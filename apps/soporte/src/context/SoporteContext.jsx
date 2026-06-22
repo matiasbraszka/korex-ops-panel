@@ -397,6 +397,13 @@ export function SoporteProvider({ children }) {
     await patchSoporteConfig({ support_number });
   }, []);
 
+  // Historial de links de WhatsApp generados (Recursos → Link de WhatsApp).
+  // Cada item: { url, message, number, created_at }.
+  const saveWaLinks = useCallback(async (wa_links) => {
+    setConfig((prev) => ({ ...prev, wa_links }));
+    await patchSoporteConfig({ wa_links });
+  }, []);
+
   // Directorio de un grupo: participantes (jsonb pesado, se pide aparte) +
   // nombres visibles de quienes ya hablaron (pushName de los mensajes).
   const [groupDirByConv, setGroupDirByConv] = useState({});
@@ -584,7 +591,8 @@ export function SoporteProvider({ children }) {
     availability: config.availability || null,
     recursos: config.recursos || [],
     supportNumber: config.support_number || '',
-    saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber,
+    waLinks: config.wa_links || [],
+    saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
     updateConversation, updateNotes, linkContact,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
@@ -594,7 +602,7 @@ export function SoporteProvider({ children }) {
     loading, realtimeOk, visibleConversations, conversations, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
-    saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber,
+    saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
     updateConversation, updateNotes, linkContact, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
