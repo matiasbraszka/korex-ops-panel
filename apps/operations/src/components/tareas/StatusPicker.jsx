@@ -2,11 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { SPRINT_COLUMNS, TASK_STATUS } from '../../utils/constants';
 
-// Estados que ofrecemos (las 5 columnas del Kanban + Bloqueada).
-const OPTIONS = [
-  ...SPRINT_COLUMNS.map(c => ({ status: c.status, label: c.label, color: c.tx })),
-  { status: 'blocked', label: 'Bloqueada', color: '#DC2626' },
-];
+// Estados que ofrecemos = las columnas del Kanban (incluye Bloqueos).
+const OPTIONS = SPRINT_COLUMNS.map(c => ({ status: c.status, label: c.label, color: c.tx }));
 const metaFor = (status) => {
   const col = SPRINT_COLUMNS.find(c => c.status === status);
   if (col) return { label: col.label, color: col.tx };

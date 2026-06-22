@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
@@ -9,7 +9,6 @@ import PriorityPicker from './PriorityPicker';
 const prioRank = (t) => TASK_PRIORITY[t?.priority]?.rank ?? 9;
 
 const COL_STATUSES = SPRINT_COLUMNS.map(c => c.status);
-const boardColumn = (status) => (COL_STATUSES.includes(status) ? status : 'priorizado');
 
 function insertIndexAt(colEl, clientY, draggedId) {
   const cards = Array.from(colEl.querySelectorAll('[data-card-id]')).filter(el => el.getAttribute('data-card-id') !== draggedId);
@@ -18,19 +17,6 @@ function insertIndexAt(colEl, clientY, draggedId) {
     if (clientY < r.top + r.height / 2) return i;
   }
   return cards.length;
-}
-
-function Kpi({ label, value, sub, color, barw }) {
-  return (
-    <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 14, padding: '15px 17px', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: '#9CA3AF' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
-        <span style={{ fontSize: 25, fontWeight: 700, letterSpacing: '-0.02em', color: color || '#1A1D26' }}>{value}</span>
-        <span style={{ fontSize: 12, color: '#9CA3AF' }}>{sub}</span>
-      </div>
-      {barw != null && <span style={{ display: 'block', marginTop: 11, height: 7, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', background: '#5B7CF5', width: barw }} /></span>}
-    </div>
-  );
 }
 
 export default function SprintBoardView({ scope = 'cli' }) {
@@ -81,8 +67,15 @@ export default function SprintBoardView({ scope = 'cli' }) {
   };
   const initialsFor = (m) => (m?.initials || m?.name?.slice(0, 2) || '?').toUpperCase();
 
+  // Columna del tablero para una tarea. Si está bloqueada (a mano con status
+  // 'blocked' o por una dependencia sin validar) va SIEMPRE a la columna Bloqueos.
+  const taskColumn = (t) => {
+    if (t.status === 'blocked' || isTaskBlocked(t, tasks)) return 'blocked';
+    return COL_STATUSES.includes(t.status) ? t.status : 'priorizado';
+  };
+
   const columnTasks = (status) => inSprint
-    .filter(t => boardColumn(t.status) === status)
+    .filter(t => taskColumn(t) === status)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || prioRank(a) - prioRank(b) || (a.sprintPriority || 9) - (b.sprintPriority || 9));
 
   const onDrop = (colStatus, e) => {
@@ -91,10 +84,11 @@ export default function SprintBoardView({ scope = 'cli' }) {
     if (!id) return;
     const task = inSprint.find(t => t.id === id);
     if (!task) return;
-    const movingCol = boardColumn(task.status) !== colStatus;
-    // Tarea bloqueada por otra sin validar: solo puede estar en el Backlog.
-    if (movingCol && colStatus !== 'backlog' && isTaskBlocked(task, tasks)) {
-      setWipMsg('Tarea bloqueada por otra sin validar. Se queda en el Backlog hasta completar la que la bloquea.');
+    const movingCol = taskColumn(task) !== colStatus;
+    // Trabada por una dependencia sin validar: no se puede avanzar a una columna
+    // de flujo. Sí se puede dejar en Bloqueos (o moverla dentro de Bloqueos).
+    if (movingCol && colStatus !== 'blocked' && isTaskBlocked(task, tasks)) {
+      setWipMsg('No se puede avanzar: está bloqueada por otra tarea sin validar. Destrabá esa primero.');
       setTimeout(() => setWipMsg(''), 4500);
       return;
     }
@@ -116,18 +110,23 @@ export default function SprintBoardView({ scope = 'cli' }) {
   }
 
   const prog = sprintProgress(tasks, activeSprint);
-  const daysLeft = sprintDaysLeft(activeSprint);
-  const kpis = [
-    { label: 'Avance del sprint', value: `${prog.done} / ${prog.total}`, sub: 'validadas', color: '#1A1D26', barw: prog.pct + '%' },
-    { label: 'En curso', value: String(prog.wip), sub: prog.wip === 1 ? 'tarea activa' : 'tareas activas', color: '#1A1D26' },
-    { label: 'Días restantes', value: daysLeft == null ? '—' : String(daysLeft), sub: daysLeft === 0 ? 'cierra hoy' : daysLeft === 1 ? 'día de sprint' : 'días de sprint', color: '#1A1D26' },
-    { label: 'Bloqueos abiertos', value: String(prog.blocked), sub: prog.blocked ? 'a destrabar' : 'todo fluye', color: prog.blocked ? '#EF4444' : '#22C55E' },
-  ];
+  const remaining = Math.max(0, prog.total - prog.done); // tareas que faltan terminar
 
   return (
     <div>
-      <div className="kx-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
-        {kpis.map(k => <Kpi key={k.label} {...k} />)}
+      {/* KPIs minimalistas: solo Avance y En curso, en una tira compacta. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 12, padding: '11px 16px', marginBottom: 16, boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF' }}>Avance</span>
+          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{prog.done}<span style={{ color: '#9CA3AF', fontWeight: 600 }}>/{prog.total}</span></span>
+          <span style={{ display: 'block', width: 84, height: 6, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', background: '#5B7CF5', width: prog.pct + '%' }} /></span>
+        </div>
+        <span style={{ width: 1, height: 20, background: '#E2E5EB' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF' }}>En curso</span>
+          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{prog.wip}<span style={{ color: '#9CA3AF', fontWeight: 600 }}>/{remaining}</span></span>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>por terminar</span>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, padding: '8px 12px', width: 320, maxWidth: '100%', marginBottom: 16 }}>
