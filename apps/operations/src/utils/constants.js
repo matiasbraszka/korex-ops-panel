@@ -70,6 +70,9 @@ export const SPRINT_COLUMNS = [
   { status: 'in-progress', label: 'En curso',     bg: '#FFF7ED', tx: '#B45309', wip: SPRINT_WIP_DEFAULT },
   { status: 'en-revision', label: 'En revisión',  bg: '#FDF2F8', tx: '#BE185D' },
   { status: 'done',        label: 'Validado',     bg: '#ECFDF5', tx: '#15803D' },
+  // Columna de bloqueos: tareas que no pueden avanzar (bloqueadas a mano o por
+  // una dependencia sin validar). El tablero las manda acá automáticamente.
+  { status: 'blocked',     label: 'Bloqueos',     bg: '#FEF2F2', tx: '#DC2626' },
 ];
 
 // Áreas / departamento responsable de la tarea. Ícono SVG (path) + color, según
