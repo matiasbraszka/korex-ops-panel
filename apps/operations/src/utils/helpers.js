@@ -768,14 +768,16 @@ export function sprintProgress(tasks, sprint) {
   const total = list.length;
   const done = list.filter(t => t.status === 'done').length;
   const wip = list.filter(t => t.status === 'in-progress').length;
-  // Bloqueadas = trabadas por otra tarea sin validar (dependsOn) y aún sin completar.
-  const blocked = list.filter(t => t.status !== 'done' && isTaskBlocked(t, tasks)).length;
-  const td = today();
-  const overdue = list.filter(t =>
-    t.dueDate && t.dueDate < td && t.status !== 'done',
+  // Bloqueos "actuales" del sprint: una tarea del sprint trabada por OTRA que
+  // también está en el sprint y todavía sin validar. Así el contador refleja
+  // bloqueos reales de la semana y NO las dependencias heredadas del roadmap
+  // viejo (cuyas bloqueadoras suelen estar fuera del sprint).
+  const sprintIds = new Set(list.map(t => t.id));
+  const blocked = list.filter(t =>
+    t.status !== 'done' && blockingTasks(t, tasks).some(b => sprintIds.has(b.id)),
   ).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
-  return { total, done, wip, blocked, overdue, pct };
+  return { total, done, wip, blocked, pct };
 }
 
 // Días restantes del sprint (hasta end_date, inclusive).

@@ -1,16 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
-import { today, fmtDate, daysBetween, getAllPhases } from '../../utils/helpers';
+import { getAllPhases } from '../../utils/helpers';
 import Modal from '../Modal';
 import { Plus } from 'lucide-react';
-
-const FILTERS = [
-  { id: 'todas',      label: 'Todas' },
-  { id: 'atrasadas',  label: 'Atrasadas' },
-  { id: 'por-vencer', label: 'Por vencer (3d)' },
-  { id: 'sin-fecha',  label: 'Sin fecha' },
-];
 
 /**
  * Modal para elegir tareas pendientes del usuario actual y vincularlas a un dia.
@@ -19,14 +12,11 @@ const FILTERS = [
 export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskIds = new Set(), date }) {
   const { tasks, clients, currentUser, getPriorityLabel, createTask, updateTask } = useApp();
   const [search, setSearch] = useState('');
-  const [quickFilter, setQuickFilter] = useState('todas');
   const [createMode, setCreateMode] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskClientId, setNewTaskClientId] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState(''); // '' = sin fase
   const [creating, setCreating] = useState(false);
-
-  const nowStr = today();
 
   // Match flexible: "Matias" matchea "Matias Braszka" y viceversa
   const matchesUser = (assigneeStr) => {
@@ -49,24 +39,9 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, currentUser]);
 
-  // Aplicar filtros
+  // Aplicar búsqueda
   const filtered = useMemo(() => {
     let list = myTasks;
-
-    // Quick filter
-    if (quickFilter === 'atrasadas') {
-      list = list.filter(t => t.dueDate && t.dueDate < nowStr);
-    } else if (quickFilter === 'por-vencer') {
-      list = list.filter(t => {
-        if (!t.dueDate) return false;
-        const d = daysBetween(nowStr, t.dueDate);
-        return d !== null && d >= 0 && d <= 3;
-      });
-    } else if (quickFilter === 'sin-fecha') {
-      list = list.filter(t => !t.dueDate);
-    }
-
-    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(t =>
@@ -75,7 +50,7 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
       );
     }
     return list;
-  }, [myTasks, search, clients, quickFilter, nowStr]);
+  }, [myTasks, search, clients]);
 
   // Agrupar por cliente, ordenar por prioridad del cliente
   const groupedByClient = useMemo(() => {
@@ -95,18 +70,6 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
     });
   }, [filtered, clients]);
 
-  // Contadores para los filtros
-  const counts = useMemo(() => ({
-    todas: myTasks.length,
-    atrasadas: myTasks.filter(t => t.dueDate && t.dueDate < nowStr).length,
-    'por-vencer': myTasks.filter(t => {
-      if (!t.dueDate) return false;
-      const d = daysBetween(nowStr, t.dueDate);
-      return d !== null && d >= 0 && d <= 3;
-    }).length,
-    'sin-fecha': myTasks.filter(t => !t.dueDate).length,
-  }), [myTasks, nowStr]);
-
   const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const dateLabel = (() => {
     if (!date) return '';
@@ -118,7 +81,6 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
   const handleClose = () => {
     onClose();
     setSearch('');
-    setQuickFilter('todas');
     setCreateMode(false);
     setNewTaskTitle('');
     setNewTaskClientId('');
@@ -248,28 +210,6 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
         />
       </div>
 
-      {/* Quick filters */}
-      <div className="flex gap-1.5 mb-3 flex-wrap">
-        {FILTERS.map(f => {
-          const active = quickFilter === f.id;
-          const count = counts[f.id] || 0;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              className={`text-[11px] font-semibold py-1 px-2.5 rounded-full border cursor-pointer font-sans transition-colors ${
-                active
-                  ? f.id === 'atrasadas' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700'
-              }`}
-              onClick={() => setQuickFilter(f.id)}
-            >
-              {f.label} <span className="text-[10px] opacity-70">{count}</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Results grouped by client */}
       {groupedByClient.length === 0 ? (
         <div className="text-xs text-gray-400 text-center py-8">
@@ -304,7 +244,6 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
                 {cTasks.map(t => {
                   const isLinked = excludeTaskIds.has(t.id);
                   const st = TASK_STATUS[t.status];
-                  const isOverdue = t.dueDate && t.dueDate < nowStr;
                   return (
                     <button
                       key={t.id}
@@ -329,11 +268,6 @@ export default function TaskPickerModal({ open, onClose, onSelect, excludeTaskId
                           <div className="text-[10px] text-gray-400 truncate mt-0.5">{t.description}</div>
                         )}
                         <div className="flex items-center gap-2 mt-0.5">
-                          {t.dueDate && (
-                            <span className={`text-[10px] font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
-                              {isOverdue ? '\u26A0' : '\uD83D\uDCC5'} {fmtDate(t.dueDate)}
-                            </span>
-                          )}
                           <span className="text-[9px] font-semibold uppercase" style={{ color: st?.color || '#9CA3AF' }}>{st?.label || t.status}</span>
                         </div>
                       </div>
