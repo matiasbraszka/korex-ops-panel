@@ -1,5 +1,9 @@
 /**
- * agendar-cita-calendar.gs — v7. Agrega la acción 'list_events' (devuelve los
+ * agendar-cita-calendar.gs — v8. En 'create_event' acepta el flag 'acceptSelf':
+ * la cuenta organizadora (admin@) confirma su asistencia con un "sí"
+ * automáticamente (setMyStatus YES), para que la reunión le aparezca
+ * confirmada en su calendario sin tener que aceptar la invitación a mano.
+ * v7. Agrega la acción 'list_events' (devuelve los
  * eventos reales de los calendarios propios de admin@ en un rango, para
  * mostrar la agenda completa en el panel resaltando los agendamientos).
  * v6. Crea/mueve/borra eventos en el Google
@@ -121,7 +125,7 @@ function doPost(e) {
     var cal = CalendarApp.getDefaultCalendar();
 
     // Para verificar qué versión del script está corriendo la web app.
-    if (action === 'ping') return kxcJson({ ok: true, v: 7 });
+    if (action === 'ping') return kxcJson({ ok: true, v: 8 });
 
     // Eventos reales del calendario admin@ en un rango (para mostrar la agenda
     // "tal cual" en el panel). Mira TODOS los calendarios propios (el principal
@@ -239,6 +243,15 @@ function doPost(e) {
       var meetRemoved = null;
       if (b.guests) {
         try { meetRemoved = kxcRemoveMeet(event.getId()); } catch (errMeet) { meetRemoved = String(errMeet); }
+      }
+      // acceptSelf: la propia cuenta (admin@, dueña del calendario) confirma su
+      // asistencia con un "sí". Cuando admin@ figura entre los invitados (porque
+      // está asignado al calendario de reserva), Google a veces le deja la
+      // invitación en "pendiente"; esto la deja siempre confirmada para que
+      // aparezca sólida en su calendario. Idempotente: si ya está aceptada/dueña
+      // no cambia nada.
+      if (b.acceptSelf) {
+        try { event.setMyStatus(CalendarApp.GuestStatus.YES); } catch (errRsvp) {}
       }
       // Link directo al evento en la UI de Google Calendar.
       var htmlLink = 'https://calendar.google.com/calendar/event?eid=' +
