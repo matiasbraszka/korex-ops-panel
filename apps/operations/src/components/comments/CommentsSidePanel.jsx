@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Send, MessageSquare, Calendar, AlertTriangle, Building2, FileText, Lightbulb, AlertCircle } from 'lucide-react';
+import { X, Send, MessageSquare, Calendar, Building2, FileText, Lightbulb, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import TeamAvatar from '../TeamAvatar';
 import CommentItem from './CommentItem';
@@ -289,15 +289,6 @@ export default function CommentsSidePanel() {
                           <Building2 size={10} />{shownClient.name}
                         </span>
                       )}
-                      {shownTask.dueDate && (() => {
-                        const overdue = shownTask.dueDate < new Date().toISOString().slice(0, 10) && shownTask.status !== 'done';
-                        return (
-                          <span className={`inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${overdue ? 'bg-[#FEF2F2] text-[#DC4B43]' : 'bg-[#F0F2F5] text-[#6B7280]'}`}>
-                            {overdue ? <AlertTriangle size={9} /> : <Calendar size={9} />}
-                            {new Date(shownTask.dueDate + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
-                          </span>
-                        );
-                      })()}
                     </div>
                   </div>
                 </div>

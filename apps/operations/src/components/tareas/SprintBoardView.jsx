@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, isKorexClient, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
@@ -116,10 +116,11 @@ export default function SprintBoardView({ scope = 'cli' }) {
   }
 
   const prog = sprintProgress(tasks, activeSprint);
+  const daysLeft = sprintDaysLeft(activeSprint);
   const kpis = [
     { label: 'Avance del sprint', value: `${prog.done} / ${prog.total}`, sub: 'validadas', color: '#1A1D26', barw: prog.pct + '%' },
     { label: 'En curso', value: String(prog.wip), sub: prog.wip === 1 ? 'tarea activa' : 'tareas activas', color: '#1A1D26' },
-    { label: 'Tareas vencidas', value: String(prog.overdue), sub: prog.overdue ? 'requieren atención' : 'sin vencidas', color: prog.overdue ? '#EF4444' : '#22C55E' },
+    { label: 'Días restantes', value: daysLeft == null ? '—' : String(daysLeft), sub: daysLeft === 0 ? 'cierra hoy' : daysLeft === 1 ? 'día de sprint' : 'días de sprint', color: '#1A1D26' },
     { label: 'Bloqueos abiertos', value: String(prog.blocked), sub: prog.blocked ? 'a destrabar' : 'todo fluye', color: prog.blocked ? '#EF4444' : '#22C55E' },
   ];
 
