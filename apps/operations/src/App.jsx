@@ -12,6 +12,7 @@ const PublicidadPage = lazy(() => import('./pages/PublicidadPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AutomatizacionesPage = lazy(() => import('./pages/AutomatizacionesPage'));
 const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const DmePage = lazy(() => import('./pages/DmePage'));
@@ -308,6 +309,7 @@ function MainLayout() {
     : salesNavItems.filter((it) => it.id !== 'contacts');
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
+    { id: 'automatizaciones', label: 'Automatizaciones', Icon: Zap, path: '/admin/automatizaciones' },
   ];
   // Items de Soporte definidos aca (no importados de @korex/soporte) para que
   // el modulo entero quede en su propio chunk lazy: la unica referencia al
@@ -372,6 +374,7 @@ function MainLayout() {
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
+    automatizaciones: ['Automatizaciones', 'Salud en vivo de todo lo que el sistema hace solo'],
     cuentas: ['Cuentas', 'Mercury, Kraken y más — control de cada cuenta'],
   };
 
@@ -420,6 +423,10 @@ function MainLayout() {
       <Route
         path="/admin/settings"
         element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to={homePath} replace />}
+      />
+      <Route
+        path="/admin/automatizaciones"
+        element={currentUser?.isAdmin ? <AutomatizacionesPage /> : <Navigate to={homePath} replace />}
       />
       {/* "Cuentas" agrupa Mercury / Kraken / (Stripe) con un selector interno.
           Va ANTES del catch-all /soporte/* para que matchee esta ruta puntual.
