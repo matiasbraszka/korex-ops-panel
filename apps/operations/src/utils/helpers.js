@@ -523,7 +523,9 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     title, clientId, assignee: assignee || '', priority: priority || 'normal',
     stepIdx: stepIdx !== undefined && stepIdx !== null && stepIdx !== '' ? parseInt(stepIdx) : null,
     status: status || 'backlog', notes: notes || '', description: '', createdDate: today(),
-    startedDate: null, completedDate: null, blockedSince: null, dueDate: null
+    startedDate: null, completedDate: null, blockedSince: null, dueDate: null,
+    definitionOfDone: '', acceptanceCriteria: [], reviewer: null,
+    validatedBy: null, validatedAt: null, sprintHistory: [],
   };
 }
 
@@ -793,6 +795,86 @@ export function sprintDaysLeft(sprint) {
   if (!sprint || !sprint.endDate) return null;
   const d = daysBetween(today(), sprint.endDate);
   return d == null ? null : Math.max(0, d);
+}
+
+// ── Tracking, validación, sprints (mejoras v5) ───────────────────────────────
+
+// Tiempo por estado de una tarea, derivado de los eventos 'system' de status en
+// task_comments (created_at). NO usa tabla nueva: reusa el historial que ya se
+// graba en cada cambio de estado. Devuelve días (float) por estado, el estado
+// actual y desde cuándo. Si la tarea no tiene historial (tareas viejas), atribuye
+// todo el tiempo al estado actual (aproximación honesta).
+export function computeStatusDurations(task, taskComments) {
+  if (!task) return { byStatus: {}, current: null, total: 0 };
+  const MS_DAY = 864e5;
+  const evs = (taskComments || [])
+    .filter(c => c.task_id === task.id && c.kind === 'system' && c.event_meta && c.event_meta.field === 'status' && c.created_at)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const startMs = task.createdDate
+    ? new Date(task.createdDate + 'T00:00:00').getTime()
+    : (evs[0] ? new Date(evs[0].created_at).getTime() : Date.now());
+  // Fin del último tramo: si está validada se congela; si no, hasta ahora.
+  let endMs = Date.now();
+  if (task.status === 'done') {
+    const endIso = task.validatedAt || (task.completedDate ? task.completedDate + 'T23:59:59' : null);
+    if (endIso) { const t = new Date(endIso).getTime(); if (!Number.isNaN(t)) endMs = t; }
+  }
+  const byMs = {};
+  const add = (status, ms) => { if (status && ms > 0) byMs[status] = (byMs[status] || 0) + ms; };
+  if (evs.length === 0) {
+    add(task.status, endMs - startMs);
+  } else {
+    add(evs[0].event_meta.from || 'backlog', new Date(evs[0].created_at).getTime() - startMs);
+    for (let i = 0; i < evs.length; i++) {
+      const segStart = new Date(evs[i].created_at).getTime();
+      const segEnd = i + 1 < evs.length ? new Date(evs[i + 1].created_at).getTime() : endMs;
+      add(evs[i].event_meta.to || task.status, segEnd - segStart);
+    }
+  }
+  const byStatus = {};
+  let total = 0;
+  Object.keys(byMs).forEach(k => { byStatus[k] = byMs[k] / MS_DAY; total += byMs[k]; });
+  const lastChangeMs = evs.length ? new Date(evs[evs.length - 1].created_at).getTime() : startMs;
+  const current = { status: task.status, sinceISO: new Date(lastChangeMs).toISOString(), days: (Date.now() - lastChangeMs) / MS_DAY };
+  return { byStatus, current, total: total / MS_DAY };
+}
+
+// Formato compacto de una duración en días → "3d" / "5h" / "<1h".
+export function fmtDuration(days) {
+  if (days == null || Number.isNaN(days)) return '';
+  if (days >= 1) return `${Math.round(days)}d`;
+  const hours = days * 24;
+  if (hours >= 1) return `${Math.round(hours)}h`;
+  return '<1h';
+}
+
+// Criterios de aceptación obligatorios: la tarea solo se puede validar si TODOS
+// están tildados. Sin criterios → no se gatea (compat con tareas existentes).
+export function canValidate(task) {
+  const ac = Array.isArray(task?.acceptanceCriteria) ? task.acceptanceCriteria : [];
+  if (ac.length === 0) return true;
+  return ac.every(c => c.done);
+}
+
+// Cantidad de criterios de aceptación sin completar.
+export function pendingCriteria(task) {
+  const ac = Array.isArray(task?.acceptanceCriteria) ? task.acceptanceCriteria : [];
+  return ac.filter(c => !c.done).length;
+}
+
+// "Lleva N sprints": cantidad de sprints distintos por los que pasó la tarea.
+// Deriva de sprintHistory + el sprint actual. Mínimo 1 si está en un sprint.
+export function sprintCount(task) {
+  const hist = Array.isArray(task?.sprintHistory) ? task.sprintHistory : [];
+  const uniq = new Set(hist.filter(Boolean));
+  if (task?.sprintId) uniq.add(task.sprintId);
+  return Math.max(uniq.size, task?.sprintId ? 1 : 0);
+}
+
+// Un sprint cerrado bloquea el cambio de estado de sus tareas (solo se permite
+// moverlas al sprint activo).
+export function isSprintLocked(sprint) {
+  return sprint?.status === 'closed';
 }
 
 // ¿La tarea está asignada a este miembro? assignee es texto CSV ("David, Matias").
