@@ -5,6 +5,7 @@ import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, fmtDuration } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
 import PriorityPicker from './PriorityPicker';
+import AddToWeeklyButton from './AddToWeeklyButton';
 
 const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
 const STATUS_SHORT = { backlog: 'Backlog', priorizado: 'Priorizado', 'in-progress': 'En curso', 'en-revision': 'En revisión', paused: 'Pausada', done: 'Validado', blocked: 'Bloqueada', retrasadas: 'Retrasada' };
@@ -88,12 +89,27 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     const c = (clients || []).find(cl => cl.id === t.clientId);
     return c?.name ? `${t.title} · ${c.name}` : t.title;
   };
-  // Candidatas: tareas del mismo cliente o del mismo sprint, sin crear ciclo directo.
+  // Candidatas a bloquear: SOLO tareas del MISMO cliente, sin completar, sin
+  // crear ciclo directo. Se eligen agrupadas por objetivo (fase) del cliente.
   const candidates = (tasks || [])
     .filter(t => t.id !== task.id && !deps.includes(t.id))
-    .filter(t => (t.clientId || null) === (task.clientId || null) || (task.sprintId && t.sprintId === task.sprintId))
+    .filter(t => (t.clientId || null) === (task.clientId || null))
+    .filter(t => t.status !== 'done')
     .filter(t => !(Array.isArray(t.dependsOn) && t.dependsOn.includes(task.id)))
     .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  // Agrupadas por objetivo (fase) del cliente, en el orden de getAllPhases; las
+  // que no tienen objetivo quedan al final ("Sin objetivo").
+  const phaseMap = getAllPhases(client);
+  const candidatesByPhase = (() => {
+    const groups = [];
+    Object.keys(phaseMap).forEach(key => {
+      const list = candidates.filter(t => t.phase === key);
+      if (list.length) groups.push({ key, label: phaseMap[key].label, list });
+    });
+    const noPhase = candidates.filter(t => !t.phase || !phaseMap[t.phase]);
+    if (noPhase.length) groups.push({ key: '__none', label: 'Sin objetivo', list: noPhase });
+    return groups;
+  })();
 
   const addBlocker = (depId) => {
     if (!depId || deps.includes(depId)) return;
@@ -128,7 +144,11 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: '#DC2626', background: '#FEF2F2', borderRadius: 999, padding: '3px 9px' }}><Lock size={11} />Bloqueada</span>
               )}
             </div>
-            <span onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6B7280', flexShrink: 0 }}><X size={18} /></span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              {/* Botón minimalista "Agregar a mi To-Do" (solo aparece si la tarea es mía); elige el día */}
+              <AddToWeeklyButton task={task} size={17} />
+              <span onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6B7280' }}><X size={18} /></span>
+            </div>
           </div>
           <input defaultValue={task.title} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== task.title) updateTask(task.id, { title: v }); }}
             style={{ width: '100%', fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.3, marginTop: 13, color: '#1A1D26', border: 'none', outline: 'none', background: 'transparent' }} />
@@ -268,8 +288,12 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <select value="" onChange={(e) => { addBlocker(e.target.value); e.target.value = ''; }}
               style={{ width: '100%', fontSize: 13, color: candidates.length ? '#1A1D26' : '#9CA3AF', border: '1px solid #E2E5EB', borderRadius: 9, padding: '9px 11px', outline: 'none', background: '#fff', cursor: candidates.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
               disabled={!candidates.length}>
-              <option value="">{candidates.length ? '+ Agregar tarea que la bloquea…' : 'No hay otras tareas para bloquear'}</option>
-              {candidates.map(t => <option key={t.id} value={t.id}>{taskLabel(t)}</option>)}
+              <option value="">{candidates.length ? '+ Elegí el objetivo y la tarea que la bloquea…' : 'No hay tareas sin completar de este cliente'}</option>
+              {candidatesByPhase.map(g => (
+                <optgroup key={g.key} label={g.label}>
+                  {g.list.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </optgroup>
+              ))}
             </select>
           </div>
 
