@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS } from '../../utils/constants';
@@ -49,8 +49,8 @@ export default function SprintBoardView() {
   // Un sprint cerrado queda bloqueado (sus tareas no cambian de estado; solo se
   // pueden mover al sprint actual).
   const sprintsSorted = [...(sprints || [])].sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')));
+  // null = siguiendo al sprint activo (default). Al navegar se fija un id concreto.
   const [viewSprintId, setViewSprintId] = useState(null);
-  useEffect(() => { if (!viewSprintId && activeSprint?.id) setViewSprintId(activeSprint.id); }, [activeSprint, viewSprintId]);
   const viewSprint = (sprints || []).find(s => s.id === viewSprintId) || activeSprint;
   const locked = isSprintLocked(viewSprint);
   const viewIdx = sprintsSorted.findIndex(s => s.id === viewSprint?.id);

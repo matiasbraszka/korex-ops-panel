@@ -83,7 +83,8 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
 
   const handlePhaseTaskAdd = (phaseKey, title) => {
     if (title.trim()) {
-      const t = createTask(title.trim(), c.id, '', 'normal', 'backlog', '', null);
+      // Auto-asignar a quien crea la tarea (creación ágil).
+      const t = createTask(title.trim(), c.id, currentUser?.name || '', 'normal', 'backlog', '', null);
       if (t) updateTask(t.id, { isRoadmapTask: true, phase: phaseKey });
     }
     setAddingToPhase(null);
