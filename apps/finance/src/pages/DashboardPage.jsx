@@ -11,14 +11,15 @@ export default function DashboardPage() {
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
   const [cli, setCli] = useState('');
-  // Filtro de período: arranca en enero 2026 y se recuerda (no se resetea al volver a entrar).
+  // Filtro de período: el "desde" arranca en enero 2026 y se recuerda. El "hasta"
+  // NO se recuerda: siempre salta a la última fecha con datos al cargar, así el
+  // dashboard nunca queda "congelado" escondiendo los ingresos más nuevos.
   const [dStart, setDStart] = useState(() => { try { return localStorage.getItem('fin_dash_dStart') || '2026-01-01'; } catch { return '2026-01-01'; } });
-  const [dEnd, setDEnd] = useState(() => { try { return localStorage.getItem('fin_dash_dEnd') || ''; } catch { return ''; } });
+  const [dEnd, setDEnd] = useState('');
   const [egCat, setEgCat] = useState('');
   const [pcHover, setPcHover] = useState(null);
   const [evoHover, setEvoHover] = useState(null);
   useEffect(() => { try { localStorage.setItem('fin_dash_dStart', dStart || ''); } catch { /* noop */ } }, [dStart]);
-  useEffect(() => { try { localStorage.setItem('fin_dash_dEnd', dEnd || ''); } catch { /* noop */ } }, [dEnd]);
 
   useEffect(() => {
     Promise.all([
