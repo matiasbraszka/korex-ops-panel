@@ -14,7 +14,7 @@ const TAB_ICONS = {
   todo: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
 };
 
-export default function TareasToolbar({ view, setView, views = [], scope, setScope, onlySprint, setOnlySprint }) {
+export default function TareasToolbar({ view, setView, views = [], onlySprint, setOnlySprint }) {
   const {
     activeSprint, teamMembers, clients, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter,
     closeSprint, hideCompletedTasks, setHideCompletedTasks,
@@ -41,13 +41,13 @@ export default function TareasToolbar({ view, setView, views = [], scope, setSco
     return () => document.removeEventListener('mousedown', h);
   }, [personOpen, clientOpen, filtersOpen]);
 
-  const isKorex = (c) => /empresa|korex/i.test(c?.name || '');
-  const scopeClients = (clients || []).filter(c => c.status !== 'completed').filter(c => (scope === 'int' ? isKorex(c) : !isKorex(c)));
+  // Todos los clientes activos, incluido Korex/Empresa: eligiéndolo se ve lo
+  // interno (lo que antes hacía el alcance "Internos").
+  const scopeClients = (clients || []).filter(c => c.status !== 'completed');
   const selClient = (clients || []).find(c => c.id === taskClientFilter);
   const cInitials = (c) => (c?.name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const selMember = (teamMembers || []).find(m => m.name === taskAssignee);
 
-  const seg = (active) => ({ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 7, cursor: 'pointer', background: active ? '#FFFFFF' : 'transparent', color: active ? '#1A1D26' : '#6B7280', boxShadow: active ? '0 1px 2px rgba(10,22,40,.08)' : 'none', whiteSpace: 'nowrap' });
   const trigger = { display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#3F4653', border: '1px solid #E2E5EB', borderRadius: 9, padding: '5px 10px', cursor: 'pointer', background: '#fff', whiteSpace: 'nowrap' };
   const activeFilters = (hideCompletedTasks ? 1 : 0) + (isObj && onlySprint ? 1 : 0);
 
@@ -70,11 +70,6 @@ export default function TareasToolbar({ view, setView, views = [], scope, setSco
       {/* Controles (solo en vistas con tareas) */}
       {showFilters && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: '#F0F2F5', borderRadius: 9, padding: 3 }}>
-            <span onClick={() => setScope('cli')} style={seg(scope === 'cli')}>Clientes</span>
-            <span onClick={() => setScope('int')} style={seg(scope === 'int')}>Internos</span>
-          </div>
-
           {/* Cliente */}
           <div ref={cRef} style={{ position: 'relative' }}>
             <span onClick={() => setClientOpen(v => !v)} style={trigger}>

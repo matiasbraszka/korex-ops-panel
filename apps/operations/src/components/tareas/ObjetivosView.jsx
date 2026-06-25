@@ -28,7 +28,7 @@ function dotStyle(status) {
   return { border: '2px solid #D0D5DD', bg: 'transparent', icon: '' };
 }
 
-export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
+export default function ObjetivosView({ onlySprint = false }) {
   const {
     clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
@@ -108,8 +108,10 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     // (userOwnsTask). Si crea una tarea SIN responsable, queda invisible para él
     // y "desaparece" apenas la crea. La asignamos a quien la crea por defecto;
     // puede reasignarla desde la fila. Los admin siguen creando sin responsable.
+    // Auto-asignación ágil: si hay un encargado filtrado, a esa persona; si no,
+    // a quien crea la tarea (admin o no). Siempre se puede reasignar desde la fila.
     const me = (teamMembers || []).find(m => m.id === currentUser?.id);
-    const defaultAssignee = restricted ? (me?.name || currentUser?.name || '') : '';
+    const defaultAssignee = (taskAssignee && taskAssignee !== 'all') ? taskAssignee : (me?.name || currentUser?.name || '');
     const created = createTask(title, clientId, defaultAssignee, 'normal', 'backlog', '', null, phaseKey === 'otras' ? null : phaseKey);
     // Bugfix: con el filtro "solo sprint" activo, una tarea recién creada (que
     // todavía no está en el sprint) quedaría oculta y "desaparece". Si estamos
@@ -140,7 +142,6 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   };
 
   let clientList = clients.filter(c => c.status !== 'completed');
-  clientList = clientList.filter(c => (scope === 'int' ? isKorexClient(c) : !isKorexClient(c)));
   if (taskClientFilter !== 'all') clientList = clientList.filter(c => c.id === taskClientFilter);
   clientList = clientList.filter(c => {
     // Mostrar si tiene al menos una tarea visible (respeta ocultar completadas,
