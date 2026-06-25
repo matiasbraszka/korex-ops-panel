@@ -286,7 +286,10 @@ function Cuadre({ globalCom, globalPub, fondoComGlobal, perCliente, rolRows }) {
   const dif = fondoCom - adeudado;
   const korexGen = +(byRole.korex || {}).generado || 0;
 
-  const bdGen = [...ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m((+r(k).generado || 0) + (k === 'afiliado' ? (+r(k).reservado || 0) : 0)) })), ...(byRole.korex ? [{ label: 'Korex', value: m(korexGen), muted: true }] : [])];
+  const bdGen = [...ROLES5.flatMap((k) => k === 'afiliado'
+    ? [{ label: 'Afiliado anotado', value: m(+r(k).generado || 0) },
+       { label: 'Reserva sin afiliado asignado', value: m(+r(k).reservado || 0) }]
+    : [{ label: ROLE_LABEL[k], value: m(+r(k).generado || 0) }]), ...(byRole.korex ? [{ label: 'Korex', value: m(korexGen), muted: true }] : [])];
   const bdPag = ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m(+r(k).pagado || 0) }));
   const bdAde = ROLES5.flatMap((k) => k === 'afiliado'
     ? [{ label: 'Afiliado anotado (a pagar)', value: m(+r(k).deuda || 0) },
