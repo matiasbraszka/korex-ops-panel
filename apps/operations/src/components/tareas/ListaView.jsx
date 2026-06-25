@@ -23,7 +23,7 @@ function taskInsertIndex(containerEl, clientY, draggedId) {
   return rows.length;
 }
 
-export default function ListaView({ scope = 'cli' }) {
+export default function ListaView() {
   const {
     clients, tasks, teamMembers, currentUser, activeSprint,
     updateTask, deleteTask, reorderTask,
@@ -74,8 +74,6 @@ export default function ListaView({ scope = 'cli' }) {
     if (!matchesAssignee(t)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
-    const c = clientById(t.clientId);
-    if (c) { const interno = isKorexClient(c); if (scope === 'int' ? !interno : interno) return false; }
     return true;
   };
 
@@ -90,7 +88,7 @@ export default function ListaView({ scope = 'cli' }) {
     });
     return list.sort((a, b) => cPos(a.c) - cPos(b.c));
     // eslint-disable-next-line
-  }, [tasks, activeSprint, taskAssignee, scope, hideCompletedTasks, taskClientFilter, posByTask, posByClient, orderUserId]);
+  }, [tasks, activeSprint, taskAssignee, hideCompletedTasks, taskClientFilter, posByTask, posByClient, orderUserId]);
 
   const initials = (c) => (c?.name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const runOnce = (fn) => { if (busyRef.current) return; busyRef.current = true; try { fn(); } finally { setTimeout(() => { busyRef.current = false; }, 0); } };

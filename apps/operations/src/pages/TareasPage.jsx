@@ -45,8 +45,8 @@ export default function TareasPage() {
       return DEFAULT_VIEW;
     }
   });
-  // Filtros del diseño: alcance (Clientes/Internos) y "solo en el sprint".
-  const [scope, setScope] = useState('cli');
+  // Filtro "solo en el sprint" (Objetivos). El antiguo alcance Clientes/Internos
+  // se quitó: el filtro de cliente ya cubre lo interno (eligiendo Korex/Empresa).
   const [onlySprint, setOnlySprint] = useState(false);
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function TareasPage() {
       {/* Sprint: toolbar unificado (pestañas + filtros en una sola fila).
           Legacy: pestañas + barra de filtros vieja. */}
       {isSprint ? (
-        <TareasToolbar view={view} setView={setView} views={VIEWS} scope={scope} setScope={setScope} onlySprint={onlySprint} setOnlySprint={setOnlySprint} />
+        <TareasToolbar view={view} setView={setView} views={VIEWS} onlySprint={onlySprint} setOnlySprint={setOnlySprint} />
       ) : (
         <ViewToggle value={view} onChange={setView} views={VIEWS} />
       )}
@@ -82,9 +82,9 @@ export default function TareasPage() {
 
       {/* Vistas sprint */}
       {isSprint && view === 'rendimiento' && <RendimientoView />}
-      {isSprint && view === 'objetivos' && <ObjetivosView scope={scope} onlySprint={onlySprint} />}
-      {isSprint && view === 'sprint' && <SprintBoardView scope={scope} />}
-      {isSprint && view === 'lista' && <ListaView scope={scope} />}
+      {isSprint && view === 'objetivos' && <ObjetivosView onlySprint={onlySprint} />}
+      {isSprint && view === 'sprint' && <SprintBoardView />}
+      {isSprint && view === 'lista' && <ListaView />}
       {isSprint && view === 'todo' && <WeeklyTodoView />}
 
       {/* Vistas legacy */}
