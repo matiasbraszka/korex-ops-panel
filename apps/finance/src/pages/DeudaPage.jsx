@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Fragment } from 'react';
+import { useEffect, useState, useMemo, useCallback, Fragment } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
 import { Search, Msg } from '../components/bits.jsx';
@@ -10,6 +10,11 @@ import { money, ROLE, ROLE_LABEL } from '../lib/format.js';
 const VIEWS = [['cuadre', 'Cuadre'], ['rol', 'Por rol'], ['afiliado', 'Afiliados'], ['cliente', 'Cliente → Korex'], ['fondos', 'Fondos Mercury'], ['especiales', 'Especiales']];
 const ROLES = ['cliente', 'conector', 'consultor', 'marketing', 'afiliado'];
 const red = (v) => v > 1 ? '#dc2626' : v < -1 ? '#059669' : '#94a3b8';
+
+// Nombres ÚNICOS para los dos conceptos del afiliado — se usan igual en TODO el
+// apartado de Deuda (Cuadre, Por rol, Fondos) para no confundir.
+const LBL_AFILIADO = 'Afiliado anotado (a pagar)';
+const LBL_RESERVA = 'Reserva sin afiliado asignado';
 
 export default function DeudaPage() {
   const [rol, setRol] = useState(null);
@@ -26,9 +31,13 @@ export default function DeudaPage() {
   const [q, setQ] = useState('');
   const [hover, setHover] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const resolve = useDirectoryResolver();
 
-  useEffect(() => {
+  // Carga (re-ejecutable). Las fuentes son vistas LIVE en Postgres, así que cada
+  // fetch trae los números actuales (no hay filtro de fecha que los congele).
+  const load = useCallback(() => {
+    setRefreshing(true);
     Promise.all([
       sbFetch('fin_deuda_cliente_rol?select=cliente,role_key,generado,reservado,pagado,deuda&limit=3000'),
       sbFetch('fin_deuda_afiliado?select=persona,generado_total,generado_korex,pagado,deuda&order=deuda.desc.nullslast&limit=3000'),
@@ -40,17 +49,29 @@ export default function DeudaPage() {
       sbFetch('fin_cuadre_cliente?select=k,cliente,com_fondo,com_generado,com_reservado,com_pagado,com_deuda,pub_fondo,pub_neto,pub_gastado&limit=500'),
       sbFetch('fin_deuda_afiliado_cliente?select=cliente,persona,generado,pagado,deuda&order=cliente.asc&limit=5000'),
     ])
-      .then(([r, a, c, s, f, rc, rp, cc, ac]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); setCuadreCli(cc || []); setAfiCli(ac || []); })
-      .catch((e) => setError(String(e)));
+      .then(([r, a, c, s, f, rc, rp, cc, ac]) => { setRol(r || []); setAfi(a || []); setCli(c || []); setEsp(s || []); setFondos(f || []); setResCom(rc || []); setResPub((Array.isArray(rp) ? rp[0] : rp) || {}); setCuadreCli(cc || []); setAfiCli(ac || []); setError(''); })
+      .catch((e) => setError(String(e)))
+      .finally(() => setRefreshing(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  // Refresca al volver a la pestaña/ventana: los datos quedan siempre frescos
+  // sin recargar la página (igual que se arregló el dashboard).
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState !== 'hidden') load(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
+  }, [load]);
 
   const rolByClient = useMemo(() => {
     if (!rol) return null;
     const map = new Map(); let reservado = 0;
     rol.forEach((r) => {
       const k = r.cliente || '—';
-      if (!map.has(k)) map.set(k, { cliente: k, byRole: {}, deuda: 0, gen: 0, pag: 0 });
-      const c = map.get(k); c.byRole[r.role_key] = +r.deuda; c.deuda += +r.deuda; c.gen += +r.generado; c.pag += +r.pagado; reservado += +r.reservado || 0;
+      if (!map.has(k)) map.set(k, { cliente: k, byRole: {}, deuda: 0, gen: 0, pag: 0, reservado: 0 });
+      const c = map.get(k); c.byRole[r.role_key] = +r.deuda; c.deuda += +r.deuda; c.gen += +r.generado; c.pag += +r.pagado;
+      const res = +r.reservado || 0; c.reservado += res; reservado += res;
     });
     return { list: [...map.values()].sort((a, b) => b.deuda - a.deuda), reservado };
   }, [rol]);
@@ -65,12 +86,15 @@ export default function DeudaPage() {
       const list = rolByClient.list.filter((c) => !qq || c.cliente.toLowerCase().includes(qq));
       const t = { gen: 0, pag: 0, deuda: 0, byRole: {} }; ROLES.forEach((r) => (t.byRole[r] = 0));
       list.forEach((c) => { t.gen += c.gen; t.pag += c.pag; t.deuda += c.deuda; ROLES.forEach((r) => (t.byRole[r] += c.byRole[r] || 0)); });
+      const resTot = list.reduce((a, c) => a + (+c.reservado || 0), 0);
       return {
-        cards: [['Generado a repartir', money(t.gen)], ['Pagado', money(t.pag)], ['Deuda (Korex debe)', money(t.deuda), 'red'], ...(rolByClient.reservado > 1 ? [['Reservado afiliado', money(rolByClient.reservado), 'amber']] : [])],
-        cols: [{ label: 'Cliente' }, ...ROLES.map((r) => ({ label: ROLE_LABEL[r], color: ROLE[r] })), { label: 'Total' }],
-        rows: list.map((c) => ({ name: c.cliente, cells: [...ROLES.map((r) => ({ v: money(c.byRole[r] || 0), color: red(c.byRole[r] || 0) })), { v: money(c.deuda), color: c.deuda > 1 ? '#dc2626' : '#94a3b8', bold: true }] })),
-        totals: [...ROLES.map((r) => ({ v: money(t.byRole[r]), color: '#dc2626' })), { v: money(t.deuda), color: '#dc2626' }],
-        note: 'Lo que Korex debe pagar a cada rol (Generado − Pagado). Si cobró el cliente, eso va en Cliente → Korex. Verde/negativo = pagado de más.', count: list.length,
+        cards: [['Generado a repartir', money(t.gen)], ['Pagado', money(t.pag)], ['Deuda (Korex debe)', money(t.deuda), 'red'], ...(rolByClient.reservado > 1 ? [[LBL_RESERVA, money(rolByClient.reservado), 'amber']] : [])],
+        // Afiliado segmentado: la columna del rol afiliado es "Afiliado anotado (a
+        // pagar)" y se agrega una columna aparte "Reserva sin afiliado asignado".
+        cols: [{ label: 'Cliente' }, ...ROLES.map((r) => ({ label: r === 'afiliado' ? LBL_AFILIADO : ROLE_LABEL[r], color: ROLE[r] })), { label: LBL_RESERVA, color: '#b45309' }, { label: 'Total' }],
+        rows: list.map((c) => ({ name: c.cliente, cells: [...ROLES.map((r) => ({ v: money(c.byRole[r] || 0), color: red(c.byRole[r] || 0) })), { v: money(c.reservado || 0), color: '#b45309' }, { v: money(c.deuda), color: c.deuda > 1 ? '#dc2626' : '#94a3b8', bold: true }] })),
+        totals: [...ROLES.map((r) => ({ v: money(t.byRole[r]), color: '#dc2626' })), { v: money(resTot), color: '#b45309' }, { v: money(t.deuda), color: '#dc2626' }],
+        note: 'Lo que Korex debe pagar a cada rol (Generado − Pagado). "Afiliado anotado (a pagar)" = comisión de un afiliado ya asignado; "Reserva sin afiliado asignado" = comisión apartada que todavía no tiene afiliado. Verde/negativo = pagado de más.', count: list.length,
       };
     }
     if (view === 'afiliado') {
@@ -100,7 +124,7 @@ export default function DeudaPage() {
       const t = list.reduce((a, r) => ({ gen: a.gen + (+r.generado || 0), pag: a.pag + (+r.pagado || 0), deuda: a.deuda + (+r.deuda || 0), res: a.res + (+r.reservado || 0), debe: a.debe + (+r.debe_apartar || 0), fondo: a.fondo + (+r.fondo_comisiones || 0), diff: a.diff + (+r.diff || 0) }), { gen: 0, pag: 0, deuda: 0, res: 0, debe: 0, fondo: 0, diff: 0 });
       return {
         cards: [['Generado', money(t.gen)], ['Pagado', money(t.pag), 'green'], ['Debe apartar', money(t.debe)], ['En fondos Mercury', money(t.fondo), 'sky'], ['Diferencia total', money(t.diff), t.diff < -1 ? 'red' : 'green']],
-        cols: [{ label: 'Cliente' }, { label: 'Generado' }, { label: 'Pagado' }, { label: 'Deuda pend.' }, { label: 'Reserva afi.' }, { label: 'Debe apartar' }, { label: 'Fondo Mercury' }, { label: 'Diferencia' }],
+        cols: [{ label: 'Cliente' }, { label: 'Generado' }, { label: 'Pagado' }, { label: 'Deuda pend.' }, { label: LBL_RESERVA }, { label: 'Debe apartar' }, { label: 'Fondo Mercury' }, { label: 'Diferencia' }],
         rows: list.map((r) => ({ name: r.cliente, cells: [{ v: money(r.generado) }, { v: money(r.pagado), color: '#059669' }, { v: money(r.deuda) }, { v: money(r.reservado), color: '#b45309' }, { v: money(r.debe_apartar), bold: true }, { v: r.tiene_fondo ? money(r.fondo_comisiones) : 'sin fondo', color: r.tiene_fondo ? '#0369a1' : '#cbd5e1' }, { v: money(r.diff), color: red(+r.diff), bold: true }] })),
         totals: [{ v: money(t.gen) }, { v: money(t.pag), color: '#059669' }, { v: money(t.deuda) }, { v: money(t.res), color: '#b45309' }, { v: money(t.debe) }, { v: money(t.fondo), color: '#0369a1' }, { v: money(t.diff), color: t.diff < -1 ? '#dc2626' : '#059669' }],
         note: 'Foto completa por cliente: lo que generó en comisiones, lo que ya se le pagó, lo que queda pendiente (Deuda = Generado − Pagado), la reserva de afiliado, lo que se debería tener apartado (Debe apartar = Deuda pend. + Reserva) y el saldo real de su cuenta "… Comisiones" en Mercury. Diferencia = Fondo − Debe apartar; rojo/negativo = falta plata en el fondo.', count: list.length,
@@ -135,6 +159,10 @@ export default function DeudaPage() {
           ))}
         </div>
         <Search value={q} onChange={setQ} placeholder="Buscar…" width={200} />
+        <button onClick={load} disabled={refreshing} title="Volver a traer los números actuales"
+          style={{ border: '1px solid #E2E5EB', background: '#fff', borderRadius: 9, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, color: refreshing ? '#9AA4B2' : '#0EA5A4', cursor: refreshing ? 'default' : 'pointer' }}>
+          {refreshing ? 'Actualizando…' : '↻ Actualizar'}
+        </button>
       </div>
 
       {view === 'cuadre' ? (
@@ -287,13 +315,13 @@ function Cuadre({ globalCom, globalPub, fondoComGlobal, perCliente, rolRows }) {
   const korexGen = +(byRole.korex || {}).generado || 0;
 
   const bdGen = [...ROLES5.flatMap((k) => k === 'afiliado'
-    ? [{ label: 'Afiliado anotado', value: m(+r(k).generado || 0) },
-       { label: 'Reserva sin afiliado asignado', value: m(+r(k).reservado || 0) }]
+    ? [{ label: LBL_AFILIADO, value: m(+r(k).generado || 0) },
+       { label: LBL_RESERVA, value: m(+r(k).reservado || 0) }]
     : [{ label: ROLE_LABEL[k], value: m(+r(k).generado || 0) }]), ...(byRole.korex ? [{ label: 'Korex', value: m(korexGen), muted: true }] : [])];
   const bdPag = ROLES5.map((k) => ({ label: ROLE_LABEL[k], value: m(+r(k).pagado || 0) }));
   const bdAde = ROLES5.flatMap((k) => k === 'afiliado'
-    ? [{ label: 'Afiliado anotado (a pagar)', value: m(+r(k).deuda || 0) },
-       { label: 'Reserva sin afiliado asignado', value: m(+r(k).reservado || 0) }]
+    ? [{ label: LBL_AFILIADO, value: m(+r(k).deuda || 0) },
+       { label: LBL_RESERVA, value: m(+r(k).reservado || 0) }]
     : [{ label: ROLE_LABEL[k], value: m(+r(k).deuda || 0) }]);
 
   const pf = +pub.fondo || 0, pn = +pub.neto || 0, pg = +pub.gastado || 0;
@@ -313,7 +341,7 @@ function Cuadre({ globalCom, globalPub, fondoComGlobal, perCliente, rolRows }) {
         <Panel title="Comisiones" subtitle={selCli ? `Fondo de comisiones de ${selCli} vs lo adeudado a sus partners` : 'Total: lo que debería estar apartado para partners vs los fondos de comisiones'} tint="#0EA5A4">
           <MetricRow label="En el fondo de Mercury (ahora)" value={m(fondoCom)} color="#0369a1" />
           <MetricRow label="Comisiones generadas" value={m(generado + reserva)} kk="g" exp={exp} setExp={setExp} breakdown={bdGen} />
-          <MetricRow label="— de eso, reserva afiliado" value={m(reserva)} muted />
+          <MetricRow label={`— de eso, ${LBL_RESERVA}`} value={m(reserva)} muted />
           <MetricRow label="Comisiones pagadas" value={m(pagado)} color="#059669" kk="p" exp={exp} setExp={setExp} breakdown={bdPag} />
           <MetricRow label="Adeudado (debería estar apartado)" value={m(adeudado)} bold kk="a" exp={exp} setExp={setExp} breakdown={bdAde} />
           <MetricRow label="Diferencia (fondo − adeudado)" value={m(dif)} bold color={dif < -1 ? '#dc2626' : '#059669'} hint={dif < -1 ? 'falta plata en el fondo' : 'ok'} />
