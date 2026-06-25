@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, isKorexClient, progressOf, getAllPhases, isTaskBlocked } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, progressOf, getAllPhases, isTaskBlocked, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, fmtDuration, today } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -30,18 +31,34 @@ function Kpi({ label, value, sub, color, barw }) {
   );
 }
 
-export default function SprintBoardView({ scope = 'cli' }) {
+export default function SprintBoardView() {
   const {
-    activeSprint, tasks, updateTask, reorderTask, teamMembers, clients, currentUser,
+    activeSprint, sprints, tasks, updateTask, reorderTask, moveTaskToSprint, teamMembers, clients, currentUser,
     taskAssignee, taskClientFilter, taskComments, hideCompletedTasks,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+  const todayStr = today();
 
   const [draggedId, setDraggedId] = useState(null);
   const [overCol, setOverCol] = useState(null);
   const [wipMsg, setWipMsg] = useState('');
   const [openTaskId, setOpenTaskId] = useState(null);
   const [query, setQuery] = useState('');
+
+  // Navegación entre sprints: por defecto el activo; se puede ir a los anteriores.
+  // Un sprint cerrado queda bloqueado (sus tareas no cambian de estado; solo se
+  // pueden mover al sprint actual).
+  const sprintsSorted = [...(sprints || [])].sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')));
+  const [viewSprintId, setViewSprintId] = useState(null);
+  useEffect(() => { if (!viewSprintId && activeSprint?.id) setViewSprintId(activeSprint.id); }, [activeSprint, viewSprintId]);
+  const viewSprint = (sprints || []).find(s => s.id === viewSprintId) || activeSprint;
+  const locked = isSprintLocked(viewSprint);
+  const viewIdx = sprintsSorted.findIndex(s => s.id === viewSprint?.id);
+  const hasPrev = viewIdx >= 0 && viewIdx + 1 < sprintsSorted.length; // anterior = más viejo
+  const hasNext = viewIdx > 0;                                         // siguiente = más nuevo
+  const goPrev = () => { if (hasPrev) setViewSprintId(sprintsSorted[viewIdx + 1].id); };
+  const goNext = () => { if (hasNext) setViewSprintId(sprintsSorted[viewIdx - 1].id); };
+  const notifyLocked = () => { setWipMsg('Este sprint está cerrado. Para reorganizar una tarea, movela al sprint actual desde la tarjeta.'); setTimeout(() => setWipMsg(''), 4500); };
 
   const clientById = (id) => (clients || []).find(c => c.id === id);
   const matchesQuery = (t) => {
@@ -65,12 +82,10 @@ export default function SprintBoardView({ scope = 'cli' }) {
     // El "ocultar completadas" NO se aplica acá (sobre `inSprint`): así los KPIs
     // de cabecera (sobre todo "Avance: X/Y validadas") siguen contando lo hecho.
     // El ocultar se aplica solo al render del tablero, en `columnTasks`.
-    const c = clientById(t.clientId);
-    if (c) { const interno = isKorexClient(c); if (scope === 'int' ? !interno : interno) return false; }
     return true;
   };
 
-  const inSprint = sprintTasks(tasks, activeSprint).filter(visible);
+  const inSprint = sprintTasks(tasks, viewSprint).filter(visible);
   const memberOf = (name) => {
     const f = String(name || '').split(',')[0]?.trim().toLowerCase();
     if (!f) return null;
@@ -89,6 +104,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
     setOverCol(null);
     const id = draggedId; setDraggedId(null);
     if (!id) return;
+    if (locked) { notifyLocked(); return; }
     const task = inSprint.find(t => t.id === id);
     if (!task) return;
     const movingCol = boardColumn(task.status) !== colStatus;
@@ -96,6 +112,13 @@ export default function SprintBoardView({ scope = 'cli' }) {
     if (movingCol && colStatus !== 'backlog' && isTaskBlocked(task, tasks)) {
       setWipMsg('Tarea bloqueada por otra sin validar. Se queda en el Backlog hasta completar la que la bloquea.');
       setTimeout(() => setWipMsg(''), 4500);
+      return;
+    }
+    // Candado de validación: no se puede pasar a "Validado" con criterios de
+    // aceptación pendientes (se chequea solo al destino Validado).
+    if (movingCol && colStatus === 'done' && !canValidate(task)) {
+      setWipMsg(`Faltan ${pendingCriteria(task)} criterio(s) de aceptación para validar «${task.title}».`);
+      setTimeout(() => setWipMsg(''), 5000);
       return;
     }
     const col = SPRINT_COLUMNS.find(c => c.status === colStatus);
@@ -111,7 +134,7 @@ export default function SprintBoardView({ scope = 'cli' }) {
     reorderTask(newOrder);
   };
 
-  if (!activeSprint) {
+  if (!viewSprint) {
     return <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 14, padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No hay un sprint activo todavía.</div>;
   }
 
@@ -129,6 +152,20 @@ export default function SprintBoardView({ scope = 'cli' }) {
 
   return (
     <div>
+      {/* Navegador de sprints: anterior / siguiente + sprint en vista */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span onClick={goPrev} title="Sprint anterior" style={{ display: 'flex', width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1px solid #E2E5EB', background: '#fff', cursor: hasPrev ? 'pointer' : 'not-allowed', color: hasPrev ? '#3F4653' : '#C7CBD3' }}><ChevronLeft size={16} /></span>
+          <span onClick={goNext} title="Sprint siguiente" style={{ display: 'flex', width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1px solid #E2E5EB', background: '#fff', cursor: hasNext ? 'pointer' : 'not-allowed', color: hasNext ? '#3F4653' : '#C7CBD3' }}><ChevronRight size={16} /></span>
+          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>{viewSprint?.name || 'Sprint'}</span>
+          {viewSprint && <span style={{ fontSize: 12.5, color: '#9CA3AF' }}>{viewSprint.startDate} → {viewSprint.endDate}</span>}
+          {locked && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#6B7280', background: '#F0F2F5', borderRadius: 999, padding: '3px 9px' }}><Lock size={11} />Cerrado</span>}
+        </div>
+        {viewSprint?.id !== activeSprint?.id && activeSprint && (
+          <span onClick={() => setViewSprintId(activeSprint.id)} style={{ fontSize: 12.5, fontWeight: 600, color: '#5B7CF5', cursor: 'pointer', whiteSpace: 'nowrap' }}>Volver al sprint actual</span>
+        )}
+      </div>
+
       <div className="kx-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
         {kpis.map(k => <Kpi key={k.label} {...k} />)}
       </div>
@@ -168,14 +205,25 @@ export default function SprintBoardView({ scope = 'cli' }) {
                 const subDone = checklist.filter(s => s.done).length;
                 const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id).length;
                 const blocked = isTaskBlocked(t, tasks);
+                const overdue = t.dueDate && t.dueDate < todayStr && t.status !== 'done';
+                const dur = computeStatusDurations(t, taskComments);
+                const showDur = (t.status === 'in-progress' || t.status === 'en-revision');
+                const nSprints = sprintCount(t);
                 return (
-                  <div key={t.id} data-card-id={t.id} draggable
-                    onDragStart={() => { setDraggedId(t.id); startDragScroll(); }}
+                  <div key={t.id} data-card-id={t.id} draggable={!locked}
+                    onDragStart={() => { if (locked) return; setDraggedId(t.id); startDragScroll(); }}
                     onDragEnd={() => { setDraggedId(null); setOverCol(null); stopDragScroll(); }}
                     onClick={() => setOpenTaskId(t.id)}
                     style={{ background: blocked ? '#FFFBFB' : '#fff', border: blocked ? '1px solid #FECACA' : '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#9CA3AF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c?.name || ''}</span>
+                      {c && (
+                        <span title={c.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 10.5, fontWeight: 600, color: c.color || '#6B7280', background: (c.color || '#9CA3AF') + '1A', borderRadius: 6, padding: '2px 8px' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color || '#9CA3AF', flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        </span>
+                      )}
+                      <span style={{ flex: 1, minWidth: 0 }} />
+                      {overdue && <span title="Vencida" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 5, padding: '1px 5px', flexShrink: 0 }}>Vencida</span>}
                       {blocked && (
                         <span title="Bloqueada por otra tarea sin validar" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 5, padding: '1px 5px', flexShrink: 0 }}>
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
@@ -198,10 +246,18 @@ export default function SprintBoardView({ scope = 'cli' }) {
                         ? <span style={{ width: 24, height: 24, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initialsFor(m)}</span>
                         : <span style={{ fontSize: 11, color: '#B6B9C0', fontStyle: 'italic' }}>sin asignar</span>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                        {showDur && <span title="Tiempo en el estado actual" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: overdue ? '#DC2626' : '#9CA3AF' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{fmtDuration(dur.current?.days)}</span>}
+                        {nSprints > 1 && <span title={`Lleva ${nSprints} sprints`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 5, padding: '1px 6px' }}>{nSprints} sprints</span>}
                         {subTotal > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#6B7280' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>{subDone}/{subTotal}</span>}
                         {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9CA3AF' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" /></svg>{cCount}</span>}
                       </div>
                     </div>
+                    {locked && activeSprint && viewSprint?.id !== activeSprint.id && (
+                      <div onClick={(e) => { e.stopPropagation(); moveTaskToSprint(t.id, activeSprint.id); }}
+                        style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#5B7CF5', background: '#EEF2FF', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+                        Mover al sprint actual
+                      </div>
+                    )}
                   </div>
                 );
               })}

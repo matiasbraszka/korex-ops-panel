@@ -27,7 +27,7 @@ function dotStyle(status) {
   return { border: '2px solid #D0D5DD', bg: 'transparent', icon: '' };
 }
 
-export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
+export default function ObjetivosView({ onlySprint = false }) {
   const {
     clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
@@ -103,7 +103,9 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
     const title = newTitle.trim();
     setNewTitle(''); setAdding(null);
     if (!title) return;
-    createTask(title, clientId, '', 'normal', 'backlog', '', null, phaseKey === 'otras' ? null : phaseKey);
+    // Auto-asignar: si hay un encargado filtrado, a esa persona; si no, a quien crea.
+    const autoAssignee = (taskAssignee && taskAssignee !== 'all') ? taskAssignee : (currentUser?.name || '');
+    createTask(title, clientId, autoAssignee, 'normal', 'backlog', '', null, phaseKey === 'otras' ? null : phaseKey);
   });
   // Marcar/desmarcar completada desde la fila (sin abrir la ficha).
   const toggleDone = (t) => updateTask(t.id, { status: t.status === 'done' ? 'backlog' : 'done' });
@@ -129,7 +131,6 @@ export default function ObjetivosView({ scope = 'cli', onlySprint = false }) {
   };
 
   let clientList = clients.filter(c => c.status !== 'completed');
-  clientList = clientList.filter(c => (scope === 'int' ? isKorexClient(c) : !isKorexClient(c)));
   if (taskClientFilter !== 'all') clientList = clientList.filter(c => c.id === taskClientFilter);
   clientList = clientList.filter(c => {
     // Mostrar si tiene al menos una tarea visible (respeta ocultar completadas,

@@ -3,9 +3,9 @@ import { ChevronLeft, ChevronRight, ChevronDown, User, Check, Zap } from 'lucide
 import { useApp } from '../../context/AppContext';
 import { sprintDaysLeft } from '../../utils/helpers';
 
-// Barra de contexto del diseño: alcance (Clientes/Internos), navegación de mes
-// o info del sprint, "En el sprint", filtro por persona y cerrar sprint.
-export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySprint }) {
+// Barra de contexto del diseño: navegación de mes o info del sprint,
+// "En el sprint", filtro por cliente/persona y cerrar sprint.
+export default function TareasBar({ view, onlySprint, setOnlySprint }) {
   const { activeSprint, teamMembers, clients, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, closeSprint, hideCompletedTasks, setHideCompletedTasks } = useApp();
   const isObj = view === 'objetivos';
   const isSprint = view === 'sprint';
@@ -25,9 +25,9 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
     return () => document.removeEventListener('mousedown', h);
   }, [personOpen, clientOpen]);
 
-  // Clientes del alcance actual (Clientes vs Internos) para el filtro.
-  const isKorex = (c) => /empresa|korex/i.test(c?.name || '');
-  const scopeClients = (clients || []).filter(c => c.status !== 'completed').filter(c => (scope === 'int' ? isKorex(c) : !isKorex(c)));
+  // Clientes para el filtro (todos los activos, incluido Korex/Empresa: eligiéndolo
+  // se ve lo interno, que es lo que antes hacía el alcance "Internos").
+  const scopeClients = (clients || []).filter(c => c.status !== 'completed');
   const selClient = (clients || []).find(c => c.id === taskClientFilter);
   const cInitials = (c) => (c?.name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
@@ -35,7 +35,6 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
   const monthLabel = (() => { const s = new Date().toLocaleDateString('es', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); })();
   const daysLeft = sprintDaysLeft(activeSprint);
 
-  const seg = (active) => ({ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 7, cursor: 'pointer', background: active ? '#FFFFFF' : 'transparent', color: active ? '#1A1D26' : '#6B7280', boxShadow: active ? '0 1px 2px rgba(10,22,40,.08)' : 'none' });
   const navBtn = { display: 'flex', width: 26, height: 26, alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#6B7280' };
 
   return (
@@ -58,14 +57,8 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
 
       {/* DERECHA */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: '#F0F2F5', borderRadius: 9, padding: 3 }}>
-          <span onClick={() => setScope('cli')} style={seg(scope === 'cli')}>Clientes</span>
-          <span onClick={() => setScope('int')} style={seg(scope === 'int')}>Internos</span>
-        </div>
-
         {isObj && (
           <>
-            <div style={{ width: 1, height: 24, background: '#E2E5EB' }} />
             <span onClick={() => setOnlySprint(!onlySprint)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#3F4653', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
               <span style={{ width: 18, height: 18, borderRadius: 5, border: onlySprint ? 'none' : '1.5px solid #D0D5DD', background: onlySprint ? '#5B7CF5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {onlySprint && <Check size={12} stroke="#fff" strokeWidth={3} />}
