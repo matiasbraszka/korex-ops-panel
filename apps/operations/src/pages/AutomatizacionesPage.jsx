@@ -1,118 +1,56 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@korex/db';
-import { RefreshCw, X, AlertTriangle, Zap } from 'lucide-react';
+import { RefreshCw, Check, X, AlertTriangle, Zap } from 'lucide-react';
 
-// ── Panel "Salud de Automatizaciones" (Administración) ──────────────────────
-// Diagrama tipo constelación: Korex en el centro y cada automatización como un
-// nodo que late alrededor, agrupado por categoría. El color = estado real (lo
-// calcula la función automations_health() en Supabase, cruzando el historial de
-// los cron con la frescura de los datos). Se refresca solo cada 5 minutos.
+// ── Panel "Automatizaciones" (Administración) ───────────────────────────────
+// Tablero estilo Miro: cada automatización es una tarjeta que dice para qué es,
+// qué hace, a qué hora, DÓNDE se ejecuta (tu PC / Claude / Supabase / externo),
+// cuándo corrió por última vez y cuándo corrió bien por última vez. El estado lo
+// calcula automations_health() en Supabase (historial de cron + frescura de datos).
 
 const HEALTH = {
-  ok:     { color: '#22C55E', label: 'Funcionando',     soft: 'Al día' },
-  warn:   { color: '#F59E0B', label: 'Con alertas',     soft: 'Revisar' },
-  error:  { color: '#EF4444', label: 'Con errores',     soft: 'Falla' },
-  paused: { color: '#64748B', label: 'Pausada',         soft: 'Apagada' },
-  info:   { color: '#38BDF8', label: 'Activa por evento', soft: 'En vivo' },
+  ok:     { color: '#16A34A', label: 'Funcionando' },
+  warn:   { color: '#F59E0B', label: 'Con alertas' },
+  error:  { color: '#EF4444', label: 'Con errores' },
+  paused: { color: '#64748B', label: 'Pausada' },
+  info:   { color: '#38BDF8', label: 'Activa' },
 };
 
-// Orden y acento de color de cada categoría (solo decorativo del rótulo).
+// Dónde corre cada una — lo más importante a entender de un vistazo.
+const RUNTIME = {
+  local:    { label: 'Tu computadora', sub: 'tiene que estar prendida', color: '#F97316', icon: '💻' },
+  claude:   { label: 'Claude (nube)',  sub: 'rutina de IA, siempre activa', color: '#8B5CF6', icon: '✨' },
+  supabase: { label: 'Supabase',       sub: 'servidor en la nube, siempre activo', color: '#10B981', icon: '⚙️' },
+  external: { label: 'Servicio externo', sub: 'se dispara cuando el servicio avisa', color: '#0EA5A4', icon: '🔌' },
+};
+
 const CATEGORY_ORDER = ['Sincronización', 'Recordatorios', 'Informes', 'IA', 'Llamadas', 'Soporte', 'Ventas', 'Contratos', 'Finanzas'];
-const CATEGORY_ACCENT = {
-  'Sincronización': '#8B5CF6', 'Recordatorios': '#22C55E', 'Informes': '#EC4899',
-  'IA': '#38BDF8', 'Llamadas': '#F59E0B', 'Soporte': '#F472B6',
-  'Ventas': '#5B7CF5', 'Contratos': '#14B8A6', 'Finanzas': '#0EA5A4',
+const CATEGORY_ICON = {
+  'Sincronización': '🔄', 'Recordatorios': '⏰', 'Informes': '📊', 'IA': '✨', 'Llamadas': '📞',
+  'Soporte': '💬', 'Ventas': '💰', 'Contratos': '📝', 'Finanzas': '🏦', 'Otros': '📦',
 };
-const SOURCE_LABEL = { cron: 'Programada (reloj)', cloud: 'Rutina en la nube (IA)', event: 'Por evento' };
+const HEALTH_RANK = { error: 0, paused: 1, warn: 2, info: 3, ok: 4 };
 
-// ── helpers de tiempo ───────────────────────────────────────────────────────
 function fmtAgo(iso) {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 0) return 'recién';
   const min = Math.floor(diff / 60000);
-  if (min < 1) return 'hace instantes';
+  if (min < 1) return 'recién';
   if (min < 60) return `hace ${min} min`;
   const h = Math.floor(min / 60);
   if (h < 24) return `hace ${h} h`;
   const d = Math.floor(h / 24);
   return `hace ${d} día${d === 1 ? '' : 's'}`;
 }
-function fmtDateTime(iso) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('es-AR', {
-      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-      timeZone: 'America/Argentina/Buenos_Aires',
-    });
-  } catch { return '—'; }
-}
-
-// Motivo legible de por qué un nodo no está "ok".
-function reasonFor(n) {
-  if (n.health === 'paused') return 'Pausada o retirada — no está corriendo.';
-  if (n.health === 'error') {
-    if (n.source === 'cloud' && n.data_stale) return `Sin datos nuevos desde ${fmtDateTime(n.last_data)} — parece detenida.`;
-    if (n.source === 'cron' && Number(n.failed_7d) > 0) return `Falla al ejecutarse (${n.failed_7d} fallos en los últimos 7 días).`;
-    return 'Está fallando.';
-  }
-  if (n.health === 'warn') {
-    if (n.data_stale) return 'Corre, pero los datos no se están actualizando.';
-    if (Number(n.failed_7d) > 0) return `Tuvo ${n.failed_7d} fallos esta semana.`;
-    return 'Necesita una revisión.';
-  }
-  return null;
-}
-
-const polar = (cx, cy, r, deg) => {
-  const a = (deg * Math.PI) / 180;
-  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-};
-
-// ── Layout: ubica cada nodo en su sector radial alrededor del centro ─────────
-function buildLayout(items) {
-  const cx = 550, cy = 372;
-  const cats = CATEGORY_ORDER.filter((c) => items.some((i) => i.category === c));
-  // categorías que no estén en el orden conocido, al final
-  items.forEach((i) => { if (!cats.includes(i.category)) cats.push(i.category); });
-
-  const N = cats.length;
-  const nodes = [];
-  const labels = [];
-
-  cats.forEach((cat, ci) => {
-    const sectorDeg = -90 + ci * (360 / N);            // centro angular del sector
-    const members = items.filter((i) => i.category === cat);
-    const M = members.length;
-    const usable = (360 / N) * 0.74;
-    const gap = M > 1 ? Math.min(13, usable / M) : 0;
-
-    let maxR = 0;
-    members.forEach((m, j) => {
-      const off = (j - (M - 1) / 2) * gap;
-      const deg = sectorDeg + off;
-      const r = 212 + (j % 2) * 54;                     // escalona el radio
-      const [x, y] = polar(cx, cy, r, deg);
-      maxR = Math.max(maxR, r);
-      const c = Math.cos((deg * Math.PI) / 180);
-      const anchor = c > 0.25 ? 'start' : c < -0.25 ? 'end' : 'middle';
-      const lx = x + (anchor === 'start' ? 15 : anchor === 'end' ? -15 : 0);
-      const ly = y + (Math.sin((deg * Math.PI) / 180) > 0 ? 4 : 0);
-      nodes.push({ ...m, x, y, deg, anchor, lx, ly });
-    });
-    const [labelX, labelY] = polar(cx, cy, maxR + 66, sectorDeg);
-    labels.push({ cat, x: labelX, y: labelY, accent: CATEGORY_ACCENT[cat] || '#94A3B8', count: M });
-  });
-
-  return { cx, cy, nodes, labels };
-}
 
 export default function AutomatizacionesPage() {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
   const [fetchedAt, setFetchedAt] = useState(null);
+  const [groupBy, setGroupBy] = useState('category');   // 'category' | 'runtime'
+  const [onlyProblems, setOnlyProblems] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,14 +63,11 @@ export default function AutomatizacionesPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 5 * 60 * 1000);          // auto-refresco cada 5 min
+    const t = setInterval(load, 5 * 60 * 1000);
     const onFocus = () => load();
     window.addEventListener('focus', onFocus);
     return () => { clearInterval(t); window.removeEventListener('focus', onFocus); };
   }, [load]);
-
-  const layout = useMemo(() => (items?.length ? buildLayout(items) : null), [items]);
-  const selected = useMemo(() => items?.find((i) => i.id === selectedId) || null, [items, selectedId]);
 
   const counts = useMemo(() => {
     const c = { ok: 0, warn: 0, error: 0, paused: 0, info: 0 };
@@ -145,6 +80,28 @@ export default function AutomatizacionesPage() {
     [items],
   );
 
+  // Agrupa en columnas (tablero) según el modo elegido.
+  const columns = useMemo(() => {
+    if (!items) return [];
+    let list = items;
+    if (onlyProblems) list = list.filter((i) => ['error', 'warn', 'paused'].includes(i.health));
+
+    const byKey = {};
+    list.forEach((i) => {
+      const key = groupBy === 'runtime' ? i.runtime : i.category;
+      (byKey[key] = byKey[key] || []).push(i);
+    });
+    const order = groupBy === 'runtime' ? ['local', 'claude', 'supabase', 'external'] : CATEGORY_ORDER;
+    const keys = [...order.filter((k) => byKey[k]), ...Object.keys(byKey).filter((k) => !order.includes(k))];
+    return keys.map((key) => ({
+      key,
+      title: groupBy === 'runtime' ? (RUNTIME[key]?.label || key) : key,
+      icon: groupBy === 'runtime' ? (RUNTIME[key]?.icon || '📦') : (CATEGORY_ICON[key] || '📦'),
+      accent: groupBy === 'runtime' ? (RUNTIME[key]?.color || '#64748B') : '#8B5CF6',
+      items: byKey[key].slice().sort((a, b) => (HEALTH_RANK[a.health] - HEALTH_RANK[b.health]) || a.name.localeCompare(b.name)),
+    }));
+  }, [items, groupBy, onlyProblems]);
+
   if (loading && !items) {
     return <div className="text-gray-400 text-center py-24 text-sm">Cargando automatizaciones…</div>;
   }
@@ -155,235 +112,163 @@ export default function AutomatizacionesPage() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[20px] font-bold text-gray-800 flex items-center gap-2">
-            <Zap size={20} className="text-violet-500" /> Automatizaciones
+            <Zap size={19} className="text-violet-500" /> Automatizaciones
           </h1>
           <p className="text-xs text-gray-400 mt-0.5">
-            Todo lo que el sistema hace solo — y si viene corriendo bien. Se actualiza solo.
+            Todo lo que el sistema hace solo: qué hace, cuándo, dónde corre y si viene bien. Se actualiza solo.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[11px] text-gray-400">
-            Actualizado {fmtAgo(fetchedAt?.toISOString())}
-          </span>
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 text-[13px] font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-          >
+          <span className="text-[11px] text-gray-400">Actualizado {fmtAgo(fetchedAt?.toISOString())}</span>
+          <button onClick={load}
+            className="flex items-center gap-1.5 text-[13px] font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Actualizar
           </button>
         </div>
       </div>
 
-      {/* semáforo resumen */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          ['ok', counts.ok], ['error', counts.error], ['warn', counts.warn],
-          ['info', counts.info], ['paused', counts.paused],
-        ].map(([k, v]) => (
-          <div key={k} className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
+      {/* semáforo */}
+      <div className="flex flex-wrap items-center gap-2">
+        {[['ok', counts.ok], ['error', counts.error], ['warn', counts.warn], ['info', counts.info], ['paused', counts.paused]].map(([k, v]) => (
+          <div key={k} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-1">
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: HEALTH[k].color }} />
             <span className="text-[13px] font-semibold text-gray-700">{v}</span>
             <span className="text-[12px] text-gray-400">{HEALTH[k].label}</span>
           </div>
         ))}
+        {attention.length > 0 && (
+          <span className="flex items-center gap-1.5 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+            <AlertTriangle size={13} /> {attention.length} necesita{attention.length === 1 ? '' : 'n'} atención
+          </span>
+        )}
       </div>
 
-      {/* banner de atención */}
-      {attention.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-          <div className="flex items-center gap-2 text-amber-800 text-[13px] font-semibold mb-1.5">
-            <AlertTriangle size={15} /> {attention.length} necesita{attention.length === 1 ? '' : 'n'} atención
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {attention.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => setSelectedId(n.id)}
-                className="text-[12px] px-2.5 py-1 rounded-lg bg-white border cursor-pointer hover:shadow-sm transition-shadow"
-                style={{ borderColor: HEALTH[n.health].color, color: '#475569' }}
-              >
-                <span className="w-2 h-2 rounded-full inline-block mr-1.5 align-middle" style={{ background: HEALTH[n.health].color }} />
-                {n.name}
-              </button>
-            ))}
-          </div>
+      {/* controles */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          {[['category', 'Por categoría'], ['runtime', 'Por dónde corre']].map(([k, label]) => (
+            <button key={k} onClick={() => setGroupBy(k)}
+              className={`text-[12.5px] font-medium px-3 py-1 rounded-md transition-colors cursor-pointer ${groupBy === k ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {label}
+            </button>
+          ))}
         </div>
-      )}
-
-      {/* diagrama constelación */}
-      <div className="relative rounded-2xl overflow-hidden border border-violet-900/40"
-        style={{ background: 'radial-gradient(ellipse at center, #1E1B3A 0%, #0F0E1F 70%, #0A0913 100%)' }}>
-        {error && (
-          <div className="absolute top-3 left-3 z-10 text-[12px] text-red-300 bg-red-950/60 px-3 py-1.5 rounded-lg">
-            No se pudo leer el estado: {error}
-          </div>
-        )}
-
-        {layout && (
-          <svg viewBox="0 0 1100 760" className="w-full h-auto block select-none" style={{ maxHeight: '74vh' }}>
-            <defs>
-              <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-                <feGaussianBlur stdDeviation="4" result="b" />
-                <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-              <radialGradient id="core" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#C4B5FD" />
-                <stop offset="55%" stopColor="#8B5CF6" />
-                <stop offset="100%" stopColor="#5B21B6" />
-              </radialGradient>
-            </defs>
-
-            {/* órbitas de fondo */}
-            {[150, 235, 320].map((r) => (
-              <circle key={r} cx={layout.cx} cy={layout.cy} r={r} fill="none" stroke="#ffffff" strokeOpacity="0.05" />
-            ))}
-
-            {/* líneas centro → nodo (energía que fluye) */}
-            {layout.nodes.map((n) => (
-              <line
-                key={`l-${n.id}`}
-                x1={layout.cx} y1={layout.cy} x2={n.x} y2={n.y}
-                stroke={HEALTH[n.health].color}
-                strokeOpacity={selectedId && selectedId !== n.id ? 0.08 : 0.5}
-                strokeWidth={selectedId === n.id ? 2.4 : 1.3}
-                strokeDasharray="3 7"
-                className={n.health === 'paused' ? '' : 'auto-flow'}
-              />
-            ))}
-
-            {/* rótulos de categoría */}
-            {layout.labels.map((l) => (
-              <text key={l.cat} x={l.x} y={l.y} textAnchor="middle"
-                fontSize="12" fontWeight="700" fill={l.accent} fillOpacity="0.9"
-                style={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                {l.cat}
-              </text>
-            ))}
-
-            {/* nodos */}
-            {layout.nodes.map((n) => {
-              const h = HEALTH[n.health];
-              const isSel = selectedId === n.id;
-              const dim = selectedId && !isSel;
-              return (
-                <g key={n.id} onClick={() => setSelectedId(isSel ? null : n.id)}
-                   style={{ cursor: 'pointer', opacity: dim ? 0.4 : 1, transition: 'opacity .2s' }}>
-                  {/* anillo que late */}
-                  {n.health !== 'paused' && (
-                    <circle cx={n.x} cy={n.y} r={isSel ? 15 : 11} fill={h.color}
-                      className="auto-pulse" style={{ transformOrigin: `${n.x}px ${n.y}px` }} />
-                  )}
-                  {/* halo */}
-                  <circle cx={n.x} cy={n.y} r={isSel ? 16 : 12} fill={h.color} fillOpacity="0.18" filter="url(#glow)" />
-                  {/* punto */}
-                  <circle cx={n.x} cy={n.y} r={isSel ? 9 : 6.5} fill={h.color}
-                    stroke="#0F0E1F" strokeWidth="1.5" filter="url(#glow)" />
-                  {/* nombre */}
-                  <text x={n.lx} y={n.ly} textAnchor={n.anchor} dominantBaseline="middle"
-                    fontSize="11" fontWeight={isSel ? 700 : 500}
-                    fill="#E2E8F0" fillOpacity={dim ? 0.5 : 0.92}>
-                    {n.name}
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* núcleo Korex */}
-            <circle cx={layout.cx} cy={layout.cy} r="46" fill="url(#core)" filter="url(#glow)"
-              className="auto-core" style={{ transformOrigin: `${layout.cx}px ${layout.cy}px` }} />
-            <circle cx={layout.cx} cy={layout.cy} r="46" fill="none" stroke="#C4B5FD" strokeOpacity="0.5" strokeWidth="1.5" />
-            <text x={layout.cx} y={layout.cy - 3} textAnchor="middle" fontSize="17" fontWeight="800" fill="#fff" style={{ letterSpacing: '0.04em' }}>KOREX</text>
-            <text x={layout.cx} y={layout.cy + 13} textAnchor="middle" fontSize="9" fill="#DDD6FE" fillOpacity="0.85" style={{ letterSpacing: '0.12em' }}>OPERACIONES</text>
-          </svg>
-        )}
-
-        {/* panel de detalle */}
-        {selected && (
-          <div className="auto-fadein lg:absolute lg:top-4 lg:right-4 lg:w-[300px] m-3 lg:m-0 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden">
-            <div className="px-4 py-3 flex items-start justify-between gap-2"
-              style={{ background: HEALTH[selected.health].color + '14' }}>
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: CATEGORY_ACCENT[selected.category] || '#64748B' }}>
-                  {selected.category}
-                </div>
-                <div className="text-[15px] font-bold text-gray-800 leading-tight">{selected.name}</div>
-              </div>
-              <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-700 cursor-pointer shrink-0">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="p-4 space-y-2.5 text-[12.5px]">
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                style={{ background: HEALTH[selected.health].color + '1A', color: HEALTH[selected.health].color }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: HEALTH[selected.health].color }} />
-                {HEALTH[selected.health].label}
-              </span>
-
-              <p className="text-gray-600 leading-snug">{selected.description}</p>
-
-              {reasonFor(selected) && (
-                <div className="text-[12px] rounded-lg px-2.5 py-2 leading-snug"
-                  style={{ background: HEALTH[selected.health].color + '12', color: '#7c2d12' }}>
-                  {reasonFor(selected)}
-                </div>
-              )}
-
-              <dl className="space-y-1.5 pt-1">
-                <Row label="Cuándo corre" value={selected.schedule_human} />
-                <Row label="Tipo" value={SOURCE_LABEL[selected.source] || selected.source} />
-                {selected.source === 'cron' && (
-                  <>
-                    <Row label="Última corrida" value={fmtAgo(selected.last_run)} />
-                    <Row label="Corridas (7 días)" value={`${selected.ok_7d ?? 0} ok · ${selected.failed_7d ?? 0} fallos`} />
-                  </>
-                )}
-                {selected.data_key && (
-                  <Row label="Últimos datos" value={`${fmtAgo(selected.last_data)} ${selected.data_stale ? '⚠️' : '✓'}`} />
-                )}
-              </dl>
-            </div>
-          </div>
-        )}
-
-        {/* leyenda */}
-        <div className="absolute bottom-2.5 left-3 flex flex-wrap gap-x-3 gap-y-1">
-          {Object.entries(HEALTH).map(([k, v]) => (
-            <span key={k} className="flex items-center gap-1.5 text-[10.5px] text-gray-300">
-              <span className="w-2 h-2 rounded-full" style={{ background: v.color }} /> {v.label}
+        <label className="flex items-center gap-1.5 text-[12.5px] text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} className="accent-violet-600" />
+          Solo los que necesitan atención
+        </label>
+        {/* leyenda de dónde corre */}
+        <div className="flex flex-wrap gap-x-3 gap-y-1 ml-auto">
+          {Object.entries(RUNTIME).map(([k, r]) => (
+            <span key={k} className="flex items-center gap-1 text-[11px] text-gray-500">
+              <span>{r.icon}</span> {r.label}
             </span>
           ))}
         </div>
       </div>
 
-      {/* lista de detalle (completa y escaneable, también para móvil) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-        {CATEGORY_ORDER.filter((c) => (items || []).some((i) => i.category === c)).map((cat) => (
-          <div key={cat} className="bg-white border border-gray-200 rounded-xl p-3">
-            <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: CATEGORY_ACCENT[cat] || '#64748B' }}>
-              {cat}
+      {error && (
+        <div className="text-[12px] text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
+          No se pudo leer el estado: {error}
+        </div>
+      )}
+
+      {/* tablero */}
+      <div className="rounded-2xl border border-gray-200 p-3 sm:p-4"
+        style={{ background: '#F8FAFC', backgroundImage: 'radial-gradient(#CBD5E1 1px, transparent 1px)', backgroundSize: '22px 22px' }}>
+        <div className="flex gap-3 overflow-x-auto pb-1 items-start">
+          {columns.map((col) => (
+            <div key={col.key} className="shrink-0 w-[300px]">
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <span className="text-[15px]">{col.icon}</span>
+                <span className="text-[13px] font-bold text-gray-700">{col.title}</span>
+                <span className="text-[11px] text-gray-400 bg-white border border-gray-200 rounded-full px-1.5">{col.items.length}</span>
+                {groupBy === 'runtime' && RUNTIME[col.key]?.sub && (
+                  <span className="text-[10.5px] text-gray-400 italic truncate">· {RUNTIME[col.key].sub}</span>
+                )}
+              </div>
+              <div className="space-y-2.5">
+                {col.items.map((n) => <Card key={n.id} n={n} />)}
+              </div>
             </div>
-            <div className="space-y-1">
-              {(items || []).filter((i) => i.category === cat).map((n) => (
-                <button key={n.id} onClick={() => setSelectedId(n.id)}
-                  className="w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: HEALTH[n.health].color }} />
-                  <span className="text-[13px] text-gray-700 truncate flex-1">{n.name}</span>
-                  <span className="text-[11px] text-gray-400 shrink-0">{n.schedule_human}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+          {columns.length === 0 && (
+            <div className="text-[13px] text-gray-400 py-10 px-2">Nada que mostrar con este filtro. 🎉</div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function Row({ label, value }) {
+// ── Tarjeta (sticky tipo Miro) ──────────────────────────────────────────────
+function Card({ n }) {
+  const h = HEALTH[n.health];
+  const r = RUNTIME[n.runtime] || RUNTIME.supabase;
+
   return (
-    <div className="flex items-center justify-between gap-2">
-      <dt className="text-gray-400">{label}</dt>
-      <dd className="text-gray-700 font-medium text-right">{value}</dd>
+    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 overflow-hidden"
+      style={{ borderLeft: `4px solid ${h.color}` }}>
+      <div className="p-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-[13.5px] font-bold text-gray-800 leading-tight">{n.name}</div>
+          <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold"
+            style={{ background: h.color + '1A', color: h.color }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: h.color }} /> {h.label}
+          </span>
+        </div>
+
+        <p className="text-[12px] text-gray-500 leading-snug">{n.description}</p>
+
+        <div className="flex flex-wrap gap-1.5">
+          <span className="inline-flex items-center gap-1 text-[11px] text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5">
+            ⏰ {n.schedule_human}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-1.5 py-0.5"
+            style={{ background: r.color + '15', color: r.color }}>
+            {r.icon} {r.label}
+          </span>
+        </div>
+
+        <div className="pt-2 border-t border-gray-100 space-y-1">
+          <Footer n={n} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Footer({ n }) {
+  if (n.source === 'cron') {
+    const failed = n.last_status === 'failed';
+    return (
+      <>
+        <FRow label="Última corrida" value={fmtAgo(n.last_run)} ok={!failed} show />
+        <FRow label="Última vez OK" value={fmtAgo(n.last_ok)} ok={!!n.last_ok} show={!!n.last_ok || failed} muted />
+        {Number(n.failed_7d) > 0 && (
+          <div className="text-[11px] text-red-500">{n.failed_7d} fallos en los últimos 7 días</div>
+        )}
+      </>
+    );
+  }
+  if (n.data_key) {
+    return <FRow label="Última vez que trajo datos" value={fmtAgo(n.last_data)} ok={!n.data_stale} show />;
+  }
+  return (
+    <div className="text-[11px] text-gray-400 italic">
+      {n.runtime === 'external' ? 'Corre cuando llega el evento (no se registra acá).' : 'Rutina en la nube (no medible desde el panel).'}
+    </div>
+  );
+}
+
+function FRow({ label, value, ok, show, muted }) {
+  if (!show) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 text-[11.5px]">
+      <span className={muted ? 'text-gray-400' : 'text-gray-500'}>{label}</span>
+      <span className="flex items-center gap-1 font-medium" style={{ color: ok ? '#16A34A' : '#EF4444' }}>
+        {ok ? <Check size={12} /> : <X size={12} />} <span className="text-gray-700">{value}</span>
+      </span>
     </div>
   );
 }
