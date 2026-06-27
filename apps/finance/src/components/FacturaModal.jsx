@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { sbFetch, supabase } from '@korex/db';
 import { facConcepto, facFormaPago, facHtmlFactura, facImprimir, facPad4, facMiles, facFechaStr } from '../lib/factura.js';
 
-// Genera la factura de un ingreso dentro del sistema (reemplaza el popup del Sheet):
-// trae los datos fiscales del Directorio, arma el N° continuo, muestra el preview,
-// imprime el PDF (Guardar como PDF) y registra la factura en `invoices` + marca Facturado.
+// Genera la factura de un ingreso dentro del sistema.
+// REGLA (2026-06-27): la factura se registra SOLO si se logra archivar en Drive.
+// Si Drive falla, NO se consume número ni se guarda: se ofrece pegar el link manual
+// (cuando la factura se sube a Drive a mano) y recién ahí se registra con ese link.
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const uuid = () => (crypto?.randomUUID ? crypto.randomUUID() : 'inv-' + Date.now() + '-' + Math.round(Math.random() * 1e6));
 
@@ -17,6 +18,9 @@ export default function FacturaModal({ income, onClose, onDone }) {
   const [done, setDone] = useState(false);
   const [sent, setSent] = useState(null);   // resultado del envío por email: {ok,sent_to,test_mode} | {error}
   const [archived, setArchived] = useState(null); // archivado en Drive: {url,carpeta} | {error}
+  const [manualMode, setManualMode] = useState(false); // Drive falló → pedir link manual
+  const [manualLink, setManualLink] = useState('');
+  const [wantEmail, setWantEmail] = useState(false);   // si el intento original era "Generar y enviar"
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -78,55 +82,78 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   const imprimir = () => { if (!bill) return; facImprimir(facHtmlFactura(docData())); };
 
+  // Registra la factura en la base, marca el ingreso como facturado y (opcional) manda el email.
+  // pdfUrl = link de Drive (automático o manual). pdfB64 = PDF para adjuntar al email (si lo hay).
+  const persistInvoice = async ({ pdfUrl, pdfB64, sendEmail }) => {
+    const invId = uuid();
+    await sbFetch('invoices', {
+      method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
+      body: JSON.stringify({
+        id: invId, number: numeroFmt, client_id: income.client_id || null,
+        income_id: income.id, issue_date: todayISO(), amount: monto, currency: moneda,
+        concept: concepto, status: 'emitida', payment_method: income.payment_method || null,
+        kind: 'ingreso', pdf_url: pdfUrl || null, // ← el link queda guardado de entrada
+      }),
+    });
+    await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
+    onDone?.(income.id, numeroFmt);
+    if (sendEmail && bill.email) {
+      try {
+        const { data, error } = await supabase.functions.invoke('enviar-factura', {
+          body: { to: bill.email, numeroFmt, nombreFactura: bill.nombreFactura, pdf_base64: pdfB64 || null, html: facHtmlFactura(docData()) },
+        });
+        if (error) setSent({ error: error.message || String(error) });
+        else if (data?.ok) setSent({ ok: true, sent_to: data.sent_to, test_mode: data.test_mode });
+        else setSent({ error: data?.error || 'No se pudo enviar el email' });
+      } catch (e) {
+        setSent({ error: String(e) });
+      }
+    }
+    setDone(true);
+  };
+
+  // Flujo principal: Drive PRIMERO. Solo si archiva, se registra la factura.
   const guardar = async (sendEmail) => {
     if (!bill || !monto || !num) return;
-    setBusy(true); setErr(''); setSent(null); setArchived(null);
+    setBusy(true); setErr(''); setSent(null); setArchived(null); setManualMode(false);
+    setWantEmail(sendEmail);
     try {
-      // 1) Registrar la factura y marcar el ingreso como facturado.
-      const invId = uuid();
-      await sbFetch('invoices', {
-        method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
-        body: JSON.stringify({
-          id: invId, number: numeroFmt, client_id: income.client_id || null,
-          income_id: income.id, // ← link factura → ingreso (trazabilidad 1:1)
-          issue_date: todayISO(), amount: monto, currency: moneda, concept: concepto,
-          status: 'emitida', payment_method: income.payment_method || null, kind: 'ingreso',
-        }),
-      });
-      // Link ingreso → factura (queda vinculado aunque falle el archivado en Drive).
-      await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
-      onDone?.(income.id, numeroFmt);
       const html = facHtmlFactura(docData());
-      // 2) Archivar el PDF en Drive PRIMERO: devuelve el link y el PDF (base64) para adjuntarlo al email.
-      let pdfB64 = null;
+      let arch;
       try {
         const { data, error } = await supabase.functions.invoke('archivar-factura', {
           body: { html, numero: num, nombreFactura: bill.nombreFactura, fecha: todayISO() },
         });
-        if (error) setArchived({ error: error.message || String(error) });
-        else if (data?.ok) {
-          setArchived({ url: data.url, carpeta: data.carpeta });
-          pdfB64 = data.pdf_base64 || null;
-          try { await sbFetch(`invoices?id=eq.${invId}`, { method: 'PATCH', body: JSON.stringify({ pdf_url: data.url }) }); } catch { /* noop */ }
-        } else setArchived({ error: data?.error || 'No se pudo archivar en Drive' });
+        if (error) arch = { ok: false, error: error.message || String(error) };
+        else if (data?.ok) arch = { ok: true, url: data.url, carpeta: data.carpeta, pdf_base64: data.pdf_base64 || null };
+        else arch = { ok: false, error: data?.error || 'No se pudo archivar en Drive' };
       } catch (e) {
-        setArchived({ error: String(e) });
+        arch = { ok: false, error: String(e) };
       }
-      // 3) Enviar por email (opcional): mensaje formal simple + factura como PDF adjunto.
-      // Si no se pudo generar el PDF (pdfB64 null), cae al HTML inline para que el email salga igual.
-      if (sendEmail && bill.email) {
-        try {
-          const { data, error } = await supabase.functions.invoke('enviar-factura', {
-            body: { to: bill.email, numeroFmt, nombreFactura: bill.nombreFactura, pdf_base64: pdfB64, html },
-          });
-          if (error) setSent({ error: error.message || String(error) });
-          else if (data?.ok) setSent({ ok: true, sent_to: data.sent_to, test_mode: data.test_mode });
-          else setSent({ error: data?.error || 'No se pudo enviar el email' });
-        } catch (e) {
-          setSent({ error: String(e) });
-        }
+
+      if (!arch.ok) {
+        // No registramos nada: el número NO se consume. Pasamos a modo manual (pegar link).
+        setArchived({ error: arch.error });
+        setManualMode(true);
+        return;
       }
-      setDone(true);
+      setArchived({ url: arch.url, carpeta: arch.carpeta });
+      await persistInvoice({ pdfUrl: arch.url, pdfB64: arch.pdf_base64, sendEmail });
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Drive falló y la subiste a mano: registrar la factura con el link pegado.
+  const guardarConLinkManual = async () => {
+    const link = manualLink.trim();
+    if (!link || !bill || !monto || !num) return;
+    setBusy(true); setErr('');
+    try {
+      setArchived({ url: link, carpeta: null, manual: true });
+      await persistInvoice({ pdfUrl: link, pdfB64: null, sendEmail: wantEmail });
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -136,6 +163,8 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
   const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+  const btnOutline = { border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' };
+  const btnPrimary = { border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' };
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -175,17 +204,32 @@ export default function FacturaModal({ income, onClose, onDone }) {
             )}
             {archived?.url && (
               <div style={{ margin: '10px auto 0', maxWidth: 420, background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#0369a1', lineHeight: 1.5 }}>
-                🗂 Archivada en Drive{archived.carpeta ? <> en <b>{archived.carpeta}</b></> : ''}. <a href={archived.url} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>Ver PDF en Drive</a>
-              </div>
-            )}
-            {archived?.error && (
-              <div style={{ margin: '10px auto 0', maxWidth: 420, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#b45309', lineHeight: 1.5 }}>
-                No se pudo archivar en Drive: {archived.error}.<br />La factura quedó registrada igual — descargá el PDF y guardalo a mano.
+                🗂 {archived.manual ? 'Link de Drive guardado' : <>Archivada en Drive{archived.carpeta ? <> en <b>{archived.carpeta}</b></> : ''}</>}. <a href={archived.url} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>Ver PDF en Drive</a>
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
-              <button onClick={imprimir} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Descargar PDF</button>
-              <button onClick={onClose} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer' }}>Listo</button>
+              <button onClick={imprimir} style={btnOutline}>Descargar PDF</button>
+              <button onClick={onClose} style={btnPrimary}>Listo</button>
+            </div>
+          </div>
+        ) : manualMode ? (
+          <div style={{ padding: '22px' }}>
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: '#b45309', lineHeight: 1.5 }}>
+              <b>No se pudo archivar en Drive automáticamente.</b><br />
+              {archived?.error}<br />
+              La factura <b>todavía no se registró</b> (no se consumió el N° {numeroFmt}).
+            </div>
+            <div style={{ marginTop: 14, fontSize: 13, color: '#334155', lineHeight: 1.5 }}>
+              Descargá el PDF, subilo a Drive a mano y pegá acá el link para registrar la factura con ese enlace:
+            </div>
+            <input value={manualLink} onChange={(e) => setManualLink(e.target.value)} placeholder="https://drive.google.com/file/d/…" style={{ ...inp, marginTop: 8 }} />
+            {err && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 10 }}>Error: {err}</div>}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16, justifyContent: 'space-between', alignItems: 'center' }}>
+              <button onClick={imprimir} style={{ ...btnOutline }}>Descargar PDF</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => guardar(wantEmail)} disabled={busy} style={{ border: '1px solid #CBD5E1', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Reintentar Drive'}</button>
+                <button onClick={guardarConLinkManual} disabled={busy || !manualLink.trim()} style={{ ...btnPrimary, opacity: (busy || !manualLink.trim()) ? 0.6 : 1 }}>{busy ? 'Guardando…' : 'Guardar con este link'}</button>
+              </div>
             </div>
           </div>
         ) : (
@@ -239,6 +283,9 @@ export default function FacturaModal({ income, onClose, onDone }) {
                   Ojo: este ingreso lo cobró el <b>cliente</b>, no Korex. En el Sheet estas ventas no las factura Korex.
                 </div>
               )}
+              <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#9AA4B2', lineHeight: 1.5 }}>
+                La factura se registra <b>solo si se archiva en Drive</b>. Si Drive falla, vas a poder subirla a mano y pegar el link.
+              </div>
               {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
             </div>
             <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -246,9 +293,9 @@ export default function FacturaModal({ income, onClose, onDone }) {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
                 <button onClick={() => guardar(false)} disabled={!monto || !num || busy || !bill.nombreFactura} style={{ border: '1px solid #CBD5E1', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura) ? 0.6 : 1 }}>{busy ? '…' : 'Solo registrar'}</button>
-                <button onClick={() => guardar(true)} disabled={!monto || !num || busy || !bill.nombreFactura || !bill.email} title={!bill.email ? 'Cargá un e-mail para enviar' : 'Registra, marca facturado y envía por email'} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura || !bill.email) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={() => guardar(true)} disabled={!monto || !num || busy || !bill.nombreFactura || !bill.email} title={!bill.email ? 'Cargá un e-mail para enviar' : 'Archiva en Drive, registra, marca facturado y envía por email'} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura || !bill.email) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="m22 6-10 7L2 6" /></svg>
-                  {busy ? 'Enviando…' : 'Generar y enviar'}
+                  {busy ? 'Procesando…' : 'Generar y enviar'}
                 </button>
               </div>
             </div>
