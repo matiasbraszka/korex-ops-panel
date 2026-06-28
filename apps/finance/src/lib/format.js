@@ -62,6 +62,7 @@ export const pagoChip = (p) => {
   const s = String(p || '').toLowerCase();
   if (s.includes('stripe')) return ['Stripe', '#e0e7ff', '#4338ca'];
   if (s.includes('mercury')) return ['Mercury', '#e0f2fe', '#0369a1'];
+  if (s.includes('kraken')) return ['Kraken', '#ede9fe', '#6d28d9'];
   if (s.includes('usdt') || s.includes('safepal')) return ['USDT', '#d1fae5', '#047857'];
   return [p || '—', '#f1f5f9', '#64748B'];
 };
