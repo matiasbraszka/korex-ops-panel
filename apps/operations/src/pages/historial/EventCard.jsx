@@ -160,6 +160,9 @@ export function EventCard({ cliente, event, showFase = true, onClick, onDelete, 
   const t = tiposByKey[event.tipo] || tiposByKey.entregable || { color: T.blue, bg: T.blueBg, label: event.tipo, dot: '•' };
   const fase = fasesById[event.fase];
   const links = Array.isArray(event.links) ? event.links : [];
+  const isImgLink = (l) => l?.type === 'image' || /\.(png|jpe?g|gif|webp|heic|heif)(\?|$)/i.test(l?.url || '');
+  const imgLinks = links.filter(isImgLink);
+  const otherLinks = links.filter(l => !isImgLink(l));
   const canEditTiempo = !event.__synthetic && typeof onUpdateTiempo === 'function';
 
   return (
@@ -245,9 +248,22 @@ export function EventCard({ cliente, event, showFase = true, onClick, onDelete, 
           {event.descripcion}
         </div>
       )}
-      {links.length > 0 && (
+      {imgLinks.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {links.map((l, i) => (
+          {imgLinks.map((l, i) => (
+            <a key={i} href={l.url} target="_blank" rel="noreferrer"
+              onClick={e => e.stopPropagation()}
+              title={l.name || l.title || 'captura'}
+              style={{ display: 'inline-block', lineHeight: 0 }}>
+              <img src={l.url} alt={l.name || 'captura'}
+                style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: `1px solid ${T.border}` }} />
+            </a>
+          ))}
+        </div>
+      )}
+      {otherLinks.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {otherLinks.map((l, i) => (
             <a key={i} href={l.url} target="_blank" rel="noreferrer"
               onClick={e => e.stopPropagation()}
               style={{

@@ -1038,6 +1038,14 @@ export function AppProvider({ children }) {
       });
       setTeamBlockers(prev => [{ ...blockerRow, created_at: new Date().toISOString() }, ...prev]);
     }
+
+    // Enviar a Slack: lo cargado de cada cliente va a su canal específico, con
+    // las capturas adjuntas. Fire-and-forget: no bloquea ni rompe el guardado.
+    try {
+      supabase.functions.invoke('informe-slack', { body: { report_id: id } })
+        .catch(e => console.warn('informe-slack', e));
+    } catch (e) { console.warn('informe-slack invoke', e); }
+
     return row;
   }, []);
 
@@ -1081,6 +1089,18 @@ export function AppProvider({ children }) {
           if (updateTaskRef.current) updateTaskRef.current(b.task_id, { status: 'done' });
         }
       } catch (e) { console.warn('updateTeamReport task links', e); }
+
+      // Slack: al editar solo mandamos los bullets NUEVOS (no repetir lo ya enviado).
+      try {
+        const beforeIds = new Set();
+        (before?.progress_by_client || []).forEach(blk => (blk?.bullets || []).forEach(b => { if (b?.id) beforeIds.add(b.id); }));
+        const newIds = [];
+        (patch.progress_by_client || []).forEach(blk => (blk?.bullets || []).forEach(b => { if (b?.id && !beforeIds.has(b.id)) newIds.push(b.id); }));
+        if (newIds.length) {
+          supabase.functions.invoke('informe-slack', { body: { report_id: id, only_bullet_ids: newIds } })
+            .catch(e => console.warn('informe-slack', e));
+        }
+      } catch (e) { console.warn('informe-slack update', e); }
     }
   }, []);
 

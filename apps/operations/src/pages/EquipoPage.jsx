@@ -324,23 +324,36 @@ function InformesView({ openCreateInforme, openEditInforme }) {
                                 // El badge se ve siempre (no solo en hover) asi el usuario lo descubre.
                                 const renderBullet = (b, key, marker, markerClass) => {
                                   const cnt = bulletCommentCounts[r.id + '::' + b.id] || 0;
+                                  const caps = Array.isArray(b.attachments) ? b.attachments.filter(a => a?.url) : [];
                                   return (
-                                    <li key={key} className="flex gap-1.5 items-start">
-                                      <span className={`${markerClass} shrink-0`}>{marker}</span>
-                                      <span className="flex-1 min-w-0"><MentionText text={b.text} /></span>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); openBulletComments(r.id, b.id); }}
-                                        className={`shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md border cursor-pointer text-[10px] font-semibold transition-colors ${
-                                          cnt > 0
-                                            ? 'bg-[#EEF2FF] text-[#4A67D8] border-transparent hover:bg-[#DEE6FE]'
-                                            : 'bg-white text-[#9CA3AF] border-[#E2E5EB] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] hover:border-[#5B7CF5]'
-                                        }`}
-                                        title={cnt > 0 ? `${cnt} comentario${cnt !== 1 ? 's' : ''}` : 'Comentar este bullet'}
-                                      >
-                                        <MessageSquare size={cnt > 0 ? 10 : 11} />
-                                        {cnt > 0 && cnt}
-                                      </button>
+                                    <li key={key}>
+                                      <div className="flex gap-1.5 items-start">
+                                        <span className={`${markerClass} shrink-0`}>{marker}</span>
+                                        <span className="flex-1 min-w-0"><MentionText text={b.text} /></span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); openBulletComments(r.id, b.id); }}
+                                          className={`shrink-0 inline-flex items-center gap-1 h-[20px] px-1.5 rounded-md border cursor-pointer text-[10px] font-semibold transition-colors ${
+                                            cnt > 0
+                                              ? 'bg-[#EEF2FF] text-[#4A67D8] border-transparent hover:bg-[#DEE6FE]'
+                                              : 'bg-white text-[#9CA3AF] border-[#E2E5EB] hover:bg-[#EEF2FF] hover:text-[#5B7CF5] hover:border-[#5B7CF5]'
+                                          }`}
+                                          title={cnt > 0 ? `${cnt} comentario${cnt !== 1 ? 's' : ''}` : 'Comentar este bullet'}
+                                        >
+                                          <MessageSquare size={cnt > 0 ? 10 : 11} />
+                                          {cnt > 0 && cnt}
+                                        </button>
+                                      </div>
+                                      {caps.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mt-1 pl-[18px]">
+                                          {caps.map((a, ci) => (
+                                            <a key={a.path || a.url || ci} href={a.url} target="_blank" rel="noreferrer"
+                                              onClick={(e) => e.stopPropagation()} title={a.name || 'captura'} className="inline-block leading-none">
+                                              <img src={a.url} alt={a.name || 'captura'} className="h-11 w-11 object-cover rounded-md border border-gray-200" />
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
                                     </li>
                                   );
                                 };

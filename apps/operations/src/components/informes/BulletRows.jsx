@@ -1,9 +1,10 @@
-import { useRef } from 'react';
-import { X, GripVertical, Plus, CheckCircle2, Circle } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, GripVertical, Plus, CheckCircle2, Circle, ImagePlus, Loader2 } from 'lucide-react';
 import MentionTextarea from '../comments/MentionTextarea';
 import { useApp } from '../../context/AppContext';
 import { parseAssignees } from '../../utils/taskActivity';
 import { isTaskEnabled } from '../../utils/helpers';
+import { uploadInformeCaptura, deleteInformeCaptura, MAX_CAPTURA_BYTES } from './capturas';
 
 // BulletRows — lista editable de bullets para los informes.
 // Cada bullet: { id?, text, category: 'entregable' | 'avance' | null, task_id? }.
@@ -25,6 +26,8 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
   const { teamMembers, currentUser, tasks } = useApp();
   const dragIdx = useRef(null);
   const overIdx = useRef(null);
+  const fileInputs = useRef({});
+  const [uploading, setUploading] = useState({}); // idx -> bool
 
   // Mostramos el desplegable tanto para clientes reales como para el trabajo
   // interno de la empresa ("Korex – Interno").
@@ -77,6 +80,35 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
 
   const add = () => {
     onChange([...(bullets || []), { text: '', category: null }]);
+  };
+
+  // ── Capturas (screenshots) por bullet ──
+  const addCapturas = async (idx, fileList) => {
+    const files = Array.from(fileList || []).filter(f => f && f.type?.startsWith('image/'));
+    if (!files.length) return;
+    const tooBig = files.find(f => f.size > MAX_CAPTURA_BYTES);
+    if (tooBig) { alert(`"${tooBig.name}" supera los 10 MB. Subí una imagen más liviana.`); return; }
+    setUploading(u => ({ ...u, [idx]: true }));
+    try {
+      const uploaded = [];
+      for (const f of files) {
+        try { uploaded.push(await uploadInformeCaptura(currentUser?.id, f)); }
+        catch (e) { console.warn('uploadInformeCaptura', e); alert('No se pudo subir una captura. Probá de nuevo.'); }
+      }
+      if (uploaded.length) {
+        const current = Array.isArray(bullets[idx]?.attachments) ? bullets[idx].attachments : [];
+        update(idx, { attachments: [...current, ...uploaded] });
+      }
+    } finally {
+      setUploading(u => ({ ...u, [idx]: false }));
+    }
+  };
+
+  const removeCaptura = (idx, capIdx) => {
+    const current = Array.isArray(bullets[idx]?.attachments) ? bullets[idx].attachments : [];
+    const removed = current[capIdx];
+    update(idx, { attachments: current.filter((_, i) => i !== capIdx) });
+    if (removed?.path) deleteInformeCaptura(removed.path); // best-effort
   };
 
   const handleDragStart = (e, idx) => {
@@ -220,6 +252,49 @@ export default function BulletRows({ bullets, onChange, disabled = false, client
                   )}
                 </div>
               )}
+
+              {/* Capturas (pruebas): miniaturas + botón para agregar */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(Array.isArray(b.attachments) ? b.attachments : []).map((a, ci) => (
+                  <span key={a.path || a.url || ci} className="relative group/cap shrink-0">
+                    <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.name || 'captura'}>
+                      <img src={a.url} alt={a.name || 'captura'} className="h-12 w-12 object-cover rounded-md border border-gray-200" />
+                    </a>
+                    {!disabled && (
+                      <button
+                        type="button"
+                        onClick={() => removeCaptura(i, ci)}
+                        title="Quitar captura"
+                        className="absolute -top-1.5 -right-1.5 bg-white border border-gray-200 rounded-full p-0.5 text-gray-400 hover:text-red-500 shadow-sm opacity-0 group-hover/cap:opacity-100 transition-opacity"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {!disabled && (
+                  <>
+                    <input
+                      ref={(el) => { fileInputs.current[i] = el; }}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addCapturas(i, e.target.files); e.target.value = ''; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputs.current[i]?.click()}
+                      disabled={uploading[i]}
+                      title="Agregar captura como prueba de lo cargado"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors disabled:opacity-50"
+                    >
+                      {uploading[i] ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+                      {uploading[i] ? 'Subiendo…' : 'Captura'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             <button

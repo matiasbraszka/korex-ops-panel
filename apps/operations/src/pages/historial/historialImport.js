@@ -63,6 +63,11 @@ export function buildImportEvents(teamReports, clienteId, teamMembers, tipoKeys 
       bullets.forEach((b, i) => {
         const text = (b.text || '').trim();
         if (!text || !b.id) return;
+        // Capturas del bullet → links tipo imagen, para que queden como prueba
+        // en el historial del cliente (se muestran como miniatura).
+        const caps = (Array.isArray(b.attachments) ? b.attachments : [])
+          .filter(a => a?.url)
+          .map(a => ({ url: a.url, type: 'image', name: a.name || '' }));
         out.push({
           tipo: suggestTipo(text, tipoKeys),
           titulo: text,        // texto completo: el título no se corta (envuelve en el card)
@@ -72,7 +77,7 @@ export function buildImportEvents(teamReports, clienteId, teamMembers, tipoKeys 
           fase: '',
           responsable: '',
           estado: 'completado',
-          links: extractUrls(text),
+          links: [...extractUrls(text), ...caps],
           incluirResumen: true,
           tiempo: mins[i] || 0,
           autor: autorUser?.name || '',

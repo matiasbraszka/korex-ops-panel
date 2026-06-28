@@ -78,6 +78,7 @@ export function getBullets(item) {
         category: b?.category === 'entregable' || b?.category === 'avance' ? b.category : null,
         id: b?.id || fallbackBulletId(item, i, text),
         ...(b?.task_id ? { task_id: b.task_id } : {}),
+        ...(Array.isArray(b?.attachments) && b.attachments.length ? { attachments: b.attachments } : {}),
       };
     }).filter(b => b.text);
   }

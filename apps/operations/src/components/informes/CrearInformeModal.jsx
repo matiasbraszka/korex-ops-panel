@@ -537,6 +537,8 @@ export default function CrearInformeModal({ open, onClose, defaultType = 'daily'
               category: b?.category || null,
               ...(b?.task_id ? { task_id: b.task_id } : {}),
               ...(b?.complete_task ? { complete_task: true } : {}),
+              // Capturas (pruebas) — se guardan en el bullet y viajan al historial + Slack.
+              ...(Array.isArray(b?.attachments) && b.attachments.length ? { attachments: b.attachments } : {}),
             }))
             .filter(b => b.text);
           base.bullets = cleaned;
