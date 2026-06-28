@@ -206,8 +206,12 @@ function ClientCard({ c, assignOpts, onEdited }) {
   };
 
   const isCli = mode === 'Cliente';
-  // % efectivo de un rol: el del juego activo; si está vacío y cobra el cliente, usa el de Korex (fallback).
-  const eff = (tipo, r) => { const v = matrix[tipo]?.[r]?.pct; if (v != null) return v; return isCli ? (fallback[tipo]?.[r]?.pct || 0) : 0; };
+  // Fallback por TIPO (igual que el motor): el lado Cliente hereda los % de Korex SOLO si ese
+  // tipo no tiene NADA cargado. Apenas cargás un % en el tipo, los vacíos cuentan como 0.
+  const cellRoles = [...ROLES, 'korex_pct'];
+  const hasCliType = (tipo) => isCli && cellRoles.some((r) => matrix[tipo]?.[r] != null);
+  const useFb = (tipo) => isCli && !hasCliType(tipo);
+  const eff = (tipo, r) => { const v = matrix[tipo]?.[r]?.pct; if (v != null) return v; return useFb(tipo) ? (fallback[tipo]?.[r]?.pct || 0) : 0; };
   const nonKorex = (tipo) => ROLES.reduce((a, r) => a + eff(tipo, r), 0);
   const korexOf = (tipo) => (tipo === 'PUBLICIDAD' ? 0.15 : 1 - nonKorex(tipo));   // automático = lo que sobra
   const ASSIGN = [['Conector', 'conector_name', 'conector_start_date', ROLE.conector, 'conector'], ['Consultor', 'consultor_name', 'consultor_start_date', ROLE.consultor, 'consultor'], ['Marketing', 'marketing_name', 'marketing_start_date', ROLE.marketing, 'marketing']];
@@ -244,7 +248,7 @@ function ClientCard({ c, assignOpts, onEdited }) {
             <button key={v} onClick={() => setMode(v)} style={{ border: 0, cursor: 'pointer', fontSize: 11, fontWeight: mode === v ? 700 : 500, padding: '5px 11px', borderRadius: 6, whiteSpace: 'nowrap', background: mode === v ? (v === 'Cliente' ? '#c2410c' : '#0EA5A4') : 'transparent', color: mode === v ? '#fff' : '#64748B' }}>{label}</button>
           ))}
         </div>
-        {isCli && <span style={{ fontSize: 10.5, color: '#9AA4B2' }}>vacío = usa el % de Korex</span>}
+        {isCli && <span style={{ fontSize: 10.5, color: '#9AA4B2' }}>tipo sin cargar = usa los % de Korex · apenas cargás un %, los vacíos = 0</span>}
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
@@ -265,7 +269,7 @@ function ClientCard({ c, assignOpts, onEdited }) {
             return (
               <tr key={tp} style={{ borderTop: '1px solid #EEF1F5' }}>
                 <td style={{ padding: '6px 15px' }}><span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: tbg, color: tfg }}>{tp}</span></td>
-                {ROLES.map((r) => <td key={r} style={{ padding: '6px 4px' }}><Pct value={matrix[tp]?.[r]?.pct} color={ROLE[r]} ph={isCli ? fallback[tp]?.[r]?.pct : undefined} onCommit={(v) => commitCell(tp, r, v)} /></td>)}
+                {ROLES.map((r) => <td key={r} style={{ padding: '6px 4px' }}><Pct value={matrix[tp]?.[r]?.pct} color={ROLE[r]} ph={useFb(tp) ? fallback[tp]?.[r]?.pct : undefined} onCommit={(v) => commitCell(tp, r, v)} /></td>)}
                 <td style={{ padding: '6px 4px' }}><KorexPct value={kxOver} auto={kxAuto} onCommit={(v) => commitCell(tp, 'korex_pct', v)} /></td>
                 <td style={{ padding: '6px 15px 6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#94a3b8' }}>{tp === 'PUBLICIDAD' ? '—' : `${over ? '⚠ ' : ''}${(sumAll * 100).toFixed(0)}%`}</td>
               </tr>
