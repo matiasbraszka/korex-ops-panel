@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, Play, Pencil, X, Check, RotateCcw, ImagePlus, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
-import { isAssignedTo, sprintProgress, memberReportCompliance, SPRINT_TEAM_IDS } from '../../utils/helpers';
+import { isAssignedTo, sprintProgress, memberReportCompliance, memberWorkedHours, SPRINT_TEAM_IDS } from '../../utils/helpers';
 import { uploadInformeCaptura, MAX_CAPTURA_BYTES } from '../informes/capturas';
 
 const GRID = '168px 52px 56px 54px 50px 72px 58px 56px 150px 62px 58px 92px';
@@ -40,7 +40,6 @@ export default function RendimientoView() {
   const rows = useMemo(() => {
     if (!activeSprint) return [];
     const st = tasks.filter(t => t.sprintId === activeSprint.id);
-    const worked = activeSprint.workedHours || {};
     // Solo el equipo interno que se mide en el sprint (en el orden definido),
     // aunque no tengan tareas: así se registra la asistencia y el cumplimiento.
     return SPRINT_TEAM_IDS
@@ -56,7 +55,7 @@ export default function RendimientoView() {
         enRev: mt.filter(t => t.status === 'en-revision').length,
         done,
         cargadas: mt.reduce((s, t) => s + (Number(t.estimatedHours) || 0), 0),
-        trabajadas: Number(worked[m.id]) || 0,
+        trabajadas: memberWorkedHours(teamReports, m.id, activeSprint),
         capacidad: m.weekly_capacity != null ? Number(m.weekly_capacity) : null,
         pct: mt.length ? Math.round(done / mt.length * 100) : 0,
         dailyReports: comp.daily,
@@ -69,7 +68,8 @@ export default function RendimientoView() {
   const cPct = prog.pct;
   const initials = (m) => (m?.initials || m?.name?.slice(0, 2) || '?').toUpperCase();
 
-  const setWorked = (id, val) => { const v = val === '' ? undefined : Number(val); const map = { ...(activeSprint.workedHours || {}) }; if (v === undefined) delete map[id]; else map[id] = v; updateSprint(activeSprint.id, { workedHours: map }); };
+  // "Trabajó" ahora es automático: sale de los minutos cargados en los informes
+  // diarios de cada persona (ver memberWorkedHours). Ya no se edita a mano.
   // Marca/desmarca la asistencia de una persona a la daily del día idx (0=Lun … 4=Vie).
   const setAttend = (memberId, idx) => {
     const map = { ...(activeSprint.dailyAttendance || {}) };
@@ -156,9 +156,7 @@ export default function RendimientoView() {
                     <span style={{ fontSize: 13, textAlign: 'center', color: '#BE185D', fontWeight: 600 }}>{r.enRev}</span>
                     <span style={{ fontSize: 13, textAlign: 'center', color: '#15803D', fontWeight: 600 }}>{r.done}</span>
                     <span style={{ fontSize: 13, textAlign: 'center', fontWeight: over ? 700 : 500, color: over ? '#DC2626' : '#1A1D26', background: over ? '#FEF2F2' : 'transparent', borderRadius: 7, padding: '4px 0' }}>{r.cargadas}h</span>
-                    <span style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                      <input type="number" min="0" step="0.5" defaultValue={r.trabajadas || ''} placeholder="–" onBlur={(e) => setWorked(r.m.id, e.target.value)} style={{ width: 52, textAlign: 'center', fontSize: 13, color: '#6B7280', border: '1px solid #E2E5EB', borderRadius: 6, padding: '4px 2px', outline: 'none', fontFamily: 'inherit' }} />
-                    </span>
+                    <span style={{ fontSize: 13, textAlign: 'center', color: '#6B7280' }} title="Horas trabajadas según los informes diarios">{r.trabajadas}h</span>
                     <span style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                       <input type="number" min="0" step="0.5" defaultValue={r.capacidad ?? ''} placeholder="–" onBlur={(e) => setCap(r.m.id, e.target.value)} style={{ width: 52, textAlign: 'center', fontSize: 13, color: '#9CA3AF', border: '1px solid #E2E5EB', borderRadius: 6, padding: '4px 2px', outline: 'none', fontFamily: 'inherit' }} />
                     </span>

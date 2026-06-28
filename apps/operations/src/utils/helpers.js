@@ -907,9 +907,24 @@ export function attendanceCount(sprint, memberId) {
   return Array.isArray(arr) ? arr.filter(Boolean).length : 0;
 }
 
+// Horas trabajadas por una persona en la semana del sprint, automáticas desde los
+// INFORMES DIARIOS: suma los minutos que cargó por cliente (progress_by_client[].minutes)
+// en cada informe diario dentro del rango y los pasa a horas. Solo daily (el
+// semanal es un resumen → evita doble conteo).
+export function memberWorkedHours(teamReports, memberId, sprint) {
+  if (!sprint || !memberId) return 0;
+  const start = sprint.startDate, end = sprint.endDate;
+  let mins = 0;
+  (teamReports || []).forEach(r => {
+    if (r.user_id !== memberId || r.report_type !== 'daily' || !r.report_date) return;
+    if ((start && r.report_date < start) || (end && r.report_date > end)) return;
+    (r.progress_by_client || []).forEach(p => { mins += Number(p?.minutes) || 0; });
+  });
+  return Math.round((mins / 60) * 100) / 100; // horas con 2 decimales
+}
+
 export function buildSprintSummary(tasks, teamMembers, sprint, teamReports = []) {
   const st = (tasks || []).filter(t => t.sprintId === sprint?.id);
-  const worked = (sprint && sprint.workedHours && typeof sprint.workedHours === 'object') ? sprint.workedHours : {};
   // Solo el equipo interno que se mide en el sprint, en el orden definido.
   const team = SPRINT_TEAM_IDS
     .map(id => (teamMembers || []).find(m => m.id === id))
@@ -925,7 +940,7 @@ export function buildSprintSummary(tasks, teamMembers, sprint, teamReports = [])
       inReview: mt.filter(t => t.status === 'en-revision').length,
       done: mt.filter(t => t.status === 'done').length,
       loadedHours: mt.reduce((s, t) => s + (Number(t.estimatedHours) || 0), 0),
-      workedHours: Number(worked[m.id]) || 0,
+      workedHours: memberWorkedHours(teamReports, m.id, sprint),
       capacity: m.weekly_capacity != null ? Number(m.weekly_capacity) : null,
       // Cumplimiento de la semana (snapshot al cerrar):
       attendance: attendanceCount(sprint, m.id),
