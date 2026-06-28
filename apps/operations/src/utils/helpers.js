@@ -877,6 +877,11 @@ export function isAssignedTo(task, member) {
   return parts.some(p => names.includes(p));
 }
 
+// Equipo interno que se mide en el sprint (Rendimiento). El resto del equipo no
+// entra en la tabla de asistencia/informes. Ids de team_members.
+export const SPRINT_TEAM_IDS = ['cristian', 'marcos', 'zerillos', 'maria', 'david', 'zil', 'josem', 'matias'];
+export const tracksSprint = (m) => SPRINT_TEAM_IDS.includes(m?.id);
+
 // Resumen por persona del sprint (para la tabla en vivo y el snapshot al cerrar).
 // Cumplimiento de informes de una persona en la semana del sprint:
 // - daily: cuántos informes DIARIOS distintos cargó dentro del rango (máx 5).
@@ -905,13 +910,13 @@ export function attendanceCount(sprint, memberId) {
 export function buildSprintSummary(tasks, teamMembers, sprint, teamReports = []) {
   const st = (tasks || []).filter(t => t.sprintId === sprint?.id);
   const worked = (sprint && sprint.workedHours && typeof sprint.workedHours === 'object') ? sprint.workedHours : {};
-  const att = (sprint && sprint.dailyAttendance && typeof sprint.dailyAttendance === 'object') ? sprint.dailyAttendance : {};
-  const perPerson = (teamMembers || []).map(m => {
+  // Solo el equipo interno que se mide en el sprint, en el orden definido.
+  const team = SPRINT_TEAM_IDS
+    .map(id => (teamMembers || []).find(m => m.id === id))
+    .filter(Boolean);
+  const perPerson = team.map(m => {
     const mt = st.filter(t => isAssignedTo(t, m));
-    const hasAttendance = Array.isArray(att[m.id]) && att[m.id].some(Boolean);
     const comp = memberReportCompliance(teamReports, m.id, sprint);
-    // omitir gente sin NADA esta semana (sin tareas, horas, asistencia ni informes)
-    if (!mt.length && !worked[m.id] && !hasAttendance && comp.daily === 0 && !comp.weekly) return null;
     return {
       memberId: m.id,
       name: m.name,

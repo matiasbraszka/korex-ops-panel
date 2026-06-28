@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, Play, Pencil, X, Check, RotateCcw, ImagePlus, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
-import { isAssignedTo, sprintProgress, memberReportCompliance, attendanceCount } from '../../utils/helpers';
+import { isAssignedTo, sprintProgress, memberReportCompliance, SPRINT_TEAM_IDS } from '../../utils/helpers';
 import { uploadInformeCaptura, MAX_CAPTURA_BYTES } from '../informes/capturas';
 
 const GRID = '168px 52px 56px 54px 50px 72px 58px 56px 150px 62px 58px 92px';
@@ -41,9 +41,12 @@ export default function RendimientoView() {
     if (!activeSprint) return [];
     const st = tasks.filter(t => t.sprintId === activeSprint.id);
     const worked = activeSprint.workedHours || {};
-    // Mostramos a TODO el equipo (aunque no tenga tareas) para poder registrar la
-    // asistencia a las dailys y ver el cumplimiento de informes de cada uno.
-    return (teamMembers || []).map(m => {
+    // Solo el equipo interno que se mide en el sprint (en el orden definido),
+    // aunque no tengan tareas: así se registra la asistencia y el cumplimiento.
+    return SPRINT_TEAM_IDS
+      .map(id => (teamMembers || []).find(m => m.id === id))
+      .filter(Boolean)
+      .map(m => {
       const mt = st.filter(t => isAssignedTo(t, m));
       const done = mt.filter(t => t.status === 'done').length;
       const comp = memberReportCompliance(teamReports, m.id, activeSprint);
