@@ -244,7 +244,22 @@ export function AppProvider({ children }) {
   }, []);
 
   const dbSaveTask = useCallback(async (t) => {
-    try { recentWriteRef.current.set(t.id, Date.now()); } catch { /* ignore */ }
+    // Guardamos QUÉ escribimos (no solo cuándo): así el poll sabe distinguir un
+    // remoto "viejo" (todavía no propagó nuestro cambio) de uno ya al día. Evita
+    // el parpadeo "reaparece y vuelve a desaparecer" al completar/mover tareas.
+    try {
+      recentWriteRef.current.set(t.id, {
+        ts: Date.now(),
+        status: t.status,
+        sprintId: t.sprintId || null,
+        sprintPriority: t.sprintPriority != null ? Number(t.sprintPriority) : null,
+        assignee: t.assignee,
+        priority: t.priority,
+        phase: t.phase || null,
+        title: t.title,
+        department: t.department || null,
+      });
+    } catch { /* ignore */ }
     return sbFetch('tasks', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
@@ -2169,14 +2184,36 @@ export function AppProvider({ children }) {
         remoteTasks.forEach(t => {
           const existingIdx = newTasks.findIndex(x => x.id === t.id);
           if (existingIdx >= 0) {
-            // No pisar una tarea recién escrita localmente (el remoto puede venir viejo).
-            const rw = recentWriteRef.current.get(t.id);
-            if (rw && Date.now() - rw < 15000) return;
-            if (rw) recentWriteRef.current.delete(t.id);
             const existing = newTasks[existingIdx];
             const sid = t.sprint_id || null;
             const sprio = t.sprint_priority != null ? Number(t.sprint_priority) : null;
             const dept = t.department || null;
+            // No pisar una tarea recién escrita localmente con un remoto VIEJO.
+            // El guard anterior era solo por tiempo (15s) y fallaba si la réplica
+            // de Supabase tardaba más en propagar: el poll leía el valor viejo y
+            // la tarea "reaparecía" para luego volver a desaparecer en el próximo
+            // poll. Ahora comparamos contra lo que escribimos: si el remoto YA
+            // refleja nuestro cambio, soltamos el guard; si todavía viene viejo,
+            // lo ignoramos hasta 60s (válvula de seguridad por si la escritura falló).
+            const rw = recentWriteRef.current.get(t.id);
+            if (rw) {
+              const remoteMatchesOurWrite =
+                t.status === rw.status &&
+                sid === rw.sprintId &&
+                sprio === rw.sprintPriority &&
+                t.assignee === rw.assignee &&
+                t.priority === rw.priority &&
+                (t.phase || null) === rw.phase &&
+                t.title === rw.title &&
+                dept === rw.department;
+              if (remoteMatchesOurWrite) {
+                recentWriteRef.current.delete(t.id); // la DB ya está al día
+              } else if (Date.now() - rw.ts < 60000) {
+                return; // remoto viejo: no revertir el cambio optimista
+              } else {
+                recentWriteRef.current.delete(t.id); // 60s sin confirmar: aceptar remoto
+              }
+            }
             if (t.title !== existing.title || t.status !== existing.status || t.assignee !== existing.assignee || t.priority !== existing.priority || (t.phase || null) !== (existing.phase || null) || sid !== (existing.sprintId || null) || sprio !== (existing.sprintPriority ?? null) || dept !== (existing.department || null)) {
               newTasks[existingIdx] = {
                 ...existing,
