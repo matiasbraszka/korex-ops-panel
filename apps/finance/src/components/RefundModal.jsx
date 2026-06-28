@@ -85,7 +85,7 @@ export default function RefundModal({ income, onClose, onDone }) {
         {/* preview */}
         <div style={{ margin: '0 22px 4px', padding: '12px 14px', background: '#FBFCFE', border: '1px solid #EEF1F5', borderRadius: 10, fontSize: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: reverse && reversal.rows.length ? 8 : 0 }}>
-            <span style={{ color: '#64748B' }}>Egreso "Reembolsos"</span>
+            <span style={{ color: '#64748B' }}>Se devuelve al cliente</span>
             <b style={{ color: '#b91c1c' }}>− {money2(amt || 0)}</b>
           </div>
           {reverse && reversal.rows.length > 0 && (
