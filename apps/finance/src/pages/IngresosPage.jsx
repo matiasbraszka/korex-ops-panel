@@ -442,7 +442,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
               <span>· Conector: <b style={{ color: form.conector_name ? '#0c8584' : '#cbd5e1' }}>{form.conector_name || '—'}</b></span>
               <button type="button" onClick={() => setAdv((a) => !a)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: '#0EA5A4', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>{adv ? 'listo' : 'ajustar'}</button>
             </div>
-            {(adv || !form.client_name_sheet) && (
+            {adv && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
                 <div><label style={lab}>Cliente <span style={{ color: '#e11d48' }}>*</span></label><input list="modal-cli-dl" value={form.client_name_sheet} onChange={(e) => setForm((s) => ({ ...s, client_name_sheet: e.target.value }))} placeholder="cliente del acuerdo" style={inp} /><datalist id="modal-cli-dl">{cliOpts.map((c) => <option key={c} value={c} />)}</datalist></div>
                 <div><label style={lab}>Conector</label><input value={form.conector_name} onChange={(e) => setForm((s) => ({ ...s, conector_name: e.target.value }))} placeholder="(opcional)" style={inp} /></div>
