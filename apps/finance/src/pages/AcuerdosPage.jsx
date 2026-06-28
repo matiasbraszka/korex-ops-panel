@@ -164,9 +164,12 @@ function ClientCard({ c, assignOpts, onEdited }) {
     const n = raw === '' ? null : parseFloat(raw);
     const frac = n == null || isNaN(n) ? null : Math.round((n / 100) * 1e6) / 1e6;
     if (frac != null && curPctNum === Math.round(frac * 1e6)) return;
+    // Korex admite 0 explícito (Korex no se lleva nada en esa categoría); para los demás
+    // roles, 0 o vacío = borrar la regla. Vacío en Korex = volver a automático.
+    const isKorex = role === 'korex_pct';
     flash('saving');
     try {
-      if (frac == null || frac === 0) {
+      if (frac == null || (frac === 0 && !isKorex)) {
         if (cur?.id) await sbFetch(`fin_commission_rules?id=eq.${cur.id}`, { method: 'DELETE', throwOnError: true });
         setMatrix((m) => { const t = { ...(m[tipo] || {}) }; delete t[role]; return { ...m, [tipo]: t }; });
       } else if (cur?.id) {
@@ -214,19 +217,23 @@ function ClientCard({ c, assignOpts, onEdited }) {
         <thead><tr style={{ color: '#9AA4B2', textAlign: 'left' }}>
           <th style={{ textAlign: 'left', padding: '6px 15px', fontWeight: 600 }}>Tipo</th>
           {ROLES.map((r) => <th key={r} style={{ padding: '6px 4px', fontWeight: 700, color: ROLE[r] }}>{ROLE_LABEL[r]}</th>)}
-          <th style={{ padding: '6px 4px', fontWeight: 700, color: '#15803d' }}>Korex</th>
+          <th style={{ padding: '6px 4px', fontWeight: 700, color: '#15803d' }} title="Lo que se lleva Korex. Vacío = automático (lo que sobra / 15% en Publicidad). Escribí un % para fijarlo.">Korex</th>
           <th style={{ padding: '6px 15px 6px 4px', fontWeight: 600 }}>Σ</th>
         </tr></thead>
         <tbody>
           {TIPOS.map((tp) => {
-            const over = (tp === 'SETUP' || tp === 'CRM') && nonKorex(tp) > 1.0005;
-            const kx = korexOf(tp); const [tbg, tfg] = TYPE_CHIP[tp];
+            const kxOver = matrix[tp]?.korex_pct?.pct;   // % fijado a mano (override) o undefined = automático
+            const kxAuto = korexOf(tp);                  // automático: lo que sobra (SETUP/CRM) o 15% (Publicidad)
+            const effKx = kxOver != null ? kxOver : kxAuto;
+            const sumAll = nonKorex(tp) + effKx;
+            const over = (tp === 'SETUP' || tp === 'CRM') && sumAll > 1.0005;
+            const [tbg, tfg] = TYPE_CHIP[tp];
             return (
               <tr key={tp} style={{ borderTop: '1px solid #EEF1F5' }}>
                 <td style={{ padding: '6px 15px' }}><span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: tbg, color: tfg }}>{tp}</span></td>
                 {ROLES.map((r) => <td key={r} style={{ padding: '6px 4px' }}><Pct value={matrix[tp]?.[r]?.pct} color={ROLE[r]} onCommit={(v) => commitCell(tp, r, v)} /></td>)}
-                <td style={{ padding: '6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#15803d' }}>{over ? '⚠' : pct(kx)}</td>
-                <td style={{ padding: '6px 15px 6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#94a3b8' }}>{over ? `${(nonKorex(tp) * 100).toFixed(0)}%` : (tp === 'PUBLICIDAD' ? '—' : '100%')}</td>
+                <td style={{ padding: '6px 4px' }}><KorexPct value={kxOver} auto={kxAuto} onCommit={(v) => commitCell(tp, 'korex_pct', v)} /></td>
+                <td style={{ padding: '6px 15px 6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#94a3b8' }}>{tp === 'PUBLICIDAD' ? '—' : `${over ? '⚠ ' : ''}${(sumAll * 100).toFixed(0)}%`}</td>
               </tr>
             );
           })}
@@ -267,6 +274,18 @@ function Pct({ value, color, onCommit }) {
   return <input type="text" inputMode="decimal" defaultValue={init} key={init} placeholder="—"
     onBlur={(e) => onCommit(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
     style={{ width: 44, fontSize: 11, textAlign: 'left', background: 'transparent', border: '1px solid transparent', borderRadius: 4, padding: '2px 4px', outline: 'none', fontWeight: value ? 600 : 400, color: value ? color : '#cbd5e1' }}
+    onFocus={(e) => { e.target.style.borderColor = '#99E6E3'; e.target.style.background = '#fff'; }} />;
+}
+// % de Korex: vacío = automático (lo que sobra / 15% en Publicidad). Si se fija a mano, queda en verde.
+// Borrar el valor lo devuelve a automático (commitCell borra la regla 'korex_pct').
+function KorexPct({ value, auto, onCommit }) {
+  const has = value != null;
+  const init = has ? String(+(value * 100).toFixed(2)) : '';
+  const autoStr = auto == null ? 'auto' : String(+(auto * 100).toFixed(1));
+  return <input type="text" inputMode="decimal" defaultValue={init} key={init} placeholder={autoStr}
+    title={has ? 'Korex fijado a mano — borralo para volver a automático' : `Automático: ${autoStr}% (lo que sobra). Escribí un % para fijar cuánto se lleva Korex acá.`}
+    onBlur={(e) => onCommit(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+    style={{ width: 46, fontSize: 11, textAlign: 'left', background: has ? '#F0FDF4' : 'transparent', border: `1px solid ${has ? '#B6E8C5' : 'transparent'}`, borderRadius: 4, padding: '2px 4px', outline: 'none', fontWeight: 700, color: has ? '#15803d' : '#cbd5e1' }}
     onFocus={(e) => { e.target.style.borderColor = '#99E6E3'; e.target.style.background = '#fff'; }} />;
 }
 const Fragment = ({ children }) => <>{children}</>;
