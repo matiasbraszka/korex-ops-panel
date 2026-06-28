@@ -36,6 +36,9 @@ export default function IngresosPage() {
   const [q, setQ] = useState('');
   const [tipo, setTipo] = useState('');
   const [mes, setMes] = useState('');
+  const [cliente, setCliente] = useState('');   // filtro por cliente específico
+  const [conector, setConector] = useState(''); // filtro por conector específico
+  const [pagador, setPagador] = useState('');   // filtro por pagador (usuario) específico
   const [openId, setOpenId] = useState(null);
   const [shown, setShown] = useState(120);     // ventana de filas renderizadas (perf)
   const [modal, setModal] = useState(null);   // form de alta/edición (null = cerrado)
@@ -152,19 +155,25 @@ export default function IngresosPage() {
   }, [rows, dirMap, reconMap]);
 
   const meses = useMemo(() => (data ? [...new Set(data.map((r) => r.mes).filter(Boolean))].sort().reverse() : []), [data]);
-  const cliOpts = useMemo(() => (data ? [...new Set(data.map((r) => r.client_name_sheet).filter(Boolean))].sort() : []), [data]);
+  const sortNames = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const cliOpts = useMemo(() => (data ? sortNames(data.map((r) => r.client_name_sheet)) : []), [data]);
+  const conOpts = useMemo(() => (data ? sortNames(data.map((r) => r.conector_name_sheet)) : []), [data]);
+  const pagOpts = useMemo(() => (data ? sortNames(data.map((r) => r.payer_name)) : []), [data]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
     const qq = q.trim().toLowerCase();
     return data.filter((r) =>
       (!qq || (r.client_name_sheet || '').toLowerCase().includes(qq) || (r.payer_name || '').toLowerCase().includes(qq) || (r.conector_name_sheet || '').toLowerCase().includes(qq)) &&
-      // El chip compara contra el tipo MOSTRADO (effective_type, siempre en mayúsculas);
+      // El filtro de tipo compara contra el tipo MOSTRADO (effective_type, siempre en mayúsculas);
       // income_type viene del Sheet con mayúsc/minúsc ("Publicidad") y rompía el filtro.
-      (!tipo || (r.effective_type || r.income_type || '').toUpperCase() === tipo) && (!mes || r.mes === mes));
-  }, [data, q, tipo, mes]);
-  // Al cambiar el filtro, volver a la ventana inicial de filas (perf).
-  useEffect(() => { setShown(120); }, [q, tipo, mes]);
+      (!tipo || (r.effective_type || r.income_type || '').toUpperCase() === tipo) && (!mes || r.mes === mes) &&
+      (!cliente || r.client_name_sheet === cliente) && (!conector || r.conector_name_sheet === conector) && (!pagador || r.payer_name === pagador));
+  }, [data, q, tipo, mes, cliente, conector, pagador]);
+  const anyFilter = q || tipo || mes || cliente || conector || pagador;
+  const clearFilters = () => { setQ(''); setTipo(''); setMes(''); setCliente(''); setConector(''); setPagador(''); };
+  // Al cambiar cualquier filtro, volver a la ventana inicial de filas (perf).
+  useEffect(() => { setShown(120); }, [q, tipo, mes, cliente, conector, pagador]);
   const visible = filtered.slice(0, shown);
 
   const totals = useMemo(() => {
@@ -186,10 +195,6 @@ export default function IngresosPage() {
     { label: 'Publicidad', value: money(totals.ad), accent: '#f59e0b', color: '#b45309' },
     { label: 'Bruto US$', value: money(totals.usd), accent: '#0ea5e9', color: '#0369a1' },
   ];
-  const tipoChips = [['', 'Todos'], ['CRM', 'CRM'], ['PUBLICIDAD', 'Publicidad'], ['SETUP', 'Setup']].map(([v, label]) => {
-    const sel = tipo === v; const base = v === 'CRM' ? '#3b82f6' : v === 'PUBLICIDAD' ? '#f59e0b' : v === 'SETUP' ? '#64748b' : '#0EA5A4';
-    return { v, label, sel, base };
-  });
   const cols = [
     ['Pagador', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Cobró', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Conector', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
     ['Afiliado', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
@@ -213,22 +218,24 @@ export default function IngresosPage() {
         ))}
       </div>
 
-      {/* toolbar */}
+      {/* toolbar — buscador + filtros minimalistas (tipo, cliente, conector, pagador, mes) */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
         <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false, convTouched: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
-        <Search value={q} onChange={setQ} placeholder="Buscar cliente, pagador o conector…" width={268} />
-        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-          {tipoChips.map((c) => (
-            <button key={c.v} onClick={() => setTipo(c.v)} style={{ border: `1px solid ${c.sel ? c.base : '#E2E5EB'}`, background: c.sel ? c.base : '#fff', color: c.sel ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, padding: '6px 11px', borderRadius: 20, cursor: 'pointer' }}>{c.label}</button>
-          ))}
-        </div>
-        <select value={mes} onChange={(e) => setMes(e.target.value)} style={ctrlSel}>
-          <option value="">Todos los meses</option>
-          {meses.map((m) => <option key={m} value={m}>{m}</option>)}
+        <Search value={q} onChange={setQ} placeholder="Buscar…" width={188} />
+        <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={fselStyle(!!tipo)}>
+          <option value="">Todos los tipos</option>
+          <option value="CRM">CRM</option>
+          <option value="PUBLICIDAD">Publicidad</option>
+          <option value="SETUP">Setup</option>
         </select>
+        <FilterSelect value={cliente} onChange={setCliente} allLabel="Todos los clientes" options={cliOpts} />
+        <FilterSelect value={conector} onChange={setConector} allLabel="Todos los conectores" options={conOpts} />
+        <FilterSelect value={pagador} onChange={setPagador} allLabel="Todos los pagadores" options={pagOpts} />
+        <FilterSelect value={mes} onChange={setMes} allLabel="Todos los meses" options={meses} />
+        {anyFilter && <button onClick={clearFilters} style={{ border: 0, background: 'transparent', color: '#0EA5A4', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 4px' }}>Limpiar</button>}
         <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#9AA4B2' }}>mostrando <b style={{ color: '#3B4453' }}>{Math.min(visible.length, filtered.length)}</b>{filtered.length > visible.length ? ` de ${filtered.length}` : ''} · {data.length} total</span>
       </div>
 
@@ -566,7 +573,17 @@ const BancoIcon = ({ color }) => (
 /* ---------- bits ---------- */
 const grpTh = { borderBottom: '1px solid #E2E5EB', fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' };
 const grpStick = { position: 'sticky', top: 0, zIndex: 4, textAlign: 'left', padding: '8px 12px' };
-const ctrlSel = { border: '1px solid #E2E5EB', borderRadius: 9, padding: '7px 10px', fontSize: 12.5, background: '#fff', outline: 'none', color: '#3B4453' };
+// Estilo unificado de los filtros (se resalta en teal cuando está activo).
+const fselStyle = (active) => ({ border: `1px solid ${active ? '#0EA5A4' : '#E2E5EB'}`, borderRadius: 9, padding: '7px 10px', fontSize: 12.5, background: active ? '#F0FDFA' : '#fff', outline: 'none', color: active ? '#0c8584' : '#3B4453', fontWeight: active ? 600 : 400, maxWidth: 180, cursor: 'pointer' });
+// Desplegable de filtro reutilizable (cliente / conector / pagador / mes).
+function FilterSelect({ value, onChange, allLabel, options }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={fselStyle(!!value)} title={allLabel}>
+      <option value="">{allLabel}</option>
+      {(options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
 const Plus = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12h14M12 5v14" /></svg>;
 const Td = ({ children, center, muted, bold, br2 }) => (
   <td style={{ padding: '8px 10px', borderBottom: '1px solid #EEF1F5', borderRight: br2 ? '2px solid #EEF1F5' : '1px solid #F4F6F9', textAlign: center ? 'center' : 'left', color: muted ? '#475569' : undefined, fontWeight: bold ? 700 : undefined }}>{children}</td>
