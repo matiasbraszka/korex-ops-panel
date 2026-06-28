@@ -190,7 +190,7 @@ export default function IngresosPage() {
   const cols = [
     ['Pagador', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Cobró', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Conector', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
     ['Afiliado', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
-    ['Pago', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Banco', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Tipo', '#F8FAFC', '#64748B', '2px solid #E2E5EB'],
+    ['Pago', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Banco', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Tipo', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Efectivo', '#F8FAFC', '#64748B', '2px solid #E2E5EB'],
     ['Fact.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Fin.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Merc.', '#F0F9FF', '#0369a1', '2px solid #E2E5EB'],
     ['Bruto €', '#F0FDFA', '#0c8584', '1px solid #EEF1F5'], ['Bruto US$', '#F0FDFA', '#0c8584', '1px solid #EEF1F5'], ['Neto US$', '#F0FDFA', '#0c8584', '2px solid #E2E5EB'],
     ['Cliente', '#EEF0FF', ROLE.cliente, '1px solid #EEF1F5'], ['Conector', '#EEF0FF', ROLE.conector, '1px solid #EEF1F5'], ['Afiliado', '#EEF0FF', ROLE.afiliado, '1px solid #EEF1F5'],
@@ -237,7 +237,7 @@ export default function IngresosPage() {
           <thead>
             <tr>
               <th colSpan={2} style={{ position: 'sticky', left: 0, top: 0, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '8px 12px', ...grpTh, color: '#0c8584' }}>Venta</th>
-              <th colSpan={7} style={{ ...grpStick, background: '#F8FAFC', ...grpTh, color: '#64748B', borderRight: '2px solid #E2E5EB' }}>Detalle</th>
+              <th colSpan={8} style={{ ...grpStick, background: '#F8FAFC', ...grpTh, color: '#64748B', borderRight: '2px solid #E2E5EB' }}>Detalle</th>
               <th colSpan={3} style={{ ...grpStick, background: '#F0F9FF', ...grpTh, color: '#0369a1', textAlign: 'center', borderRight: '2px solid #E2E5EB' }}>Estado</th>
               <th colSpan={3} style={{ ...grpStick, background: '#F0FDFA', ...grpTh, color: '#0c8584', borderRight: '2px solid #E2E5EB' }}>Montos</th>
               <th colSpan={5} style={{ ...grpStick, background: '#EEF0FF', ...grpTh, color: '#4f46e5', textAlign: 'center', borderRight: '2px solid #E2E5EB' }}>Comisiones a repartir</th>
@@ -248,7 +248,7 @@ export default function IngresosPage() {
               <th style={{ position: 'sticky', left: 0, top: 33, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', textAlign: 'left', padding: '7px 12px', fontWeight: 600, color: '#64748B' }}>Fecha</th>
               <th style={{ position: 'sticky', left: 96, top: 33, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '7px 12px', fontWeight: 600, color: '#64748B', boxShadow: '2px 0 4px -2px rgba(13,17,23,.12)' }}>Cliente</th>
               {cols.map(([label, bg, fg, br], i) => (
-                <th key={i} style={{ position: 'sticky', top: 33, zIndex: 3, background: bg, borderBottom: '1px solid #E2E5EB', borderRight: br, textAlign: (i >= 7 && i <= 9) ? 'center' : 'left', padding: '7px 10px', fontWeight: 600, color: fg }}>{label}</th>
+                <th key={i} style={{ position: 'sticky', top: 33, zIndex: 3, background: bg, borderBottom: '1px solid #E2E5EB', borderRight: br, textAlign: (i >= 8 && i <= 10) ? 'center' : 'left', padding: '7px 10px', fontWeight: 600, color: fg }}>{label}</th>
               ))}
             </tr>
           </thead>
@@ -289,6 +289,7 @@ export default function IngresosPage() {
                   <Td center>{banco.link
                     ? <a href={banco.link} target="_blank" rel="noopener noreferrer" title={banco.title} style={{ display: 'inline-flex', cursor: 'pointer' }}><BancoIcon color={banco.color} /></a>
                     : <span title={banco.title} style={{ display: 'inline-flex', cursor: 'default' }}><BancoIcon color={banco.color} /></span>}</Td>
+                  <Td><Chip bg={TYPE_BG[(r.income_type || '').toUpperCase()] || '#f1f5f9'} fg={TYPE_FG[(r.income_type || '').toUpperCase()] || '#64748B'}>{r.income_type || '—'}</Chip></Td>
                   <Td br2><Chip bg={TYPE_BG[r.effective_type] || '#f1f5f9'} fg={TYPE_FG[r.effective_type] || '#64748B'}>{r.effective_type || '—'}</Chip></Td>
                   <Td center><Dot on={r.facturado} title={`Facturado: ${r.facturado ? 'sí' : 'no'}`} onClick={() => patchIncome(r.id, { facturado: !r.facturado })} /></Td>
                   <Td center><Dot on={r.organizado_finanzas} title={`Organizado en finanzas: ${r.organizado_finanzas ? 'sí' : 'no'}`} onClick={() => patchIncome(r.id, { organizado_finanzas: !r.organizado_finanzas })} /></Td>
@@ -309,7 +310,7 @@ export default function IngresosPage() {
             })}
             {filtered.length > visible.length && (
               <tr>
-                <td colSpan={22} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
+                <td colSpan={23} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
                   <button onClick={() => setShown((n) => n + 300)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#0c8584', fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 9, cursor: 'pointer' }}>
                     Mostrar más · faltan {filtered.length - visible.length}
                   </button>
@@ -320,7 +321,7 @@ export default function IngresosPage() {
           <tfoot>
             <tr style={{ fontWeight: 800, fontSize: 11.5 }}>
               <td colSpan={2} style={{ position: 'sticky', left: 0, bottom: 0, zIndex: 5, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', padding: '10px 12px' }}>TOTAL · {filtered.length}</td>
-              <td colSpan={10} style={{ position: 'sticky', bottom: 0, zIndex: 3, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', borderRight: '2px solid #E2E5EB' }} />
+              <td colSpan={11} style={{ position: 'sticky', bottom: 0, zIndex: 3, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', borderRight: '2px solid #E2E5EB' }} />
               <Foot>{money2(totals.eur, '€')}</Foot>
               <Foot>{money(totals.usd)}</Foot>
               <Foot br2>{money(totals.net)}</Foot>
