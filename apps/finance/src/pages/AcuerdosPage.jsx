@@ -90,10 +90,16 @@ export default function AcuerdosPage() {
       </div>
 
       {view === 'cliente' ? (
+        <>
+        <div style={{ fontSize: 11.5, color: '#8A93A2', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-block', width: 24, height: 16, borderRadius: 5, border: '1px dashed #C4CCD6', background: '#F8FAFC' }} />
+          <span>En la columna <b style={{ color: '#15803d' }}>Korex</b> (recuadro punteado) podés <b>fijar a mano</b> el % que se lleva Korex por categoría. Vacío = automático (lo que sobra); 0 = no se lleva nada.</span>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {filteredCards.map((c) => <ClientCard key={c.id || c.sheet_client_name} c={c} assignOpts={assignOpts} onEdited={scheduleRecompute} />)}
           {!filteredCards.length && <div style={{ color: '#9AA4B2', padding: 40, textAlign: 'center', gridColumn: '1 / -1' }}>Sin resultados.</div>}
         </div>
+        </>
       ) : (
         <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
@@ -282,10 +288,13 @@ function KorexPct({ value, auto, onCommit }) {
   const has = value != null;
   const init = has ? String(+(value * 100).toFixed(2)) : '';
   const autoStr = auto == null ? 'auto' : String(+(auto * 100).toFixed(1));
+  // Si está en automático se muestra el valor calculado como texto-fantasma con borde
+  // punteado, para que se vea que es un campo donde podés fijar el % a mano.
   return <input type="text" inputMode="decimal" defaultValue={init} key={init} placeholder={autoStr}
-    title={has ? 'Korex fijado a mano — borralo para volver a automático' : `Automático: ${autoStr}% (lo que sobra). Escribí un % para fijar cuánto se lleva Korex acá.`}
+    title={has ? 'Korex fijado a mano — borralo para volver a automático' : `Automático: ${autoStr}% (lo que sobra). Hacé clic y escribí un % para fijar cuánto se lleva Korex acá.`}
     onBlur={(e) => onCommit(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-    style={{ width: 46, fontSize: 11, textAlign: 'left', background: has ? '#F0FDF4' : 'transparent', border: `1px solid ${has ? '#B6E8C5' : 'transparent'}`, borderRadius: 4, padding: '2px 4px', outline: 'none', fontWeight: 700, color: has ? '#15803d' : '#cbd5e1' }}
-    onFocus={(e) => { e.target.style.borderColor = '#99E6E3'; e.target.style.background = '#fff'; }} />;
+    style={{ width: 50, fontSize: 11.5, textAlign: 'center', background: has ? '#F0FDF4' : '#F8FAFC', border: `1px ${has ? 'solid #86D8C8' : 'dashed #C4CCD6'}`, borderRadius: 5, padding: '3px 4px', outline: 'none', cursor: 'text', fontWeight: 700, color: has ? '#15803d' : '#94A3B2' }}
+    onFocus={(e) => { e.target.style.borderColor = '#0EA5A4'; e.target.style.borderStyle = 'solid'; e.target.style.background = '#fff'; }}
+    onBlurCapture={(e) => { if (!e.target.value) { e.target.style.borderStyle = 'dashed'; e.target.style.background = '#F8FAFC'; } }} />;
 }
 const Fragment = ({ children }) => <>{children}</>;
