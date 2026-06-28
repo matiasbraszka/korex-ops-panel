@@ -81,10 +81,9 @@ export default function IngresosPage() {
   const openEdit = (r) => {
     const usd = Number(r.amount_usd) || 0, eur = Number(r.amount_eur) || 0;
     const divisa = (usd || !eur) ? 'USD' : 'EUR';
-    const implied = (usd > 0 && eur > 0) ? Math.round((usd / eur) * 10000) / 10000 : null;
     setModal({
       mode: 'edit', id: r.id,
-      fx_rate: implied != null ? String(implied) : '', rateTouched: implied != null,
+      convTouched: true,
       income_date: r.income_date || '', income_type: r.income_type || 'CRM',
       payer_name: r.payer_name || '', client_name_sheet: r.client_name_sheet || '', conector_name: r.conector_name_sheet || '', afiliado_name: r.afiliado_name || '',
       payment_method: r.payment_method || PAY_OPTS[0], divisa,
@@ -216,7 +215,7 @@ export default function IngresosPage() {
 
       {/* toolbar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
-        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false, fx_rate: '', rateTouched: false })}
+        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false, convTouched: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
@@ -359,20 +358,33 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
 
   useEffect(() => {
     let alive = true;
-    fetch('https://api.frankfurter.app/latest?from=EUR&to=USD')
-      .then((r) => r.json()).then((d) => { if (alive && d?.rates?.USD) setRate(d.rates.USD); })
-      .catch(() => {});
+    (async () => {
+      // Cotización EUR→USD del momento. Dos fuentes por si una falla.
+      try {
+        const d = await (await fetch('https://open.er-api.com/v6/latest/EUR')).json();
+        if (alive && d?.rates?.USD) { setRate(d.rates.USD); return; }
+      } catch { /* probamos la otra */ }
+      try {
+        const d = await (await fetch('https://api.frankfurter.app/latest?from=EUR&to=USD')).json();
+        if (alive && d?.rates?.USD) setRate(d.rates.USD);
+      } catch { /* sin red: queda el fallback */ }
+    })();
     return () => { alive = false; };
   }, []);
 
-  // Recalcula ambos montos (USD/EUR) y el neto según divisa + bruto + método.
-  const recompute = (s, rtFallback) => {
-    const rt = num(s.fx_rate) || rtFallback;   // tipo de cambio editable; si no, el del momento
+  // Recalcula montos USD/EUR y neto. El monto convertido (la otra divisa) se autocompleta con
+  // la cotización del momento, pero si lo editás a mano (convTouched) se respeta tu valor.
+  const recompute = (s, rt) => {
     const b = num(s.bruto);
     let usd = '', eur = '';
     if (b != null) {
-      if (s.divisa === 'USD') { usd = b; eur = r2(b / rt); }
-      else { eur = b; usd = r2(b * rt); }
+      if (s.divisa === 'USD') {
+        usd = b;
+        eur = (s.convTouched && num(s.amount_eur) != null) ? num(s.amount_eur) : r2(b / rt);
+      } else {
+        eur = b;
+        usd = (s.convTouched && num(s.amount_usd) != null) ? num(s.amount_usd) : r2(b * rt);
+      }
     }
     const usdStr = usd === '' ? '' : String(usd);
     // Mercury/USDT no tienen comisión → neto = bruto USD. Stripe: si no tocaron el neto a mano,
@@ -382,12 +394,14 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
       : usdStr;
     return { ...s, amount_usd: usdStr, amount_eur: eur === '' ? '' : String(eur), net_usd: net };
   };
-  const setBruto = (v) => setForm((s) => recompute({ ...s, bruto: v }, RATE));
-  const setDivisa = (d) => setForm((s) => recompute({ ...s, divisa: d }, RATE));
+  // Al cambiar bruto o divisa, se recalcula la conversión (se "des-toca" el monto convertido).
+  const setBruto = (v) => setForm((s) => recompute({ ...s, bruto: v, convTouched: false }, RATE));
+  const setDivisa = (d) => setForm((s) => recompute({ ...s, divisa: d, convTouched: false }, RATE));
   const setMethod = (m) => setForm((s) => recompute({ ...s, payment_method: m }, RATE));
-  const setFxRate = (v) => setForm((s) => recompute({ ...s, fx_rate: v, rateTouched: true }, RATE));
-  // La cotización en vivo llena el tipo de cambio por defecto (salvo que se haya editado a mano).
-  useEffect(() => { if (rate) setForm((s) => (s.rateTouched ? s : recompute({ ...s, fx_rate: String(rate) }, rate))); }, [rate]); // eslint-disable-line
+  // Editar a mano el monto convertido (la otra divisa).
+  const setConvAmount = (v) => setForm((s) => recompute({ ...s, [s.divisa === 'USD' ? 'amount_eur' : 'amount_usd']: v, convTouched: true }, RATE));
+  // Cuando llega la cotización en vivo, recalcula la conversión (salvo edición o monto tocado a mano).
+  useEffect(() => { if (rate) setForm((s) => (isEdit || s.convTouched ? s : recompute(s, rate))); }, [rate]); // eslint-disable-line
 
   // Pagador → autocompleta cliente (cliente_padre) y conector (acuerdo del cliente).
   const pickPayer = (p) => setForm((s) => ({
@@ -417,9 +431,6 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
     return () => { alive = false; };
   }, [isStripe, form.payer_name, form.amount_usd, form.netTouched]); // eslint-disable-line
 
-  const otherCur = form.divisa === 'USD'
-    ? (form.amount_eur ? `≈ € ${form.amount_eur}` : '')
-    : (form.amount_usd ? `≈ US$ ${form.amount_usd}` : '');
   const ok = form.client_name_sheet.trim() && (form.payer_name || '').trim() && num(form.net_usd) != null;
   const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
   const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
@@ -464,11 +475,11 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
           <div>
             <label style={lab}>Monto bruto <span style={{ color: '#e11d48' }}>*</span></label>
             <input inputMode="decimal" value={form.bruto} onChange={(e) => setBruto(e.target.value)} placeholder="0" style={inp} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 10.5, color: '#9AA4B2', flexWrap: 'wrap' }}>
-              <span>Cambio EUR→USD</span>
-              <input inputMode="decimal" value={form.fx_rate} onChange={(e) => setFxRate(e.target.value)} placeholder={RATE.toFixed(4)} title="Tipo de cambio del momento; editable como el neto" style={{ width: 72, border: '1px solid #99E6E3', background: '#F0FDFA', borderRadius: 6, padding: '3px 7px', fontSize: 11, fontWeight: 700, color: '#0c8584', outline: 'none' }} />
-              <span style={{ color: form.rateTouched ? '#b45309' : '#16a34a', fontWeight: 600 }}>{form.rateTouched ? 'editado' : 'en vivo'}</span>
-              {otherCur && <span style={{ color: '#cbd5e1' }}>· {otherCur}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, color: '#6B7585', flexWrap: 'wrap' }}>
+              <span style={{ color: '#9AA4B2' }}>Equivale a</span>
+              <span style={{ fontWeight: 700, color: '#0c8584' }}>{form.divisa === 'USD' ? '€' : 'US$'}</span>
+              <input inputMode="decimal" value={(form.divisa === 'USD' ? form.amount_eur : form.amount_usd) || ''} onChange={(e) => setConvAmount(e.target.value)} placeholder="0" title="Monto convertido — se calcula con la cotización del momento; editable" style={{ width: 100, border: '1px solid #99E6E3', background: '#F0FDFA', borderRadius: 6, padding: '4px 8px', fontSize: 12.5, fontWeight: 700, color: '#0c8584', outline: 'none' }} />
+              <span style={{ color: '#cbd5e1' }}>· cambio {RATE.toFixed(4)} {rate ? <b style={{ color: '#16a34a' }}>en vivo</b> : <b style={{ color: '#b45309' }}>(sin conexión)</b>}</span>
             </div>
           </div>
           <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Cobro <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· cómo entró el dinero</span></label><select value={form.payment_method} onChange={(e) => setMethod(e.target.value)} style={inp}>{PAY_OPTS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
