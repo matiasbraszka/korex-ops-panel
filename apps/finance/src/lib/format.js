@@ -78,12 +78,12 @@ export const roleChip = (t) => ROLE_CHIP[t] || ['#f1f5f9', '#64748B'];
 export const CAT_CHIP = {
   Personal: ['#ede9fe', '#6d28d9'], Herramientas: ['#dbeafe', '#1d4ed8'], Proveedor: ['#e0f2fe', '#0369a1'],
   Infraestructura: ['#cffafe', '#0e7490'], Retiros: ['#ffe4e6', '#be123c'], Formacion: ['#fef3c7', '#b45309'],
-  Fees: ['#ffedd5', '#c2410c'], Comisiones: ['#d1fae5', '#047857'], Otros: ['#f1f5f9', '#475569'],
+  Fees: ['#ffedd5', '#c2410c'], Comisiones: ['#d1fae5', '#047857'], Reembolsos: ['#fee2e2', '#b91c1c'], Otros: ['#f1f5f9', '#475569'],
 };
 export const catChip = (c) => CAT_CHIP[c] || ['#f1f5f9', '#64748B'];
 export const CAT_COLOR = {
   Personal: '#8b5cf6', Herramientas: '#3b82f6', Proveedor: '#0ea5e9', Infraestructura: '#06b6d4',
-  Retiros: '#f43f5e', Formacion: '#f59e0b', Fees: '#f97316', Comisiones: '#10b981', Otros: '#94a3b8',
+  Retiros: '#f43f5e', Formacion: '#f59e0b', Fees: '#f97316', Comisiones: '#10b981', Reembolsos: '#ef4444', Otros: '#94a3b8',
 };
 export const catColor = (c) => CAT_COLOR[c] || '#94a3b8';
 

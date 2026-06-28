@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
 import FacturaModal from '../components/FacturaModal.jsx';
+import RefundModal from '../components/RefundModal.jsx';
 import { Search } from '../components/bits.jsx';
 import { money, money2, fdate, pagoChip, TYPE_BG, TYPE_FG, TYPE_RAIL, ROLE } from '../lib/format.js';
 
@@ -44,6 +45,8 @@ export default function IngresosPage() {
   const [modal, setModal] = useState(null);   // form de alta/edición (null = cerrado)
   const [busy, setBusy] = useState(false);
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
+  const [refundFor, setRefundFor] = useState(null);  // ingreso a reembolsar (null = cerrado)
+  const [refundMap, setRefundMap] = useState({});    // income_id → total reembolsado US$
 
   const load = useCallback(() => {
     sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
@@ -53,6 +56,9 @@ export default function IngresosPage() {
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.id] = r; }); setDirMap(m); }).catch(() => {});
     sbFetch('fin_income_recon?select=income_id,source,ref_id,amount,dt,who,receipt_url,confidence&limit=6000')
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.income_id] = r; }); setReconMap(m); }).catch(() => {});
+    // Reembolsos por ingreso (para el badge "Reembolsado / parcial").
+    sbFetch('fin_refunds?select=income_id,amount_usd&limit=6000')
+      .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.income_id] = (m[r.income_id] || 0) + (Number(r.amount_usd) || 0); }); setRefundMap(m); }).catch(() => {});
     // Roster del directorio (para elegir el pagador) — dedup por nombre, preferimos el que tenga cliente_padre.
     sbFetch('fin_directory?select=nombre,tipo,cliente_padre,conector_e,conector,email,aliases&order=nombre.asc&limit=2000')
       .then((d) => {
@@ -150,9 +156,9 @@ export default function IngresosPage() {
         if (isReservado(e)) reservadoAfi = true;
       });
       const dir = dirMap[r.id] || {};
-      return { ...r, comm, ad, reservadoAfi, mes: (r.income_date || '').slice(0, 7), recon: reconMap[r.id], payer_dir_id: dir.payer_dir_id, client_dir_id: dir.client_dir_id };
+      return { ...r, comm, ad, reservadoAfi, refunded: refundMap[r.id] || 0, mes: (r.income_date || '').slice(0, 7), recon: reconMap[r.id], payer_dir_id: dir.payer_dir_id, client_dir_id: dir.client_dir_id };
     });
-  }, [rows, dirMap, reconMap]);
+  }, [rows, dirMap, reconMap, refundMap]);
 
   const meses = useMemo(() => (data ? [...new Set(data.map((r) => r.mes).filter(Boolean))].sort().reverse() : []), [data]);
   const sortNames = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
@@ -290,6 +296,9 @@ export default function IngresosPage() {
                   </td>
                   <td className="fin-stick" style={{ position: 'sticky', left: 96, zIndex: 2, background: '#fff', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #E2E5EB', padding: '8px 12px', fontWeight: 600, boxShadow: '2px 0 4px -2px rgba(13,17,23,.07)' }}>
                     <Clickable name={r.client_name_sheet} id={r.client_dir_id} onOpen={setOpenId} dashed />
+                    {r.refunded > 0.005 && (() => { const full = r.refunded >= (r.net_usd || 0) - 0.005;
+                      return <span title={`Reembolsado US$ ${Math.round(r.refunded).toLocaleString('es-AR')}`} style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: full ? '#fee2e2' : '#ffedd5', color: full ? '#b91c1c' : '#c2410c', whiteSpace: 'nowrap' }}>↩ {full ? 'Reembolsado' : 'Parcial'}</span>;
+                    })()}
                   </td>
                   <Td><Clickable name={r.payer_name} id={r.payer_dir_id} onOpen={setOpenId} dashed muted /></Td>
                   <Td><Chip bg={r.collected_by === 'Cliente' ? '#ffedd5' : '#f1f5f9'} fg={r.collected_by === 'Cliente' ? '#c2410c' : '#64748B'} round>{r.collected_by || 'Korex'}</Chip></Td>
@@ -344,15 +353,16 @@ export default function IngresosPage() {
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
 
-      {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} onDelete={deleteModal} busy={busy} onClose={() => setModal(null)} />}
+      {modal && <IngresoModal form={modal} setForm={setModal} cliOpts={cliOpts} dir={dir} conByClient={conByClient} onSave={saveModal} onDelete={deleteModal} onRefund={() => { const inc = (data || []).find((x) => x.id === modal?.id); if (inc) { setModal(null); setRefundFor(inc); } }} busy={busy} onClose={() => setModal(null)} />}
       {factura && <FacturaModal income={factura} onClose={() => { setFactura(null); load(); }} onDone={(id) => setRows((rs) => (rs || []).map((r) => (r.id === id ? { ...r, facturado: true } : r)))} />}
+      {refundFor && <RefundModal income={refundFor} onClose={() => setRefundFor(null)} onDone={() => { setRefundFor(null); load(); }} />}
       {openId && <PersonDrawer personId={openId} onClose={() => setOpenId(null)} onOpenPerson={setOpenId} />}
     </div>
   );
 }
 
 /* ---------- modal de alta/edición (6 campos; el resto automático) ---------- */
-function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDelete, busy, onClose }) {
+function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDelete, onRefund, busy, onClose }) {
   const [rate, setRate] = useState(null);   // cotización EUR → USD (en vivo)
   const [adv, setAdv] = useState(false);     // ajustar cliente/conector
   const [confirmDel, setConfirmDel] = useState(false);
@@ -512,6 +522,9 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
                   <button onClick={() => setConfirmDel(false)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>No</button>
                 </span>
               : <button onClick={() => setConfirmDel(true)} title="Eliminar este ingreso" style={{ border: '1px solid #FBC9CF', background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Eliminar</button>
+            )}
+            {isEdit && !confirmDel && (
+              <button onClick={onRefund} title="Reembolsar este ingreso" style={{ border: '1px solid #FED7AA', background: '#fff', color: '#c2410c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>↩ Reembolsar</button>
             )}
             {!confirmDel && <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Pagador, cliente y monto son obligatorios'}</span>}
           </div>
