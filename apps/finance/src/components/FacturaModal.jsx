@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { sbFetch, supabase } from '@korex/db';
-import { facConcepto, facFormaPago, facHtmlFactura, facImprimir, facPad4, facMiles, facFechaStr, refCodigo } from '../lib/factura.js';
+import { facConcepto, facFormaPago, facHtmlFactura, facImprimir, facPad4, facMiles, facFechaStr } from '../lib/factura.js';
 
 // Genera la factura de un ingreso dentro del sistema.
 // REGLA (2026-06-27): la factura se registra SOLO si se logra archivar en Drive.
@@ -21,8 +21,6 @@ export default function FacturaModal({ income, onClose, onDone }) {
   const [manualMode, setManualMode] = useState(false); // Drive falló → pedir link manual
   const [manualLink, setManualLink] = useState('');
   const [wantEmail, setWantEmail] = useState(false);   // si el intento original era "Generar y enviar"
-  const [siblings, setSiblings] = useState([]);        // otros ingresos sin facturar del MISMO pagador
-  const [sel, setSel] = useState({});                  // {incomeId: true} incluidos en esta factura
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -54,13 +52,6 @@ export default function FacturaModal({ income, onClose, onDone }) {
           return isFinite(n) && n > mx ? n : mx;
         }, 0);
         if (alive) setNum(String(max + 1));
-        // 3) Selección inicial + otros ingresos sin facturar del mismo pagador (para factura masiva).
-        if (alive) setSel({ [income.id]: true });
-        if (income.payer_name && income.collected_by !== 'Cliente') {
-          const encp = encodeURIComponent(income.payer_name.trim());
-          const sib = await sbFetch(`fin_incomes?payer_name=eq.${encp}&facturado=eq.false&collected_by=neq.Cliente&id=neq.${income.id}&select=id,income_date,income_type,effective_type,amount_eur,amount_usd,payment_method,ref_seq&order=income_date.asc&limit=100`).catch(() => []);
-          if (alive) setSiblings(Array.isArray(sib) ? sib : []);
-        }
       } catch (e) {
         if (alive) setErr(String(e));
       } finally {
@@ -71,24 +62,13 @@ export default function FacturaModal({ income, onClose, onDone }) {
   }, [income]);
 
   if (!income) return null;
-  // Helpers por ingreso (concepto según tipo, igual que el Apps Script).
-  const tipoDe = (inc) => (inc.income_type || inc.effective_type || '').toUpperCase();
-  const montoDe = (inc) => (moneda === 'EUR' ? (Number(inc.amount_eur) || 0) : (Number(inc.amount_usd) || 0));
-  const tipo = tipoDe(income);
+  // Concepto según el tipo del ingreso (col H del Sheet = income_type), igual que el Apps Script.
+  const tipo = (income.income_type || income.effective_type || '').toUpperCase();
+  const concepto = facConcepto(tipo);
   const formaPago = facFormaPago(income.payment_method);
+  const monto = moneda === 'EUR' ? (Number(income.amount_eur) || 0) : (Number(income.amount_usd) || 0);
   const sym = moneda === 'EUR' ? '€' : 'US$';
   const numeroFmt = facPad4(num);
-  // Ingresos incluidos en la factura: el actual + los del mismo pagador que se tilden (masiva).
-  const allIncomes = [income, ...siblings];
-  const selectedIncomes = allIncomes.filter((inc) => sel[inc.id]);
-  const esMasiva = selectedIncomes.length > 1;
-  const total = selectedIncomes.reduce((s, inc) => s + montoDe(inc), 0);
-  const items = selectedIncomes.map((inc) => ({
-    codigo: refCodigo(inc.income_type, inc.ref_seq),
-    concepto: facConcepto(tipoDe(inc)),
-    fecha: inc.income_date,
-    monto: montoDe(inc),
-  }));
   const faltan = bill ? [
     !bill.nombreFactura && 'Nombre / empresa',
     !bill.idFiscal && 'ID fiscal o DNI',
@@ -97,7 +77,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   const docData = () => ({
     nombreFactura: bill.nombreFactura, idFiscal: bill.idFiscal, direccion: bill.direccion,
-    numeroFmt, fecha: new Date(), moneda, formaPago, items,
+    numeroFmt, fecha: new Date(), concepto, monto, moneda, formaPago,
   });
 
   const imprimir = () => { if (!bill) return; facImprimir(facHtmlFactura(docData())); };
@@ -106,20 +86,17 @@ export default function FacturaModal({ income, onClose, onDone }) {
   // pdfUrl = link de Drive (automático o manual). pdfB64 = PDF para adjuntar al email (si lo hay).
   const persistInvoice = async ({ pdfUrl, pdfB64, sendEmail }) => {
     const invId = uuid();
-    const ids = selectedIncomes.map((inc) => inc.id);
     await sbFetch('invoices', {
       method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
       body: JSON.stringify({
         id: invId, number: numeroFmt, client_id: income.client_id || null,
-        income_id: income.id, issue_date: todayISO(), amount: total, currency: moneda,
-        concept: esMasiva ? `Factura masiva — ${ids.length} ingresos` : facConcepto(tipo),
-        status: 'emitida', payment_method: income.payment_method || null,
-        kind: 'ingreso', is_bulk: esMasiva, pdf_url: pdfUrl || null, // ← el link queda guardado de entrada
+        income_id: income.id, issue_date: todayISO(), amount: monto, currency: moneda,
+        concept: concepto, status: 'emitida', payment_method: income.payment_method || null,
+        kind: 'ingreso', pdf_url: pdfUrl || null, // ← el link queda guardado de entrada
       }),
     });
-    // Vincula TODOS los ingresos incluidos a la misma factura (N ingresos → 1 factura).
-    await sbFetch(`fin_incomes?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
-    ids.forEach((id) => onDone?.(id, numeroFmt));
+    await sbFetch(`fin_incomes?id=eq.${income.id}`, { method: 'PATCH', body: JSON.stringify({ facturado: true, invoice_id: invId }), throwOnError: true });
+    onDone?.(income.id, numeroFmt);
     if (sendEmail && bill.email) {
       try {
         const { data, error } = await supabase.functions.invoke('enviar-factura', {
@@ -137,7 +114,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   // Flujo principal: Drive PRIMERO. Solo si archiva, se registra la factura.
   const guardar = async (sendEmail) => {
-    if (!bill || !total || !num) return;
+    if (!bill || !monto || !num) return;
     setBusy(true); setErr(''); setSent(null); setArchived(null); setManualMode(false);
     setWantEmail(sendEmail);
     try {
@@ -172,7 +149,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
   // Drive falló y la subiste a mano: registrar la factura con el link pegado.
   const guardarConLinkManual = async () => {
     const link = manualLink.trim();
-    if (!link || !bill || !total || !num) return;
+    if (!link || !bill || !monto || !num) return;
     setBusy(true); setErr('');
     try {
       setArchived({ url: link, carpeta: null, manual: true });
@@ -212,7 +189,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
           <div style={{ padding: '30px 22px', textAlign: 'center' }}>
             <div style={{ fontSize: 34, marginBottom: 8 }}>✅</div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Factura N° {numeroFmt} registrada</div>
-            <div style={{ fontSize: 12.5, color: '#6B7585', marginTop: 5, lineHeight: 1.5 }}>{esMasiva ? <>Los <b>{selectedIncomes.length} ingresos</b> quedaron marcados como facturados y la factura se guardó en el sistema.</> : <>El ingreso quedó marcado como <b>facturado</b> y la factura se guardó en el sistema.</>}</div>
+            <div style={{ fontSize: 12.5, color: '#6B7585', marginTop: 5, lineHeight: 1.5 }}>El ingreso quedó marcado como <b>facturado</b> y la factura se guardó en el sistema.</div>
             {sent?.ok && (
               <div style={{ margin: '14px auto 0', maxWidth: 420, background: sent.test_mode ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${sent.test_mode ? '#FDE68A' : '#BBF7D0'}`, borderRadius: 10, padding: '10px 12px', fontSize: 12, color: sent.test_mode ? '#b45309' : '#15803d', lineHeight: 1.5 }}>
                 {sent.test_mode
@@ -271,7 +248,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
                       <button key={m} onClick={() => setMoneda(m)} disabled={m === 'EUR' && !Number(income.amount_eur)} style={{ border: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: moneda === m ? 700 : 500, padding: '6px 12px', borderRadius: 6, background: moneda === m ? '#fff' : 'transparent', color: moneda === m ? '#1d4ed8' : '#64748B', opacity: (m === 'EUR' && !Number(income.amount_eur)) ? 0.4 : 1, boxShadow: moneda === m ? '0 1px 2px rgba(0,0,0,.08)' : 'none' }}>{m}</button>
                     ))}
                   </div>
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 15, fontWeight: 800, color: total ? '#1d4ed8' : '#cbd5e1' }}>{sym} {facMiles(total)}</div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 15, fontWeight: 800, color: monto ? '#1d4ed8' : '#cbd5e1' }}>{sym} {facMiles(monto)}</div>
                 </div>
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
@@ -291,28 +268,10 @@ export default function FacturaModal({ income, onClose, onDone }) {
                 <input value={bill.direccion} onChange={(e) => setBill((b) => ({ ...b, direccion: e.target.value }))} placeholder="—" style={inp} />
               </div>
               <div style={{ gridColumn: '1 / -1', background: '#F8FAFC', border: '1px solid #EEF1F5', borderRadius: 9, padding: '10px 12px' }}>
-                <div style={{ fontSize: 11, color: '#9AA4B2', fontWeight: 600, marginBottom: 4 }}>
-                  {siblings.length > 0
-                    ? <>Ingresos a facturar <span style={{ color: '#6366f1' }}>· este pagador tiene {siblings.length} más sin facturar — tildá los que quieras incluir</span></>
-                    : <>Concepto <span style={{ color: '#cbd5e1' }}>· según tipo {tipo || '—'}</span></>}
-                </div>
-                {allIncomes.map((inc) => {
-                  const on = !!sel[inc.id];
-                  const isCurrent = inc.id === income.id;
-                  return (
-                    <label key={inc.id} title={isCurrent ? 'Ingreso actual (siempre incluido)' : ''} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: isCurrent ? 'default' : 'pointer', fontSize: 12, opacity: (on || isCurrent) ? 1 : 0.6 }}>
-                      <input type="checkbox" checked={on} disabled={isCurrent} onChange={(e) => setSel((m) => ({ ...m, [inc.id]: e.target.checked }))} />
-                      <span style={{ fontWeight: 700, color: '#1d4ed8', minWidth: 52 }}>{refCodigo(inc.income_type, inc.ref_seq) || '—'}</span>
-                      <span style={{ flex: 1, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{facConcepto(tipoDe(inc))}</span>
-                      <span style={{ color: '#9AA4B2', whiteSpace: 'nowrap' }}>{facFechaStr(inc.income_date)}</span>
-                      <span style={{ fontWeight: 700, minWidth: 72, textAlign: 'right' }}>{sym} {facMiles(montoDe(inc))}</span>
-                    </label>
-                  );
-                })}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #E2E5EB', marginTop: 6, paddingTop: 7, fontSize: 12, flexWrap: 'wrap', gap: 6 }}>
-                  <span style={{ color: '#9AA4B2' }}>Forma de pago: <b style={{ color: '#475569' }}>{formaPago}</b></span>
-                  <span style={{ fontWeight: 800, color: '#1d4ed8' }}>Total: {sym} {facMiles(total)}{esMasiva ? ` · ${selectedIncomes.length} ingresos` : ''}</span>
-                </div>
+                <div style={{ fontSize: 11, color: '#9AA4B2', fontWeight: 600 }}>Concepto <span style={{ color: '#cbd5e1' }}>· según tipo {tipo || '—'}</span></div>
+                <div style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.4 }}>{concepto}</div>
+                <div style={{ fontSize: 11, color: '#9AA4B2', fontWeight: 600, marginTop: 8 }}>Forma de pago</div>
+                <div style={{ fontSize: 12.5, marginTop: 2 }}>{formaPago}</div>
               </div>
               {faltan.length > 0 && (
                 <div style={{ gridColumn: '1 / -1', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 9, padding: '9px 12px', fontSize: 12, color: '#b45309' }}>
@@ -330,11 +289,11 @@ export default function FacturaModal({ income, onClose, onDone }) {
               {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
             </div>
             <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={imprimir} disabled={!total} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: total ? 1 : 0.5 }}>Ver / Descargar PDF</button>
+              <button onClick={imprimir} disabled={!monto} style={{ border: '1px solid #1d4ed8', background: '#fff', color: '#1d4ed8', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: monto ? 1 : 0.5 }}>Ver / Descargar PDF</button>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={() => guardar(false)} disabled={!total || !num || busy || !bill.nombreFactura} style={{ border: '1px solid #CBD5E1', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer', opacity: (!total || !num || busy || !bill.nombreFactura) ? 0.6 : 1 }}>{busy ? '…' : 'Solo registrar'}</button>
-                <button onClick={() => guardar(true)} disabled={!total || !num || busy || !bill.nombreFactura || !bill.email} title={!bill.email ? 'Cargá un e-mail para enviar' : 'Archiva en Drive, registra, marca facturado y envía por email'} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: (!total || !num || busy || !bill.nombreFactura || !bill.email) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={() => guardar(false)} disabled={!monto || !num || busy || !bill.nombreFactura} style={{ border: '1px solid #CBD5E1', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura) ? 0.6 : 1 }}>{busy ? '…' : 'Solo registrar'}</button>
+                <button onClick={() => guardar(true)} disabled={!monto || !num || busy || !bill.nombreFactura || !bill.email} title={!bill.email ? 'Cargá un e-mail para enviar' : 'Archiva en Drive, registra, marca facturado y envía por email'} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 16px', borderRadius: 9, cursor: 'pointer', opacity: (!monto || !num || busy || !bill.nombreFactura || !bill.email) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="m22 6-10 7L2 6" /></svg>
                   {busy ? 'Procesando…' : 'Generar y enviar'}
                 </button>

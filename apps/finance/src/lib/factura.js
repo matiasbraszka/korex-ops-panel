@@ -19,16 +19,6 @@ export function facConcepto(tipo) {
   return FAC_CONCEPTOS[t] || FAC_CONCEPTO_DEFAULT;
 }
 
-// Código de referencia del ingreso: letra del tipo + correlativo global (ej. "S-0042", "C-0117").
-// El número (ref_seq) es global y único por ingreso; la letra solo etiqueta el tipo.
-const TIPO_LETRA = { SETUP: 'S', CRM: 'C', PUBLICIDAD: 'P', COMISIONES: 'M' };
-export function refCodigo(tipo, seq) {
-  if (seq == null || seq === '') return '';
-  const t = String(tipo || '').trim().toUpperCase();
-  const letra = TIPO_LETRA[t] || (t ? t[0] : 'X');
-  return letra + '-' + String(seq).replace(/[^\d]/g, '').padStart(4, '0');
-}
-
 // Forma de pago según la cuenta/método receptor.
 export function facFormaPago(cuenta) {
   const s = String(cuenta || '').toLowerCase();
@@ -58,28 +48,12 @@ export function facFechaStr(d) {
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Plantilla HTML idéntica a la del Apps Script (bordes/tipografía/color; sin fondos).
-// d = { nombreFactura, idFiscal, direccion, numeroFmt, fecha(Date|str), moneda('USD'|'EUR'), formaPago,
-//       items: [{ codigo, concepto, fecha, monto }] }  — si no hay items, cae a { codigo, concepto, fecha, monto }
+// d = { nombreFactura, idFiscal, direccion, numeroFmt, fecha(Date|str), concepto, monto, moneda('USD'|'EUR'), formaPago }
 export function facHtmlFactura(d) {
   const sym = d.moneda === 'EUR' ? '€' : 'US$';
-  const items = (Array.isArray(d.items) && d.items.length)
-    ? d.items
-    : [{ codigo: d.codigo, concepto: d.concepto, fecha: d.fecha, monto: d.monto }];
-  const total = items.reduce((s, it) => s + (Number(it.monto) || 0), 0);
-  const totalStr = sym + ' ' + facMiles(total);
+  const importe = sym + ' ' + facMiles(d.monto);
   const fechaStr = facFechaStr(d.fecha);
   const AZUL = '#1d4ed8', GRIS = '#6b7280', BORDE = '#d1d5db', OSCURO = '#111827';
-
-  const filas = items.map((it) => {
-    const imp = sym + ' ' + facMiles(it.monto);
-    const fec = it.fecha ? facFechaStr(it.fecha) : '';
-    return '<tr>' +
-      '<td style="padding:11px 12px;border-bottom:1px solid ' + BORDE + ';font-weight:700;color:' + AZUL + ';white-space:nowrap;">' + esc(it.codigo || '') + '</td>' +
-      '<td style="padding:11px 12px;border-bottom:1px solid ' + BORDE + ';">' + esc(it.concepto) + '</td>' +
-      '<td style="padding:11px 12px;border-bottom:1px solid ' + BORDE + ';text-align:center;color:' + GRIS + ';white-space:nowrap;">' + esc(fec) + '</td>' +
-      '<td style="padding:11px 12px;border-bottom:1px solid ' + BORDE + ';text-align:right;white-space:nowrap;">' + esc(imp) + '</td>' +
-    '</tr>';
-  }).join('');
 
   return '' +
   '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Factura ' + esc(d.numeroFmt) + '</title>' +
@@ -118,12 +92,15 @@ export function facHtmlFactura(d) {
 
     '<table style="width:100%;border-collapse:collapse;margin-top:30px;font-size:13px;">' +
       '<tr>' +
-        '<th style="text-align:left;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:80px;">CÓDIGO</th>' +
         '<th style="text-align:left;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';">CONCEPTO</th>' +
-        '<th style="text-align:center;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:100px;">FECHA</th>' +
-        '<th style="text-align:right;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:130px;">IMPORTE</th>' +
+        '<th style="text-align:center;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:90px;">UNIDADES</th>' +
+        '<th style="text-align:right;padding:0 12px 8px;font-weight:700;color:' + AZUL + ';border-bottom:2px solid ' + AZUL + ';width:150px;">SUBTOTAL</th>' +
       '</tr>' +
-      filas +
+      '<tr>' +
+        '<td style="padding:12px;border-bottom:1px solid ' + BORDE + ';">' + esc(d.concepto) + '</td>' +
+        '<td style="padding:12px;border-bottom:1px solid ' + BORDE + ';text-align:center;">1</td>' +
+        '<td style="padding:12px;border-bottom:1px solid ' + BORDE + ';text-align:right;">' + esc(importe) + '</td>' +
+      '</tr>' +
     '</table>' +
 
     '<table style="width:100%;border-collapse:collapse;margin-top:6px;"><tr>' +
@@ -132,7 +109,7 @@ export function facHtmlFactura(d) {
         '<table style="width:100%;border-collapse:collapse;font-size:15px;">' +
           '<tr>' +
             '<td style="padding:10px 12px;color:' + GRIS + ';font-weight:700;">TOTAL</td>' +
-            '<td style="padding:10px 12px;text-align:right;font-weight:800;font-size:17px;color:' + AZUL + ';">' + esc(totalStr) + '</td>' +
+            '<td style="padding:10px 12px;text-align:right;font-weight:800;font-size:17px;color:' + AZUL + ';">' + esc(importe) + '</td>' +
           '</tr>' +
         '</table>' +
       '</td>' +
