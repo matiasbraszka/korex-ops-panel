@@ -32,7 +32,7 @@ export default function AcuerdosPage() {
   useEffect(() => {
     Promise.all([
       sbFetch('fin_client_terms?select=id,sheet_client_name,client_id,service_value,umbral_base,conector_name,consultor_name,marketing_name,conector_start_date,consultor_start_date,marketing_start_date&order=agreement_date.desc.nullslast'),
-      sbFetch('fin_commission_rules?select=id,sheet_client_name,client_id,income_type,role_key,pct'),
+      sbFetch('fin_commission_rules?select=id,sheet_client_name,client_id,income_type,role_key,pct,collected_by'),
       sbFetch('fin_directory?select=nombre,tipo,roles&limit=1000'),
       sbFetch('fin_incomes?select=conector_name_sheet,client_name_sheet,collected_by,net_usd,korex_real,fin_commission_entries(role_key,amount)&limit=6000'),
     ])
@@ -49,9 +49,16 @@ export default function AcuerdosPage() {
 
   const cards = useMemo(() => {
     if (!terms || !rules) return null;
+    // Dos juegos de % por cliente: cuando cobra Korex y cuando cobra el cliente.
     const byClient = new Map();
-    rules.forEach((r) => { const k = (r.sheet_client_name || '').toLowerCase(); if (!byClient.has(k)) byClient.set(k, {}); const m = byClient.get(k); (m[r.income_type] ||= {})[r.role_key] = { pct: Number(r.pct), id: r.id }; });
-    return terms.map((t) => ({ ...t, matrix: byClient.get((t.sheet_client_name || '').toLowerCase()) || {} }));
+    rules.forEach((r) => {
+      const k = (r.sheet_client_name || '').toLowerCase();
+      if (!byClient.has(k)) byClient.set(k, { Korex: {}, Cliente: {} });
+      const coll = r.collected_by === 'Cliente' ? 'Cliente' : 'Korex';
+      const m = byClient.get(k)[coll];
+      (m[r.income_type] ||= {})[r.role_key] = { pct: Number(r.pct), id: r.id };
+    });
+    return terms.map((t) => ({ ...t, matrices: byClient.get((t.sheet_client_name || '').toLowerCase()) || { Korex: {}, Cliente: {} } }));
   }, [terms, rules]);
 
   const conectorGroups = useMemo(() => {
@@ -91,9 +98,8 @@ export default function AcuerdosPage() {
 
       {view === 'cliente' ? (
         <>
-        <div style={{ fontSize: 11.5, color: '#8A93A2', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-block', width: 24, height: 16, borderRadius: 5, border: '1px dashed #C4CCD6', background: '#F8FAFC' }} />
-          <span>En la columna <b style={{ color: '#15803d' }}>Korex</b> (recuadro punteado) podés <b>fijar a mano</b> el % que se lleva Korex por categoría. Vacío = automático (lo que sobra); 0 = no se lleva nada.</span>
+        <div style={{ fontSize: 11.5, color: '#8A93A2', marginBottom: 10, lineHeight: 1.5 }}>
+          Cada acuerdo tiene dos juegos de comisiones según <b>quién cobra el ingreso</b> (botón <b>Cobra Korex / Cobra el cliente</b> en cada tarjeta). El reparto funciona igual en ambos; <b style={{ color: '#15803d' }}>Korex</b> se queda con <b>lo que sobra</b> (orientativo). Mientras no cargues el lado "Cobra el cliente", esos ingresos usan los mismos % que Korex.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {filteredCards.map((c) => <ClientCard key={c.id || c.sheet_client_name} c={c} assignOpts={assignOpts} onEdited={scheduleRecompute} />)}
@@ -145,11 +151,14 @@ const conSub = () => ({ padding: '8px 14px', borderBottom: '1px solid #F4F6F9', 
 
 /* ---------- tarjeta editable por cliente ---------- */
 function ClientCard({ c, assignOpts, onEdited }) {
-  const [matrix, setMatrix] = useState(c.matrix);
+  const [matrices, setMatrices] = useState(c.matrices);   // { Korex:{...}, Cliente:{...} }
+  const [mode, setMode] = useState('Korex');              // juego de % que se edita
   const [fields, setFields] = useState({ service_value: c.service_value, umbral_base: c.umbral_base, conector_name: c.conector_name, consultor_name: c.consultor_name, marketing_name: c.marketing_name, conector_start_date: c.conector_start_date, consultor_start_date: c.consultor_start_date, marketing_start_date: c.marketing_start_date });
   const [state, setState] = useState('');
   const okTimer = useRef(null);
   const [bg, fg] = avatarColor(c.sheet_client_name);
+  const matrix = matrices[mode] || {};
+  const fallback = matrices.Korex || {};   // si cobra el cliente y no hay %, usa el de Korex
 
   const flash = (s) => { setState(s); if (s === 'ok') { clearTimeout(okTimer.current); okTimer.current = setTimeout(() => setState(''), 1200); } };
   const patchTerm = async (body) => { if (!c.id) return; flash('saving'); try { await sbFetch(`fin_client_terms?id=eq.${c.id}`, { method: 'PATCH', body: JSON.stringify(body), throwOnError: true }); flash('ok'); } catch { flash('err'); } };
@@ -163,6 +172,12 @@ function ClientCard({ c, assignOpts, onEdited }) {
     if (same) return;
     setFields((f) => ({ ...f, [field]: val })); patchTerm({ [field]: val }); if (recompute) onEdited?.();
   };
+  // Actualiza una celda del juego ACTIVO (mode) en el estado local.
+  const setCell = (tipo, role, val) => setMatrices((ms) => {
+    const cur = { ...(ms[mode] || {}) }; const t = { ...(cur[tipo] || {}) };
+    if (val == null) delete t[role]; else t[role] = val;
+    cur[tipo] = t; return { ...ms, [mode]: cur };
+  });
   const commitCell = async (tipo, role, rawStr) => {
     const cur = matrix[tipo]?.[role];
     const curPctNum = cur ? Math.round(cur.pct * 1e6) : null;
@@ -170,21 +185,18 @@ function ClientCard({ c, assignOpts, onEdited }) {
     const n = raw === '' ? null : parseFloat(raw);
     const frac = n == null || isNaN(n) ? null : Math.round((n / 100) * 1e6) / 1e6;
     if (frac != null && curPctNum === Math.round(frac * 1e6)) return;
-    // Korex admite 0 explícito (Korex no se lleva nada en esa categoría); para los demás
-    // roles, 0 o vacío = borrar la regla. Vacío en Korex = volver a automático.
-    const isKorex = role === 'korex_pct';
     flash('saving');
     try {
-      if (frac == null || (frac === 0 && !isKorex)) {
+      if (frac == null || frac === 0) {   // vacío o 0 = sin comisión (borra la regla del juego activo)
         if (cur?.id) await sbFetch(`fin_commission_rules?id=eq.${cur.id}`, { method: 'DELETE', throwOnError: true });
-        setMatrix((m) => { const t = { ...(m[tipo] || {}) }; delete t[role]; return { ...m, [tipo]: t }; });
+        setCell(tipo, role, null);
       } else if (cur?.id) {
         await sbFetch(`fin_commission_rules?id=eq.${cur.id}`, { method: 'PATCH', body: JSON.stringify({ pct: frac }), throwOnError: true });
-        setMatrix((m) => ({ ...m, [tipo]: { ...(m[tipo] || {}), [role]: { ...cur, pct: frac } } }));
+        setCell(tipo, role, { ...cur, pct: frac });
       } else {
-        const res = await sbFetch('fin_commission_rules', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ client_id: c.client_id || null, sheet_client_name: c.sheet_client_name, income_type: tipo, role_key: role, pct: frac }), throwOnError: true });
+        const res = await sbFetch('fin_commission_rules', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ client_id: c.client_id || null, sheet_client_name: c.sheet_client_name, income_type: tipo, role_key: role, pct: frac, collected_by: mode }), throwOnError: true });
         const id = Array.isArray(res) ? res[0]?.id : res?.id;
-        setMatrix((m) => ({ ...m, [tipo]: { ...(m[tipo] || {}), [role]: { pct: frac, id } } }));
+        setCell(tipo, role, { pct: frac, id });
       }
       flash('ok'); onEdited?.();
     } catch { flash('err'); }
@@ -193,6 +205,7 @@ function ClientCard({ c, assignOpts, onEdited }) {
   const nonKorex = (tipo) => ROLES.reduce((a, r) => a + (matrix[tipo]?.[r]?.pct || 0), 0);
   const korexOf = (tipo) => (tipo === 'PUBLICIDAD' ? 0.15 : 1 - nonKorex(tipo));
   const ASSIGN = [['Conector', 'conector_name', 'conector_start_date', ROLE.conector, 'conector'], ['Consultor', 'consultor_name', 'consultor_start_date', ROLE.consultor, 'consultor'], ['Marketing', 'marketing_name', 'marketing_start_date', ROLE.marketing, 'marketing']];
+  const isCli = mode === 'Cliente';
 
   return (
     <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, overflow: 'hidden', boxShadow: '0 1px 2px rgba(13,17,23,.04)' }}>
@@ -219,27 +232,33 @@ function ClientCard({ c, assignOpts, onEdited }) {
         ))}
       </div>
 
+      {/* Quién cobra el ingreso → qué juego de comisiones se edita */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 15px 2px' }}>
+        <div style={{ display: 'inline-flex', gap: 3, background: '#F1F5F9', borderRadius: 8, padding: 3 }}>
+          {[['Korex', 'Cobra Korex'], ['Cliente', 'Cobra el cliente']].map(([v, label]) => (
+            <button key={v} onClick={() => setMode(v)} style={{ border: 0, cursor: 'pointer', fontSize: 11, fontWeight: mode === v ? 700 : 500, padding: '5px 11px', borderRadius: 6, whiteSpace: 'nowrap', background: mode === v ? (v === 'Cliente' ? '#c2410c' : '#0EA5A4') : 'transparent', color: mode === v ? '#fff' : '#64748B' }}>{label}</button>
+          ))}
+        </div>
+        {isCli && <span style={{ fontSize: 10.5, color: '#9AA4B2' }}>vacío = usa el % de Korex</span>}
+      </div>
+
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead><tr style={{ color: '#9AA4B2', textAlign: 'left' }}>
           <th style={{ textAlign: 'left', padding: '6px 15px', fontWeight: 600 }}>Tipo</th>
           {ROLES.map((r) => <th key={r} style={{ padding: '6px 4px', fontWeight: 700, color: ROLE[r] }}>{ROLE_LABEL[r]}</th>)}
-          <th style={{ padding: '6px 4px', fontWeight: 700, color: '#15803d' }} title="Lo que se lleva Korex. Vacío = automático (lo que sobra / 15% en Publicidad). Escribí un % para fijarlo.">Korex</th>
+          <th style={{ padding: '6px 4px', fontWeight: 700, color: '#15803d' }} title="Lo que se queda Korex = lo que sobra (15% en Publicidad). Es orientativo; el motor lo calcula solo.">Korex</th>
           <th style={{ padding: '6px 15px 6px 4px', fontWeight: 600 }}>Σ</th>
         </tr></thead>
         <tbody>
           {TIPOS.map((tp) => {
-            const kxOver = matrix[tp]?.korex_pct?.pct;   // % fijado a mano (override) o undefined = automático
-            const kxAuto = korexOf(tp);                  // automático: lo que sobra (SETUP/CRM) o 15% (Publicidad)
-            const effKx = kxOver != null ? kxOver : kxAuto;
-            const sumAll = nonKorex(tp) + effKx;
-            const over = (tp === 'SETUP' || tp === 'CRM') && sumAll > 1.0005;
-            const [tbg, tfg] = TYPE_CHIP[tp];
+            const over = (tp === 'SETUP' || tp === 'CRM') && nonKorex(tp) > 1.0005;
+            const kx = korexOf(tp); const [tbg, tfg] = TYPE_CHIP[tp];
             return (
               <tr key={tp} style={{ borderTop: '1px solid #EEF1F5' }}>
                 <td style={{ padding: '6px 15px' }}><span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: tbg, color: tfg }}>{tp}</span></td>
-                {ROLES.map((r) => <td key={r} style={{ padding: '6px 4px' }}><Pct value={matrix[tp]?.[r]?.pct} color={ROLE[r]} onCommit={(v) => commitCell(tp, r, v)} /></td>)}
-                <td style={{ padding: '6px 4px' }}><KorexPct value={kxOver} auto={kxAuto} onCommit={(v) => commitCell(tp, 'korex_pct', v)} /></td>
-                <td style={{ padding: '6px 15px 6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#94a3b8' }}>{tp === 'PUBLICIDAD' ? '—' : `${over ? '⚠ ' : ''}${(sumAll * 100).toFixed(0)}%`}</td>
+                {ROLES.map((r) => <td key={r} style={{ padding: '6px 4px' }}><Pct value={matrix[tp]?.[r]?.pct} color={ROLE[r]} ph={isCli ? fallback[tp]?.[r]?.pct : undefined} onCommit={(v) => commitCell(tp, r, v)} /></td>)}
+                <td style={{ padding: '6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#15803d' }}>{over ? '⚠' : pct(kx)}</td>
+                <td style={{ padding: '6px 15px 6px 4px', fontWeight: 700, color: over ? '#dc2626' : '#94a3b8' }}>{over ? `${(nonKorex(tp) * 100).toFixed(0)}%` : (tp === 'PUBLICIDAD' ? '—' : '100%')}</td>
               </tr>
             );
           })}
@@ -275,26 +294,15 @@ function RoleSelect({ value, options, onCommit }) {
     </select>
   );
 }
-function Pct({ value, color, onCommit }) {
+// Celda de %. En modo "Cobra el cliente", si está vacía muestra (placeholder) el %
+// de Korex que se usaría por defecto (ph), para dejar claro el fallback.
+function Pct({ value, color, onCommit, ph }) {
   const init = value ? String(+(value * 100).toFixed(2)) : '';
-  return <input type="text" inputMode="decimal" defaultValue={init} key={init} placeholder="—"
+  const phStr = (ph != null && ph !== 0) ? String(+(ph * 100).toFixed(1)) : '—';
+  return <input type="text" inputMode="decimal" defaultValue={init} key={init} placeholder={phStr}
+    title={(ph != null && !value) ? `Si lo dejás vacío, usa el % de Korex (${phStr}%)` : undefined}
     onBlur={(e) => onCommit(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
     style={{ width: 44, fontSize: 11, textAlign: 'left', background: 'transparent', border: '1px solid transparent', borderRadius: 4, padding: '2px 4px', outline: 'none', fontWeight: value ? 600 : 400, color: value ? color : '#cbd5e1' }}
     onFocus={(e) => { e.target.style.borderColor = '#99E6E3'; e.target.style.background = '#fff'; }} />;
-}
-// % de Korex: vacío = automático (lo que sobra / 15% en Publicidad). Si se fija a mano, queda en verde.
-// Borrar el valor lo devuelve a automático (commitCell borra la regla 'korex_pct').
-function KorexPct({ value, auto, onCommit }) {
-  const has = value != null;
-  const init = has ? String(+(value * 100).toFixed(2)) : '';
-  const autoStr = auto == null ? 'auto' : String(+(auto * 100).toFixed(1));
-  // Si está en automático se muestra el valor calculado como texto-fantasma con borde
-  // punteado, para que se vea que es un campo donde podés fijar el % a mano.
-  return <input type="text" inputMode="decimal" defaultValue={init} key={init} placeholder={autoStr}
-    title={has ? 'Korex fijado a mano — borralo para volver a automático' : `Automático: ${autoStr}% (lo que sobra). Hacé clic y escribí un % para fijar cuánto se lleva Korex acá.`}
-    onBlur={(e) => onCommit(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-    style={{ width: 50, fontSize: 11.5, textAlign: 'center', background: has ? '#F0FDF4' : '#F8FAFC', border: `1px ${has ? 'solid #86D8C8' : 'dashed #C4CCD6'}`, borderRadius: 5, padding: '3px 4px', outline: 'none', cursor: 'text', fontWeight: 700, color: has ? '#15803d' : '#94A3B2' }}
-    onFocus={(e) => { e.target.style.borderColor = '#0EA5A4'; e.target.style.borderStyle = 'solid'; e.target.style.background = '#fff'; }}
-    onBlurCapture={(e) => { if (!e.target.value) { e.target.style.borderStyle = 'dashed'; e.target.style.background = '#F8FAFC'; } }} />;
 }
 const Fragment = ({ children }) => <>{children}</>;
