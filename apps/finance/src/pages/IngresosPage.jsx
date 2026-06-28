@@ -4,6 +4,7 @@ import PersonDrawer from '../components/PersonDrawer.jsx';
 import FacturaModal from '../components/FacturaModal.jsx';
 import { Search } from '../components/bits.jsx';
 import { money, money2, fdate, pagoChip, TYPE_BG, TYPE_FG, TYPE_RAIL, ROLE } from '../lib/format.js';
+import { refCodigo } from '../lib/factura.js';
 
 // Ingresos (diseño Claude Design): tabla con columnas fijas (Fecha + Cliente),
 // conciliación Banco (Stripe/Mercury), estados (dots), edición inline por fila y
@@ -41,10 +42,10 @@ export default function IngresosPage() {
   const [factura, setFactura] = useState(null);  // ingreso a facturar (null = cerrado)
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,usuario_name,ref_seq,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status,is_bulk),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
-    sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id&limit=6000')
+    sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id,usuario_dir_id&limit=6000')
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.id] = r; }); setDirMap(m); }).catch(() => {});
     sbFetch('fin_income_recon?select=income_id,source,ref_id,amount,dt,who,receipt_url,confidence&limit=6000')
       .then((d) => { const m = {}; (Array.isArray(d) ? d : []).forEach((r) => { m[r.income_id] = r; }); setReconMap(m); }).catch(() => {});
@@ -82,7 +83,7 @@ export default function IngresosPage() {
     setModal({
       mode: 'edit', id: r.id,
       income_date: r.income_date || '', income_type: r.income_type || 'CRM',
-      payer_name: r.payer_name || '', client_name_sheet: r.client_name_sheet || '', conector_name: r.conector_name_sheet || '', afiliado_name: r.afiliado_name || '',
+      payer_name: r.payer_name || '', usuario_name: r.usuario_name || '', client_name_sheet: r.client_name_sheet || '', conector_name: r.conector_name_sheet || '', afiliado_name: r.afiliado_name || '',
       payment_method: r.payment_method || PAY_OPTS[0], divisa,
       bruto: String(divisa === 'USD' ? (r.amount_usd ?? '') : (r.amount_eur ?? '')),
       amount_usd: r.amount_usd == null ? '' : String(r.amount_usd), amount_eur: r.amount_eur == null ? '' : String(r.amount_eur),
@@ -99,6 +100,7 @@ export default function IngresosPage() {
       const common = {
         income_date: f.income_date || null, month_date: f.income_date ? f.income_date.slice(0, 7) + '-01' : null,
         client_name_sheet: f.client_name_sheet.trim(), payer_name: (f.payer_name || '').trim() || f.client_name_sheet.trim(),
+        usuario_name: (f.usuario_name || '').trim() || (f.payer_name || '').trim() || f.client_name_sheet.trim(),
         conector_name_sheet: (f.conector_name || '').trim() || null, afiliado_name: (f.afiliado_name || '').trim() || null,
         collected_by: collected, income_type: f.income_type,
         amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
@@ -144,9 +146,16 @@ export default function IngresosPage() {
         if (isReservado(e)) reservadoAfi = true;
       });
       const dir = dirMap[r.id] || {};
-      return { ...r, comm, ad, reservadoAfi, mes: (r.income_date || '').slice(0, 7), recon: reconMap[r.id], payer_dir_id: dir.payer_dir_id, client_dir_id: dir.client_dir_id };
+      return { ...r, comm, ad, reservadoAfi, mes: (r.income_date || '').slice(0, 7), recon: reconMap[r.id], payer_dir_id: dir.payer_dir_id, client_dir_id: dir.client_dir_id, usuario_dir_id: dir.usuario_dir_id };
     });
   }, [rows, dirMap, reconMap]);
+
+  // Cuántos ingresos comparten cada factura (para marcar las "masivas" en la lista).
+  const bulkCount = useMemo(() => {
+    const m = {};
+    (rows || []).forEach((r) => { if (r.invoice_id) m[r.invoice_id] = (m[r.invoice_id] || 0) + 1; });
+    return m;
+  }, [rows]);
 
   const meses = useMemo(() => (data ? [...new Set(data.map((r) => r.mes).filter(Boolean))].sort().reverse() : []), [data]);
   const cliOpts = useMemo(() => (data ? [...new Set(data.map((r) => r.client_name_sheet).filter(Boolean))].sort() : []), [data]);
@@ -188,7 +197,7 @@ export default function IngresosPage() {
     return { v, label, sel, base };
   });
   const cols = [
-    ['Pagador', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Cobró', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Conector', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
+    ['Código', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Pagador', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Usuario', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Cobró', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Conector', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
     ['Afiliado', '#F8FAFC', '#64748B', '1px solid #EEF1F5'],
     ['Pago', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Banco', '#F8FAFC', '#64748B', '1px solid #EEF1F5'], ['Tipo', '#F8FAFC', '#64748B', '2px solid #E2E5EB'],
     ['Fact.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Fin.', '#F0F9FF', '#0369a1', '1px solid #EEF1F5'], ['Merc.', '#F0F9FF', '#0369a1', '2px solid #E2E5EB'],
@@ -212,7 +221,7 @@ export default function IngresosPage() {
 
       {/* toolbar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
-        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
+        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', usuario_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
@@ -237,7 +246,7 @@ export default function IngresosPage() {
           <thead>
             <tr>
               <th colSpan={2} style={{ position: 'sticky', left: 0, top: 0, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '8px 12px', ...grpTh, color: '#0c8584' }}>Venta</th>
-              <th colSpan={7} style={{ ...grpStick, background: '#F8FAFC', ...grpTh, color: '#64748B', borderRight: '2px solid #E2E5EB' }}>Detalle</th>
+              <th colSpan={9} style={{ ...grpStick, background: '#F8FAFC', ...grpTh, color: '#64748B', borderRight: '2px solid #E2E5EB' }}>Detalle</th>
               <th colSpan={3} style={{ ...grpStick, background: '#F0F9FF', ...grpTh, color: '#0369a1', textAlign: 'center', borderRight: '2px solid #E2E5EB' }}>Estado</th>
               <th colSpan={3} style={{ ...grpStick, background: '#F0FDFA', ...grpTh, color: '#0c8584', borderRight: '2px solid #E2E5EB' }}>Montos</th>
               <th colSpan={5} style={{ ...grpStick, background: '#EEF0FF', ...grpTh, color: '#4f46e5', textAlign: 'center', borderRight: '2px solid #E2E5EB' }}>Comisiones a repartir</th>
@@ -248,7 +257,7 @@ export default function IngresosPage() {
               <th style={{ position: 'sticky', left: 0, top: 33, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', textAlign: 'left', padding: '7px 12px', fontWeight: 600, color: '#64748B' }}>Fecha</th>
               <th style={{ position: 'sticky', left: 96, top: 33, zIndex: 6, background: '#F4FBFB', borderBottom: '1px solid #E2E5EB', borderRight: '1px solid #E2E5EB', textAlign: 'left', padding: '7px 12px', fontWeight: 600, color: '#64748B', boxShadow: '2px 0 4px -2px rgba(13,17,23,.12)' }}>Cliente</th>
               {cols.map(([label, bg, fg, br], i) => (
-                <th key={i} style={{ position: 'sticky', top: 33, zIndex: 3, background: bg, borderBottom: '1px solid #E2E5EB', borderRight: br, textAlign: (i >= 7 && i <= 9) ? 'center' : 'left', padding: '7px 10px', fontWeight: 600, color: fg }}>{label}</th>
+                <th key={i} style={{ position: 'sticky', top: 33, zIndex: 3, background: bg, borderBottom: '1px solid #E2E5EB', borderRight: br, textAlign: (i >= 9 && i <= 11) ? 'center' : 'left', padding: '7px 10px', fontWeight: 600, color: fg }}>{label}</th>
               ))}
             </tr>
           </thead>
@@ -256,6 +265,8 @@ export default function IngresosPage() {
             {visible.map((r) => {
               const [pago, pbg, pfg] = pagoChip(r.payment_method);
               const banco = bancoVisual(r.recon, r.payment_method);
+              const esBulk = !!r.invoices?.is_bulk;
+              const nBulk = r.invoice_id ? (bulkCount[r.invoice_id] || 1) : 1;
               return (
                 <tr key={r.id}>
                   <td className="fin-stick" style={{ position: 'sticky', left: 0, zIndex: 2, background: '#fff', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9', padding: 0, color: '#64748B' }}>
@@ -263,8 +274,9 @@ export default function IngresosPage() {
                       <span>{fdate(r.income_date)}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         {r.collected_by !== 'Cliente' && (
-                          <button onClick={() => setFactura(r)} title={r.facturado ? `Factura ${r.invoices?.number || 'emitida'} — ver / reimprimir / reenviar` : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? '#16a34a' : '#B6BFCC', padding: 0, display: 'flex' }}>
+                          <button onClick={() => setFactura(r)} title={r.facturado ? (esBulk ? `Factura masiva ${r.invoices?.number || ''} — ${nBulk} ingresos` : `Factura ${r.invoices?.number || 'emitida'} — ver / reimprimir / reenviar`) : 'Generar factura'} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: r.facturado ? (esBulk ? '#6366f1' : '#16a34a') : '#B6BFCC', padding: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
+                            {esBulk && <span style={{ fontSize: 8, fontWeight: 800, color: '#6366f1' }}>{nBulk}</span>}
                           </button>
                         )}
                         {r.invoices?.pdf_url && (
@@ -281,7 +293,9 @@ export default function IngresosPage() {
                   <td className="fin-stick" style={{ position: 'sticky', left: 96, zIndex: 2, background: '#fff', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #E2E5EB', padding: '8px 12px', fontWeight: 600, boxShadow: '2px 0 4px -2px rgba(13,17,23,.07)' }}>
                     <Clickable name={r.client_name_sheet} id={r.client_dir_id} onOpen={setOpenId} dashed />
                   </td>
+                  <Td muted><span style={{ fontWeight: 700, color: r.ref_seq ? '#475569' : '#cbd5e1' }}>{refCodigo(r.income_type, r.ref_seq) || '—'}</span></Td>
                   <Td><Clickable name={r.payer_name} id={r.payer_dir_id} onOpen={setOpenId} dashed muted /></Td>
+                  <Td><Clickable name={r.usuario_name} id={r.usuario_dir_id} onOpen={setOpenId} dashed muted /></Td>
                   <Td><Chip bg={r.collected_by === 'Cliente' ? '#ffedd5' : '#f1f5f9'} fg={r.collected_by === 'Cliente' ? '#c2410c' : '#64748B'} round>{r.collected_by || 'Korex'}</Chip></Td>
                   <Td muted>{r.conector_name_sheet || '—'}</Td>
                   <Td muted>{r.afiliado_name || '—'}</Td>
@@ -309,7 +323,7 @@ export default function IngresosPage() {
             })}
             {filtered.length > visible.length && (
               <tr>
-                <td colSpan={22} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
+                <td colSpan={24} style={{ padding: '10px 12px', textAlign: 'center', background: '#fff', borderBottom: '1px solid #EEF1F5' }}>
                   <button onClick={() => setShown((n) => n + 300)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#0c8584', fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 9, cursor: 'pointer' }}>
                     Mostrar más · faltan {filtered.length - visible.length}
                   </button>
@@ -320,7 +334,7 @@ export default function IngresosPage() {
           <tfoot>
             <tr style={{ fontWeight: 800, fontSize: 11.5 }}>
               <td colSpan={2} style={{ position: 'sticky', left: 0, bottom: 0, zIndex: 5, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', padding: '10px 12px' }}>TOTAL · {filtered.length}</td>
-              <td colSpan={10} style={{ position: 'sticky', bottom: 0, zIndex: 3, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', borderRight: '2px solid #E2E5EB' }} />
+              <td colSpan={12} style={{ position: 'sticky', bottom: 0, zIndex: 3, background: '#F1F5F9', borderTop: '2px solid #CBD5E1', borderRight: '2px solid #E2E5EB' }} />
               <Foot>{money2(totals.eur, '€')}</Foot>
               <Foot>{money(totals.usd)}</Foot>
               <Foot br2>{money(totals.net)}</Foot>
@@ -385,6 +399,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
   // Pagador → autocompleta cliente (cliente_padre) y conector (acuerdo del cliente).
   const pickPayer = (p) => setForm((s) => ({
     ...s, payer_name: p.nombre,
+    usuario_name: (s.usuario_name && s.usuario_name.trim()) ? s.usuario_name : p.nombre,
     client_name_sheet: p.cliente_padre || (p.tipo === 'Cliente' ? p.nombre : s.client_name_sheet),
     conector_name: conByClient[(p.cliente_padre || p.nombre || '').trim().toLowerCase()] || '',
     // El afiliado SIEMPRE sale de la Base de datos del usuario (no se edita por venta).
@@ -432,8 +447,8 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
             <input value={form.afiliado_name || '—'} readOnly title="Para cambiarlo, editá el afiliado del usuario en Base de datos" style={{ ...inp, background: '#F8FAFC', color: form.afiliado_name ? '#475569' : '#9AA4B2', cursor: 'not-allowed' }} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lab}>Usuario / pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>
-            <PayerSelect value={form.payer_name} dir={dir} inp={inp} onPick={pickPayer} onType={(v) => setForm((s) => ({ ...s, payer_name: v }))} />
+            <label style={lab}>Pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· a quién se le factura</span></label>
+            <PayerSelect value={form.payer_name} dir={dir} inp={inp} placeholder="Buscá la persona que pagó…" onPick={pickPayer} onType={(v) => setForm((s) => ({ ...s, payer_name: v }))} />
             <div style={{ marginTop: 7, fontSize: 11.5, color: '#6B7585', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Cliente: <b style={{ color: form.client_name_sheet ? '#0c8584' : '#cbd5e1' }}>{form.client_name_sheet || 'sin asignar'}</b></span>
               <span>· Conector: <b style={{ color: form.conector_name ? '#0c8584' : '#cbd5e1' }}>{form.conector_name || '—'}</b></span>
@@ -445,6 +460,10 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
                 <div><label style={lab}>Conector</label><input value={form.conector_name} onChange={(e) => setForm((s) => ({ ...s, conector_name: e.target.value }))} placeholder="(opcional)" style={inp} /></div>
               </div>
             )}
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lab}>Usuario <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· quién recibe el producto (por defecto, el pagador) · se puede asignar después</span></label>
+            <PayerSelect value={form.usuario_name} dir={dir} inp={inp} placeholder="Buscá el usuario que recibe el producto…" onPick={(p) => setForm((s) => ({ ...s, usuario_name: p.nombre }))} onType={(v) => setForm((s) => ({ ...s, usuario_name: v }))} />
           </div>
           <div>
             <label style={lab}>Divisa</label>
@@ -496,7 +515,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
 }
 
 // Desplegable de búsqueda del pagador sobre el directorio (nombre + tipo · cliente).
-function PayerSelect({ value, dir, onPick, onType, inp }) {
+function PayerSelect({ value, dir, onPick, onType, inp, placeholder }) {
   const [open, setOpen] = useState(false);
   const [qq, setQq] = useState(value || '');
   useEffect(() => { setQq(value || ''); }, [value]);
@@ -506,7 +525,7 @@ function PayerSelect({ value, dir, onPick, onType, inp }) {
   }, [qq, dir]);
   return (
     <div style={{ position: 'relative' }}>
-      <input value={qq} onChange={(e) => { setQq(e.target.value); onType(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} placeholder="Buscá la persona que pagó…" style={inp} />
+      <input value={qq} onChange={(e) => { setQq(e.target.value); onType(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} placeholder={placeholder || 'Buscá la persona que pagó…'} style={inp} />
       {open && (
         <div style={{ position: 'absolute', zIndex: 20, top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, maxHeight: 240, overflowY: 'auto', boxShadow: '0 10px 28px rgba(13,17,23,.16)' }}>
           {list.length === 0 ? <div style={{ padding: '10px 12px', fontSize: 12, color: '#9AA4B2' }}>Sin coincidencias — se usa el nombre escrito.</div>
