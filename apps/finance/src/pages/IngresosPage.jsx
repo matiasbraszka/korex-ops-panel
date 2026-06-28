@@ -11,6 +11,8 @@ import { money, money2, fdate, pagoChip, TYPE_BG, TYPE_FG, TYPE_RAIL, ROLE } fro
 const COMM_ORDER = ['cliente', 'conector', 'afiliado', 'consultor', 'marketing'];
 const PAY_OPTS = ['Stripe (Tarjeta) - Empresa', 'Mercury (Transferencia) - Empresa', 'USDT - Cliente', 'Safepal (USDT) - Empresa', 'Tarjeta - Cliente'];
 const TIPO_OPTS = ['SETUP', 'CRM', 'PUBLICIDAD'];
+// Etiqueta de pantalla unificada para el tipo (mismo formato en "Tipo" y "Efectivo"): Publicidad, no PUBLICIDAD.
+const typeLabel = (t) => (t || '').toUpperCase() === 'PUBLICIDAD' ? 'Publicidad' : (t || '—');
 const num = (x) => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; };
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const feePct = (g, n) => { const gg = Number(g), nn = Number(n); return (gg > 0 && nn > 0 && gg > nn) ? ((gg - nn) / gg) * 100 : null; };
@@ -289,8 +291,8 @@ export default function IngresosPage() {
                   <Td center>{banco.link
                     ? <a href={banco.link} target="_blank" rel="noopener noreferrer" title={banco.title} style={{ display: 'inline-flex', cursor: 'pointer' }}><BancoIcon color={banco.color} /></a>
                     : <span title={banco.title} style={{ display: 'inline-flex', cursor: 'default' }}><BancoIcon color={banco.color} /></span>}</Td>
-                  <Td><Chip bg={TYPE_BG[(r.income_type || '').toUpperCase()] || '#f1f5f9'} fg={TYPE_FG[(r.income_type || '').toUpperCase()] || '#64748B'}>{r.income_type || '—'}</Chip></Td>
-                  <Td br2><Chip bg={TYPE_BG[r.effective_type] || '#f1f5f9'} fg={TYPE_FG[r.effective_type] || '#64748B'}>{r.effective_type || '—'}</Chip></Td>
+                  <Td><Chip bg={TYPE_BG[(r.income_type || '').toUpperCase()] || '#f1f5f9'} fg={TYPE_FG[(r.income_type || '').toUpperCase()] || '#64748B'}>{typeLabel(r.income_type)}</Chip></Td>
+                  <Td br2><Chip bg={TYPE_BG[r.effective_type] || '#f1f5f9'} fg={TYPE_FG[r.effective_type] || '#64748B'}>{typeLabel(r.effective_type)}</Chip></Td>
                   <Td center><Dot on={r.facturado} title={`Facturado: ${r.facturado ? 'sí' : 'no'}`} onClick={() => patchIncome(r.id, { facturado: !r.facturado })} /></Td>
                   <Td center><Dot on={r.organizado_finanzas} title={`Organizado en finanzas: ${r.organizado_finanzas ? 'sí' : 'no'}`} onClick={() => patchIncome(r.id, { organizado_finanzas: !r.organizado_finanzas })} /></Td>
                   <Td center br2><Dot on={r.llego_mercury} title={`Llegó a Mercury: ${r.llego_mercury ? 'sí' : 'no'}`} onClick={() => patchIncome(r.id, { llego_mercury: !r.llego_mercury })} /></Td>
