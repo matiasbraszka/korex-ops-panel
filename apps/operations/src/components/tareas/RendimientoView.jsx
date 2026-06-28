@@ -1,11 +1,15 @@
-import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Play, Pencil, X, Check, RotateCcw } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { ChevronDown, ChevronRight, Play, Pencil, X, Check, RotateCcw, ImagePlus, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
-import { isAssignedTo, sprintProgress } from '../../utils/helpers';
+import { isAssignedTo, sprintProgress, memberReportCompliance, attendanceCount } from '../../utils/helpers';
+import { uploadInformeCaptura, MAX_CAPTURA_BYTES } from '../informes/capturas';
 
-const GRID = '190px 70px 70px 78px 80px 86px 80px 84px 122px';
+const GRID = '168px 52px 56px 54px 50px 72px 58px 56px 150px 62px 58px 92px';
+const DAY_LABELS = ['L', 'M', 'X', 'J', 'V'];
 const compColor = (pct) => pct >= 75 ? '#15803D' : (pct < 50 ? '#DC2626' : '#1A1D26');
+// Color del "n/5" de informes: verde si está completo, rojo si flojo.
+const fiveColor = (n) => n >= 5 ? '#15803D' : (n <= 2 ? '#DC2626' : '#B45309');
 
 function StatPill({ status }) {
   const st = TASK_STATUS[status] || TASK_STATUS.backlog;
@@ -24,20 +28,25 @@ function CallLink({ url, label, onEdit }) {
 }
 
 export default function RendimientoView() {
-  const { activeSprint, sprints, tasks, teamMembers, updateSprint, updateTeamMember, finalizeSprint } = useApp();
+  const { activeSprint, sprints, tasks, teamMembers, teamReports, currentUser, updateSprint, updateTeamMember, finalizeSprint } = useApp();
   const [perfOpen, setPerfOpen] = useState({});
   const [histOpen, setHistOpen] = useState({});
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [conclusion, setConclusion] = useState('');
+  const [closeShot, setCloseShot] = useState(null);   // captura del cierre { url, path, name }
+  const [shotUploading, setShotUploading] = useState(false);
+  const shotInputRef = useRef(null);
 
   const rows = useMemo(() => {
     if (!activeSprint) return [];
     const st = tasks.filter(t => t.sprintId === activeSprint.id);
     const worked = activeSprint.workedHours || {};
+    // Mostramos a TODO el equipo (aunque no tenga tareas) para poder registrar la
+    // asistencia a las dailys y ver el cumplimiento de informes de cada uno.
     return (teamMembers || []).map(m => {
       const mt = st.filter(t => isAssignedTo(t, m));
-      if (!mt.length && !worked[m.id]) return null;
       const done = mt.filter(t => t.status === 'done').length;
+      const comp = memberReportCompliance(teamReports, m.id, activeSprint);
       return {
         m, tasks: mt, assigned: mt.length,
         enCurso: mt.filter(t => t.status === 'in-progress').length,
@@ -47,15 +56,35 @@ export default function RendimientoView() {
         trabajadas: Number(worked[m.id]) || 0,
         capacidad: m.weekly_capacity != null ? Number(m.weekly_capacity) : null,
         pct: mt.length ? Math.round(done / mt.length * 100) : 0,
+        dailyReports: comp.daily,
+        weeklyReport: comp.weekly,
       };
-    }).filter(Boolean);
-  }, [activeSprint, tasks, teamMembers]);
+    });
+  }, [activeSprint, tasks, teamMembers, teamReports]);
 
   const prog = activeSprint ? sprintProgress(tasks, activeSprint) : { done: 0, total: 0, pct: 0 };
   const cPct = prog.pct;
   const initials = (m) => (m?.initials || m?.name?.slice(0, 2) || '?').toUpperCase();
 
   const setWorked = (id, val) => { const v = val === '' ? undefined : Number(val); const map = { ...(activeSprint.workedHours || {}) }; if (v === undefined) delete map[id]; else map[id] = v; updateSprint(activeSprint.id, { workedHours: map }); };
+  // Marca/desmarca la asistencia de una persona a la daily del día idx (0=Lun … 4=Vie).
+  const setAttend = (memberId, idx) => {
+    const map = { ...(activeSprint.dailyAttendance || {}) };
+    const arr = Array.isArray(map[memberId]) ? [...map[memberId]] : [false, false, false, false, false];
+    arr[idx] = !arr[idx];
+    map[memberId] = arr;
+    updateSprint(activeSprint.id, { dailyAttendance: map });
+  };
+  // Sube la captura del estado de las tareas al cerrar el sprint.
+  const onPickShot = async (file) => {
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) { alert('Subí una imagen.'); return; }
+    if (file.size > MAX_CAPTURA_BYTES) { alert('La imagen supera los 10 MB.'); return; }
+    setShotUploading(true);
+    try { setCloseShot(await uploadInformeCaptura(currentUser?.id, file)); }
+    catch (e) { console.warn('close screenshot', e); alert('No se pudo subir la captura.'); }
+    finally { setShotUploading(false); }
+  };
   const setCap = (id, val) => updateTeamMember(id, { weekly_capacity: val === '' ? null : Number(val) });
   const editCall = (field, label) => { const url = window.prompt(`Link de la grabación — ${label}:`, activeSprint[field] || ''); if (url !== null) updateSprint(activeSprint.id, { [field]: url.trim() || null }); };
 
@@ -92,7 +121,7 @@ export default function RendimientoView() {
       {/* tabla por persona */}
       <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 16, boxShadow: '0 1px 2px rgba(10,22,40,.05)', overflow: 'hidden', marginBottom: 18 }}>
         <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 884 }}>
+          <div style={{ minWidth: 1080 }}>
             <div style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', gap: 8, padding: '12px 18px', borderBottom: '1px solid #E2E5EB', background: '#F7F8FA' }}>
               <span style={thStyle}>Persona</span>
               <span style={{ ...thStyle, textAlign: 'center' }}>Asign.</span>
@@ -102,6 +131,9 @@ export default function RendimientoView() {
               <span style={{ ...thStyle, textAlign: 'center' }}>Cargadas</span>
               <span style={{ ...thStyle, textAlign: 'center' }}>Trabajó</span>
               <span style={{ ...thStyle, textAlign: 'center' }}>Capac.</span>
+              <span style={{ ...thStyle, textAlign: 'center' }}>Dailies</span>
+              <span style={{ ...thStyle, textAlign: 'center' }}>Inf. día</span>
+              <span style={{ ...thStyle, textAlign: 'center' }}>Inf. sem</span>
               <span style={thStyle}>Avance</span>
             </div>
             {rows.length === 0 && <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, padding: 26 }}>El sprint todavía no tiene tareas asignadas.</div>}
@@ -127,6 +159,24 @@ export default function RendimientoView() {
                     <span style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                       <input type="number" min="0" step="0.5" defaultValue={r.capacidad ?? ''} placeholder="–" onBlur={(e) => setCap(r.m.id, e.target.value)} style={{ width: 52, textAlign: 'center', fontSize: 13, color: '#9CA3AF', border: '1px solid #E2E5EB', borderRadius: 6, padding: '4px 2px', outline: 'none', fontFamily: 'inherit' }} />
                     </span>
+                    {/* Asistencia a las dailys: 5 toggles (L M X J V) */}
+                    <span onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                      {DAY_LABELS.map((d, idx) => {
+                        const present = !!(activeSprint.dailyAttendance?.[r.m.id]?.[idx]);
+                        return (
+                          <span key={idx} onClick={() => setAttend(r.m.id, idx)} title={`Daily ${['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'][idx]}`}
+                            style={{ width: 21, height: 21, borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, border: present ? 'none' : '1px solid #D0D5DD', background: present ? '#22C55E' : '#fff', color: present ? '#fff' : '#9CA3AF' }}>{d}</span>
+                        );
+                      })}
+                    </span>
+                    {/* Informes diarios cargados en la semana / 5 */}
+                    <span style={{ fontSize: 13, textAlign: 'center', fontWeight: 600, color: fiveColor(r.dailyReports) }}>{r.dailyReports}/5</span>
+                    {/* Informe semanal cargado */}
+                    <span style={{ display: 'flex', justifyContent: 'center' }}>
+                      {r.weeklyReport
+                        ? <span title="Cargó el informe semanal" style={{ width: 20, height: 20, borderRadius: '50%', background: '#22C55E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} strokeWidth={3} /></span>
+                        : <span title="Sin informe semanal" style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid #E2E5EB', color: '#C7CBD3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={12} strokeWidth={2.5} /></span>}
+                    </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ flex: 1, height: 7, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', background: '#22C55E', width: r.pct + '%' }} /></span><span style={{ fontSize: 11, fontWeight: 600, color: '#6B7280' }}>{r.pct}%</span></span>
                   </div>
                   {open && (
@@ -149,7 +199,7 @@ export default function RendimientoView() {
 
       {/* finalizar */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 38 }}>
-        <span onClick={() => { setConclusion(''); setFinalizeOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: '#5B7CF5', borderRadius: 10, padding: '11px 18px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(10,22,40,.12)' }}>
+        <span onClick={() => { setConclusion(''); setCloseShot(null); setFinalizeOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: '#5B7CF5', borderRadius: 10, padding: '11px 18px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(10,22,40,.12)' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2"><path d="M5 13l4 4L19 7" /></svg>Finalizar sprint
         </span>
       </div>
@@ -186,13 +236,16 @@ export default function RendimientoView() {
                   {per.length > 0 && (
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 9 }}>Por persona</div>
-                      <div style={{ overflowX: 'auto' }}><div style={{ minWidth: 460, border: '1px solid #E2E5EB', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 92px 124px', gap: 8, padding: '8px 13px', borderBottom: '1px solid #F0F2F5', background: '#F7F8FA' }}><span style={thStyle}>Persona</span><span style={{ ...thStyle, textAlign: 'center' }}>Tareas</span><span style={{ ...thStyle, textAlign: 'center' }}>Horas</span></div>
+                      <div style={{ overflowX: 'auto' }}><div style={{ minWidth: 640, border: '1px solid #E2E5EB', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 76px 104px 78px 58px 58px', gap: 8, padding: '8px 13px', borderBottom: '1px solid #F0F2F5', background: '#F7F8FA' }}><span style={thStyle}>Persona</span><span style={{ ...thStyle, textAlign: 'center' }}>Tareas</span><span style={{ ...thStyle, textAlign: 'center' }}>Horas</span><span style={{ ...thStyle, textAlign: 'center' }}>Asist.</span><span style={{ ...thStyle, textAlign: 'center' }}>Inf. día</span><span style={{ ...thStyle, textAlign: 'center' }}>Inf. sem</span></div>
                         {per.map(pp => (
-                          <div key={pp.memberId} style={{ display: 'grid', gridTemplateColumns: '1.5fr 92px 124px', gap: 8, padding: '8px 13px', borderBottom: '1px solid #F4F5F7', alignItems: 'center' }}>
+                          <div key={pp.memberId} style={{ display: 'grid', gridTemplateColumns: '1.4fr 76px 104px 78px 58px 58px', gap: 8, padding: '8px 13px', borderBottom: '1px solid #F4F5F7', alignItems: 'center' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}><span style={{ width: 23, height: 23, borderRadius: '50%', background: memberColor(pp.memberId), color: '#fff', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(pp.name || memberName(pp.memberId) || '').slice(0, 2).toUpperCase()}</span><span style={{ fontSize: 12.5, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pp.name || memberName(pp.memberId)}</span></span>
                             <span style={{ fontSize: 12.5, textAlign: 'center', color: '#3F4653' }}>{pp.done}/{pp.assigned}</span>
                             <span style={{ fontSize: 12.5, textAlign: 'center', color: '#6B7280' }}>{pp.loadedHours || 0}h / {pp.workedHours || 0}h</span>
+                            <span style={{ fontSize: 12.5, textAlign: 'center', fontWeight: 600, color: pp.attendance == null ? '#9CA3AF' : fiveColor(pp.attendance) }}>{pp.attendance == null ? '—' : `${pp.attendance}/5`}</span>
+                            <span style={{ fontSize: 12.5, textAlign: 'center', fontWeight: 600, color: pp.dailyReports == null ? '#9CA3AF' : fiveColor(pp.dailyReports) }}>{pp.dailyReports == null ? '—' : `${pp.dailyReports}/5`}</span>
+                            <span style={{ fontSize: 13, textAlign: 'center', fontWeight: 700, color: pp.weeklyReport == null ? '#9CA3AF' : (pp.weeklyReport ? '#15803D' : '#DC2626') }}>{pp.weeklyReport == null ? '—' : (pp.weeklyReport ? '✓' : '✗')}</span>
                           </div>
                         ))}
                       </div></div>
@@ -208,6 +261,14 @@ export default function RendimientoView() {
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 9 }}>Conclusión y acciones</div>
                       <div style={{ fontSize: 13, color: '#3F4653', lineHeight: 1.6, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, padding: '12px 14px', whiteSpace: 'pre-wrap' }}>{h.conclusion}</div>
+                    </div>
+                  )}
+                  {h.closeScreenshotUrl && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 9 }}>Captura del estado al cierre</div>
+                      <a href={h.closeScreenshotUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', lineHeight: 0 }}>
+                        <img src={h.closeScreenshotUrl} alt="Estado de las tareas al cierre" style={{ maxWidth: 280, maxHeight: 200, borderRadius: 10, border: '1px solid #E2E5EB' }} />
+                      </a>
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
@@ -230,10 +291,28 @@ export default function RendimientoView() {
               <span onClick={() => setFinalizeOpen(false)} style={{ cursor: 'pointer', color: '#6B7280' }}><X size={18} /></span>
             </div>
             <div style={{ fontSize: 13, color: '#6B7280', marginTop: 5, lineHeight: 1.5 }}>Escribí la conclusión de la semana: qué mejoramos, qué nos trabó y las acciones para el próximo sprint. Las tareas sin terminar pasan al sprint siguiente y se archiva el resumen.</div>
-            <textarea value={conclusion} onChange={(e) => setConclusion(e.target.value)} autoFocus placeholder="Conclusión de la semana…" style={{ width: '100%', marginTop: 15, minHeight: 132, fontFamily: 'inherit', fontSize: 13, color: '#1A1D26', border: '1px solid #E2E5EB', borderRadius: 10, padding: '12px 13px', outline: 'none', resize: 'vertical', lineHeight: 1.55 }} />
+            <textarea value={conclusion} onChange={(e) => setConclusion(e.target.value)} autoFocus placeholder="Conclusión de la semana…" style={{ width: '100%', marginTop: 15, minHeight: 120, fontFamily: 'inherit', fontSize: 13, color: '#1A1D26', border: '1px solid #E2E5EB', borderRadius: 10, padding: '12px 13px', outline: 'none', resize: 'vertical', lineHeight: 1.55 }} />
+
+            {/* Captura del estado de las tareas al cerrar (prueba) */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: '#3F4653', marginBottom: 7 }}>Captura del estado de las tareas <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(opcional)</span></div>
+              <input ref={shotInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { onPickShot(e.target.files?.[0]); e.target.value = ''; }} />
+              {closeShot ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <a href={closeShot.url} target="_blank" rel="noreferrer"><img src={closeShot.url} alt="captura" style={{ height: 56, width: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid #E2E5EB' }} /></a>
+                  <span style={{ fontSize: 12.5, color: '#6B7280', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{closeShot.name}</span>
+                  <span onClick={() => setCloseShot(null)} style={{ cursor: 'pointer', color: '#9CA3AF', display: 'flex' }} title="Quitar captura"><X size={16} /></span>
+                </div>
+              ) : (
+                <span onClick={() => { if (!shotUploading) shotInputRef.current?.click(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: '#5B7CF5', border: '1px dashed #C7D2FE', borderRadius: 9, padding: '9px 13px', cursor: shotUploading ? 'default' : 'pointer' }}>
+                  {shotUploading ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={15} />}{shotUploading ? 'Subiendo…' : 'Adjuntar captura'}
+                </span>
+              )}
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <span onClick={() => setFinalizeOpen(false)} style={{ fontSize: 14, fontWeight: 600, color: '#6B7280', border: '1px solid #E2E5EB', borderRadius: 10, padding: '10px 16px', cursor: 'pointer' }}>Cancelar</span>
-              <span onClick={() => { finalizeSprint(conclusion); setFinalizeOpen(false); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: '#22C55E', borderRadius: 10, padding: '10px 18px', cursor: 'pointer' }}><Check size={16} strokeWidth={2.4} />Finalizar y archivar</span>
+              <span onClick={() => { finalizeSprint(conclusion, closeShot?.url || null); setFinalizeOpen(false); setCloseShot(null); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#fff', background: '#22C55E', borderRadius: 10, padding: '10px 18px', cursor: 'pointer' }}><Check size={16} strokeWidth={2.4} />Finalizar y archivar</span>
             </div>
           </div>
         </div>

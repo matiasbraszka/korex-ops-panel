@@ -304,6 +304,8 @@ export function AppProvider({ children }) {
         monday_call_url: s.mondayCallUrl || null, friday_call_url: s.fridayCallUrl || null,
         conclusion: s.conclusion || null,
         worked_hours: s.workedHours && typeof s.workedHours === 'object' ? s.workedHours : {},
+        daily_attendance: s.dailyAttendance && typeof s.dailyAttendance === 'object' ? s.dailyAttendance : {},
+        close_screenshot_url: s.closeScreenshotUrl || null,
         summary: s.summary || null,
       }),
     });
@@ -738,6 +740,8 @@ export function AppProvider({ children }) {
           mondayCallUrl: r.monday_call_url || null, fridayCallUrl: r.friday_call_url || null,
           conclusion: r.conclusion || null,
           workedHours: r.worked_hours && typeof r.worked_hours === 'object' ? r.worked_hours : {},
+          dailyAttendance: r.daily_attendance && typeof r.daily_attendance === 'object' ? r.daily_attendance : {},
+          closeScreenshotUrl: r.close_screenshot_url || null,
           summary: r.summary || null,
         })));
       }
@@ -807,7 +811,7 @@ export function AppProvider({ children }) {
   const closeSprint = useCallback((extra = {}) => {
     const active = getActiveSprint(sprintsRef.current);
     if (!active) return null;
-    const summary = buildSprintSummary(tasksRef.current, teamMembersRef.current, active);
+    const summary = buildSprintSummary(tasksRef.current, teamMembersRef.current, active, teamReportsRef.current);
     const nextMonday = active.endDate ? addDaysStr(active.endDate, 1) : mondayOf(today());
     const next = mkSprintForMonday(nextMonday);
     // 1) cerrar el sprint (con snapshot) + crear el nuevo
@@ -826,8 +830,12 @@ export function AppProvider({ children }) {
     return next;
   }, [dbSaveSprint, mkSprintForMonday, updateTask]);
 
-  // Finalizar sprint con la conclusión de la semana (botón de Rendimiento).
-  const finalizeSprint = useCallback((conclusion) => closeSprint({ conclusion: conclusion || null }), [closeSprint]);
+  // Finalizar sprint con la conclusión de la semana (botón de Rendimiento) y,
+  // opcionalmente, la captura del estado de las tareas al cierre.
+  const finalizeSprint = useCallback((conclusion, closeScreenshotUrl) => closeSprint({
+    conclusion: conclusion || null,
+    closeScreenshotUrl: closeScreenshotUrl || null,
+  }), [closeSprint]);
 
   // ── Auth ──
   // doLogin vive ahora en @korex/auth (Supabase Auth).
@@ -1887,6 +1895,8 @@ export function AppProvider({ children }) {
           mondayCallUrl: r.monday_call_url || null, fridayCallUrl: r.friday_call_url || null,
           conclusion: r.conclusion || null,
           workedHours: r.worked_hours && typeof r.worked_hours === 'object' ? r.worked_hours : {},
+          dailyAttendance: r.daily_attendance && typeof r.daily_attendance === 'object' ? r.daily_attendance : {},
+          closeScreenshotUrl: r.close_screenshot_url || null,
           summary: r.summary || null,
         })));
       }

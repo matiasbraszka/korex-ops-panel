@@ -878,12 +878,40 @@ export function isAssignedTo(task, member) {
 }
 
 // Resumen por persona del sprint (para la tabla en vivo y el snapshot al cerrar).
-export function buildSprintSummary(tasks, teamMembers, sprint) {
+// Cumplimiento de informes de una persona en la semana del sprint:
+// - daily: cuántos informes DIARIOS distintos cargó dentro del rango (máx 5).
+// - weekly: si cargó el informe SEMANAL de esa semana.
+export function memberReportCompliance(teamReports, memberId, sprint) {
+  if (!sprint || !memberId) return { daily: 0, weekly: false };
+  const start = sprint.startDate, end = sprint.endDate;
+  const dailyDates = new Set();
+  let weekly = false;
+  (teamReports || []).forEach(r => {
+    if (r.user_id !== memberId || !r.report_date) return;
+    const inRange = (!start || r.report_date >= start) && (!end || r.report_date <= end);
+    if (!inRange) return;
+    if (r.report_type === 'daily') dailyDates.add(r.report_date);
+    else if (r.report_type === 'weekly') weekly = true;
+  });
+  return { daily: dailyDates.size, weekly };
+}
+
+// Cantidad de dailys a las que asistió una persona (0-5) según el registro manual.
+export function attendanceCount(sprint, memberId) {
+  const arr = sprint?.dailyAttendance?.[memberId];
+  return Array.isArray(arr) ? arr.filter(Boolean).length : 0;
+}
+
+export function buildSprintSummary(tasks, teamMembers, sprint, teamReports = []) {
   const st = (tasks || []).filter(t => t.sprintId === sprint?.id);
   const worked = (sprint && sprint.workedHours && typeof sprint.workedHours === 'object') ? sprint.workedHours : {};
+  const att = (sprint && sprint.dailyAttendance && typeof sprint.dailyAttendance === 'object') ? sprint.dailyAttendance : {};
   const perPerson = (teamMembers || []).map(m => {
     const mt = st.filter(t => isAssignedTo(t, m));
-    if (!mt.length && !worked[m.id]) return null; // omitir gente sin nada esta semana
+    const hasAttendance = Array.isArray(att[m.id]) && att[m.id].some(Boolean);
+    const comp = memberReportCompliance(teamReports, m.id, sprint);
+    // omitir gente sin NADA esta semana (sin tareas, horas, asistencia ni informes)
+    if (!mt.length && !worked[m.id] && !hasAttendance && comp.daily === 0 && !comp.weekly) return null;
     return {
       memberId: m.id,
       name: m.name,
@@ -894,6 +922,10 @@ export function buildSprintSummary(tasks, teamMembers, sprint) {
       loadedHours: mt.reduce((s, t) => s + (Number(t.estimatedHours) || 0), 0),
       workedHours: Number(worked[m.id]) || 0,
       capacity: m.weekly_capacity != null ? Number(m.weekly_capacity) : null,
+      // Cumplimiento de la semana (snapshot al cerrar):
+      attendance: attendanceCount(sprint, m.id),
+      dailyReports: comp.daily,
+      weeklyReport: comp.weekly,
     };
   }).filter(Boolean);
   const proposed = st.length;
