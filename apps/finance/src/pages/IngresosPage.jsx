@@ -432,7 +432,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
             <input value={form.afiliado_name || '—'} readOnly title="Para cambiarlo, editá el afiliado del usuario en Base de datos" style={{ ...inp, background: '#F8FAFC', color: form.afiliado_name ? '#475569' : '#9AA4B2', cursor: 'not-allowed' }} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lab}>Usuario / pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>
+            <label style={lab}>Pagador <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· del directorio</span></label>
             <PayerSelect value={form.payer_name} dir={dir} inp={inp} onPick={pickPayer} onType={(v) => setForm((s) => ({ ...s, payer_name: v }))} />
             <div style={{ marginTop: 7, fontSize: 11.5, color: '#6B7585', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Cliente: <b style={{ color: form.client_name_sheet ? '#0c8584' : '#cbd5e1' }}>{form.client_name_sheet || 'sin asignar'}</b></span>
@@ -483,7 +483,7 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
                 </span>
               : <button onClick={() => setConfirmDel(true)} title="Eliminar este ingreso" style={{ border: '1px solid #FBC9CF', background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Eliminar</button>
             )}
-            {!confirmDel && <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Usuario, cliente y monto son obligatorios'}</span>}
+            {!confirmDel && <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Pagador, cliente y monto son obligatorios'}</span>}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
