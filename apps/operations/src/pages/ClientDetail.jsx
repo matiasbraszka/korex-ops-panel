@@ -10,6 +10,7 @@ import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import StrategyMatrix from '../components/clientes/StrategyMatrix';
+import DriveTreeTab from '../components/clientes/DriveTreeTab';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
@@ -181,6 +182,7 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Recursos', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
+          { key: 'drive', label: 'Carpetas' },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
@@ -261,6 +263,8 @@ export default function ClientDetail({ client: c }) {
             })()}
 
             {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
+
+            {activeTab === 'drive' && <DriveTreeTab client={c} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 

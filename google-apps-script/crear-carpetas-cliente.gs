@@ -59,6 +59,10 @@ function doPost(e) {
     // poder vincularlas a sus ingresos en el panel. Solo lectura.
     if (b.action === 'listar_facturas') return facListarFacturas(b);
 
+    // Lectura del árbol de una carpeta (para el panel: espejo de Drive del cliente).
+    // No crea nada; solo devuelve metadata de carpetas + archivos.
+    if (b.action === 'list_folder_tree') return listFolderTree(b);
+
     const name = String(b.name || '').trim();
     if (!name) return json({ ok: false, error: 'missing_name' });
     const empresa = String(b.empresa || '').trim();
@@ -204,6 +208,68 @@ function facCarpetaMes(date) {
   var raiz = DriveApp.getFolderById(FAC_FOLDER_ID);
   var it = raiz.getFoldersByName(nombre);
   return it.hasNext() ? it.next() : raiz.createFolder(nombre);
+}
+
+// ---------- Lectura del árbol (acción 'list_folder_tree') ----------
+// Recorre una carpeta en anchura (BFS) y devuelve TODOS sus nodos (subcarpetas y
+// archivos) con metadata: id, nombre, padre, mimeType, url y última modificación.
+// No baja el contenido de los archivos. Tope `maxNodes` para no pasar el límite
+// de ejecución de Apps Script (6 min); si lo alcanza, devuelve truncated:true.
+function listFolderTree(b) {
+  var rootId = String(b.folderId || '').trim();
+  if (!rootId) return json({ ok: false, error: 'missing_folderId' });
+  var maxNodes = Number(b.maxNodes) || 3000;
+  var FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+  var root;
+  try { root = DriveApp.getFolderById(rootId); }
+  catch (err) { return json({ ok: false, error: 'folder_not_found' }); }
+
+  var nodes = [];
+  var truncated = false;
+
+  nodes.push({
+    id: root.getId(), name: root.getName(), parentId: null,
+    mimeType: FOLDER_MIME, url: root.getUrl(),
+    modified: dateIso(root.getLastUpdated()), depth: 0, isRoot: true,
+  });
+
+  var queue = [{ folder: root, depth: 0 }];
+  while (queue.length) {
+    var cur = queue.shift();
+    var parentId = cur.folder.getId();
+
+    var subs = cur.folder.getFolders();
+    while (subs.hasNext()) {
+      if (nodes.length >= maxNodes) { truncated = true; break; }
+      var f = subs.next();
+      nodes.push({
+        id: f.getId(), name: f.getName(), parentId: parentId,
+        mimeType: FOLDER_MIME, url: f.getUrl(),
+        modified: dateIso(f.getLastUpdated()), depth: cur.depth + 1, isRoot: false,
+      });
+      queue.push({ folder: f, depth: cur.depth + 1 });
+    }
+    if (truncated) break;
+
+    var files = cur.folder.getFiles();
+    while (files.hasNext()) {
+      if (nodes.length >= maxNodes) { truncated = true; break; }
+      var file = files.next();
+      nodes.push({
+        id: file.getId(), name: file.getName(), parentId: parentId,
+        mimeType: file.getMimeType(), url: file.getUrl(),
+        modified: dateIso(file.getLastUpdated()), depth: cur.depth + 1, isRoot: false,
+      });
+    }
+    if (truncated) break;
+  }
+
+  return json({ ok: true, nodes: nodes, count: nodes.length, truncated: truncated });
+}
+
+function dateIso(d) {
+  try { return d ? d.toISOString() : null; } catch (err) { return null; }
 }
 
 function json(o) {

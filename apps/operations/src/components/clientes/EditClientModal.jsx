@@ -77,6 +77,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       conector: c.conector || '',
       closer: c.closer || '',
       contractData: c.contractData || '',
+      driveFolderUrl: c.driveFolderUrl || '',
       notes: c.notes || '',
     });
   }, [open, client, isCreate]);
@@ -114,6 +115,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
         conector: form.conector.trim(),
         closer: form.closer.trim(),
         contractData: form.contractData.trim(),
+        driveFolderUrl: form.driveFolderUrl.trim(),
         notes: form.notes,
       });
       onClose();
@@ -146,6 +148,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       conector: form.conector.trim() || null,
       closer: form.closer.trim() || null,
       contractData: form.contractData.trim() || null,
+      driveFolderUrl: form.driveFolderUrl.trim() || null,
       notes: form.notes,
     });
     onClose();
@@ -243,6 +246,11 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
                   </button>
                 ))}
               </div>
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Field label="Carpeta de Drive (link)" hint="Se crea sola al cargar la venta. Si falta o cambió, pegá acá el link de la carpeta del cliente — de ahí el panel sincroniza el árbol todos los días.">
+              <input type="url" value={form.driveFolderUrl || ''} onChange={e => set('driveFolderUrl', e.target.value)} className={inputClass} placeholder="https://drive.google.com/drive/folders/..." />
             </Field>
           </div>
         </Section>
