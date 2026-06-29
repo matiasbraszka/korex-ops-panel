@@ -791,7 +791,13 @@ export function AppProvider({ children }) {
 
   // Saca una tarea del sprint (vuelve a estar solo en Objetivos).
   const removeTaskFromSprint = useCallback((taskId) => {
-    updateTask(taskId, { sprintId: null, sprintPriority: null });
+    // Al salir del sprint, los estados de tablero (priorizado/en curso/en revisión)
+    // ya no aplican: la tarea vuelve a "pendiente" (backlog) salvo que esté
+    // terminada. Si no, quedaba con el puntito azul aunque ya no estuviera en el sprint.
+    const t = tasksRef.current.find(x => x.id === taskId);
+    const patch = { sprintId: null, sprintPriority: null };
+    if (t && t.status !== 'done') patch.status = 'backlog';
+    updateTask(taskId, patch);
   }, [updateTask]);
 
   // Mueve una tarea a OTRO sprint (relocación pura: no toca estado ni
