@@ -8,7 +8,7 @@
 //   3. Vincula cada carpeta a su estrategia del panel (por el id de carpeta guardado en
 //      strategies.folders / archivos / drive_url) y propaga strategy_id a todo el subárbol.
 //   4. Detecta duplicados / nombres muy parecidos DENTRO de la misma carpeta (carpetas,
-//      documentos y videos) y avisa por Slack al canal del cliente (1 vez por grupo).
+//      documentos y videos) y avisa por Slack al canal de alertas del equipo (1 vez por grupo).
 //
 // El panel SOLO lee client_drive_nodes; toda la escritura pasa por acá (service_role).
 //
@@ -63,7 +63,7 @@ function normName(s: string): string {
   return stripCopy(
     (s || "")
       .toLowerCase()
-      .normalize("NFD").replace(/[̀-ͯ]/g, "") // sin tildes (combining marks)
+      .normalize("NFD").replace(/\p{M}/gu, "") // sin tildes (marcas combinantes)
       .replace(/\.[a-z0-9]{1,5}$/i, "")                 // sin extensión
       .replace(/[_\-|.,()\[\]]+/g, " ")
       .replace(/\s+/g, " ")
@@ -154,7 +154,7 @@ async function fetchTree(url: string, secret: string, folderId: string): Promise
 // ── Sincroniza un cliente ────────────────────────────────────────────────────────
 async function syncClient(
   client: { id: string; name: string; drive_folder_url: string; slack_channel_id: string },
-  cfg: { appscriptUrl: string; appscriptSecret: string; botToken: string; adminIds: string[] },
+  cfg: { appscriptUrl: string; appscriptSecret: string; botToken: string; adminIds: string[]; alertsChannel: string },
 ): Promise<{ ok: boolean; nodes?: number; dupes?: number; error?: string }> {
   const clientId = client.id;
   const folderId = driveId(client.drive_folder_url);
@@ -256,7 +256,9 @@ async function syncClient(
       `En «${parentName}» hay ${g.members.length} ${tipo} con nombre muy parecido:\n${lines}\n` +
       `Dejá uno o renombrá el otro para mantener el orden.`;
 
-    const posted = await postSlack(cfg.botToken, client.slack_channel_id, text);
+    // Las alertas de duplicados van al canal de alertas del equipo (no al canal
+    // de cada cliente); el mensaje ya nombra al cliente para ubicarlo.
+    const posted = await postSlack(cfg.botToken, cfg.alertsChannel, text);
     if (!posted && cfg.adminIds.length) {
       // Fallback: el bot no está en el canal -> aviso al equipo en la campana del panel.
       await supabase.from("notifications").insert(cfg.adminIds.map((rid) => ({
@@ -313,6 +315,8 @@ Deno.serve(async (req) => {
   const appscriptUrl = str(vcfg.appscript_url);
   const appscriptSecret = str(vcfg.appscript_secret);
   const botToken = str(vcfg.slack_bot_token);
+  // Canal de alertas del equipo (configurable; por defecto #alertas-general).
+  const alertsChannel = str(vcfg.drive_alerts_channel) || "#alertas-general";
   if (!appscriptUrl) {
     return new Response(JSON.stringify({ ok: false, error: "missing_appscript_url" }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }
@@ -332,7 +336,7 @@ Deno.serve(async (req) => {
   const { data: clients, error } = await q;
   if (error) return new Response(JSON.stringify({ ok: false, error: String(error.message) }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
 
-  const sharedCfg = { appscriptUrl, appscriptSecret, botToken, adminIds };
+  const sharedCfg = { appscriptUrl, appscriptSecret, botToken, adminIds, alertsChannel };
   const results: Record<string, unknown>[] = [];
   let okCount = 0, totalDupes = 0;
   for (const c of (clients ?? [])) {
