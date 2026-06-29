@@ -36,6 +36,8 @@ export default function RendimientoView() {
   const [closeShot, setCloseShot] = useState(null);   // captura del cierre { url, path, name }
   const [shotUploading, setShotUploading] = useState(false);
   const shotInputRef = useRef(null);
+  const [histShotBusy, setHistShotBusy] = useState(null); // id del sprint cerrado subiendo captura
+  const histShotInputs = useRef({});
 
   const rows = useMemo(() => {
     if (!activeSprint) return [];
@@ -87,6 +89,18 @@ export default function RendimientoView() {
     try { setCloseShot(await uploadInformeCaptura(currentUser?.id, file)); }
     catch (e) { console.warn('close screenshot', e); alert('No se pudo subir la captura.'); }
     finally { setShotUploading(false); }
+  };
+  // Cambiar / agregar la captura de un sprint YA cerrado (desde el historial).
+  const onPickHistShot = async (sprintId, file) => {
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) { alert('Subí una imagen.'); return; }
+    if (file.size > MAX_CAPTURA_BYTES) { alert('La imagen supera los 10 MB.'); return; }
+    setHistShotBusy(sprintId);
+    try {
+      const up = await uploadInformeCaptura(currentUser?.id, file);
+      updateSprint(sprintId, { closeScreenshotUrl: up.url });
+    } catch (e) { console.warn('hist screenshot', e); alert('No se pudo subir la captura.'); }
+    finally { setHistShotBusy(null); }
   };
   const setCap = (id, val) => updateTeamMember(id, { weekly_capacity: val === '' ? null : Number(val) });
   const editCall = (field, label) => { const url = window.prompt(`Link de la grabación — ${label}:`, activeSprint[field] || ''); if (url !== null) updateSprint(activeSprint.id, { [field]: url.trim() || null }); };
@@ -264,14 +278,23 @@ export default function RendimientoView() {
                       <div style={{ fontSize: 13, color: '#3F4653', lineHeight: 1.6, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, padding: '12px 14px', whiteSpace: 'pre-wrap' }}>{h.conclusion}</div>
                     </div>
                   )}
-                  {h.closeScreenshotUrl && (
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 9 }}>Captura del estado al cierre</div>
-                      <a href={h.closeScreenshotUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', lineHeight: 0 }}>
-                        <img src={h.closeScreenshotUrl} alt="Estado de las tareas al cierre" style={{ maxWidth: 280, maxHeight: 200, borderRadius: 10, border: '1px solid #E2E5EB' }} />
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 9 }}>Captura del estado al cierre</div>
+                    {h.closeScreenshotUrl && (
+                      <a href={h.closeScreenshotUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', lineHeight: 0, marginBottom: 9 }}>
+                        <img src={h.closeScreenshotUrl} alt="Estado de las tareas al cierre" style={{ display: 'block', maxWidth: 280, maxHeight: 200, borderRadius: 10, border: '1px solid #E2E5EB' }} />
                       </a>
+                    )}
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <input ref={(el) => { histShotInputs.current[h.id] = el; }} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { onPickHistShot(h.id, e.target.files?.[0]); e.target.value = ''; }} />
+                      <span onClick={() => { if (histShotBusy !== h.id) histShotInputs.current[h.id]?.click(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: '#5B7CF5', border: '1px dashed #C7D2FE', borderRadius: 9, padding: '7px 12px', cursor: histShotBusy === h.id ? 'default' : 'pointer' }}>
+                        {histShotBusy === h.id ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}{histShotBusy === h.id ? 'Subiendo…' : (h.closeScreenshotUrl ? 'Cambiar captura' : 'Adjuntar captura')}
+                      </span>
+                      {h.closeScreenshotUrl && histShotBusy !== h.id && (
+                        <span onClick={() => { if (window.confirm('¿Quitar la captura de este sprint?')) updateSprint(h.id, { closeScreenshotUrl: null }); }} style={{ fontSize: 12.5, fontWeight: 600, color: '#9CA3AF', cursor: 'pointer' }}>Quitar</span>
+                      )}
                     </div>
-                  )}
+                  </div>
                   <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
                     {h.mondayCallUrl && <a href={h.mondayCallUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#3F4653', textDecoration: 'none', border: '1px solid #E2E5EB', borderRadius: 8, padding: '6px 11px', background: '#fff' }}><Play size={13} fill="#5B7CF5" stroke="none" />Llamada del lunes</a>}
                     {h.fridayCallUrl && <a href={h.fridayCallUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#3F4653', textDecoration: 'none', border: '1px solid #E2E5EB', borderRadius: 8, padding: '6px 11px', background: '#fff' }}><Play size={13} fill="#5B7CF5" stroke="none" />Llamada del viernes</a>}
