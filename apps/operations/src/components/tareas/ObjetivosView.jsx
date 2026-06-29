@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { isKorexClient, userOwnsTask, getAllPhases, blockingTasks } from '../../utils/helpers';
+import { TASK_PRIORITY } from '../../utils/constants';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
@@ -203,8 +204,20 @@ export default function ObjetivosView({ onlySprint = false }) {
     const byPhase = new Map();
     cTasks.forEach(t => { const k = phaseMap[t.phase] ? t.phase : 'otras'; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(t); });
     const order = [...Object.keys(phaseMap), ...(byPhase.has('otras') ? ['otras'] : [])];
+    // Orden automático dentro de cada objetivo: primero por PRIORIDAD
+    // (súper-alta → alta → media → baja → sin prioridad) y las BLOQUEADAS
+    // (esperan otra tarea) siempre al fondo. La posición solo desempata.
+    const blockedIds = new Set(cTasks.filter(t => t.status !== 'done' && blockingTasks(t, allClientTasks).length > 0).map(t => t.id));
+    const prioRank = (t) => (TASK_PRIORITY[t.priority]?.rank ?? 5);
+    const taskSort = (a, b) => {
+      const ba = blockedIds.has(a.id) ? 1 : 0, bb = blockedIds.has(b.id) ? 1 : 0;
+      if (ba !== bb) return ba - bb;
+      const ra = prioRank(a), rb = prioRank(b);
+      if (ra !== rb) return ra - rb;
+      return (a.position ?? 0) - (b.position ?? 0);
+    };
     const groups = order.map(k => {
-      const list = (byPhase.get(k) || []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const list = (byPhase.get(k) || []).slice().sort(taskSort);
       const meta = phaseMap[k] || { label: 'Otras tareas', color: '#9CA3AF' };
       const gdone = list.filter(t => t.status === 'done').length;
       const gEst = list.reduce((s, t) => s + hoursOf(t), 0);
@@ -339,9 +352,7 @@ export default function ObjetivosView({ onlySprint = false }) {
                               onDragStart={(e) => { e.stopPropagation(); setDraggedTaskId(t.id); startDragScroll(); }}
                               onDragEnd={() => { setDraggedTaskId(null); stopDragScroll(); }}
                               onClick={() => { if (!editing) setOpenTaskId(t.id); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
-                              {/* Agarre para reordenar: arrastrá la tarea para cambiar el orden (o moverla a otro objetivo). */}
-                              <span onClick={(e) => e.stopPropagation()} title="Arrastrar para reordenar" style={{ color: '#C7CBD3', cursor: 'grab', flexShrink: 0, display: 'flex' }}><GripVertical size={14} /></span>
+                              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
                               <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={blockers.length > 0 ? `Bloqueada por: ${blockers.map(b => b.title).join(', ')}` : (t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada')} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
                               {editing ? (
                                 <input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
