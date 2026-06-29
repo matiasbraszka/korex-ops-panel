@@ -88,7 +88,9 @@ export default function SprintBoardView() {
 
   const columnTasks = (status) => inSprint
     .filter(t => taskColumn(t) === status)
-    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || prioRank(a) - prioRank(b) || (a.sprintPriority || 9) - (b.sprintPriority || 9));
+    // Orden visual por PRIORIDAD (súper-alta arriba → alta → media → baja → sin
+    // prioridad). La posición y la prioridad de sprint solo desempatan.
+    .sort((a, b) => prioRank(a) - prioRank(b) || (a.position ?? 0) - (b.position ?? 0) || (a.sprintPriority || 9) - (b.sprintPriority || 9));
 
   const onDrop = (colStatus, e) => {
     setOverCol(null);
