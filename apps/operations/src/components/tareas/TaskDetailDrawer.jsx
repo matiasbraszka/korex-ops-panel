@@ -139,8 +139,9 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const critOk = criteria.length === 0 || acDone === criteria.length;
   const okToValidate = pendingBlockers.length === 0 && critOk && !locked;
   const footerLabel = pendingBlockers.length > 0 ? 'Bloqueada · validá la otra tarea' : (!critOk ? 'Completá los criterios primero' : (locked ? 'Sprint cerrado' : ''));
-  // Punto de la pestaña Validación: rojo si está bloqueada por otra, azul si tiene descripción.
-  const hasDescription = !!String(task.description || '').trim();
+  // Punto de la pestaña Validación: rojo si está bloqueada por otra; azul si tiene
+  // contenido cargado (definición de hecho o descripción).
+  const hasDescription = !!(String(task.definitionOfDone || '').trim() || String(task.description || '').trim());
   const valDot = pendingBlockers.length > 0 ? '#EF4444' : (hasDescription ? '#5B7CF5' : null);
 
   const metaRow = { display: 'grid', gridTemplateColumns: '104px 1fr', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid #F0F1F4' };
