@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS } from '../utils/constants';
-import { initials, progress, getAllPhases, getRoadmapTasks, daysAgo, fmtDate, clientPill, today } from '../utils/helpers';
+import { initials, progress, getAllPhases, getRoadmapTasks, daysAgo, fmtDate, clientPill, today, userOwnsTask } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
@@ -41,7 +41,12 @@ export default function ClientDetail({ client: c }) {
   const restricted = !!currentUser && !currentUser.isAdmin;
 
   const clientTasks = tasks.filter(t => t.clientId === c.id);
-  const roadmapTasks = getRoadmapTasks(c.id, tasks);
+  // Los usuarios que no son admin solo ven SUS tareas (igual que la lista de la
+  // pestaña Tareas): por eso el conteo del tab y el resumen también se filtran.
+  const roadmapTasks = (() => {
+    const all = getRoadmapTasks(c.id, tasks);
+    return restricted ? all.filter(t => userOwnsTask(t, currentUser, TEAM)) : all;
+  })();
   // Use new system if client has ANY tasks (not just roadmap-flagged ones)
   const useNewSystem = clientTasks.length > 0;
 
@@ -72,6 +77,9 @@ export default function ClientDetail({ client: c }) {
   // Total roadmap tasks for progress display
   const totalRoadmap = useNewSystem ? roadmapTasks.length : c.steps.length;
   const doneRoadmap = useNewSystem ? roadmapTasks.filter(t => t.status === 'done').length : c.steps.filter(s => s.status === 'completed').length;
+  // % de la pestaña Tareas: para no-admin se calcula sobre SUS tareas (consistente
+  // con el conteo filtrado); para admin se usa el progreso global del cliente.
+  const roadmapPct = restricted ? (totalRoadmap ? Math.round(doneRoadmap / totalRoadmap * 100) : 0) : pct;
 
   return (
     <div>
@@ -217,9 +225,9 @@ export default function ClientDetail({ client: c }) {
               const myPages = myStrategies.flatMap(s => (strategyPages || []).filter(p => p.strategy_id === s.id));
               const pagesActive = myPages.filter(p => p.testing_url || p.prod_url).length;
               // Tareas vencidas
-              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today()).length;
+              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today() && (!restricted || userOwnsTask(t, currentUser, TEAM))).length;
               const tiles = [
-                { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${pct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
+                { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${roadmapPct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
                 { icon: Layers, label: 'Estrategias', value: strategiesCount, sub: pagesActive ? `${pagesActive} página(s) activa(s)` : 'sin páginas activas', color: '#1A1D26', tab: 'trabajo' },
                 { icon: CreditCard, label: 'Importe / ciclo', value: c.billingAmount != null ? `${billCurr}${Number(c.billingAmount).toLocaleString()}` : '—', sub: billLabel.t, color: billLabel.fg, tab: 'facturacion' },
                 { icon: FileText, label: 'Facturas', value: invoicesCount, sub: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin próximo cobro', color: '#1A1D26', tab: 'facturacion' },
@@ -270,7 +278,7 @@ export default function ClientDetail({ client: c }) {
                   </button>
                   <div className="text-right">
                     <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>Tareas pendientes</div>
-                    <div className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>{pct}% completado · {doneRoadmap}/{totalRoadmap}</div>
+                    <div className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>{roadmapPct}% completado · {doneRoadmap}/{totalRoadmap}</div>
                   </div>
                 </div>
                 <ObjetivosView clientId={c.id} />
