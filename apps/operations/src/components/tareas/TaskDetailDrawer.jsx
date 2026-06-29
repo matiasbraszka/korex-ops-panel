@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, AlertTriangle, Check, Send, Sparkles } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, fmtDuration } from '../../utils/helpers';
@@ -135,17 +135,13 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     setNewComment('');
   };
 
-  // Estado de validación (mismo criterio que el footer).
+  // Validación: criterio del footer + punto de la pestaña.
   const critOk = criteria.length === 0 || acDone === criteria.length;
   const okToValidate = pendingBlockers.length === 0 && critOk && !locked;
-  const vState = pendingBlockers.length > 0
-    ? { key: 'blocked', label: 'No se puede validar todavía', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', desc: 'Está bloqueada por otra tarea. Resolvela para poder avanzar.', icon: <AlertTriangle size={17} /> }
-    : !critOk
-      ? { key: 'crit', label: 'Faltan criterios por cumplir', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A', desc: `Completá ${criteria.length - acDone} de ${criteria.length} criterios de aceptación.`, icon: <Clock size={17} /> }
-      : locked
-        ? { key: 'locked', label: 'Sprint cerrado', color: '#6B7280', bg: '#F3F4F6', border: '#E2E5EB', desc: 'Movela al sprint actual para poder validarla.', icon: <Lock size={17} /> }
-        : { key: 'ready', label: 'Lista para validar', color: '#15803D', bg: '#ECFDF5', border: '#A7F3D0', desc: 'Cumple todo lo necesario. Podés marcarla como validada.', icon: <Check size={17} /> };
   const footerLabel = pendingBlockers.length > 0 ? 'Bloqueada · validá la otra tarea' : (!critOk ? 'Completá los criterios primero' : (locked ? 'Sprint cerrado' : ''));
+  // Punto de la pestaña Validación: rojo si está bloqueada por otra, azul si tiene descripción.
+  const hasDescription = !!String(task.description || '').trim();
+  const valDot = pendingBlockers.length > 0 ? '#EF4444' : (hasDescription ? '#5B7CF5' : null);
 
   const metaRow = { display: 'grid', gridTemplateColumns: '104px 1fr', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid #F0F1F4' };
   const metaLabel = { fontSize: 11.5, color: '#6B7280' };
@@ -242,7 +238,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               </button>
               <button onClick={() => setTab('validacion')} style={tBtn(tab === 'validacion')}>
                 Validación
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: vState.color }} />
+                {valDot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: valDot }} />}
               </button>
               <button onClick={() => setTab('actividad')} style={tBtn(tab === 'actividad')}>Actividad</button>
             </div>
@@ -252,8 +248,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
           {tab === 'tarea' && (
             <div>
               <div style={{ padding: '18px 18px 16px', borderBottom: '1px solid #F0F1F4' }}>
-                <SectionHead icon={<AlignLeft size={15} />} title="Descripción" sub="Contexto para no dejar dudas"
-                  right={<span title="Próximamente" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid #E2E5EB', background: '#fff', borderRadius: 999, padding: '4px 10px', fontSize: 10.5, fontWeight: 600, color: '#6B7280', cursor: 'pointer' }}><Sparkles size={12} />Mejorar con IA</span>} />
+                <SectionHead icon={<AlignLeft size={15} />} title="Descripción" sub="Contexto para no dejar dudas" />
                 <textarea defaultValue={task.description || ''} placeholder="Describí la tarea para que no quede lugar a dudas…"
                   onBlur={(e) => { const v = e.target.value; if (v !== (task.description || '')) updateTask(task.id, { description: v }); }}
                   style={{ width: '100%', minHeight: 104, border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
@@ -278,14 +273,6 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
           {/* TAB: VALIDACIÓN */}
           {tab === 'validacion' && (
             <div style={{ padding: '16px 18px 20px' }}>
-              <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start', padding: '12px 14px', borderRadius: 11, background: vState.bg, border: `1px solid ${vState.border}`, marginBottom: 20 }}>
-                <span style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', color: vState.color }}>{vState.icon}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: vState.color, marginBottom: 3, lineHeight: 1.25 }}>{vState.label}</div>
-                  <div style={{ fontSize: 11.5, lineHeight: 1.45, color: '#6B7280' }}>{vState.desc}</div>
-                </div>
-              </div>
-
               {task.status === 'done' && task.validatedAt && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ECFDF5', color: '#15803D', fontSize: 12.5, fontWeight: 600, borderRadius: 10, padding: '9px 12px', marginBottom: 20 }}>
                   <Check size={15} />Validada por {validator?.name || 'alguien'}{task.validatedAt ? ` · ${fmtDateTime(task.validatedAt)}` : ''}
