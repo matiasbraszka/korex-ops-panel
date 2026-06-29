@@ -97,16 +97,22 @@ function ratio(a: string, b: string): number {
 }
 // ¿Son el mismo nombre o uno muy parecido (confuso)? Una secuencia numerada a
 // propósito (Anuncio 1 / Anuncio 2) NO cuenta como duplicado.
+// Conservador y preciso: avisa solo cuando los nombres son realmente el MISMO
+// (idénticos, o "Copia de X" vs "X", o tildes/mayúsculas), o el caso "X" vs "X 2"
+// (mismo nombre con uno numerado y el otro no). NO marca series (a/b/c, 1/2/3) ni
+// nombres largos solo parecidos — eso generaba falsos positivos.
 function isDup(an: string, bn: string): boolean {
   const a = normName(an), b = normName(bn);
   if (!a || !b) return false;
-  const ba = baseName(a), bb = baseName(b);
-  if (ba === bb) {
-    const ta = trailingNum(a), tb = trailingNum(b);
-    if (ta && tb && ta !== tb) return false; // secuencia numerada -> no es duplicado
-    return true;                              // igual, o "X" vs "X 2"
+  if (a === b) return true;                                        // idénticos (incluye copia/tildes/mayúsculas)
+  const ska = a.replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+  const skb = b.replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+  if (ska === skb) {                                               // mismo texto, difieren solo en números
+    const da = a.match(/\d+/g) || [];
+    const db = b.match(/\d+/g) || [];
+    return da.length === 0 || db.length === 0;                     // "X" vs "X 2" -> avisar; ambos numerados -> no
   }
-  return ratio(a, b) >= 0.90;                 // typos / casi iguales
+  return false;
 }
 function dupBucket(t: string): string | null {
   if (t === "folder") return "carpeta";
