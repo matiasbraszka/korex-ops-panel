@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
+import { isKorexClient, userOwnsTask, getAllPhases, blockingTasks } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
@@ -327,6 +327,8 @@ export default function ObjetivosView({ onlySprint = false }) {
                         onDrop={(e) => dropTask(e, g, o.c.id)}>
                         {g.tasks.map((t, i) => {
                           const d = dotStyle(t.status);
+                          // Bloqueada por otra tarea no terminada → candado rojo.
+                          const blockers = t.status === 'done' ? [] : blockingTasks(t, tasks);
                           const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id && (!cc.kind || cc.kind === 'user')).length;
                           const unread = unreadCommentTaskIds?.has?.(t.id);
                           const editing = editingId === t.id;
@@ -345,7 +347,10 @@ export default function ObjetivosView({ onlySprint = false }) {
                                   style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid #C7D2FE', borderRadius: 7, padding: '5px 9px', outline: 'none', fontFamily: 'inherit' }} />
                               ) : (
                                 <>
-                                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
+                                  {blockers.length > 0 && (
+                                    <span title={`Bloqueada por: ${blockers.map(b => b.title).join(', ')}`} style={{ color: '#DC2626', flexShrink: 0, display: 'flex' }}><Lock size={13} /></span>
+                                  )}
+                                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: blockers.length > 0 ? '#DC2626' : '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
                                   <span onClick={(e) => { e.stopPropagation(); setEditTitle(t.title); setEditingId(t.id); }} title="Editar título" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>
                                   <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Eliminar la tarea «${t.title}»?`)) deleteTask(t.id); }} title="Eliminar tarea" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Trash2 size={12} /></span>
                                 </>
