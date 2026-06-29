@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2, Lock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { isKorexClient, userOwnsTask, getAllPhases, blockingTasks } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
@@ -22,8 +22,10 @@ function taskInsertIndex(containerEl, clientY, draggedId) {
 }
 
 // Estado → estilo del puntito de la tarea (igual que el diseño).
-function dotStyle(status) {
+// `blocked` (bloqueada por otra tarea sin terminar) pinta el punto de ROJO.
+function dotStyle(status, blocked) {
   if (status === 'done') return { border: 'none', bg: '#22C55E', icon: '✓' };
+  if (blocked) return { border: 'none', bg: '#DC2626', icon: '' };
   if (status === 'in-progress' || status === 'en-revision' || status === 'priorizado') return { border: 'none', bg: '#5B7CF5', icon: '' };
   return { border: '2px solid #D0D5DD', bg: 'transparent', icon: '' };
 }
@@ -326,9 +328,9 @@ export default function ObjetivosView({ onlySprint = false }) {
                         onDragOver={(e) => { if (draggedTaskId) e.preventDefault(); }}
                         onDrop={(e) => dropTask(e, g, o.c.id)}>
                         {g.tasks.map((t, i) => {
-                          const d = dotStyle(t.status);
-                          // Bloqueada por otra tarea no terminada → candado rojo.
+                          // Bloqueada por otra tarea no terminada → punto rojo.
                           const blockers = t.status === 'done' ? [] : blockingTasks(t, tasks);
+                          const d = dotStyle(t.status, blockers.length > 0);
                           const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id && (!cc.kind || cc.kind === 'user')).length;
                           const unread = unreadCommentTaskIds?.has?.(t.id);
                           const editing = editingId === t.id;
@@ -338,7 +340,7 @@ export default function ObjetivosView({ onlySprint = false }) {
                               onDragEnd={() => { setDraggedTaskId(null); stopDragScroll(); }}
                               onClick={() => { if (!editing) setOpenTaskId(t.id); }}
                               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
-                              <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada'} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
+                              <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={blockers.length > 0 ? `Bloqueada por: ${blockers.map(b => b.title).join(', ')}` : (t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada')} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
                               {editing ? (
                                 <input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
                                   onClick={(e) => e.stopPropagation()}
@@ -347,10 +349,7 @@ export default function ObjetivosView({ onlySprint = false }) {
                                   style={{ flex: 1, minWidth: 0, fontSize: 13, border: '1px solid #C7D2FE', borderRadius: 7, padding: '5px 9px', outline: 'none', fontFamily: 'inherit' }} />
                               ) : (
                                 <>
-                                  {blockers.length > 0 && (
-                                    <span title={`Bloqueada por: ${blockers.map(b => b.title).join(', ')}`} style={{ color: '#DC2626', flexShrink: 0, display: 'flex' }}><Lock size={13} /></span>
-                                  )}
-                                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: blockers.length > 0 ? '#DC2626' : '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
+                                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
                                   <span onClick={(e) => { e.stopPropagation(); setEditTitle(t.title); setEditingId(t.id); }} title="Editar título" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>
                                   <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Eliminar la tarea «${t.title}»?`)) deleteTask(t.id); }} title="Eliminar tarea" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Trash2 size={12} /></span>
                                 </>
@@ -365,7 +364,11 @@ export default function ObjetivosView({ onlySprint = false }) {
                                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
                               </span>
                               <AssigneePicker value={t.assignee} onChange={(name) => updateTask(t.id, { assignee: name })} />
-                              {t.status !== 'done' && <AddToSprintButton task={t} />}
+                              {/* Columna fija para el botón de sprint: así "En sprint"/"al sprint"
+                                  y las tareas terminadas (sin botón) quedan alineadas en la fila. */}
+                              <span style={{ width: 120, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                                {t.status !== 'done' && <AddToSprintButton task={t} />}
+                              </span>
                             </div>
                           );
                         })}
