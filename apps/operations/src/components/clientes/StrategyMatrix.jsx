@@ -5,7 +5,7 @@ import Modal from '../Modal';
 import {
   ExternalLink, FileText, Folder, FolderOpen, FileSpreadsheet, Presentation,
   Plus, ChevronDown, ChevronRight, Trash2, Pencil, Check, X, Image as ImageIcon,
-  Key, Copy, Eye, EyeOff, Mail, Calendar, Link2,
+  Key, Copy, Eye, EyeOff, Mail, Calendar, Link2, Pin, Star,
 } from 'lucide-react';
 import { fmtDate } from '../../utils/helpers';
 
@@ -244,13 +244,45 @@ function PageStatusPill({ status, onChange }) {
 }
 
 // ── Drive (espejo sincronizado) ──────────────────────────────────────────────────
+// Colores bien distintos para reconocer de un vistazo carpeta vs documento.
 const NODE_ICON = {
-  folder:   { Icon: Folder,          color: '#8A93A3' },
-  document: { Icon: FileText,        color: '#2E69E0' },
-  sheet:    { Icon: FileSpreadsheet, color: '#16A34A' },
-  slides:   { Icon: Presentation,    color: '#A855F7' },
+  folder:   { Icon: Folder,          color: '#E0922E', bg: '#FDF2DE' }, // ámbar = carpeta
+  document: { Icon: FileText,        color: '#2E69E0', bg: '#E9F1FF' }, // azul  = documento
+  sheet:    { Icon: FileSpreadsheet, color: '#16A34A', bg: '#E6F7EE' }, // verde = hoja de cálculo
+  slides:   { Icon: Presentation,    color: '#A855F7', bg: '#F4ECFE' }, // violeta = presentación
 };
 const isDisplayableNode = (n) => ['folder', 'document', 'sheet', 'slides'].includes(n.node_type);
+
+// Normaliza un nombre para comparar (minúsculas, sin tildes, sin extensión ni puntuación).
+function normLabel(v) {
+  return (v || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// El DEL es el documento clave de la estrategia: lleva el acrónimo "DEL" en mayúsculas.
+function isDelDoc(n) { return n && n.node_type !== 'folder' && /\bDEL\b/.test(n.name || ''); }
+
+// Carpetas de la estrategia (para pickers de material / auto-match), las menos profundas primero.
+function strategyFolders(nodes) {
+  return nodes.filter(n => n.node_type === 'folder')
+    .sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0) || (a.name || '').localeCompare(b.name || '', 'es'));
+}
+// Busca la carpeta cuyo nombre mejor coincide con el label de un material (logo, testimonios…).
+function matchFolderForLabel(label, folders) {
+  const q = normLabel(label);
+  if (!q) return null;
+  const qWords = q.split(' ').filter(w => w.length >= 4);
+  let best = null, score = 0;
+  for (const f of folders) {
+    const fn = normLabel(f.name);
+    if (!fn) continue;
+    let sc = 0;
+    if (fn === q) sc = 100;
+    else if (fn.includes(q) || q.includes(fn)) sc = 70;
+    else { const shared = qWords.filter(w => fn.includes(w)).length; if (shared) sc = 25 + shared * 15; }
+    if (sc > score) { score = sc; best = f; }
+  }
+  return score >= 40 ? best : null;
+}
 
 // Carpeta raíz de la estrategia + sus hijos directos (carpetas/documentos) ya sincronizados.
 function strategyDriveItems(driveNodes, s) {
@@ -287,11 +319,13 @@ function buildChildrenMap(nodes) {
 }
 
 // Fila del árbol de Drive: carpeta desplegable (chevron) o documento (hoja). Abre en Drive.
-function DriveTreeRow({ node, childrenByParent, openSet, onToggle, depth }) {
+// Cada fila se puede "fijar" (pin) para destacarla arriba del desplegable.
+function DriveTreeRow({ node, childrenByParent, openSet, onToggle, depth, pinnedSet, onTogglePin }) {
   const cfg = NODE_ICON[node.node_type] || NODE_ICON.document;
   const Icon = cfg.Icon;
   const isFolder = node.node_type === 'folder';
   const isOpen = openSet.has(node.id);
+  const isPinned = pinnedSet?.has(node.id);
   const kids = (childrenByParent.get(node.id) || []).filter(isDisplayableNode);
   const pad = 4 + depth * 15;
   return (
@@ -303,15 +337,21 @@ function DriveTreeRow({ node, childrenByParent, openSet, onToggle, depth }) {
             <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
           </button>
         ) : <span className="w-5 h-5 shrink-0" />}
-        <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cfg.color + '1A' }}>
+        <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cfg.bg }}>
           {isFolder && isOpen ? <FolderOpen size={13} style={{ color: cfg.color }} /> : <Icon size={13} style={{ color: cfg.color }} />}
         </span>
         <a href={node.web_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-[12px] font-medium no-underline truncate hover:text-blue" style={{ color: '#1A1D26' }} title={node.name}>{node.name}</a>
         {isFolder && kids.length > 0 && <span className="text-[10px] text-text3 shrink-0">{kids.length}</span>}
+        {onTogglePin && (
+          <button type="button" onClick={() => onTogglePin(node.id)} title={isPinned ? 'Quitar de destacados' : 'Fijar / destacar'}
+            className={`w-7 h-7 rounded inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer transition-opacity ${isPinned ? 'text-[#E0922E]' : 'opacity-0 group-hover/tr:opacity-100 text-text3 hover:text-[#E0922E]'}`}>
+            <Pin size={12} fill={isPinned ? '#E0922E' : 'none'} />
+          </button>
+        )}
         <span className="opacity-0 group-hover/tr:opacity-100 transition-opacity"><CopyButton value={node.web_url} title="Copiar enlace" /></span>
       </div>
       {isFolder && isOpen && kids.length > 0 && (
-        <div>{kids.map(ch => <DriveTreeRow key={ch.id} node={ch} childrenByParent={childrenByParent} openSet={openSet} onToggle={onToggle} depth={depth + 1} />)}</div>
+        <div>{kids.map(ch => <DriveTreeRow key={ch.id} node={ch} childrenByParent={childrenByParent} openSet={openSet} onToggle={onToggle} depth={depth + 1} pinnedSet={pinnedSet} onTogglePin={onTogglePin} />)}</div>
       )}
     </div>
   );
@@ -431,16 +471,28 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
   // Árbol desplegable de Drive (solo los nodos de esta estrategia).
   const [treeOpen, setTreeOpen] = useState(new Set());
   const toggleTree = (id) => setTreeOpen(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  const childrenByParent = buildChildrenMap((driveNodes || []).filter(n => n.strategy_id === s.id));
+  const myNodes = (driveNodes || []).filter(n => n.strategy_id === s.id);
+  const childrenByParent = buildChildrenMap(myNodes);
 
-  // Archivos manuales (legacy/manual). Drive sincronizado se muestra aparte arriba.
-  const legacyFolders = (Array.isArray(s.folders) && s.folders.length) ? s.folders : (s.drive_url ? [{ label: 'Drive de la estrategia', url: s.drive_url }] : []);
-  const manualAll = Array.isArray(s.archivos) ? s.archivos
-    : [...legacyFolders.map(f => ({ label: f.label, url: f.url, category: 'folder' })), ...(s.docs || []).map(d => ({ label: d.label, url: d.url, category: 'doc' }))];
-  const saveManual = (next) => onUpdate(s.id, { archivos: next, folders: [], docs: [], drive_url: null });
+  // DEL: documento clave de la estrategia (se aparta arriba de todo, destacado).
+  const delDocs = myNodes.filter(isDelDoc).sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0));
+  const delIds = new Set(delDocs.map(d => d.id));
+
+  // Fijados ("Destacados"): nodos que el equipo pin-eó; se apartan debajo del DEL.
+  const pinnedIds = Array.isArray(s.pinned_nodes) ? s.pinned_nodes : [];
+  const pinnedSet = new Set(pinnedIds);
+  const pinnedNodes = pinnedIds.map(id => myNodes.find(n => n.id === id))
+    .filter(n => n && isDisplayableNode(n) && !delIds.has(n.id));
+  const togglePin = (id) => {
+    const next = pinnedSet.has(id) ? pinnedIds.filter(x => x !== id) : [...pinnedIds, id];
+    onUpdate(s.id, { pinned_nodes: next });
+  };
+
+  // Enlaces propios de la estrategia (manuales). Las carpetas/documentos ahora salen del espejo de Drive.
+  const manualAll = Array.isArray(s.archivos) ? s.archivos : [];
+  const saveManual = (next) => onUpdate(s.id, { archivos: next });
   const upsertManual = (data, ref) => { const idx = ref ? manualAll.indexOf(ref) : -1; const next = idx >= 0 ? manualAll.map((x, i) => i === idx ? data : x) : [...manualAll, data]; saveManual(next); };
   const removeManual = (ref) => saveManual(manualAll.filter(x => x !== ref));
-  const manual = manualAll.filter(a => (a.category || 'folder') !== 'link');   // carpetas + documentos
   const links = manualAll.filter(a => (a.category || 'folder') === 'link');     // enlaces externos
   const accesos = s.accesos || [];
   const needs = Array.isArray(s.visual_resources) ? s.visual_resources : [];
@@ -474,52 +526,61 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
         {/* ARCHIVOS */}
         {tab === 'archivos' && (
           <div className="flex flex-col gap-1.5">
-            {drive.entry && (
-              <div className="flex items-stretch gap-1.5 mb-1">
-                <a href={drive.entry.web_url} target="_blank" rel="noreferrer" className="flex-1 flex items-center gap-2.5 py-2.5 px-3 rounded-[10px] no-underline" style={{ border: '1px solid #DCE3FF', background: '#F5F7FF' }}>
-                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0 text-white" style={{ background: '#2E69E0' }}><FolderOpen size={16} /></span>
-                  <span className="flex-1 min-w-0"><span className="block text-[13px] font-bold" style={{ color: '#1A1D26' }}>Drive de la estrategia</span><span className="block text-[11px]" style={{ color: '#6B7280' }}>Carpeta principal · sincronizada</span></span>
+            {/* DEL — documento clave de la estrategia (destacado) */}
+            {delDocs.map(d => (
+              <div key={d.id} className="flex items-stretch gap-1.5 mb-0.5">
+                <a href={d.web_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 flex items-center gap-2.5 py-2.5 px-3 rounded-[10px] no-underline" style={{ border: '1px solid #F1D08B', background: 'linear-gradient(90deg,#FFFBF0,#FFF4DA)' }}>
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg shrink-0 text-white" style={{ background: '#E0922E' }}><Star size={17} fill="#fff" /></span>
+                  <span className="flex-1 min-w-0">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider py-0.5 px-1.5 rounded" style={{ background: '#E0922E', color: '#fff' }}>DEL</span>
+                      <span className="text-[10.5px] font-semibold" style={{ color: '#9A6A1A' }}>Documento clave de la estrategia</span>
+                    </span>
+                    <span className="block text-[13px] font-bold truncate mt-0.5" style={{ color: '#1A1D26' }}>{d.name}</span>
+                  </span>
                 </a>
-                <CopyButton value={drive.entry.web_url} title="Copiar enlace" />
+                <CopyButton value={d.web_url} title="Copiar enlace" />
+              </div>
+            ))}
+
+            {/* Destacados (fijados) */}
+            {pinnedNodes.length > 0 && (
+              <div className="rounded-lg border mb-0.5" style={{ borderColor: '#F1D08B', background: '#FFFDF6' }}>
+                <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1">
+                  <Pin size={11} style={{ color: '#E0922E' }} fill="#E0922E" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#B5872E' }}>Destacados</span>
+                </div>
+                <div className="px-1 pb-1.5">
+                  {pinnedNodes.map(n => {
+                    const cfg = NODE_ICON[n.node_type] || NODE_ICON.document;
+                    const Icon = cfg.Icon;
+                    return (
+                      <div key={n.id} className="flex items-center gap-2 py-1.5 px-1.5 rounded-md hover:bg-[#FFF7E8] group/pin">
+                        <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cfg.bg }}><Icon size={13} style={{ color: cfg.color }} /></span>
+                        <a href={n.web_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-[12px] font-semibold no-underline truncate hover:text-blue" style={{ color: '#1A1D26' }} title={n.name}>{n.name}</a>
+                        <span className="opacity-0 group-hover/pin:opacity-100"><CopyButton value={n.web_url} title="Copiar enlace" /></span>
+                        <button type="button" onClick={() => togglePin(n.id)} title="Quitar de destacados" className="w-7 h-7 rounded inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer text-[#E0922E] hover:bg-[#FBEAD0]"><Pin size={12} fill="#E0922E" /></button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
+            {/* Árbol desplegable de Drive */}
             {drive.items.length > 0 && (
               <div className="rounded-lg border border-[#E8EBF0] bg-white py-1 px-1">
                 {drive.items.map(n => (
-                  <DriveTreeRow key={n.id} node={n} childrenByParent={childrenByParent} openSet={treeOpen} onToggle={toggleTree} depth={0} />
+                  <DriveTreeRow key={n.id} node={n} childrenByParent={childrenByParent} openSet={treeOpen} onToggle={toggleTree} depth={0} pinnedSet={pinnedSet} onTogglePin={togglePin} />
                 ))}
               </div>
             )}
 
-            {manual.length > 0 && (
-              <>
-                {(drive.entry || drive.items.length > 0) && <div className="text-[10px] font-bold uppercase tracking-wider mt-2 mb-0.5" style={{ color: '#9CA3AF' }}>Otros archivos</div>}
-                {manual.map((a, ai) => {
-                  const cat = ARCHIVO_CATS[a.category] || ARCHIVO_CATS.folder;
-                  const Icon = cat.Icon;
-                  return (
-                    <div key={ai} className="flex items-center gap-2 text-[12px] py-2 px-2.5 rounded-lg bg-white border border-[#E8EBF0] group/lk" style={{ color: '#1A1D26' }}>
-                      <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cat.bg }}><Icon size={12} style={{ color: cat.color }} /></span>
-                      <a href={a.url} target="_blank" rel="noreferrer" className="flex-1 truncate font-medium no-underline hover:text-blue" style={{ color: 'inherit' }}>{a.label}</a>
-                      <CopyButton value={a.url} title="Copiar URL" />
-                      <button className="opacity-0 group-hover/lk:opacity-100 w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => setLinkModal({ initial: a, ref: a })} title="Editar"><Pencil size={11} /></button>
-                      <button className="opacity-0 group-hover/lk:opacity-100 w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm(`¿Quitar "${a.label}"?`)) removeManual(a); }} title="Quitar"><X size={11} /></button>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-
-            {!drive.entry && !drive.items.length && !manual.length && (
+            {!delDocs.length && !pinnedNodes.length && !drive.items.length && (
               <div className="text-[11.5px] italic py-2" style={{ color: '#9CA3AF' }}>
-                Cuando la rutina de Drive sincronice la carpeta de esta estrategia, sus archivos aparecen acá solos.
+                Cuando la rutina de Drive sincronice la carpeta de esta estrategia, sus carpetas y documentos aparecen acá solos.
               </div>
             )}
-
-            <div className="flex gap-1.5 mt-2 flex-wrap">
-              <button className="inline-flex items-center gap-1 text-[11.5px] bg-white py-1.5 px-2.5 rounded-lg border border-dashed border-[#D0D5DD] cursor-pointer text-text2 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ initial: null, category: 'folder' })}><Plus size={12} /> Carpeta</button>
-              <button className="inline-flex items-center gap-1 text-[11.5px] bg-white py-1.5 px-2.5 rounded-lg border border-dashed border-[#D0D5DD] cursor-pointer text-text2 hover:text-blue hover:border-blue" onClick={() => setLinkModal({ initial: null, category: 'doc' })}><Plus size={12} /> Documento</button>
-            </div>
           </div>
         )}
 
@@ -576,7 +637,7 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
 
         {/* MATERIAL (recursos necesarios) */}
         {tab === 'necesarios' && (
-          <MaterialList needs={needs} onToggle={toggleNeed} onChange={(next) => onUpdate(s.id, { visual_resources: next })} />
+          <MaterialList needs={needs} folders={strategyFolders(myNodes)} onToggle={toggleNeed} onChange={(next) => onUpdate(s.id, { visual_resources: next })} />
         )}
       </div>
 
@@ -596,29 +657,79 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
   );
 }
 
-function MaterialList({ needs, onToggle, onChange }) {
+function MaterialList({ needs, folders, onToggle, onChange }) {
   const [adding, setAdding] = useState(false);
   const [newLabel, setNewLabel] = useState('');
+  const [pickFor, setPickFor] = useState(null);   // índice del item al que se le elige carpeta
+  const [pasteUrl, setPasteUrl] = useState('');
   const done = needs.filter(n => n.ok).length;
   const add = () => { const l = newLabel.trim(); if (!l) return; onChange([...needs, { label: l, ok: false }]); setNewLabel(''); setAdding(false); };
+  const setFolder = (i, folder) => onChange(needs.map((n, j) => j === i ? { ...n, folder_url: folder?.web_url || folder?.url || null, folder_name: folder?.name || folder?.label || null } : n));
+  const clearFolder = (i) => onChange(needs.map((n, j) => j === i ? { ...n, folder_url: null, folder_name: null } : n));
+  const openPick = (i) => { setPickFor(p => p === i ? null : i); setPasteUrl(''); };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[11px]" style={{ color: '#6B7280' }}>Material requerido para producir</div>
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>Material requerido para producir · con su carpeta de Drive</div>
         {needs.length > 0 && <div className="text-[11px] font-bold" style={{ color: done === needs.length ? '#16A34A' : '#EAB308' }}>{done} / {needs.length} completos</div>}
       </div>
       {needs.length === 0 && <div className="text-[11.5px] italic mb-2" style={{ color: '#9CA3AF' }}>Sin material cargado. Ej: logo, fotos, video VSL.</div>}
       <div className="flex flex-col gap-0.5">
-        {needs.map((n, i) => (
-          <div key={i} className="flex items-center gap-2.5 py-2 px-1 border-b border-[#F4F5F8] last:border-b-0 group/m">
-            <button onClick={() => onToggle(i)} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer border-none"
-              style={n.ok ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #C7CCD6' }} title={n.ok ? 'Marcar faltante' : 'Marcar disponible'}>
-              {n.ok && <Check size={12} strokeWidth={3} />}
-            </button>
-            <span className="flex-1 min-w-0 text-[12.5px] truncate" style={{ color: n.ok ? '#1A1D26' : '#6B7280' }}>{n.label}</span>
-            <button className="opacity-0 group-hover/m:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center shrink-0" onClick={() => onChange(needs.filter((_, j) => j !== i))} title="Quitar"><X size={11} /></button>
-          </div>
-        ))}
+        {needs.map((n, i) => {
+          // Carpeta explícita del item; si no hay, se intenta adivinar por el nombre.
+          const explicit = n.folder_url ? { url: n.folder_url, name: n.folder_name || 'Carpeta' } : null;
+          const auto = !explicit ? matchFolderForLabel(n.label, folders || []) : null;
+          const loc = explicit || (auto ? { url: auto.web_url, name: auto.name, isAuto: true } : null);
+          return (
+            <div key={i} className="border-b border-[#F4F5F8] last:border-b-0">
+              <div className="flex items-center gap-2.5 py-2 px-1 group/m">
+                <button onClick={() => onToggle(i)} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer border-none"
+                  style={n.ok ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #C7CCD6' }} title={n.ok ? 'Marcar faltante' : 'Marcar disponible'}>
+                  {n.ok && <Check size={12} strokeWidth={3} />}
+                </button>
+                <span className="flex-1 min-w-0 text-[12.5px] truncate" style={{ color: n.ok ? '#1A1D26' : '#6B7280' }} title={n.label}>{n.label}</span>
+                {loc ? (
+                  <a href={loc.url} target="_blank" rel="noreferrer" title={loc.isAuto ? `Carpeta sugerida: ${loc.name}` : `Abrir carpeta: ${loc.name}`}
+                    className="inline-flex items-center gap-1 max-w-[150px] py-1 px-2 rounded-md no-underline shrink-0"
+                    style={loc.isAuto ? { background: '#FFF7E8', color: '#B5872E', border: '1px dashed #EAC78A' } : { background: '#FDF2DE', color: '#B5701A', border: '1px solid #F1D08B' }}>
+                    <Folder size={11} className="shrink-0" />
+                    <span className="text-[11px] font-semibold truncate">{loc.name}</span>
+                    {loc.isAuto && <span className="text-[8.5px] font-bold uppercase shrink-0">auto</span>}
+                  </a>
+                ) : (
+                  <button onClick={() => openPick(i)} title="Ubicar carpeta en Drive" className="inline-flex items-center gap-1 py-1 px-2 rounded-md border border-dashed border-[#D0D5DD] bg-white text-text3 text-[11px] font-semibold cursor-pointer hover:text-blue hover:border-blue shrink-0">
+                    <Folder size={11} /> Ubicar
+                  </button>
+                )}
+                <button onClick={() => openPick(i)} title="Cambiar carpeta" className="opacity-0 group-hover/m:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center shrink-0"><Pencil size={11} /></button>
+                <button className="opacity-0 group-hover/m:opacity-100 w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center shrink-0" onClick={() => onChange(needs.filter((_, j) => j !== i))} title="Quitar"><X size={11} /></button>
+              </div>
+              {pickFor === i && (
+                <div className="ml-7 mb-2 rounded-lg border border-[#E2E5EB] bg-white p-2 flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>Elegí la carpeta de Drive</span>
+                    {explicit && <button onClick={() => { clearFolder(i); setPickFor(null); }} className="text-[10.5px] font-semibold text-text3 hover:text-red-500 bg-transparent border-none cursor-pointer">Quitar carpeta</button>}
+                  </div>
+                  <div className="max-h-[180px] overflow-auto flex flex-col gap-0.5">
+                    {(folders || []).length === 0 && <div className="text-[11px] italic py-1" style={{ color: '#9CA3AF' }}>Aún no hay carpetas sincronizadas de Drive.</div>}
+                    {(folders || []).map(f => (
+                      <button key={f.id} onClick={() => { setFolder(i, f); setPickFor(null); }} className="flex items-center gap-2 text-left text-[12px] py-1.5 px-2 rounded-md hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer">
+                        <Folder size={13} style={{ color: '#E0922E' }} className="shrink-0" />
+                        <span className="truncate" style={{ color: '#1A1D26' }}>{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1 border-t border-[#F0F2F5] pt-1.5">
+                    <input type="url" value={pasteUrl} onChange={e => setPasteUrl(e.target.value)} placeholder="…o pegá el link de una carpeta" className="flex-1 min-w-0 text-[11.5px] py-1.5 px-2 rounded-md border border-[#E2E5EB] outline-none focus:border-blue" />
+                    <button disabled={!pasteUrl.trim()} onClick={() => { setFolder(i, { web_url: pasteUrl.trim(), name: 'Carpeta' }); setPickFor(null); }} className="text-[11px] py-1.5 px-2.5 rounded bg-blue text-white font-medium cursor-pointer border-none disabled:opacity-50">OK</button>
+                    <button onClick={() => setPickFor(null)} className="text-[11px] py-1.5 px-2 rounded bg-surface2 text-text2 cursor-pointer border-none">×</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       {adding ? (
         <div className="flex gap-1 mt-2">
