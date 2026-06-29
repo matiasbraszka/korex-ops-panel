@@ -14,7 +14,7 @@ import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
 import MetaAdAccountsManager from '../components/clientes/MetaAdAccountsManager';
-import ClientRoadmapPanel from '../components/tareas/ClientRoadmapPanel';
+import ObjetivosView from '../components/tareas/ObjetivosView';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
@@ -273,7 +273,7 @@ export default function ClientDetail({ client: c }) {
                     <div className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>{pct}% completado · {doneRoadmap}/{totalRoadmap}</div>
                   </div>
                 </div>
-                <ClientRoadmapPanel client={c} hideCompleted={true} />
+                <ObjetivosView clientId={c.id} />
               </div>
             )}
 

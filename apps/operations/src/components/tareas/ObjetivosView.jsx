@@ -31,13 +31,16 @@ function dotStyle(status, blocked) {
   return { border: '2px solid #D0D5DD', bg: 'transparent', icon: '' };
 }
 
-export default function ObjetivosView({ onlySprint = false }) {
+export default function ObjetivosView({ onlySprint = false, clientId = null }) {
   const {
     clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
     taskComments, unreadCommentTaskIds, addTaskToSprint,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+  // Modo embebido: se monta dentro de la ficha de un cliente (pestaña Tareas).
+  // Muestra SOLO ese cliente, siempre expandido y sin la cromática global.
+  const embedded = !!clientId;
 
   const [editingPhase, setEditingPhase] = useState(null); // `${clientId}::${phaseKey}`
   const [editPhaseText, setEditPhaseText] = useState('');
@@ -144,18 +147,25 @@ export default function ObjetivosView({ onlySprint = false }) {
     return true;
   };
 
-  let clientList = clients.filter(c => c.status !== 'completed');
-  if (taskClientFilter !== 'all') clientList = clientList.filter(c => c.id === taskClientFilter);
-  clientList = clientList.filter(c => {
-    // Mostrar si tiene al menos una tarea visible (respeta ocultar completadas,
-    // en el sprint, persona, etc.).
-    if (tasks.some(t => t.clientId === c.id && visibleTask(t))) return true;
-    // Sin tareas visibles: solo mostrar si NO tiene ninguna tarea pero sí
-    // objetivos personalizados para gestionar (cliente recién creado).
-    const hasAnyTask = tasks.some(t => t.clientId === c.id);
-    return !hasAnyTask && (c.customPhases || []).length > 0;
-  });
-  clientList = [...clientList].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  let clientList;
+  if (embedded) {
+    // Embebido en la ficha: siempre ESE cliente, aunque no tenga tareas todavía
+    // (para poder cargarle objetivos/tareas desde acá).
+    clientList = clients.filter(c => c.id === clientId);
+  } else {
+    clientList = clients.filter(c => c.status !== 'completed');
+    if (taskClientFilter !== 'all') clientList = clientList.filter(c => c.id === taskClientFilter);
+    clientList = clientList.filter(c => {
+      // Mostrar si tiene al menos una tarea visible (respeta ocultar completadas,
+      // en el sprint, persona, etc.).
+      if (tasks.some(t => t.clientId === c.id && visibleTask(t))) return true;
+      // Sin tareas visibles: solo mostrar si NO tiene ninguna tarea pero sí
+      // objetivos personalizados para gestionar (cliente recién creado).
+      const hasAnyTask = tasks.some(t => t.clientId === c.id);
+      return !hasAnyTask && (c.customPhases || []).length > 0;
+    });
+    clientList = [...clientList].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
 
   useEffect(() => {
     if (Object.keys(expanded).length === 0 && clientList.length) {
@@ -248,26 +258,28 @@ export default function ObjetivosView({ onlySprint = false }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 15 }}>
-        <Target size={16} stroke="#5B7CF5" strokeWidth={1.9} />
-        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}>Objetivos de {monthName}</span>
-        <span style={{ fontSize: 13, color: '#9CA3AF' }}>· {count} {count === 1 ? 'objetivo' : 'objetivos'}</span>
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6B7280', background: '#F0F2F5', borderRadius: 7, padding: '4px 10px' }}><Clock size={13} /> {grandTotalHours}h estimadas</span>
-      </div>
+      {!embedded && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 15 }}>
+          <Target size={16} stroke="#5B7CF5" strokeWidth={1.9} />
+          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}>Objetivos de {monthName}</span>
+          <span style={{ fontSize: 13, color: '#9CA3AF' }}>· {count} {count === 1 ? 'objetivo' : 'objetivos'}</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6B7280', background: '#F0F2F5', borderRadius: 7, padding: '4px 10px' }}><Clock size={13} /> {grandTotalHours}h estimadas</span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
         {objetivos.map(o => {
-          const open = !!expanded[o.c.id];
+          const open = embedded ? true : !!expanded[o.c.id];
           const w = (n) => Math.round(n / (o.total || 1) * 100) + '%';
           return (
             <div key={o.c.id}
-              onDragOver={(e) => { if (dragClientId && dragClientId !== o.c.id) { e.preventDefault(); setDragOverClientId(o.c.id); } }}
+              onDragOver={(e) => { if (!embedded && dragClientId && dragClientId !== o.c.id) { e.preventDefault(); setDragOverClientId(o.c.id); } }}
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverClientId(prev => prev === o.c.id ? null : prev); }}
-              onDrop={() => handleClientDrop(o.c)}
+              onDrop={() => { if (!embedded) handleClientDrop(o.c); }}
               style={{ background: '#fff', border: `1px solid ${dragOverClientId === o.c.id ? '#5B7CF5' : (open ? '#C7D2FE' : '#E2E5EB')}`, borderRadius: 14, boxShadow: '0 1px 2px rgba(10,22,40,.05)', overflow: 'hidden', opacity: dragClientId === o.c.id ? 0.5 : 1 }}>
-              <div onClick={() => toggle(o.c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer' }}>
-                {!restricted && (
+              <div onClick={() => { if (!embedded) toggle(o.c.id); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: embedded ? 'default' : 'pointer' }}>
+                {!restricted && !embedded && (
                   <span draggable
                     onDragStart={(e) => { e.stopPropagation(); setDragClientId(o.c.id); startDragScroll(); }}
                     onDragEnd={() => { setDragClientId(null); setDragOverClientId(null); stopDragScroll(); }}
@@ -275,7 +287,7 @@ export default function ObjetivosView({ onlySprint = false }) {
                     title="Arrastrar para ordenar la prioridad"
                     style={{ display: 'flex', color: '#C7CBD3', cursor: 'grab', flexShrink: 0 }}><GripVertical size={15} /></span>
                 )}
-                <span style={{ color: '#9CA3AF', flexShrink: 0, display: 'flex' }}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+                {!embedded && <span style={{ color: '#9CA3AF', flexShrink: 0, display: 'flex' }}>{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>}
                 {o.c.avatarUrl
                   ? <img src={o.c.avatarUrl} alt={o.c.name} style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
                   : <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: o.isInterno ? '#0D1117' : (o.c.color || '#5B7CF5'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{(o.c.name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</span>}
@@ -414,7 +426,7 @@ export default function ObjetivosView({ onlySprint = false }) {
                     ) : (
                       <span onClick={() => { setNewPhaseText(''); setAddingPhase(o.c.id); }} style={{ fontSize: 12, fontWeight: 600, color: '#5B7CF5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Plus size={13} /> Nuevo objetivo</span>
                     ))}
-                    <span onClick={() => { setSelectedId(o.c.id); setView('clients'); }} style={{ fontSize: 12, fontWeight: 500, color: '#9CA3AF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Abrir ficha del cliente <ArrowUpRight size={12} /></span>
+                    {!embedded && <span onClick={() => { setSelectedId(o.c.id); setView('clients'); }} style={{ fontSize: 12, fontWeight: 500, color: '#9CA3AF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Abrir ficha del cliente <ArrowUpRight size={12} /></span>}
                   </div>
                 </div>
               )}
@@ -423,12 +435,14 @@ export default function ObjetivosView({ onlySprint = false }) {
         })}
       </div>
 
-      <div style={{ marginTop: 20, display: 'flex', gap: 10, alignItems: 'flex-start', background: '#F5F7FF', border: '1px solid #DCE3FF', borderRadius: 11, padding: '13px 16px' }}>
-        <Info size={17} stroke="#5B7CF5" strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} />
-        <div style={{ fontSize: 12.5, color: '#3F4653', lineHeight: 1.55 }}>
-          <b style={{ color: '#1A1D26' }}>Horas estimadas:</b> cada tarea tiene un campo editable de horas. El objetivo suma las horas de sus tareas (chip junto al cliente) y arriba se muestra el total del periodo.
+      {!embedded && (
+        <div style={{ marginTop: 20, display: 'flex', gap: 10, alignItems: 'flex-start', background: '#F5F7FF', border: '1px solid #DCE3FF', borderRadius: 11, padding: '13px 16px' }}>
+          <Info size={17} stroke="#5B7CF5" strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 12.5, color: '#3F4653', lineHeight: 1.55 }}>
+            <b style={{ color: '#1A1D26' }}>Horas estimadas:</b> cada tarea tiene un campo editable de horas. El objetivo suma las horas de sus tareas (chip junto al cliente) y arriba se muestra el total del periodo.
+          </div>
         </div>
-      </div>
+      )}
 
       {openTaskId && <TaskDetailDrawer taskId={openTaskId} onClose={() => setOpenTaskId(null)} />}
     </div>
