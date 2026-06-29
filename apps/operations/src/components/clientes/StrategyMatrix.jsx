@@ -268,6 +268,55 @@ function strategyDriveItems(driveNodes, s) {
   return { entry, items };
 }
 
+// Mapa parent_id -> hijos (solo nodos de la estrategia), carpetas primero.
+function buildChildrenMap(nodes) {
+  const map = new Map();
+  for (const n of nodes) {
+    if (!n.parent_id) continue;
+    if (!map.has(n.parent_id)) map.set(n.parent_id, []);
+    map.get(n.parent_id).push(n);
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => {
+      const af = a.node_type === 'folder' ? 0 : 1, bf = b.node_type === 'folder' ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return (a.name || '').localeCompare(b.name || '', 'es');
+    });
+  }
+  return map;
+}
+
+// Fila del árbol de Drive: carpeta desplegable (chevron) o documento (hoja). Abre en Drive.
+function DriveTreeRow({ node, childrenByParent, openSet, onToggle, depth }) {
+  const cfg = NODE_ICON[node.node_type] || NODE_ICON.document;
+  const Icon = cfg.Icon;
+  const isFolder = node.node_type === 'folder';
+  const isOpen = openSet.has(node.id);
+  const kids = (childrenByParent.get(node.id) || []).filter(isDisplayableNode);
+  const pad = 4 + depth * 15;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 py-1.5 pr-1.5 rounded-md hover:bg-[#F7F8FA] group/tr" style={{ paddingLeft: pad }}>
+        {isFolder ? (
+          <button type="button" onClick={() => onToggle(node.id)} title={isOpen ? 'Plegar' : 'Desplegar'}
+            className="w-5 h-5 rounded inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer text-text3 hover:text-blue">
+            <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+          </button>
+        ) : <span className="w-5 h-5 shrink-0" />}
+        <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cfg.color + '1A' }}>
+          {isFolder && isOpen ? <FolderOpen size={13} style={{ color: cfg.color }} /> : <Icon size={13} style={{ color: cfg.color }} />}
+        </span>
+        <a href={node.web_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-[12px] font-medium no-underline truncate hover:text-blue" style={{ color: '#1A1D26' }} title={node.name}>{node.name}</a>
+        {isFolder && kids.length > 0 && <span className="text-[10px] text-text3 shrink-0">{kids.length}</span>}
+        <span className="opacity-0 group-hover/tr:opacity-100 transition-opacity"><CopyButton value={node.web_url} title="Copiar enlace" /></span>
+      </div>
+      {isFolder && isOpen && kids.length > 0 && (
+        <div>{kids.map(ch => <DriveTreeRow key={ch.id} node={ch} childrenByParent={childrenByParent} openSet={openSet} onToggle={onToggle} depth={depth + 1} />)}</div>
+      )}
+    </div>
+  );
+}
+
 // ── Página: enlaces (prod/testing/meta) ──────────────────────────────────────────
 function PageLinks({ p }) {
   const links = [];
@@ -374,11 +423,15 @@ function PageRow({ p, onUpdate, onDelete }) {
 const railColor = (active) => active ? '#2E69E0' : '#6B7280';
 const railBorder = (active) => active ? '2px solid #2E69E0' : '2px solid transparent';
 
-function StrategyResourcePanel({ s, drive, onUpdate }) {
+function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
   const [tab, setTab] = useState('archivos');
   const [linkModal, setLinkModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
   const [expanded, setExpanded] = useState({});
+  // Árbol desplegable de Drive (solo los nodos de esta estrategia).
+  const [treeOpen, setTreeOpen] = useState(new Set());
+  const toggleTree = (id) => setTreeOpen(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  const childrenByParent = buildChildrenMap((driveNodes || []).filter(n => n.strategy_id === s.id));
 
   // Archivos manuales (legacy/manual). Drive sincronizado se muestra aparte arriba.
   const legacyFolders = (Array.isArray(s.folders) && s.folders.length) ? s.folders : (s.drive_url ? [{ label: 'Drive de la estrategia', url: s.drive_url }] : []);
@@ -430,19 +483,13 @@ function StrategyResourcePanel({ s, drive, onUpdate }) {
                 <CopyButton value={drive.entry.web_url} title="Copiar enlace" />
               </div>
             )}
-            {drive.items.map(n => {
-              const cfg = NODE_ICON[n.node_type] || NODE_ICON.document;
-              const Icon = cfg.Icon;
-              return (
-                <div key={n.id} className="flex items-stretch gap-1.5">
-                  <a href={n.web_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 flex items-center gap-2.5 py-2 px-2.5 rounded-lg no-underline border border-[#E8EBF0] hover:bg-[#F7F8FA] hover:border-[#DCE3FF]">
-                    <Icon size={14} style={{ color: cfg.color }} className="shrink-0" />
-                    <span className="flex-1 min-w-0 text-[12px] truncate" style={{ color: '#1A1D26' }}>{n.name}</span>
-                  </a>
-                  <CopyButton value={n.web_url} title="Copiar enlace" />
-                </div>
-              );
-            })}
+            {drive.items.length > 0 && (
+              <div className="rounded-lg border border-[#E8EBF0] bg-white py-1 px-1">
+                {drive.items.map(n => (
+                  <DriveTreeRow key={n.id} node={n} childrenByParent={childrenByParent} openSet={treeOpen} onToggle={toggleTree} depth={0} />
+                ))}
+              </div>
+            )}
 
             {manual.length > 0 && (
               <>
@@ -674,7 +721,7 @@ function StrategyCard({ s, pages, driveNodes }) {
           </div>
 
           {/* Recursos de la estrategia */}
-          <StrategyResourcePanel s={s} drive={drive} onUpdate={updateStrategy} />
+          <StrategyResourcePanel s={s} drive={drive} driveNodes={driveNodes} onUpdate={updateStrategy} />
         </div>
       )}
     </div>
