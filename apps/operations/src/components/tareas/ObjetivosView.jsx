@@ -204,14 +204,14 @@ export default function ObjetivosView({ onlySprint = false }) {
     const byPhase = new Map();
     cTasks.forEach(t => { const k = phaseMap[t.phase] ? t.phase : 'otras'; if (!byPhase.has(k)) byPhase.set(k, []); byPhase.get(k).push(t); });
     const order = [...Object.keys(phaseMap), ...(byPhase.has('otras') ? ['otras'] : [])];
-    // Orden automático dentro de cada objetivo: primero por PRIORIDAD
-    // (súper-alta → alta → media → baja → sin prioridad) y las BLOQUEADAS
-    // (esperan otra tarea) siempre al fondo. La posición solo desempata.
-    const blockedIds = new Set(cTasks.filter(t => t.status !== 'done' && blockingTasks(t, allClientTasks).length > 0).map(t => t.id));
+    // Orden automático dentro de cada objetivo: 100% por PRIORIDAD
+    // (súper-alta → alta → media → baja → sin prioridad). Las tareas que NO
+    // están en el sprint activo van siempre al fondo. La posición solo desempata.
+    const inSprint = (t) => !!activeSprint && t.sprintId === activeSprint.id;
     const prioRank = (t) => (TASK_PRIORITY[t.priority]?.rank ?? 5);
     const taskSort = (a, b) => {
-      const ba = blockedIds.has(a.id) ? 1 : 0, bb = blockedIds.has(b.id) ? 1 : 0;
-      if (ba !== bb) return ba - bb;
+      const sa = inSprint(a) ? 0 : 1, sb = inSprint(b) ? 0 : 1;
+      if (sa !== sb) return sa - sb;
       const ra = prioRank(a), rb = prioRank(b);
       if (ra !== rb) return ra - rb;
       return (a.position ?? 0) - (b.position ?? 0);
