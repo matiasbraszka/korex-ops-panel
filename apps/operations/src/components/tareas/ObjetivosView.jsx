@@ -339,7 +339,9 @@ export default function ObjetivosView({ onlySprint = false }) {
                               onDragStart={(e) => { e.stopPropagation(); setDraggedTaskId(t.id); startDragScroll(); }}
                               onDragEnd={() => { setDraggedTaskId(null); stopDragScroll(); }}
                               onClick={() => { if (!editing) setOpenTaskId(t.id); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
+                              {/* Agarre para reordenar: arrastrá la tarea para cambiar el orden (o moverla a otro objetivo). */}
+                              <span onClick={(e) => e.stopPropagation()} title="Arrastrar para reordenar" style={{ color: '#C7CBD3', cursor: 'grab', flexShrink: 0, display: 'flex' }}><GripVertical size={14} /></span>
                               <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={blockers.length > 0 ? `Bloqueada por: ${blockers.map(b => b.title).join(', ')}` : (t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada')} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
                               {editing ? (
                                 <input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
