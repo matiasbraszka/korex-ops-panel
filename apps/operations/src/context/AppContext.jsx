@@ -159,6 +159,14 @@ export function AppProvider({ children }) {
   // durante unos segundos, para evitar que un fetch viejo revierta un cambio
   // optimista (ej: agregar al sprint y que "se desagregue" un instante).
   const recentWriteRef = useRef(new Map());
+  // Anti-bucle: último payload escrito por tarea (id -> {hash, ts}). Si llega un
+  // guardado IDÉNTICO a la misma tarea en <4s lo coalescemos (no lo mandamos).
+  // Un re-render en loop manda siempre el mismo payload → se corta solo; una
+  // edición real cambia el payload (hash distinto) → sí se guarda.
+  const lastTaskWriteRef = useRef(new Map());
+  // El backfill de started_date al cargar corre UNA sola vez por sesión, para
+  // que un re-login/re-entrada no re-dispare decenas de writes cada vez.
+  const startedDateBackfilledRef = useRef(false);
   const teamMembersRef = useRef([]);
   teamMembersRef.current = teamMembers;
   const taskCommentsRef = useRef([]);
@@ -244,6 +252,39 @@ export function AppProvider({ children }) {
   }, []);
 
   const dbSaveTask = useCallback(async (t) => {
+    const payload = {
+      id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
+      priority: t.priority, status: t.status, notes: t.notes,
+      description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
+      started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
+      phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
+      template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+      days_from_unblock: t.daysFromUnblock != null ? t.daysFromUnblock : null,
+      due_date: t.dueDate || null,
+      accumulated_days: t.accumulatedDays || 0,
+      timer_started_at: t.timerStartedAt || null,
+      enabled_date: t.enabledDate || null,
+      position: t.position ?? 0,
+      sprint_id: t.sprintId || null,
+      sprint_priority: t.sprintPriority != null ? t.sprintPriority : null,
+      estimated_hours: t.estimatedHours != null ? t.estimatedHours : null,
+      department: t.department || null,
+      checklist: Array.isArray(t.checklist) ? t.checklist : [],
+      definition_of_done: t.definitionOfDone || null,
+      acceptance_criteria: Array.isArray(t.acceptanceCriteria) ? t.acceptanceCriteria : [],
+      reviewer: t.reviewer || null,
+      validated_by: t.validatedBy || null,
+      validated_at: t.validatedAt || null,
+      sprint_history: Array.isArray(t.sprintHistory) ? t.sprintHistory : [],
+      last_actor_id: currentUserIdRef.current,
+    };
+    // Anti-bucle: si este MISMO payload ya se mandó para esta tarea hace <4s, lo
+    // coalescemos (no reenviamos). Corta en seco cualquier re-render en loop sin
+    // afectar ediciones reales (que cambian el payload → hash distinto).
+    const hash = JSON.stringify(payload);
+    const last = lastTaskWriteRef.current.get(t.id);
+    if (last && last.hash === hash && Date.now() - last.ts < 4000) return;
+    lastTaskWriteRef.current.set(t.id, { hash, ts: Date.now() });
     // Guardamos QUÉ escribimos (no solo cuándo): así el poll sabe distinguir un
     // remoto "viejo" (todavía no propagó nuestro cambio) de uno ya al día. Evita
     // el parpadeo "reaparece y vuelve a desaparecer" al completar/mover tareas.
@@ -263,32 +304,7 @@ export function AppProvider({ children }) {
     return sbFetch('tasks', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-      body: JSON.stringify({
-        id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
-        priority: t.priority, status: t.status, notes: t.notes,
-        description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
-        started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
-        phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
-        template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
-        days_from_unblock: t.daysFromUnblock != null ? t.daysFromUnblock : null,
-        due_date: t.dueDate || null,
-        accumulated_days: t.accumulatedDays || 0,
-        timer_started_at: t.timerStartedAt || null,
-        enabled_date: t.enabledDate || null,
-        position: t.position ?? 0,
-        sprint_id: t.sprintId || null,
-        sprint_priority: t.sprintPriority != null ? t.sprintPriority : null,
-        estimated_hours: t.estimatedHours != null ? t.estimatedHours : null,
-        department: t.department || null,
-        checklist: Array.isArray(t.checklist) ? t.checklist : [],
-        definition_of_done: t.definitionOfDone || null,
-        acceptance_criteria: Array.isArray(t.acceptanceCriteria) ? t.acceptanceCriteria : [],
-        reviewer: t.reviewer || null,
-        validated_by: t.validatedBy || null,
-        validated_at: t.validatedAt || null,
-        sprint_history: Array.isArray(t.sprintHistory) ? t.sprintHistory : [],
-        last_actor_id: currentUserIdRef.current,
-      })
+      body: JSON.stringify(payload),
     });
   }, []);
 
@@ -2116,28 +2132,32 @@ export function AppProvider({ children }) {
         localStorage.setItem('korex_v6', JSON.stringify({ clients: injected, tasks: mappedTasks }));
         dbReady.current = true;
 
-        // Persistir en Supabase las tareas que cambiaron por el backfill
-        mappedTasks.forEach((t, i) => {
-          if (t !== rawMappedTasks[i]) {
-            sbFetch('tasks', {
-              method: 'POST',
-              headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-              body: JSON.stringify({
-                id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
-                priority: t.priority, status: t.status, notes: t.notes,
-                description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
-                started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
-                phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
-                template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
-                due_date: t.dueDate || null,
-                accumulated_days: t.accumulatedDays || 0,
-                timer_started_at: t.timerStartedAt || null,
-                enabled_date: t.enabledDate || null,
-                position: t.position ?? 0
-              })
-            });
-          }
-        });
+        // Persistir en Supabase las tareas que cambiaron por el backfill.
+        // Corre UNA sola vez por sesión (anti-bucle ante re-login/re-entradas).
+        if (!startedDateBackfilledRef.current) {
+          startedDateBackfilledRef.current = true;
+          mappedTasks.forEach((t, i) => {
+            if (t !== rawMappedTasks[i]) {
+              sbFetch('tasks', {
+                method: 'POST',
+                headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+                body: JSON.stringify({
+                  id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
+                  priority: t.priority, status: t.status, notes: t.notes,
+                  description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
+                  started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
+                  phase: t.phase || null, depends_on: t.dependsOn || null, is_roadmap_task: t.isRoadmapTask || false,
+                  template_id: t.templateId || null, estimated_days: t.estimatedDays || null, is_client_task: t.isClientTask || false,
+                  due_date: t.dueDate || null,
+                  accumulated_days: t.accumulatedDays || 0,
+                  timer_started_at: t.timerStartedAt || null,
+                  enabled_date: t.enabledDate || null,
+                  position: t.position ?? 0
+                })
+              });
+            }
+          });
+        }
         console.log('\u2713 Loaded from Supabase:', injected.length, 'clients,', mappedTasks.length, 'tasks');
         return true;
       }

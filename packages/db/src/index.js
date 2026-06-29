@@ -15,6 +15,13 @@ export const supabase = envMissing
   ? createClient('https://invalid.invalid', 'invalid')
   : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Circuit-breaker: si el backend corta por cuota/plan (402) o rate-limit (429),
+// pausamos TODOS los requests REST un rato. Así un bucle accidental no martilla
+// la API cientos de veces por segundo ni quema más cuota; se reanuda solo tras
+// el cooldown. Es la red de seguridad ante cualquier loop, venga de donde venga.
+let restPausedUntil = 0;
+const REST_PAUSE_MS = 60000;
+
 // Low-level REST fetch para PostgREST. Usa el JWT del usuario autenticado
 // cuando hay sesión (para que RLS vea auth.uid() correctamente); cae a
 // la anon key solamente si no hay sesión.
@@ -23,6 +30,16 @@ export async function sbFetch(path, opts = {}) {
   // el body de la respuesta. Por default sigue siendo "log + return null"
   // para mantener el comportamiento histórico de los callers existentes.
   const { headers: extraH, throwOnError, ...restOpts } = opts;
+  // Si estamos en pausa por cuota/limite, cortamos sin tocar la red.
+  if (Date.now() < restPausedUntil) {
+    if (throwOnError) {
+      const err = new Error('REST en pausa por cuota/límite del plan');
+      err.status = 402;
+      err.paused = true;
+      throw err;
+    }
+    return null;
+  }
   const { data: { session } } = await supabase.auth.getSession();
   const bearer = session?.access_token || SUPABASE_ANON_KEY;
   const headers = {
@@ -33,6 +50,11 @@ export async function sbFetch(path, opts = {}) {
     ...(extraH || {}),
   };
   const r = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers, ...restOpts });
+  // 402 = cuota/plan agotado · 429 = demasiados requests. Activamos la pausa.
+  if (r.status === 402 || r.status === 429) {
+    restPausedUntil = Date.now() + REST_PAUSE_MS;
+    console.warn('SB ' + r.status + ': pausando requests REST ' + (REST_PAUSE_MS / 1000) + 's (cuota/límite del plan).');
+  }
   if (!r.ok && r.status !== 406) {
     const body = await r.text();
     console.warn('SB error:', r.status, body);
