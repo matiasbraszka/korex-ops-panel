@@ -1,6 +1,6 @@
 // Pestaña "Funnels": páginas del cliente con variantes de avatar, tracking
 // (pixel/clarity/eventos) y material a completar. Diseño "Recursos y Carpetas".
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Plus, X, ExternalLink, Copy, ChevronDown, Users, ArrowRight, Megaphone,
@@ -80,15 +80,25 @@ function TrackingEditor({ value, onChange }) {
 
 function StatusPill({ status, onChange }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
   const cfg = FUNNEL_STATUS[status] || FUNNEL_STATUS.activa;
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ left: r.left, top: r.bottom + 4 });
+    }
+    setOpen(o => !o);
+  };
   return (
-    <span className="relative inline-block" onClick={e => e.stopPropagation()}>
-      <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[11px] font-bold border-none cursor-pointer" style={{ background: cfg.bg, color: cfg.color }}>
+    <span className="inline-block" onClick={e => e.stopPropagation()}>
+      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[11px] font-bold border-none cursor-pointer" style={{ background: cfg.bg, color: cfg.color }}>
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.color }} />{cfg.label}<ChevronDown size={10} />
       </button>
-      {open && (<>
-        <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-        <div className="absolute left-0 top-full mt-1 bg-white border border-[#E2E5EB] rounded-lg shadow-md z-20 min-w-[130px] overflow-hidden">
+      {open && pos && (<>
+        {/* menú con position:fixed para que no lo corte el borde de la tabla */}
+        <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+        <div className="fixed bg-white border border-[#E2E5EB] rounded-lg shadow-lg z-[61] min-w-[130px] overflow-hidden py-0.5" style={{ left: pos.left, top: pos.top }}>
           {STATUS_ORDER.map(k => { const v = FUNNEL_STATUS[k]; return (
             <button key={k} onClick={() => { onChange(k); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-blue-bg2 bg-transparent border-none cursor-pointer font-medium" style={{ color: v.color }}><span className="w-2 h-2 rounded-full" style={{ background: v.dot }} />{v.label}</button>
           ); })}

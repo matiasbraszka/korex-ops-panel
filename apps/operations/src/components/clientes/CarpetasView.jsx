@@ -32,12 +32,10 @@ function TreeRow({ row }) {
           </span>
         )}
       </button>
-      {!row.locked && (
-        <button onClick={row.onPin} title={row.pinned ? 'Quitar de fijados' : 'Fijar arriba'}
-          className="w-[26px] h-[26px] rounded-md inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer hover:bg-[#EEF0F4]" style={{ color: row.pinned ? '#E0A93B' : '#C2C7D0' }}>
-          <Pin size={13} fill={row.pinned ? '#FBE6B0' : 'none'} />
-        </button>
-      )}
+      <button onClick={row.onPin} title={row.pinned ? 'Quitar de fijados' : 'Fijar arriba'}
+        className="w-[26px] h-[26px] rounded-md inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer hover:bg-[#EEF0F4]" style={{ color: row.pinned ? '#E0A93B' : '#C2C7D0' }}>
+        <Pin size={13} fill={row.pinned ? '#FBE6B0' : 'none'} />
+      </button>
       <button onClick={row.onOpen} title="Abrir en Drive" className="w-[26px] h-[26px] rounded-md inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer text-[#B0B6C0] hover:bg-[#EEF2FF] hover:text-[#2E69E0]">
         <ExternalLink size={13} />
       </button>
@@ -66,10 +64,20 @@ function StrategyBlock({ s, nodes, pages, q }) {
 
   const pinnedIds = Array.isArray(s.pinned_nodes) ? s.pinned_nodes : [];
   const pinnedSet = new Set(pinnedIds);
-  const isPinned = (n) => isAutoPinned(n) || pinnedSet.has(n.id);
+  // Nodos auto-fijados (DEL/onboarding) que el usuario desfijó a mano.
+  const unpinnedIds = Array.isArray(s.unpinned_nodes) ? s.unpinned_nodes : [];
+  const unpinnedSet = new Set(unpinnedIds);
+  const isPinned = (n) => (isAutoPinned(n) && !unpinnedSet.has(n.id)) || pinnedSet.has(n.id);
   const togglePin = (n) => {
-    const next = pinnedSet.has(n.id) ? pinnedIds.filter(x => x !== n.id) : [...pinnedIds, n.id];
-    updateStrategy(s.id, { pinned_nodes: next });
+    if (isPinned(n)) {
+      // Desfijar: si es fijado a mano lo saco de pinned; si es auto (DEL/onb) lo marco como desfijado.
+      if (pinnedSet.has(n.id)) updateStrategy(s.id, { pinned_nodes: pinnedIds.filter(x => x !== n.id) });
+      else updateStrategy(s.id, { unpinned_nodes: [...unpinnedIds, n.id] });
+    } else {
+      // Fijar: si es auto y estaba desfijado, lo restauro; si no, lo agrego a mano.
+      if (isAutoPinned(n) && unpinnedSet.has(n.id)) updateStrategy(s.id, { unpinned_nodes: unpinnedIds.filter(x => x !== n.id) });
+      else updateStrategy(s.id, { pinned_nodes: [...pinnedIds, n.id] });
+    }
   };
   // Orden de fijados: DEL primero, luego onboarding, luego lo fijado a mano.
   const pinRank = (n) => isDelDoc(n) ? 0 : isOnboardingDoc(n) ? 1 : 2;
