@@ -22,6 +22,9 @@ const AVATAR_STATUS = {
 };
 const AVATAR_OPTS = ['En grabación', 'En edición', 'Editados'];
 const DEFAULT_NEEDS = ['Imágenes de autoridad', 'Branding / logo', 'Imágenes de empresa o producto', 'Testimonios'];
+// Eventos de conversión estándar: se pre-cargan en cada funnel nuevo; los demás son personalizados.
+const STD_EVENTS = ['Visitas', 'Registro lead', 'Thank you page'];
+const stdEvents = () => STD_EVENTS.map(n => ({ id: rid('ev'), name: n, purpose: '', code: '' }));
 const inputCls = 'w-full py-2.5 px-3 border border-[#E2E5EB] rounded-[9px] font-sans text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue';
 const rid = (p) => p + Math.random().toString(36).slice(2, 8);
 
@@ -59,6 +62,14 @@ function TrackingEditor({ value, onChange }) {
           <span className="text-[12px] font-bold text-[#1A1D26]">Eventos de conversión <span className="text-[11.5px] text-[#9CA3AF] font-normal">· {events.length}</span></span>
           <button onClick={() => onChange({ ...value, events: [...events, { id: rid('ev'), name: '', purpose: '', code: '' }] })} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#EEF2FF]"><Plus size={12} />Agregar evento</button>
         </div>
+        {STD_EVENTS.some(n => !events.some(e => (e.name || '').trim().toLowerCase() === n.toLowerCase())) && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+            <span className="text-[10.5px] font-semibold text-[#9CA3AF]">Estándar:</span>
+            {STD_EVENTS.filter(n => !events.some(e => (e.name || '').trim().toLowerCase() === n.toLowerCase())).map(n => (
+              <button key={n} onClick={() => onChange({ ...value, events: [...events, { id: rid('ev'), name: n, purpose: '', code: '' }] })} className="inline-flex items-center gap-1 py-1 px-2 border border-dashed border-[#C9D6FF] rounded-full bg-white text-[#2E69E0] text-[11px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF]"><Plus size={10} />{n}</button>
+            ))}
+          </div>
+        )}
         {events.length === 0
           ? <div className="py-3.5 px-4 text-center text-[12.5px] text-[#6B7280] border border-dashed border-[#E2E5EB] rounded-[11px] bg-[#FBFCFE]">Aún no hay eventos. Definí cada conversión con su nombre, para qué es y su código.</div>
           : <div className="flex flex-col gap-2.5">
@@ -270,7 +281,7 @@ export default function FunnelsView({ clientId }) {
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
   const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
-  const blankForm = () => ({ name: '', strategy_id: myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: [] });
+  const blankForm = () => ({ name: '', strategy_id: myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
   const [form, setForm] = useState(blankForm);
 
   const filtered = funnels.filter(f => filter === 'todos' ? true : filter === 'activos' ? f.status === 'activa' : (Array.isArray(f.visual_resources) ? f.visual_resources.filter(n => !n.done).length : 0) > 0);
