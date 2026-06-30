@@ -98,6 +98,19 @@ function StatusPill({ status, onChange }) {
   );
 }
 
+// Chip de enlace: al clickear COPIA la URL (no abre la página).
+function CopyLinkChip({ short, url, bg, color, border }) {
+  const [done, setDone] = useState(false);
+  return (
+    <span onClick={(e) => { e.stopPropagation(); copyText(url); setDone(true); setTimeout(() => setDone(false), 1200); }}
+      title={`Copiar ${short}: ${url}`}
+      className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md text-[11px] font-semibold cursor-pointer"
+      style={{ background: bg, color, border: `1px solid ${border}` }}>
+      {short}{done ? <Check size={10} strokeWidth={3} /> : <Copy size={10} />}
+    </span>
+  );
+}
+
 const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
 
 function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
@@ -146,7 +159,7 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
         </div>
         <div><StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} /></div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {links.map((l, i) => <span key={i} onClick={(e) => { e.stopPropagation(); openUrl(l.url); }} className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md text-[11px] font-semibold cursor-pointer" style={{ background: l.bg, color: l.color, border: `1px solid ${l.border}` }}>{l.short}<ExternalLink size={10} /></span>)}
+          {links.map((l, i) => <CopyLinkChip key={i} {...l} />)}
           {missingLinks.map((m, i) => <span key={'m' + i} className="inline-flex items-center py-1 px-2.5 border border-dashed border-[#D7DBE2] rounded-md bg-white text-[#AEB4BF] text-[11px] font-semibold">{m}</span>)}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -158,6 +171,19 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
 
       {open && (
         <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
+          {/* Enlaces del funnel (editables) */}
+          <div className="border border-[#ECEEF2] rounded-xl bg-white p-3 mb-3.5">
+            <div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[#9CA3AF] mb-2.5">Enlaces del funnel</div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+              {[['prod_url', 'Producción', '#2E69E0'], ['testing_url', 'Testing', '#9CA3AF'], ['ads_url', 'Publicidad', '#7C3AED']].map(([k, lbl, col]) => (
+                <div key={k}>
+                  <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold" style={{ color: col }}><span className="w-2 h-2 rounded-[3px]" style={{ background: col }} />{lbl}</div>
+                  <input defaultValue={f[k] || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f[k] || '')) onUpdate(f.id, { [k]: v || null }); }} placeholder="https://…" className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                </div>
+              ))}
+            </div>
+            <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">Pegá o editá la URL y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
+          </div>
           <div className="grid gap-3.5 items-start" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
             {/* Avatares */}
             <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
