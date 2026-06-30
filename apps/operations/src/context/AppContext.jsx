@@ -1247,15 +1247,16 @@ export function AppProvider({ children }) {
 
   const updateStrategy = useCallback(async (id, fields) => {
     const patch = { ...fields };
+    // Optimista primero (pin/desfijar y demás cambios se ven al instante).
+    setStrategies(prev => prev.map(s => s.id === id
+      ? { ...s, ...patch, updated_at: new Date().toISOString() }
+      : s));
     await sbFetch('strategies?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify(patch),
       throwOnError: true,
     });
-    setStrategies(prev => prev.map(s => s.id === id
-      ? { ...s, ...patch, updated_at: new Date().toISOString() }
-      : s));
   }, []);
 
   const deleteStrategy = useCallback(async (id) => {
@@ -1296,13 +1297,15 @@ export function AppProvider({ children }) {
 
   const updateStrategyPage = useCallback(async (id, fields) => {
     const patch = { ...fields, updated_at: new Date().toISOString() };
+    // Optimista PRIMERO: la pantalla refleja el cambio al instante (evita que se
+    // "desordene" lo que se escribe mientras espera la respuesta de la red).
+    setStrategyPages(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
     await sbFetch('strategy_pages?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify(patch),
       throwOnError: true,
     });
-    setStrategyPages(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
   }, []);
 
   const deleteStrategyPage = useCallback(async (id) => {

@@ -218,18 +218,18 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
                   <div key={av.id} className="rounded-[9px] p-2 hover:bg-[#FAFBFC]">
                     <div className="flex items-center gap-2.5">
                       <span className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-lg bg-[#EEF0F4] text-[#4B5563] text-[13px] font-bold shrink-0">{i + 1}</span>
-                      <input value={av.name} onChange={e => setAvatar(av.id, { name: e.target.value })} placeholder="Nombre del avatar" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] font-semibold text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                      <input key={av.id + 'n'} defaultValue={av.name} onBlur={e => { if (e.target.value !== (av.name || '')) setAvatar(av.id, { name: e.target.value }); }} placeholder="Nombre del avatar" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] font-semibold text-[#1A1D26] bg-white outline-none focus:border-blue" />
                       <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[10.5px] font-bold whitespace-nowrap shrink-0" style={{ background: ast.bg, color: ast.color }}><span className="w-[5px] h-[5px] rounded-full" style={{ background: ast.color }} />{av.status}</span>
                       <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#B0B6C0] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={12} /></button>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1.5 pl-[40px] flex-wrap">
-                      <input value={av.audience} onChange={e => setAvatar(av.id, { audience: e.target.value })} placeholder="¿A quién se le publicita?" className="flex-1 min-w-[140px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                      <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="¿A quién se le publicita?" className="flex-1 min-w-[140px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
                       {AVATAR_OPTS.map(o => { const sel = av.status === o; const c = AVATAR_STATUS[o]; return (
                         <button key={o} onClick={() => setAvatar(av.id, { status: o })} className="inline-flex items-center gap-1 py-1 px-2 rounded-full text-[10.5px] font-semibold cursor-pointer" style={{ background: sel ? c.bg : '#fff', border: `1px solid ${sel ? c.color : '#E8EBF0'}`, color: sel ? c.color : '#6B7280' }}>{o}</button>
                       ); })}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <input value={av.ad_url || ''} onChange={e => setAvatar(av.id, { ad_url: e.target.value })} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                      <input key={av.id + 'u'} defaultValue={av.ad_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.ad_url || '')) setAvatar(av.id, { ad_url: v }); }} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
                       {av.ad_url
                         ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
                            <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
