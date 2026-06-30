@@ -128,6 +128,8 @@ function StrategyBlock({ s, nodes, pages, q }) {
 
   const num = (s.position ?? 0) + 1;
   const created = s.start_date ? fmtDate(s.start_date) : '';
+  // Nombre sin el prefijo "Estrategia #N |" (algunas estrategias viejas lo traen embebido).
+  const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
 
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden">
@@ -135,7 +137,7 @@ function StrategyBlock({ s, nodes, pages, q }) {
         <ChevronRight size={15} className="shrink-0 text-[#7C93C8] transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }} strokeWidth={2.2} />
         <span className="inline-flex items-center justify-center w-[22px] h-[22px] text-[#2E69E0] shrink-0"><Folder size={18} fill="#DCE6FB" strokeWidth={1.7} /></span>
         <span className="flex-1 min-w-0 text-[14px] font-bold truncate" style={{ color: '#1A1D26' }}>
-          Estrategia #{num}{s.name ? <> <span className="text-[#B9C2D6] font-medium">|</span> {s.name}</> : null}{created ? <> <span className="text-[#B9C2D6] font-medium">|</span> {created}</> : null}
+          Estrategia #{num}{cleanName ? <> <span className="text-[#B9C2D6] font-medium">|</span> {cleanName}</> : null}{created ? <> <span className="text-[#B9C2D6] font-medium">|</span> {created}</> : null}
         </span>
         <span className="text-[12px] text-[#8FA0C0] font-bold shrink-0 bg-[#E7EDFB] rounded-lg py-0.5 px-2.5">{topLevel.length}</span>
         {entryNode?.web_url && (
@@ -192,7 +194,12 @@ export default function CarpetasView({ client }) {
   };
   useEffect(() => { let alive = true; setLoading(true); (async () => { await fetchNodes(); if (!alive) return; })(); return () => { alive = false; }; /* eslint-disable-next-line */ }, [c.id]);
 
-  const myStrategies = (strategies || []).filter(s => s.client_id === c.id).sort((a, b) => (a.position || 0) - (b.position || 0));
+  // Solo estrategias respaldadas por Drive: con carpeta vinculada o con archivos
+  // sincronizados. Las huérfanas (sin carpeta ni archivos) no se muestran acá.
+  const stratIdsWithNodes = new Set(nodes.map(n => n.strategy_id).filter(Boolean));
+  const myStrategies = (strategies || [])
+    .filter(s => s.client_id === c.id && (s.drive_folder_id || stratIdsWithNodes.has(s.id)))
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
   const pageIds = new Set(myStrategies.map(s => s.id));
   const pagesByStrategy = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid).sort((a, b) => (a.position || 0) - (b.position || 0));
 
