@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { fmtDate } from '../../utils/helpers';
 import {
-  CopyButton, NODE_ICON, isDisplayableNode, isDelDoc, buildChildrenMap,
+  CopyButton, NODE_ICON, isDisplayableNode, isDelDoc, isOnboardingDoc, isAutoPinned, pinBadge, buildChildrenMap,
   AccessFormModal, LinkFormModal, openUrl, CredRow,
 } from './recursosShared';
 
@@ -28,11 +28,11 @@ function TreeRow({ row }) {
         <span className="flex-1 min-w-0 text-[12.5px] truncate" style={{ fontWeight: row.node_type === 'folder' ? 600 : 400, color: '#1A1D26' }} title={row.name}>{row.name}</span>
         {row.pinned && (
           <span className="inline-flex items-center gap-1 py-[1px] px-[7px] rounded-full text-[10px] font-bold shrink-0" style={{ background: '#FFF4D6', color: '#B27D0B' }}>
-            <Pin size={10} fill="currentColor" stroke="none" />{row.isDel ? 'DEL' : 'Fijado'}
+            <Pin size={10} fill="currentColor" stroke="none" />{row.badge}
           </span>
         )}
       </button>
-      {!row.isDel && (
+      {!row.locked && (
         <button onClick={row.onPin} title={row.pinned ? 'Quitar de fijados' : 'Fijar arriba'}
           className="w-[26px] h-[26px] rounded-md inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer hover:bg-[#EEF0F4]" style={{ color: row.pinned ? '#E0A93B' : '#C2C7D0' }}>
           <Pin size={13} fill={row.pinned ? '#FBE6B0' : 'none'} />
@@ -66,22 +66,24 @@ function StrategyBlock({ s, nodes, pages, q }) {
 
   const pinnedIds = Array.isArray(s.pinned_nodes) ? s.pinned_nodes : [];
   const pinnedSet = new Set(pinnedIds);
-  const isPinned = (n) => isDelDoc(n) || pinnedSet.has(n.id);
+  const isPinned = (n) => isAutoPinned(n) || pinnedSet.has(n.id);
   const togglePin = (n) => {
     const next = pinnedSet.has(n.id) ? pinnedIds.filter(x => x !== n.id) : [...pinnedIds, n.id];
     updateStrategy(s.id, { pinned_nodes: next });
   };
+  // Orden de fijados: DEL primero, luego onboarding, luego lo fijado a mano.
+  const pinRank = (n) => isDelDoc(n) ? 0 : isOnboardingDoc(n) ? 1 : 2;
 
   const query = (q || '').trim().toLowerCase();
 
-  // Acceso rápido: el DEL y lo fijado se muestran SIEMPRE arriba (aunque estén
-  // anidados dentro de una carpeta cerrada).
+  // Acceso rápido: DEL, onboarding y lo fijado se muestran SIEMPRE arriba (aunque
+  // estén anidados dentro de una carpeta cerrada).
   const pinnedFlat = myNodes
     .filter(n => isDisplayableNode(n) && n.id !== entry && isPinned(n))
-    .sort((a, b) => (isDelDoc(b) ? 1 : 0) - (isDelDoc(a) ? 1 : 0));
+    .sort((a, b) => pinRank(a) - pinRank(b));
   const pinnedRow = (n) => ({
     key: 'pin-' + n.id, name: n.name, node_type: n.node_type, indent: 12,
-    expandable: false, open: false, pinned: true, isDel: isDelDoc(n),
+    expandable: false, open: false, pinned: true, badge: pinBadge(n), locked: isAutoPinned(n),
     onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n),
   });
 
@@ -97,7 +99,7 @@ function StrategyBlock({ s, nodes, pages, q }) {
       rows.push({
         key: n.id, name: n.name, node_type: n.node_type,
         indent: 12 + depth * 22, expandable, open: opened,
-        pinned: isPinned(n), isDel: isDelDoc(n),
+        pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n),
         onMain: expandable ? () => toggleFolder(n.id) : () => openUrl(n.web_url),
         onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n),
       });
@@ -108,7 +110,7 @@ function StrategyBlock({ s, nodes, pages, q }) {
   const searchWalk = (parentId) => {
     for (const n of (childrenByParent.get(parentId) || []).filter(isDisplayableNode)) {
       if ((n.name || '').toLowerCase().includes(query)) {
-        searchRows.push({ key: n.id, name: n.name, node_type: n.node_type, indent: 12, expandable: false, open: false, pinned: isPinned(n), isDel: isDelDoc(n), onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n) });
+        searchRows.push({ key: n.id, name: n.name, node_type: n.node_type, indent: 12, expandable: false, open: false, pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n), onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n) });
       }
       searchWalk(n.id);
     }

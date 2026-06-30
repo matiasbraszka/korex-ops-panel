@@ -48,6 +48,16 @@ export function isDelDoc(n) {
   return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
 }
 
+// El doc de onboarding del cliente (lo crea el Apps Script: "Onboarding Korex y …").
+export function isOnboardingDoc(n) {
+  if (!n || n.node_type === 'folder') return false;
+  return /\bonboarding\b/i.test(n.name || '');
+}
+
+// ¿Se fija solo? (DEL u onboarding). No se puede des-fijar a mano.
+export function isAutoPinned(n) { return isDelDoc(n) || isOnboardingDoc(n); }
+export function pinBadge(n) { return isDelDoc(n) ? 'DEL' : isOnboardingDoc(n) ? 'Onboarding' : 'Fijado'; }
+
 // Mapa parent_id -> hijos (carpetas primero, alfabético).
 export function buildChildrenMap(nodes) {
   const map = new Map();
