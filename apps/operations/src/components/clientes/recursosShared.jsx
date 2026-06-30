@@ -77,7 +77,7 @@ export function buildChildrenMap(nodes) {
 }
 
 // ── Modal: acceso (credenciales) ─────────────────────────────────────────────────
-export function AccessFormModal({ open, onClose, initial, onSave }) {
+export function AccessFormModal({ open, onClose, initial, onSave, onDelete }) {
   const isEdit = !!initial;
   const [form, setForm] = useState({ label: '', url: '', email: '', password: '', notes: '' });
   if (open && form._k !== (initial?.label || 'new')) {
@@ -96,9 +96,14 @@ export function AccessFormModal({ open, onClose, initial, onSave }) {
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? `Editar acceso · ${initial?.label}` : 'Nuevo acceso'} maxWidth={500}
       footer={
-        <div className="flex justify-end gap-2 w-full">
-          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
-          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.label.trim()} onClick={save}>{isEdit ? 'Guardar' : 'Agregar acceso'}</button>
+        <div className="flex items-center justify-between gap-2 w-full">
+          {isEdit && onDelete
+            ? <button className="text-[12.5px] py-2 px-3 rounded-lg border border-[#F3C9C9] bg-white text-[#DC2626] font-semibold cursor-pointer hover:bg-[#FEF2F2]" onClick={() => { onDelete(); onClose(); }}>Borrar</button>
+            : <span />}
+          <div className="flex gap-2">
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.label.trim()} onClick={save}>{isEdit ? 'Guardar' : 'Agregar acceso'}</button>
+          </div>
         </div>
       }>
       <div className="grid gap-3 p-1">
@@ -119,7 +124,7 @@ export function AccessFormModal({ open, onClose, initial, onSave }) {
 }
 
 // ── Modal: enlace simple (general del cliente) ───────────────────────────────────
-export function LinkFormModal({ open, onClose, initial, onSave }) {
+export function LinkFormModal({ open, onClose, initial, onSave, onDelete }) {
   const isEdit = !!initial;
   const [form, setForm] = useState({ label: '', url: '' });
   const k = initial?.url || 'new';
@@ -133,9 +138,14 @@ export function LinkFormModal({ open, onClose, initial, onSave }) {
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? `Editar · ${initial?.label}` : 'Nuevo enlace'} maxWidth={500}
       footer={
-        <div className="flex justify-end gap-2 w-full">
-          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
-          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.url.trim()} onClick={save}>{isEdit ? 'Guardar' : 'Agregar'}</button>
+        <div className="flex items-center justify-between gap-2 w-full">
+          {isEdit && onDelete
+            ? <button className="text-[12.5px] py-2 px-3 rounded-lg border border-[#F3C9C9] bg-white text-[#DC2626] font-semibold cursor-pointer hover:bg-[#FEF2F2]" onClick={() => { onDelete(); onClose(); }}>Borrar</button>
+            : <span />}
+          <div className="flex gap-2">
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.url.trim()} onClick={save}>{isEdit ? 'Guardar' : 'Agregar'}</button>
+          </div>
         </div>
       }>
       <div className="grid gap-3 p-1">

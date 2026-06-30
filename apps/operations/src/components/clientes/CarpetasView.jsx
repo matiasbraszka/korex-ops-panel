@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
-  Search, X, ExternalLink, RefreshCw, ChevronRight, Folder, FileText, Plus, Link2, Key, Pin,
+  Search, X, ExternalLink, RefreshCw, ChevronRight, Folder, Plus, Link2, Key, Pin, Pencil,
 } from 'lucide-react';
 import { fmtDate } from '../../utils/helpers';
 import {
@@ -217,22 +217,34 @@ export default function CarpetasView({ client }) {
       <div className="flex items-center gap-3.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[11px] bg-white mb-3.5 flex-wrap">
         <div className="flex items-center gap-[7px] flex-wrap">
           <span className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#9CA3AF]">Enlaces</span>
+          {enlaces.length === 0 && <span className="text-[11.5px] text-[#C2C7D0]">—</span>}
           {enlaces.map((g, gi) => (
-            <button key={gi} onClick={() => openUrl(g.url)} onContextMenu={(e) => { e.preventDefault(); setLinkModal({ initial: g, ref: g }); }} title={g.url}
-              className="inline-flex items-center gap-1.5 py-[5px] px-2.5 border border-[#E8EBF0] rounded-full bg-white text-[#1A1D26] text-[12px] font-medium font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-[#C9D6FF] hover:text-[#2E69E0]">
-              <Link2 size={12} className="text-[#2E69E0]" />{g.label || g.url}
-            </button>
+            <span key={gi} className="group/chip inline-flex items-center gap-1 py-[3px] pl-2.5 pr-1.5 border border-[#E8EBF0] rounded-full bg-white hover:bg-[#F5F7FF] hover:border-[#C9D6FF]">
+              <button onClick={() => openUrl(g.url)} title={g.url} className="inline-flex items-center gap-1.5 bg-transparent border-none p-0 text-[#1A1D26] text-[12px] font-medium font-sans cursor-pointer hover:text-[#2E69E0]">
+                <Link2 size={12} className="text-[#2E69E0]" />{g.label || g.url}
+              </button>
+              <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/chip:opacity-100 transition-opacity">
+                <button onClick={() => setLinkModal({ initial: g, ref: g })} title="Editar" className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] hover:bg-[#E8EFFF]"><Pencil size={11} /></button>
+                <button onClick={() => { if (window.confirm(`¿Borrar el enlace "${g.label || g.url}"?`)) removeItem(g); }} title="Borrar" className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-transparent border-none cursor-pointer text-[#B7BDC8] hover:text-[#DC2626] hover:bg-[#FEECEC]"><X size={12} /></button>
+              </span>
+            </span>
           ))}
           <button title="Agregar enlace general" onClick={() => setLinkModal({ initial: null })} className="inline-flex items-center justify-center w-[26px] h-[26px] border border-dashed border-[#D0D5DD] rounded-full bg-white text-[#5B7CF5] cursor-pointer hover:border-blue hover:bg-[#F5F7FF]"><Plus size={12} /></button>
         </div>
         <div className="w-px h-5 bg-[#E8EBF0]" />
         <div className="flex items-center gap-[7px] flex-wrap">
           <span className="text-[10px] font-bold tracking-[0.1em] uppercase text-[#9CA3AF]">Accesos</span>
+          {accesos.length === 0 && <span className="text-[11.5px] text-[#C2C7D0]">— agregalos con +</span>}
           {accesos.map((a, ai) => (
-            <button key={ai} onClick={() => setAccView(a)} onContextMenu={(e) => { e.preventDefault(); setAccModal({ initial: a, ref: a }); }} title={`Ver credenciales · ${a.label}`}
-              className="inline-flex items-center gap-1.5 py-[5px] px-2.5 border border-[#E8EBF0] rounded-full bg-white text-[#1A1D26] text-[12px] font-medium font-sans cursor-pointer hover:bg-[#F7F4FE] hover:border-[#E0D4FB] hover:text-[#7C3AED]">
-              <Key size={12} className="text-[#7C3AED]" />{a.label}
-            </button>
+            <span key={ai} className="group/chip inline-flex items-center gap-1 py-[3px] pl-2.5 pr-1.5 border border-[#E8EBF0] rounded-full bg-white hover:bg-[#F7F4FE] hover:border-[#E0D4FB]">
+              <button onClick={() => setAccView(a)} title={`Ver credenciales · ${a.label}`} className="inline-flex items-center gap-1.5 bg-transparent border-none p-0 text-[#1A1D26] text-[12px] font-medium font-sans cursor-pointer hover:text-[#7C3AED]">
+                <Key size={12} className="text-[#7C3AED]" />{a.label}
+              </button>
+              <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/chip:opacity-100 transition-opacity">
+                <button onClick={() => setAccModal({ initial: a, ref: a })} title="Editar" className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#7C3AED] hover:bg-[#F1ECFE]"><Pencil size={11} /></button>
+                <button onClick={() => { if (window.confirm(`¿Borrar el acceso "${a.label}"?`)) removeItem(a); }} title="Borrar" className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-transparent border-none cursor-pointer text-[#B7BDC8] hover:text-[#DC2626] hover:bg-[#FEECEC]"><X size={12} /></button>
+              </span>
+            </span>
           ))}
           <button title="Agregar acceso general" onClick={() => setAccModal({ initial: null })} className="inline-flex items-center justify-center w-[26px] h-[26px] border border-dashed border-[#D0D5DD] rounded-full bg-white text-[#5B7CF5] cursor-pointer hover:border-blue hover:bg-[#F5F7FF]"><Plus size={12} /></button>
         </div>
@@ -245,7 +257,7 @@ export default function CarpetasView({ client }) {
           <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar carpeta o documento…" className="flex-1 border-none bg-transparent font-sans text-[13px] text-[#1A1D26] p-0 outline-none" />
           {q && <button onClick={() => setQ('')} className="inline-flex items-center justify-center w-[18px] h-[18px] border-none rounded-full bg-[#EEF0F4] text-[#6B7280] cursor-pointer shrink-0"><X size={11} /></button>}
         </div>
-        <button onClick={() => openUrl(c.drive_folder_url)} disabled={!c.drive_folder_url} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-40"><ExternalLink size={14} />Carpeta raíz</button>
+        <button onClick={() => openUrl(c.driveFolderUrl)} disabled={!c.driveFolderUrl} title={c.driveFolderUrl ? 'Abrir la carpeta raíz en Drive' : 'Falta vincular la carpeta raíz (Editar cliente)'} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-40"><ExternalLink size={14} />Carpeta raíz</button>
         <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-60"><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar'}</button>
       </div>
       <div className="flex items-center gap-[7px] text-[#9CA3AF] text-[11.5px] mb-4">
@@ -266,8 +278,8 @@ export default function CarpetasView({ client }) {
         ))}
       </div>
 
-      {linkModal && <LinkFormModal open={!!linkModal} onClose={() => setLinkModal(null)} initial={linkModal.initial} onSave={(data) => upsertEnlace(data, linkModal.ref)} />}
-      {accModal && <AccessFormModal open={!!accModal} onClose={() => setAccModal(null)} initial={accModal.initial} onSave={(data) => upsertAcceso(data, accModal.ref)} />}
+      {linkModal && <LinkFormModal open={!!linkModal} onClose={() => setLinkModal(null)} initial={linkModal.initial} onSave={(data) => upsertEnlace(data, linkModal.ref)} onDelete={linkModal.ref ? () => removeItem(linkModal.ref) : undefined} />}
+      {accModal && <AccessFormModal open={!!accModal} onClose={() => setAccModal(null)} initial={accModal.initial} onSave={(data) => upsertAcceso(data, accModal.ref)} onDelete={accModal.ref ? () => removeItem(accModal.ref) : undefined} />}
       {accView && (
         <div onClick={() => setAccView(null)} className="fixed inset-0 z-[110] flex items-start justify-center p-[60px] overflow-y-auto" style={{ background: 'rgba(17,20,24,.42)' }}>
           <div onClick={e => e.stopPropagation()} className="w-[440px] max-w-full bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(10,22,40,.28)' }}>
