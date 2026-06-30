@@ -1278,7 +1278,11 @@ export function AppProvider({ children }) {
       ads_url: data.ads_url || null,
       conversion_events: Array.isArray(data.conversion_events) ? data.conversion_events : [],
       pixel_id: data.pixel_id || null,
+      pixel_code: data.pixel_code || null,
       clarity_id: data.clarity_id || null,
+      avatars: Array.isArray(data.avatars) ? data.avatars : [],
+      visual_resources: Array.isArray(data.visual_resources) ? data.visual_resources : [],
+      updated_at: new Date().toISOString(),
     };
     await sbFetch('strategy_pages', {
       method: 'POST',
@@ -1291,7 +1295,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const updateStrategyPage = useCallback(async (id, fields) => {
-    const patch = { ...fields };
+    const patch = { ...fields, updated_at: new Date().toISOString() };
     await sbFetch('strategy_pages?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },

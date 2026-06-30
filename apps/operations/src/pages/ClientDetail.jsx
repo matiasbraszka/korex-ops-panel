@@ -9,8 +9,8 @@ import TeamAvatar from '../components/TeamAvatar';
 import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
-import StrategyMatrix from '../components/clientes/StrategyMatrix';
-import DriveTreeTab from '../components/clientes/DriveTreeTab';
+import FunnelsView from '../components/clientes/FunnelsView';
+import CarpetasView from '../components/clientes/CarpetasView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
@@ -172,6 +172,8 @@ export default function ClientDetail({ client: c }) {
         // cuando se decida volver a usar el modulo.
         const myStrategies = (strategies || []).filter(s => s.client_id === c.id);
         const strategiesCount = myStrategies.length;
+        const stratIdSet = new Set(myStrategies.map(s => s.id));
+        const funnelsCount = (strategyPages || []).filter(p => stratIdSet.has(p.strategy_id)).length;
         // Recursos visuales: suma de todas las estrategias del cliente
         const visualesArr = myStrategies.flatMap(s => Array.isArray(s.visual_resources) ? s.visual_resources : []);
         const visualesDone = visualesArr.filter(v => v.ok).length;
@@ -181,7 +183,7 @@ export default function ClientDetail({ client: c }) {
         const contractsCount = (contracts || []).filter(ct => ct.client_id === c.id).length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
-          { key: 'trabajo', label: 'Recursos', count: strategiesCount, sub: visualesTotal ? `${visualesDone}/${visualesTotal}` : null },
+          { key: 'trabajo', label: 'Funnels', count: funnelsCount },
           { key: 'drive', label: 'Carpetas' },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
@@ -262,9 +264,9 @@ export default function ClientDetail({ client: c }) {
               );
             })()}
 
-            {activeTab === 'trabajo' && <StrategyMatrix clientId={c.id} />}
+            {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
 
-            {activeTab === 'drive' && <DriveTreeTab client={c} />}
+            {activeTab === 'drive' && <CarpetasView client={c} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 

@@ -32,6 +32,13 @@ const cors = {
 
 function rnd(n = 6) { return Math.random().toString(36).slice(2, 2 + n); }
 function str(v: unknown) { return v === null || v === undefined ? "" : String(v).trim(); }
+// "1/04/2026" -> "2026-04-01" (d/m/y). null si no parsea.
+function parseDmy(s: string): string | null {
+  const m = (s || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!m) return null;
+  let y = m[3]; if (y.length === 2) y = "20" + y;
+  return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+}
 
 // ── Drive helpers ──────────────────────────────────────────────────────────────
 function driveId(url?: string | null): string | null {
@@ -179,7 +186,7 @@ async function syncClient(
 
   // Vínculo con estrategias del panel: carpeta de estrategia -> strategy_id, propagado al subárbol.
   const { data: strats } = await supabase
-    .from("strategies").select("id, position, folders, archivos, drive_url")
+    .from("strategies").select("id, position, name, drive_folder_id, start_date, folders, archivos, drive_url")
     .eq("client_id", clientId).order("position", { ascending: true });
   const strategyOf = new Map<string, string>();
   for (const s of (strats ?? [])) {
@@ -199,26 +206,62 @@ async function syncClient(
     }
   }
 
-  // Fallback por numeración: las carpetas "Estrategia #N" (hijas de la raíz) se
-  // ligan, EN ORDEN, a las estrategias del panel por posición (1ra carpeta ->
-  // 1ra estrategia, etc.). Cubre los clientes cuyas estrategias no tienen carpeta
-  // guardada (la mayoría); guía por el número, no por el nombre. No pisa lo ya
-  // ligado por id arriba.
-  const stratsByPos = strats ?? []; // ya viene ordenado por position asc
-  if (stratsByPos.length) {
-    const root = typed.find((n) => n.isRoot) || typed.find((n) => !n.parentId);
-    const estrFolders = typed
-      .filter((n) => n.node_type === "folder" && (root ? n.parentId === root.id : (n.depth ?? 0) === 1))
-      .map((n) => { const m = (n.name || "").match(/estrategia\s*#?\s*(\d+)/i); return { node: n, num: m ? parseInt(m[1], 10) : 0 }; })
-      .filter((x) => x.num > 0)
-      .sort((a, b) => a.num - b.num);
-    for (let i = 0; i < estrFolders.length && i < stratsByPos.length; i++) {
-      const sid = stratsByPos[i].id;
-      const stack = [estrFolders[i].node.id];
+  // ── La estrategia la DEFINE la carpeta "Estrategia #N" del Drive ──
+  // Por cada carpeta de estrategia (hija de la raíz) auto-creamos/actualizamos su
+  // registro en `strategies` (nombre, número y fecha salen de la carpeta) y
+  // propagamos su strategy_id al subárbol. Mati ya no crea estrategias a mano.
+  const root = typed.find((n) => n.isRoot) || typed.find((n) => !n.parentId);
+  const estrFolders = typed
+    .filter((n) => n.node_type === "folder" && (root ? n.parentId === root.id : (n.depth ?? 0) === 1))
+    .map((n) => {
+      const nm = n.name || "";
+      const m = nm.match(/estrategia\s*#?\s*(\d+)/i);
+      const num = m ? parseInt(m[1], 10) : 0;
+      const parts = nm.split("|").map((p) => p.trim());
+      const last = parts[parts.length - 1] || "";
+      const hasDate = /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(last);
+      const stratName = parts.length >= 2 ? (hasDate ? parts.slice(1, -1) : parts.slice(1)).join(" | ").trim() : "";
+      return { node: n, num, name: stratName, created: hasDate ? last : "" };
+    })
+    .filter((x) => x.num > 0)
+    .sort((a, b) => a.num - b.num);
+
+  // deno-lint-ignore no-explicit-any
+  const byFolder = new Map<string, any>();
+  // deno-lint-ignore no-explicit-any
+  const byPos = new Map<number, any>();
+  for (const s of (strats ?? [])) {
+    if (s.drive_folder_id) byFolder.set(s.drive_folder_id, s);
+    byPos.set(s.position ?? 0, s);
+  }
+  for (const ef of estrFolders) {
+    const pos = ef.num - 1;
+    // deno-lint-ignore no-explicit-any
+    let s: any = byFolder.get(ef.node.id) || byPos.get(pos);
+    const startDate = parseDmy(ef.created);
+    if (s) {
+      const patch: Record<string, unknown> = {};
+      if (ef.name && str(s.name) !== ef.name) patch.name = ef.name;
+      if (s.drive_folder_id !== ef.node.id) patch.drive_folder_id = ef.node.id;
+      if ((s.position ?? 0) !== pos) patch.position = pos;
+      if (startDate && !s.start_date) patch.start_date = startDate;
+      if (Object.keys(patch).length) await supabase.from("strategies").update(patch).eq("id", s.id);
+    } else {
+      const row = {
+        id: `strat_${Math.floor(Date.now() / 1000)}_${rnd(6)}`,
+        client_id: clientId, position: pos, name: ef.name || `Estrategia #${ef.num}`,
+        status: "activa", version: "v1", drive_folder_id: ef.node.id, start_date: startDate,
+      };
+      const { error } = await supabase.from("strategies").insert(row);
+      if (!error) { s = row; byPos.set(pos, row); byFolder.set(ef.node.id, row); }
+      else console.error("drive-sync strategy insert error", clientId, error);
+    }
+    if (s) {
+      const stack = [ef.node.id];
       while (stack.length) {
         const cur = stack.pop()!;
         if (strategyOf.has(cur)) continue;
-        strategyOf.set(cur, sid);
+        strategyOf.set(cur, s.id);
         for (const ch of (childrenMap.get(cur) ?? [])) stack.push(ch);
       }
     }

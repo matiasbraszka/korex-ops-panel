@@ -1,0 +1,318 @@
+// Pestaña "Funnels": páginas del cliente con variantes de avatar, tracking
+// (pixel/clarity/eventos) y material a completar. Diseño "Recursos y Carpetas".
+import { useState, useMemo } from 'react';
+import { useApp } from '../../context/AppContext';
+import {
+  Plus, X, ExternalLink, Copy, ChevronDown, Users, ArrowRight, Megaphone,
+  Check, Trash2, Activity, Zap,
+} from 'lucide-react';
+import Modal from '../Modal';
+import { openUrl, copyText } from './recursosShared';
+
+const FUNNEL_STATUS = {
+  activa:   { label: 'Activa', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
+  borrador: { label: 'Borrador', bg: '#FEFCE8', color: '#A16207', dot: '#A16207' },
+  pausada:  { label: 'Pausada', bg: '#FEF2F2', color: '#DC2626', dot: '#DC2626' },
+};
+const STATUS_ORDER = ['activa', 'borrador', 'pausada'];
+const AVATAR_STATUS = {
+  'En grabación': { bg: '#FEF3E7', color: '#C2630A' },
+  'En edición':   { bg: '#EEF2FF', color: '#2E69E0' },
+  'Editados':     { bg: '#ECFDF5', color: '#16A34A' },
+};
+const AVATAR_OPTS = ['En grabación', 'En edición', 'Editados'];
+const DEFAULT_NEEDS = ['Imágenes de autoridad', 'Branding / logo', 'Imágenes de empresa o producto', 'Testimonios'];
+const inputCls = 'w-full py-2.5 px-3 border border-[#E2E5EB] rounded-[9px] font-sans text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue';
+const rid = (p) => p + Math.random().toString(36).slice(2, 8);
+
+// Normaliza eventos viejos {label,meta_name} -> {name,purpose,code}.
+function normEvents(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map((e, i) => ({
+    id: e.id || 'ev' + i,
+    name: e.name || '', purpose: e.purpose || e.label || '', code: e.code || e.meta_name || '',
+  }));
+}
+
+// ── Editor de tracking (reusado en modal nuevo funnel y modal tracking) ──────────
+function TrackingEditor({ value, onChange }) {
+  const pOk = !!(value.pixel_code && value.pixel_code.trim());
+  const cOk = !!(value.clarity_id && value.clarity_id.trim());
+  const events = value.events || [];
+  const setEvent = (id, patch) => onChange({ ...value, events: events.map(e => e.id === id ? { ...e, ...patch } : e) });
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <div>
+        <div className="flex items-center gap-2 mb-1.5"><span className="text-[12px] font-bold text-[#1A1D26]">Pixel de Meta</span>
+          <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold" style={pOk ? { background: '#ECFDF5', color: '#16A34A' } : { background: '#F0F2F5', color: '#9CA3AF' }}>{pOk ? 'Configurado' : 'Sin configurar'}</span>
+        </div>
+        <textarea value={value.pixel_code || ''} onChange={e => onChange({ ...value, pixel_code: e.target.value })} rows={3} placeholder="Pegá el código del pixel o solo el ID…" className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-[9px] text-[12px] leading-[1.55] text-[#1A1D26] bg-[#FBFCFE] resize-y outline-none focus:border-blue" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' }} />
+      </div>
+      <div>
+        <div className="flex items-center gap-2 mb-1.5"><span className="text-[12px] font-bold text-[#1A1D26]">Microsoft Clarity</span>
+          <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold" style={cOk ? { background: '#E0F2FE', color: '#0B6FA8' } : { background: '#F0F2F5', color: '#9CA3AF' }}>{cOk ? 'Conectado' : 'Sin conectar'}</span>
+        </div>
+        <input type="text" value={value.clarity_id || ''} onChange={e => onChange({ ...value, clarity_id: e.target.value })} placeholder="ID o código de Clarity (ej. abc123def)" className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-[9px] text-[12px] text-[#1A1D26] bg-[#FBFCFE] outline-none focus:border-blue" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' }} />
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[12px] font-bold text-[#1A1D26]">Eventos de conversión <span className="text-[11.5px] text-[#9CA3AF] font-normal">· {events.length}</span></span>
+          <button onClick={() => onChange({ ...value, events: [...events, { id: rid('ev'), name: '', purpose: '', code: '' }] })} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#EEF2FF]"><Plus size={12} />Agregar evento</button>
+        </div>
+        {events.length === 0
+          ? <div className="py-3.5 px-4 text-center text-[12.5px] text-[#6B7280] border border-dashed border-[#E2E5EB] rounded-[11px] bg-[#FBFCFE]">Aún no hay eventos. Definí cada conversión con su nombre, para qué es y su código.</div>
+          : <div className="flex flex-col gap-2.5">
+              {events.map(ev => (
+                <div key={ev.id} className="border border-[#E8EBF0] rounded-[11px] bg-[#FBFCFE] p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input type="text" value={ev.name} onChange={e => setEvent(ev.id, { name: e.target.value })} placeholder="¿Qué trackea? (ej. Visita a la página)" className="flex-1 min-w-0 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[13px] font-semibold text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                    <button onClick={() => onChange({ ...value, events: events.filter(e => e.id !== ev.id) })} title="Eliminar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E2E5EB] rounded-lg bg-white text-[#B0B6C0] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={14} /></button>
+                  </div>
+                  <input type="text" value={ev.purpose} onChange={e => setEvent(ev.id, { purpose: e.target.value })} placeholder="Nombre del evento (ej. Registro lead)" className="w-full mb-2 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                  <textarea value={ev.code} onChange={e => setEvent(ev.id, { code: e.target.value })} rows={2} placeholder="fbq('track','Lead')" className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#1A1D26] bg-white resize-y leading-[1.5] outline-none focus:border-blue" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' }} />
+                </div>
+              ))}
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ status, onChange }) {
+  const [open, setOpen] = useState(false);
+  const cfg = FUNNEL_STATUS[status] || FUNNEL_STATUS.activa;
+  return (
+    <span className="relative inline-block" onClick={e => e.stopPropagation()}>
+      <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[11px] font-bold border-none cursor-pointer" style={{ background: cfg.bg, color: cfg.color }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.color }} />{cfg.label}<ChevronDown size={10} />
+      </button>
+      {open && (<>
+        <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+        <div className="absolute left-0 top-full mt-1 bg-white border border-[#E2E5EB] rounded-lg shadow-md z-20 min-w-[130px] overflow-hidden">
+          {STATUS_ORDER.map(k => { const v = FUNNEL_STATUS[k]; return (
+            <button key={k} onClick={() => { onChange(k); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-blue-bg2 bg-transparent border-none cursor-pointer font-medium" style={{ color: v.color }}><span className="w-2 h-2 rounded-full" style={{ background: v.dot }} />{v.label}</button>
+          ); })}
+        </div>
+      </>)}
+    </span>
+  );
+}
+
+const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
+
+function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
+  const [open, setOpen] = useState(false);
+  const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
+  const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
+  const avatars = Array.isArray(f.avatars) ? f.avatars : [];
+  const doneCount = needs.filter(n => n.done).length;
+  const missing = needs.length - doneCount;
+  const events = normEvents(f.conversion_events);
+  const pOk = !!(f.pixel_code && f.pixel_code.trim());
+  const cOk = !!(f.clarity_id && f.clarity_id.trim());
+
+  const links = [];
+  if (f.prod_url) links.push({ short: 'Prod', bg: '#EEF2FF', color: '#2E69E0', border: '#DCE3FF', url: f.prod_url });
+  if (f.testing_url) links.push({ short: 'Test', bg: '#F1F3F6', color: '#6B7280', border: '#E2E5EB', url: f.testing_url });
+  if (f.ads_url) links.push({ short: 'Pub', bg: '#F4F1FE', color: '#7C3AED', border: '#E7E0FB', url: f.ads_url });
+  const missingLinks = [];
+  if (!f.prod_url) missingLinks.push('Prod'); if (!f.testing_url) missingLinks.push('Test');
+
+  const setNeed = (i, patch) => onUpdate(f.id, { visual_resources: needs.map((n, j) => j === i ? { ...n, ...patch } : n) });
+  const setAvatar = (id, patch) => onUpdate(f.id, { avatars: avatars.map(a => a.id === id ? { ...a, ...patch } : a) });
+  const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
+  const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
+
+  const trk = [
+    pOk ? { label: 'Pixel', bg: '#ECFDF5', color: '#16A34A', border: 'transparent', solid: true, ok: true }
+        : { label: 'Pixel', bg: '#fff', color: '#B0926A', border: '#E6D3A3', solid: false, ok: false },
+    cOk ? { label: 'Clarity', bg: '#E0F2FE', color: '#0B6FA8', border: 'transparent', solid: true, ok: true }
+        : { label: 'Clarity', bg: '#fff', color: '#B0926A', border: '#E6D3A3', solid: false, ok: false },
+    { label: events.length + ' eventos', bg: events.length ? '#F1ECFE' : '#fff', color: events.length ? '#7C3AED' : '#B0926A', border: events.length ? 'transparent' : '#E6D3A3', solid: !!events.length, ok: false },
+  ];
+
+  return (
+    <div className="border-b border-[#F0F2F5] last:border-b-0">
+      <button onClick={() => setOpen(o => !o)} className="w-full grid items-center py-[13px] px-4 bg-white border-none font-sans cursor-pointer text-left hover:bg-[#FAFBFC]" style={{ gridTemplateColumns: GRID, borderLeft: `3px solid ${st.color}` }}>
+        <div className="flex items-center gap-[11px] min-w-0">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#EEF2FF', color: '#2E69E0' }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></svg></span>
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-semibold truncate" style={{ color: '#1A1D26' }}>{f.name}</div>
+            <div className="flex items-center gap-[7px] mt-0.5">
+              <span className="text-[11px] text-[#9CA3AF]">{strategyName}</span>
+              {missing > 0 && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#A16207] bg-[#FEF9E7] border border-[#F5E6B8] rounded-md py-px px-1.5">Faltan {missing}</span>}
+            </div>
+          </div>
+        </div>
+        <div><StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} /></div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {links.map((l, i) => <span key={i} onClick={(e) => { e.stopPropagation(); openUrl(l.url); }} className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md text-[11px] font-semibold cursor-pointer" style={{ background: l.bg, color: l.color, border: `1px solid ${l.border}` }}>{l.short}<ExternalLink size={10} /></span>)}
+          {missingLinks.map((m, i) => <span key={'m' + i} className="inline-flex items-center py-1 px-2.5 border border-dashed border-[#D7DBE2] rounded-md bg-white text-[#AEB4BF] text-[11px] font-semibold">{m}</span>)}
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {trk.map((t, i) => <span key={i} onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="inline-flex items-center gap-1 py-1 px-2 rounded-md text-[11px] font-semibold cursor-pointer" style={{ background: t.bg, color: t.color, border: `1px ${t.solid ? 'solid' : 'dashed'} ${t.border}` }}>{t.ok && <Check size={10} strokeWidth={3} />}{t.label}</span>)}
+        </div>
+        <div className="text-[12px] text-[#6B7280]">{f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-AR') : '—'}</div>
+        <div className="flex justify-end"><ChevronDown size={16} className="text-[#B0B6C0] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }} /></div>
+      </button>
+
+      {open && (
+        <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
+          <div className="grid gap-3.5 items-start" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
+            {/* Avatares */}
+            <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
+              <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
+                <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Users size={14} /></span>
+                <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Variantes de avatar</div><div className="text-[11px] text-[#9CA3AF]">A quién se le publicita · anuncio por avatar</div></div>
+                <span className="text-[11px] font-bold text-[#7B8190] bg-[#F0F2F5] rounded-lg py-0.5 px-2">{avatars.length}</span>
+              </div>
+              <div className="p-2">
+                {avatars.map((av, i) => { const ast = AVATAR_STATUS[av.status] || AVATAR_STATUS['En grabación']; return (
+                  <div key={av.id} className="rounded-[9px] p-2 hover:bg-[#FAFBFC]">
+                    <div className="flex items-center gap-2.5">
+                      <span className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-lg bg-[#EEF0F4] text-[#4B5563] text-[13px] font-bold shrink-0">{i + 1}</span>
+                      <input value={av.name} onChange={e => setAvatar(av.id, { name: e.target.value })} placeholder="Nombre del avatar" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] font-semibold text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                      <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[10.5px] font-bold whitespace-nowrap shrink-0" style={{ background: ast.bg, color: ast.color }}><span className="w-[5px] h-[5px] rounded-full" style={{ background: ast.color }} />{av.status}</span>
+                      <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#B0B6C0] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={12} /></button>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px] flex-wrap">
+                      <input value={av.audience} onChange={e => setAvatar(av.id, { audience: e.target.value })} placeholder="¿A quién se le publicita?" className="flex-1 min-w-[140px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                      {AVATAR_OPTS.map(o => { const sel = av.status === o; const c = AVATAR_STATUS[o]; return (
+                        <button key={o} onClick={() => setAvatar(av.id, { status: o })} className="inline-flex items-center gap-1 py-1 px-2 rounded-full text-[10.5px] font-semibold cursor-pointer" style={{ background: sel ? c.bg : '#fff', border: `1px solid ${sel ? c.color : '#E8EBF0'}`, color: sel ? c.color : '#6B7280' }}>{o}</button>
+                      ); })}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
+                      <input value={av.ad_url || ''} onChange={e => setAvatar(av.id, { ad_url: e.target.value })} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                      {av.ad_url
+                        ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
+                           <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
+                        : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
+                    </div>
+                  </div>
+                ); })}
+                <button onClick={addAvatar} className="inline-flex items-center gap-1.5 mt-1 mb-0.5 ml-2 py-[7px] px-2.5 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={12} />Agregar variante de avatar</button>
+              </div>
+            </div>
+            {/* Material */}
+            <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
+              <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
+                <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: doneCount === needs.length ? '#ECFDF5' : '#FEF9E7', color: doneCount === needs.length ? '#16A34A' : '#C2630A' }}><ArrowRight size={14} /></span>
+                <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Para completar el funnel</div></div>
+                <span className="text-[11px] font-bold" style={{ color: doneCount === needs.length ? '#16A34A' : '#A16207' }}>{doneCount} / {needs.length}</span>
+              </div>
+              <div className="py-1.5 px-2">
+                {needs.map((n, i) => (
+                  <div key={i} className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-[#FAFBFC]">
+                    <button onClick={() => setNeed(i, { done: !n.done })} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer border-none" style={n.done ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{n.done && <Check size={12} strokeWidth={3} />}</button>
+                    <span className="flex-1 min-w-0 text-[12.5px] truncate" style={{ color: n.done ? '#1A1D26' : '#6B7280' }}>{n.label}</span>
+                    {n.done
+                      ? <button onClick={() => openUrl(n.url)} className="inline-flex items-center gap-1 py-[5px] px-2.5 border border-[#DCE3FF] rounded-md bg-[#F5F7FF] text-[#2E69E0] text-[11px] font-semibold font-sans cursor-pointer shrink-0 hover:bg-[#EEF2FF]">Ver</button>
+                      : <button onClick={() => { const u = window.prompt('Pegá el link de ' + n.label + ' (Drive):'); if (u) setNeed(i, { done: true, url: u.trim() }); }} className="inline-flex items-center gap-1 py-[5px] px-2.5 border border-[#F0DDA8] rounded-md bg-[#FEF9E7] text-[#A16207] text-[11px] font-semibold font-sans cursor-pointer shrink-0 hover:bg-[#FCF3D4]">Subir</button>}
+                  </div>
+                ))}
+                <button onClick={() => { const l = window.prompt('Nombre del material:'); if (l) onUpdate(f.id, { visual_resources: [...needs, { label: l.trim(), done: false, url: '' }] }); }} className="inline-flex items-center gap-1.5 mt-1 ml-2 py-1.5 px-2.5 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={12} />Material</button>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end mt-2.5">
+            <button onClick={() => { if (window.confirm(`¿Borrar el funnel "${f.name}"?`)) onDelete(f.id); }} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-transparent border-none text-text3 text-[11.5px] font-semibold cursor-pointer hover:bg-red-bg hover:text-red-500"><Trash2 size={12} />Borrar funnel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function FunnelsView({ clientId }) {
+  const { strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
+  const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
+  const stratIds = new Set(myStrategies.map(s => s.id));
+  const funnels = useMemo(() => (strategyPages || []).filter(p => stratIds.has(p.strategy_id)), [strategyPages, myStrategies]);
+  const stratName = (sid) => { const s = myStrategies.find(x => x.id === sid); return s ? `Estrategia #${(s.position ?? 0) + 1}` : '—'; };
+
+  const [filter, setFilter] = useState('todos');
+  const [modal, setModal] = useState(false);
+  const [trackFunnel, setTrackFunnel] = useState(null);
+  const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
+  const blankForm = () => ({ name: '', strategy_id: myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: [] });
+  const [form, setForm] = useState(blankForm);
+
+  const filtered = funnels.filter(f => filter === 'todos' ? true : filter === 'activos' ? f.status === 'activa' : (Array.isArray(f.visual_resources) ? f.visual_resources.filter(n => !n.done).length : 0) > 0);
+
+  const create = () => {
+    if (!form.name.trim() || !form.strategy_id) return;
+    addStrategyPage({
+      strategy_id: form.strategy_id, name: form.name.trim(), status: form.status,
+      prod_url: form.prod_url || null, testing_url: form.testing_url || null, ads_url: form.ads_url || null,
+      pixel_code: form.pixel_code || null, clarity_id: form.clarity_id || null,
+      conversion_events: form.events, avatars: form.avatars,
+      visual_resources: DEFAULT_NEEDS.map(l => ({ label: l, done: false, url: '' })),
+    });
+    setModal(false); setForm(blankForm());
+  };
+  const saveTrack = (val) => { updateStrategyPage(trackFunnel.id, { pixel_code: val.pixel_code || null, clarity_id: val.clarity_id || null, conversion_events: val.events }); setTrackFunnel(null); };
+
+  const filters = [
+    { id: 'todos', label: 'Todos', count: funnels.length },
+    { id: 'activos', label: 'Activos', count: funnels.filter(f => f.status === 'activa').length },
+    { id: 'faltantes', label: 'Con faltantes', count: funnels.filter(f => (Array.isArray(f.visual_resources) ? f.visual_resources.filter(n => !n.done).length : 0) > 0).length },
+  ];
+
+  return (
+    <div style={{ background: '#FAFBFC' }} className="p-[18px] -mx-1 rounded-xl">
+      <div className="flex items-center gap-2.5 mb-3.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+          {filters.map(x => { const active = filter === x.id; return (
+            <button key={x.id} onClick={() => setFilter(x.id)} className="inline-flex items-center gap-1.5 py-2 px-3 rounded-[9px] text-[12.5px] font-semibold font-sans cursor-pointer" style={{ border: `1px solid ${active ? '#C9D6FF' : '#E2E5EB'}`, background: active ? '#EEF2FF' : '#fff', color: active ? '#2E69E0' : '#6B7280' }}>{x.label}<span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-lg text-[10px] font-bold" style={{ background: active ? '#fff' : '#F0F2F5', color: active ? '#2E69E0' : '#7B8190' }}>{x.count}</span></button>
+          ); })}
+        </div>
+        <button onClick={() => { setForm(blankForm()); setModal(true); }} disabled={myStrategies.length === 0} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[9px] bg-blue text-white text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-blue-dark disabled:opacity-50" title={myStrategies.length === 0 ? 'Primero sincronizá las carpetas (pestaña Carpetas)' : ''}><Plus size={14} />Nuevo funnel</button>
+      </div>
+
+      <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden">
+        <div className="grid items-center py-[11px] px-4 border-b border-[#E2E5EB]" style={{ gridTemplateColumns: GRID, background: '#FAFBFC' }}>
+          {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#9CA3AF]">{h}</div>)}
+        </div>
+        {filtered.length === 0
+          ? <div className="flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">{funnels.length === 0 ? 'Todavía no hay funnels' : 'Sin resultados con ese filtro'}</div><div className="text-[11.5px] text-text2">{myStrategies.length === 0 ? 'Primero sincronizá las carpetas del cliente.' : 'Creá uno con "Nuevo funnel".'}</div></div>
+          : filtered.map(f => <FunnelRow key={f.id} f={f} strategyName={stratName(f.strategy_id)} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} />)}
+      </div>
+
+      {/* Modal nuevo funnel */}
+      {modal && (
+        <Modal open={modal} onClose={() => setModal(false)} title="Nuevo funnel" maxWidth={560}
+          footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={() => setModal(false)}>Cancelar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.name.trim() || !form.strategy_id} onClick={create}>Crear funnel</button></div>}>
+          <div className="flex flex-col gap-[18px] p-1">
+            <div className="grid gap-3.5" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Nombre del funnel</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ej. Profesionales V1" className={inputCls} autoFocus /></div>
+              <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Estrategia</label><select value={form.strategy_id} onChange={e => setForm({ ...form, strategy_id: e.target.value })} className={inputCls + ' cursor-pointer'}>{myStrategies.map(s => <option key={s.id} value={s.id}>Estrategia #{(s.position ?? 0) + 1}{s.name ? ' · ' + s.name : ''}</option>)}</select></div>
+            </div>
+            <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Estado</label>
+              <div className="inline-flex items-center gap-1 p-1 border border-[#E2E5EB] rounded-[10px] bg-[#F7F8FA]">
+                {STATUS_ORDER.map(k => { const v = FUNNEL_STATUS[k]; const sel = form.status === k; return <button key={k} onClick={() => setForm({ ...form, status: k })} className="inline-flex items-center gap-1.5 py-[7px] px-3.5 border-none rounded-[7px] text-[12.5px] font-semibold font-sans cursor-pointer" style={{ background: sel ? '#fff' : 'transparent', color: sel ? '#1A1D26' : '#6B7280', boxShadow: sel ? '0 1px 2px rgba(10,22,40,.12)' : 'none' }}><span className="w-[7px] h-[7px] rounded-full" style={{ background: v.dot }} />{v.label}</button>; })}
+              </div>
+            </div>
+            <div><div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-2.5">Enlaces</div>
+              <div className="flex flex-col gap-2.5">
+                {[['prod_url', 'Producción', '#2E69E0'], ['testing_url', 'Testing', '#9CA3AF'], ['ads_url', 'Publicidad', '#7C3AED']].map(([k, lbl, col]) => (
+                  <div key={k} className="flex items-center gap-2.5"><span className="inline-flex items-center gap-1.5 w-24 shrink-0 text-[12px] font-semibold" style={{ color: col }}><span className="w-2 h-2 rounded-[3px]" style={{ background: col }} />{lbl}</span><input value={form[k]} onChange={e => setForm({ ...form, [k]: e.target.value })} placeholder="https://…" className="flex-1 py-2 px-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue" /></div>
+                ))}
+              </div>
+            </div>
+            <div><div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-2.5">Tracking</div>
+              <div className="border border-[#EEF0F3] rounded-[11px] bg-[#FBFCFE] p-3.5"><TrackingEditor value={{ pixel_code: form.pixel_code, clarity_id: form.clarity_id, events: form.events }} onChange={(v) => setForm({ ...form, pixel_code: v.pixel_code, clarity_id: v.clarity_id, events: v.events })} /></div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal tracking de un funnel */}
+      {trackFunnel && (
+        <Modal open={!!trackFunnel} onClose={() => setTrackFunnel(null)} title={`Tracking · ${trackFunnel.name}`} maxWidth={580}
+          footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={() => setTrackFunnel(null)}>Cerrar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark inline-flex items-center gap-1.5" onClick={() => saveTrack(trackFunnel._edit)}><Check size={14} />Guardar tracking</button></div>}>
+          <div className="p-1"><TrackingEditor value={trackFunnel._edit} onChange={(v) => setTrackFunnel(tf => ({ ...tf, _edit: v }))} /></div>
+        </Modal>
+      )}
+    </div>
+  );
+}
