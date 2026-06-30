@@ -146,6 +146,10 @@ export function AppProvider({ children }) {
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
   const lastPoll = useRef(0);
+  // Foto del último estado sincronizado (id -> JSON) para escribir SOLO lo que cambió
+  // en el guardado masivo y no pisar registros que cambiaron en la base por otro lado.
+  const lastSyncedRef = useRef({ clients: {}, tasks: {} });
+  const seededRef = useRef(false);
   const clientsRef = useRef(clients);
   const tasksRef = useRef(tasks);
   clientsRef.current = clients;
@@ -420,11 +424,28 @@ export function AppProvider({ children }) {
       clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(async () => {
         try {
+          // Primera corrida: tomamos foto del estado actual como "ya sincronizado"
+          // (lo que cambi\u00f3 en esta edici\u00f3n ya se persisti\u00f3 con su dbSave puntual).
+          if (!seededRef.current) {
+            for (const client of c) lastSyncedRef.current.clients[client.id] = JSON.stringify(client);
+            for (const task of t) lastSyncedRef.current.tasks[task.id] = JSON.stringify(task);
+            seededRef.current = true;
+            setSyncStatus('ok');
+            return;
+          }
+          // Guardado masivo SELECTIVO: solo los registros que cambiaron desde la
+          // \u00faltima sincronizaci\u00f3n. As\u00ed no pisamos clientes/tareas que toc\u00f3 otra
+          // sesi\u00f3n o que se editaron directo en la base.
           const promises = [];
-          for (const client of c) promises.push(dbSaveClient(client));
-          for (const task of t) promises.push(dbSaveTask(task));
+          for (const client of c) {
+            const j = JSON.stringify(client);
+            if (lastSyncedRef.current.clients[client.id] !== j) { promises.push(dbSaveClient(client)); lastSyncedRef.current.clients[client.id] = j; }
+          }
+          for (const task of t) {
+            const j = JSON.stringify(task);
+            if (lastSyncedRef.current.tasks[task.id] !== j) { promises.push(dbSaveTask(task)); lastSyncedRef.current.tasks[task.id] = j; }
+          }
           await Promise.all(promises);
-          console.log('\u2713 Synced to Supabase');
           setSyncStatus('ok');
         } catch (e) {
           console.warn('DB sync error:', e);
