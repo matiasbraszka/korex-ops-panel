@@ -74,6 +74,17 @@ function StrategyBlock({ s, nodes, pages, q }) {
 
   const query = (q || '').trim().toLowerCase();
 
+  // Acceso rápido: el DEL y lo fijado se muestran SIEMPRE arriba (aunque estén
+  // anidados dentro de una carpeta cerrada).
+  const pinnedFlat = myNodes
+    .filter(n => isDisplayableNode(n) && n.id !== entry && isPinned(n))
+    .sort((a, b) => (isDelDoc(b) ? 1 : 0) - (isDelDoc(a) ? 1 : 0));
+  const pinnedRow = (n) => ({
+    key: 'pin-' + n.id, name: n.name, node_type: n.node_type, indent: 12,
+    expandable: false, open: false, pinned: true, isDel: isDelDoc(n),
+    onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n),
+  });
+
   // Aplana el subárbol respetando expandidos; fijados (incl. DEL) primero.
   const rows = [];
   const walk = (parentId, depth) => {
@@ -126,6 +137,12 @@ function StrategyBlock({ s, nodes, pages, q }) {
 
       {open && (
         <div className="p-2 border-b border-[#F4F5F8]">
+          {!query && pinnedFlat.length > 0 && (
+            <div className="mb-1.5 pb-1.5 border-b border-dashed border-[#F0E6C8]">
+              <div className="flex items-center gap-1.5 px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: '#B27D0B' }}><Pin size={11} fill="currentColor" stroke="none" />Fijados</div>
+              {pinnedFlat.map(n => <TreeRow key={'pin-' + n.id} row={pinnedRow(n)} />)}
+            </div>
+          )}
           {finalRows.length > 0
             ? finalRows.map(r => <TreeRow key={r.key} row={r} />)
             : <div className="py-3.5 px-4 text-[12.5px] text-[#AEB4BF]">{query ? 'Sin coincidencias en esta estrategia.' : (myNodes.length ? 'Carpeta vacía.' : 'Sin sincronizar todavía. Tocá "Sincronizar".')}</div>}
