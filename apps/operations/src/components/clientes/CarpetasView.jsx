@@ -221,6 +221,20 @@ export default function CarpetasView({ client }) {
 
   return (
     <div style={{ background: '#FAFBFC' }} className="p-[18px] -mx-1 rounded-xl">
+      {/* Buscador + acciones */}
+      <div className="flex items-center gap-2.5 mb-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[220px] py-[9px] px-3 border border-[#E2E5EB] rounded-[10px] bg-white">
+          <Search size={15} className="text-[#9CA3AF]" />
+          <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar carpeta o documento…" className="flex-1 border-none bg-transparent font-sans text-[13px] text-[#1A1D26] p-0 outline-none" />
+          {q && <button onClick={() => setQ('')} className="inline-flex items-center justify-center w-[18px] h-[18px] border-none rounded-full bg-[#EEF0F4] text-[#6B7280] cursor-pointer shrink-0"><X size={11} /></button>}
+        </div>
+        <button onClick={() => openUrl(c.driveFolderUrl)} disabled={!c.driveFolderUrl} title={c.driveFolderUrl ? 'Abrir la carpeta raíz en Drive' : 'Falta vincular la carpeta raíz (Editar cliente)'} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-40"><ExternalLink size={14} />Carpeta raíz</button>
+        <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-60"><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar'}</button>
+      </div>
+      <div className="flex items-center gap-[7px] text-[#9CA3AF] text-[11.5px] mb-4">
+        <RefreshCw size={13} />Se sincroniza solo todos los días{lastSync ? <> · última actualización <b className="text-[#6B7280]">{fmtDate(lastSync)}</b></> : null}
+      </div>
+
       {/* Barra: enlaces + accesos del cliente */}
       <div className="flex items-center gap-3.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[11px] bg-white mb-3.5 flex-wrap">
         <div className="flex items-center gap-[7px] flex-wrap">
@@ -256,20 +270,6 @@ export default function CarpetasView({ client }) {
           ))}
           <button title="Agregar acceso general" onClick={() => setAccModal({ initial: null })} className="inline-flex items-center justify-center w-[26px] h-[26px] border border-dashed border-[#D0D5DD] rounded-full bg-white text-[#5B7CF5] cursor-pointer hover:border-blue hover:bg-[#F5F7FF]"><Plus size={12} /></button>
         </div>
-      </div>
-
-      {/* Buscador + acciones */}
-      <div className="flex items-center gap-2.5 mb-2 flex-wrap">
-        <div className="flex items-center gap-2 flex-1 min-w-[220px] py-[9px] px-3 border border-[#E2E5EB] rounded-[10px] bg-white">
-          <Search size={15} className="text-[#9CA3AF]" />
-          <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar carpeta o documento…" className="flex-1 border-none bg-transparent font-sans text-[13px] text-[#1A1D26] p-0 outline-none" />
-          {q && <button onClick={() => setQ('')} className="inline-flex items-center justify-center w-[18px] h-[18px] border-none rounded-full bg-[#EEF0F4] text-[#6B7280] cursor-pointer shrink-0"><X size={11} /></button>}
-        </div>
-        <button onClick={() => openUrl(c.driveFolderUrl)} disabled={!c.driveFolderUrl} title={c.driveFolderUrl ? 'Abrir la carpeta raíz en Drive' : 'Falta vincular la carpeta raíz (Editar cliente)'} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-40"><ExternalLink size={14} />Carpeta raíz</button>
-        <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-60"><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar'}</button>
-      </div>
-      <div className="flex items-center gap-[7px] text-[#9CA3AF] text-[11.5px] mb-4">
-        <RefreshCw size={13} />Se sincroniza solo todos los días{lastSync ? <> · última actualización <b className="text-[#6B7280]">{fmtDate(lastSync)}</b></> : null}
       </div>
 
       {/* Bloques de estrategia */}
