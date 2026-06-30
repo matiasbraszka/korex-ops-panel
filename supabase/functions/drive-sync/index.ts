@@ -199,6 +199,31 @@ async function syncClient(
     }
   }
 
+  // Fallback por numeración: las carpetas "Estrategia #N" (hijas de la raíz) se
+  // ligan, EN ORDEN, a las estrategias del panel por posición (1ra carpeta ->
+  // 1ra estrategia, etc.). Cubre los clientes cuyas estrategias no tienen carpeta
+  // guardada (la mayoría); guía por el número, no por el nombre. No pisa lo ya
+  // ligado por id arriba.
+  const stratsByPos = strats ?? []; // ya viene ordenado por position asc
+  if (stratsByPos.length) {
+    const root = typed.find((n) => n.isRoot) || typed.find((n) => !n.parentId);
+    const estrFolders = typed
+      .filter((n) => n.node_type === "folder" && (root ? n.parentId === root.id : (n.depth ?? 0) === 1))
+      .map((n) => { const m = (n.name || "").match(/estrategia\s*#?\s*(\d+)/i); return { node: n, num: m ? parseInt(m[1], 10) : 0 }; })
+      .filter((x) => x.num > 0)
+      .sort((a, b) => a.num - b.num);
+    for (let i = 0; i < estrFolders.length && i < stratsByPos.length; i++) {
+      const sid = stratsByPos[i].id;
+      const stack = [estrFolders[i].node.id];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (strategyOf.has(cur)) continue;
+        strategyOf.set(cur, sid);
+        for (const ch of (childrenMap.get(cur) ?? [])) stack.push(ch);
+      }
+    }
+  }
+
   // Upsert de nodos + borrado de lo que ya no existe.
   const runStart = new Date().toISOString();
   const rows = typed.map((n) => ({

@@ -259,7 +259,12 @@ function normLabel(v) {
     .replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 // El DEL es el documento clave de la estrategia: lleva el acrónimo "DEL" en mayúsculas.
-function isDelDoc(n) { return n && n.node_type !== 'folder' && /\bDEL\b/.test(n.name || ''); }
+// El documento clave puede titularse "DEL" (acrónimo en mayúsculas) o "Documento en limpio…".
+function isDelDoc(n) {
+  if (!n || n.node_type === 'folder') return false;
+  const name = n.name || '';
+  return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
+}
 
 // Carpetas de la estrategia (para pickers de material / auto-match), las menos profundas primero.
 function strategyFolders(nodes) {
@@ -467,6 +472,7 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
   const [tab, setTab] = useState('archivos');
   const [linkModal, setLinkModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
+  const [delEdit, setDelEdit] = useState(null);
   const [expanded, setExpanded] = useState({});
   // Árbol desplegable de Drive (solo los nodos de esta estrategia).
   const [treeOpen, setTreeOpen] = useState(new Set());
@@ -475,8 +481,16 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
   const childrenByParent = buildChildrenMap(myNodes);
 
   // DEL: documento clave de la estrategia (se aparta arriba de todo, destacado).
-  const delDocs = myNodes.filter(isDelDoc).sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0));
-  const delIds = new Set(delDocs.map(d => d.id));
+  // del_overrides permite OCULTAR un DEL auto-detectado o EDITAR su etiqueta/link.
+  const delOv = (s.del_overrides && typeof s.del_overrides === 'object' && !Array.isArray(s.del_overrides)) ? s.del_overrides : {};
+  const allDel = myNodes.filter(isDelDoc);
+  const delIds = new Set(allDel.map(d => d.id));
+  const delDocs = allDel
+    .filter(d => !(delOv[d.id] && delOv[d.id].hidden))
+    .map(d => ({ ...d, name: delOv[d.id]?.label || d.name, web_url: delOv[d.id]?.url || d.web_url }))
+    .sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0));
+  const hideDel = (id) => onUpdate(s.id, { del_overrides: { ...delOv, [id]: { ...(delOv[id] || {}), hidden: true } } });
+  const saveDelEdit = (id, data) => onUpdate(s.id, { del_overrides: { ...delOv, [id]: { hidden: false, label: data.label, url: data.url } } });
 
   // Fijados ("Destacados"): nodos que el equipo pin-eó; se apartan debajo del DEL.
   const pinnedIds = Array.isArray(s.pinned_nodes) ? s.pinned_nodes : [];
@@ -526,9 +540,9 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
         {/* ARCHIVOS */}
         {tab === 'archivos' && (
           <div className="flex flex-col gap-1.5">
-            {/* DEL — documento clave de la estrategia (destacado) */}
+            {/* DEL — documento clave de la estrategia (destacado, editable) */}
             {delDocs.map(d => (
-              <div key={d.id} className="flex items-stretch gap-1.5 mb-0.5">
+              <div key={d.id} className="flex items-stretch gap-1.5 mb-0.5 group/del">
                 <a href={d.web_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 flex items-center gap-2.5 py-2.5 px-3 rounded-[10px] no-underline" style={{ border: '1px solid #F1D08B', background: 'linear-gradient(90deg,#FFFBF0,#FFF4DA)' }}>
                   <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg shrink-0 text-white" style={{ background: '#E0922E' }}><Star size={17} fill="#fff" /></span>
                   <span className="flex-1 min-w-0">
@@ -540,6 +554,8 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
                   </span>
                 </a>
                 <CopyButton value={d.web_url} title="Copiar enlace" />
+                <button className="opacity-0 group-hover/del:opacity-100 w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center shrink-0" onClick={() => setDelEdit({ id: d.id, label: d.name, url: d.web_url })} title="Editar nombre/link del DEL"><Pencil size={12} /></button>
+                <button className="opacity-0 group-hover/del:opacity-100 w-7 h-7 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center shrink-0" onClick={() => { if (window.confirm(`¿Quitar este DEL de los destacados?\n"${d.name}"`)) hideDel(d.id); }} title="Quitar de DEL destacado"><X size={12} /></button>
               </div>
             ))}
 
@@ -652,6 +668,10 @@ function StrategyResourcePanel({ s, drive, driveNodes, onUpdate }) {
             if (accModal.index != null) next[accModal.index] = data; else next.push(data);
             onUpdate(s.id, { accesos: next });
           }} />
+      )}
+      {delEdit && (
+        <LinkFormModal open={!!delEdit} onClose={() => setDelEdit(null)} initial={{ label: delEdit.label, url: delEdit.url, category: 'doc' }} defaultCategory="doc"
+          onSave={(data) => saveDelEdit(delEdit.id, data)} />
       )}
     </div>
   );
