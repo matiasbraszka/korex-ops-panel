@@ -858,8 +858,34 @@ export function computeStatusDurations(task, taskComments) {
   const byStatus = {};
   let total = 0;
   Object.keys(byMs).forEach(k => { byStatus[k] = byMs[k] / MS_DAY; total += byMs[k]; });
-  const lastChangeMs = evs.length ? new Date(evs[evs.length - 1].created_at).getTime() : startMs;
-  const current = { status: task.status, sinceISO: new Date(lastChangeMs).toISOString(), days: (Date.now() - lastChangeMs) / MS_DAY };
+  // Ancla del "tiempo en el estado actual":
+  //  - Con log de cambios: el último evento (exacto).
+  //  - SIN log (tareas viejas anteriores al log, carry-over de sprint con
+  //    _skipHistory, o cambios hechos desde otra sesión): NO usamos createdDate,
+  //    porque haría que "tiempo en la fase" sea en realidad "tiempo desde que se
+  //    creó". Usamos el campo guardado más cercano al estado actual
+  //    (blockedSince / startedDate / validatedAt) y recién como último recurso
+  //    la creación.
+  const pick = (v) => {
+    if (!v) return null;
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v + 'T00:00:00' : v;
+    const ms = new Date(iso).getTime();
+    return Number.isNaN(ms) ? null : ms;
+  };
+  let anchorMs;
+  if (evs.length) {
+    anchorMs = new Date(evs[evs.length - 1].created_at).getTime();
+  } else if (task.status === 'blocked') {
+    anchorMs = pick(task.blockedSince);
+  } else if (task.status === 'done') {
+    anchorMs = pick(task.validatedAt) ?? pick(task.completedDate);
+  } else if (task.status === 'in-progress' || task.status === 'en-revision' || task.status === 'priorizado') {
+    anchorMs = pick(task.startedDate);
+  } else {
+    anchorMs = null; // backlog u otros → desde la creación
+  }
+  if (anchorMs == null) anchorMs = startMs;
+  const current = { status: task.status, sinceISO: new Date(anchorMs).toISOString(), days: Math.max(0, (Date.now() - anchorMs) / MS_DAY) };
   return { byStatus, current, total: total / MS_DAY };
 }
 

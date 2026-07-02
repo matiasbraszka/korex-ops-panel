@@ -14,7 +14,10 @@ import {
   recomputeStartedDates,
   normalizeName,
   assigneeMatches,
+  computeStatusDurations,
 } from './helpers';
+
+const isoDaysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
 describe('today', () => {
   it('devuelve YYYY-MM-DD en hora local', () => {
@@ -166,6 +169,27 @@ describe('userOwnsTask', () => {
     expect(userOwnsTask({ assignee: 'Matias Braszka' }, u)).toBe(true);   // sin acento
     expect(userOwnsTask({ assignee: '  matías  ' }, u)).toBe(true);        // espacios + acento
     expect(userOwnsTask({ assignee: 'Ana, Matías' }, { id: 'x', name: 'matias' })).toBe(true);
+  });
+});
+
+describe('computeStatusDurations (tiempo en el estado actual)', () => {
+  it('sin log de cambios, una tarea in-progress mide desde startedDate, NO desde la creación', () => {
+    const task = { id: 'k1', status: 'in-progress', createdDate: isoDaysAgo(30), startedDate: isoDaysAgo(5) };
+    const { current } = computeStatusDurations(task, []);
+    // ~5 días (desde startedDate), no ~30 (desde createdDate).
+    expect(current.days).toBeLessThan(10);
+    expect(current.days).toBeGreaterThan(3);
+  });
+  it('sin log, una tarea en backlog sí mide desde la creación', () => {
+    const task = { id: 'k2', status: 'backlog', createdDate: isoDaysAgo(8), startedDate: null };
+    const { current } = computeStatusDurations(task, []);
+    expect(current.days).toBeGreaterThan(6);
+  });
+  it('con log de cambios, mide desde el último evento de estado', () => {
+    const task = { id: 'k3', status: 'in-progress', createdDate: isoDaysAgo(30), startedDate: isoDaysAgo(20) };
+    const comments = [{ task_id: 'k3', kind: 'system', created_at: new Date(Date.now() - 2 * 864e5).toISOString(), event_meta: { field: 'status', from: 'priorizado', to: 'in-progress' } }];
+    const { current } = computeStatusDurations(task, comments);
+    expect(current.days).toBeLessThan(4); // ~2 días desde el evento
   });
 });
 
