@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
 import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, fmtDuration } from '../../utils/helpers';
@@ -46,6 +46,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const client = task ? (clients || []).find(c => c.id === task.clientId) : null;
   const [tab, setTab] = useState('tarea');
   const [newItem, setNewItem] = useState('');
+  const [dragId, setDragId] = useState(null);
   const [newAc, setNewAc] = useState('');
   const [gateMsg, setGateMsg] = useState('');
   const [newComment, setNewComment] = useState('');
@@ -77,6 +78,17 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const addItem = () => { const t = newItem.trim(); if (!t) return; saveChecklist([...checklist, { id: mkId(), text: t, done: false }]); setNewItem(''); };
   const toggleItem = (id) => saveChecklist(checklist.map(i => i.id === id ? { ...i, done: !i.done } : i));
   const removeItem = (id) => saveChecklist(checklist.filter(i => i.id !== id));
+  // Reordenar la checklist arrastrando (soltar el ítem `fromId` sobre `toId`).
+  const moveChecklist = (fromId, toId) => {
+    if (!fromId || fromId === toId) return;
+    const arr = [...checklist];
+    const from = arr.findIndex(i => i.id === fromId);
+    const to = arr.findIndex(i => i.id === toId);
+    if (from < 0 || to < 0) return;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    saveChecklist(arr);
+  };
 
   const saveCriteria = (next) => updateTask(task.id, { acceptanceCriteria: next });
   const addAc = () => { const t = newAc.trim(); if (!t) return; saveCriteria([...criteria, { id: mkId(), text: t, done: false }]); setNewAc(''); };
@@ -151,8 +163,20 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const inputStyle = { flex: 1, border: '1px solid #E2E5EB', borderRadius: 9, padding: '9px 11px', fontSize: 12.5, outline: 'none', color: '#1A1D26', fontFamily: 'inherit' };
   const addBtnStyle = { width: 38, height: 38, flexShrink: 0, border: '1px solid #E2E5EB', borderRadius: 9, background: '#fff', color: '#6B7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
-  const checkRow = (it, accent, onToggle, onDel) => (
-    <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 0', borderBottom: '1px solid #F6F7F9' }}>
+  // `dnd` opcional: { dragId, setDragId, onReorder } habilita arrastrar para
+  // reordenar (agarrando el ⋮⋮). Sin `dnd`, la fila se comporta como antes.
+  const checkRow = (it, accent, onToggle, onDel, dnd) => (
+    <div key={it.id}
+      onDragOver={dnd ? (e) => e.preventDefault() : undefined}
+      onDrop={dnd ? (e) => { e.preventDefault(); dnd.onReorder(dnd.dragId, it.id); dnd.setDragId(null); } : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: dnd ? 6 : 11, padding: '8px 0', borderBottom: '1px solid #F6F7F9', opacity: dnd && dnd.dragId === it.id ? 0.4 : 1 }}>
+      {dnd && (
+        <span draggable onDragStart={() => dnd.setDragId(it.id)} onDragEnd={() => dnd.setDragId(null)}
+          title="Arrastrar para reordenar"
+          style={{ cursor: 'grab', color: '#CBD2DC', display: 'flex', flexShrink: 0, alignItems: 'center' }}>
+          <GripVertical size={14} />
+        </span>
+      )}
       <span onClick={() => onToggle(it.id)} style={{ width: 19, height: 19, flexShrink: 0, borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: it.done ? accent : '#fff', border: it.done ? 'none' : '1.5px solid #CBD2DC' }}>
         {it.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
       </span>
@@ -262,7 +286,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                     <div style={{ width: subPct + '%', height: '100%', background: ACC, borderRadius: 999, transition: 'width .3s ease' }} />
                   </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column' }}>{checklist.map(it => checkRow(it, ACC, toggleItem, removeItem))}</div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>{checklist.map(it => checkRow(it, ACC, toggleItem, removeItem, { dragId, setDragId, onReorder: moveChecklist }))}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
                   <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>

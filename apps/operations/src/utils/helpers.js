@@ -355,6 +355,32 @@ export function userOwnsTask(task, currentUser, teamMembers = []) {
 }
 
 /**
+ * isReviewerOf: ¿la persona (filtro por nombre/id) es el REVISOR de la tarea y
+ * la tarea está EN REVISIÓN? El revisor solo "ve" la tarea cuando llega a
+ * `en-revision`, para poder revisarla y pasarla a Validado. En cualquier otro
+ * estado la tarea no le aparece por ser revisor.
+ */
+export function isReviewerOf(task, filter) {
+  if (task?.status !== 'en-revision' || !task?.reviewer) return false;
+  if (!filter || filter === 'all') return false;
+  return assigneeMatches(task.reviewer, filter);
+}
+
+/**
+ * userSeesTask: ¿el usuario ve la tarea en su tablero? Es responsable, O es el
+ * revisor y la tarea está en revisión (para poder validarla). Se usa donde la
+ * visibilidad de un no-admin hoy usa `userOwnsTask` en el tablero de tareas, así
+ * el revisor no-admin ve la tarea justo cuando le toca revisarla.
+ */
+export function userSeesTask(task, currentUser, teamMembers = []) {
+  if (userOwnsTask(task, currentUser, teamMembers)) return true;
+  if (task?.status === 'en-revision' && task?.reviewer) {
+    return userOwnsTask({ assignee: task.reviewer }, currentUser, teamMembers);
+  }
+  return false;
+}
+
+/**
  * getBottleneck: "Pendiente para avanzar" es un texto MANUAL por cliente,
  * editado a mano desde la lista de clientes y guardado en Supabase (columna
  * `bottleneck`). El sistema NUNCA lo deriva ni lo pisa automaticamente.

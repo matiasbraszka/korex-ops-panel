@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary, userOwnsTask, assigneeMatches } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
@@ -826,8 +826,8 @@ export function AppProvider({ children }) {
       const merged = { ...prevForHistory, ...cleanUpdates };
       const cu = currentUserRef.current;
       const restricted = !!cu && !cu.isAdmin;
-      const stillMine = !restricted || userOwnsTask(merged, cu, teamMembersRef.current);
-      const stillInFilter = assigneeMatches(merged.assignee, taskAssigneeRef.current);
+      const stillMine = !restricted || userSeesTask(merged, cu, teamMembersRef.current);
+      const stillInFilter = assigneeMatches(merged.assignee, taskAssigneeRef.current) || isReviewerOf(merged, taskAssigneeRef.current);
       if (!stillMine || !stillInFilter) {
         const who = (merged.assignee || '').trim();
         flash(who

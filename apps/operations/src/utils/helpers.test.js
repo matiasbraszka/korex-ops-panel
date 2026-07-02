@@ -11,6 +11,8 @@ import {
   isTaskEnabled,
   isTimerRunning,
   userOwnsTask,
+  userSeesTask,
+  isReviewerOf,
   recomputeStartedDates,
   normalizeName,
   assigneeMatches,
@@ -216,6 +218,35 @@ describe('normalizeName', () => {
     expect(normalizeName('  Matías   Braszka ')).toBe('matias braszka');
     expect(normalizeName('JOSÉ')).toBe('jose');
     expect(normalizeName(null)).toBe('');
+  });
+});
+
+describe('isReviewerOf (revisor ve la tarea solo en-revisión)', () => {
+  it('matchea al revisor (nombre completo, sin acento) solo cuando está en-revisión', () => {
+    const task = { status: 'en-revision', reviewer: 'Matías Braszka', assignee: 'Ana' };
+    expect(isReviewerOf(task, 'Matias Braszka')).toBe(true);       // filtro sin acento
+    expect(isReviewerOf({ ...task, status: 'in-progress' }, 'Matias Braszka')).toBe(false); // otro estado
+  });
+  it('no matchea si no es el revisor, o sin revisor, o filtro all/vacío', () => {
+    const task = { status: 'en-revision', reviewer: 'Matías Braszka', assignee: 'Ana' };
+    expect(isReviewerOf(task, 'Ana')).toBe(false);         // ana es responsable, no revisor
+    expect(isReviewerOf({ status: 'en-revision', reviewer: null }, 'matias')).toBe(false);
+    expect(isReviewerOf(task, 'all')).toBe(false);
+    expect(isReviewerOf(task, '')).toBe(false);
+  });
+});
+
+describe('userSeesTask (responsable o revisor en-revisión)', () => {
+  const rev = { id: 'u9', name: 'Matías Braszka' };
+  it('el responsable siempre la ve', () => {
+    expect(userSeesTask({ assignee: 'Matias Braszka', status: 'backlog' }, rev)).toBe(true);
+  });
+  it('el revisor la ve solo cuando está en-revisión', () => {
+    expect(userSeesTask({ assignee: 'Ana', reviewer: 'Matías Braszka', status: 'en-revision' }, rev)).toBe(true);
+    expect(userSeesTask({ assignee: 'Ana', reviewer: 'Matías Braszka', status: 'in-progress' }, rev)).toBe(false);
+  });
+  it('sin relación, no la ve', () => {
+    expect(userSeesTask({ assignee: 'Ana', reviewer: 'Pedro', status: 'en-revision' }, rev)).toBe(false);
   });
 });
 

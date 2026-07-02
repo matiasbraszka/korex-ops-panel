@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft, isSprintLocked, canValidate, pendingCriteria, sprintCount, daysAgo, daysBetween, assigneeMatches } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, userSeesTask, isReviewerOf, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft, isSprintLocked, canValidate, pendingCriteria, sprintCount, daysAgo, daysBetween, assigneeMatches } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
@@ -55,9 +55,11 @@ export default function SprintBoardView() {
     const dept = t.department ? (DEPARTMENTS[t.department]?.label || '') : '';
     return `${t.title} ${c?.name || ''} ${phaseLabel} ${dept}`.toLowerCase().includes(q);
   };
-  const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee);
+  // El revisor ve la tarea cuando entra "en-revisión": la matchea por revisor
+  // (además del responsable) para que le aparezca al filtrar por su nombre.
+  const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee) || isReviewerOf(t, taskAssignee);
   const visible = (t) => {
-    if (restricted && !userOwnsTask(t, currentUser, teamMembers)) return false;
+    if (restricted && !userSeesTask(t, currentUser, teamMembers)) return false;
     if (!matchesAssignee(t)) return false;
     if (!matchesQuery(t)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
