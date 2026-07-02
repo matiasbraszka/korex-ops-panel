@@ -630,10 +630,17 @@ export function AppProvider({ children }) {
       return newClients;
     });
     // Devolvemos la promesa de persistencia en Supabase para que quien llame
-    // pueda hacer await y mostrar feedback (spinner / check / error).
-    if (updated && dbReady.current) return dbSaveClient(updated);
+    // pueda hacer await y mostrar feedback (spinner / check / error). Además,
+    // avisamos si el guardado no llegó a la base (dbSaveClient devuelve null),
+    // para que un cambio de cliente no falle en silencio.
+    if (updated && dbReady.current) {
+      return dbSaveClient(updated).then(res => {
+        if (res === null) flash('No se pudo guardar el cambio del cliente. Revisá tu conexión y volvé a intentar.');
+        return res;
+      });
+    }
     return Promise.resolve();
-  }, [save, dbSaveClient]);
+  }, [save, dbSaveClient, flash]);
 
   // Borra un cliente y TODAS sus tareas (incluido fases custom y deadlines).
   // Operacion irreversible. Persiste en Supabase y limpia el state local.
@@ -1010,11 +1017,12 @@ export function AppProvider({ children }) {
       sbFetch('app_settings?key=eq.global', {
         method: 'PATCH',
         headers: { 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ value: merged, updated_at: new Date().toISOString() })
-      }).catch(e => console.warn('updateAppSettings error', e));
+        body: JSON.stringify({ value: merged, updated_at: new Date().toISOString() }),
+        throwOnError: true,
+      }).catch(e => { console.warn('updateAppSettings error', e); flash('No se pudo guardar la configuración. Revisá tu conexión y volvé a guardar.'); });
       return merged;
     });
-  }, []);
+  }, [flash]);
 
   // ── CRUD: team_members ──
   const addTeamMember = useCallback(async (member) => {
@@ -1295,26 +1303,32 @@ export function AppProvider({ children }) {
   const resolveBlocker = useCallback(async (blockerId) => {
     const now = new Date().toISOString();
     const resolvedBy = currentUser?.id || null;
-    await sbFetch('team_blockers?id=eq.' + encodeURIComponent(blockerId), {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ resolved: true, resolved_at: now, resolved_by: resolvedBy }),
-    });
     setTeamBlockers(prev => prev.map(b => b.id === blockerId
       ? { ...b, resolved: true, resolved_at: now, resolved_by: resolvedBy }
       : b));
-  }, [currentUser]);
+    try {
+      await sbFetch('team_blockers?id=eq.' + encodeURIComponent(blockerId), {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ resolved: true, resolved_at: now, resolved_by: resolvedBy }),
+        throwOnError: true,
+      });
+    } catch { flash('No se pudo marcar el bloqueo como resuelto. Volvé a intentar.'); }
+  }, [currentUser, flash]);
 
   const unresolveBlocker = useCallback(async (blockerId) => {
-    await sbFetch('team_blockers?id=eq.' + encodeURIComponent(blockerId), {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ resolved: false, resolved_at: null, resolved_by: null }),
-    });
     setTeamBlockers(prev => prev.map(b => b.id === blockerId
       ? { ...b, resolved: false, resolved_at: null, resolved_by: null }
       : b));
-  }, []);
+    try {
+      await sbFetch('team_blockers?id=eq.' + encodeURIComponent(blockerId), {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ resolved: false, resolved_at: null, resolved_by: null }),
+        throwOnError: true,
+      });
+    } catch { flash('No se pudo reabrir el bloqueo. Volvé a intentar.'); }
+  }, [flash]);
 
   // ── CRUD: ideas (cajón de ideas) ──
   const addIdea = useCallback(async (data) => {
@@ -1327,28 +1341,37 @@ export function AppProvider({ children }) {
       status: data.status || 'pending',
       author_id: data.author_id,
     };
-    await sbFetch('ideas', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify(row),
-    });
-    setIdeas(prev => [{ ...row, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
+    const nowIso = new Date().toISOString();
+    setIdeas(prev => [{ ...row, created_at: nowIso, updated_at: nowIso }, ...prev]);
+    try {
+      await sbFetch('ideas', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify(row),
+        throwOnError: true,
+      });
+    } catch { flash('No se pudo guardar la idea. Revisá tu conexión y volvé a intentar.'); }
     return row;
-  }, []);
+  }, [flash]);
 
   const updateIdea = useCallback(async (id, fields) => {
-    await sbFetch('ideas?id=eq.' + encodeURIComponent(id), {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify(fields),
-    });
     setIdeas(prev => prev.map(i => i.id === id ? { ...i, ...fields, updated_at: new Date().toISOString() } : i));
-  }, []);
+    try {
+      await sbFetch('ideas?id=eq.' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify(fields),
+        throwOnError: true,
+      });
+    } catch { flash('No se pudo guardar el cambio en la idea. Volvé a intentar.'); }
+  }, [flash]);
 
   const deleteIdea = useCallback(async (id) => {
-    await sbFetch('ideas?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
     setIdeas(prev => prev.filter(i => i.id !== id));
-  }, []);
+    try {
+      await sbFetch('ideas?id=eq.' + encodeURIComponent(id), { method: 'DELETE', throwOnError: true });
+    } catch { flash('No se pudo borrar la idea. Volvé a intentar.'); }
+  }, [flash]);
 
   // ── CRUD: strategies + strategy_pages ──
   // Cada cliente puede tener varias estrategias (embudo de ventas). Cada
@@ -1913,12 +1936,15 @@ export function AppProvider({ children }) {
     else if (nextPosition == null) newPos = prevPosition + 1;
     else newPos = (prevPosition + nextPosition) / 2;
     setNotas(prev => prev.map(n => n.id === id ? { ...n, position: newPos } : n));
-    await sbFetch('notas?id=eq.' + encodeURIComponent(id), {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ position: newPos }),
-    });
-  }, []);
+    try {
+      await sbFetch('notas?id=eq.' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ position: newPos }),
+        throwOnError: true,
+      });
+    } catch { flash('No se pudo guardar el nuevo orden de las notas. Volvé a intentar.'); }
+  }, [flash]);
 
   const updateNota = useCallback(async (id, fields) => {
     await sbFetch('notas?id=eq.' + encodeURIComponent(id), {
@@ -1931,9 +1957,11 @@ export function AppProvider({ children }) {
   }, []);
 
   const deleteNota = useCallback(async (id) => {
-    await sbFetch('notas?id=eq.' + encodeURIComponent(id), { method: 'DELETE' });
     setNotas(prev => prev.filter(n => n.id !== id));
-  }, []);
+    try {
+      await sbFetch('notas?id=eq.' + encodeURIComponent(id), { method: 'DELETE', throwOnError: true });
+    } catch { flash('No se pudo borrar la nota. Volvé a intentar.'); }
+  }, [flash]);
 
   // ── CRUD: llamadas ──
   const updateLlamada = useCallback(async (id, fields) => {
