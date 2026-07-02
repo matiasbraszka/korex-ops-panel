@@ -185,6 +185,24 @@ describe('computeStatusDurations (tiempo en el estado actual)', () => {
     const { current } = computeStatusDurations(task, []);
     expect(current.days).toBeGreaterThan(6);
   });
+  it('usa status_history (fuente nueva): tiempo por estado real + estado actual', () => {
+    const task = {
+      id: 'k4', status: 'in-progress', createdDate: isoDaysAgo(40),
+      statusHistory: [
+        { status: 'priorizado', at: new Date(Date.now() - 10 * 864e5).toISOString() },
+        { status: 'in-progress', at: new Date(Date.now() - 3 * 864e5).toISOString() },
+      ],
+    };
+    const { current, byStatus, hasHistory } = computeStatusDurations(task, []);
+    expect(hasHistory).toBe(true);
+    expect(current.days).toBeGreaterThan(2);
+    expect(current.days).toBeLessThan(4); // ~3 días en curso, NO 40
+    expect(byStatus['priorizado']).toBeGreaterThan(6); // ~7 días priorizado
+  });
+  it('sin historial devuelve hasHistory=false', () => {
+    const { hasHistory } = computeStatusDurations({ id: 'k5', status: 'in-progress', createdDate: isoDaysAgo(5), startedDate: isoDaysAgo(2) }, []);
+    expect(hasHistory).toBe(false);
+  });
   it('con log de cambios, mide desde el último evento de estado', () => {
     const task = { id: 'k3', status: 'in-progress', createdDate: isoDaysAgo(30), startedDate: isoDaysAgo(20) };
     const comments = [{ task_id: 'k3', kind: 'system', created_at: new Date(Date.now() - 2 * 864e5).toISOString(), event_meta: { field: 'status', from: 'priorizado', to: 'in-progress' } }];

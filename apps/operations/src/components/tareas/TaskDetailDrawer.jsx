@@ -344,7 +344,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                     .map(([k, label]) => ({ k, label, d: dur.byStatus[k] || 0 }));
                   const max = Math.max(0.01, ...rows.map(r => r.d));
                   const any = rows.some(r => r.d >= 0.04);
-                  if (!any) return <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin historial de cambios todavía.</div>;
+                  if (!any) return dur.hasHistory ? null : <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin historial de estados todavía — arranca a registrarse desde el próximo cambio de estado.</div>;
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {rows.filter(r => r.d >= 0.04).map(r => {
@@ -361,7 +361,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                   );
                 })()}
                 {task.status !== 'done' && dur.current && (
-                  <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 12 }}>Estado actual: <strong style={{ color: '#1A1D26' }}>{STATUS_SHORT[task.status] || task.status}</strong> · hace {fmtDuration(dur.current.days)}</div>
+                  <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 12 }}>Estado actual: <strong style={{ color: '#1A1D26' }}>{STATUS_SHORT[task.status] || task.status}</strong>{dur.hasHistory ? ` · hace ${fmtDuration(dur.current.days)}` : ' · seguimiento desde el próximo cambio'}</div>
                 )}
               </div>
 

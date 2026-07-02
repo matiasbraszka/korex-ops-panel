@@ -558,7 +558,7 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     status: status || 'backlog', notes: notes || '', description: '', createdDate: today(),
     startedDate: null, completedDate: null, blockedSince: null, dueDate: null,
     definitionOfDone: '', acceptanceCriteria: [], reviewer: null,
-    validatedBy: null, validatedAt: null, sprintHistory: [],
+    validatedBy: null, validatedAt: null, sprintHistory: [], statusHistory: [],
   };
 }
 
@@ -830,63 +830,64 @@ export function sprintDaysLeft(sprint) {
 // actual y desde cuándo. Si la tarea no tiene historial (tareas viejas), atribuye
 // todo el tiempo al estado actual (aproximación honesta).
 export function computeStatusDurations(task, taskComments) {
-  if (!task) return { byStatus: {}, current: null, total: 0 };
+  if (!task) return { byStatus: {}, current: null, total: 0, hasHistory: false };
   const MS_DAY = 864e5;
-  const evs = (taskComments || [])
-    .filter(c => c.task_id === task.id && c.kind === 'system' && c.event_meta && c.event_meta.field === 'status' && c.created_at)
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-  const startMs = task.createdDate
-    ? new Date(task.createdDate + 'T00:00:00').getTime()
-    : (evs[0] ? new Date(evs[0].created_at).getTime() : Date.now());
-  let endMs = Date.now();
-  if (task.status === 'done') {
-    const endIso = task.validatedAt || (task.completedDate ? task.completedDate + 'T23:59:59' : null);
-    if (endIso) { const t = new Date(endIso).getTime(); if (!Number.isNaN(t)) endMs = t; }
-  }
-  const byMs = {};
-  const add = (status, ms) => { if (status && ms > 0) byMs[status] = (byMs[status] || 0) + ms; };
-  if (evs.length === 0) {
-    add(task.status, endMs - startMs);
-  } else {
-    add(evs[0].event_meta.from || 'backlog', new Date(evs[0].created_at).getTime() - startMs);
-    for (let i = 0; i < evs.length; i++) {
-      const segStart = new Date(evs[i].created_at).getTime();
-      const segEnd = i + 1 < evs.length ? new Date(evs[i + 1].created_at).getTime() : endMs;
-      add(evs[i].event_meta.to || task.status, segEnd - segStart);
-    }
-  }
-  const byStatus = {};
-  let total = 0;
-  Object.keys(byMs).forEach(k => { byStatus[k] = byMs[k] / MS_DAY; total += byMs[k]; });
-  // Ancla del "tiempo en el estado actual":
-  //  - Con log de cambios: el último evento (exacto).
-  //  - SIN log (tareas viejas anteriores al log, carry-over de sprint con
-  //    _skipHistory, o cambios hechos desde otra sesión): NO usamos createdDate,
-  //    porque haría que "tiempo en la fase" sea en realidad "tiempo desde que se
-  //    creó". Usamos el campo guardado más cercano al estado actual
-  //    (blockedSince / startedDate / validatedAt) y recién como último recurso
-  //    la creación.
   const pick = (v) => {
     if (!v) return null;
     const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v + 'T00:00:00' : v;
     const ms = new Date(iso).getTime();
     return Number.isNaN(ms) ? null : ms;
   };
-  let anchorMs;
-  if (evs.length) {
-    anchorMs = new Date(evs[evs.length - 1].created_at).getTime();
-  } else if (task.status === 'blocked') {
-    anchorMs = pick(task.blockedSince);
-  } else if (task.status === 'done') {
-    anchorMs = pick(task.validatedAt) ?? pick(task.completedDate);
-  } else if (task.status === 'in-progress' || task.status === 'en-revision' || task.status === 'priorizado') {
-    anchorMs = pick(task.startedDate);
-  } else {
-    anchorMs = null; // backlog u otros → desde la creación
+  // Fin del cómputo: ahora, salvo done (usa validación/completado).
+  let endMs = Date.now();
+  if (task.status === 'done') {
+    const e = pick(task.validatedAt) ?? pick(task.completedDate ? task.completedDate + 'T23:59:59' : null);
+    if (e != null) endMs = e;
   }
-  if (anchorMs == null) anchorMs = startMs;
-  const current = { status: task.status, sinceISO: new Date(anchorMs).toISOString(), days: Math.max(0, (Date.now() - anchorMs) / MS_DAY) };
-  return { byStatus, current, total: total / MS_DAY };
+  // Timeline de "entradas a cada estado" (ms). Fuente primaria: status_history
+  // (desacoplado del feed de comentarios). Fallback: los eventos system viejos del
+  // feed (tareas anteriores al cambio de junio). Si no hay ninguno → vacío.
+  let timeline = [];
+  if (Array.isArray(task.statusHistory) && task.statusHistory.length) {
+    timeline = task.statusHistory
+      .map(h => ({ status: h.status, ms: pick(h.at) }))
+      .filter(e => e.status && e.ms != null)
+      .sort((a, b) => a.ms - b.ms);
+  } else {
+    const evs = (taskComments || [])
+      .filter(c => c.task_id === task.id && c.kind === 'system' && c.event_meta && c.event_meta.field === 'status' && c.created_at)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    if (evs.length) {
+      const startMs = pick(task.createdDate) ?? new Date(evs[0].created_at).getTime();
+      timeline.push({ status: evs[0].event_meta.from || 'backlog', ms: startMs });
+      evs.forEach(e => timeline.push({ status: e.event_meta.to || task.status, ms: new Date(e.created_at).getTime() }));
+    }
+  }
+  const byMs = {};
+  const add = (status, ms) => { if (status && ms > 0) byMs[status] = (byMs[status] || 0) + ms; };
+  const hasHistory = timeline.length > 0;
+  let currentSinceMs;
+  if (hasHistory) {
+    for (let i = 0; i < timeline.length; i++) {
+      const segEnd = i + 1 < timeline.length ? timeline[i + 1].ms : endMs;
+      add(timeline[i].status, segEnd - timeline[i].ms);
+    }
+    currentSinceMs = timeline[timeline.length - 1].ms;
+  } else {
+    // Sin historial real: NO inventamos un desglose ni medimos desde la creación.
+    // Anclamos el "estado actual" en el mejor campo guardado (aproximado honesto);
+    // la ficha aclara que el seguimiento arranca desde el próximo cambio.
+    if (task.status === 'blocked') currentSinceMs = pick(task.blockedSince);
+    else if (task.status === 'in-progress' || task.status === 'en-revision' || task.status === 'priorizado') currentSinceMs = pick(task.startedDate);
+    else if (task.status === 'done') currentSinceMs = pick(task.validatedAt) ?? pick(task.completedDate);
+    else currentSinceMs = pick(task.createdDate);
+    if (currentSinceMs == null) currentSinceMs = pick(task.createdDate) ?? Date.now();
+  }
+  const byStatus = {};
+  let total = 0;
+  Object.keys(byMs).forEach(k => { byStatus[k] = byMs[k] / MS_DAY; total += byMs[k]; });
+  const current = { status: task.status, sinceISO: new Date(currentSinceMs).toISOString(), days: Math.max(0, (endMs - currentSinceMs) / MS_DAY) };
+  return { byStatus, current, total: total / MS_DAY, hasHistory };
 }
 
 // Formato compacto de una duración en días → "3d" / "5h" / "<1h".
