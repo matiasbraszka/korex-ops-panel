@@ -18,15 +18,19 @@ Corre sobre la **suscripción de Claude** (claude.ai RemoteTrigger), igual que
 2. Busca en `llamadas` las de `categoria='equipo'` con `mkt_resumen_status is null` dentro del `lookback_days`, y su transcripción (`llamadas_inbox.transcript` vía `inbox_id`).
 3. **Detección** = título (`marketing`/`semanal`/`planificación`/`retrospectiva`) o ≥2 participantes del equipo de marketing (José Martín, María, José Zerillo, David) **+ la IA confirma** leyendo la transcripción (si no es de marketing → `skipped`).
 4. Escribe el resumen de **5 secciones**: Contexto · Wins · Cuellos de botella · Insights · Tareas nuevas y foco.
-5. **Postea a Slack** (una publicación por llamada) con el link de la grabación.
-6. **Bitácora (Canvas):** agrega el resumen al **Canvas de Slack** (`canvas_id`), la sesión más nueva arriba de todo (debajo de la intro). Es el archivo permanente y buscable — el DM/canal es solo el aviso.
-7. Marca `mkt_resumen_status='sent'` solo si el envío salió OK (si falla, reintenta la próxima corrida).
+5. **Guarda el resumen COMPLETO en el Canvas** (`canvas_id`), la sesión más nueva arriba de todo (debajo de la intro). Es el archivo permanente y buscable — la salida principal.
+6. **Aviso corto** al destino: canal `grupos.marketing.channel` si `test_mode=false`, o DM a Matías si `test_mode=true`. Texto: "Resumen cargado → link al Canvas" (NO el resumen completo).
+7. Marca `mkt_resumen_status='sent'` solo si el Canvas se actualizó OK (si falla, reintenta la próxima corrida).
 
 ### Canvas (bitácora)
-Canvas **"📈 Resúmenes — Reuniones de Marketing"** = `F0BESB2FD0A`
-(https://metodokorex1.slack.com/docs/T07NCGMQT5Z/F0BESB2FD0A). Cada sesión queda
-archivada ahí para no perderse en el scroll del chat. El id vive en
+Canvas **"Reuniones Equipo de marketing"** = `F0BEPE88QJH`
+(https://metodokorex1.slack.com/docs/T07NCGMQT5Z/F0BEPE88QJH). El id vive en
 `reuniones_config.marketing_auto.canvas_id`.
+
+> **OJO:** un canvas creado por el MCP de Slack queda **privado del conector** y no
+> se puede compartir con el equipo (no hay tool de share/access). Por eso la bitácora
+> vive en un canvas que **creó Matías** (el MCP sí puede leer/escribir en él). Matías
+> debe **compartirlo** con #equipo-marketing/workspace para que el equipo lo vea.
 
 ## Modo prueba → producción
 
