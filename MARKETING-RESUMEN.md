@@ -32,6 +32,14 @@ Canvas **"Reuniones Equipo de marketing"** = `F0BEPE88QJH`
 > vive en un canvas que **creó Matías** (el MCP sí puede leer/escribir en él). Matías
 > debe **compartirlo** con #equipo-marketing/workspace para que el equipo lo vea.
 
+## Gemela: Socios
+
+Misma máquina para las **daily de socios** (Matías · Cristian · Marcos), independiente:
+- **Trigger:** `trig_01SVod45SUfFFL1vYkYVUjku` — "Socios: resumen de dailies", diario `45 4 * * *` UTC (01:45 AR).
+- **Columnas:** `llamadas.soc_resumen_status` / `soc_resumen_at`. **Config:** `reuniones_config.socios_auto` (mismos campos). **Canal:** `grupos.socios.channel` = `C0ADMC3HMED` (#socios-privado). **Canvas:** `F0BELNR5YQ3` ("Reuniones socios", de Matías).
+- **Detección:** título con 'socios' o ≥2 de {Matías, Cristian, Marcos} + la IA confirma que es reunión de socios (no marketing/tech/ventas/cliente).
+- Arrancó en `test_mode=true` (DM a Matías) por ser contenido sensible; cutover al canal cuando valide.
+
 ## Modo prueba → producción
 
 Config en `app_settings.reuniones_config.marketing_auto`:
