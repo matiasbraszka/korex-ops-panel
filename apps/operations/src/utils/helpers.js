@@ -890,13 +890,15 @@ export function computeStatusDurations(task, taskComments) {
   return { byStatus, current, total: total / MS_DAY, hasHistory };
 }
 
-// Formato compacto de una duración en días → "3d" / "5h" / "<1h".
+// Formato compacto de una duración en días → "3d" / "5h" / "12m" / "<1m".
 export function fmtDuration(days) {
   if (days == null || Number.isNaN(days)) return '';
   if (days >= 1) return `${Math.round(days)}d`;
   const hours = days * 24;
   if (hours >= 1) return `${Math.round(hours)}h`;
-  return '<1h';
+  const mins = hours * 60;
+  if (mins >= 1) return `${Math.round(mins)}m`;
+  return '<1m';
 }
 
 // Criterios de aceptación obligatorios: la tarea solo se puede validar si TODOS

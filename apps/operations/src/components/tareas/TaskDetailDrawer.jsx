@@ -342,12 +342,12 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 {(() => {
                   const rows = [['priorizado', 'Priorizado'], ['in-progress', 'En curso'], ['en-revision', 'En revisión'], ['blocked', 'Bloqueada'], ['paused', 'Pausada'], ['backlog', 'Backlog']]
                     .map(([k, label]) => ({ k, label, d: dur.byStatus[k] || 0 }));
-                  const max = Math.max(0.01, ...rows.map(r => r.d));
-                  const any = rows.some(r => r.d >= 0.04);
+                  const max = Math.max(0.0007, ...rows.map(r => r.d));
+                  const any = rows.some(r => r.d > 0);
                   if (!any) return dur.hasHistory ? null : <div style={{ fontSize: 12, color: '#9CA3AF' }}>Sin historial de estados todavía — arranca a registrarse desde el próximo cambio de estado.</div>;
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {rows.filter(r => r.d >= 0.04).map(r => {
+                      {rows.filter(r => r.d > 0).map(r => {
                         const tone = r.k === 'blocked' ? '#DC2626' : (r.k === 'en-revision' ? '#BE185D' : '#8B5CF6');
                         return (
                           <div key={r.k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
