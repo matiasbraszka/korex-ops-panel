@@ -14,12 +14,19 @@ Corre sobre la **suscripción de Claude** (claude.ai RemoteTrigger), igual que
 - **Conectores MCP:** Supabase (`cgdwieoxjoexzlfbxrfc`) + Slack.
 
 ### Qué hace en cada corrida
-1. Lee la config `app_settings.reuniones_config.marketing_auto` + `grupos.marketing.channel` + `test_dm_to`.
+1. Lee la config `app_settings.reuniones_config.marketing_auto` + `grupos.marketing.channel` + `test_dm_to` + `canvas_id`.
 2. Busca en `llamadas` las de `categoria='equipo'` con `mkt_resumen_status is null` dentro del `lookback_days`, y su transcripción (`llamadas_inbox.transcript` vía `inbox_id`).
 3. **Detección** = título (`marketing`/`semanal`/`planificación`/`retrospectiva`) o ≥2 participantes del equipo de marketing (José Martín, María, José Zerillo, David) **+ la IA confirma** leyendo la transcripción (si no es de marketing → `skipped`).
 4. Escribe el resumen de **5 secciones**: Contexto · Wins · Cuellos de botella · Insights · Tareas nuevas y foco.
 5. **Postea a Slack** (una publicación por llamada) con el link de la grabación.
-6. Marca `mkt_resumen_status='sent'` solo si el envío salió OK (si falla, reintenta la próxima corrida).
+6. **Bitácora (Canvas):** agrega el resumen al **Canvas de Slack** (`canvas_id`), la sesión más nueva arriba de todo (debajo de la intro). Es el archivo permanente y buscable — el DM/canal es solo el aviso.
+7. Marca `mkt_resumen_status='sent'` solo si el envío salió OK (si falla, reintenta la próxima corrida).
+
+### Canvas (bitácora)
+Canvas **"📈 Resúmenes — Reuniones de Marketing"** = `F0BESB2FD0A`
+(https://metodokorex1.slack.com/docs/T07NCGMQT5Z/F0BESB2FD0A). Cada sesión queda
+archivada ahí para no perderse en el scroll del chat. El id vive en
+`reuniones_config.marketing_auto.canvas_id`.
 
 ## Modo prueba → producción
 
@@ -31,6 +38,7 @@ Config en `app_settings.reuniones_config.marketing_auto`:
 | `lookback_days` | Ventana de llamadas a mirar (default 7). |
 | `max_per_run` | Tope de llamadas por corrida (default 4). |
 | `enabled` | Interruptor general. |
+| `canvas_id` | Canvas de Slack donde se archiva cada sesión (bitácora). |
 
 **Pasar a producción** (cuando Matías valide los resúmenes de prueba):
 ```sql
