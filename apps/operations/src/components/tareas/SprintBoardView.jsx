@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft, isSprintLocked, canValidate, pendingCriteria, sprintCount, daysAgo, assigneeMatches } from '../../utils/helpers';
+import { sprintTasks, userOwnsTask, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft, isSprintLocked, canValidate, pendingCriteria, sprintCount, daysAgo, daysBetween, assigneeMatches } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
@@ -196,10 +196,16 @@ export default function SprintBoardView() {
                 const subDone = checklist.filter(s => s.done).length;
                 const cCount = (taskComments || []).filter(cc => cc.task_id === t.id && !cc.parent_id && (!cc.kind || cc.kind === 'user')).length;
                 const blocked = isTaskBlocked(t, tasks);
-                // Antigüedad de la tarea: días desde que se creó (lo que se muestra
-                // en la tarjeta). El tiempo por fase/estado es tracking interno y
-                // vive en la ficha, no acá.
-                const ageDays = t.createdDate ? daysAgo(t.createdDate) : null;
+                // Antigüedad de la tarea en la tarjeta: días desde que se creó.
+                // En las terminadas (Validado) NO sigue contando: se congela en
+                // cuánto tardó (de creada a completada), que es lo que se usa para
+                // ver el tiempo real de cada tarea. El tiempo por etapa es tracking
+                // interno y vive en la ficha.
+                const isDone = t.status === 'done';
+                const doneDate = t.completedDate || (t.validatedAt ? t.validatedAt.slice(0, 10) : null);
+                const ageDays = t.createdDate
+                  ? (isDone && doneDate ? Math.max(0, daysBetween(t.createdDate, doneDate) ?? 0) : daysAgo(t.createdDate))
+                  : null;
                 const nSprints = sprintCount(t);
                 return (
                   <div key={t.id} data-card-id={t.id} draggable={!locked}
@@ -238,7 +244,7 @@ export default function SprintBoardView() {
                         ? <span style={{ width: 24, height: 24, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initialsFor(m)}</span>
                         : <span style={{ fontSize: 11, color: '#B6B9C0', fontStyle: 'italic' }}>sin asignar</span>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                        {ageDays != null && t.status !== 'done' && <span title="Días desde que se creó la tarea" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#9CA3AF' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{ageDays === 0 ? 'hoy' : ageDays + 'd'}</span>}
+                        {ageDays != null && <span title={isDone ? 'Cuánto tardó: de creada a completada' : 'Días desde que se creó la tarea'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#9CA3AF' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{isDone ? ageDays + 'd' : (ageDays === 0 ? 'hoy' : ageDays + 'd')}</span>}
                         {nSprints > 1 && <span title={`Lleva ${nSprints} sprints`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 5, padding: '1px 6px' }}>{nSprints} sprints</span>}
                         {subTotal > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#6B7280' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>{subDone}/{subTotal}</span>}
                         {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9CA3AF' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" /></svg>{cCount}</span>}
