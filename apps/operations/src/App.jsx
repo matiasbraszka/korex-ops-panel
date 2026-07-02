@@ -255,7 +255,7 @@ function AreaDropdown({ areas, activeArea, onSwitch, collapsed = false }) {
 }
 
 function MainLayout() {
-  const { view, setSelectedId, currentUser, doLogout, syncStatus, tasks, clients, createClient: ctxCreateClient, getAllPriorityLabels, loomVideos } = useApp();
+  const { view, setSelectedId, currentUser, doLogout, syncStatus, saveError, retryFailedSaves, flashMessage, tasks, clients, createClient: ctxCreateClient, getAllPriorityLabels, loomVideos } = useApp();
   const navigate = useNavigate();
   const [newClientModal, setNewClientModal] = useState(false);
   // Sidebar colapsable (PC) — persiste en localStorage
@@ -792,6 +792,32 @@ function MainLayout() {
       {/* Buzón de notificaciones + aviso flotante (montados al root). */}
       <NotificationsPanel />
       <NotificationToast />
+      {/* Aviso de guardado fallido — para que un cambio nunca "se revierta solo"
+          sin explicación. Se reintenta solo; el botón fuerza un reintento ya. */}
+      {saveError && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] max-md:bottom-[76px] max-w-[92vw]">
+          <div className="flex items-center gap-3 bg-red text-white rounded-xl shadow-xl px-4 py-2.5 border border-white/20">
+            <span className="text-[13px] font-medium leading-tight">
+              No se pudo guardar {saveError.count > 1 ? `${saveError.count} cambios` : 'un cambio'}. Reintentando…
+            </span>
+            <button
+              onClick={retryFailedSaves}
+              className="shrink-0 text-[12px] font-semibold bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 border-0 cursor-pointer text-white transition-colors"
+            >
+              Reintentar ahora
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Aviso transitorio (info): explica cuándo una acción movió una tarea
+          fuera del filtro/vista actual, para que no parezca que "desapareció". */}
+      {flashMessage && !saveError && (
+        <div key={flashMessage.ts} className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[65] max-md:bottom-[76px] max-w-[92vw]">
+          <div className="bg-[#1A1D26] text-white rounded-xl shadow-xl px-4 py-2.5 text-[13px] font-medium leading-tight border border-white/10">
+            {flashMessage.message}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

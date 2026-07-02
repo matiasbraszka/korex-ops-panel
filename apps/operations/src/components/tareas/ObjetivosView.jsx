@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isKorexClient, userOwnsTask, getAllPhases, blockingTasks } from '../../utils/helpers';
+import { isKorexClient, userOwnsTask, getAllPhases, blockingTasks, assigneeMatches } from '../../utils/helpers';
 import { TASK_PRIORITY } from '../../utils/constants';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
@@ -134,11 +134,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
     try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded)); } catch { /* ignore */ }
   }, [expanded]);
 
-  const matchesAssignee = (t) => {
-    if (taskAssignee === 'all') return true;
-    if (!t.assignee) return false;
-    return t.assignee.split(',').map(s => s.trim().toLowerCase()).includes(taskAssignee.toLowerCase());
-  };
+  const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee);
   const visibleTask = (t) => {
     if (restricted && !userOwnsTask(t, currentUser, teamMembers)) return false;
     if (!matchesAssignee(t)) return false;

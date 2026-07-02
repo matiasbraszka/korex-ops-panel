@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, GripVertical, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isKorexClient, userOwnsTask, getAllPhases } from '../../utils/helpers';
+import { isKorexClient, userOwnsTask, getAllPhases, assigneeMatches } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
@@ -62,11 +62,7 @@ export default function ListaView() {
   const tPos = (t) => (orderUserId && posByTask[t.id] !== undefined) ? posByTask[t.id] : (t.position ?? 0);
   const cPos = (c) => (orderUserId && posByClient[c.id] !== undefined) ? posByClient[c.id] : (c.position ?? 0);
 
-  const matchesAssignee = (t) => {
-    if (taskAssignee === 'all') return true;
-    if (!t.assignee) return false;
-    return t.assignee.split(',').map(s => s.trim().toLowerCase()).includes(taskAssignee.toLowerCase());
-  };
+  const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee);
   const clientById = (id) => (clients || []).find(c => c.id === id);
   const visible = (t) => {
     if (!activeSprint || t.sprintId !== activeSprint.id) return false;       // solo tareas del sprint

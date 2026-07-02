@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary, userOwnsTask, assigneeMatches } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
@@ -96,6 +96,15 @@ export function AppProvider({ children }) {
   const [hideBlockedTasks, setHideBlockedTasks] = useState(true);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [syncStatus, setSyncStatus] = useState('ok');
+  // Fallos de guardado de tareas que NO llegaron a la base. A diferencia de
+  // syncStatus (guardado masivo debounced), esto rastrea cada POST puntual de
+  // dbSaveTask: si falla, lo reintentamos con backoff y lo mostramos al usuario,
+  // así un cambio nunca "se revierte solo" sin explicación. null = todo ok.
+  const [saveError, setSaveError] = useState(null);
+  // Aviso transitorio (info) para explicar acciones que sacan una tarea de la
+  // vista/filtro actual (ej: reasignar la manda "fuera del filtro"), así no
+  // parece que "desapareció". Se limpia solo a los pocos segundos.
+  const [flashMessage, setFlashMessage] = useState(null);
   // Settings panel state (cargado desde Supabase)
   const [appSettings, setAppSettings] = useState(null); // { roadmap_template, services, priority_labels }
   const [teamMembers, setTeamMembers] = useState([]); // [{ id, name, role, ... }]
@@ -168,11 +177,24 @@ export function AppProvider({ children }) {
   // Un re-render en loop manda siempre el mismo payload → se corta solo; una
   // edición real cambia el payload (hash distinto) → sí se guarda.
   const lastTaskWriteRef = useRef(new Map());
+  // Cola de reintento: tareas cuyo POST falló (id -> {payload, title, hash, attempts}).
+  // Un loop con backoff las reintenta; guardamos SIEMPRE el último payload por id,
+  // así un reintento nunca pisa una edición más nueva. El aviso (saveError) se
+  // limpia solo cuando la cola queda vacía.
+  const failedWritesRef = useRef(new Map());
   // El backfill de started_date al cargar corre UNA sola vez por sesión, para
   // que un re-login/re-entrada no re-dispare decenas de writes cada vez.
   const startedDateBackfilledRef = useRef(false);
   const teamMembersRef = useRef([]);
   teamMembersRef.current = teamMembers;
+  // Refs de usuario/filtro actuales para leerlos dentro de callbacks memoizados
+  // (updateTask) sin recrearlos ni sumarlos a sus deps.
+  const currentUserRef = useRef(null);
+  currentUserRef.current = currentUser;
+  const taskAssigneeRef = useRef('all');
+  taskAssigneeRef.current = taskAssignee;
+  // Timer del aviso transitorio (flash) para poder reiniciarlo.
+  const flashTimerRef = useRef(null);
   const taskCommentsRef = useRef([]);
   taskCommentsRef.current = taskComments;
   const bulletCommentsRef = useRef([]);
@@ -255,6 +277,36 @@ export function AppProvider({ children }) {
     });
   }, []);
 
+  // Manda un POST de tarea detectando el error (throwOnError). En éxito marca el
+  // write como confirmado y lo saca de la cola; en fallo guarda el payload MÁS
+  // NUEVO por id para reintentar y muestra el aviso. No pasa por el coalescing
+  // (recibe el payload ya resuelto) para que un reintento sí se reenvíe.
+  const postTaskPayload = useCallback(async (id, payload, title, hash) => {
+    try {
+      await sbFetch('tasks', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+        body: JSON.stringify(payload),
+        throwOnError: true,
+      });
+      const le = lastTaskWriteRef.current.get(id);
+      if (le && le.hash === hash) le.state = 'ok';
+      failedWritesRef.current.delete(id);
+      if (failedWritesRef.current.size === 0) setSaveError(null);
+      return true;
+    } catch (err) {
+      const prev = failedWritesRef.current.get(id);
+      failedWritesRef.current.set(id, { payload, title: title || prev?.title || '', hash, attempts: prev?.attempts || 0 });
+      const le = lastTaskWriteRef.current.get(id);
+      if (le && le.hash === hash) le.state = 'failed';
+      // Mantener vivo el guard optimista mientras reintentamos (que el poll no revierta).
+      const rw = recentWriteRef.current.get(id);
+      if (rw) rw.ts = Date.now();
+      setSaveError({ count: failedWritesRef.current.size, title: title || prev?.title || '', paused: !!err?.paused });
+      return false;
+    }
+  }, []);
+
   const dbSaveTask = useCallback(async (t) => {
     const payload = {
       id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
@@ -287,8 +339,11 @@ export function AppProvider({ children }) {
     // afectar ediciones reales (que cambian el payload → hash distinto).
     const hash = JSON.stringify(payload);
     const last = lastTaskWriteRef.current.get(t.id);
-    if (last && last.hash === hash && Date.now() - last.ts < 4000) return;
-    lastTaskWriteRef.current.set(t.id, { hash, ts: Date.now() });
+    // Coalescer SOLO si el mismo payload ya está en vuelo o se guardó OK hace <4s.
+    // Si el último intento FALLÓ (state 'failed'), NO coalescemos: hay que reenviarlo
+    // de verdad (antes esto tapaba el reintento y la tarea "se revertía sola").
+    if (last && last.hash === hash && last.state !== 'failed' && Date.now() - last.ts < 4000) return;
+    lastTaskWriteRef.current.set(t.id, { hash, ts: Date.now(), state: 'pending' });
     // Guardamos QUÉ escribimos (no solo cuándo): así el poll sabe distinguir un
     // remoto "viejo" (todavía no propagó nuestro cambio) de uno ya al día. Evita
     // el parpadeo "reaparece y vuelve a desaparecer" al completar/mover tareas.
@@ -305,12 +360,8 @@ export function AppProvider({ children }) {
         department: t.department || null,
       });
     } catch { /* ignore */ }
-    return sbFetch('tasks', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-      body: JSON.stringify(payload),
-    });
-  }, []);
+    return postTaskPayload(t.id, payload, t.title, hash);
+  }, [postTaskPayload]);
 
   const dbSaveSprint = useCallback(async (s) => {
     if (!dbReady.current) return;
@@ -458,6 +509,41 @@ export function AppProvider({ children }) {
   // Limpiar el timer de guardado al desmontar para evitar un guardado fantasma
   // (setTimeout pendiente que dispara después de desmontar el provider).
   useEffect(() => () => clearTimeout(saveTimer.current), []);
+
+  // Reintento con backoff de las escrituras de tarea que fallaron. Acotado (máx.
+  // 6 intentos ≈ 60s, alineado con el guard del poll) y espaciado (cada 10s) para
+  // NO generar un storm; durante la pausa del circuit-breaker sbFetch corta sin
+  // tocar la red, así reintentar es barato. Usa SIEMPRE el payload más nuevo por id.
+  const runRetryFailedSaves = useCallback(async (force = false) => {
+    if (!dbReady.current || !failedWritesRef.current.size) return;
+    const entries = [...failedWritesRef.current.entries()];
+    for (const [id, e] of entries) {
+      if (!force && (e.attempts || 0) >= 6) continue;
+      e.attempts = (e.attempts || 0) + 1;
+      await postTaskPayload(id, e.payload, e.title, e.hash);
+    }
+    setSaveError(failedWritesRef.current.size ? { count: failedWritesRef.current.size } : null);
+  }, [postTaskPayload]);
+
+  // Botón "Reintentar ahora": resetea el contador y fuerza una vuelta inmediata.
+  const retryFailedSaves = useCallback(() => {
+    failedWritesRef.current.forEach((e) => { e.attempts = 0; });
+    runRetryFailedSaves(true);
+  }, [runRetryFailedSaves]);
+
+  useEffect(() => {
+    const iv = setInterval(() => { runRetryFailedSaves(false); }, 10000);
+    return () => clearInterval(iv);
+  }, [runRetryFailedSaves]);
+
+  // Aviso transitorio (info): se muestra unos segundos y se limpia solo.
+  const flash = useCallback((message) => {
+    if (!message) return;
+    setFlashMessage({ message, ts: Date.now() });
+    clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setFlashMessage(null), 5000);
+  }, []);
+  useEffect(() => () => clearTimeout(flashTimerRef.current), []);
 
   // ── CRUD: Clients ──
   const createClient = useCallback((name, company, service, start, pm, extraFields = {}) => {
@@ -619,6 +705,9 @@ export function AppProvider({ children }) {
     const { _skipTimerRecalc, _skipRecomputeStarted, _skipHistory, ...cleanUpdates } = updates;
     // Snapshot del estado previo para el historial automatico (system comments).
     const prevForHistory = tasksRef.current.find(t => t.id === id);
+    // Cuántas tareas dependientes se auto-promueven al marcar esta 'done' (para
+    // avisar del cambio de estado "en cascada" y que no parezca que cambió solo).
+    let promotedCount = 0;
     setTasks(prev => {
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
@@ -695,6 +784,7 @@ export function AppProvider({ children }) {
         });
         if (promoted.length) {
           finalTasks = newTasks;
+          promotedCount = promoted.length;
           if (dbReady.current) promoted.forEach(t => dbSaveTask(t));
         }
       }
@@ -704,7 +794,31 @@ export function AppProvider({ children }) {
       if (updated && dbReady.current) dbSaveTask(updated);
       return finalTasks;
     });
-  }, [save, dbSaveTask, recalculateTimers]);
+    // Feedback de cascada: avisar que al validar esta tarea se desbloquearon
+    // otras (pasaron de backlog a priorizado). Así el cambio de estado de esas
+    // tareas no se ve como que "cambió solo".
+    if (promotedCount > 0) {
+      flash(promotedCount === 1
+        ? 'Se desbloqueó 1 tarea que dependía de esta (pasó a «Priorizado»).'
+        : `Se desbloquearon ${promotedCount} tareas que dependían de esta (pasaron a «Priorizado»).`);
+    }
+    // Feedback "asigno y desaparece": si la reasignación saca la tarea de la
+    // vista/filtro actual, avisamos que se MOVIÓ (no que desapareció). Solo se
+    // dispara al cambiar el responsable; no toca la lógica del update.
+    if (cleanUpdates.assignee !== undefined && prevForHistory && !_skipHistory) {
+      const merged = { ...prevForHistory, ...cleanUpdates };
+      const cu = currentUserRef.current;
+      const restricted = !!cu && !cu.isAdmin;
+      const stillMine = !restricted || userOwnsTask(merged, cu, teamMembersRef.current);
+      const stillInFilter = assigneeMatches(merged.assignee, taskAssigneeRef.current);
+      if (!stillMine || !stillInFilter) {
+        const who = (merged.assignee || '').trim();
+        flash(who
+          ? `«${merged.title}» quedó asignada a ${who} — fuera del filtro/vista actual.`
+          : `«${merged.title}» quedó sin responsable — fuera de tu vista.`);
+      }
+    }
+  }, [save, dbSaveTask, recalculateTimers, flash]);
 
   const deleteTask = useCallback((id) => {
     setTasks(prev => {
@@ -2501,6 +2615,8 @@ export function AppProvider({ children }) {
     hideBlockedTasks, setHideBlockedTasks,
     collapsedGroups, setCollapsedGroups,
     syncStatus, setSyncStatus,
+    saveError, retryFailedSaves,
+    flashMessage, flash,
 
     // Actions
     save,
@@ -2644,7 +2760,7 @@ export function AppProvider({ children }) {
     taskAssignee, taskClientFilter, taskPriority, taskDueFilter, taskDepartment,
     currentUser, authUser, isAdmin, briefing, reportFeedbacks, taskProposals,
     dashboardAlerts, hideCompleted, hideCompletedTasks, hideBlockedTasks,
-    collapsedGroups, syncStatus, appSettings, teamMembers, weeklyTodos,
+    collapsedGroups, syncStatus, saveError, flashMessage, appSettings, teamMembers, weeklyTodos,
     sprints, activeSprint,
     loomVideos, llamadas, pendingCallsCount, teamReports, teamBlockers,
     ideas, notas, taskComments, bulletComments, ideaComments, blockerComments,
@@ -2652,7 +2768,7 @@ export function AppProvider({ children }) {
     notifications, unreadNotifCount, notifPanelOpen, notifToast,
     strategies, strategyPages, invoices, contracts,
     // Acciones (todas useCallback)
-    dismissAlert, save, dbSaveClient, dbSaveTask, dbSyncAll, dbDeleteTask,
+    dismissAlert, save, dbSaveClient, dbSaveTask, dbSyncAll, dbDeleteTask, retryFailedSaves, flash,
     createClient, updateClient, deleteClient, createTask, updateTask,
     deleteTask, reorderTask, doLogout, injectMetaMetrics, recalculateTimers,
     updateAppSettings, addTeamMember, updateTeamMember, deleteTeamMember,

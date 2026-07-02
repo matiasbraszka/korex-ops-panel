@@ -306,21 +306,52 @@ export function isKorexClient(client) {
 }
 
 /**
+ * normalizeName: minúsculas + sin acentos + espacios colapsados. Para comparar
+ * nombres de responsables de forma robusta: "Matías" == "matias" == " Matias ".
+ * Evita que una tarea "desaparezca" para su responsable por un acento o espacio.
+ */
+export function normalizeName(s) {
+  return (s || '')
+    .toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * assigneeMatches: ¿el string de responsables (nombres separados por coma)
+ * incluye al `filter` dado? Normaliza acentos/espacios en ambos lados. Filtro
+ * 'all' o vacío matchea todo. Centraliza la lógica que estaba duplicada (con
+ * bug de acentos) en cada vista de tareas.
+ */
+export function assigneeMatches(assignee, filter) {
+  if (!filter || filter === 'all') return true;
+  const target = normalizeName(filter);
+  if (!target) return true;
+  if (!assignee) return false;
+  return assignee.split(',').map(s => normalizeName(s)).filter(Boolean).includes(target);
+}
+
+/**
  * userOwnsTask: ¿la tarea está asignada al usuario actual? Misma lógica que el
  * filtro "Mis tareas" de TasksPage y el isMine de BulletRows. `assignee` es un
  * texto con nombres separados por coma (nombre completo, nombre parcial o id).
+ * Normaliza acentos/espacios para no dejar invisible una tarea por "Matías" vs
+ * "Matias".
  */
 export function userOwnsTask(task, currentUser, teamMembers = []) {
   if (!task?.assignee || !currentUser) return false;
   const names = [
-    (currentUser.name || '').toLowerCase(),
-    ((currentUser.name || '').split(' ')[0] || '').toLowerCase(),
-    (currentUser.id || '').toLowerCase(),
-  ];
+    normalizeName(currentUser.name),
+    normalizeName((currentUser.name || '').split(' ')[0]),
+    normalizeName(currentUser.id),
+  ].filter(Boolean);
   const me = (teamMembers || []).find(m => m.id === currentUser.id);
-  if (me?.name) names.push(me.name.toLowerCase());
-  const parts = task.assignee.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  return parts.some(p => p && names.includes(p));
+  if (me?.name) names.push(normalizeName(me.name));
+  const parts = task.assignee.split(',').map(s => normalizeName(s)).filter(Boolean);
+  return parts.some(p => names.includes(p));
 }
 
 /**

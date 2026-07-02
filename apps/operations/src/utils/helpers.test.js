@@ -12,6 +12,8 @@ import {
   isTimerRunning,
   userOwnsTask,
   recomputeStartedDates,
+  normalizeName,
+  assigneeMatches,
 } from './helpers';
 
 describe('today', () => {
@@ -158,6 +160,30 @@ describe('userOwnsTask', () => {
   it('sin assignee o sin usuario devuelve false', () => {
     expect(userOwnsTask({ assignee: '' }, user)).toBe(false);
     expect(userOwnsTask({ assignee: 'matias' }, null)).toBe(false);
+  });
+  it('ignora acentos y espacios extra en el nombre', () => {
+    const u = { id: 'u2', name: 'Matías Braszka' };
+    expect(userOwnsTask({ assignee: 'Matias Braszka' }, u)).toBe(true);   // sin acento
+    expect(userOwnsTask({ assignee: '  matías  ' }, u)).toBe(true);        // espacios + acento
+    expect(userOwnsTask({ assignee: 'Ana, Matías' }, { id: 'x', name: 'matias' })).toBe(true);
+  });
+});
+
+describe('normalizeName', () => {
+  it('minúsculas, sin acentos, espacios colapsados', () => {
+    expect(normalizeName('  Matías   Braszka ')).toBe('matias braszka');
+    expect(normalizeName('JOSÉ')).toBe('jose');
+    expect(normalizeName(null)).toBe('');
+  });
+});
+
+describe('assigneeMatches', () => {
+  it('all/vacío matchea todo; compara sin acentos', () => {
+    expect(assigneeMatches('Ana', 'all')).toBe(true);
+    expect(assigneeMatches('Ana', '')).toBe(true);
+    expect(assigneeMatches('Matías, Ana', 'matias')).toBe(true);
+    expect(assigneeMatches('Ana, Pedro', 'matias')).toBe(false);
+    expect(assigneeMatches('', 'ana')).toBe(false);
   });
 });
 
