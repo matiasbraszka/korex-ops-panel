@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@korex/db';
+import { COUNTRIES, FREQUENT_COUNTRIES, countryByCode } from '../utils/countries';
 
 // Agenda pública (/agendar) — flujo de reserva tipo Calendly en 3 pasos.
 // Diseño: design_handoff_agenda_publica (azul de marca #4878FF, Montserrat
@@ -8,14 +9,6 @@ import { supabase } from '@korex/db';
 
 const BLUE = '#4878FF';
 const MONTSERRAT = { fontFamily: "'Montserrat', 'Inter', sans-serif" };
-
-const DIALS = [
-  ['+54', '🇦🇷 +54'], ['+52', '🇲🇽 +52'], ['+57', '🇨🇴 +57'], ['+56', '🇨🇱 +56'],
-  ['+51', '🇵🇪 +51'], ['+593', '🇪🇨 +593'], ['+598', '🇺🇾 +598'], ['+595', '🇵🇾 +595'],
-  ['+591', '🇧🇴 +591'], ['+58', '🇻🇪 +58'], ['+507', '🇵🇦 +507'], ['+506', '🇨🇷 +506'],
-  ['+503', '🇸🇻 +503'], ['+502', '🇬🇹 +502'], ['+504', '🇭🇳 +504'], ['+1809', '🇩🇴 +1 809'],
-  ['+1', '🇺🇸 +1'], ['+34', '🇪🇸 +34'],
-];
 
 const pad = (n) => String(n).padStart(2, '0');
 const dateKey = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
@@ -68,7 +61,8 @@ export default function AgendaPublica() {
   const [calCollapsed, setCalCollapsed] = useState(false); // mobile: tira semanal
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [dial, setDial] = useState('+54');
+  const [countryCode, setCountryCode] = useState('AR'); // país elegido; fija el prefijo
+  const dial = countryByCode(countryCode)?.dial || '+54';
   const [phone, setPhone] = useState('');
   const [answers, setAnswers] = useState({}); // { [questionId]: value }
   const [error, setError] = useState('');
@@ -266,7 +260,7 @@ export default function AgendaPublica() {
 
   const reset = () => {
     setStep(1); setSelDate(null); setTime(null); setCalCollapsed(false);
-    setName(''); setEmail(''); setDial('+54'); setPhone(''); setAnswers({});
+    setName(''); setEmail(''); setCountryCode('AR'); setPhone(''); setAnswers({});
     setError(''); setBooked(null);
     loadMonth(month, true);
   };
@@ -525,9 +519,18 @@ export default function AgendaPublica() {
                 <label className="flex flex-col gap-[5px]">
                   <span className="text-[12px] font-semibold text-[#3D4659]">WhatsApp</span>
                   <div className="flex gap-2">
-                    <select value={dial} onChange={(e) => setDial(e.target.value)}
-                            className="h-12 max-md:h-[50px] shrink-0 border-[1.5px] border-[#E2E5EB] rounded-xl px-2.5 text-[14px] font-semibold outline-none bg-white cursor-pointer transition-colors duration-150 focus:border-[#4878FF]">
-                      {DIALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)}
+                            className="h-12 max-md:h-[50px] min-w-0 max-w-[45%] md:max-w-[220px] border-[1.5px] border-[#E2E5EB] rounded-xl px-2.5 text-[14px] font-semibold outline-none bg-white cursor-pointer transition-colors duration-150 focus:border-[#4878FF]">
+                      <optgroup label="Frecuentes">
+                        {FREQUENT_COUNTRIES.map((c) => (
+                          <option key={'f-' + c.code} value={c.code}>{c.flag} {c.name} {c.dial}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Todos los países">
+                        {COUNTRIES.map((c) => (
+                          <option key={c.code} value={c.code}>{c.flag} {c.name} {c.dial}</option>
+                        ))}
+                      </optgroup>
                     </select>
                     <input value={phone}
                            onChange={(e) => setPhone(e.target.value.replace(/[^\d\s-]/g, ''))}
