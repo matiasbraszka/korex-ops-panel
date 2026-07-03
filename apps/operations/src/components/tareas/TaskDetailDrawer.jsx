@@ -74,26 +74,32 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
   const commentCount = comments.length;
 
-  const saveChecklist = (next) => updateTask(task.id, { checklist: next });
-  const addItem = () => { const t = newItem.trim(); if (!t) return; saveChecklist([...checklist, { id: mkId(), text: t, done: false }]); setNewItem(''); };
-  const toggleItem = (id) => saveChecklist(checklist.map(i => i.id === id ? { ...i, done: !i.done } : i));
-  const removeItem = (id) => saveChecklist(checklist.filter(i => i.id !== id));
+  // Mutaciones de checklist/criterios vía updater FUNCIONAL: se calculan contra la
+  // tarea más nueva (no el render actual), así agregar/tildar/reordenar varios
+  // seguido no se pisa (antes se perdían ítems). Los ids se precalculan afuera para
+  // que el updater sea puro.
+  const mutChecklist = (fn) => updateTask(task.id, (t) => ({ checklist: fn(Array.isArray(t.checklist) ? t.checklist : []) }));
+  const addItem = () => { const v = newItem.trim(); if (!v) return; const item = { id: mkId(), text: v, done: false }; mutChecklist(l => [...l, item]); setNewItem(''); };
+  const toggleItem = (id) => mutChecklist(l => l.map(i => i.id === id ? { ...i, done: !i.done } : i));
+  const removeItem = (id) => mutChecklist(l => l.filter(i => i.id !== id));
   // Reordenar la checklist arrastrando (soltar el ítem `fromId` sobre `toId`).
   const moveChecklist = (fromId, toId) => {
     if (!fromId || fromId === toId) return;
-    const arr = [...checklist];
-    const from = arr.findIndex(i => i.id === fromId);
-    const to = arr.findIndex(i => i.id === toId);
-    if (from < 0 || to < 0) return;
-    const [moved] = arr.splice(from, 1);
-    arr.splice(to, 0, moved);
-    saveChecklist(arr);
+    mutChecklist(l => {
+      const arr = [...l];
+      const from = arr.findIndex(i => i.id === fromId);
+      const to = arr.findIndex(i => i.id === toId);
+      if (from < 0 || to < 0) return l;
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+      return arr;
+    });
   };
 
-  const saveCriteria = (next) => updateTask(task.id, { acceptanceCriteria: next });
-  const addAc = () => { const t = newAc.trim(); if (!t) return; saveCriteria([...criteria, { id: mkId(), text: t, done: false }]); setNewAc(''); };
-  const toggleAc = (id) => saveCriteria(criteria.map(i => i.id === id ? { ...i, done: !i.done } : i));
-  const removeAc = (id) => saveCriteria(criteria.filter(i => i.id !== id));
+  const mutCriteria = (fn) => updateTask(task.id, (t) => ({ acceptanceCriteria: fn(Array.isArray(t.acceptanceCriteria) ? t.acceptanceCriteria : []) }));
+  const addAc = () => { const v = newAc.trim(); if (!v) return; const it = { id: mkId(), text: v, done: false }; mutCriteria(l => [...l, it]); setNewAc(''); };
+  const toggleAc = (id) => mutCriteria(l => l.map(i => i.id === id ? { ...i, done: !i.done } : i));
+  const removeAc = (id) => mutCriteria(l => l.filter(i => i.id !== id));
 
   const doValidate = () => {
     if (!canValidate(task)) { setGateMsg(`Faltan ${pendingCriteria(task)} criterio(s) de aceptación para validar.`); setTimeout(() => setGateMsg(''), 5000); return; }

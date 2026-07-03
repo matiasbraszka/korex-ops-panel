@@ -710,14 +710,26 @@ export function AppProvider({ children }) {
   }, [save, dbSaveTask, recalculateTimers]);
 
   const updateTask = useCallback((id, updates) => {
-    // Limpio flags privados (_skip*) antes de mergear para no inflar el objeto en memoria
-    const { _skipTimerRecalc, _skipRecomputeStarted, _skipHistory, ...cleanUpdates } = updates;
+    // `updates` puede ser un OBJETO de cambios o una FUNCIÓN (task) => cambios.
+    // La forma funcional se resuelve contra el estado MÁS NUEVO de la tarea DENTRO
+    // de setTasks: así dos ediciones seguidas antes de re-renderizar (ej. agregar
+    // varios ítems de checklist rápido) se acumulan y NO se pisan por un closure
+    // viejo. IMPORTANTE: el updater debe ser PURO (React puede llamarlo más de una
+    // vez) → precalculá ids/fechas afuera.
+    const isFn = typeof updates === 'function';
     // Snapshot del estado previo para el historial automatico (system comments).
     const prevForHistory = tasksRef.current.find(t => t.id === id);
+    // Resolución "de afuera": solo para los flags _skip* y el aviso de reasignación.
+    const { _skipTimerRecalc, _skipRecomputeStarted, _skipHistory, ...cleanOuter } =
+      isFn ? (updates(prevForHistory || {}) || {}) : updates;
     // Cuántas tareas dependientes se auto-promueven al marcar esta 'done' (para
     // avisar del cambio de estado "en cascada" y que no parezca que cambió solo).
     let promotedCount = 0;
     setTasks(prev => {
+      // Resolución "de adentro": los cambios se calculan contra la tarea más nueva
+      // de `prev` (no un closure viejo) → ediciones consecutivas se acumulan bien.
+      const { _skipTimerRecalc: _si1, _skipRecomputeStarted: _si2, _skipHistory: _si3, ...cleanUpdates } =
+        isFn ? (updates(prev.find(t => t.id === id) || {}) || {}) : updates;
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
         const merged = { ...t, ...cleanUpdates };
@@ -822,8 +834,8 @@ export function AppProvider({ children }) {
     // Feedback "asigno y desaparece": si la reasignación saca la tarea de la
     // vista/filtro actual, avisamos que se MOVIÓ (no que desapareció). Solo se
     // dispara al cambiar el responsable; no toca la lógica del update.
-    if (cleanUpdates.assignee !== undefined && prevForHistory && !_skipHistory) {
-      const merged = { ...prevForHistory, ...cleanUpdates };
+    if (cleanOuter.assignee !== undefined && prevForHistory && !_skipHistory) {
+      const merged = { ...prevForHistory, ...cleanOuter };
       const cu = currentUserRef.current;
       const restricted = !!cu && !cu.isAdmin;
       const stillMine = !restricted || userSeesTask(merged, cu, teamMembersRef.current);
