@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, addDaysStr, sprintStubForMonday, upcomingSprintStubs, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
@@ -21,23 +21,8 @@ function enrichBulletsWithMentions(progressByClient, teamMembers, excludeId) {
   }));
 }
 
-// Utilidades de fecha para construir un sprint a partir del lunes de su semana.
-const pad2 = (n) => String(n).padStart(2, '0');
-const addDaysStr = (dateStr, n) => {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-};
-const isoWeekNumber = (dateStr) => {
-  const d = new Date(dateStr + 'T00:00:00');
-  const target = new Date(d.valueOf());
-  const dayNr = (d.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = target.valueOf();
-  target.setMonth(0, 1);
-  if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-  return 1 + Math.ceil((firstThursday - target) / 604800000);
-};
+// Las utilidades de fecha para sprints (addDaysStr, sprintStubForMonday,
+// upcomingSprintStubs) viven en utils/helpers.js (fuente única del id de sprint).
 
 const AppContext = createContext(null);
 
@@ -332,6 +317,7 @@ export function AppProvider({ children }) {
       validated_by: t.validatedBy || null,
       validated_at: t.validatedAt || null,
       sprint_history: Array.isArray(t.sprintHistory) ? t.sprintHistory : [],
+      sprint_events: Array.isArray(t.sprintEvents) ? t.sprintEvents : [],
       status_history: Array.isArray(t.statusHistory) ? t.statusHistory : [],
       last_actor_id: currentUserIdRef.current,
     };
@@ -454,6 +440,7 @@ export function AppProvider({ children }) {
         validated_by: t.validatedBy || null,
         validated_at: t.validatedAt || null,
         sprint_history: Array.isArray(t.sprintHistory) ? t.sprintHistory : [],
+        sprint_events: Array.isArray(t.sprintEvents) ? t.sprintEvents : [],
         status_history: Array.isArray(t.statusHistory) ? t.statusHistory : [],
         last_actor_id: currentUserIdRef.current,
       }));
@@ -745,11 +732,17 @@ export function AppProvider({ children }) {
           merged.validatedBy = null;
           merged.validatedAt = null;
         }
-        // Historial de sprints (append-if-absent): cuenta el "lleva N sprints",
-        // tanto en movimientos manuales como en el carry-over de closeSprint.
-        if (cleanUpdates.sprintId && cleanUpdates.sprintId !== t.sprintId) {
-          const hist = Array.isArray(t.sprintHistory) ? t.sprintHistory : [];
-          merged.sprintHistory = hist.includes(cleanUpdates.sprintId) ? hist : [...hist, cleanUpdates.sprintId];
+        // Historial de sprints: dos registros al cambiar de sprint (incluye salir).
+        //  · sprint_history (ids, append-if-absent) → alimenta el "lleva N sprints".
+        //  · sprint_events (log con fecha `{sprint, at}`, incluye salir → sprint:null)
+        //    → mide el tiempo real por sprint en el panel Actividad.
+        if (cleanUpdates.sprintId !== undefined && cleanUpdates.sprintId !== t.sprintId) {
+          if (cleanUpdates.sprintId) {
+            const hist = Array.isArray(t.sprintHistory) ? t.sprintHistory : [];
+            merged.sprintHistory = hist.includes(cleanUpdates.sprintId) ? hist : [...hist, cleanUpdates.sprintId];
+          }
+          const evs = Array.isArray(t.sprintEvents) ? t.sprintEvents : [];
+          merged.sprintEvents = [...evs, { sprint: cleanUpdates.sprintId || null, at: new Date().toISOString() }];
         }
         // Historial de ESTADOS (append-only, desacoplado del feed de comentarios):
         // registra CUÁNDO entró a cada estado para que el panel "Tiempo por estado"
@@ -893,19 +886,7 @@ export function AppProvider({ children }) {
   // ── Sprints (Kanban ágil) ───────────────────────────────────────────────────
   const activeSprint = useMemo(() => getActiveSprint(sprints), [sprints]);
 
-  const mkSprintForMonday = useCallback((mondayStr) => {
-    const week = isoWeekNumber(mondayStr);
-    const year = new Date(mondayStr + 'T00:00:00').getFullYear();
-    return {
-      id: `sp_${year}_${pad2(week)}`,
-      number: week,
-      name: `Sprint ${week}`,
-      startDate: mondayStr,
-      endDate: addDaysStr(mondayStr, 6),
-      goal: null,
-      status: 'active',
-    };
-  }, []);
+  const mkSprintForMonday = useCallback((mondayStr, status = 'active') => sprintStubForMonday(mondayStr, status), []);
 
   // Refresca los sprints desde Supabase (lo usa el load inicial y el poll).
   const loadSprints = useCallback(async () => {
@@ -945,6 +926,33 @@ export function AppProvider({ children }) {
     dbSaveSprint(sprint);
     return sprint;
   }, [dbSaveSprint, mkSprintForMonday]);
+
+  // Mantiene SIEMPRE abiertos los próximos `count` sprints (pre-abiertos como
+  // 'planned') después del activo, para poder repartir tareas hacia adelante.
+  // Idempotente por id: solo crea los que faltan (nunca re-escribe → sin
+  // write-storm ni conflicto entre sesiones paralelas, porque dbSaveSprint hace
+  // upsert por PK). No hace setState si no falta ninguno (evita loops).
+  const ensureUpcomingSprints = useCallback((count = 2) => {
+    if (!dbReady.current) return;
+    const active = getActiveSprint(sprintsRef.current);
+    if (!active) return;
+    const faltan = upcomingSprintStubs(active, count)
+      .filter(stub => !sprintsRef.current.some(s => s.id === stub.id));
+    if (!faltan.length) return;
+    setSprints(prev => {
+      const have = new Set(prev.map(s => s.id));
+      const toAdd = faltan.filter(s => !have.has(s.id));
+      if (!toAdd.length) return prev;
+      toAdd.forEach(s => dbSaveSprint(s));
+      return [...toAdd, ...prev];
+    });
+  }, [dbSaveSprint]);
+
+  // Dispara la apertura anticipada al cambiar el sprint activo: montaje inicial
+  // (crea los 2 siguientes) y cierre de sprint (rellena hasta 2 adelante de nuevo).
+  useEffect(() => {
+    if (activeSprint?.id) ensureUpcomingSprints(2);
+  }, [activeSprint?.id, ensureUpcomingSprints]);
 
   // Actualiza campos de un sprint (ej: goal, status).
   const updateSprint = useCallback((id, updates) => {
@@ -999,15 +1007,17 @@ export function AppProvider({ children }) {
     if (!active) return null;
     const summary = buildSprintSummary(tasksRef.current, teamMembersRef.current, active, teamReportsRef.current);
     const nextMonday = active.endDate ? addDaysStr(active.endDate, 1) : mondayOf(today());
-    const next = mkSprintForMonday(nextMonday);
-    // 1) cerrar el sprint (con snapshot) + crear el nuevo
+    // Si el sprint de la semana siguiente ya está pre-abierto ('planned'), lo
+    // ACTIVAMOS (no creamos un duplicado); si no existe, lo creamos activo.
+    const existingNext = sprintsRef.current.find(s => s.startDate === nextMonday);
+    const next = existingNext ? { ...existingNext, status: 'active' } : mkSprintForMonday(nextMonday);
+    // 1) cerrar el sprint (con snapshot) + activar/crear el siguiente
     setSprints(prev => {
       const closed = { ...active, status: 'closed', summary, ...extra };
-      const withNew = prev.some(s => s.id === next.id)
-        ? prev.map(s => s.id === active.id ? closed : s)
-        : [next, ...prev.map(s => s.id === active.id ? closed : s)];
+      const mapped = prev.map(s => (s.id === active.id ? closed : (s.id === next.id ? next : s)));
+      const withNew = mapped.some(s => s.id === next.id) ? mapped : [next, ...mapped];
       dbSaveSprint(closed);
-      if (!prev.some(s => s.id === next.id)) dbSaveSprint(next);
+      dbSaveSprint(next);
       return withNew;
     });
     // 2) carry-over de tareas no terminadas
@@ -2084,7 +2094,7 @@ export function AppProvider({ children }) {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
       const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,drive_folder_url,contract_signer_email,korex_code';
-      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,status_history';
+      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
         // order=created_at.DESC: si algún día se supera el límite, se descartan
@@ -2298,6 +2308,7 @@ export function AppProvider({ children }) {
           validatedBy: t.validated_by || null,
           validatedAt: t.validated_at || null,
           sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : [],
+          sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : [],
           statusHistory: Array.isArray(t.status_history) ? t.status_history : [],
         }));
 
@@ -2395,7 +2406,7 @@ export function AppProvider({ children }) {
       // tareas nuevas detectadas por el poll lleguen completas (con phase,
       // depends_on, due_date, etc.). Si solo trajéramos un subset, una tarea
       // nueva se agregaría sin fase y caería en "Sin fase" en el roadmap.
-      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,status_history,updated_at';
+      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,updated_at';
       const remoteTasks = await sbFetch('tasks?select=' + POLL_TASK_COLS + '&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
       // Refrescar sprints en el mismo poll (livianito: lista corta).
       loadSprints();
@@ -2425,6 +2436,7 @@ export function AppProvider({ children }) {
         validatedBy: t.validated_by || null,
         validatedAt: t.validated_at || null,
         sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : [],
+        sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : [],
         statusHistory: Array.isArray(t.status_history) ? t.status_history : [],
       });
 
@@ -2474,6 +2486,7 @@ export function AppProvider({ children }) {
                 validatedBy: t.validated_by || null,
                 validatedAt: t.validated_at || null,
                 sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : (existing.sprintHistory || []),
+                sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : (existing.sprintEvents || []),
                 statusHistory: Array.isArray(t.status_history) ? t.status_history : (existing.statusHistory || []),
               };
               changed = true;

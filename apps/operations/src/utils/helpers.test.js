@@ -17,6 +17,10 @@ import {
   normalizeName,
   assigneeMatches,
   computeStatusDurations,
+  getActiveSprint,
+  sprintStubForMonday,
+  upcomingSprintStubs,
+  computeSprintDurations,
 } from './helpers';
 
 const isoDaysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
@@ -210,6 +214,108 @@ describe('computeStatusDurations (tiempo en el estado actual)', () => {
     const comments = [{ task_id: 'k3', kind: 'system', created_at: new Date(Date.now() - 2 * 864e5).toISOString(), event_meta: { field: 'status', from: 'priorizado', to: 'in-progress' } }];
     const { current } = computeStatusDurations(task, comments);
     expect(current.days).toBeLessThan(4); // ~2 días desde el evento
+  });
+});
+
+describe('getActiveSprint (ignora sprints planned)', () => {
+  const s27 = { id: 'sp_2026_27', startDate: '2026-06-29', status: 'active' };
+  const s28 = { id: 'sp_2026_28', startDate: '2026-07-06', status: 'planned' };
+  const s29 = { id: 'sp_2026_29', startDate: '2026-07-13', status: 'planned' };
+  it('devuelve el active aunque un planned tenga fecha posterior', () => {
+    expect(getActiveSprint([s29, s28, s27]).id).toBe('sp_2026_27');
+  });
+  it('en el fallback (sin active) nunca elige un planned', () => {
+    const s26 = { id: 'sp_2026_26', startDate: '2026-06-22', status: 'closed' };
+    expect(getActiveSprint([s29, s28, s26]).id).toBe('sp_2026_26'); // el closed más reciente, no un planned
+  });
+});
+
+describe('sprintStubForMonday / upcomingSprintStubs', () => {
+  it('arma el id sp_AAAA_SS, la semana ISO y las fechas correctas', () => {
+    const s = sprintStubForMonday('2026-07-06'); // lunes de la semana 28
+    expect(s.id).toBe('sp_2026_28');
+    expect(s.number).toBe(28);
+    expect(s.name).toBe('Sprint 28');
+    expect(s.startDate).toBe('2026-07-06');
+    expect(s.endDate).toBe('2026-07-12'); // +6 = domingo
+    expect(s.status).toBe('active');
+  });
+  it('acepta status planned', () => {
+    expect(sprintStubForMonday('2026-07-06', 'planned').status).toBe('planned');
+  });
+  it('devuelve los 2 sprints siguientes como planned', () => {
+    const active = { id: 'sp_2026_27', startDate: '2026-06-29', endDate: '2026-07-05' };
+    const next = upcomingSprintStubs(active, 2);
+    expect(next.map(s => s.id)).toEqual(['sp_2026_28', 'sp_2026_29']);
+    expect(next.every(s => s.status === 'planned')).toBe(true);
+    expect(next[0].startDate).toBe('2026-07-06'); // lunes siguiente
+    expect(next[1].startDate).toBe('2026-07-13');
+  });
+});
+
+describe('computeSprintDurations (paso por sprints)', () => {
+  const sprints = [
+    { id: 'sp_2026_27', name: 'Sprint 27' },
+    { id: 'sp_2026_28', name: 'Sprint 28' },
+  ];
+  it('mide el tiempo por sprint con eventos {sprint, at} y marca el actual', () => {
+    const task = {
+      id: 't1', status: 'in-progress', sprintId: 'sp_2026_28',
+      sprintEvents: [
+        { sprint: 'sp_2026_27', at: new Date(Date.now() - 10 * 864e5).toISOString() },
+        { sprint: 'sp_2026_28', at: new Date(Date.now() - 3 * 864e5).toISOString() },
+      ],
+    };
+    const { rows, current, hasHistory } = computeSprintDurations(task, sprints);
+    expect(hasHistory).toBe(true);
+    expect(rows.map(r => r.id)).toEqual(['sp_2026_27', 'sp_2026_28']);
+    const r27 = rows.find(r => r.id === 'sp_2026_27');
+    const r28 = rows.find(r => r.id === 'sp_2026_28');
+    expect(r27.days).toBeGreaterThan(6); // ~7 días en sprint 27
+    expect(r27.days).toBeLessThan(8);
+    expect(r28.isCurrent).toBe(true);
+    expect(r28.days).toBeGreaterThan(2); // ~3 días en curso en sprint 28
+    expect(current.id).toBe('sp_2026_28');
+    expect(current.name).toBe('Sprint 28');
+  });
+  it('una entrada con sprint:null cierra el segmento (no cuenta tras salir)', () => {
+    const task = {
+      id: 't2', status: 'backlog', sprintId: null,
+      sprintEvents: [
+        { sprint: 'sp_2026_27', at: new Date(Date.now() - 10 * 864e5).toISOString() },
+        { sprint: null, at: new Date(Date.now() - 7 * 864e5).toISOString() },
+      ],
+    };
+    const { rows, current } = computeSprintDurations(task, sprints);
+    const r27 = rows.find(r => r.id === 'sp_2026_27');
+    expect(r27.days).toBeGreaterThan(2); // ~3 días (de 10 a 7 atrás), NO 10
+    expect(r27.days).toBeLessThan(4);
+    expect(current).toBe(null); // ya no está en ningún sprint
+  });
+  it('tarea done: mide hasta la validación, no hasta ahora', () => {
+    const task = {
+      id: 't3', status: 'done', sprintId: 'sp_2026_27',
+      validatedAt: new Date(Date.now() - 5 * 864e5).toISOString(),
+      sprintEvents: [{ sprint: 'sp_2026_27', at: new Date(Date.now() - 12 * 864e5).toISOString() }],
+    };
+    const { rows } = computeSprintDurations(task, sprints);
+    const r27 = rows.find(r => r.id === 'sp_2026_27');
+    expect(r27.days).toBeGreaterThan(6); // ~7 días (de 12 a 5 atrás)
+    expect(r27.days).toBeLessThan(8);
+  });
+  it('tarea vieja sin eventos: lista el sprint (sprintHistory) pero sin tiempo', () => {
+    const task = { id: 't4', status: 'in-progress', sprintId: 'sp_2026_27', sprintHistory: ['sp_2026_27'], sprintEvents: [] };
+    const { rows, hasHistory } = computeSprintDurations(task, sprints);
+    expect(hasHistory).toBe(false);
+    expect(rows.map(r => r.id)).toEqual(['sp_2026_27']);
+    expect(rows[0].measured).toBe(false);
+    expect(rows[0].isCurrent).toBe(true);
+  });
+  it('sin sprint ni historial devuelve rows vacío', () => {
+    const { rows, current, hasHistory } = computeSprintDurations({ id: 't5', status: 'backlog', sprintId: null }, sprints);
+    expect(rows).toEqual([]);
+    expect(current).toBe(null);
+    expect(hasHistory).toBe(false);
   });
 });
 

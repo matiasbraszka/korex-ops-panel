@@ -38,6 +38,26 @@ export function mondayOf(dateStr) {
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
 
+// Utilidades para construir/identificar sprints semanales. Fuente única de la
+// verdad del id de sprint (`sp_AAAA_SS`) — la reusan AppContext (mkSprintForMonday,
+// closeSprint) y los helpers de sprints futuros, para que nunca discrepen.
+export const pad2 = (n) => String(n).padStart(2, '0');
+export function addDaysStr(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+export function isoWeekNumber(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  return 1 + Math.ceil((firstThursday - target) / 604800000);
+}
+
 // Devuelve los 7 ISO de la semana cuya raiz es `monday` (Lun → Dom).
 export function weekDatesOf(monday) {
   const [y, m, d] = monday.split('-').map(Number);
@@ -804,7 +824,41 @@ export function getActiveSprint(sprints) {
   const byStart = (a, b) => String(b.startDate || '').localeCompare(String(a.startDate || ''));
   const actives = list.filter(s => s.status === 'active').sort(byStart);
   if (actives.length) return actives[0];
-  return [...list].sort(byStart)[0] || null;
+  // Fallback sin ningún 'active': el más reciente, pero NUNCA uno 'planned'
+  // (los sprints futuros pre-abiertos no deben tomarse como el sprint en curso).
+  const naturales = list.filter(s => s.status !== 'planned');
+  return [...(naturales.length ? naturales : list)].sort(byStart)[0] || null;
+}
+
+// Construye el objeto de un sprint a partir del lunes de su semana. Fuente única
+// del id `sp_AAAA_SS` / número de semana. `status` por defecto 'active'; los
+// sprints futuros pre-abiertos se crean con 'planned'.
+export function sprintStubForMonday(mondayStr, status = 'active') {
+  const week = isoWeekNumber(mondayStr);
+  const year = new Date(mondayStr + 'T00:00:00').getFullYear();
+  return {
+    id: `sp_${year}_${pad2(week)}`,
+    number: week,
+    name: `Sprint ${week}`,
+    startDate: mondayStr,
+    endDate: addDaysStr(mondayStr, 6),
+    goal: null,
+    status,
+  };
+}
+
+// Stubs de los `count` sprints siguientes al activo (semanas consecutivas),
+// marcados 'planned'. Los usa AppContext para mantener siempre abiertos los
+// próximos N sprints. No toca la base: solo arma los objetos.
+export function upcomingSprintStubs(activeSprint, count = 2) {
+  if (!activeSprint || !activeSprint.endDate) return [];
+  const out = [];
+  let monday = addDaysStr(activeSprint.endDate, 1); // lunes de la semana siguiente
+  for (let i = 0; i < count; i++) {
+    out.push(sprintStubForMonday(monday, 'planned'));
+    monday = addDaysStr(monday, 7);
+  }
+  return out;
 }
 
 export function isInSprint(task, sprint) {
@@ -914,6 +968,72 @@ export function computeStatusDurations(task, taskComments) {
   Object.keys(byMs).forEach(k => { byStatus[k] = byMs[k] / MS_DAY; total += byMs[k]; });
   const current = { status: task.status, sinceISO: new Date(currentSinceMs).toISOString(), days: Math.max(0, (endMs - currentSinceMs) / MS_DAY) };
   return { byStatus, current, total: total / MS_DAY, hasHistory };
+}
+
+// "Paso por sprints": por qué sprints pasó la tarea y cuánto tiempo estuvo en
+// cada uno. Calcado de computeStatusDurations pero sobre `task.sprintEvents`
+// (log append-only `{ sprint, at }`; una entrada con sprint:null = salió del
+// sprint y cierra el segmento sin sumar). Los ids sin fecha (tareas viejas,
+// solo en `sprintHistory`) se listan como "pasó" pero sin desglose de tiempo.
+// `sprints` se usa solo para resolver el nombre a mostrar.
+export function computeSprintDurations(task, sprints) {
+  const empty = { rows: [], current: null, total: 0, hasHistory: false };
+  if (!task) return empty;
+  const MS_DAY = 864e5;
+  const nameOf = (id) => (sprints || []).find(s => s.id === id)?.name || id;
+  const pick = (v) => {
+    if (!v) return null;
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v + 'T00:00:00' : v;
+    const ms = new Date(iso).getTime();
+    return Number.isNaN(ms) ? null : ms;
+  };
+  // Fin del cómputo: ahora, salvo done (usa validación/completado).
+  let endMs = Date.now();
+  if (task.status === 'done') {
+    const e = pick(task.validatedAt) ?? pick(task.completedDate ? task.completedDate + 'T23:59:59' : null);
+    if (e != null) endMs = e;
+  }
+  // Línea de tiempo de entradas/salidas de sprint (ms), ordenada.
+  const timeline = (Array.isArray(task.sprintEvents) ? task.sprintEvents : [])
+    .map(e => ({ sprint: e && e.sprint != null ? e.sprint : null, ms: pick(e && e.at) }))
+    .filter(e => e.ms != null)
+    .sort((a, b) => a.ms - b.ms);
+  // Suma de tiempo por sprint (cada segmento hasta la próxima entrada / ahora).
+  const byMs = {};
+  for (let i = 0; i < timeline.length; i++) {
+    const seg = (i + 1 < timeline.length ? timeline[i + 1].ms : endMs) - timeline[i].ms;
+    const sp = timeline[i].sprint;
+    if (sp && seg > 0) byMs[sp] = (byMs[sp] || 0) + seg;
+  }
+  // Orden de "pasó por": primero el historial legacy (ids sin fecha), luego los
+  // eventos con fecha, luego el sprint actual. Sin duplicados, primer avistaje.
+  const order = [];
+  const seen = new Set();
+  const pushId = (id) => { if (id && !seen.has(id)) { seen.add(id); order.push(id); } };
+  (Array.isArray(task.sprintHistory) ? task.sprintHistory : [])
+    .map(h => (typeof h === 'string' ? h : (h && h.sprint))).forEach(pushId);
+  timeline.forEach(e => pushId(e.sprint));
+  const currentId = task.sprintId || null;
+  pushId(currentId);
+  // Sprint actual + desde cuándo (última entrada a ese sprint en la timeline).
+  let current = null;
+  if (currentId) {
+    let sinceMs = null;
+    for (let i = timeline.length - 1; i >= 0; i--) { if (timeline[i].sprint === currentId) { sinceMs = timeline[i].ms; break; } }
+    current = {
+      id: currentId, name: nameOf(currentId),
+      sinceISO: sinceMs != null ? new Date(sinceMs).toISOString() : null,
+      days: sinceMs != null ? Math.max(0, (endMs - sinceMs) / MS_DAY) : null,
+    };
+  }
+  const rows = order.map(id => ({
+    id, name: nameOf(id),
+    days: (byMs[id] || 0) / MS_DAY,
+    measured: byMs[id] != null,
+    isCurrent: id === currentId,
+  }));
+  const total = Object.values(byMs).reduce((a, b) => a + b, 0) / MS_DAY;
+  return { rows, current, total, hasHistory: Object.keys(byMs).length > 0 };
 }
 
 // Formato compacto de una duración en días → "3d" / "5h" / "12m" / "<1m".

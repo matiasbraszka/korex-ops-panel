@@ -147,7 +147,9 @@ export default function SprintBoardView() {
           <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26', whiteSpace: 'nowrap' }}>{viewSprint?.name || 'Sprint'}</span>
           {locked
             ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#6B7280', background: '#F0F2F5', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}><Lock size={11} />Cerrado</span>
-            : (daysLeft != null && <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>{daysLeft === 0 ? 'cierra hoy' : `quedan ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`}</span>)}
+            : viewSprint?.status === 'planned'
+              ? <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#5B7CF5', background: '#EEF2FF', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>Próximo</span>
+              : (daysLeft != null && <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>{daysLeft === 0 ? 'cierra hoy' : `quedan ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`}</span>)}
           {viewSprint?.id !== activeSprint?.id && activeSprint && <span onClick={() => setViewSprintId(activeSprint.id)} style={{ fontSize: 12, fontWeight: 600, color: '#5B7CF5', cursor: 'pointer', whiteSpace: 'nowrap' }}>Volver al actual</span>}
         </div>
         <span style={{ width: 1, height: 20, background: '#E2E5EB' }} />

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, fmtDuration } from '../../utils/helpers';
+import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, computeSprintDurations, fmtDuration } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
 import PriorityPicker from './PriorityPicker';
 import AddToWeeklyButton from './AddToWeeklyButton';
@@ -68,6 +68,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const acPct = criteria.length ? Math.round(acDone / criteria.length * 100) : 0;
   const validator = task.validatedBy ? (teamMembers || []).find(m => m.id === task.validatedBy) : null;
   const dur = computeStatusDurations(task, taskComments);
+  const sprintDur = computeSprintDurations(task, sprints);
 
   const comments = (taskComments || [])
     .filter(c => c.task_id === task.id && !c.parent_id && (!c.kind || c.kind === 'user'))
@@ -238,7 +239,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               <span style={metaLabel}>Sprint{nSprints > 1 ? ` · lleva ${nSprints}` : ''}</span>
               <select value={task.sprintId || ''} onChange={(e) => onSprintChange(e.target.value)} style={{ ...selStyle, justifySelf: 'end', color: task.sprintId ? '#1A1D26' : '#9CA3AF' }}>
                 <option value="">Sin sprint (solo en Objetivo)</option>
-                {sprintsSorted.map(s => <option key={s.id} value={s.id}>{s.name}{s.status === 'closed' ? ' (cerrado)' : s.id === activeSprint?.id ? ' (actual)' : ''}</option>)}
+                {sprintsSorted.map(s => <option key={s.id} value={s.id}>{s.name}{s.status === 'closed' ? ' (cerrado)' : s.id === activeSprint?.id ? ' (actual)' : s.status === 'planned' ? ' (próximo)' : ''}</option>)}
               </select>
             </div>
             <div style={metaRow}>
@@ -392,6 +393,35 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 })()}
                 {task.status !== 'done' && dur.current && (
                   <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 12 }}>Estado actual: <strong style={{ color: '#1A1D26' }}>{STATUS_SHORT[task.status] || task.status}</strong>{dur.hasHistory ? ` · hace ${fmtDuration(dur.current.days)}` : ' · seguimiento desde el próximo cambio'}</div>
+                )}
+              </div>
+
+              {/* Paso por sprints: por qué sprints pasó la tarea y cuánto estuvo en cada uno */}
+              <div style={{ borderTop: '1px solid #F0F1F4', paddingTop: 18, marginBottom: 22 }}>
+                <SectionHead icon={<Zap size={15} />} title="Paso por sprints" sub="Por qué sprints pasó y cuánto estuvo" color="#5B7CF5" bg="#EEF2FF" />
+                {sprintDur.rows.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>Todavía no pasó por ningún sprint.</div>
+                ) : (() => {
+                  const max = Math.max(0.0007, ...sprintDur.rows.map(r => r.days));
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {sprintDur.rows.map(r => (
+                        <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ width: 96, fontSize: 11.5, color: r.isCurrent ? '#1A1D26' : '#374151', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}{r.isCurrent ? ' ·' : ''}</span>
+                          <span style={{ flex: 1, height: 8, borderRadius: 999, background: '#F0F2F5', overflow: 'hidden' }}>
+                            {r.measured && <span style={{ display: 'block', height: '100%', width: Math.round(r.days / max * 100) + '%', background: r.isCurrent ? '#5B7CF5' : '#93A5F0', borderRadius: 999 }} />}
+                          </span>
+                          <span style={{ width: 62, textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: '#374151', flexShrink: 0 }}>{r.measured ? fmtDuration(r.days) : (r.isCurrent ? 'en curso' : '—')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {sprintDur.current && sprintDur.current.days != null && task.status !== 'done' && (
+                  <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 12 }}>En <strong style={{ color: '#1A1D26' }}>{sprintDur.current.name}</strong> hace {fmtDuration(sprintDur.current.days)}{sprintDur.rows.length > 1 ? ` · lleva ${sprintDur.rows.length} sprints` : ''}</div>
+                )}
+                {!sprintDur.hasHistory && sprintDur.rows.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 10 }}>Sin registro de tiempo por sprint todavía — se mide desde el próximo movimiento.</div>
                 )}
               </div>
 
