@@ -42,18 +42,12 @@ function providerFor(key: string, hint: string, model: string) {
     : { url: GROQ_URL, key, model: model || "whisper-large-v3" };
 }
 
-// Resuelve el proveedor: 1) secrets de entorno (preferido), 2) fallback a la fila
-// app_settings.transcribe_config, que SOLO lee esta función con service role (el
-// frontend nunca la consulta), para poder configurar la key sin acceso a los
-// secrets de la función y sin exponerla a los usuarios de soporte.
-async function resolveProvider(): Promise<{ url: string; key: string; model: string } | null> {
+// Resuelve el proveedor según el secret de entorno seteado. La key vive como
+// secret de la Edge Function (GROQ_API_KEY / OPENAI_API_KEY), no en la base.
+function resolveProvider(): { url: string; key: string; model: string } | null {
   if (GROQ_API_KEY) return providerFor(GROQ_API_KEY, "groq", MODEL_OVERRIDE);
   if (OPENAI_API_KEY) return providerFor(OPENAI_API_KEY, "openai", MODEL_OVERRIDE);
-  const { data } = await admin.from("app_settings").select("value").eq("key", "transcribe_config").maybeSingle();
-  const cfg = (data?.value ?? {}) as Record<string, string>;
-  const key = cfg.api_key || "";
-  if (!key) return null;
-  return providerFor(key, (cfg.provider || "").toLowerCase(), cfg.model || MODEL_OVERRIDE);
+  return null;
 }
 
 const corsHeaders = {
@@ -97,7 +91,7 @@ Deno.serve(async (req: Request) => {
 
   if (!(await authorizeSoporteRead(req))) return jsonResp(403, { error: "forbidden" });
 
-  const provider = await resolveProvider();
+  const provider = resolveProvider();
   if (!provider) {
     // Falta configurar la key: error "esperado", 200 con ok:false para que la UI
     // lo muestre limpio sin romper el flujo.
