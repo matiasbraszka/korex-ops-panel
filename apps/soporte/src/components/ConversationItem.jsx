@@ -1,4 +1,4 @@
-import { Users, Calendar, Link2, CheckCheck } from 'lucide-react';
+import { Users, Calendar, Link2, CheckCheck, Building2 } from 'lucide-react';
 import { initials, fmtTime, colorFromString, convName, prettyPreview } from '../lib/format.js';
 
 // Item de conversación — Diseño A.
@@ -68,17 +68,14 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
           </span>
         </div>
 
-        {/* Fila 3: cliente vinculado + etiquetas (con nombre) + cita + no leídos */}
+        {/* Fila 3: CLIENTE vinculado (para identificar de quién es) + etiquetas + cita + no leídos.
+            El nombre de la persona ya va arriba; no lo repetimos como pastilla. */}
         <div className="flex items-center gap-1 mt-1">
           {conv.client?.name ? (
-            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[120px] shrink-0">
-              {conv.client.name}
+            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[140px] shrink-0 flex items-center gap-0.5">
+              <Building2 size={9} className="shrink-0" /> {conv.client.name}
             </span>
-          ) : conv.contact?.full_name ? (
-            <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#ECFEFF] text-[#0E7490] truncate max-w-[120px] shrink-0">
-              {conv.contact.full_name}
-            </span>
-          ) : !conv.is_group ? (
+          ) : (!conv.is_group && !conv.contact?.full_name) ? (
             <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full border border-dashed border-[#F5D9A8] text-[#B45309] flex items-center gap-0.5 shrink-0">
               <Link2 size={8} /> Vincular
             </span>
