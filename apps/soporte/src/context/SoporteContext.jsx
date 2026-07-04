@@ -4,7 +4,7 @@ import { useAuth } from '@korex/auth';
 import {
   fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
   patchSoporteConfig, fetchAppointments, fetchParticipants, fetchGroupNames,
-  invokeSend, invokeCita, invokeMedia, PAGE_SIZE,
+  invokeSend, invokeCita, invokeMedia, invokeGroup, invokeLink, PAGE_SIZE,
 } from '../lib/api.js';
 import { fmtNextCita } from '../lib/format.js';
 
@@ -367,6 +367,22 @@ export function SoporteProvider({ children }) {
     await patchConversation(convId, patch);
   }, []);
 
+  // Vincula la conversacion a una persona del Directorio de Finanzas (edge
+  // function whatsapp-link): deriva cliente + puente CRM + Google Contacts.
+  const linkByFinance = useCallback(async (convId, directoryId) => {
+    const res = await invokeLink({ conversationId: convId, directoryId });
+    setConversations((prev) => prev.map((c) => {
+      if (c.id !== convId) return c;
+      const next = { ...c };
+      next.contact_id = res.contact_id ?? null;
+      next.contact = res.contact_id ? { id: res.contact_id, full_name: res.name } : null;
+      if (res.client_id) { next.client_id = res.client_id; next.client = { id: res.client_id, name: res.client_name }; }
+      if (res.name) next.wa_profile_name = res.name;
+      return next;
+    }));
+    return res;
+  }, []);
+
   const saveTagsCatalog = useCallback(async (tags) => {
     setConfig((prev) => ({ ...prev, tags }));
     await patchSoporteConfig({ tags });
@@ -423,6 +439,40 @@ export function SoporteProvider({ children }) {
       groupDirInflight.current.delete(convId);
     }
   }, [groupDirByConv]);
+
+  // ── Administracion de grupos (nombre, descripcion, participantes) ──
+  // Proxea a Evolution via la edge function whatsapp-group y refleja el
+  // resultado en la conversacion + el directorio del grupo.
+  const runGroupAction = useCallback(async (convId, payload) => {
+    const res = await invokeGroup({ conversationId: convId, ...payload });
+    setConversations((prev) => prev.map((c) => {
+      if (c.id !== convId) return c;
+      const next = { ...c };
+      if (res.subject) next.wa_profile_name = res.subject;
+      if (res.description !== undefined) next.description = res.description;
+      return next;
+    }));
+    if (Array.isArray(res.participants)) {
+      setGroupDirByConv((prev) => ({
+        ...prev,
+        [convId]: { participants: res.participants, names: prev[convId]?.names || {} },
+      }));
+    }
+    return res;
+  }, []);
+
+  const setGroupSubject = useCallback(
+    (convId, subject) => runGroupAction(convId, { action: 'set_subject', value: subject }),
+    [runGroupAction]);
+  const setGroupDescription = useCallback(
+    (convId, description) => runGroupAction(convId, { action: 'set_description', value: description }),
+    [runGroupAction]);
+  const addParticipant = useCallback(
+    (convId, phone) => runGroupAction(convId, { action: 'update_participants', op: 'add', participants: [phone] }),
+    [runGroupAction]);
+  const removeParticipant = useCallback(
+    (convId, jid) => runGroupAction(convId, { action: 'update_participants', op: 'remove', participants: [jid] }),
+    [runGroupAction]);
 
   // ── Media (imagenes, audios, documentos) ──
   // mediaByMsg: { [msgId]: { status: 'loading'|'ok'|'failed', url?, mime?, filename? } }
@@ -593,9 +643,10 @@ export function SoporteProvider({ children }) {
     supportNumber: config.support_number || '',
     waLinks: config.wa_links || [],
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact,
+    updateConversation, updateNotes, linkContact, linkByFinance,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
+    setGroupSubject, setGroupDescription, addParticipant, removeParticipant,
     mediaByMsg, loadMedia,
     getDraft, setDraft, refresh,
   }), [
@@ -603,9 +654,10 @@ export function SoporteProvider({ children }) {
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact, appointmentsByConv,
+    updateConversation, updateNotes, linkContact, linkByFinance, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
+    setGroupSubject, setGroupDescription, addParticipant, removeParticipant,
     mediaByMsg, loadMedia, getDraft, setDraft, refresh,
   ]);
 

@@ -43,6 +43,7 @@ function unwrapMessage(message: Record<string, any> | null | undefined): Record<
   let m = message ?? {};
   for (let i = 0; i < 3; i++) {
     const inner = m.viewOnceMessage?.message || m.viewOnceMessageV2?.message ||
+      m.viewOnceMessageV2Extension?.message ||
       m.ephemeralMessage?.message || m.documentWithCaptionMessage?.message;
     if (!inner) break;
     m = inner;
@@ -127,6 +128,7 @@ async function upsertGoogleContact(name: string, phone: string): Promise<void> {
 // "quien es quien" del panel.
 interface GroupInfo {
   subject: string | null;
+  description: string | null;
   participants: { jid: string; phone: string; admin: boolean }[] | null;
 }
 
@@ -156,7 +158,7 @@ async function fetchGroupInfo(jid: string): Promise<GroupInfo | null> {
           };
         }).filter((p: { jid: string }) => p.jid)
       : null;
-    return { subject: str(info.subject) || null, participants };
+    return { subject: str(info.subject) || null, description: str(info.desc) || null, participants };
   } catch {
     return null;
   }
@@ -325,17 +327,39 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   if (!isNew) return null; // reintento del webhook: nada mas que hacer
 
   // ── 3. Actualizar la conversacion (solo para mensajes nuevos) ──
-  // Vinculo best-effort con contacts por los ultimos digitos del telefono.
+  // Vinculo por telefono: 1ro contra el Directorio de Finanzas (fuente de
+  // verdad), que ademas deriva el cliente y puentea al CRM; si no esta ahi,
+  // fallback a un contacto CRM ya cargado con ese numero (no crea nada nuevo).
   let contactId = existing?.contact_id ?? null;
-  if (!contactId && waPhone && waPhone.length >= 8) {
-    const tail = waPhone.slice(-8);
-    const { data: contact } = await supabase
-      .from("contacts")
-      .select("id")
-      .ilike("phone", `%${tail}%`)
-      .limit(1)
-      .maybeSingle();
-    contactId = contact?.id ?? null;
+  let matchedClientId: string | null = null;
+  let finName: string | null = null;
+  if (!contactId && !isGroup && waPhone && waPhone.length >= 8) {
+    try {
+      const { data: r } = await supabase.rpc("soporte_resolve_fin", {
+        p_wa_phone: waPhone, p_directory_id: null,
+      });
+      const hit = Array.isArray(r) ? r[0] : r;
+      if (hit?.matched) {
+        contactId = hit.contact_id ?? null;
+        matchedClientId = hit.client_id ?? null;
+        finName = hit.name ?? null;
+      }
+    } catch (e) {
+      console.error("whatsapp-webhook: soporte_resolve_fin fallo", e);
+    }
+    if (!contactId) {
+      const tail = waPhone.slice(-8);
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("id, linked_client_id")
+        .ilike("phone", `%${tail}%`)
+        .limit(1)
+        .maybeSingle();
+      if (contact?.id) {
+        contactId = contact.id;
+        matchedClientId = contact.linked_client_id ?? null;
+      }
+    }
   }
 
   // Preview: en grupos se antepone el autor para saber quien hablo.
@@ -353,6 +377,8 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
     last_message_preview: preview,
     last_message_direction: fromMe ? "out" : "in",
   };
+  // Auto-vincular el cliente derivado (solo cuando resolvimos recien el vinculo).
+  if (matchedClientId) convPatch.client_id = matchedClientId;
   if (isGroup) {
     // El nombre del chat de un grupo es su subject (NO el pushName del autor).
     // Participantes: se traen una vez y quedan cacheados en la conversacion.
@@ -361,23 +387,29 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
     if (needName || needParticipants) {
       const info = await fetchGroupInfo(jid);
       if (info?.subject && needName) convPatch.wa_profile_name = info.subject;
+      if (info?.description) convPatch.description = info.description;
       if (info?.participants && needParticipants) convPatch.participants = info.participants;
     }
-  } else if (!fromMe && pushName) {
-    // 1-a-1: pushName del remitente = nombre del contacto.
-    convPatch.wa_profile_name = pushName;
-    // Primera vez que conocemos el nombre: alta en Google Contacts, despues
-    // de responder el webhook (no demora la respuesta a Evolution).
-    if (!existing?.wa_profile_name && waPhone) {
+  } else if (finName) {
+    // 1-a-1 con match en el Directorio de Finanzas: el nombre es el de la base.
+    convPatch.wa_profile_name = finName;
+    // Agendar en Google Contacts con el NOMBRE DE LA BASE, solo la primera vez
+    // que se vincula el numero (no en cada mensaje). Best-effort, no bloquea.
+    if (!existing?.contact_id && waPhone) {
       try {
         // deno-lint-ignore no-explicit-any
         (globalThis as any).EdgeRuntime?.waitUntil
-          ? (globalThis as any).EdgeRuntime.waitUntil(upsertGoogleContact(pushName, waPhone))
-          : upsertGoogleContact(pushName, waPhone);
+          ? (globalThis as any).EdgeRuntime.waitUntil(upsertGoogleContact(finName, waPhone))
+          : upsertGoogleContact(finName, waPhone);
       } catch {
         // sin waitUntil: igual se intenta, sin bloquear
       }
     }
+  } else if (!fromMe && pushName && !existing?.contact_id) {
+    // Sin match en Finanzas y todavia sin vincular: mostramos el pushName como
+    // referencia visible. El agendado automatico ciego en Google Contacts se
+    // desactivo a pedido: solo se agenda al vincular a una persona de la base.
+    convPatch.wa_profile_name = pushName;
   }
   if (!fromMe) {
     convPatch.unread_count = (Number(existing?.unread_count) || 0) + 1;

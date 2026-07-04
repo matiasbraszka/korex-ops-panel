@@ -5,7 +5,7 @@ import { fmtNextCita } from './format.js';
 
 // Columnas explícitas: participants (puede tener cientos de miembros en
 // comunidades) NO viaja con la lista — se pide aparte al abrir el panel.
-const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at';
+const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,description,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at';
 const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,email),client:clients(id,name)`;
 
 export async function fetchConversations() {
@@ -229,13 +229,20 @@ export async function searchContacts(q) {
   return Array.isArray(rows) ? rows : [];
 }
 
+// Clientes por nombre. RPC SECURITY DEFINER: soporte no puede leer `clients`
+// directo (es módulo operations). Se usa para vincular grupos a un cliente.
 export async function searchClients(q) {
-  const term = encodeURIComponent(`%${q}%`);
-  const rows = await sbFetch(
-    `clients?name=ilike.${term}&select=id,name&limit=10`,
-    { headers: { Prefer: 'return=representation' } },
-  );
-  return Array.isArray(rows) ? rows : [];
+  const { data, error } = await supabase.rpc('soporte_search_clients', { p_q: q });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+// Personas del Directorio de Finanzas (base general) por nombre/teléfono, con
+// el cliente derivado. RPC SECURITY DEFINER (soporte no puede leer finanzas).
+export async function searchFinPeople(q) {
+  const { data, error } = await supabase.rpc('soporte_search_fin_people', { p_q: q });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
 }
 
 // Edge functions (usan el JWT de la sesion; la function valida permiso soporte).
@@ -263,4 +270,36 @@ export async function invokeMedia(messageId) {
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   return data; // { ok, url, mime, filename }
+}
+
+// Exporta la conversacion completa a texto plano (.txt).
+export async function invokeExport(conversationId) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-export', {
+    body: { conversation_id: conversationId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data; // { ok, filename, text }
+}
+
+// Administra un grupo: nombre (subject), descripcion y participantes.
+// action: 'set_subject' | 'set_description' | 'update_participants'
+export async function invokeGroup({ conversationId, action, value, op, participants }) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-group', {
+    body: { conversation_id: conversationId, action, value, op, participants },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.detail || data.error);
+  return data; // { ok, subject?, description?, participants? }
+}
+
+// Vincula la conversacion a una persona del Directorio de Finanzas: deriva el
+// cliente, puentea al CRM y agenda en Google Contacts con el nombre de la base.
+export async function invokeLink({ conversationId, directoryId }) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-link', {
+    body: { conversation_id: conversationId, directory_id: directoryId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data; // { ok, contact_id, client_id, client_name, name }
 }

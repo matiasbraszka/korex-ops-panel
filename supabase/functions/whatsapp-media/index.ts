@@ -106,12 +106,19 @@ Deno.serve(async (req: Request) => {
   const instance = cfg.instance_name || "korex-soporte";
   if (!serverUrl || !apiKey) return jsonResp(502, { error: "evolution_not_configured" });
 
+  // Mandamos el nodo Baileys COMPLETO guardado (key + message con mediaKey/
+  // directPath) para que Evolution pueda desencriptar aunque su store interno
+  // haya expirado el mensaje. Fallback a solo el id si no tenemos el payload.
+  const stored = (msg.payload as Record<string, any>) ?? {};
+  const evoMessage: Record<string, any> = { key: stored.key ?? { id: msg.wa_message_id } };
+  if (stored.message) evoMessage.message = stored.message;
+
   let media: Record<string, any> | null = null;
   try {
     const r = await fetch(`${serverUrl}/chat/getBase64FromMediaMessage/${instance}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: apiKey },
-      body: JSON.stringify({ message: { key: { id: msg.wa_message_id } }, convertToMp4: false }),
+      body: JSON.stringify({ message: evoMessage, convertToMp4: false }),
       signal: AbortSignal.timeout(60000),
     });
     media = await r.json().catch(() => null);

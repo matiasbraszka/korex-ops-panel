@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore, UserCheck } from 'lucide-react';
+import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore, UserCheck, Download, Pencil, UserPlus } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { fetchTeamMembers } from '../lib/api.js';
+import { fetchTeamMembers, invokeExport } from '../lib/api.js';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import TagPicker from './TagPicker.jsx';
 import LinkContactModal from './LinkContactModal.jsx';
@@ -33,10 +33,83 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
     selectedConversation: conv, updateNotes, updateConversation,
     appointmentsByConv, loadAppointments, cancelAppointment,
     groupDirByConv, loadGroupDirectory,
+    setGroupSubject, setGroupDescription, addParticipant, removeParticipant,
   } = useSoporte();
   const [linkOpen, setLinkOpen] = useState(false);
   const [showAllParts, setShowAllParts] = useState(false);
   const [team, setTeam] = useState([]);
+  const [exporting, setExporting] = useState(false);
+
+  // Exporta el chat completo a .txt y lo descarga en el navegador.
+  const exportChat = async () => {
+    if (exporting || !conv?.id) return;
+    setExporting(true);
+    try {
+      const { text, filename } = await invokeExport(conv.id);
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'chat.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('exportChat', e);
+      alert('No se pudo exportar el chat. Probá de nuevo.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // ── Edición de grupo (nombre / descripción / participantes) ──
+  const [subjectDraft, setSubjectDraft] = useState('');
+  const [descDraft, setDescDraft] = useState('');
+  const [newPart, setNewPart] = useState('');
+  const [groupBusy, setGroupBusy] = useState(''); // 'subject' | 'desc' | 'add' | <jid>
+  const [groupErr, setGroupErr] = useState('');
+
+  useEffect(() => {
+    if (conv?.is_group) {
+      setSubjectDraft(conv.wa_profile_name || '');
+      setDescDraft(conv.description || '');
+      setNewPart('');
+      setGroupErr('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conv?.id, conv?.is_group]);
+
+  const groupErrMsg = (e) => {
+    const m = String(e?.message || '');
+    if (/forbidden|admin|401|403/i.test(m)) return 'Para esto la cuenta de WhatsApp tiene que ser admin del grupo.';
+    if (/unreachable|not_configured/i.test(m)) return 'No se pudo conectar con WhatsApp. Probá de nuevo.';
+    return 'No se pudo completar la acción. Probá de nuevo.';
+  };
+  const runGroup = async (busyKey, fn) => {
+    setGroupBusy(busyKey); setGroupErr('');
+    try { await fn(); }
+    catch (e) { console.error('group action', e); setGroupErr(groupErrMsg(e)); }
+    finally { setGroupBusy(''); }
+  };
+  const saveSubject = () => {
+    const v = subjectDraft.trim();
+    if (!v || v === (conv.wa_profile_name || '')) return;
+    runGroup('subject', () => setGroupSubject(conv.id, v));
+  };
+  const saveDesc = () => {
+    if (descDraft === (conv.description || '')) return;
+    runGroup('desc', () => setGroupDescription(conv.id, descDraft));
+  };
+  const addPart = () => {
+    const digits = newPart.replace(/\D/g, '');
+    if (digits.length < 8) { setGroupErr('Escribí un número válido con código de país.'); return; }
+    runGroup('add', async () => { await addParticipant(conv.id, digits); setNewPart(''); });
+  };
+  const removePart = (jid) => {
+    if (!window.confirm('¿Quitar a esta persona del grupo?')) return;
+    runGroup(jid, () => removeParticipant(conv.id, jid));
+  };
 
   useEffect(() => {
     fetchTeamMembers().then(setTeam).catch(() => {});
@@ -93,10 +166,80 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
               {conv.is_group ? <Users size={26} /> : initials(name)}
             </div>
             <div className="text-[15px] font-bold mt-1">{name}</div>
-            <div className="text-[12px] text-text3">
-              {conv.is_group ? `Grupo de WhatsApp${participants.length ? ` · ${participants.length} participantes` : ''}` : fmtPhone(conv.wa_phone)}
-            </div>
+            {conv.is_group ? (
+              <div className="text-[12px] text-text3">
+                {`Grupo de WhatsApp${participants.length ? ` · ${participants.length} participantes` : ''}`}
+              </div>
+            ) : (
+              <button onClick={() => setLinkOpen(true)} title="Vincular a una persona de la base"
+                      className="text-[12px] text-text3 bg-transparent border-0 cursor-pointer hover:text-[#B45309] hover:underline p-0">
+                {fmtPhone(conv.wa_phone)}
+              </button>
+            )}
           </div>
+
+          {/* Cliente del grupo: qué cliente corresponde a este grupo de WhatsApp */}
+          {conv.is_group && (
+            <div>
+              <SectionLabel>Cliente del grupo</SectionLabel>
+              <button onClick={() => setLinkOpen(true)}
+                      className="w-full text-left px-3 py-2.5 rounded-xl border border-border bg-white hover:border-[#F5D9A8] cursor-pointer transition-colors duration-150 flex items-center gap-2.5">
+                {conv.client ? (
+                  <>
+                    <span className="w-8 h-8 rounded-[9px] bg-[#EEF2FF] flex items-center justify-center shrink-0">
+                      <Building2 size={15} className="text-[#4A67D8]" />
+                    </span>
+                    <span className="flex-1 min-w-0 leading-tight">
+                      <span className="block text-[12.5px] font-semibold truncate">{conv.client.name}</span>
+                      <span className="block text-[10.5px] text-text3">Cliente</span>
+                    </span>
+                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 size={14} className="text-[#B45309] shrink-0" />
+                    <span className="text-[12.5px] flex-1 text-[#B45309] font-medium">Vincular grupo a un cliente…</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Editar grupo (nombre + descripción). Requiere ser admin del grupo. */}
+          {conv.is_group && (
+            <div>
+              <SectionLabel>Grupo</SectionLabel>
+              <div className="flex flex-col gap-2.5">
+                <div>
+                  <div className="text-[10.5px] text-text3 mb-0.5 flex items-center gap-1"><Pencil size={10} /> Nombre</div>
+                  <div className="flex items-center gap-1.5">
+                    <input value={subjectDraft} onChange={(e) => setSubjectDraft(e.target.value)}
+                           className="flex-1 min-w-0 px-2.5 py-1.5 text-[12.5px] rounded-lg border border-border outline-none focus:border-[#F59E0B]" />
+                    <button onClick={saveSubject}
+                            disabled={groupBusy === 'subject' || !subjectDraft.trim() || subjectDraft.trim() === (conv.wa_profile_name || '')}
+                            className="shrink-0 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border-0 bg-[#F59E0B] text-white cursor-pointer disabled:opacity-50 disabled:cursor-default">
+                      {groupBusy === 'subject' ? '…' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10.5px] text-text3 mb-0.5">Descripción</div>
+                  <textarea value={descDraft} onChange={(e) => setDescDraft(e.target.value)} rows={3}
+                            placeholder="Descripción del grupo…"
+                            className="w-full resize-none px-2.5 py-1.5 text-[12.5px] rounded-lg border border-border outline-none focus:border-[#F59E0B]" />
+                  <button onClick={saveDesc}
+                          disabled={groupBusy === 'desc' || descDraft === (conv.description || '')}
+                          className="mt-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border-0 bg-[#F59E0B] text-white cursor-pointer disabled:opacity-50 disabled:cursor-default">
+                    {groupBusy === 'desc' ? 'Guardando…' : 'Guardar descripción'}
+                  </button>
+                </div>
+                {groupErr && <div className="text-[11px] font-medium text-[#DC2626]">{groupErr}</div>}
+                <div className="text-[10px] text-text3">
+                  Para cambiar el nombre, la descripción o los miembros, la cuenta de WhatsApp debe ser admin del grupo.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Vinculado a (solo 1:1) */}
           {!conv.is_group && (
@@ -114,45 +257,50 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                         {[conv.contact?.full_name, conv.client?.name].filter(Boolean).join(' · ')}
                       </span>
                       <span className="block text-[10.5px] text-text3">
-                        {conv.client ? 'Cliente' : 'Contacto del CRM'}
+                        {conv.client ? 'Cliente' : 'Persona de la base'}
                       </span>
                     </span>
-                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Ver ficha →</span>
+                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar</span>
                   </>
                 ) : (
                   <>
                     <Link2 size={14} className="text-[#B45309] shrink-0" />
-                    <span className="text-[12.5px] flex-1 text-[#B45309] font-medium">Vincular a contacto o cliente…</span>
+                    <span className="text-[12.5px] flex-1 text-[#B45309] font-medium">Vincular a una persona de la base…</span>
                   </>
                 )}
               </button>
             </div>
           )}
 
-          {/* Quién es quién (grupos) */}
-          {conv.is_group && participants.length > 0 && (
+          {/* Participantes (grupos): ver, quitar y agregar */}
+          {conv.is_group && (
             <div>
               <SectionLabel action={
                 <span className="text-[11px] font-semibold text-text3">
-                  {namedCount} con nombre
+                  {participants.length} · {namedCount} con nombre
                 </span>
-              }>Quién es quién</SectionLabel>
+              }>Participantes</SectionLabel>
               <div className="flex flex-col gap-0.5">
                 {visibleParts.map((p) => {
                   const pname = p.displayName || 'Sin nombre aún';
                   const pcolor = colorFromString(p.jid || '');
                   return (
-                    <div key={p.jid} className="flex items-center gap-2.5 px-2 py-1.5 rounded-[10px] hover:bg-surface2 transition-colors duration-150">
+                    <div key={p.jid} className="group flex items-center gap-2.5 px-2 py-1.5 rounded-[10px] hover:bg-surface2 transition-colors duration-150">
                       <span className="w-[30px] h-[30px] rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
                             style={{ background: pcolor + '1d', color: pcolor }}>
                         {p.displayName ? initials(p.displayName) : <Users size={12} />}
                       </span>
                       <span className="flex-1 min-w-0 leading-tight">
                         <span className={`block text-[12px] font-semibold truncate ${p.displayName ? '' : 'text-text3 font-medium'}`}>{pname}</span>
-                        {p.admin && (
-                          <span className="block text-[10px] font-semibold text-[#B45309]">Admin del grupo</span>
-                        )}
+                        <span className="block text-[10px] text-text3 truncate">
+                          {p.admin ? 'Admin · ' : ''}{p.phone ? `+${p.phone}` : ''}
+                        </span>
                       </span>
+                      <button onClick={() => removePart(p.jid)} disabled={groupBusy === p.jid}
+                              title="Quitar del grupo"
+                              className="shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 bg-transparent border-0 text-text3 hover:text-[#DC2626] cursor-pointer p-1 disabled:opacity-40 transition-opacity duration-150">
+                        <X size={13} />
+                      </button>
                     </div>
                   );
                 })}
@@ -162,6 +310,20 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                     Ver los {participants.length} participantes →
                   </button>
                 )}
+                {participants.length === 0 && (
+                  <div className="text-[11.5px] text-text3 px-1 py-1">Todavía no cargamos los participantes de este grupo.</div>
+                )}
+              </div>
+              {/* Agregar participante por número */}
+              <div className="flex items-center gap-1.5 mt-2">
+                <input value={newPart} onChange={(e) => setNewPart(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === 'Enter') addPart(); }}
+                       placeholder="Agregar por número (con código de país)…"
+                       className="flex-1 min-w-0 px-2.5 py-1.5 text-[12px] rounded-lg border border-border outline-none focus:border-[#F59E0B]" />
+                <button onClick={addPart} disabled={groupBusy === 'add' || !newPart.replace(/\D/g, '')}
+                        className="shrink-0 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border-0 bg-[#F59E0B] text-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-default">
+                  <UserPlus size={12} /> {groupBusy === 'add' ? '…' : 'Agregar'}
+                </button>
               </div>
               <div className="text-[10px] text-text3 mt-1.5 px-1">
                 Los nombres aparecen a medida que cada persona escribe en el grupo.
@@ -258,9 +420,20 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
             />
           </div>
 
+          {/* Exportar el chat completo a un archivo de texto */}
+          <div className="border-t border-surface2 pt-3 mt-auto">
+            <button
+              onClick={exportChat}
+              disabled={exporting}
+              className="w-full py-2 mb-2 rounded-xl border border-border bg-white text-text2 text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:bg-surface2 transition-colors duration-150 disabled:opacity-60 disabled:cursor-default"
+            >
+              <Download size={13} /> {exporting ? 'Exportando…' : 'Exportar chat (.txt)'}
+            </button>
+          </div>
+
           {/* Archivar: lo saca de la bandeja sin borrar nada. Si el contacto
               vuelve a escribir, el chat reaparece solo. */}
-          <div className="border-t border-surface2 pt-3 mt-auto">
+          <div className="border-t border-surface2 pt-3">
             <button
               onClick={() => updateConversation(conv.id, { archived: !conv.archived })}
               className={`w-full py-2 rounded-xl border text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition-colors duration-150 ${conv.archived

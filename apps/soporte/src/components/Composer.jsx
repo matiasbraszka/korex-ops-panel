@@ -33,6 +33,7 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
   const [fileError, setFileError] = useState('');
+  const [dragging, setDragging] = useState(false);
   const [slashDismissed, setSlashDismissed] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const taRef = useRef(null);
@@ -166,9 +167,9 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
     });
   };
 
-  const pickFile = (e) => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
+  // Deja un archivo en preview listo para enviar. Fuente única para el botón
+  // clip, pegar (paste) y arrastrar-soltar (drop).
+  const stageFile = (f) => {
     if (!f) return;
     setFileError('');
     if (f.size > MAX_FILE_MB * 1024 * 1024) {
@@ -181,13 +182,45 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
       const base64 = dataUrl.split(',')[1] || '';
       const mimetype = f.type || 'application/octet-stream';
       const kind = kindFromMime(mimetype);
+      // Las imágenes pegadas del portapapeles suelen venir sin nombre.
+      const filename = f.name || `imagen.${(mimetype.split('/')[1] || 'png').split(';')[0]}`;
       setFile({
-        base64, mimetype, filename: f.name, kind,
+        base64, mimetype, filename, kind,
         sizeMB: (f.size / 1048576).toFixed(1),
         previewUrl: kind === 'image' ? dataUrl : null,
       });
     };
     reader.readAsDataURL(f);
+  };
+
+  const pickFile = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    stageFile(f);
+  };
+
+  // Pegar (Ctrl/Cmd+V) una imagen/archivo desde el portapapeles.
+  const onPaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === 'file') {
+        const f = it.getAsFile();
+        if (f) { e.preventDefault(); stageFile(f); return; }
+      }
+    }
+  };
+
+  // Arrastrar-soltar un archivo sobre el cuadro de mensaje.
+  const onDragOver = (e) => {
+    if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragging(true); }
+  };
+  const onDragLeave = () => setDragging(false);
+  const onDrop = (e) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    setDragging(false);
+    stageFile(e.dataTransfer.files[0]);
   };
 
   const submit = () => {
@@ -225,7 +258,16 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
   const KindIcon = file ? KIND_ICONS[file.kind] : null;
 
   return (
-    <div className="px-3.5 pb-1.5 pt-2 shrink-0 relative">
+    <div className="px-3.5 pb-1.5 pt-2 shrink-0 relative"
+         onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+      {/* Overlay al arrastrar un archivo encima del cuadro */}
+      {dragging && (
+        <div className="absolute inset-1.5 z-30 flex items-center justify-center rounded-[14px] border-2 border-dashed border-[#F59E0B] bg-[#FFFBEB]/95 pointer-events-none">
+          <span className="text-[13px] font-bold text-[#B45309] flex items-center gap-2">
+            <Paperclip size={16} /> Soltá para adjuntar
+          </span>
+        </div>
+      )}
       {/* Mobile: respuestas rápidas como chips horizontales (el popover "/" es
           incómodo con teclado táctil) */}
       {!file && !text && (
@@ -339,6 +381,7 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
             value={text}
             onChange={onChange}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             rows={1}
             placeholder={file ? 'Descripción (opcional)…' : 'Escribí un mensaje…'}
             className="flex-1 resize-none text-[13px] leading-relaxed py-1.5 border-0 bg-transparent outline-none min-h-[32px] max-h-[120px]"
@@ -364,7 +407,7 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
       <div className="text-[10px] text-text3 mt-1 px-1">
         {recording
           ? 'Tocá el avión para enviar la nota de voz · el tacho la descarta'
-          : <>Enter envía · Shift+Enter salto de línea · <b className="font-semibold">/</b> respuestas rápidas · 🎙 micrófono para nota de voz</>}
+          : <>Enter envía · Shift+Enter salto de línea · <b className="font-semibold">/</b> respuestas rápidas · pegá o arrastrá una imagen 📎</>}
       </div>
     </div>
   );
