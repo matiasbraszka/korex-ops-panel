@@ -30,23 +30,30 @@ const MODEL_OVERRIDE = Deno.env.get("TRANSCRIBE_MODEL") || "";
 // 25MB: límite de las APIs de Whisper (Groq/OpenAI) y tope defensivo.
 const MAX_BYTES = 25 * 1024 * 1024;
 
-// Resuelve el proveedor según qué key esté seteada (Groq tiene prioridad).
-function resolveProvider(): { url: string; key: string; model: string } | null {
-  if (GROQ_API_KEY) {
-    return {
-      url: "https://api.groq.com/openai/v1/audio/transcriptions",
-      key: GROQ_API_KEY,
-      model: MODEL_OVERRIDE || "whisper-large-v3",
-    };
-  }
-  if (OPENAI_API_KEY) {
-    return {
-      url: "https://api.openai.com/v1/audio/transcriptions",
-      key: OPENAI_API_KEY,
-      model: MODEL_OVERRIDE || "whisper-1",
-    };
-  }
-  return null;
+const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions";
+
+// Arma el proveedor a partir de una key. Detecta OpenAI vs Groq por el hint
+// explícito o por el prefijo de la key (sk-… = OpenAI, gsk_… = Groq).
+function providerFor(key: string, hint: string, model: string) {
+  const isOpenAI = hint === "openai" || (hint !== "groq" && key.startsWith("sk-"));
+  return isOpenAI
+    ? { url: OPENAI_URL, key, model: model || "whisper-1" }
+    : { url: GROQ_URL, key, model: model || "whisper-large-v3" };
+}
+
+// Resuelve el proveedor: 1) secrets de entorno (preferido), 2) fallback a la fila
+// app_settings.transcribe_config, que SOLO lee esta función con service role (el
+// frontend nunca la consulta), para poder configurar la key sin acceso a los
+// secrets de la función y sin exponerla a los usuarios de soporte.
+async function resolveProvider(): Promise<{ url: string; key: string; model: string } | null> {
+  if (GROQ_API_KEY) return providerFor(GROQ_API_KEY, "groq", MODEL_OVERRIDE);
+  if (OPENAI_API_KEY) return providerFor(OPENAI_API_KEY, "openai", MODEL_OVERRIDE);
+  const { data } = await admin.from("app_settings").select("value").eq("key", "transcribe_config").maybeSingle();
+  const cfg = (data?.value ?? {}) as Record<string, string>;
+  const key = cfg.api_key || "";
+  if (!key) return null;
+  return providerFor(key, (cfg.provider || "").toLowerCase(), cfg.model || MODEL_OVERRIDE);
 }
 
 const corsHeaders = {
@@ -90,7 +97,7 @@ Deno.serve(async (req: Request) => {
 
   if (!(await authorizeSoporteRead(req))) return jsonResp(403, { error: "forbidden" });
 
-  const provider = resolveProvider();
+  const provider = await resolveProvider();
   if (!provider) {
     // Falta configurar la key: error "esperado", 200 con ok:false para que la UI
     // lo muestre limpio sin romper el flujo.
