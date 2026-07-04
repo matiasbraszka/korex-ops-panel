@@ -105,9 +105,17 @@ Deno.serve(async (req: Request) => {
   }
 
   const b64 = String(body.base64 || "");
-  const mimetype = String(body.mimetype || "application/octet-stream").split(";")[0];
-  const filename = String(body.filename || "audio.opus");
+  let mimetype = String(body.mimetype || "application/octet-stream").split(";")[0];
+  let filename = String(body.filename || "audio.opus");
   if (!b64) return jsonResp(400, { error: "missing_base64" });
+
+  // Los audios de WhatsApp son .opus (contenedor Ogg/Opus). OpenAI Whisper NO
+  // acepta la extensión .opus (sí .ogg/.oga), y Groq acepta ambas → normalizamos
+  // opus→ogg para que funcione con cualquier proveedor. El contenido no cambia.
+  if (/\.opus$/i.test(filename)) {
+    filename = filename.replace(/\.opus$/i, ".ogg");
+    mimetype = "audio/ogg";
+  }
 
   let bytes: Uint8Array;
   try {
