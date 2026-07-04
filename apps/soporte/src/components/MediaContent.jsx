@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
-import { FileText, Download, Play, RefreshCw, ImageOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FileText, Download, Play, RefreshCw, ImageOff, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
+import { transcribeAudioUrl, downloadTextFile, transcribeErrorLabel } from '../lib/audioTranscribe.js';
 
 // Render del contenido multimedia de un mensaje.
 // Imagenes/stickers/audios se cargan solos al aparecer; videos y documentos
@@ -64,7 +65,7 @@ export default function MediaContent({ msg }) {
         </div>
       );
     }
-    return <audio controls src={media.url} preload="metadata" className="max-w-[260px] h-10" />;
+    return <AudioBubble media={media} msg={msg} />;
   }
 
   // ── Video ──
@@ -110,4 +111,71 @@ export default function MediaContent({ msg }) {
   }
 
   return null;
+}
+
+// Nota de voz con reproductor + botón "Transcribir" (un click → transcribe con la
+// edge function y descarga el .txt; también lo muestra inline). Sirve igual para
+// audios entrantes (que nos mandan) y salientes (propios).
+function AudioBubble({ media, msg }) {
+  const [state, setState] = useState('idle'); // idle | loading | done | error
+  const [text, setText] = useState('');
+  const [err, setErr] = useState('');
+
+  const run = async () => {
+    setState('loading');
+    setErr('');
+    try {
+      const res = await transcribeAudioUrl(media.url, media.filename);
+      if (res?.ok) {
+        const t = (res.text || '').trim();
+        setText(t);
+        setState('done');
+        const base = (media.filename || `audio-${msg?.id || ''}`).replace(/\.[^.]+$/, '');
+        downloadTextFile(`${base}_transcripcion`, t || '(audio sin voz reconocible)');
+      } else {
+        setErr(transcribeErrorLabel(res?.error));
+        setState('error');
+      }
+    } catch {
+      setErr('No se pudo transcribir el audio.');
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <audio controls src={media.url} preload="metadata" className="max-w-[260px] h-10" />
+      <button
+        onClick={run}
+        disabled={state === 'loading'}
+        title="Transcribir este audio y descargar el texto"
+        className={`self-start inline-flex items-center gap-1.5 py-1 px-2.5 rounded-[9px] text-[11.5px] font-semibold border transition-colors ${
+          state === 'loading'
+            ? 'border-border bg-surface2 text-text3 cursor-default'
+            : 'border-[#F59E0B]/45 bg-[#FEF0D7] text-[#B45309] cursor-pointer hover:bg-[#FDE6BC]'
+        }`}
+      >
+        {state === 'loading' ? (
+          <><Loader2 size={12} className="animate-spin" /> Transcribiendo…</>
+        ) : state === 'done' ? (
+          <><Check size={12} /> Transcripción descargada · repetir</>
+        ) : (
+          <><FileText size={12} /> Transcribir</>
+        )}
+      </button>
+      {state === 'done' && text && (
+        <div className="max-w-[300px] text-[12px] leading-snug text-text2 bg-surface2 rounded-[10px] px-2.5 py-2 whitespace-pre-wrap">
+          {text}
+        </div>
+      )}
+      {state === 'done' && !text && (
+        <div className="text-[11.5px] text-text3">El audio no tenía voz reconocible.</div>
+      )}
+      {state === 'error' && (
+        <div className="max-w-[300px] flex items-start gap-1.5 text-[11.5px] text-[#B91C1C]">
+          <AlertTriangle size={12} className="shrink-0 mt-0.5" /> <span>{err}</span>
+        </div>
+      )}
+    </div>
+  );
 }
