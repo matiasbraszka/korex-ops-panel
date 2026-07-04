@@ -177,6 +177,12 @@ Deno.serve(async (req: Request) => {
     if (p?.key) quoted = { key: p.key, message: p.message || {} };
   }
 
+  // Menciones (@personas de un grupo): Evolution espera los numeros; extraemos
+  // el numero del jid (soporta @lid y @s.whatsapp.net). Best-effort.
+  const mentioned = Array.isArray(body.mentioned)
+    ? body.mentioned.map((m: string) => String(m).split("@")[0].split(":")[0]).filter(Boolean)
+    : [];
+
   // ── Adjunto ──
   if (media?.base64) {
     const kind = String(media.kind || "");
@@ -260,7 +266,7 @@ Deno.serve(async (req: Request) => {
     evoRes = await fetch(`${serverUrl}/message/sendText/${instance}`, {
       method: "POST",
       headers: evoHeaders,
-      body: JSON.stringify({ number: conv.wa_jid, text, ...(quoted ? { quoted } : {}) }),
+      body: JSON.stringify({ number: conv.wa_jid, text, ...(quoted ? { quoted } : {}), ...(mentioned.length ? { mentioned } : {}) }),
       signal: AbortSignal.timeout(25000),
     });
   } catch (e) {

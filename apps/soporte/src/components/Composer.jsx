@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Send, Paperclip, X, FileText, Image as ImageIcon, Film, Music, Mic, Trash2 } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Image as ImageIcon, Film, Music, Mic, Trash2, User } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { convName } from '../lib/format.js';
+import { convName, colorFromString, initials } from '../lib/format.js';
 
 const MAX_FILE_MB = 12;
 
@@ -29,7 +29,7 @@ const DEFAULT_TEMPLATES = [
 // Composer — Diseño A: card redondeada, foco ámbar, enviar circular ámbar.
 // Tipear «/» al inicio abre el popover de respuestas rápidas (↑↓ Enter Esc).
 export default function Composer({ onSent, replyTo, onClearReply }) {
-  const { selectedId, selectedConversation, sendMessage, sendAttachment, getDraft, setDraft, templates: configTemplates } = useSoporte();
+  const { selectedId, selectedConversation, sendMessage, sendAttachment, getDraft, setDraft, templates: configTemplates, groupDirByConv } = useSoporte();
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
   const [fileError, setFileError] = useState('');
@@ -38,6 +38,35 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
   const [highlight, setHighlight] = useState(0);
   const taRef = useRef(null);
   const fileRef = useRef(null);
+
+  // ── Menciones @ (solo grupos) ──
+  const [mentionQuery, setMentionQuery] = useState(null); // texto tras @ o null
+  const [mentionStart, setMentionStart] = useState(0);
+  const mentionsRef = useRef([]); // [{ tag, num, jid }] agregadas con el picker
+  const isGroup = selectedConversation?.is_group;
+  const groupDir = isGroup ? groupDirByConv[selectedId] : null;
+  const mentionCandidates = useMemo(() => {
+    if (!groupDir) return [];
+    const names = groupDir.names || {};
+    const seen = new Set();
+    const list = [];
+    const add = (jid) => {
+      const num = String(jid || '').split('@')[0].split(':')[0];
+      if (!num || seen.has(num)) return;
+      seen.add(num);
+      list.push({ num, jid, name: names[jid] || null });
+    };
+    (groupDir.participants || []).forEach((p) => add(p.jid));
+    Object.keys(names).forEach((jid) => add(jid));
+    return list.sort((a, b) => (b.name ? 1 : 0) - (a.name ? 1 : 0));
+  }, [groupDir]);
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery;
+    return mentionCandidates
+      .filter((c) => (c.name || '').toLowerCase().includes(q) || c.num.includes(q))
+      .slice(0, 8);
+  }, [mentionQuery, mentionCandidates]);
 
   // ── Grabación de nota de voz ──
   const [recording, setRecording] = useState(false);
@@ -120,8 +149,9 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
     return templates.filter((t) => t.shortcut.startsWith(slashQuery) || t.name.toLowerCase().includes(slashQuery));
   }, [slashQuery, templates]);
   const popoverOpen = slashQuery !== null && slashMatches.length > 0 && !slashDismissed && !file;
+  const mentionOpen = Boolean(isGroup) && mentionQuery !== null && mentionMatches.length > 0 && !file;
 
-  useEffect(() => { setHighlight(0); }, [slashQuery]);
+  useEffect(() => { setHighlight(0); }, [slashQuery, mentionQuery]);
 
   useEffect(() => {
     // Si estaba grabando y cambia de chat, descartar la grabación.
@@ -130,6 +160,8 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
     setFile(null);
     setFileError('');
     setSlashDismissed(false);
+    setMentionQuery(null);
+    mentionsRef.current = [];
     const ta = taRef.current;
     if (ta) {
       ta.style.height = 'auto';
@@ -147,11 +179,43 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   };
 
+  // Detecta si el cursor está escribiendo una mención (@algo) para abrir el picker.
+  const detectMention = (val, caret) => {
+    if (!isGroup) { setMentionQuery(null); return; }
+    const upto = val.slice(0, caret ?? val.length);
+    const m = upto.match(/(?:^|\s)@([\p{L}0-9._-]*)$/u);
+    if (m) { setMentionQuery(m[1].toLowerCase()); setMentionStart((caret ?? val.length) - m[1].length - 1); }
+    else setMentionQuery(null);
+  };
+
   const onChange = (e) => {
     setText(e.target.value);
     setDraft(selectedId, e.target.value);
     setSlashDismissed(false);
+    detectMention(e.target.value, e.target.selectionStart);
     autosize();
+  };
+
+  // Elegir a quién mencionar: inserta @Nombre legible y recuerda su número/jid.
+  const pickMention = (c) => {
+    if (!c) return;
+    const ta = taRef.current;
+    const caret = ta ? ta.selectionStart : text.length;
+    const before = text.slice(0, mentionStart);
+    const after = text.slice(caret);
+    const tag = c.name ? '@' + c.name.split(' ')[0] : '@' + c.num;
+    const insert = tag + ' ';
+    const next = before + insert + after;
+    setText(next);
+    setDraft(selectedId, next);
+    mentionsRef.current.push({ tag, num: c.num, jid: c.jid });
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      autosize();
+      const pos = (before + insert).length;
+      ta?.focus();
+      ta?.setSelectionRange(pos, pos);
+    });
   };
 
   // Inserta la plantilla resolviendo {nombre} con el contacto del chat.
@@ -231,8 +295,20 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
       setFile(null);
     } else {
       if (!body) return;
-      sendMessage(selectedId, body, quotedId);
+      // Traducir @Nombre → @número (lo que WhatsApp necesita) y juntar los jids
+      // mencionados para que Evolution notifique a esas personas.
+      let outBody = body;
+      const mentioned = [];
+      for (const men of mentionsRef.current) {
+        if (outBody.includes(men.tag)) {
+          outBody = outBody.replace(men.tag, '@' + men.num);
+          mentioned.push(men.jid);
+        }
+      }
+      sendMessage(selectedId, outBody, quotedId, mentioned.length ? mentioned : undefined);
     }
+    mentionsRef.current = [];
+    setMentionQuery(null);
     setText('');
     setDraft(selectedId, '');
     onClearReply?.();
@@ -242,6 +318,12 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
   };
 
   const onKeyDown = (e) => {
+    if (mentionOpen) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => (h + 1) % mentionMatches.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => (h - 1 + mentionMatches.length) % mentionMatches.length); return; }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickMention(mentionMatches[highlight]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); return; }
+    }
     if (popoverOpen) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => (h + 1) % slashMatches.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => (h - 1 + slashMatches.length) % slashMatches.length); return; }
@@ -284,6 +366,32 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
               más…
             </button>
           )}
+        </div>
+      )}
+      {/* Popover de menciones (@ en grupos) */}
+      {mentionOpen && (
+        <div className="absolute bottom-full left-3.5 mb-1.5 w-[min(360px,calc(100%-28px))] bg-white border border-border rounded-[14px] shadow-lg p-1.5 z-20">
+          <div className="px-2.5 pt-1.5 pb-1.5 text-[10px] font-bold tracking-widest text-text3">MENCIONAR EN EL GRUPO</div>
+          <div className="flex flex-col gap-0.5 max-h-[240px] overflow-y-auto">
+            {mentionMatches.map((c, i) => (
+              <button key={c.num}
+                      onMouseEnter={() => setHighlight(i)}
+                      onClick={() => pickMention(c)}
+                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-[10px] border-0 cursor-pointer text-left transition-colors duration-150 ${i === highlight ? 'bg-[#FEF0D7]' : 'bg-transparent hover:bg-surface2'}`}>
+                <span className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
+                      style={{ background: colorFromString(c.jid) + '1d', color: colorFromString(c.jid) }}>
+                  {c.name ? initials(c.name) : <User size={13} />}
+                </span>
+                <span className="flex-1 min-w-0 leading-tight">
+                  <span className="block text-[12.5px] font-semibold truncate">{c.name || `+${c.num}`}</span>
+                  {!c.name && <span className="block text-[10.5px] text-text3">Sin nombre en WhatsApp</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-surface2 mt-1 px-2.5 pt-1.5 pb-0.5 text-[10px] text-text3">
+            ↑ ↓ elegir · Enter menciona · Esc cierra
+          </div>
         </div>
       )}
       {/* Popover de respuestas rápidas */}

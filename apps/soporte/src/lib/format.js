@@ -96,6 +96,23 @@ export function convName(conv) {
   return conv?.contact?.full_name || conv?.wa_profile_name || fmtPhone(conv?.wa_phone) || conv?.wa_jid || '';
 }
 
+// Número (o id @lid) sin el sufijo del jid: "31336282775675@lid" -> "31336282775675".
+export function jidNum(jid) {
+  return String(jid || '').split('@')[0].split(':')[0];
+}
+
+// Mapa número→nombre a partir del directorio de un grupo (sender_jid → pushName).
+// Se usa para mostrar las menciones @<número> con el nombre de la persona.
+export function mentionMap(dir) {
+  const map = {};
+  const names = dir?.names || {};
+  for (const jid in names) {
+    const num = jidNum(jid);
+    if (num && names[jid]) map[num] = names[jid];
+  }
+  return map;
+}
+
 // Resuelve la plantilla de confirmación: {{nombre}}, {{fecha}}, {{hora}}.
 export function resolveTemplate(template, { nombre, fecha, hora }) {
   return String(template || '')

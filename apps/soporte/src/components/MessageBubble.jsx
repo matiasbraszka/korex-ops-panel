@@ -9,14 +9,20 @@ const MEDIA_TYPES = new Set(['imageMessage', 'stickerMessage', 'audioMessage', '
 const MEDIA_SNIPPET = { imageMessage: '📷 Imagen', stickerMessage: 'Sticker', audioMessage: '🎙 Nota de voz', videoMessage: '🎬 Video', documentMessage: '📄 Documento' };
 const snippetOf = (m) => (m?.body && m.body.trim()) || MEDIA_SNIPPET[m?.msg_type] || 'Mensaje';
 
-// Menciones (@Nombre) coloreadas como en WhatsApp.
-function BodyText({ text }) {
-  const parts = String(text).split(/(@[\wÀ-ÿ.]+)/g);
+// Menciones coloreadas como en WhatsApp. Si la mención es un @<número> y
+// conocemos el nombre de esa persona (mapa mentions), mostramos @Nombre.
+function BodyText({ text, mentions }) {
+  const parts = String(text).split(/(@[0-9]{5,}|@[\wÀ-ÿ.]+)/g);
   return (
     <div className="whitespace-pre-wrap">
-      {parts.map((p, i) =>
-        p.startsWith('@') ? <span key={i} className="font-semibold text-[#4A67D8]">{p}</span> : <span key={i}>{p}</span>
-      )}
+      {parts.map((p, i) => {
+        if (p.startsWith('@')) {
+          const key = p.slice(1);
+          const name = mentions && mentions[key];
+          return <span key={i} className="font-semibold text-[#4A67D8]">@{name || key}</span>;
+        }
+        return <span key={i}>{p}</span>;
+      })}
     </div>
   );
 }
@@ -24,7 +30,7 @@ function BodyText({ text }) {
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
-export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, selectMode, selected, onToggleSelect, quotedMsg }) {
+export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, selectMode, selected, onToggleSelect, quotedMsg, mentions }) {
   const out = msg.direction === 'out';
   const isMedia = MEDIA_TYPES.has(msg.msg_type);
   const typeLabel = !isMedia ? msgTypeLabel(msg.msg_type) : null;
@@ -86,7 +92,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
       {typeLabel && (
         <div className={`text-[11.5px] font-medium ${msg.body ? 'mb-0.5' : ''} text-text2`}>{typeLabel}</div>
       )}
-      {msg.body && <BodyText text={msg.body} />}
+      {msg.body && <BodyText text={msg.body} mentions={mentions} />}
 
       <div className="flex items-center justify-end gap-1 mt-0.5">
         <span className={`text-[9.5px] ${out && !failed ? 'text-[#7A9484]' : 'text-text3'}`}>

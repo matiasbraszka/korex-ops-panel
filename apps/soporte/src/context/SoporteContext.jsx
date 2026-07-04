@@ -218,7 +218,7 @@ export function SoporteProvider({ children }) {
     });
   };
 
-  const sendMessage = useCallback(async (convId, text, quotedId = null) => {
+  const sendMessage = useCallback(async (convId, text, quotedId = null, mentioned = null) => {
     const body = String(text || '').trim();
     if (!convId || !body) return;
     const now = new Date().toISOString();
@@ -235,7 +235,7 @@ export function SoporteProvider({ children }) {
     setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, last_message_at: now, last_message_preview: body.slice(0, 120) } : c)));
 
     try {
-      const res = await invokeSend({ conversationId: convId, text: body, quotedId });
+      const res = await invokeSend({ conversationId: convId, text: body, quotedId, mentioned });
       const real = res?.message;
       setThreads((prev) => {
         const cur = prev[convId];

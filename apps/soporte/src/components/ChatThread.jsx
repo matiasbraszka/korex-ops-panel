@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
+import { initials, dayKey, colorFromString, convName, fmtPhone, mentionMap } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
 import Composer from './Composer.jsx';
 import ForwardModal from './ForwardModal.jsx';
@@ -99,6 +99,8 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     if (isGroup && convId) loadGroupDirectory(convId);
   }, [isGroup, convId, loadGroupDirectory]);
   const dir = isGroup && convId ? groupDirByConv[convId] : null;
+  // Mapa número→nombre para mostrar las menciones (@número) con el nombre real.
+  const mentions = useMemo(() => (isGroup ? mentionMap(dir) : null), [isGroup, dir]);
   let groupSub = 'Grupo';
   if (dir?.participants?.length) {
     const names = dir.participants
@@ -227,6 +229,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   selected={selected.has(g.msg.id)}
                   onToggleSelect={toggleSelect}
                   quotedMsg={g.msg.reply_to ? byWaId[g.msg.reply_to] : null}
+                  mentions={mentions}
                 />
               )
             )}
