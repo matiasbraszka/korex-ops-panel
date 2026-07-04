@@ -1,16 +1,20 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Gauge, Zap, FolderOpen, FileText, Folder, Link2, ExternalLink,
-  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check, Save,
+  Plus, Trash2, AlertTriangle, RefreshCw, MessageCircle, Copy, Check, Save, FileAudio, Loader2,
 } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { fetchBriefings } from '../lib/api.js';
 import PlantillasPage from './PlantillasPage.jsx';
 
+// Herramienta pesada (trae fflate): cargar solo cuando se abre su pestaña.
+const TranscripcionWhatsApp = lazy(() => import('./TranscripcionWhatsApp.jsx'));
+
 const TABS = [
   { id: 'resumen', label: 'Resumen de grupos', Icon: Gauge },
   { id: 'plantillas', label: 'Plantillas', Icon: Zap },
+  { id: 'transcripcion', label: 'Auditoría de audios', Icon: FileAudio },
   { id: 'enlaces', label: 'Enlaces y carpetas', Icon: FolderOpen },
   { id: 'walink', label: 'Link de WhatsApp', Icon: MessageCircle },
 ];
@@ -384,6 +388,11 @@ export default function RecursosPage() {
       {/* Contenido */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'resumen' && <ResumenGrupos />}
+        {tab === 'transcripcion' && (
+          <Suspense fallback={<div className="flex items-center justify-center py-20 text-text3 text-[13px] gap-2"><Loader2 size={16} className="animate-spin" /> Cargando…</div>}>
+            <TranscripcionWhatsApp />
+          </Suspense>
+        )}
         {tab === 'enlaces' && <EnlacesCarpetas />}
         {tab === 'walink' && <GeneradorWaLink />}
         {tab === 'plantillas' && (

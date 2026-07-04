@@ -303,3 +303,15 @@ export async function invokeLink({ conversationId, directoryId }) {
   if (data?.error) throw new Error(data.error);
   return data; // { ok, contact_id, client_id, client_name, name }
 }
+
+// Transcribe un audio/video suelto (herramienta "Auditoría de audios" de Recursos).
+// Recibe el archivo en base64 y devuelve { ok, text } o { ok:false, error }.
+// Devolvemos el objeto tal cual (sin lanzar en ok:false) para que el llamador
+// decida por audio: reintentar un rate_limited, marcar el fallo, etc.
+export async function invokeTranscribir({ base64, mimetype, filename }) {
+  const { data, error } = await supabase.functions.invoke('transcribir-audio', {
+    body: { base64, mimetype, filename },
+  });
+  if (error) throw error; // error de transporte/HTTP (403, 400, red)
+  return data; // { ok:true, text } | { ok:false, error, detail? }
+}

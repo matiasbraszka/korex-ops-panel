@@ -11,6 +11,7 @@
     "@korex/auth": "*",
     "@korex/db": "*",
     "@korex/ui": "*",
+    "fflate": "^0.8.2",
     "lucide-react": "^1.7.0"
   },
   "peerDependencies": {
