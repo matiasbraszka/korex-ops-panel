@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, User, Check, SlidersHorizontal, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import PersonAvatar from './PersonAvatar';
 
 // Toolbar unificado de la sección Tareas: junta las PESTAÑAS + los filtros en
 // UNA sola fila (antes eran 2: ViewToggle + TareasBar). Los toggles menos usados
@@ -106,7 +107,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
           <div ref={pRef} style={{ position: 'relative' }}>
             <span onClick={() => setPersonOpen(v => !v)} style={trigger}>
               {selMember
-                ? <span style={{ width: 20, height: 20, borderRadius: '50%', background: selMember.color || '#9CA3AF', color: '#fff', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(selMember.initials || selMember.name?.slice(0, 2) || '').toUpperCase()}</span>
+                ? <PersonAvatar member={selMember} size={20} />
                 : <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={12} stroke="#5B7CF5" strokeWidth={1.9} /></span>}
               <span style={{ whiteSpace: 'nowrap' }}>{selMember ? selMember.name.split(' ')[0] : 'Encargado'}</span>
               <ChevronDown size={13} stroke="#9CA3AF" />
@@ -120,7 +121,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
                     <div key={m.id} onClick={() => { setTaskAssignee(isAll ? 'all' : m.name); setPersonOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: active ? '#F5F7FF' : 'transparent' }}>
                       {isAll
                         ? <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={14} stroke="#5B7CF5" strokeWidth={1.9} /></span>
-                        : <span style={{ width: 24, height: 24, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(m.initials || m.name?.slice(0, 2) || '').toUpperCase()}</span>}
+                        : <PersonAvatar member={m} size={24} />}
                       <span style={{ flex: 1, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap' }}>{m.name}</span>
                       {active && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5B7CF5" strokeWidth="2.2"><path d="M20 6 9 17l-5-5" /></svg>}
                     </div>
