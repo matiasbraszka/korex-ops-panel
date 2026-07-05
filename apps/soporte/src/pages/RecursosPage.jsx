@@ -106,19 +106,29 @@ function ResumenGrupos() {
                 <span className="flex items-center gap-1">📩 1-a-1 cliente <Chip v={b.sat_privado_cliente} /></span>
                 <span className="flex items-center gap-1">🧑‍🤝‍🧑 1-a-1 usuarios <Chip v={b.sat_privado_usuarios} /></span>
               </div>
-              {b.estado && <div className="text-[12.5px] text-text2 mt-2.5 leading-snug">{b.estado}</div>}
+              {b.estado && (
+                <div className="mt-3 border-t border-surface2 pt-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-text3 mb-1">Estado general</div>
+                  <div className="text-[12.5px] text-text2 leading-snug">{b.estado}</div>
+                </div>
+              )}
               {(b.resumen_usuarios || b.resumen_cliente_grupo || b.resumen_privado_cliente || b.resumen_privado_usuarios) && (
-                <div className="mt-2.5 flex flex-col gap-1.5 border-t border-surface2 pt-2.5">
-                  <ResumenLinea icon="👥" label="Grupo usuarios" texto={b.resumen_usuarios} />
-                  <ResumenLinea icon="💬" label="Grupo cliente" texto={b.resumen_cliente_grupo} />
-                  <ResumenLinea icon="📩" label="1-a-1 cliente" texto={b.resumen_privado_cliente} />
-                  <ResumenLinea icon="🧑‍🤝‍🧑" label="1-a-1 usuarios" texto={b.resumen_privado_usuarios} />
+                <div className="mt-3 border-t border-surface2 pt-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-text3 mb-1.5">Detalle por canal</div>
+                  <div className="flex flex-col gap-2">
+                    <ResumenLinea icon="👥" label="Grupo usuarios" texto={b.resumen_usuarios} />
+                    <ResumenLinea icon="💬" label="Grupo cliente" texto={b.resumen_cliente_grupo} />
+                    <ResumenLinea icon="📩" label="1-a-1 cliente" texto={b.resumen_privado_cliente} />
+                    <ResumenLinea icon="🧑‍🤝‍🧑" label="1-a-1 usuarios" texto={b.resumen_privado_usuarios} />
+                  </div>
                 </div>
               )}
               {b.riesgos && (
-                <div className="flex items-start gap-1.5 mt-2 text-[12px] text-[#DC2626] leading-snug">
-                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-                  <span>{b.riesgos}</span>
+                <div className="mt-3 border-t border-surface2 pt-2.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#DC2626] mb-1 flex items-center gap-1">
+                    <AlertTriangle size={11} /> Riesgo
+                  </div>
+                  <div className="text-[12px] text-[#DC2626] leading-snug">{b.riesgos}</div>
                 </div>
               )}
               {b.updated_at && (
