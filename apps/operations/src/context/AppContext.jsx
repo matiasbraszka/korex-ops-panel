@@ -73,6 +73,7 @@ export function AppProvider({ children }) {
     };
   }, [profile, isAdmin, authUser]);
   const [briefing, setBriefing] = useState(null);
+  const [satByClient, setSatByClient] = useState({}); // satisfacción WhatsApp por client_id (RPC ops_wa_satisfaction)
   const [reportFeedbacks, setReportFeedbacks] = useState([]);
   const [taskProposals, setTaskProposals] = useState([]);
   const [dashboardAlerts, setDashboardAlerts] = useState([]);
@@ -2156,6 +2157,19 @@ export function AppProvider({ children }) {
         if (calls && Array.isArray(calls)) setLlamadas(calls);
       } catch { /* silent */ }
 
+      // Cargar satisfacción por cliente (WhatsApp) vía RPC SECURITY DEFINER —
+      // wa_briefings está gateada a 'soporte' por RLS; el RPC la expone a operations.
+      try {
+        const sat = await sbFetch('rpc/ops_wa_satisfaction', {
+          method: 'POST', body: '{}', headers: { 'Prefer': 'return=representation' },
+        });
+        if (Array.isArray(sat)) {
+          const map = {};
+          for (const r of sat) map[r.client_id] = r;
+          setSatByClient(map);
+        }
+      } catch { /* silent */ }
+
       // Contar llamadas pendientes de procesar
       try {
         const pending = await sbFetch('llamadas_inbox?processed=eq.false&select=id', { headers: { 'Prefer': 'return=representation' } });
@@ -2689,6 +2703,7 @@ export function AppProvider({ children }) {
     authUser,
     isAdmin,
     briefing, setBriefing,
+    satByClient,
     reportFeedbacks, setReportFeedbacks,
     taskProposals, setTaskProposals,
     dashboardAlerts, setDashboardAlerts,
@@ -2841,7 +2856,7 @@ export function AppProvider({ children }) {
     // Estado (los setters de useState son estables y no necesitan estar aca)
     clients, tasks, view, setView, selectedId, phase, filter, taskFilter,
     taskAssignee, taskClientFilter, taskPriority, taskDueFilter, taskDepartment,
-    currentUser, authUser, isAdmin, briefing, reportFeedbacks, taskProposals,
+    currentUser, authUser, isAdmin, briefing, satByClient, reportFeedbacks, taskProposals,
     dashboardAlerts, hideCompleted, hideCompletedTasks, hideBlockedTasks,
     collapsedGroups, syncStatus, saveError, flashMessage, appSettings, teamMembers, weeklyTodos,
     sprints, activeSprint,

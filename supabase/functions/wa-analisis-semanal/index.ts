@@ -8,7 +8,9 @@
 //     técnicos + FAQs → nutre la Guía de soporte (Google Docs).
 //   • Grupos de CLIENTES (etiqueta G-Clientes): satisfacción + dudas + quejas +
 //     calidad de la respuesta de Korex.
-//   • Chats privados 1-a-1 vinculados a cliente: satisfacción de la relación directa.
+//   • Chats privados 1-a-1, separados en dos por rol (directorio de Finanzas):
+//       – con EL CLIENTE titular (tipo='Cliente')
+//       – con LOS USUARIOS/afiliados del cliente (otro rol o desconocido)
 // Luego sintetiza un BRIEFING vivo por cliente (estado + riesgos + historial) y
 // lo vuelca a Google Docs (una sección/pestaña por cliente) + Slack.
 //
@@ -45,7 +47,11 @@ const SYS_CLIENTE = `Sos analista de soporte de Korex. Te paso el transcript de 
 
 Devolvé: satisfaccion {score 0-100, label}, resumen (3-4 oraciones), dudas (lo que preguntó el cliente), quejas (lo que reclamó o le molestó), y calidad_respuesta {score 0-100, notas} evaluando cómo respondió Korex (rapidez, claridad, si resolvió).`;
 
-const SYS_BRIEFING = `Sos analista de soporte de Korex. Te paso los resúmenes de esta semana de un cliente desde tres ángulos (grupo de usuarios, grupo privado del cliente, chats 1-a-1). Sintetizá un briefing ejecutivo.
+const SYS_PRIVADO_USUARIOS = `Sos analista de soporte de Korex. Te paso el transcript de 7 días de los chats privados 1-a-1 de Korex con USUARIOS/afiliados individuales de un cliente (no con el cliente titular, sino con su gente). Los "KOREX:" son del equipo de Korex (soporte/Matías/Cristian) y cuentan como respuesta de la empresa.
+
+Devolvé: satisfaccion {score 0-100, label}, resumen (3-4 oraciones del clima de esos 1-a-1), dudas (lo que preguntaron), quejas (lo que reclamaron o les molestó), y calidad_respuesta {score 0-100, notas} evaluando cómo respondió Korex (rapidez, claridad, si resolvió).`;
+
+const SYS_BRIEFING = `Sos analista de soporte de Korex. Te paso los resúmenes de esta semana de un cliente desde cuatro ángulos (grupo de usuarios, grupo del cliente, 1-a-1 con el cliente, 1-a-1 con los usuarios). Sintetizá un briefing ejecutivo.
 
 Devolvé: estado (2-3 oraciones de la situación general del cliente esta semana), riesgos (señales de alerta o churn; vacío si no hay), sat_overall (0-100, satisfacción consolidada) y resumen_semana (1 oración para el historial).`;
 
@@ -77,7 +83,13 @@ const SCHEMA_BRIEFING = {
 };
 
 interface ScopeData { score: number | null; label: string; resumen: string; }
-interface ClientAccum { name: string; usuarios?: ScopeData; cliente_grupo?: ScopeData; privado?: ScopeData; }
+interface ClientAccum {
+  name: string;
+  usuarios?: ScopeData;
+  cliente_grupo?: ScopeData;
+  privado_cliente?: ScopeData;   // 1-a-1 con el cliente titular
+  privado_usuarios?: ScopeData;  // 1-a-1 con los usuarios/afiliados
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok");
@@ -133,7 +145,7 @@ Deno.serve(async (req: Request) => {
   };
 
   const faqBucket: { pregunta: string; respuesta: string; categoria: string; cid: string | null }[] = [];
-  const stats = { usuarios: 0, cliente_grupo: 0, privado: 0, briefings: 0, errors: 0 };
+  const stats = { usuarios: 0, cliente_grupo: 0, privado_cliente: 0, privado_usuarios: 0, briefings: 0, errors: 0 };
 
   // ── G usuarios ────────────────────────────────────────────────────────────────
   for (const conv of convs.filter((c) => c.is_group && convHasAnyTag(c, usuariosTagIds))) {
@@ -168,29 +180,58 @@ Deno.serve(async (req: Request) => {
     } catch (e) { console.error("cliente IA error", conv.id, e); stats.errors++; }
   }
 
-  // ── Privados 1-a-1 por cliente (mensajes combinados de sus DMs) ──────────────────
-  const dmByClient = new Map<string, string[]>();
+  // ── Privados 1-a-1: separados por rol del contacto ───────────────────────────────
+  //   • con EL CLIENTE   → el teléfono figura como tipo='Cliente' en el directorio de Finanzas
+  //   • con LOS USUARIOS → cualquier otro rol (Usuario/Conector/…) o número desconocido
+  // Mapa de teléfonos "Cliente" (por últimos 8 dígitos, igual que soporte_resolve_fin).
+  const clientePhones = new Set<string>();
+  {
+    const { data: dir } = await admin.from("fin_directory").select("telefono, tipo");
+    for (const d of dir ?? []) {
+      if (String(d.tipo || "").trim().toLowerCase() !== "cliente") continue;
+      const digits = String(d.telefono || "").replace(/\D/g, "");
+      if (digits.length >= 8) clientePhones.add(digits.slice(-8));
+    }
+  }
+  const isClientePhone = (phone?: string | null): boolean => {
+    const digits = String(phone || "").replace(/\D/g, "");
+    return digits.length >= 8 && clientePhones.has(digits.slice(-8));
+  };
+
+  const dmClienteByClient = new Map<string, string[]>();
+  const dmUsuariosByClient = new Map<string, string[]>();
   for (const conv of convs.filter((c) => !c.is_group && c.client_id)) {
-    const arr = dmByClient.get(conv.client_id!) || [];
+    const target = isClientePhone((conv as any).wa_phone) ? dmClienteByClient : dmUsuariosByClient;
+    const arr = target.get(conv.client_id!) || [];
     arr.push(conv.id);
-    dmByClient.set(conv.client_id!, arr);
+    target.set(conv.client_id!, arr);
   }
-  for (const [cid, convIds] of dmByClient) {
-    let msgs: WaMessage[] = [];
-    for (const id of convIds) msgs = msgs.concat(await fetchMessagesSince(admin, id, sinceIso));
-    if (msgs.length < 2) continue;
-    msgs.sort((a, b) => String(a.wa_timestamp || a.created_at).localeCompare(String(b.wa_timestamp || b.created_at)));
-    if (msgs.length > MAX_MSGS) msgs = msgs.slice(msgs.length - MAX_MSGS);
-    const transcript = buildTranscript(msgs, korex);
-    if (!transcript.trim()) continue;
-    try {
-      const r = await analyze<any>({ system: SYS_CLIENTE, user: transcript, schema: SCHEMA_CLIENTE, model: cfg.analysis_model });
-      const score = clampScore(r.satisfaccion?.score);
-      await saveSat(cid, "privado", score, r.satisfaccion?.label || "", r.resumen || "");
-      accum(cid).privado = { score, label: r.satisfaccion?.label || "", resumen: r.resumen || "" };
-      stats.privado++;
-    } catch (e) { console.error("privado IA error", cid, e); stats.errors++; }
-  }
+
+  // Analiza un bucket de DMs (mensajes combinados por cliente) y guarda su puntaje.
+  const analyzeDmBucket = async (
+    scope: "privado_cliente" | "privado_usuarios",
+    sys: string,
+    byClient: Map<string, string[]>,
+  ) => {
+    for (const [cid, convIds] of byClient) {
+      let msgs: WaMessage[] = [];
+      for (const id of convIds) msgs = msgs.concat(await fetchMessagesSince(admin, id, sinceIso));
+      if (msgs.length < 2) continue;
+      msgs.sort((a, b) => String(a.wa_timestamp || a.created_at).localeCompare(String(b.wa_timestamp || b.created_at)));
+      if (msgs.length > MAX_MSGS) msgs = msgs.slice(msgs.length - MAX_MSGS);
+      const transcript = buildTranscript(msgs, korex);
+      if (!transcript.trim()) continue;
+      try {
+        const r = await analyze<any>({ system: sys, user: transcript, schema: SCHEMA_CLIENTE, model: cfg.analysis_model });
+        const score = clampScore(r.satisfaccion?.score);
+        await saveSat(cid, scope, score, r.satisfaccion?.label || "", r.resumen || "");
+        accum(cid)[scope] = { score, label: r.satisfaccion?.label || "", resumen: r.resumen || "" };
+        stats[scope]++;
+      } catch (e) { console.error(`${scope} IA error`, cid, e); stats.errors++; }
+    }
+  };
+  await analyzeDmBucket("privado_cliente", SYS_CLIENTE, dmClienteByClient);
+  await analyzeDmBucket("privado_usuarios", SYS_PRIVADO_USUARIOS, dmUsuariosByClient);
 
   // ── FAQs → tabla + Guía de soporte ──────────────────────────────────────────────
   const today = new Date().toISOString().slice(0, 10);
@@ -220,18 +261,20 @@ Deno.serve(async (req: Request) => {
   // ── Briefings vivos por cliente (Fase 5) ─────────────────────────────────────────
   const satRows: any[] = [];
   for (const [cid, acc] of perClient) {
-    const present = [acc.usuarios, acc.cliente_grupo, acc.privado].filter(Boolean) as ScopeData[];
+    const present = [acc.usuarios, acc.cliente_grupo, acc.privado_cliente, acc.privado_usuarios].filter(Boolean) as ScopeData[];
     const scores = present.map((s) => s.score).filter((n): n is number => n !== null);
-    const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+    // Puntuación general = promedio de los canales presentes (0..100). El frontend la
+    // muestra proporcional (suma/máx, ej. 270/300); el color usa este promedio.
+    const overall = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
-    let estado = "", riesgos = "", overall = avg, resumenSemana = "";
+    let estado = "", riesgos = "", resumenSemana = "";
     try {
       const ctx = `GRUPO DE USUARIOS: ${acc.usuarios ? `(${acc.usuarios.score}/100) ${acc.usuarios.resumen}` : "sin datos"}\n` +
         `GRUPO DEL CLIENTE: ${acc.cliente_grupo ? `(${acc.cliente_grupo.score}/100) ${acc.cliente_grupo.resumen}` : "sin datos"}\n` +
-        `CHATS 1-A-1: ${acc.privado ? `(${acc.privado.score}/100) ${acc.privado.resumen}` : "sin datos"}`;
+        `1-A-1 CON EL CLIENTE: ${acc.privado_cliente ? `(${acc.privado_cliente.score}/100) ${acc.privado_cliente.resumen}` : "sin datos"}\n` +
+        `1-A-1 CON LOS USUARIOS: ${acc.privado_usuarios ? `(${acc.privado_usuarios.score}/100) ${acc.privado_usuarios.resumen}` : "sin datos"}`;
       const b = await analyze<any>({ system: SYS_BRIEFING, user: `Cliente: ${acc.name}\n\n${ctx}`, schema: SCHEMA_BRIEFING, model: cfg.analysis_model, maxTokens: 2048 });
       estado = b.estado || ""; riesgos = b.riesgos || ""; resumenSemana = b.resumen_semana || "";
-      if (b.sat_overall !== null && b.sat_overall !== undefined) overall = clampScore(b.sat_overall);
     } catch (e) { console.error("briefing IA error", cid, e); stats.errors++; }
 
     if (!dryRun) {
@@ -243,13 +286,22 @@ Deno.serve(async (req: Request) => {
         client_id: cid,
         sat_usuarios: acc.usuarios?.score ?? null, sat_usuarios_label: acc.usuarios?.label ?? null,
         sat_cliente_grupo: acc.cliente_grupo?.score ?? null, sat_cliente_grupo_label: acc.cliente_grupo?.label ?? null,
-        sat_privado: acc.privado?.score ?? null, sat_privado_label: acc.privado?.label ?? null,
+        sat_privado_cliente: acc.privado_cliente?.score ?? null, sat_privado_cliente_label: acc.privado_cliente?.label ?? null,
+        sat_privado_usuarios: acc.privado_usuarios?.score ?? null, sat_privado_usuarios_label: acc.privado_usuarios?.label ?? null,
+        resumen_usuarios: acc.usuarios?.resumen ?? null,
+        resumen_cliente_grupo: acc.cliente_grupo?.resumen ?? null,
+        resumen_privado_cliente: acc.privado_cliente?.resumen ?? null,
+        resumen_privado_usuarios: acc.privado_usuarios?.resumen ?? null,
         sat_overall: overall, estado, riesgos, historial: trimmed, updated_at: new Date().toISOString(),
       }, { onConflict: "client_id" });
 
       await postDocs(cfg, "upsert_briefing_tab", {
         doc_url: cfg.briefings_doc_url, client_id: cid, client_name: acc.name, week_start: weekStart,
-        estado, riesgos, sat: { overall, usuarios: acc.usuarios?.score ?? null, cliente_grupo: acc.cliente_grupo?.score ?? null, privado: acc.privado?.score ?? null },
+        estado, riesgos, sat: {
+          overall,
+          usuarios: acc.usuarios?.score ?? null, cliente_grupo: acc.cliente_grupo?.score ?? null,
+          privado_cliente: acc.privado_cliente?.score ?? null, privado_usuarios: acc.privado_usuarios?.score ?? null,
+        },
         historial: trimmed,
       });
       stats.briefings++;
@@ -258,7 +310,8 @@ Deno.serve(async (req: Request) => {
     satRows.push({
       client_id: cid, client_name: acc.name,
       sat_usuarios: acc.usuarios?.score ?? null, sat_cliente_grupo: acc.cliente_grupo?.score ?? null,
-      sat_privado: acc.privado?.score ?? null, nota: estado,
+      sat_privado_cliente: acc.privado_cliente?.score ?? null, sat_privado_usuarios: acc.privado_usuarios?.score ?? null,
+      nota: estado,
     });
   }
 
@@ -278,14 +331,14 @@ Deno.serve(async (req: Request) => {
         const o = overallOf(r);
         const dot = o === null ? ":white_circle:" : o >= 75 ? ":large_green_circle:" : o >= 50 ? ":large_yellow_circle:" : ":red_circle:";
         text += `\n${dot} *${r.client_name}* — ${o === null ? "s/d" : o + "/100"}` +
-          ` _(U:${fmt(r.sat_usuarios)} · C:${fmt(r.sat_cliente_grupo)} · 1a1:${fmt(r.sat_privado)})_`;
+          ` _(U:${fmt(r.sat_usuarios)} · C:${fmt(r.sat_cliente_grupo)} · 1a1-cli:${fmt(r.sat_privado_cliente)} · 1a1-usr:${fmt(r.sat_privado_usuarios)})_`;
       }
       if (!satRows.length) text += "\nSin actividad suficiente esta semana.";
       await postSlack(token, channel, text);
     }
 
     if (runId) await admin.from("wa_intel_runs").update({
-      status: stats.errors && !(stats.usuarios + stats.cliente_grupo + stats.privado) ? "error" : "ok",
+      status: stats.errors && !(stats.usuarios + stats.cliente_grupo + stats.privado_cliente + stats.privado_usuarios) ? "error" : "ok",
       finished_at: new Date().toISOString(), stats,
     }).eq("id", runId);
   }
@@ -295,6 +348,6 @@ Deno.serve(async (req: Request) => {
 
 function fmt(v: number | null) { return v === null || v === undefined ? "—" : String(v); }
 function overallOf(r: any): number | null {
-  const s = [r.sat_usuarios, r.sat_cliente_grupo, r.sat_privado].filter((n) => n !== null && n !== undefined) as number[];
+  const s = [r.sat_usuarios, r.sat_cliente_grupo, r.sat_privado_cliente, r.sat_privado_usuarios].filter((n) => n !== null && n !== undefined) as number[];
   return s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : null;
 }

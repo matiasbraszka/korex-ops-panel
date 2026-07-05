@@ -27,6 +27,31 @@ function Chip({ v }) {
 }
 const dot = (v) => (v === null || v === undefined ? '⚪' : v >= 75 ? '🟢' : v >= 50 ? '🟡' : '🔴');
 
+// ── Puntuación general: suma proporcional de los 4 canales ────────────────────
+// { sum, max, pct } — pct (0-100) = promedio de los canales con datos, y define el color.
+const CANALES = ['sat_usuarios', 'sat_cliente_grupo', 'sat_privado_cliente', 'sat_privado_usuarios'];
+function general(b) {
+  const vals = CANALES.map((k) => b[k]).filter((v) => v !== null && v !== undefined);
+  if (!vals.length) return { sum: null, max: 0, pct: null };
+  const sum = vals.reduce((a, v) => a + v, 0);
+  const max = vals.length * 100;
+  return { sum, max, pct: Math.round((sum / max) * 100) };
+}
+const genColor = (pct) => (pct === null || pct === undefined
+  ? { b: '#F1F5F9', t: '#64748B' }
+  : pct >= 75 ? { b: '#DCFCE7', t: '#15803D' } : pct >= 50 ? { b: '#FEF0D7', t: '#B45309' } : { b: '#FEE2E2', t: '#DC2626' });
+
+// Línea de resumen por canal (solo se muestra si hay texto).
+function ResumenLinea({ icon, label, texto }) {
+  if (!texto) return null;
+  return (
+    <div className="text-[12px] leading-snug">
+      <span className="font-semibold text-text2">{icon} {label}:</span>{' '}
+      <span className="text-text2">{texto}</span>
+    </div>
+  );
+}
+
 // ── Resumen de grupos: una tarjeta por cliente con su situación ───────────────
 function ResumenGrupos() {
   const [rows, setRows] = useState(null);
@@ -65,22 +90,35 @@ function ResumenGrupos() {
       <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
         {rows.map((b) => {
           const name = b.client?.name || b.client_id;
+          const g = general(b);
+          const gc = genColor(g.pct);
           return (
             <div key={b.client_id} className="rounded-[14px] border border-border bg-white p-4 shadow-[0_1px_2px_rgba(10,22,40,.04)]">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-[14px] font-bold truncate">{dot(b.sat_overall)} {name}</div>
-                <Chip v={b.sat_overall} />
+                <div className="text-[14px] font-bold truncate">{dot(g.pct)} {name}</div>
+                <span className="text-[13px] font-bold px-2 py-0.5 rounded-md shrink-0" style={{ background: gc.b, color: gc.t }}>
+                  {g.sum === null ? '—' : `${g.sum}/${g.max}`}
+                </span>
               </div>
-              <div className="flex items-center gap-3 mt-2 text-[12px] text-text2 flex-wrap">
-                <span className="flex items-center gap-1">👥 Usuarios <Chip v={b.sat_usuarios} /></span>
-                <span className="flex items-center gap-1">💬 Cliente <Chip v={b.sat_cliente_grupo} /></span>
-                <span className="flex items-center gap-1">📩 1-a-1 <Chip v={b.sat_privado} /></span>
+              <div className="flex items-center gap-x-3 gap-y-1 mt-2 text-[12px] text-text2 flex-wrap">
+                <span className="flex items-center gap-1">👥 Grupo usuarios <Chip v={b.sat_usuarios} /></span>
+                <span className="flex items-center gap-1">💬 Grupo cliente <Chip v={b.sat_cliente_grupo} /></span>
+                <span className="flex items-center gap-1">📩 1-a-1 cliente <Chip v={b.sat_privado_cliente} /></span>
+                <span className="flex items-center gap-1">🧑‍🤝‍🧑 1-a-1 usuarios <Chip v={b.sat_privado_usuarios} /></span>
               </div>
-              {b.estado && <div className="text-[12.5px] text-text2 mt-2.5 leading-snug line-clamp-4">{b.estado}</div>}
+              {b.estado && <div className="text-[12.5px] text-text2 mt-2.5 leading-snug">{b.estado}</div>}
+              {(b.resumen_usuarios || b.resumen_cliente_grupo || b.resumen_privado_cliente || b.resumen_privado_usuarios) && (
+                <div className="mt-2.5 flex flex-col gap-1.5 border-t border-surface2 pt-2.5">
+                  <ResumenLinea icon="👥" label="Grupo usuarios" texto={b.resumen_usuarios} />
+                  <ResumenLinea icon="💬" label="Grupo cliente" texto={b.resumen_cliente_grupo} />
+                  <ResumenLinea icon="📩" label="1-a-1 cliente" texto={b.resumen_privado_cliente} />
+                  <ResumenLinea icon="🧑‍🤝‍🧑" label="1-a-1 usuarios" texto={b.resumen_privado_usuarios} />
+                </div>
+              )}
               {b.riesgos && (
                 <div className="flex items-start gap-1.5 mt-2 text-[12px] text-[#DC2626] leading-snug">
                   <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-                  <span className="line-clamp-3">{b.riesgos}</span>
+                  <span>{b.riesgos}</span>
                 </div>
               )}
               {b.updated_at && (

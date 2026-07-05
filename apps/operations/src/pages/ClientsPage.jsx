@@ -3,6 +3,7 @@ import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, Grip
 import { useApp } from '../context/AppContext';
 import { PRIO_CLIENT, PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, clientPill } from '../utils/helpers';
+import { satGeneral, satDotColor, satLabel } from '../utils/satisfaccion';
 import KpiRow from '../components/KpiRow';
 import ClientDetail from './ClientDetail';
 import PublicidadPage from './PublicidadPage';
@@ -112,7 +113,7 @@ function PendienteCell({ client, onSave }) {
 }
 
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, getPriorityLabel, phase, setPhase, updateClient, reorderClient, currentUser } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, getPriorityLabel, phase, setPhase, updateClient, reorderClient, currentUser, satByClient } = useApp();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
 
   // Drag&drop refs (solo se usan si isAdmin)
@@ -398,6 +399,16 @@ export default function ClientsPage() {
                   </div>
                 )}
                 <div className="font-semibold text-[13px] max-md:text-[12px] flex items-center gap-1 flex-wrap">
+                  {(() => {
+                    const pct = satGeneral(satByClient?.[c.id]).pct;
+                    return (
+                      <span
+                        className="inline-block w-2 h-2 rounded-full shrink-0"
+                        style={{ background: satDotColor(pct) }}
+                        title={`Satisfacción: ${satLabel(pct)}${pct === null ? '' : ` (${pct}%)`}`}
+                      />
+                    );
+                  })()}
                   <span className="truncate">{c.name}</span> <span className="font-normal text-[11px] text-text3 max-md:text-[10px] truncate">{c.company}</span>
                 </div>
                 {/* Mobile-only: fase + ads inline */}

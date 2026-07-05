@@ -16,12 +16,13 @@ import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
 import MetaAdAccountsManager from '../components/clientes/MetaAdAccountsManager';
 import ObjetivosView from '../components/tareas/ObjetivosView';
+import SatisfaccionTab from '../components/clientes/SatisfaccionTab';
 
 const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 'other'];
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, strategies, strategyPages, invoices, contracts } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
   const TEAM = teamMembers || [];
   const [editModal, setEditModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -189,6 +190,7 @@ export default function ClientDetail({ client: c }) {
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
           { key: 'dme', label: 'DME' },
+          { key: 'satisfaccion', label: 'Satisfacción' },
           { key: 'historial', label: 'Historial' },
         ].filter(t => !(restricted && t.key === 'facturacion'));
         return (
@@ -269,6 +271,8 @@ export default function ClientDetail({ client: c }) {
             {activeTab === 'drive' && <CarpetasView client={c} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
+
+            {activeTab === 'satisfaccion' && <SatisfaccionTab sat={satByClient?.[c.id]} />}
 
             {activeTab === 'facturacion' && !restricted && <ContratoTab client={c} />}
 
