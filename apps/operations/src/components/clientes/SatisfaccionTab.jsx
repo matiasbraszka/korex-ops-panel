@@ -30,6 +30,14 @@ const fmtSemana = (d) => {
   return `sem. del ${day}/${m}`;
 };
 
+// Lunes de la semana actual (para saber si un dato es de esta semana o anterior).
+const MONDAY_THIS_WEEK = (() => {
+  const d = new Date();
+  const day = (d.getUTCDay() + 6) % 7; // 0 = lunes
+  d.setUTCDate(d.getUTCDate() - day);
+  return d.toISOString().slice(0, 10);
+})();
+
 const CANALES = [
   { icon: '👥', label: 'Grupo de usuarios', score: 'sat_usuarios', resumen: 'resumen_usuarios', scope: 'usuarios' },
   { icon: '💬', label: 'Grupo con el cliente', score: 'sat_cliente_grupo', resumen: 'resumen_cliente_grupo', scope: 'cliente_grupo' },
@@ -89,7 +97,8 @@ export default function SatisfaccionTab({ sat, clientId }) {
         {CANALES.map((ch) => {
           const fresh = sat[ch.resumen];            // resumen de esta semana
           const h = hist?.[ch.scope];               // último dato histórico conocido
-          const isStale = !fresh && !!(h && h.notas);
+          // "Último dato" solo si NO hay resumen fresco y el histórico es de una semana anterior.
+          const isStale = !fresh && !!(h && h.notas) && String(h.week_start).slice(0, 10) < MONDAY_THIS_WEEK;
           const texto = fresh || (h && h.notas) || null;
           const scoreShown = fresh ? sat[ch.score] : (sat[ch.score] ?? h?.score ?? null);
           return (
