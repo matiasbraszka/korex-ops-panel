@@ -21,6 +21,7 @@ import {
   sprintStubForMonday,
   upcomingSprintStubs,
   computeSprintDurations,
+  departmentForAssignee,
 } from './helpers';
 
 const isoDaysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
@@ -316,6 +317,30 @@ describe('computeSprintDurations (paso por sprints)', () => {
     expect(rows).toEqual([]);
     expect(current).toBe(null);
     expect(hasHistory).toBe(false);
+  });
+});
+
+describe('departmentForAssignee (área según responsable)', () => {
+  const team = [
+    { name: 'Marcos del Rey', department: 'programacion' },
+    { name: 'Cristian Fernandez', department: 'ventas' },
+    { name: 'Zil Oliveros', department: 'operaciones' },
+    { name: 'Jose Martin', department: 'marketing' },
+  ];
+  it('resuelve por nombre completo', () => {
+    expect(departmentForAssignee('Cristian Fernandez', team)).toBe('ventas');
+  });
+  it('resuelve por nombre de pila (apodo) y sin acento', () => {
+    expect(departmentForAssignee('Zil', team)).toBe('operaciones');
+    expect(departmentForAssignee('marcos', team)).toBe('programacion');
+  });
+  it('toma el PRIMER responsable si hay varios (CSV)', () => {
+    expect(departmentForAssignee('Jose Martin, Cristian Fernandez', team)).toBe('marketing');
+  });
+  it('devuelve null si no hay responsable o no tiene área', () => {
+    expect(departmentForAssignee('', team)).toBe(null);
+    expect(departmentForAssignee('Cliente', team)).toBe(null);
+    expect(departmentForAssignee('Alberto', team)).toBe(null);
   });
 });
 

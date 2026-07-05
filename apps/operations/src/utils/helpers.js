@@ -401,6 +401,20 @@ export function userSeesTask(task, currentUser, teamMembers = []) {
 }
 
 /**
+ * departmentForAssignee: área (department) por defecto según el RESPONSABLE.
+ * Mira el primer responsable y devuelve su `department` (cargado en team_members).
+ * Sirve para autocompletar el área de una tarea al asignarla, sin dejarla en
+ * blanco. Editable a mano después. Devuelve null si el responsable no tiene área.
+ */
+export function departmentForAssignee(assignee, teamMembers) {
+  const first = String(assignee || '').split(',')[0]?.trim();
+  if (!first) return null;
+  const f = normalizeName(first);
+  const m = (teamMembers || []).find(x => normalizeName(x.name) === f || normalizeName((x.name || '').split(' ')[0]) === f);
+  return m?.department || null;
+}
+
+/**
  * getBottleneck: "Pendiente para avanzar" es un texto MANUAL por cliente,
  * editado a mano desde la lista de clientes y guardado en Supabase (columna
  * `bottleneck`). El sistema NUNCA lo deriva ni lo pisa automaticamente.

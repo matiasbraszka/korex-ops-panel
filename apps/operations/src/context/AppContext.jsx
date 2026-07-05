@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT, TAREAS_LAYOUT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, addDaysStr, sprintStubForMonday, upcomingSprintStubs, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, addDaysStr, sprintStubForMonday, upcomingSprintStubs, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches, departmentForAssignee } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
@@ -677,6 +677,11 @@ export function AppProvider({ children }) {
   const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx, phase) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
     if (phase) t.phase = phase; // crear ya con su objetivo/fase (sin paso intermedio)
+    // Área automática según el responsable (si no viene una y hay responsable).
+    if (assignee && !t.department) {
+      const dep = departmentForAssignee(assignee, teamMembersRef.current);
+      if (dep) t.department = dep;
+    }
     // Assign position: max of sibling tasks + 1
     const siblings = tasksRef.current.filter(x => x.clientId === clientId);
     t.position = siblings.length > 0 ? Math.max(...siblings.map(x => x.position ?? 0)) + 1 : 0;
@@ -720,6 +725,12 @@ export function AppProvider({ children }) {
       const mappedTasks = prev.map(t => {
         if (t.id !== id) return t;
         const merged = { ...t, ...cleanUpdates };
+        // Área automática: al asignar responsable, si la tarea no tiene área, la
+        // hereda del responsable (no pisa un área ya puesta; editable a mano).
+        if (cleanUpdates.assignee !== undefined && !merged.department) {
+          const dep = departmentForAssignee(cleanUpdates.assignee, teamMembersRef.current);
+          if (dep) merged.department = dep;
+        }
         // completedDate automático al pasar a done. startedDate lo gestiona recomputeStartedDates.
         if (cleanUpdates.status && cleanUpdates.status !== t.status && cleanUpdates.status === 'done') {
           merged.completedDate = today();
@@ -1097,6 +1108,7 @@ export function AppProvider({ children }) {
     if (fields.slack_id !== undefined || fields.slackId !== undefined) {
       dbFields.slack_id = fields.slack_id ?? fields.slackId;
     }
+    if (fields.department !== undefined) dbFields.department = fields.department;
     await sbFetch('team_members?id=eq.' + encodeURIComponent(id), {
       method: 'PATCH',
       headers: { 'Prefer': 'return=minimal' },

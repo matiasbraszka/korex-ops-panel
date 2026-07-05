@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@korex/db';
 import { useAuth } from '@korex/auth';
 import { useApp } from '../../context/AppContext';
+import { DEPARTMENTS } from '../../utils/constants';
 import { UserPlus, Trash2, ImagePlus, Zap } from 'lucide-react';
 
 // Editor unico de equipo + cuentas + roles del sistema.
@@ -128,12 +129,13 @@ export default function TeamUsersEditor() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px] min-w-[720px]">
+        <table className="w-full text-[12px] min-w-[820px]">
           <thead>
             <tr className="text-[10px] font-semibold text-text3 uppercase border-b border-border">
               <th className="text-left py-2 px-2 w-[50px]">Foto</th>
               <th className="text-left py-2 px-2">Nombre</th>
               <th className="text-left py-2 px-2">Rol descriptivo</th>
+              <th className="text-left py-2 px-2 w-[130px]">Área</th>
               <th className="text-left py-2 px-2 w-[40px]">Color</th>
               {rolesCatalog.map((r) => (
                 <th key={r.name} className="text-center py-2 px-2 capitalize w-[80px]" title={r.description}>{r.name}</th>
@@ -179,6 +181,13 @@ export default function TeamUsersEditor() {
                   <td className="py-2 px-2">
                     <input value={m.role || ''} onChange={(e) => patchMember(m.id, { role: e.target.value })}
                            className={inlineInput} placeholder="Comercial, CMO…" />
+                  </td>
+                  <td className="py-2 px-2">
+                    <select value={m.department || ''} onChange={(e) => patchMember(m.id, { department: e.target.value || null })}
+                            className={inlineInput} title="Área: se usa para autocompletar el área de las tareas de esta persona">
+                      <option value="">— Sin área —</option>
+                      {Object.entries(DEPARTMENTS).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                    </select>
                   </td>
                   <td className="py-2 px-2">
                     <input type="color" value={m.color || '#5B7CF5'}
