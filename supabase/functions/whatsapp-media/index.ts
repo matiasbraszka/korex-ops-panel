@@ -7,7 +7,9 @@
 // guarda media_path/mime/filename en wa_messages. Siguientes veces: solo
 // genera la signed URL (1h) desde Storage — rapido y sin depender del puente.
 //
-// Auth: verify_jwt=true + permiso soporte:read.
+// Auth: verify_jwt=true + permiso soporte:read. Ademas, un usuario NO admin
+// solo puede pedir media de una conversacion que tenga ASIGNADA (los admins
+// ven todo). Evita que un agente con soporte adivine message_id de chats ajenos.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -32,19 +34,32 @@ function jsonResp(status: number, body: unknown): Response {
   });
 }
 
-async function authorizeSoporteRead(req: Request): Promise<boolean> {
+// Devuelve {userId, isAdmin} si el usuario tiene permiso de lectura de soporte,
+// o null si no esta autorizado.
+async function authorizeSoporte(req: Request): Promise<{ userId: string; isAdmin: boolean } | null> {
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!token) return false;
+  if (!token) return null;
   const { data: { user }, error } = await admin.auth.getUser(token);
-  if (error || !user) return false;
+  if (error || !user) return null;
   const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", user.id);
   const roleNames = (roles || []).map((r: { role: string }) => r.role);
-  if (roleNames.includes("admin")) return true;
-  if (roleNames.length === 0) return false;
+  if (roleNames.includes("admin")) return { userId: user.id, isAdmin: true };
+  if (roleNames.length === 0) return null;
   const { data: perms } = await admin
     .from("role_permissions").select("role")
     .in("role", roleNames).eq("module", "soporte").eq("can_read", true).limit(1);
-  return (perms || []).length > 0;
+  if ((perms || []).length === 0) return null;
+  return { userId: user.id, isAdmin: false };
+}
+
+// Un no-admin solo accede a media de conversaciones que tiene asignadas.
+async function canSeeConversation(userId: string, conversationId: string): Promise<boolean> {
+  const { data: me } = await admin.from("team_members").select("id").eq("user_id", userId).maybeSingle();
+  if (!me?.id) return false;
+  const { data: asg } = await admin
+    .from("wa_conversation_assignees").select("member_id")
+    .eq("conversation_id", conversationId).eq("member_id", me.id).maybeSingle();
+  return !!asg;
 }
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -71,7 +86,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResp(405, { error: "method_not_allowed" });
 
-  if (!(await authorizeSoporteRead(req))) return jsonResp(403, { error: "forbidden" });
+  const auth = await authorizeSoporte(req);
+  if (!auth) return jsonResp(403, { error: "forbidden" });
 
   let body: { message_id?: string };
   try {
@@ -88,6 +104,11 @@ Deno.serve(async (req: Request) => {
     .eq("id", msgId)
     .maybeSingle();
   if (!msg) return jsonResp(404, { error: "message_not_found" });
+
+  // Un no-admin solo puede ver media de sus conversaciones asignadas.
+  if (!auth.isAdmin && !(await canSeeConversation(auth.userId, msg.conversation_id))) {
+    return jsonResp(403, { error: "forbidden" });
+  }
 
   // ── Ya cacheado en Storage: solo firmar ──
   if (msg.media_path) {

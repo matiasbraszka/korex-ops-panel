@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Check, Users } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { useSoporte } from '../context/SoporteContext.jsx';
+import { useAuth } from '@korex/auth';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 
 const PREVIEW = {
@@ -14,6 +15,7 @@ const PREVIEW = {
 // Acepta `msgs` (array) — también `msg` suelto por compatibilidad.
 export default function ForwardModal({ msgs, msg, onClose }) {
   const { allConversations, forwardMessage } = useSoporte();
+  const { isAdmin } = useAuth();
   const [q, setQ] = useState('');
   const [sendingId, setSendingId] = useState(null);
   const [sent, setSent] = useState([]);     // ids de chats ya reenviados
@@ -73,7 +75,7 @@ export default function ForwardModal({ msgs, msg, onClose }) {
           {list.length === 0 ? (
             <div className="text-[12px] text-text3 text-center py-6">No hay chats con esa búsqueda.</div>
           ) : list.map((c) => {
-            const name = convName(c);
+            const name = convName(c, !isAdmin);
             const color = colorFromString(c.wa_jid);
             const done = sent.includes(c.id);
             const sending = sendingId === c.id;
@@ -90,7 +92,8 @@ export default function ForwardModal({ msgs, msg, onClose }) {
                 <span className="flex-1 min-w-0 leading-tight">
                   <span className="block text-[12.5px] font-semibold truncate">{name}</span>
                   <span className="block text-[10.5px] text-text3 truncate">
-                    {c.is_group ? 'Grupo' : fmtPhone(c.wa_phone)}{c.client?.name ? ` · ${c.client.name}` : ''}
+                    {[c.is_group ? 'Grupo' : (isAdmin ? fmtPhone(c.wa_phone) : ''), c.client?.name]
+                      .filter(Boolean).join(' · ')}
                   </span>
                 </span>
                 {done ? (

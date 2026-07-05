@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore, UserCheck, Download, Pencil, UserPlus, Image as ImageIcon } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { fetchTeamMembers } from '../lib/api.js';
+import { useAuth } from '@korex/auth';
+import { fetchTeamMembers, fetchAssignees, setAssignees } from '../lib/api.js';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import TagPicker from './TagPicker.jsx';
 import LinkContactModal from './LinkContactModal.jsx';
@@ -36,11 +37,17 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
     groupDirByConv, loadGroupDirectory,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
   } = useSoporte();
+  const { isAdmin } = useAuth();
   const [linkOpen, setLinkOpen] = useState(false);
   const [showAllParts, setShowAllParts] = useState(false);
   const [team, setTeam] = useState([]);
   const [exportOpen, setExportOpen] = useState(false);
   const photoRef = useRef(null);
+
+  // ── Asignación (acceso al chat). member_id = team_members.id. Múltiple.
+  // Solo admins pueden cambiarla; un no-admin con rol soporte solo ve sus chats.
+  const [assigneeIds, setAssigneeIds] = useState([]);
+  const [assigneesBusy, setAssigneesBusy] = useState(false);
 
   // ── Edición de grupo (nombre / descripción / participantes) ──
   const [subjectDraft, setSubjectDraft] = useState('');
@@ -107,6 +114,36 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
     fetchTeamMembers().then(setTeam).catch(() => {});
   }, []);
 
+  // Cargar los asignados del chat abierto (para la sección "Asignado a").
+  useEffect(() => {
+    if (!open || !conv?.id) { setAssigneeIds([]); return; }
+    let alive = true;
+    fetchAssignees(conv.id).then((ids) => { if (alive) setAssigneeIds(ids); }).catch(() => {});
+    return () => { alive = false; };
+  }, [open, conv?.id]);
+
+  // Alterna (agrega/quita) una persona asignada. Optimista + persiste por RPC.
+  // La RPC ya sincroniza la columna legacy assigned_to y bumpea updated_at, así
+  // que el chat le aparece/desaparece a esa persona por realtime.
+  const toggleAssignee = async (memberId) => {
+    if (!isAdmin || !conv?.id || assigneesBusy) return;
+    const next = assigneeIds.includes(memberId)
+      ? assigneeIds.filter((x) => x !== memberId)
+      : [...assigneeIds, memberId];
+    const prev = assigneeIds;
+    setAssigneeIds(next);
+    setAssigneesBusy(true);
+    try {
+      const rows = await setAssignees(conv.id, next);
+      setAssigneeIds(rows.map((r) => r.member_id));
+    } catch (e) {
+      console.error('set assignees', e);
+      setAssigneeIds(prev);
+    } finally {
+      setAssigneesBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (open && conv?.id) {
       if (!conv.is_group) loadAppointments(conv.id);
@@ -117,7 +154,7 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
 
   if (!open || !conv) return null;
 
-  const name = convName(conv);
+  const name = convName(conv, !isAdmin);
   const color = colorFromString(conv.wa_jid);
   // Solo citas vigentes: las canceladas no aportan nada en el panel.
   const proximas = (appointmentsByConv[conv.id] || []).filter((a) => a.status === 'scheduled');
@@ -162,11 +199,13 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
               <div className="text-[12px] text-text3">
                 {`Grupo de WhatsApp${participants.length ? ` · ${participants.length} participantes` : ''}`}
               </div>
-            ) : (
+            ) : isAdmin ? (
               <button onClick={() => setLinkOpen(true)} title="Vincular a una persona de la base"
                       className="text-[12px] text-text3 bg-transparent border-0 cursor-pointer hover:text-[#B45309] hover:underline p-0">
                 {fmtPhone(conv.wa_phone)}
               </button>
+            ) : (
+              <span className="text-[12px] text-text3">Número oculto</span>
             )}
           </div>
 
@@ -174,8 +213,8 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
           {conv.is_group && (
             <div>
               <SectionLabel>Cliente del grupo</SectionLabel>
-              <button onClick={() => setLinkOpen(true)}
-                      className="w-full text-left px-3 py-2.5 rounded-xl border border-border bg-white hover:border-[#F5D9A8] cursor-pointer transition-colors duration-150 flex items-center gap-2.5">
+              <button onClick={isAdmin ? () => setLinkOpen(true) : undefined}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl border border-border bg-white transition-colors duration-150 flex items-center gap-2.5 ${isAdmin ? 'hover:border-[#F5D9A8] cursor-pointer' : 'cursor-default'}`}>
                 {conv.client ? (
                   <>
                     <span className="w-8 h-8 rounded-[9px] bg-[#EEF2FF] flex items-center justify-center shrink-0">
@@ -185,13 +224,15 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                       <span className="block text-[12.5px] font-semibold truncate">{conv.client.name}</span>
                       <span className="block text-[10.5px] text-text3">Cliente</span>
                     </span>
-                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar</span>
+                    {isAdmin && <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar</span>}
                   </>
-                ) : (
+                ) : isAdmin ? (
                   <>
                     <Link2 size={14} className="text-[#B45309] shrink-0" />
                     <span className="text-[12.5px] flex-1 text-[#B45309] font-medium">Vincular grupo a un cliente…</span>
                   </>
+                ) : (
+                  <span className="text-[12.5px] flex-1 text-text3">Sin vincular</span>
                 )}
               </button>
             </div>
@@ -246,8 +287,8 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
           {!conv.is_group && (
             <div>
               <SectionLabel>Vinculado a</SectionLabel>
-              <button onClick={() => setLinkOpen(true)}
-                      className="w-full text-left px-3 py-2.5 rounded-xl border border-border bg-white hover:border-[#F5D9A8] cursor-pointer transition-colors duration-150 flex items-center gap-2.5">
+              <button onClick={isAdmin ? () => setLinkOpen(true) : undefined}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl border border-border bg-white transition-colors duration-150 flex items-center gap-2.5 ${isAdmin ? 'hover:border-[#F5D9A8] cursor-pointer' : 'cursor-default'}`}>
                 {conv.contact || conv.client ? (
                   <>
                     <span className="w-8 h-8 rounded-[9px] bg-[#EEF2FF] flex items-center justify-center shrink-0">
@@ -261,13 +302,15 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                         {conv.client ? 'Cliente' : 'Persona de la base'}
                       </span>
                     </span>
-                    <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar</span>
+                    {isAdmin && <span className="text-[10.5px] font-semibold text-[#4A67D8] shrink-0">Cambiar</span>}
                   </>
-                ) : (
+                ) : isAdmin ? (
                   <>
                     <Link2 size={14} className="text-[#B45309] shrink-0" />
                     <span className="text-[12.5px] flex-1 text-[#B45309] font-medium">Vincular a una persona de la base…</span>
                   </>
+                ) : (
+                  <span className="text-[12.5px] flex-1 text-text3">Sin vincular</span>
                 )}
               </button>
             </div>
@@ -294,7 +337,7 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                       <span className="flex-1 min-w-0 leading-tight">
                         <span className={`block text-[12px] font-semibold truncate ${p.displayName ? '' : 'text-text3 font-medium'}`}>{pname}</span>
                         <span className="block text-[10px] text-text3 truncate">
-                          {p.admin ? 'Admin · ' : ''}{p.phone ? `+${p.phone}` : ''}
+                          {p.admin ? 'Admin · ' : ''}{isAdmin && p.phone ? `+${p.phone}` : ''}
                         </span>
                       </span>
                       <button onClick={() => removePart(p.jid)} disabled={groupBusy === p.jid}
@@ -332,20 +375,52 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
             </div>
           )}
 
-          {/* Asignado a (responsable del chat; por defecto la asistente) */}
+          {/* Asignado a — quién puede ver y atender este chat (varias personas).
+              Solo los administradores cambian la asignación; una persona con rol
+              soporte (no admin) únicamente ve los chats que tiene asignados. */}
           <div>
             <SectionLabel>Asignado a</SectionLabel>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-white">
-              <UserCheck size={14} className="text-text3 shrink-0" />
-              <select
-                value={conv.assigned_to || ''}
-                onChange={(e) => updateConversation(conv.id, { assigned_to: e.target.value || null })}
-                className="flex-1 text-[12.5px] font-medium border-0 outline-none bg-transparent cursor-pointer"
-              >
-                <option value="">Sin asignar</option>
-                {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+            <div className="flex flex-wrap gap-1.5">
+              {assigneeIds.length === 0 && (
+                <span className="text-[11.5px] text-text3 px-1 py-0.5">
+                  {isAdmin ? 'Sin asignar — elegí abajo' : 'Sin asignar'}
+                </span>
+              )}
+              {assigneeIds.map((id) => {
+                const m = team.find((t) => t.id === id);
+                return (
+                  <span key={id}
+                        className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-full bg-[#FFFBEB] border border-[#F5D9A8] text-[11.5px] font-semibold text-[#B45309]">
+                    <UserCheck size={11} />
+                    {m?.name || id}
+                    {isAdmin && (
+                      <button onClick={() => toggleAssignee(id)} disabled={assigneesBusy}
+                              title="Quitar" className="bg-transparent border-0 text-[#B45309] hover:text-[#DC2626] cursor-pointer p-0 ml-0.5 disabled:opacity-40">
+                        <X size={11} />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
             </div>
+            {isAdmin && (
+              <>
+                <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl border border-border bg-white">
+                  <UserPlus size={14} className="text-text3 shrink-0" />
+                  <select value="" disabled={assigneesBusy}
+                          onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) toggleAssignee(v); }}
+                          className="flex-1 text-[12.5px] font-medium border-0 outline-none bg-transparent cursor-pointer disabled:opacity-50">
+                    <option value="">Asignar persona…</option>
+                    {team.filter((m) => !assigneeIds.includes(m.id)).map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="text-[10px] text-text3 mt-1 px-1">
+                  Quien no sea administrador solo verá los chats que le asignes (y sin el número de teléfono).
+                </div>
+              </>
+            )}
           </div>
 
           {/* Etiquetas */}

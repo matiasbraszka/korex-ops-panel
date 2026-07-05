@@ -92,8 +92,13 @@ export function prettyPreview(preview) {
 }
 
 // Nombre a mostrar de una conversación: contacto vinculado > nombre de perfil > teléfono > jid.
-export function convName(conv) {
-  return conv?.contact?.full_name || conv?.wa_profile_name || fmtPhone(conv?.wa_phone) || conv?.wa_jid || '';
+// hidePhone=true (para usuarios no admin): si no hay nombre real, NO revela el
+// número — muestra una etiqueta genérica.
+export function convName(conv, hidePhone = false) {
+  const named = conv?.contact?.full_name || conv?.wa_profile_name;
+  if (named) return named;
+  if (hidePhone) return conv?.is_group ? 'Grupo' : 'Contacto';
+  return fmtPhone(conv?.wa_phone) || conv?.wa_jid || '';
 }
 
 // Número (o id @lid) sin el sufijo del jid: "31336282775675@lid" -> "31336282775675".

@@ -245,6 +245,27 @@ export async function searchFinPeople(q) {
   return Array.isArray(data) ? data : [];
 }
 
+// Personas asignadas a un chat (control de acceso). member_id = team_members.id.
+// Un usuario NO admin con rol soporte solo ve los chats que tiene asignados.
+export async function fetchAssignees(convId) {
+  const rows = await sbFetch(
+    `wa_conversation_assignees?conversation_id=eq.${convId}&select=member_id`,
+    { headers: { Prefer: 'return=representation' } },
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows.map((r) => r.member_id) : [];
+}
+
+// Reemplaza el set completo de asignados de un chat (solo admins). RPC SECURITY
+// DEFINER que valida is_admin(). Devuelve [{ member_id, name }].
+export async function setAssignees(convId, memberIds) {
+  const { data, error } = await supabase.rpc('soporte_set_assignees', {
+    p_conversation_id: convId,
+    p_member_ids: memberIds,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
 // Edge functions (usan el JWT de la sesion; la function valida permiso soporte).
 // media (opcional): { base64, mimetype, filename, kind: image|video|audio|document }
 export async function invokeSend({ conversationId, text, media, quotedId, mentioned }) {

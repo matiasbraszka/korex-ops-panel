@@ -312,12 +312,10 @@ function MainLayout() {
   // Items de Soporte definidos aca (no importados de @korex/soporte) para que
   // el modulo entero quede en su propio chunk lazy: la unica referencia al
   // paquete es el import() dinamico de SoporteRoutes.
-  // Mercury (banco) vive en Soporte pero es solo para admins (datos sensibles).
   const soporteItems = [
     { id: 'inbox', label: 'WhatsApp', Icon: MessageCircle, path: '/soporte/inbox' },
     { id: 'citas', label: 'Citas', Icon: CalendarDays, path: '/soporte/citas' },
     { id: 'recursos', label: 'Recursos', Icon: FolderOpen, path: '/soporte/recursos' },
-    ...(currentUser?.isAdmin ? [{ id: 'cuentas', label: 'Cuentas', Icon: Wallet, path: '/soporte/cuentas' }] : []),
   ];
   // Items de Finanzas (mismo criterio lazy que Soporte). SOLO admins. El area tiene
   // su propio sidebar interno; estos items alimentan el switcher de areas y el nav del shell.
@@ -331,6 +329,8 @@ function MainLayout() {
     { id: 'cuotas',     label: 'Cuotas',     Icon: CalendarDays,    path: '/finance/cuotas' },
     { id: 'deuda',      label: 'Deuda',      Icon: Scale,           path: '/finance/deuda' },
     { id: 'egresos',    label: 'Egresos',    Icon: TrendingDown,    path: '/finance/egresos' },
+    // Cuentas (Mercury / Kraken / Stripe): datos bancarios → vive en Finanzas. Solo admins.
+    { id: 'cuentas',    label: 'Cuentas',    Icon: Wallet,          path: '/finance/cuentas' },
   ];
   // Tokens de color por area (mantienen consistencia con la paleta Korex).
   const areaTokens = {
@@ -422,13 +422,14 @@ function MainLayout() {
         element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to={homePath} replace />}
       />
       {/* "Cuentas" agrupa Mercury / Kraken / (Stripe) con un selector interno.
-          Va ANTES del catch-all /soporte/* para que matchee esta ruta puntual.
-          Rutas viejas redirigen acá. */}
-      <Route path="/admin/mercury" element={<Navigate to="/soporte/cuentas" replace />} />
-      <Route path="/soporte/mercury" element={<Navigate to="/soporte/cuentas" replace />} />
-      <Route path="/soporte/kraken" element={<Navigate to="/soporte/cuentas" replace />} />
+          Vive en Finanzas (datos bancarios). Va ANTES del catch-all /finance/*
+          para que matchee esta ruta puntual. Rutas viejas redirigen acá. */}
+      <Route path="/admin/mercury" element={<Navigate to="/finance/cuentas" replace />} />
+      <Route path="/soporte/mercury" element={<Navigate to="/finance/cuentas" replace />} />
+      <Route path="/soporte/kraken" element={<Navigate to="/finance/cuentas" replace />} />
+      <Route path="/soporte/cuentas" element={<Navigate to="/finance/cuentas" replace />} />
       <Route
-        path="/soporte/cuentas"
+        path="/finance/cuentas"
         element={currentUser?.isAdmin ? <CuentasPage /> : <Navigate to={homePath} replace />}
       />
       <Route

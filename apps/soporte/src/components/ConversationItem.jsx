@@ -1,11 +1,13 @@
 import { Users, Calendar, Link2, CheckCheck, Building2 } from 'lucide-react';
+import { useAuth } from '@korex/auth';
 import { initials, fmtTime, colorFromString, convName, prettyPreview } from '../lib/format.js';
 
 // Item de conversación — Diseño A.
 // Card con avatar + mini-badge WhatsApp, chip de vínculo (cliente azul /
 // contacto cian / "Vincular" punteado ámbar), puntos de etiqueta y badge ámbar.
 export default function ConversationItem({ conv, active, isSelected, tagsCatalog, onClick }) {
-  const name = convName(conv);
+  const { isAdmin } = useAuth();
+  const name = convName(conv, !isAdmin);
   const color = colorFromString(conv.wa_jid);
   const unread = isSelected ? 0 : conv.unread_count || 0;
   // Sin nombre conocido (solo teléfono) → avatar "?" punteado, como el diseño.
@@ -75,7 +77,7 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
             <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[140px] shrink-0 flex items-center gap-0.5">
               <Building2 size={9} className="shrink-0" /> {conv.client.name}
             </span>
-          ) : (!conv.is_group && !conv.contact?.full_name) ? (
+          ) : (isAdmin && !conv.is_group && !conv.contact?.full_name) ? (
             <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full border border-dashed border-[#F5D9A8] text-[#B45309] flex items-center gap-0.5 shrink-0">
               <Link2 size={8} /> Vincular
             </span>

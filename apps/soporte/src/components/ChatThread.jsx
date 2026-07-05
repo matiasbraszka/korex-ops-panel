@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
+import { useAuth } from '@korex/auth';
 import { initials, dayKey, colorFromString, convName, fmtPhone, mentionMap } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
 import Composer from './Composer.jsx';
@@ -19,6 +20,7 @@ const WALLPAPER = {
 
 export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, groupDirByConv, loadGroupDirectory } = useSoporte();
+  const { isAdmin } = useAuth();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
   const [forwardMsgs, setForwardMsgs] = useState(null); // array de mensajes a reenviar (null = modal cerrado)
@@ -151,7 +153,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     );
   }
 
-  const name = convName(conv);
+  const name = convName(conv, !isAdmin);
   const color = colorFromString(conv.wa_jid);
 
   return (
@@ -180,8 +182,10 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
             )}
           </div>
           <div className="text-[11px] text-text3 truncate">
-            {conv.is_group ? groupSub : fmtPhone(conv.wa_phone)}
-            {conv.status === 'closed' ? ' · Cerrada' : ''}
+            {/* El número solo lo ven los admins; el resto ve el nombre arriba. */}
+            {[conv.is_group ? groupSub : (isAdmin ? fmtPhone(conv.wa_phone) : ''),
+              conv.status === 'closed' ? 'Cerrada' : '']
+              .filter(Boolean).join(' · ')}
           </div>
         </div>
         {!conv.is_group && (

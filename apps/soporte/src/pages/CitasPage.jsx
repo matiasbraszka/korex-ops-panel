@@ -230,6 +230,7 @@ function CitaModal({ appt, onClose, onChanged }) {
 // ── Nueva cita: elegir el chat y abrir el ScheduleModal ──
 function NuevaCitaModal({ open, onClose, onCreated }) {
   const { conversations } = useSoporte();
+  const { isAdmin } = useAuth();
   const [q, setQ] = useState('');
   const [conv, setConv] = useState(null);
 
@@ -260,7 +261,7 @@ function NuevaCitaModal({ open, onClose, onCreated }) {
           {list.length === 0 ? (
             <div className="text-[12px] text-text3 text-center py-6">No hay chats con esa búsqueda.</div>
           ) : list.map((c) => {
-            const name = convName(c);
+            const name = convName(c, !isAdmin);
             const color = colorFromString(c.wa_jid);
             return (
               <button key={c.id} onClick={() => setConv(c)}
@@ -271,7 +272,7 @@ function NuevaCitaModal({ open, onClose, onCreated }) {
                 </span>
                 <span className="flex-1 min-w-0 leading-tight">
                   <span className="block text-[12.5px] font-semibold truncate">{name}</span>
-                  <span className="block text-[10.5px] text-text3">{fmtPhone(c.wa_phone)}</span>
+                  {isAdmin && <span className="block text-[10.5px] text-text3">{fmtPhone(c.wa_phone)}</span>}
                 </span>
                 {c.client?.name && (
                   <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[100px] shrink-0">
