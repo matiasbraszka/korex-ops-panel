@@ -47,6 +47,7 @@ export function downloadTextFile(name, text) {
 export function transcribeErrorLabel(code) {
   switch (code) {
     case 'no_transcription_key': return 'Falta configurar la key de transcripción en Supabase.';
+    case 'quota_exhausted': return 'La API de transcripción se quedó sin saldo. Se avisó al canal de alertas para cargar crédito.';
     case 'file_too_big': return 'El audio supera 25 MB (límite del servicio).';
     case 'empty_file': return 'El audio está vacío.';
     case 'rate_limited': return 'Límite temporal del servicio, probá de nuevo en unos segundos.';

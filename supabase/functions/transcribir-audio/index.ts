@@ -85,6 +85,50 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
+// ── Alerta a Slack cuando la API de transcripción se queda SIN SALDO ──
+// Reusa el bot token de venta_form_config y el canal de alertas (configurable en
+// soporte_config.alertas_channel, fallback #alertas-general). Con throttle de 30
+// min vía app_settings.transcribe_alert_state para no spamear si fallan muchos
+// audios seguidos (el navegador dispara una llamada por audio).
+async function sendSlackAlert(text: string): Promise<void> {
+  try {
+    const { data: v } = await admin.from("app_settings").select("value").eq("key", "venta_form_config").maybeSingle();
+    const token = String((v?.value as Record<string, unknown> | null)?.slack_bot_token || "");
+    if (!token) return;
+    const { data: s } = await admin.from("app_settings").select("value").eq("key", "soporte_config").maybeSingle();
+    const channel = String((s?.value as Record<string, unknown> | null)?.alertas_channel || "#alertas-general");
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ channel, text, unfurl_links: false }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) {
+    console.error("transcribir-audio: slack alert fallo", e);
+  }
+}
+
+async function maybeAlertQuota(detail: string): Promise<void> {
+  try {
+    const { data } = await admin.from("app_settings").select("value").eq("key", "transcribe_alert_state").maybeSingle();
+    const last = (data?.value as Record<string, string> | null)?.last_quota_alert;
+    if (last && Date.now() - new Date(last).getTime() < 30 * 60 * 1000) return; // throttle 30 min
+    await admin.from("app_settings").upsert(
+      { key: "transcribe_alert_state", value: { last_quota_alert: new Date().toISOString() } },
+      { onConflict: "key" },
+    );
+    await sendSlackAlert(
+      "🔴 *Transcripcion de audios sin saldo*\n" +
+        "La API de transcripcion (OpenAI) se quedo sin credito: no se pueden transcribir audios en el panel " +
+        "(Soporte › Auditoria de audios y el boton de la bandeja).\n" +
+        "➡️ Carga saldo en OpenAI (o configura una key de Groq) para reactivarlo.\n" +
+        "_Detalle: " + detail.slice(0, 180) + "_",
+    );
+  } catch (e) {
+    console.error("transcribir-audio: maybeAlertQuota fallo", e);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResp(405, { error: "method_not_allowed" });
@@ -146,7 +190,12 @@ Deno.serve(async (req: Request) => {
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).slice(0, 300);
       console.error("transcribir-audio: provider error", res.status, detail);
-      // 429 = rate limit: la UI puede reintentar ese audio más tarde.
+      // Sin saldo/credito (OpenAI devuelve 429 con "insufficient_quota"): avisar a Slack.
+      if (/insufficient_quota|exceeded your current quota|billing/i.test(detail)) {
+        await maybeAlertQuota(detail);
+        return jsonResp(200, { ok: false, error: "quota_exhausted", detail });
+      }
+      // 429 = rate limit transitorio: la UI puede reintentar ese audio más tarde.
       const code = res.status === 429 ? "rate_limited" : `provider_${res.status}`;
       return jsonResp(200, { ok: false, error: code, detail });
     }
