@@ -272,21 +272,23 @@ export async function invokeMedia(messageId) {
   return data; // { ok, url, mime, filename }
 }
 
-// Exporta la conversacion completa a texto plano (.txt).
-export async function invokeExport(conversationId) {
+// Exporta la conversacion a texto plano (.txt). Rango de fechas opcional (ISO).
+// Devuelve { ok, filename, text, audios }: el text trae tokens ⟦AUDIO:id⟧ que el
+// navegador puede transcribir y reemplazar (o dejar como "🎙 Audio").
+export async function invokeExport({ conversationId, from, to } = {}) {
   const { data, error } = await supabase.functions.invoke('whatsapp-export', {
-    body: { conversation_id: conversationId },
+    body: { conversation_id: conversationId, from: from || undefined, to: to || undefined },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  return data; // { ok, filename, text }
+  return data; // { ok, filename, text, audios }
 }
 
-// Administra un grupo: nombre (subject), descripcion y participantes.
-// action: 'set_subject' | 'set_description' | 'update_participants'
-export async function invokeGroup({ conversationId, action, value, op, participants }) {
+// Administra un grupo: nombre (subject), descripcion, participantes y foto.
+// action: 'set_subject' | 'set_description' | 'update_participants' | 'set_picture'
+export async function invokeGroup({ conversationId, action, value, op, participants, image, mimetype }) {
   const { data, error } = await supabase.functions.invoke('whatsapp-group', {
-    body: { conversation_id: conversationId, action, value, op, participants },
+    body: { conversation_id: conversationId, action, value, op, participants, image, mimetype },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.detail || data.error);

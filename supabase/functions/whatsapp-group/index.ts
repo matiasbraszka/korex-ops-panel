@@ -69,6 +69,13 @@ function toJid(p: string): string {
   return digits ? `${digits}@s.whatsapp.net` : "";
 }
 
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 // Trae subject/desc/participantes actuales del grupo (best-effort).
 async function fetchGroupInfo(cfg: Cfg, jid: string) {
   try {
@@ -142,6 +149,27 @@ Deno.serve(async (req: Request) => {
       evoRes = await fetch(`${cfg.server_url}/group/updateParticipant/${cfg.instance}${groupQs}`, {
         method: "POST", headers: evoHeaders, body: JSON.stringify({ action: op, participants }),
         signal: AbortSignal.timeout(20000),
+      });
+    } else if (action === "set_picture") {
+      // La imagen llega en base64; la subimos a Storage (privado) y le pasamos a
+      // Evolution una URL firmada corta (Evolution la descarga para setearla).
+      const b64 = str(body.image);
+      const mimetype = str(body.mimetype) || "image/jpeg";
+      if (!b64) return jsonResp(400, { error: "missing_image" });
+      let bytes: Uint8Array;
+      try { bytes = base64ToBytes(b64); } catch { return jsonResp(400, { error: "bad_image" }); }
+      if (bytes.length > 5 * 1024 * 1024) return jsonResp(413, { error: "image_too_big" });
+      const ext = mimetype.includes("png") ? "png" : "jpg";
+      const path = `group-pics/${jid.split("@")[0]}-${Date.now()}.${ext}`;
+      const { error: upErr } = await admin.storage.from("wa-media").upload(path, bytes, {
+        contentType: mimetype, upsert: true,
+      });
+      if (upErr) { console.error("whatsapp-group: storage", upErr); return jsonResp(500, { error: "storage_error" }); }
+      const { data: signed } = await admin.storage.from("wa-media").createSignedUrl(path, 600);
+      if (!signed?.signedUrl) return jsonResp(500, { error: "sign_error" });
+      evoRes = await fetch(`${cfg.server_url}/group/updateGroupPicture/${cfg.instance}${groupQs}`, {
+        method: "POST", headers: evoHeaders, body: JSON.stringify({ image: signed.signedUrl }),
+        signal: AbortSignal.timeout(30000),
       });
     } else {
       return jsonResp(400, { error: "bad_action" });

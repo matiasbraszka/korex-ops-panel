@@ -473,6 +473,9 @@ export function SoporteProvider({ children }) {
   const removeParticipant = useCallback(
     (convId, jid) => runGroupAction(convId, { action: 'update_participants', op: 'remove', participants: [jid] }),
     [runGroupAction]);
+  const setGroupPicture = useCallback(
+    (convId, image, mimetype) => runGroupAction(convId, { action: 'set_picture', image, mimetype }),
+    [runGroupAction]);
 
   // ── Media (imagenes, audios, documentos) ──
   // mediaByMsg: { [msgId]: { status: 'loading'|'ok'|'failed', url?, mime?, filename? } }
@@ -646,7 +649,7 @@ export function SoporteProvider({ children }) {
     updateConversation, updateNotes, linkContact, linkByFinance,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
-    setGroupSubject, setGroupDescription, addParticipant, removeParticipant,
+    setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
     mediaByMsg, loadMedia,
     getDraft, setDraft, refresh,
   }), [
@@ -657,7 +660,7 @@ export function SoporteProvider({ children }) {
     updateConversation, updateNotes, linkContact, linkByFinance, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
-    setGroupSubject, setGroupDescription, addParticipant, removeParticipant,
+    setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
     mediaByMsg, loadMedia, getDraft, setDraft, refresh,
   ]);
 

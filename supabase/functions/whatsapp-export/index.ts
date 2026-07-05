@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
 
   if (!(await authorizeSoporteRead(req))) return jsonResp(403, { error: "forbidden" });
 
-  let body: { conversation_id?: string };
+  let body: { conversation_id?: string; from?: string; to?: string };
   try {
     body = await req.json();
   } catch {
@@ -97,6 +97,9 @@ Deno.serve(async (req: Request) => {
   }
   const convId = String(body.conversation_id || "");
   if (!convId) return jsonResp(400, { error: "missing_fields" });
+  // Rango de fechas opcional (ISO). Si vienen, se filtra por created_at.
+  const dateFrom = String(body.from || "").trim();
+  const dateTo = String(body.to || "").trim();
 
   // Conversacion + nombre a mostrar (contacto vinculado > perfil > telefono).
   const { data: conv } = await admin
@@ -111,16 +114,22 @@ Deno.serve(async (req: Request) => {
     (conv.wa_phone ? `+${conv.wa_phone}` : conv.wa_jid);
   const isGroup = conv.is_group === true;
 
-  // Traer TODOS los mensajes en paginas de 1000, ascendente por created_at.
+  // Traer TODOS los mensajes (o del rango) en paginas de 1000, asc por created_at.
+  // Los audios se emiten con un token ⟦AUDIO:id⟧ para que el navegador pueda
+  // transcribirlos y reemplazarlos en su lugar (opcional).
   const lines: string[] = [];
-  let from = 0;
+  const audios: { id: string }[] = [];
+  let offset = 0;
   while (true) {
-    const { data: msgs, error } = await admin
+    let q = admin
       .from("wa_messages")
-      .select("direction, sender_jid, msg_type, body, wa_timestamp, created_at, payload")
-      .eq("conversation_id", convId)
+      .select("id, direction, sender_jid, msg_type, body, wa_timestamp, created_at, payload")
+      .eq("conversation_id", convId);
+    if (dateFrom) q = q.gte("created_at", dateFrom);
+    if (dateTo) q = q.lte("created_at", dateTo);
+    const { data: msgs, error } = await q
       .order("created_at", { ascending: true })
-      .range(from, from + PAGE - 1);
+      .range(offset, offset + PAGE - 1);
     if (error) {
       console.error("whatsapp-export: error leyendo mensajes", error);
       return jsonResp(500, { error: "read_error" });
@@ -135,17 +144,22 @@ Deno.serve(async (req: Request) => {
             : chatName);
       let content = (m.body || "").trim();
       if (!content) {
-        const label = TYPE_LABELS[m.msg_type as string] || "📎 Adjunto";
-        // Documento: agregar el nombre del archivo si lo tenemos.
-        const docName = payload?.message?.documentMessage?.fileName;
-        content = m.msg_type === "documentMessage" && docName ? `${label}: ${docName}` : label;
+        if (m.msg_type === "audioMessage") {
+          content = `⟦AUDIO:${m.id}⟧`;
+          audios.push({ id: String(m.id) });
+        } else {
+          const label = TYPE_LABELS[m.msg_type as string] || "📎 Adjunto";
+          // Documento: agregar el nombre del archivo si lo tenemos.
+          const docName = payload?.message?.documentMessage?.fileName;
+          content = m.msg_type === "documentMessage" && docName ? `${label}: ${docName}` : label;
+        }
       }
       const stamp = fmtStamp(m.wa_timestamp || m.created_at);
       // Mensajes multilinea: se mantienen tal cual bajo la misma marca.
       lines.push(`[${stamp}] ${author}: ${content}`);
     }
     if (batch.length < PAGE) break;
-    from += PAGE;
+    offset += PAGE;
   }
 
   const header =
@@ -158,5 +172,5 @@ Deno.serve(async (req: Request) => {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ }); // yyyy-mm-dd
   const filename = `WhatsApp - ${sanitize(String(chatName))} - ${today}.txt`;
 
-  return jsonResp(200, { ok: true, filename, text });
+  return jsonResp(200, { ok: true, filename, text, audios });
 });

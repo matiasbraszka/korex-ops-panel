@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore, UserCheck, Download, Pencil, UserPlus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, Link2, CalendarPlus, CalendarClock, CalendarX, ExternalLink, Users, Building2, Video, Archive, ArchiveRestore, UserCheck, Download, Pencil, UserPlus, Image as ImageIcon } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
-import { fetchTeamMembers, invokeExport } from '../lib/api.js';
+import { fetchTeamMembers } from '../lib/api.js';
 import { initials, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import TagPicker from './TagPicker.jsx';
 import LinkContactModal from './LinkContactModal.jsx';
+import ExportChatModal from './ExportChatModal.jsx';
 
 const fmtCita = (iso) =>
   new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' }) +
@@ -33,35 +34,13 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
     selectedConversation: conv, updateNotes, updateConversation,
     appointmentsByConv, loadAppointments, cancelAppointment,
     groupDirByConv, loadGroupDirectory,
-    setGroupSubject, setGroupDescription, addParticipant, removeParticipant,
+    setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
   } = useSoporte();
   const [linkOpen, setLinkOpen] = useState(false);
   const [showAllParts, setShowAllParts] = useState(false);
   const [team, setTeam] = useState([]);
-  const [exporting, setExporting] = useState(false);
-
-  // Exporta el chat completo a .txt y lo descarga en el navegador.
-  const exportChat = async () => {
-    if (exporting || !conv?.id) return;
-    setExporting(true);
-    try {
-      const { text, filename } = await invokeExport(conv.id);
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || 'chat.txt';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('exportChat', e);
-      alert('No se pudo exportar el chat. Probá de nuevo.');
-    } finally {
-      setExporting(false);
-    }
-  };
+  const [exportOpen, setExportOpen] = useState(false);
+  const photoRef = useRef(null);
 
   // ── Edición de grupo (nombre / descripción / participantes) ──
   const [subjectDraft, setSubjectDraft] = useState('');
@@ -109,6 +88,19 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
   const removePart = (jid) => {
     if (!window.confirm('¿Quitar a esta persona del grupo?')) return;
     runGroup(jid, () => removeParticipant(conv.id, jid));
+  };
+  const pickGroupPhoto = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { setGroupErr('Elegí una imagen (JPG o PNG).'); return; }
+    if (f.size > 5 * 1024 * 1024) { setGroupErr('La imagen supera 5 MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = String(reader.result || '').split(',')[1] || '';
+      if (b64) runGroup('picture', () => setGroupPicture(conv.id, b64, f.type));
+    };
+    reader.readAsDataURL(f);
   };
 
   useEffect(() => {
@@ -231,6 +223,15 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                           disabled={groupBusy === 'desc' || descDraft === (conv.description || '')}
                           className="mt-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border-0 bg-[#F59E0B] text-white cursor-pointer disabled:opacity-50 disabled:cursor-default">
                     {groupBusy === 'desc' ? 'Guardando…' : 'Guardar descripción'}
+                  </button>
+                </div>
+                {/* Foto del grupo (requiere ser admin) */}
+                <div>
+                  <div className="text-[10.5px] text-text3 mb-0.5 flex items-center gap-1"><ImageIcon size={10} /> Foto del grupo</div>
+                  <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={pickGroupPhoto} />
+                  <button onClick={() => photoRef.current?.click()} disabled={groupBusy === 'picture'}
+                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-border bg-white text-text2 cursor-pointer hover:bg-surface2 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-default">
+                    <ImageIcon size={12} /> {groupBusy === 'picture' ? 'Actualizando…' : 'Cambiar foto del grupo'}
                   </button>
                 </div>
                 {groupErr && <div className="text-[11px] font-medium text-[#DC2626]">{groupErr}</div>}
@@ -420,14 +421,13 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
             />
           </div>
 
-          {/* Exportar el chat completo a un archivo de texto */}
+          {/* Exportar el chat a texto (rango de fechas + transcripción de audios) */}
           <div className="border-t border-surface2 pt-3 mt-auto">
             <button
-              onClick={exportChat}
-              disabled={exporting}
-              className="w-full py-2 mb-2 rounded-xl border border-border bg-white text-text2 text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:bg-surface2 transition-colors duration-150 disabled:opacity-60 disabled:cursor-default"
+              onClick={() => setExportOpen(true)}
+              className="w-full py-2 mb-2 rounded-xl border border-border bg-white text-text2 text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:bg-surface2 transition-colors duration-150"
             >
-              <Download size={13} /> {exporting ? 'Exportando…' : 'Exportar chat (.txt)'}
+              <Download size={13} /> Exportar chat (.txt)
             </button>
           </div>
 
@@ -453,6 +453,7 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
         </div>
       </div>
       <LinkContactModal open={linkOpen} onClose={() => setLinkOpen(false)} conv={conv} />
+      <ExportChatModal open={exportOpen} onClose={() => setExportOpen(false)} conv={conv} />
     </>
   );
 }
