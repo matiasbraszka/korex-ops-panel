@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback, us
 import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
-import { CLIENT_ADS_DATA, PRIO_CLIENT } from '../utils/constants';
+import { CLIENT_ADS_DATA, PRIO_CLIENT, TAREAS_LAYOUT } from '../utils/constants';
 import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, addDaysStr, sprintStubForMonday, upcomingSprintStubs, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
@@ -2204,15 +2204,20 @@ export function AppProvider({ children }) {
         if (allIdeaComments && Array.isArray(allIdeaComments)) setIdeaComments(allIdeaComments);
       } catch (e) { console.warn('loadIdeaComments error', e); }
 
-      // Orden custom de tareas por usuario.
-      try {
-        const tup = await sbFetch('task_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
-        if (tup && Array.isArray(tup)) setTaskUserPositions(tup);
-      } catch (e) { console.warn('loadTaskUserPositions error', e); }
-      try {
-        const cup = await sbFetch('client_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
-        if (cup && Array.isArray(cup)) setClientUserPositions(cup);
-      } catch (e) { console.warn('loadClientUserPositions error', e); }
+      // Orden custom de tareas/clientes por usuario. SOLO lo consume la vista
+      // Lista/TasksPage del layout LEGACY. En el layout 'sprint' (producción)
+      // nadie lo usa → nos ahorramos 2 fetches (hasta 5000 filas c/u) en CADA
+      // carga. Si se vuelve al layout legacy, se cargan de nuevo.
+      if (TAREAS_LAYOUT !== 'sprint') {
+        try {
+          const tup = await sbFetch('task_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
+          if (tup && Array.isArray(tup)) setTaskUserPositions(tup);
+        } catch (e) { console.warn('loadTaskUserPositions error', e); }
+        try {
+          const cup = await sbFetch('client_user_positions?select=*&limit=5000', { headers: { 'Prefer': 'return=representation' } });
+          if (cup && Array.isArray(cup)) setClientUserPositions(cup);
+        } catch (e) { console.warn('loadClientUserPositions error', e); }
+      }
       try {
         const allBlockerComments = await sbFetch('blocker_comments?select=*&order=created_at.asc&limit=2000', { headers: { 'Prefer': 'return=representation' } });
         if (allBlockerComments && Array.isArray(allBlockerComments)) setBlockerComments(allBlockerComments);

@@ -9,7 +9,6 @@ import TimelineView from '../components/tareas/TimelineView';
 import WeeklyTodoView from '../components/tareas/WeeklyTodoView';
 import ObjetivosView from '../components/tareas/ObjetivosView';
 import SprintBoardView from '../components/tareas/SprintBoardView';
-import ListaView from '../components/tareas/ListaView';
 import RendimientoView from '../components/tareas/RendimientoView';
 import TasksPage from './TasksPage';
 
@@ -19,8 +18,8 @@ const SPRINT_VIEWS = [
   { id: 'rendimiento', label: 'Rendimiento' },
   { id: 'objetivos', label: 'Objetivos' },
   { id: 'sprint', label: 'Tablero Sprint' },
-  // Pestaña "Lista" oculta: resultaba repetitiva con el Tablero Sprint.
-  // El componente sigue disponible (ListaView) por si se quiere reactivar.
+  // La pestaña "Lista" se ELIMINÓ (2026-07-03): no se usaba y era repetitiva con
+  // el Tablero Sprint. El layout legacy conserva su propia "Lista" (TasksPage).
   { id: 'todo', label: 'To-Do diario' },
 ];
 const LEGACY_VIEWS = [
@@ -84,7 +83,6 @@ export default function TareasPage() {
       {isSprint && view === 'rendimiento' && <RendimientoView />}
       {isSprint && view === 'objetivos' && <ObjetivosView onlySprint={onlySprint} />}
       {isSprint && view === 'sprint' && <SprintBoardView />}
-      {isSprint && view === 'lista' && <ListaView />}
       {isSprint && view === 'todo' && <WeeklyTodoView />}
 
       {/* Vistas legacy */}
