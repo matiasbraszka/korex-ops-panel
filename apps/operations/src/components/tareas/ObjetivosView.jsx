@@ -8,6 +8,7 @@ import AddToSprintButton from './AddToSprintButton';
 import DepartmentPicker from './DepartmentPicker';
 import PriorityPicker from './PriorityPicker';
 import AssigneePicker from './AssigneePicker';
+import PersonAvatar from './PersonAvatar';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
 const EXPANDED_KEY = 'tareas_objetivos_expanded';
@@ -188,7 +189,6 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
     if (!f) return null;
     return (teamMembers || []).find(m => m.name?.toLowerCase() === f || m.name?.toLowerCase().split(' ')[0] === f);
   };
-  const initialsFor = (m) => (m?.initials || m?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '?').toUpperCase();
   const hoursOf = (t) => Number(t.estimatedHours) || 0;
   const monthName = (() => { const s = new Date().toLocaleDateString('es', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); })();
 
@@ -300,7 +300,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                   </div>
                 </div>
                 <div className="kx-team" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  {o.team.map(m => <span key={m.id} style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', marginLeft: -7 }}>{initialsFor(m)}</span>)}
+                  {o.team.map((m, i) => <span key={m.id} style={{ marginLeft: i ? -7 : 0, display: 'inline-flex' }}><PersonAvatar member={m} size={26} /></span>)}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 13, flexShrink: 0, width: 248, justifyContent: 'flex-end' }}>
                   <div style={{ flex: 1, maxWidth: 168 }}>

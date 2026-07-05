@@ -6,6 +6,7 @@ import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount
 import DepartmentPicker from './DepartmentPicker';
 import PriorityPicker from './PriorityPicker';
 import AddToWeeklyButton from './AddToWeeklyButton';
+import PersonAvatar from './PersonAvatar';
 
 const ACC = '#5B7CF5';
 const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
@@ -58,6 +59,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const subPct = checklist.length ? Math.round(subDone / checklist.length * 100) : 0;
   const phaseLabel = (getAllPhases(client)[task.phase] || {}).label || '—';
   const owner = (() => { const f = String(task.assignee || '').split(',')[0]?.trim().toLowerCase(); return (teamMembers || []).find(m => m.name?.toLowerCase() === f || m.name?.toLowerCase().split(' ')[0] === f); })();
+  const reviewerMember = (() => { const f = String(task.reviewer || '').split(',')[0]?.trim().toLowerCase(); return f ? (teamMembers || []).find(m => m.name?.toLowerCase() === f || m.name?.toLowerCase().split(' ')[0] === f) : null; })();
 
   const taskSprint = (sprints || []).find(s => s.id === task.sprintId) || null;
   const locked = isSprintLocked(taskSprint);
@@ -219,7 +221,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <div style={metaRow}>
               <span style={metaLabel}>Responsable</span>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
-                {owner && <span style={{ width: 22, height: 22, borderRadius: '50%', background: owner.color || '#9CA3AF', color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(owner.initials || owner.name?.slice(0, 2) || '').toUpperCase()}</span>}
+                {owner && <PersonAvatar member={owner} size={22} />}
                 <select value={owner?.name || ''} onChange={(e) => updateTask(task.id, { assignee: e.target.value })} style={selStyle}>
                   <option value="">Sin asignar</option>
                   {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
@@ -228,10 +230,13 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             </div>
             <div style={metaRow}>
               <span style={metaLabel}>Revisor</span>
-              <select value={task.reviewer || ''} onChange={(e) => updateTask(task.id, { reviewer: e.target.value || null })} style={{ ...selStyle, justifySelf: 'end', color: task.reviewer ? '#1A1D26' : '#9CA3AF' }}>
-                <option value="">Sin revisor</option>
-                {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-              </select>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
+                {task.reviewer && <PersonAvatar member={reviewerMember} name={task.reviewer} size={22} ring="#EC4899" />}
+                <select value={task.reviewer || ''} onChange={(e) => updateTask(task.id, { reviewer: e.target.value || null })} style={{ ...selStyle, color: task.reviewer ? '#1A1D26' : '#9CA3AF' }}>
+                  <option value="">Sin revisor</option>
+                  {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                </select>
+              </span>
             </div>
             <div style={metaRow}><span style={metaLabel}>Cliente</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{client?.name || '—'}</span></div>
             <div style={{ ...metaRow, alignItems: 'flex-start' }}><span style={{ ...metaLabel, paddingTop: 1 }}>Objetivo / fase</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right', lineHeight: 1.35 }}>{phaseLabel}</span></div>
