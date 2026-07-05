@@ -106,29 +106,37 @@ Deno.serve(async (req: Request) => {
   const instance = cfg.instance_name || "korex-soporte";
   if (!serverUrl || !apiKey) return jsonResp(502, { error: "evolution_not_configured" });
 
-  // Mandamos el nodo Baileys COMPLETO guardado (key + message con mediaKey/
-  // directPath) para que Evolution pueda desencriptar aunque su store interno
-  // haya expirado el mensaje. Fallback a solo el id si no tenemos el payload.
+  // Descarga con DOS intentos para maximizar exito:
+  //  1) por id (el metodo simple; funciona para media reciente que Evolution
+  //     todavia tiene en su store interno);
+  //  2) fallback con el nodo Baileys COMPLETO guardado (key + message con
+  //     mediaKey/directPath) por si el store de Evolution ya expiro el mensaje.
+  // Si ambos fallan, la media ya no es recuperable (WhatsApp la expiro).
   const stored = (msg.payload as Record<string, any>) ?? {};
-  const evoMessage: Record<string, any> = { key: stored.key ?? { id: msg.wa_message_id } };
-  if (stored.message) evoMessage.message = stored.message;
-
-  let media: Record<string, any> | null = null;
-  try {
-    const r = await fetch(`${serverUrl}/chat/getBase64FromMediaMessage/${instance}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: apiKey },
-      body: JSON.stringify({ message: evoMessage, convertToMp4: false }),
-      signal: AbortSignal.timeout(60000),
-    });
-    media = await r.json().catch(() => null);
-    if (!r.ok || !media?.base64) {
-      console.error("whatsapp-media: Evolution respondio error", r.status, media?.message || media);
-      return jsonResp(502, { error: "media_unavailable" });
+  async function fetchFromEvolution(payload: Record<string, any>): Promise<Record<string, any> | null> {
+    try {
+      const r = await fetch(`${serverUrl}/chat/getBase64FromMediaMessage/${instance}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: apiKey },
+        body: JSON.stringify({ message: payload, convertToMp4: false }),
+        signal: AbortSignal.timeout(40000),
+      });
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.base64) return j;
+      console.error("whatsapp-media: Evolution sin base64", r.status, j?.message || null);
+      return null;
+    } catch (e) {
+      console.error("whatsapp-media: Evolution inalcanzable", e);
+      return null;
     }
-  } catch (e) {
-    console.error("whatsapp-media: Evolution inalcanzable", e);
-    return jsonResp(502, { error: "evolution_unreachable" });
+  }
+
+  let media = await fetchFromEvolution({ key: { id: msg.wa_message_id } });
+  if (!media && stored.message) {
+    media = await fetchFromEvolution({ key: stored.key ?? { id: msg.wa_message_id }, message: stored.message });
+  }
+  if (!media?.base64) {
+    return jsonResp(502, { error: "media_unavailable" });
   }
 
   const mime = String(media.mimetype || "application/octet-stream").split(";")[0];
