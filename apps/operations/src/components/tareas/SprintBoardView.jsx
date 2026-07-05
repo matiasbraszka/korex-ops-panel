@@ -6,6 +6,7 @@ import { sprintTasks, userOwnsTask, userSeesTask, isReviewerOf, sprintProgress, 
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
+import PersonAvatar from './PersonAvatar';
 
 const prioRank = (t) => TASK_PRIORITY[t?.priority]?.rank ?? 9;
 
@@ -75,7 +76,10 @@ export default function SprintBoardView() {
     if (!f) return null;
     return (teamMembers || []).find(m => m.name?.toLowerCase() === f || m.name?.toLowerCase().split(' ')[0] === f);
   };
-  const initialsFor = (m) => (m?.initials || m?.name?.slice(0, 2) || '?').toUpperCase();
+  // Todos los encargados de una tarea (assignee es CSV): resuelve cada nombre a su
+  // miembro para poder mostrar la foto de CADA uno (no solo el primero).
+  const membersOf = (assignee) => String(assignee || '').split(',').map(s => s.trim()).filter(Boolean)
+    .map(nm => ({ name: nm, member: memberOf(nm) || null }));
 
   // Columna del tablero para una tarea. Si está bloqueada (a mano con status
   // 'blocked' o por una dependencia sin validar) va SIEMPRE a la columna Bloqueos.
@@ -192,7 +196,8 @@ export default function SprintBoardView() {
               </div>
               {list.map(t => {
                 const c = clientById(t.clientId);
-                const m = memberOf(t.assignee);
+                const assignees = membersOf(t.assignee);
+                const reviewerM = t.reviewer ? memberOf(t.reviewer) : null;
                 const area = t.department ? DEPARTMENTS[t.department] : null;
                 const phase = c && t.phase ? getAllPhases(c)[t.phase] : null;
                 const checklist = Array.isArray(t.checklist) ? t.checklist : [];
@@ -244,9 +249,25 @@ export default function SprintBoardView() {
                       </div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 11 }}>
-                      {m
-                        ? <span style={{ width: 24, height: 24, borderRadius: '50%', background: m.color || '#9CA3AF', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initialsFor(m)}</span>
-                        : <span style={{ fontSize: 11, color: '#B6B9C0', fontStyle: 'italic' }}>sin asignar</span>}
+                      {assignees.length === 0 && !t.reviewer
+                        ? <span style={{ fontSize: 11, color: '#B6B9C0', fontStyle: 'italic' }}>sin asignar</span>
+                        : (
+                          <span style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                            {/* Encargados: la foto de CADA uno (levemente superpuestas) */}
+                            {assignees.map((a, i) => (
+                              <span key={i} style={{ marginLeft: i ? -7 : 0, zIndex: assignees.length - i, display: 'inline-flex' }}>
+                                <PersonAvatar member={a.member} name={a.name} size={24} title={a.member?.name || a.name} />
+                              </span>
+                            ))}
+                            {/* Revisor (si hay): al lado, con aro rosa e ícono de "revisa" */}
+                            {t.reviewer && (
+                              <span title={`Revisor: ${reviewerM?.name || t.reviewer}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: assignees.length ? 7 : 0 }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="2.2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                                <PersonAvatar member={reviewerM} name={t.reviewer} size={22} ring="#EC4899" title={`Revisor: ${reviewerM?.name || t.reviewer}`} />
+                              </span>
+                            )}
+                          </span>
+                        )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                         {ageDays != null && <span title={isDone ? 'Cuánto tardó: de creada a completada' : 'Días desde que se creó la tarea'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#9CA3AF' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{isDone ? ageDays + 'd' : (ageDays === 0 ? 'hoy' : ageDays + 'd')}</span>}
                         {nSprints > 1 && <span title={`Lleva ${nSprints} sprints`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 5, padding: '1px 6px' }}>{nSprints} sprints</span>}
