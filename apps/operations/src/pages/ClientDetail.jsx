@@ -272,7 +272,7 @@ export default function ClientDetail({ client: c }) {
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 
-            {activeTab === 'satisfaccion' && <SatisfaccionTab sat={satByClient?.[c.id]} />}
+            {activeTab === 'satisfaccion' && <SatisfaccionTab sat={satByClient?.[c.id]} clientId={c.id} />}
 
             {activeTab === 'facturacion' && !restricted && <ContratoTab client={c} />}
 
