@@ -70,6 +70,14 @@ Deno.serve(async (req) => {
     const { report_id, only_bullet_ids } = await req.json().catch(() => ({}));
     if (!report_id) return json({ ok: false, error: "missing report_id" }, 400);
 
+    // Interruptor de PAUSA: si app_settings.informe_slack_config.enabled === false,
+    // NO se envía nada a Slack al cargar informes. Se re-activa cambiando el flag
+    // a true (o borrando la clave), sin necesidad de re-deployar la función.
+    const { data: cfg } = await supabase.from("app_settings").select("value").eq("key", "informe_slack_config").maybeSingle();
+    if ((cfg?.value as Record<string, unknown>)?.enabled === false) {
+      return json({ ok: true, paused: true, sent: 0 });
+    }
+
     // Token del bot (mismo lugar que el resto de las funciones).
     const { data: s } = await supabase.from("app_settings").select("value").eq("key", "venta_form_config").maybeSingle();
     const token = str((s?.value as Record<string, unknown>)?.slack_bot_token);
