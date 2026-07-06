@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
@@ -33,6 +33,17 @@ export default function SprintBoardView() {
   const [wipMsg, setWipMsg] = useState('');
   const [openTaskId, setOpenTaskId] = useState(null);
   const [query, setQuery] = useState('');
+  // Al cambiar la prioridad, la tarjeta se re-ordena (súper alta va arriba) y
+  // "se pierde de vista". La marcamos y la traemos al foco + resaltado para que
+  // se vea A DÓNDE se movió (no que "desapareció").
+  const [flashCardId, setFlashCardId] = useState(null);
+  useEffect(() => {
+    if (!flashCardId) return;
+    const el = document.querySelector(`[data-card-id="${flashCardId}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const t = setTimeout(() => setFlashCardId(null), 1400);
+    return () => clearTimeout(t);
+  }, [flashCardId]);
 
   // Navegación entre sprints: por defecto el activo; se puede ir a los anteriores.
   // Un sprint cerrado queda bloqueado (sus tareas no cambian de estado; solo se
@@ -221,7 +232,7 @@ export default function SprintBoardView() {
                     onDragStart={() => { if (locked) return; setDraggedId(t.id); startDragScroll(); }}
                     onDragEnd={() => { setDraggedId(null); setOverCol(null); stopDragScroll(); }}
                     onClick={() => setOpenTaskId(t.id)}
-                    style={{ background: blocked ? '#FFFBFB' : '#fff', border: blocked ? '1px solid #FECACA' : '1px solid #E2E5EB', borderRadius: 11, padding: '11px 12px', boxShadow: '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1 }}>
+                    style={{ background: blocked ? '#FFFBFB' : '#fff', border: flashCardId === t.id ? '1px solid #5B7CF5' : (blocked ? '1px solid #FECACA' : '1px solid #E2E5EB'), borderRadius: 11, padding: '11px 12px', boxShadow: flashCardId === t.id ? '0 0 0 3px rgba(91,124,245,0.28)' : '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1, transition: 'box-shadow .3s ease, border-color .3s ease' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       {c
                         ? <span title={c.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 10.5, fontWeight: 600, color: c.color || '#6B7280', background: (c.color || '#9CA3AF') + '1A', borderRadius: 6, padding: '2px 8px' }}>
@@ -230,7 +241,7 @@ export default function SprintBoardView() {
                           </span>
                         : <span />}
                       <span style={{ flex: 1, minWidth: 0 }} />
-                      <PriorityPicker value={t.priority} onChange={(p) => updateTask(t.id, { priority: p || 'normal' })} />
+                      <PriorityPicker value={t.priority} onChange={(p) => { updateTask(t.id, { priority: p || 'normal' }); setFlashCardId(t.id); }} />
                       {blocked && (
                         <span title="Bloqueada por otra tarea sin validar" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 5, padding: '1px 5px', flexShrink: 0 }}>
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>

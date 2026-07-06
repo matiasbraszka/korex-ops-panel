@@ -135,6 +135,17 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
     try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded)); } catch { /* ignore */ }
   }, [expanded]);
 
+  // Al cambiar prioridad/responsable la fila se re-ordena o cambia; la marcamos
+  // y la traemos al foco + resaltado para que se vea que se MOVIÓ (no que desapareció).
+  const [flashTaskId, setFlashTaskId] = useState(null);
+  useEffect(() => {
+    if (!flashTaskId) return;
+    const el = document.querySelector(`[data-task-id="${flashTaskId}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const to = setTimeout(() => setFlashTaskId(null), 1400);
+    return () => clearTimeout(to);
+  }, [flashTaskId]);
+
   // El revisor ve la tarea cuando entra "en-revisión" (además del responsable).
   const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee) || isReviewerOf(t, taskAssignee);
   const visibleTask = (t) => {
@@ -361,7 +372,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                               onDragStart={(e) => { e.stopPropagation(); setDraggedTaskId(t.id); startDragScroll(); }}
                               onDragEnd={() => { setDraggedTaskId(null); stopDragScroll(); }}
                               onClick={() => { if (!editing) setOpenTaskId(t.id); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1 }}>
+                              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < g.tasks.length - 1 ? '1px solid #F0F2F5' : 'none', cursor: 'pointer', opacity: draggedTaskId === t.id ? 0.4 : 1, background: flashTaskId === t.id ? 'rgba(91,124,245,0.10)' : 'transparent', transition: 'background .3s ease' }}>
                               <span onClick={(e) => { e.stopPropagation(); toggleDone(t); }} title={blockers.length > 0 ? `Bloqueada por: ${blockers.map(b => b.title).join(', ')}` : (t.status === 'done' ? 'Marcar pendiente' : 'Marcar completada')} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: d.border, background: d.bg, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{d.icon}</span>
                               {editing ? (
                                 <input autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
@@ -377,7 +388,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                                 </>
                               )}
                               {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }} title={`${cCount} comentario${cCount === 1 ? '' : 's'}${unread ? ' · sin leer' : ''}`}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
-                              <PriorityPicker value={t.priority} onChange={(p) => updateTask(t.id, { priority: p || 'normal' })} />
+                              <PriorityPicker value={t.priority} onChange={(p) => { updateTask(t.id, { priority: p || 'normal' }); setFlashTaskId(t.id); }} />
                               <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="Horas estimadas" onClick={(e) => e.stopPropagation()}>
                                 <input type="number" min="0" step="0.5" defaultValue={t.estimatedHours ?? ''} placeholder="–"
@@ -385,7 +396,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                                   style={{ width: 40, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: '#3F4653', textAlign: 'right', border: '1px solid #E2E5EB', borderRadius: 6, padding: '3px 5px', background: '#fff', outline: 'none' }} />
                                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
                               </span>
-                              <AssigneePicker value={t.assignee} onChange={(name) => updateTask(t.id, { assignee: name })} />
+                              <AssigneePicker value={t.assignee} onChange={(name) => { updateTask(t.id, { assignee: name }); setFlashTaskId(t.id); }} />
                               {/* Columna fija para el botón de sprint: así "En sprint"/"al sprint"
                                   y las tareas terminadas (sin botón) quedan alineadas en la fila. */}
                               <span style={{ width: 120, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
