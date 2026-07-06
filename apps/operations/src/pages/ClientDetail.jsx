@@ -22,7 +22,7 @@ const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, llamadas, teamMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, llamadas, teamMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
   const TEAM = teamMembers || [];
   const [editModal, setEditModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -110,7 +110,7 @@ export default function ClientDetail({ client: c }) {
                 open={openDropdown === 'client-prio'}
                 onClose={() => setOpenDropdown(null)}
                 anchorRef={getDropdownRef('client-prio')}
-                items={Object.entries(getAllPriorityLabels()).map(([k, v]) => ({ label: v.label, iconColor: v.color, icon: '●', onClick: () => { updateClient(c.id, { priority: parseInt(k) }); setOpenDropdown(null); } }))}
+                items={getPriorityList().map(v => ({ label: v.label, iconColor: v.color, icon: '●', onClick: () => { updateClient(c.id, { priority: v.key }); setOpenDropdown(null); } }))}
               />
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>

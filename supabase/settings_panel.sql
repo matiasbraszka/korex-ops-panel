@@ -72,12 +72,12 @@ INSERT INTO app_settings (key, value) VALUES ('global', '{
   },
   "services": ["Funnel completo + Ads"],
   "priority_labels": {
-    "1": { "label": "SUPER PRIORITARIO", "color": "#EF4444" },
-    "2": { "label": "IMPORTANTES",       "color": "#F97316" },
-    "3": { "label": "NORMAL",            "color": "#22C55E" },
-    "4": { "label": "POCO IMPORTANTES",  "color": "#9CA3AF" },
-    "5": { "label": "NUEVOS",            "color": "#8B5CF6" },
-    "6": { "label": "DESCARTADOS",       "color": "#6B7280" }
+    "1": { "label": "SUPER PRIORITARIO", "color": "#EF4444", "order": 0, "hidden": false },
+    "2": { "label": "IMPORTANTES",       "color": "#F97316", "order": 1, "hidden": false },
+    "3": { "label": "NORMAL",            "color": "#22C55E", "order": 2, "hidden": false },
+    "4": { "label": "POCO IMPORTANTES",  "color": "#9CA3AF", "order": 3, "hidden": false },
+    "5": { "label": "NUEVOS",            "color": "#8B5CF6", "order": 4, "hidden": false },
+    "6": { "label": "DESCARTADOS",       "color": "#6B7280", "order": 5, "hidden": true }
   }
 }'::jsonb)
 ON CONFLICT (key) DO NOTHING;

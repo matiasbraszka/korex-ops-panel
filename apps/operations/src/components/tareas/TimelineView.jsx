@@ -21,6 +21,7 @@ export default function TimelineView({ onGoToTaskList }) {
     taskComments,
     openTaskComments,
     unreadCommentTaskIds,
+    isPriorityHidden,
   } = useApp();
   const TEAM = teamMembers || [];
   const commentCountsByTask = useMemo(() => {
@@ -90,7 +91,7 @@ export default function TimelineView({ onGoToTaskList }) {
     if (taskPriority !== 'all') {
       if (String(c.priority || 5) !== taskPriority) return false;
     } else {
-      if ((c.priority || 5) === 6) return false;
+      if (isPriorityHidden(c.priority || 5)) return false;
     }
     return true;
   });

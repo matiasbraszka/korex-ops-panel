@@ -156,6 +156,10 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
 
   if (!open) return null;
   const priorityLabels = getAllPriorityLabels ? getAllPriorityLabels() : {};
+  // Ordenar por rango configurado (`order`) con fallback al número de slot.
+  const priorityEntries = Object.entries(priorityLabels)
+    .filter(([, v]) => v)
+    .sort((a, b) => ((a[1].order ?? Number(a[0])) - (b[1].order ?? Number(b[0]))));
 
   return (
     <Modal
@@ -236,7 +240,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
             </Field>
             <Field label="Prioridad">
               <div className="flex flex-wrap gap-1.5">
-                {Object.entries(priorityLabels).map(([k, v]) => (
+                {priorityEntries.map(([k, v]) => (
                   <button key={k} type="button"
                     className={`text-[11.5px] py-1.5 px-2.5 rounded-lg cursor-pointer font-medium inline-flex items-center gap-1 border ${Number(form.priority) === Number(k) ? 'border-2' : 'bg-white'}`}
                     style={Number(form.priority) === Number(k) ? { borderColor: v.color, background: v.color + '15', color: v.color } : { borderColor: '#E2E5EB', color: '#6B7280' }}

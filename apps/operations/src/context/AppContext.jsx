@@ -2097,8 +2097,11 @@ export function AppProvider({ children }) {
   // ── Normalize client priority (new 6-level scale) ──
   // 1: SUPER PRIORITARIO, 2: IMPORTANTES, 3: NORMAL, 4: POCO IMPORTANTES, 5: NUEVOS, 6: DESCARTADOS
   const normalizePriority = (p) => {
-    if (p >= 1 && p <= 6) return p;
-    return 5; // default to NUEVOS
+    // Antes se recortaba a 1-6; ahora las prioridades son configurables (se
+    // pueden agregar/borrar desde Configuración › Prioridades), así que se
+    // acepta cualquier slot válido. Solo null/basura cae al default.
+    const n = Number(p);
+    return Number.isInteger(n) && n >= 1 && n <= 99 ? n : 5;
   };
 
   // ── Load from Supabase ──
@@ -2674,16 +2677,54 @@ export function AppProvider({ children }) {
   const openIdeaComments = useCallback((ideaId) => setCommentsTarget({ kind: 'idea', ideaId }), []);
   const openBlockerComments = useCallback((blockerId) => setCommentsTarget({ kind: 'blocker', blockerId }), []);
   const closeComments = useCallback(() => setCommentsTarget(null), []);
-  // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT
+  // Helper unificado: lee priority labels de appSettings con fallback a PRIO_CLIENT.
+  // Crash-safe: una prioridad huérfana (borrada pero todavía asignada a un
+  // cliente) devuelve una etiqueta neutra en vez de undefined, así el render no
+  // se rompe hasta que el cliente se reasigne.
   const getPriorityLabel = useCallback((p) => {
-    const fromDb = appSettings?.priority_labels?.[String(p)];
-    return fromDb || PRIO_CLIENT[p];
+    const labels = appSettings?.priority_labels;
+    // Si ya hay prioridades configuradas en la DB, esa es la fuente autoritativa:
+    // una key ausente = prioridad borrada = "Sin prioridad" (no la vieja constante).
+    if (labels && Object.keys(labels).length > 0) {
+      return labels[String(p)] || { label: 'Sin prioridad', color: '#9CA3AF' };
+    }
+    // Sin config en la DB (arranque/carga): fallback a las constantes.
+    return PRIO_CLIENT[p] || { label: 'Sin prioridad', color: '#9CA3AF' };
   }, [appSettings]);
   const getAllPriorityLabels = useCallback(() => {
     const fromDb = appSettings?.priority_labels;
     if (fromDb && Object.keys(fromDb).length > 0) return fromDb;
     return PRIO_CLIENT;
   }, [appSettings]);
+  // Lista ordenada de prioridades para chips, secciones y selectores. Cada item:
+  // { key:Number, label, color, hidden:Bool, order:Number }. `order` define el
+  // rank visible; si no está seteado cae al número de slot. `hidden` marca las
+  // prioridades "descartadas" (se ocultan de la lista por defecto y no cuentan
+  // como clientes activos). Retrocompat: si ningún slot define `hidden`, se
+  // aplica la regla vieja (slot 6 = descartados).
+  const getPriorityList = useCallback(() => {
+    const labels = getAllPriorityLabels();
+    const anyHidden = Object.values(labels).some(v => v && typeof v.hidden === 'boolean');
+    const list = Object.entries(labels).map(([k, v]) => {
+      const key = Number(k);
+      return {
+        key,
+        label: v?.label ?? `Prioridad ${key}`,
+        color: v?.color ?? '#9CA3AF',
+        hidden: anyHidden ? !!v?.hidden : (key === 6),
+        order: (v && typeof v.order === 'number') ? v.order : key,
+      };
+    });
+    list.sort((a, b) => (a.order - b.order) || (a.key - b.key));
+    return list;
+  }, [getAllPriorityLabels]);
+  // ¿La prioridad `p` está marcada como descartada/oculta? Las prioridades
+  // huérfanas (no configuradas) se consideran visibles para que el cliente no
+  // desaparezca de la lista sin aviso.
+  const isPriorityHidden = useCallback((p) => {
+    const item = getPriorityList().find(x => x.key === Number(p));
+    return item ? item.hidden : false;
+  }, [getPriorityList]);
 
   const value = useMemo(() => ({
     // State
@@ -2852,6 +2893,8 @@ export function AppProvider({ children }) {
     deleteContract,
     getPriorityLabel,
     getAllPriorityLabels,
+    getPriorityList,
+    isPriorityHidden,
   }), [
     // Estado (los setters de useState son estables y no necesitan estar aca)
     clients, tasks, view, setView, selectedId, phase, filter, taskFilter,
@@ -2890,7 +2933,7 @@ export function AppProvider({ children }) {
     addStrategy, updateStrategy, deleteStrategy, addStrategyPage,
     updateStrategyPage, deleteStrategyPage, addInvoice, updateInvoice,
     deleteInvoice, linkContract, addContract, updateContract, deleteContract,
-    getPriorityLabel, getAllPriorityLabels,
+    getPriorityLabel, getAllPriorityLabels, getPriorityList, isPriorityHidden,
   ]);
 
   return (

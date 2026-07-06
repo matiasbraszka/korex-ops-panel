@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { PRIO_CLIENT, PHASES } from '../utils/constants';
+import { PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, clientPill } from '../utils/helpers';
 import { satGeneral, satDotColor, satLabel } from '../utils/satisfaccion';
 import KpiRow from '../components/KpiRow';
@@ -113,7 +113,7 @@ function PendienteCell({ client, onSave }) {
 }
 
 export default function ClientsPage() {
-  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, getPriorityLabel, phase, setPhase, updateClient, reorderClient, currentUser, satByClient } = useApp();
+  const { clients, tasks, filter, setFilter, selectedId, setSelectedId, setView, getPriorityLabel, getPriorityList, isPriorityHidden, phase, setPhase, updateClient, reorderClient, currentUser, satByClient } = useApp();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
 
   // Drag&drop refs (solo se usan si isAdmin)
@@ -140,10 +140,20 @@ export default function ClientsPage() {
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
   const visibleClients = clients.filter(c => !isKorexClient(c));
 
-  // Exclude descartados (6) from default active count / KPIs
-  const activeForKpis = visibleClients.filter(c => (c.priority || 5) !== 6);
+  // Prioridades configuradas (dinámicas: se agregan/borran desde Configuración).
+  // `order` define el rango visible; `hidden` = descartados.
+  const priorityList = getPriorityList();
+  const rankMap = new Map(priorityList.map(p => [p.key, p.order]));
+  // Rank de una prioridad para ordenar la lista. Las huérfanas (borradas pero
+  // aún asignadas) van al final para que el cliente siga visible.
+  const rankOf = (p) => (rankMap.has(Number(p)) ? rankMap.get(Number(p)) : 100000 + Number(p || 0));
+
+  // Exclude descartados (hidden) from default active count / KPIs
+  const activeForKpis = visibleClients.filter(c => !isPriorityHidden(c.priority || 5));
   const t = activeForKpis.length;
-  const b = activeForKpis.filter(c => (c.priority || 5) === 1).length;
+  const topKey = priorityList.find(p => !p.hidden)?.key ?? 1;       // prioridad más alta (activa)
+  const lastActive = [...priorityList].reverse().find(p => !p.hidden); // prioridad activa más baja (ej "Nuevos"/"Onboarding")
+  const b = activeForKpis.filter(c => (c.priority || 5) === topKey).length;
   const l = activeForKpis.filter(c => {
     // New system: check if lanzamiento roadmap task is done
     const launchTask = tasks.find(tk => tk.clientId === c.id && tk.isRoadmapTask && tk.templateId === 'lanzamiento');
@@ -151,32 +161,27 @@ export default function ClientsPage() {
     // Fallback to steps
     return c.steps[17] && c.steps[17].status === 'completed';
   }).length;
-  const n = activeForKpis.filter(c => (c.priority || 5) === 5).length;
+  const n = lastActive ? activeForKpis.filter(c => (c.priority || 5) === lastActive.key).length : 0;
 
+  // Un chip por prioridad configurada (incluye descartados) + "Todos".
   const filterDefs = [
-    { key: 'all',         label: 'Todos' },
-    { key: 'super',       label: 'Super prioritarios' },
-    { key: 'important',   label: 'Importantes' },
-    { key: 'normal',      label: 'Normal' },
-    { key: 'poco',        label: 'Poco importantes' },
-    { key: 'new',         label: 'Nuevos' },
-    { key: 'descartados', label: 'Descartados' },
+    { key: 'all', label: 'Todos' },
+    ...priorityList.map(p => ({ key: `p${p.key}`, label: p.label })),
   ];
 
-  // By default (filter === 'all'), hide descartados from the list
-  // Orden: primero por priority asc (para que las secciones queden agrupadas), despues por position asc (orden manual dentro de la seccion).
+  // By default (filter === 'all'), hide descartados from the list.
+  // Orden: primero por rango de prioridad (para agrupar las secciones), después por position asc (orden manual dentro de la sección).
   let cls = [...visibleClients].sort((a, bb) => {
-    const pa = a.priority || 5, pb = bb.priority || 5;
-    if (pa !== pb) return pa - pb;
+    const ra = rankOf(a.priority || 5), rb = rankOf(bb.priority || 5);
+    if (ra !== rb) return ra - rb;
     return (a.position ?? 0) - (bb.position ?? 0);
   });
-  if (filter === 'all')         cls = cls.filter(c => (c.priority || 5) !== 6);
-  if (filter === 'super')       cls = cls.filter(c => (c.priority || 5) === 1);
-  if (filter === 'important')   cls = cls.filter(c => (c.priority || 5) === 2);
-  if (filter === 'normal')      cls = cls.filter(c => (c.priority || 5) === 3);
-  if (filter === 'poco')        cls = cls.filter(c => (c.priority || 5) === 4);
-  if (filter === 'new')         cls = cls.filter(c => (c.priority || 5) === 5);
-  if (filter === 'descartados') cls = cls.filter(c => (c.priority || 5) === 6);
+  if (filter === 'all') {
+    cls = cls.filter(c => !isPriorityHidden(c.priority || 5));
+  } else if (filter.startsWith('p')) {
+    const k = Number(filter.slice(1));
+    cls = cls.filter(c => (c.priority || 5) === k);
+  }
 
   // Filtro por fase actual (set desde el buscador global). 'all' = sin filtro.
   if (phase && phase !== 'all') cls = cls.filter(c => currentTask(c, tasks)?.phase === phase);
@@ -280,7 +285,7 @@ export default function ClientsPage() {
         { label: 'Clientes activos', value: t, color: 'var(--color-blue)' },
         { label: 'Críticos / Urgentes', value: b, color: 'var(--color-red)' },
         { label: 'Ads lanzados', value: l, color: 'var(--color-green)' },
-        { label: 'Nuevos', value: n, color: 'var(--color-purple)' },
+        { label: lastActive?.label || 'Nuevos', value: n, color: 'var(--color-purple)' },
       ]} />
 
       {/* Filters */}

@@ -18,6 +18,7 @@ export default function RoadmapView() {
     hideCompletedTasks,
     hideBlockedTasks,
     getPriorityLabel,
+    isPriorityHidden,
     currentUser,
     teamMembers,
   } = useApp();
@@ -46,7 +47,7 @@ export default function RoadmapView() {
   if (taskPriority !== 'all') {
     filteredClients = filteredClients.filter(c => String(c.priority || 5) === taskPriority);
   } else {
-    filteredClients = filteredClients.filter(c => (c.priority || 5) !== 6);
+    filteredClients = filteredClients.filter(c => !isPriorityHidden(c.priority || 5));
   }
 
   // Filtro integral: ocultar clientes cuyas tareas NO sobrevivan a TODOS los filtros activos.
