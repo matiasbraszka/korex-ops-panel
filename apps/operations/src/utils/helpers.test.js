@@ -216,6 +216,14 @@ describe('computeStatusDurations (tiempo en el estado actual)', () => {
     const { current } = computeStatusDurations(task, comments);
     expect(current.days).toBeLessThan(4); // ~2 días desde el evento
   });
+  it('fallback NO infla el primer estado con createdDate viejo (roadmap)', () => {
+    // Tarea creada hace 200 días (onboarding del cliente) con UN evento reciente.
+    const task = { id: 'k6', status: 'in-progress', createdDate: isoDaysAgo(200) };
+    const comments = [{ task_id: 'k6', kind: 'system', created_at: new Date(Date.now() - 3 * 864e5).toISOString(), event_meta: { field: 'status', from: 'priorizado', to: 'in-progress' } }];
+    const { byStatus, current } = computeStatusDurations(task, comments);
+    expect(byStatus['priorizado'] || 0).toBeLessThan(1); // NO ~197 días falsos
+    expect(current.days).toBeLessThan(4);                 // ~3 días en curso
+  });
 });
 
 describe('getActiveSprint (ignora sprints planned)', () => {

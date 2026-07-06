@@ -951,11 +951,11 @@ export function computeStatusDurations(task, taskComments) {
     const evs = (taskComments || [])
       .filter(c => c.task_id === task.id && c.kind === 'system' && c.event_meta && c.event_meta.field === 'status' && c.created_at)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    if (evs.length) {
-      const startMs = pick(task.createdDate) ?? new Date(evs[0].created_at).getTime();
-      timeline.push({ status: evs[0].event_meta.from || 'backlog', ms: startMs });
-      evs.forEach(e => timeline.push({ status: e.event_meta.to || task.status, ms: new Date(e.created_at).getTime() }));
-    }
+    // Cada evento = entró a un estado en ese momento. Arrancamos en el PRIMER
+    // evento registrado, NO en createdDate: en tareas de roadmap createdDate es
+    // la fecha de onboarding del cliente (meses atrás) e inflaba el primer estado
+    // con tiempos falsos. El tiempo previo al primer evento queda sin atribuir.
+    evs.forEach(e => timeline.push({ status: e.event_meta.to || task.status, ms: new Date(e.created_at).getTime() }));
   }
   const byMs = {};
   const add = (status, ms) => { if (status && ms > 0) byMs[status] = (byMs[status] || 0) + ms; };
