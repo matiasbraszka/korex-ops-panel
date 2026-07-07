@@ -9,6 +9,15 @@ import { facConcepto, facFormaPago, facHtmlFactura, facImprimir, facPad4, facMil
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const uuid = () => (crypto?.randomUUID ? crypto.randomUUID() : 'inv-' + Date.now() + '-' + Math.round(Math.random() * 1e6));
 
+// La factura lleva SIEMPRE la fecha del ingreso cargada en Finanzas (no la de hoy).
+// income_date viene como 'YYYY-MM-DD' (columna date). Si faltara, cae a hoy.
+const incomeISO = (income) => String(income?.income_date || '').slice(0, 10) || todayISO();
+// Date local (no UTC) para que facFechaStr no corra el día por zona horaria.
+const incomeDate = (income) => {
+  const [y, m, d] = incomeISO(income).split('-').map(Number);
+  return (y && m && d) ? new Date(y, m - 1, d) : new Date();
+};
+
 export default function FacturaModal({ income, onClose, onDone }) {
   const [bill, setBill] = useState(null);          // datos fiscales del Directorio
   const [num, setNum] = useState('');              // número de factura (editable)
@@ -77,7 +86,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
 
   const docData = () => ({
     nombreFactura: bill.nombreFactura, idFiscal: bill.idFiscal, direccion: bill.direccion,
-    numeroFmt, fecha: new Date(), concepto, monto, moneda, formaPago,
+    numeroFmt, fecha: incomeDate(income), concepto, monto, moneda, formaPago,
   });
 
   const imprimir = () => { if (!bill) return; facImprimir(facHtmlFactura(docData())); };
@@ -90,7 +99,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
       method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true,
       body: JSON.stringify({
         id: invId, number: numeroFmt, client_id: income.client_id || null,
-        income_id: income.id, issue_date: todayISO(), amount: monto, currency: moneda,
+        income_id: income.id, issue_date: incomeISO(income), amount: monto, currency: moneda,
         concept: concepto, status: 'emitida', payment_method: income.payment_method || null,
         kind: 'ingreso', pdf_url: pdfUrl || null, // ← el link queda guardado de entrada
       }),
@@ -122,7 +131,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
       let arch;
       try {
         const { data, error } = await supabase.functions.invoke('archivar-factura', {
-          body: { html, numero: num, nombreFactura: bill.nombreFactura, fecha: todayISO() },
+          body: { html, numero: num, nombreFactura: bill.nombreFactura, fecha: incomeISO(income) },
         });
         if (error) arch = { ok: false, error: error.message || String(error) };
         else if (data?.ok) arch = { ok: true, url: data.url, carpeta: data.carpeta, pdf_base64: data.pdf_base64 || null };
@@ -177,7 +186,7 @@ export default function FacturaModal({ income, onClose, onDone }) {
             </span>
             <div>
               <div style={{ fontSize: 16, fontWeight: 800 }}>Generar factura</div>
-              <div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 1 }}>{income.payer_name || income.client_name_sheet} · {facFechaStr(income.income_date)}</div>
+              <div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 1 }}>{income.payer_name || income.client_name_sheet} · {facFechaStr(incomeDate(income))}</div>
             </div>
           </div>
           <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
