@@ -1,4 +1,4 @@
-import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle } from 'lucide-react';
+import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle, Trash2, Ban } from 'lucide-react';
 import { fmtClock, colorFromString, msgTypeLabel, initials } from '../lib/format.js';
 import MediaContent from './MediaContent.jsx';
 
@@ -30,20 +30,24 @@ function BodyText({ text, mentions }) {
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
-export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, selectMode, selected, onToggleSelect, quotedMsg, mentions }) {
+export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, onDeleteForEveryone, selectMode, selected, onToggleSelect, quotedMsg, mentions }) {
   const out = msg.direction === 'out';
-  const isMedia = MEDIA_TYPES.has(msg.msg_type);
-  const typeLabel = !isMedia ? msgTypeLabel(msg.msg_type) : null;
+  const deleted = !!msg.deleted_at;
+  const isMedia = !deleted && MEDIA_TYPES.has(msg.msg_type);
+  const typeLabel = !isMedia && !deleted ? msgTypeLabel(msg.msg_type) : null;
   const authorName = !out && isGroup ? (msg.payload?.pushName || (msg.sender_jid || '').split('@')[0]) : null;
   const authorColor = colorFromString(msg.sender_jid || '');
   const failed = msg.status === 'failed';
   const sending = msg.status === 'sending';
 
-  // Acciones (responder / reenviar / seleccionar): en mensajes ya enviados o recibidos.
-  const actionable = !failed && !sending && !msg._temp && (msg.body || isMedia);
+  // Acciones (responder / reenviar / eliminar / seleccionar): en mensajes ya
+  // enviados o recibidos (no en los que fallaron, están enviándose o se borraron).
+  const actionable = !failed && !sending && !msg._temp && !deleted && (msg.body || isMedia);
   const canForward = onForward && actionable;
   const canReply = onReply && actionable;
-  const actions = (canForward || canReply) ? (
+  // Eliminar "para todos": solo mensajes propios (salientes).
+  const canDelete = onDeleteForEveryone && actionable && out;
+  const actions = (canForward || canReply || canDelete) ? (
     <div className="self-center flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-70 transition-opacity duration-150 shrink-0">
       {canReply && (
         <button onClick={() => onReply(msg)} title="Responder a este mensaje"
@@ -55,6 +59,12 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
         <button onClick={() => onForward(msg)} title="Reenviar a otro chat (podés elegir varios)"
                 className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
           <Forward size={13} />
+        </button>
+      )}
+      {canDelete && (
+        <button onClick={() => onDeleteForEveryone(msg)} title="Eliminar para todos"
+                className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#DC2626] hover:border-[#FCA5A5] flex items-center justify-center cursor-pointer">
+          <Trash2 size={13} />
         </button>
       )}
     </div>
@@ -78,21 +88,29 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
           {authorName}
         </div>
       )}
-      {quotedMsg && (
-        <div className="mb-1 rounded-md border-l-[3px] border-[#4A67D8] bg-black/[0.045] px-2 py-1 overflow-hidden">
-          <div className="text-[10.5px] font-bold text-[#4A67D8] truncate leading-tight">{quotedAuthor}</div>
-          <div className="text-[11px] text-text2 truncate leading-tight">{snippetOf(quotedMsg)}</div>
+      {deleted ? (
+        <div className="text-[12.5px] italic text-text3 flex items-center gap-1.5">
+          <Ban size={13} className="shrink-0" /> {out ? 'Eliminaste este mensaje' : 'Se eliminó este mensaje'}
         </div>
+      ) : (
+        <>
+          {quotedMsg && (
+            <div className="mb-1 rounded-md border-l-[3px] border-[#4A67D8] bg-black/[0.045] px-2 py-1 overflow-hidden">
+              <div className="text-[10.5px] font-bold text-[#4A67D8] truncate leading-tight">{quotedAuthor}</div>
+              <div className="text-[11px] text-text2 truncate leading-tight">{snippetOf(quotedMsg)}</div>
+            </div>
+          )}
+          {isMedia && (
+            <div className={msg.body ? 'mb-1' : ''}>
+              <MediaContent msg={msg} />
+            </div>
+          )}
+          {typeLabel && (
+            <div className={`text-[11.5px] font-medium ${msg.body ? 'mb-0.5' : ''} text-text2`}>{typeLabel}</div>
+          )}
+          {msg.body && <BodyText text={msg.body} mentions={mentions} />}
+        </>
       )}
-      {isMedia && (
-        <div className={msg.body ? 'mb-1' : ''}>
-          <MediaContent msg={msg} />
-        </div>
-      )}
-      {typeLabel && (
-        <div className={`text-[11.5px] font-medium ${msg.body ? 'mb-0.5' : ''} text-text2`}>{typeLabel}</div>
-      )}
-      {msg.body && <BodyText text={msg.body} mentions={mentions} />}
 
       <div className="flex items-center justify-end gap-1 mt-0.5">
         <span className={`text-[9.5px] ${out && !failed ? 'text-[#7A9484]' : 'text-text3'}`}>

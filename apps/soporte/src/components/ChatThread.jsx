@@ -19,7 +19,7 @@ const WALLPAPER = {
 };
 
 export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
-  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, groupDirByConv, loadGroupDirectory } = useSoporte();
+  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, deleteForEveryone, groupDirByConv, loadGroupDirectory } = useSoporte();
   const { isAdmin } = useAuth();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
@@ -33,6 +33,17 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const toggleSelect = useCallback((m) => {
     setSelected((prev) => { const n = new Set(prev); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; });
   }, []);
+
+  // Eliminar "para todos" (revoke). Solo mensajes propios; confirma antes.
+  const handleDelete = useCallback(async (m) => {
+    if (!window.confirm('¿Eliminar este mensaje para todos? Se borra también del WhatsApp del contacto.')) return;
+    try {
+      await deleteForEveryone(selectedId, m.id);
+    } catch (e) {
+      console.error('delete for everyone', e);
+      window.alert('No se pudo eliminar para todos. Puede que WhatsApp ya no lo permita (pasó demasiado tiempo desde que se envió).');
+    }
+  }, [deleteForEveryone, selectedId]);
   const stickToBottom = useRef(true);
   const prevHeightRef = useRef(null);
 
@@ -40,7 +51,12 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
   const conv = selectedConversation;
 
   const groups = useMemo(() => {
-    const sorted = [...thread.items].sort((a, b) => {
+    // "Contenido protegido" (secretEncryptedMessage): wrapper E2E que WhatsApp no
+    // deja ver del lado del panel (viene sobre todo de mensajes del teléfono).
+    // Es ruido irrecuperable → no se muestra en el hilo.
+    const sorted = [...thread.items]
+      .filter((m) => m.msg_type !== 'secretEncryptedMessage')
+      .sort((a, b) => {
       const ta = a.wa_timestamp || a.created_at || '';
       const tb = b.wa_timestamp || b.created_at || '';
       if (ta !== tb) return ta < tb ? -1 : 1;
@@ -229,6 +245,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   onDiscard={() => discardFailed(selectedId, g.msg.id)}
                   onForward={enterSelect}
                   onReply={setReplyTo}
+                  onDeleteForEveryone={handleDelete}
                   selectMode={selectMode}
                   selected={selected.has(g.msg.id)}
                   onToggleSelect={toggleSelect}

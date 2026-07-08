@@ -34,7 +34,7 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
   const {
     selectedConversation: conv, updateNotes, updateConversation,
     appointmentsByConv, loadAppointments, cancelAppointment,
-    groupDirByConv, loadGroupDirectory,
+    groupDirByConv, loadGroupDirectory, agendarContact,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
   } = useSoporte();
   const { isAdmin } = useAuth();
@@ -48,6 +48,11 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
   // Solo admins pueden cambiarla; un no-admin con rol soporte solo ve sus chats.
   const [assigneeIds, setAssigneeIds] = useState([]);
   const [assigneesBusy, setAssigneesBusy] = useState(false);
+
+  // ── Agendar con nombre a elección (para contactos que NO están en la base) ──
+  const [agendarDraft, setAgendarDraft] = useState('');
+  const [agendarBusy, setAgendarBusy] = useState(false);
+  const [agendarDone, setAgendarDone] = useState(false);
 
   // ── Edición de grupo (nombre / descripción / participantes) ──
   const [subjectDraft, setSubjectDraft] = useState('');
@@ -121,6 +126,26 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
     fetchAssignees(conv.id).then((ids) => { if (alive) setAssigneeIds(ids); }).catch(() => {});
     return () => { alive = false; };
   }, [open, conv?.id]);
+
+  // Prefill del campo "agendar con nombre" con el nombre manual actual.
+  useEffect(() => {
+    setAgendarDraft(conv?.custom_name || '');
+    setAgendarDone(false);
+  }, [conv?.id, conv?.custom_name]);
+
+  const saveAgendar = async () => {
+    if (agendarBusy) return;
+    setAgendarBusy(true); setAgendarDone(false);
+    try {
+      await agendarContact(conv.id, agendarDraft.trim());
+      setAgendarDone(true);
+      setTimeout(() => setAgendarDone(false), 2500);
+    } catch (e) {
+      console.error('agendar', e);
+    } finally {
+      setAgendarBusy(false);
+    }
+  };
 
   // Alterna (agrega/quita) una persona asignada. Optimista + persiste por RPC.
   // La RPC ya sincroniza la columna legacy assigned_to y bumpea updated_at, así
@@ -313,6 +338,33 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
                   <span className="text-[12.5px] flex-1 text-text3">Sin vincular</span>
                 )}
               </button>
+            </div>
+          )}
+
+          {/* Agendar con nombre a elección → Google Contacts (solo 1:1).
+              Para contactos que NO están en la base. Si el chat ya está vinculado
+              a la base, ESE nombre tiene prioridad al mostrarse en el panel. */}
+          {!conv.is_group && (
+            <div>
+              <SectionLabel>Agendar con nombre</SectionLabel>
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={agendarDraft}
+                  onChange={(e) => setAgendarDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveAgendar(); }}
+                  placeholder="Nombre para guardar…"
+                  className="flex-1 min-w-0 px-2.5 py-1.5 text-[12.5px] rounded-lg border border-border outline-none focus:border-[#F59E0B]"
+                />
+                <button onClick={saveAgendar}
+                        disabled={agendarBusy || agendarDraft.trim() === (conv.custom_name || '')}
+                        className="shrink-0 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border-0 bg-[#F59E0B] text-white cursor-pointer disabled:opacity-50 disabled:cursor-default">
+                  {agendarBusy ? '…' : (agendarDone ? '✓ Listo' : 'Agendar')}
+                </button>
+              </div>
+              <div className="text-[10px] text-text3 mt-1">
+                Lo guarda en Google Contacts para que veas el nombre cuando te escriba.
+                {(conv.contact || conv.client) && ' Este chat ya está en la base: ese nombre tiene prioridad.'}
+              </div>
             </div>
           )}
 

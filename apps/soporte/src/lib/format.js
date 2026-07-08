@@ -91,11 +91,14 @@ export function prettyPreview(preview) {
   return preview.replace(/\[(\w+Message|\w+)\]/g, (match, type) => TYPE_LABELS[type] || match);
 }
 
-// Nombre a mostrar de una conversación: contacto vinculado > nombre de perfil > teléfono > jid.
+// Nombre a mostrar de una conversación. Prioridad:
+//   contacto vinculado a la base (contact.full_name) > nombre manual "agendado"
+//   (custom_name) > nombre de perfil de WhatsApp (pushName) > teléfono > jid.
+// La base SIEMPRE gana; custom_name es para contactos que no están en la base.
 // hidePhone=true (para usuarios no admin): si no hay nombre real, NO revela el
 // número — muestra una etiqueta genérica.
 export function convName(conv, hidePhone = false) {
-  const named = conv?.contact?.full_name || conv?.wa_profile_name;
+  const named = conv?.contact?.full_name || conv?.custom_name || conv?.wa_profile_name;
   if (named) return named;
   if (hidePhone) return conv?.is_group ? 'Grupo' : 'Contacto';
   return fmtPhone(conv?.wa_phone) || conv?.wa_jid || '';

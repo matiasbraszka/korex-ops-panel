@@ -5,7 +5,7 @@ import { fmtNextCita } from './format.js';
 
 // Columnas explícitas: participants (puede tener cientos de miembros en
 // comunidades) NO viaja con la lista — se pide aparte al abrir el panel.
-const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,description,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at';
+const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,custom_name,description,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at';
 const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,email),client:clients(id,name)`;
 
 export async function fetchConversations() {
@@ -282,6 +282,29 @@ export async function invokeCita(payload) {
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   return data; // { ok, appointment } | { ok } en cancel
+}
+
+// Agenda un chat 1-a-1 con un nombre a elección: lo guarda como custom_name en
+// la conversación y lo da de alta en Google Contacts (para que el WhatsApp del
+// teléfono muestre ese nombre). La base de datos igual tiene prioridad.
+export async function invokeAgendar({ conversationId, name }) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-agendar', {
+    body: { conversation_id: conversationId, name },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data; // { ok, custom_name, google }
+}
+
+// Elimina un mensaje "para todos" (revoke estilo WhatsApp) vía Evolution.
+// Solo mensajes propios (salientes). Marca deleted_at.
+export async function invokeDeleteForEveryone(messageId) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-delete', {
+    body: { message_id: messageId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data; // { ok }
 }
 
 export async function invokeMedia(messageId) {

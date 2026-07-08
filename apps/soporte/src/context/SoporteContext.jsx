@@ -4,7 +4,8 @@ import { useAuth } from '@korex/auth';
 import {
   fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
   patchSoporteConfig, fetchAppointments, fetchParticipants, fetchGroupNames,
-  invokeSend, invokeCita, invokeMedia, invokeGroup, invokeLink, PAGE_SIZE,
+  invokeSend, invokeCita, invokeMedia, invokeGroup, invokeLink,
+  invokeAgendar, invokeDeleteForEveryone, PAGE_SIZE,
 } from '../lib/api.js';
 import { fmtNextCita } from '../lib/format.js';
 
@@ -383,6 +384,27 @@ export function SoporteProvider({ children }) {
     return res;
   }, []);
 
+  // Agenda un chat 1-a-1 con un nombre a eleccion (custom_name) y lo da de alta
+  // en Google Contacts (edge whatsapp-agendar). La base de datos igual tiene
+  // prioridad al mostrar el nombre (contact.full_name > custom_name > pushName).
+  const agendarContact = useCallback(async (convId, name) => {
+    const clean = String(name || '').trim();
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, custom_name: clean || null } : c)));
+    return invokeAgendar({ conversationId: convId, name: clean });
+  }, []);
+
+  // Elimina un mensaje "para todos" (revoke estilo WhatsApp) via Evolution.
+  // Solo mensajes propios; al confirmar, marca deleted_at en el hilo.
+  const deleteForEveryone = useCallback(async (convId, messageId) => {
+    await invokeDeleteForEveryone(messageId);
+    setThreads((prev) => {
+      const cur = prev[convId];
+      if (!cur) return prev;
+      const items = cur.items.map((m) => (m.id === messageId ? { ...m, deleted_at: new Date().toISOString() } : m));
+      return { ...prev, [convId]: { ...cur, items } };
+    });
+  }, []);
+
   const saveTagsCatalog = useCallback(async (tags) => {
     setConfig((prev) => ({ ...prev, tags }));
     await patchSoporteConfig({ tags });
@@ -646,7 +668,7 @@ export function SoporteProvider({ children }) {
     supportNumber: config.support_number || '',
     waLinks: config.wa_links || [],
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact, linkByFinance,
+    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
@@ -657,7 +679,7 @@ export function SoporteProvider({ children }) {
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact, linkByFinance, appointmentsByConv,
+    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,

@@ -21,6 +21,13 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
   const extraTags = allTags.length - tags.length;
   // Próxima cita embebida (opcional — si la query de conversaciones la trae).
   const cita = conv.next_appointment || null;
+  // Preview del último mensaje, ocultando el cartel de "contenido protegido"
+  // (secretEncryptedMessage: ruido irrecuperable que no mostramos).
+  const rawPreview = lastIsOurs
+    ? prettyPreview(conv.last_message_preview).replace(/^Vos: /, '')
+    : prettyPreview(conv.last_message_preview);
+  const previewText = (/Contenido protegido/i.test(rawPreview) ? '' : rawPreview)
+    || (conv.is_group ? 'Grupo' : 'Sin mensajes');
 
   return (
     <button
@@ -63,11 +70,7 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
         {/* Fila 2: preview (tilde doble azul si el último mensaje es nuestro) */}
         <div className={`text-[12px] truncate mt-0.5 flex items-center gap-1 ${unread > 0 ? 'text-text font-medium' : 'text-text3'}`}>
           {lastIsOurs && <CheckCheck size={13} className="text-[#53BDEB] shrink-0" />}
-          <span className="truncate">
-            {(lastIsOurs
-              ? prettyPreview(conv.last_message_preview).replace(/^Vos: /, '')
-              : prettyPreview(conv.last_message_preview)) || (conv.is_group ? 'Grupo' : 'Sin mensajes')}
-          </span>
+          <span className="truncate">{previewText}</span>
         </div>
 
         {/* Fila 3: CLIENTE vinculado (para identificar de quién es) + etiquetas + cita + no leídos.
