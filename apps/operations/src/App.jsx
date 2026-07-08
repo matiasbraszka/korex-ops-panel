@@ -4,6 +4,7 @@ import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, Ch
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
+import { guestEmailForCode, normalizeGuestCode } from './utils/guest';
 // ClientsPage queda eager (es la ruta default — evita un flash de Suspense al login).
 // El resto se baja en su propio chunk solo si el usuario entra a esa pestaña.
 import ClientsPage from './pages/ClientsPage';
@@ -53,6 +54,13 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resetMsg, setResetMsg] = useState('');
+  // Modo de acceso: 'staff' (email + contraseña) o 'guest' (solo código).
+  // Un link directo a /invitado abre ya en modo invitado.
+  const [mode, setMode] = useState(() => {
+    try { return window.location.pathname.replace(/\/+$/, '').toLowerCase().endsWith('/invitado') ? 'guest' : 'staff'; }
+    catch { return 'staff'; }
+  });
+  const [code, setCode] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -67,6 +75,22 @@ function LoginPage() {
     }
   };
 
+  // Login de invitado: el código ES la credencial. Derivamos el correo sintético
+  // y usamos el mismo código normalizado como contraseña.
+  const handleGuestSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const c = normalizeGuestCode(code);
+    if (!c) { setError('Ingresá tu código de acceso'); return; }
+    setSubmitting(true);
+    const { error: authError } = await signIn(guestEmailForCode(c), c);
+    setSubmitting(false);
+    if (authError) {
+      setError('Código incorrecto');
+      setCode('');
+    }
+  };
+
   const handleReset = async () => {
     setResetMsg('');
     if (!email.trim()) { setError('Ingresá tu email primero'); return; }
@@ -76,49 +100,94 @@ function LoginPage() {
     else setResetMsg('Te mandamos un email con un link para resetear la contraseña.');
   };
 
+  const switchMode = (m) => { setMode(m); setError(''); setResetMsg(''); };
+
+  const inputCls = 'w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]';
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-white">
       <div className="w-full max-w-[380px] px-8">
         <div className="text-center mb-10">
           <img src="https://assets.cdn.filesafe.space/yvsigXlQTGQpDlSg1j7X/media/69d38d8184c045c2748d55e8.png" alt="Método Korex" className="h-[48px] w-auto mx-auto" />
         </div>
-        <form onSubmit={handleSubmit}>
-          <label className="block text-[13px] font-semibold text-text mb-2">Correo electrónico</label>
-          <input
-            type="email"
-            name="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
-            placeholder="usuario@email.com"
-            autoFocus
-            required
-          />
-          <label className="block text-[13px] font-semibold text-text mb-2">Contraseña</label>
-          <input
-            type="password"
-            name="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-blue-bg2 border border-border rounded-xl py-3.5 px-4 text-text text-sm font-sans mb-5 outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(91,124,245,0.1)]"
-            placeholder={'••••••••••'}
-            required
-          />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-3.5 bg-blue text-white border-none rounded-xl text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark disabled:opacity-60"
-          >
-            {submitting ? 'Entrando...' : 'Iniciar sesión'}
-          </button>
-          {error && <div className="text-red text-xs text-center mt-3.5">{error}</div>}
-          {resetMsg && <div className="text-green-600 text-xs text-center mt-3.5">{resetMsg}</div>}
-        </form>
-        <div className="text-center mt-6">
-          <button type="button" onClick={handleReset} className="text-blue text-[13px] no-underline bg-transparent border-0 cursor-pointer">
-            {'¿'}Olvidaste tu contraseña?
-          </button>
-        </div>
+
+        {mode === 'guest' ? (
+          <>
+            <form onSubmit={handleGuestSubmit}>
+              <label className="block text-[13px] font-semibold text-text mb-2">Código de acceso</label>
+              <input
+                type="text"
+                name="code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className={inputCls + ' font-mono tracking-wide'}
+                placeholder="tu código"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+              />
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3.5 bg-blue text-white border-none rounded-xl text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark disabled:opacity-60"
+              >
+                {submitting ? 'Entrando...' : 'Entrar'}
+              </button>
+              {error && <div className="text-red text-xs text-center mt-3.5">{error}</div>}
+            </form>
+            <div className="text-center mt-6">
+              <button type="button" onClick={() => switchMode('staff')} className="text-blue text-[13px] no-underline bg-transparent border-0 cursor-pointer">
+                Soy del equipo · entrar con email
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <form onSubmit={handleSubmit}>
+              <label className="block text-[13px] font-semibold text-text mb-2">Correo electrónico</label>
+              <input
+                type="email"
+                name="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputCls}
+                placeholder="usuario@email.com"
+                autoFocus
+                required
+              />
+              <label className="block text-[13px] font-semibold text-text mb-2">Contraseña</label>
+              <input
+                type="password"
+                name="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputCls}
+                placeholder={'••••••••••'}
+                required
+              />
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3.5 bg-blue text-white border-none rounded-xl text-[15px] font-semibold font-sans cursor-pointer mt-1 hover:bg-blue-dark disabled:opacity-60"
+              >
+                {submitting ? 'Entrando...' : 'Iniciar sesión'}
+              </button>
+              {error && <div className="text-red text-xs text-center mt-3.5">{error}</div>}
+              {resetMsg && <div className="text-green-600 text-xs text-center mt-3.5">{resetMsg}</div>}
+            </form>
+            <div className="text-center mt-6 flex flex-col gap-2">
+              <button type="button" onClick={handleReset} className="text-blue text-[13px] no-underline bg-transparent border-0 cursor-pointer">
+                {'¿'}Olvidaste tu contraseña?
+              </button>
+              <button type="button" onClick={() => switchMode('guest')} className="text-text3 text-[13px] no-underline bg-transparent border-0 cursor-pointer hover:text-blue">
+                Soy invitado · entrar con código
+              </button>
+            </div>
+          </>
+        )}
+
         <div className="text-center mt-10 text-xs text-text3">
           Política de Privacidad &middot; Términos y Condiciones
         </div>
@@ -406,6 +475,9 @@ function MainLayout() {
     <Suspense fallback={<div className="text-text3 text-center py-20">Cargando…</div>}>
     <Routes>
       <Route path="/" element={<Navigate to={homePath} replace />} />
+      {/* Link directo de invitado: tras loguearse cae acá y lo mandamos a su home
+          (para el invitado, /operations/tasks). */}
+      <Route path="/invitado" element={<Navigate to={homePath} replace />} />
       <Route path="/operations" element={<Navigate to={homePath} replace />} />
       <Route path="/operations/clients" element={guestBlock(<ClientsPage />)} />
       <Route path="/operations/tasks" element={opsGuarded(<TareasPage />)} />

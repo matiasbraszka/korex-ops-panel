@@ -3,7 +3,8 @@ import { supabase } from '@korex/db';
 import { useAuth } from '@korex/auth';
 import { useApp } from '../../context/AppContext';
 import { DEPARTMENTS } from '../../utils/constants';
-import { UserPlus, Trash2, ImagePlus, Zap } from 'lucide-react';
+import { guestEmailForCode, generateGuestCode, normalizeGuestCode } from '../../utils/guest';
+import { UserPlus, Trash2, ImagePlus, Zap, KeyRound, Copy, Check } from 'lucide-react';
 
 // Editor unico de equipo + cuentas + roles del sistema.
 // Vive como tab dentro de Configuraciones. Sin paginas separadas.
@@ -22,6 +23,8 @@ export default function TeamUsersEditor() {
   const [accountModal, setAccountModal] = useState(null); // { member, role }
   // Modal alta de miembro nuevo (no estaba en la lista).
   const [newMemberModal, setNewMemberModal] = useState(false);
+  // Modal alta de invitado (login por código, sin correo).
+  const [newGuestModal, setNewGuestModal] = useState(false);
   // Modal de activacion masiva.
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
@@ -123,6 +126,11 @@ export default function TeamUsersEditor() {
               <Zap size={13} /> Activar miembros sin cuenta
             </button>
           )}
+          <button onClick={() => setNewGuestModal(true)}
+                  className="py-1.5 px-3 rounded-md border border-border bg-white text-text2 text-[12px] hover:bg-surface2 flex items-center gap-1.5"
+                  title="Colaborador externo que entra con un código (sin correo) y solo ve sus tareas">
+            <KeyRound size={13} /> Nuevo invitado
+          </button>
           <button onClick={() => setNewMemberModal(true)}
                   className="py-1.5 px-3 rounded-md bg-blue text-white text-[12px] hover:bg-blue-dark flex items-center gap-1.5">
             <UserPlus size={13} /> Nuevo usuario
@@ -249,6 +257,13 @@ export default function TeamUsersEditor() {
           addTeamMember={addTeamMember}
           onClose={() => setNewMemberModal(false)}
           onDone={async () => { setNewMemberModal(false); await load(); }}
+        />
+      )}
+
+      {newGuestModal && (
+        <NewGuestModal
+          onClose={() => setNewGuestModal(false)}
+          onDone={async () => { setNewGuestModal(false); await load(); }}
         />
       )}
 
@@ -684,6 +699,147 @@ function NewUserModal({ rolesCatalog, addTeamMember, onClose, onDone }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// Modal "Nuevo invitado": crea un colaborador externo que entra con un CÓDIGO
+// (sin correo). El código es su credencial; por detrás se crea la cuenta con un
+// correo sintético derivado del código y el rol RBAC "invitado".
+function NewGuestModal({ onClose, onDone }) {
+  const [name, setName] = useState('');
+  const [code, setCode] = useState(() => generateGuestCode());
+  const [color, setColor] = useState('#5B7CF5');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [created, setCreated] = useState(null); // { name, code, link }
+  const [copied, setCopied] = useState('');
+
+  const loginLink = (() => { try { return window.location.origin + '/invitado'; } catch { return '/invitado'; } })();
+
+  const copy = (text, which) => {
+    navigator.clipboard?.writeText(text);
+    setCopied(which);
+    setTimeout(() => setCopied(''), 1500);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const c = normalizeGuestCode(code);
+    if (!name.trim()) { setError('El nombre es obligatorio.'); return; }
+    if (c.length < 6) { setError('El código debe tener al menos 6 caracteres.'); return; }
+    setSubmitting(true);
+    const { data, error: fnErr } = await supabase.functions.invoke('admin-create-user', {
+      body: {
+        email: guestEmailForCode(c),
+        password: c,
+        name: name.trim(),
+        role: 'Invitado',
+        color,
+        roles: ['invitado'],
+      },
+    });
+    setSubmitting(false);
+    if (fnErr || data?.error) {
+      setError(data?.detail || data?.error || fnErr?.message || 'Error creando el invitado');
+      return;
+    }
+    setCreated({ name: name.trim(), code: c, link: loginLink });
+  };
+
+  const close = () => { if (created) onDone(); else onClose(); };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={close}>
+      <div className="bg-white rounded-xl w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
+        {!created ? (
+          <form onSubmit={submit}>
+            <div className="p-5 border-b border-border">
+              <h2 className="text-[15px] font-bold flex items-center gap-2"><KeyRound size={15} /> Nuevo invitado</h2>
+              <p className="text-xs text-text3 mt-1">
+                Colaborador externo con acceso <strong>solo a Tareas</strong> (sus propias tareas). Entra con un <strong>código</strong>, sin correo. Vos le pasás el código por WhatsApp.
+              </p>
+            </div>
+            <div className="p-5 space-y-3">
+              <Field label="Nombre *">
+                <input value={name} onChange={(e) => setName(e.target.value)}
+                       placeholder="Juan Pérez" required className={inputCls} autoFocus />
+                <p className="text-[10px] text-text3 mt-1">Con este nombre le asignás las tareas.</p>
+              </Field>
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <Field label="Código de acceso">
+                  <div className="flex gap-2">
+                    <input value={code} onChange={(e) => setCode(e.target.value)}
+                           minLength={6} required className={inputCls + ' font-mono'} />
+                    <button type="button" onClick={() => setCode(generateGuestCode())}
+                            className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[12px] hover:bg-surface2 shrink-0">
+                      Generar
+                    </button>
+                  </div>
+                </Field>
+                <Field label="Color">
+                  <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
+                         className="w-full h-[38px] rounded-md border border-border cursor-pointer bg-bg" />
+                </Field>
+              </div>
+              {error && <div className="text-red text-xs bg-red/5 rounded-md p-2">{error}</div>}
+            </div>
+            <div className="p-5 border-t border-border flex justify-end gap-2">
+              <button type="button" onClick={onClose}
+                      className="py-2 px-4 rounded-md border border-border bg-white text-text2 text-[13px] hover:bg-surface2">
+                Cancelar
+              </button>
+              <button type="submit" disabled={submitting}
+                      className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark disabled:opacity-60">
+                {submitting ? 'Creando…' : 'Crear invitado'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div className="p-5 border-b border-border">
+              <h2 className="text-[15px] font-bold flex items-center gap-2 text-green-600"><Check size={16} /> Invitado creado</h2>
+              <p className="text-xs text-text3 mt-1">Pasale a <strong>{created.name}</strong> el link y su código.</p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-text2 mb-1">Link de acceso</label>
+                <div className="flex gap-2 items-center">
+                  <code className="flex-1 bg-surface2 rounded-md p-2.5 text-[12px] break-all">{created.link}</code>
+                  <button type="button" onClick={() => copy(created.link, 'link')}
+                          className="py-2 px-2.5 rounded-md border border-border bg-white text-text2 hover:bg-surface2 shrink-0">
+                    {copied === 'link' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text2 mb-1">Código de acceso</label>
+                <div className="flex gap-2 items-center">
+                  <code className="flex-1 bg-surface2 rounded-md p-2.5 text-[16px] font-mono font-bold tracking-wider text-center">{created.code}</code>
+                  <button type="button" onClick={() => copy(created.code, 'code')}
+                          className="py-2 px-2.5 rounded-md border border-border bg-white text-text2 hover:bg-surface2 shrink-0">
+                    {copied === 'code' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+              <button type="button" onClick={() => copy(`Entrá a ${created.link} y poné tu código: ${created.code}`, 'msg')}
+                      className="w-full py-2 rounded-md border border-blue text-blue text-[12px] hover:bg-blue-bg flex items-center justify-center gap-1.5">
+                {copied === 'msg' ? <Check size={14} /> : <Copy size={14} />} Copiar mensaje para WhatsApp
+              </button>
+              <p className="text-[11px] text-text3">
+                Guardá el código: por seguridad no se puede volver a ver. Si se pierde, generá un invitado nuevo o cambiale la contraseña.
+              </p>
+            </div>
+            <div className="p-5 border-t border-border flex justify-end">
+              <button type="button" onClick={onDone}
+                      className="py-2 px-4 rounded-md bg-blue text-white text-[13px] hover:bg-blue-dark">
+                Listo
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
