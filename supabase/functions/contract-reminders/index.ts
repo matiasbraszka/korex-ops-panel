@@ -97,7 +97,11 @@ Deno.serve(async () => {
 
   // ─── Avisos de VENCIMIENTO de contratos ───
   // Mira los contratos con fecha de vencimiento/renovación que están por vencer o
-  // ya vencieron. Avisa a legal + canal del cliente + #contratos-legalidad. No repite antes de N días.
+  // ya vencieron. Avisa SOLO a legal (campana del panel) + #contratos-legalidad. No repite antes de N días.
+  //
+  // NOTA (2026-07-08, pedido de Matías): al canal PRIVADO del cliente ya NO se le
+  // postea el aviso de vencimiento/renovación (era intrusivo). Igual que el pendiente
+  // de firma, el vencimiento queda solo como aviso INTERNO en #contratos-legalidad + campana.
   const renewalDays = Number(onb.contract_renewal_days) || 30;   // avisar X días antes
   const renewalRepeatDays = Number(onb.contract_renewal_repeat_days) || 7; // no repetir antes de M días
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -121,15 +125,14 @@ Deno.serve(async () => {
     if (!expired && c.renewal_alerted_at && c.renewal_alerted_at > renewalRepeatCutoff) continue;
 
     const { data: cli } = await supabase
-      .from("clients").select("name, slack_channel_id").eq("id", c.client_id).maybeSingle();
+      .from("clients").select("name").eq("id", c.client_id).maybeSingle();
     const name = str(cli?.name);
-    const channelId = str(cli?.slack_channel_id);
     const titulo = str(c.title) || "Contrato";
 
     if (expired) {
       await supabase.from("contracts").update({ status: "vencido", renewal_alerted_at: todayStr }).eq("id", c.id);
-      await postSlack(botToken, channelId,
-        `:rotating_light: *El contrato "${titulo}" venció* (${c.renewal_date}). Coordinemos la renovación.`);
+      // Aviso SOLO al canal interno de legalidad + campana. Al canal del cliente ya
+      // NO se le postea el vencimiento (pedido de Matías 2026-07-08).
       await postSlack(botToken, legalChannel,
         `:rotating_light: *Contrato vencido* — *${name || "Cliente"}*\n• Documento: ${titulo}\n• Venció: ${c.renewal_date}`);
       await supabase.from("notifications").insert(
@@ -144,8 +147,8 @@ Deno.serve(async () => {
     } else {
       const daysLeft = Math.max(0, Math.round((new Date(c.renewal_date).getTime() - Date.now()) / 86400000));
       await supabase.from("contracts").update({ renewal_alerted_at: todayStr }).eq("id", c.id);
-      await postSlack(botToken, channelId,
-        `:calendar: *El contrato "${titulo}" vence en ${daysLeft} día${daysLeft === 1 ? "" : "s"}* (${c.renewal_date}). ¿Coordinamos la renovación?`);
+      // Aviso SOLO al canal interno de legalidad + campana. Al canal del cliente ya
+      // NO se le postea el "por vencer" (pedido de Matías 2026-07-08).
       await postSlack(botToken, legalChannel,
         `:calendar: *Contrato por vencer (${daysLeft} día${daysLeft === 1 ? "" : "s"})* — *${name || "Cliente"}*\n• Documento: ${titulo}\n• Vence: ${c.renewal_date}`);
       await supabase.from("notifications").insert(
