@@ -27,6 +27,9 @@ export default function SprintBoardView() {
     taskAssignee, taskClientFilter, taskComments,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+  // Invitado ("mover y marcar"): arrastra tarjetas entre columnas, pero no cambia
+  // la prioridad ni edita metadatos desde la tarjeta.
+  const isGuest = !!currentUser?.isGuest;
 
   const [draggedId, setDraggedId] = useState(null);
   const [overCol, setOverCol] = useState(null);
@@ -241,7 +244,9 @@ export default function SprintBoardView() {
                           </span>
                         : <span />}
                       <span style={{ flex: 1, minWidth: 0 }} />
-                      <PriorityPicker value={t.priority} onChange={(p) => { updateTask(t.id, { priority: p || 'normal' }); setFlashCardId(t.id); }} />
+                      {isGuest
+                        ? <PriorityPicker value={t.priority} onChange={() => {}} readOnly />
+                        : <PriorityPicker value={t.priority} onChange={(p) => { updateTask(t.id, { priority: p || 'normal' }); setFlashCardId(t.id); }} />}
                       {blocked && (
                         <span title="Bloqueada por otra tarea sin validar" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 5, padding: '1px 5px', flexShrink: 0 }}>
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>

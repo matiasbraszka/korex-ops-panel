@@ -39,6 +39,9 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
     taskComments, unreadCommentTaskIds, addTaskToSprint,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+  // Invitado ("mover y marcar"): puede tocar el punto de completar y arrastrar,
+  // pero NO editar/borrar/crear/reasignar. Ocultamos esos controles de la fila.
+  const isGuest = !!currentUser?.isGuest;
   // Modo embebido: se monta dentro de la ficha de un cliente (pestaña Tareas).
   // Muestra SOLO ese cliente, siempre expandido y sin la cromática global.
   const embedded = !!clientId;
@@ -383,29 +386,33 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                               ) : (
                                 <>
                                   <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>{t.title}</span>
-                                  <span onClick={(e) => { e.stopPropagation(); setEditTitle(t.title); setEditingId(t.id); }} title="Editar título" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>
-                                  <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Eliminar la tarea «${t.title}»?`)) deleteTask(t.id); }} title="Eliminar tarea" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Trash2 size={12} /></span>
+                                  {!isGuest && <span onClick={(e) => { e.stopPropagation(); setEditTitle(t.title); setEditingId(t.id); }} title="Editar título" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Pencil size={12} /></span>}
+                                  {!isGuest && <span onClick={(e) => { e.stopPropagation(); if (window.confirm(`Eliminar la tarea «${t.title}»?`)) deleteTask(t.id); }} title="Eliminar tarea" style={{ color: '#C7CBD3', cursor: 'pointer', flexShrink: 0, display: 'flex' }}><Trash2 size={12} /></span>}
                                 </>
                               )}
                               {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: unread ? '#5B7CF5' : '#9CA3AF', flexShrink: 0 }} title={`${cCount} comentario${cCount === 1 ? '' : 's'}${unread ? ' · sin leer' : ''}`}><MessageSquare size={13} />{cCount}{unread && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}</span>}
-                              <PriorityPicker value={t.priority} onChange={(p) => { updateTask(t.id, { priority: p || 'normal' }); setFlashTaskId(t.id); }} />
-                              <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />
+                              {!isGuest && <PriorityPicker value={t.priority} onChange={(p) => { updateTask(t.id, { priority: p || 'normal' }); setFlashTaskId(t.id); }} />}
+                              {!isGuest && <DepartmentPicker value={t.department} onChange={(dep) => updateTask(t.id, { department: dep })} />}
+                              {!isGuest && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="Horas estimadas" onClick={(e) => e.stopPropagation()}>
                                 <input type="number" min="0" step="0.5" defaultValue={t.estimatedHours ?? ''} placeholder="–"
                                   onBlur={(e) => { const v = e.target.value === '' ? null : Number(e.target.value); if (v !== (t.estimatedHours ?? null)) updateTask(t.id, { estimatedHours: v }); }}
                                   style={{ width: 40, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: '#3F4653', textAlign: 'right', border: '1px solid #E2E5EB', borderRadius: 6, padding: '3px 5px', background: '#fff', outline: 'none' }} />
                                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
                               </span>
-                              <AssigneePicker value={t.assignee} onChange={(name) => { updateTask(t.id, { assignee: name }); setFlashTaskId(t.id); }} />
+                              )}
+                              {!isGuest && <AssigneePicker value={t.assignee} onChange={(name) => { updateTask(t.id, { assignee: name }); setFlashTaskId(t.id); }} />}
                               {/* Columna fija para el botón de sprint: así "En sprint"/"al sprint"
                                   y las tareas terminadas (sin botón) quedan alineadas en la fila. */}
+                              {!isGuest && (
                               <span style={{ width: 120, display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
                                 {t.status !== 'done' && <AddToSprintButton task={t} />}
                               </span>
+                              )}
                             </div>
                           );
                         })}
-                        {(() => {
+                        {!isGuest && (() => {
                           const key = `${o.c.id}::${g.key}`;
                           return adding === key ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: '1px solid #F0F2F5' }} onClick={(e) => e.stopPropagation()}>
@@ -434,7 +441,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                     ) : (
                       <span onClick={() => { setNewPhaseText(''); setAddingPhase(o.c.id); }} style={{ fontSize: 12, fontWeight: 600, color: '#5B7CF5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Plus size={13} /> Nuevo objetivo</span>
                     ))}
-                    {!embedded && <span onClick={() => { setSelectedId(o.c.id); setView('clients'); }} style={{ fontSize: 12, fontWeight: 500, color: '#9CA3AF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Abrir ficha del cliente <ArrowUpRight size={12} /></span>}
+                    {!embedded && !isGuest && <span onClick={() => { setSelectedId(o.c.id); setView('clients'); }} style={{ fontSize: 12, fontWeight: 500, color: '#9CA3AF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Abrir ficha del cliente <ArrowUpRight size={12} /></span>}
                   </div>
                 </div>
               )}

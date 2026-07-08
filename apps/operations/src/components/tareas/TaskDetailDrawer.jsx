@@ -45,6 +45,12 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   } = useApp();
   const task = useMemo(() => (tasks || []).find(t => t.id === taskId) || null, [tasks, taskId]);
   const client = task ? (clients || []).find(c => c.id === task.clientId) : null;
+  // Invitado ("mover y marcar"): la ficha queda de SOLO LECTURA para metadatos y
+  // estructura. Sí puede: marcar/validar (footer), tildar checklist y criterios
+  // (marcar avance) y comentar. No puede: editar título, reasignar responsable/
+  // revisor, cambiar sprint/prioridad/área/horas/descripción, agregar/borrar
+  // ítems, agregar/quitar bloqueos ni eliminar la tarea.
+  const canEdit = !currentUser?.isGuest;
   const [tab, setTab] = useState('tarea');
   const [newItem, setNewItem] = useState('');
   const [dragId, setDragId] = useState(null);
@@ -174,7 +180,9 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
 
   // `dnd` opcional: { dragId, setDragId, onReorder } habilita arrastrar para
   // reordenar (agarrando el ⋮⋮). Sin `dnd`, la fila se comporta como antes.
-  const checkRow = (it, accent, onToggle, onDel, dnd) => (
+  // `dnd` opcional habilita reordenar arrastrando. `canDelete` (default true) muestra
+  // el botón de borrar; el invitado tilda pero no borra ni reordena.
+  const checkRow = (it, accent, onToggle, onDel, dnd, canDelete = true) => (
     <div key={it.id}
       onDragOver={dnd ? (e) => e.preventDefault() : undefined}
       onDrop={dnd ? (e) => { e.preventDefault(); dnd.onReorder(dnd.dragId, it.id); dnd.setDragId(null); } : undefined}
@@ -190,7 +198,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
         {it.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
       </span>
       <span onClick={() => onToggle(it.id)} style={{ flex: 1, fontSize: 12.5, lineHeight: 1.4, cursor: 'pointer', color: it.done ? '#9CA3AF' : '#1A1D26', textDecoration: it.done ? 'line-through' : 'none' }}>{it.text}</span>
-      <span onClick={() => onDel(it.id)} style={{ cursor: 'pointer', color: '#D1D5DB', padding: 2, display: 'flex', flexShrink: 0 }}><Trash2 size={14} /></span>
+      {canDelete && <span onClick={() => onDel(it.id)} style={{ cursor: 'pointer', color: '#D1D5DB', padding: 2, display: 'flex', flexShrink: 0 }}><Trash2 size={14} /></span>}
     </div>
   );
 
@@ -206,11 +214,11 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999, background: '#FEF2F2', color: '#DC2626', fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase' }}><Lock size={11} />Bloqueada</span>
             )}
             <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <AddToWeeklyButton task={task} size={17} />
+              {canEdit && <AddToWeeklyButton task={task} size={17} />}
               <span onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9CA3AF' }}><X size={17} /></span>
             </span>
           </div>
-          <input defaultValue={task.title} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== task.title) updateTask(task.id, { title: v }); }}
+          <input defaultValue={task.title} readOnly={!canEdit} onBlur={(e) => { if (!canEdit) return; const v = e.target.value.trim(); if (v && v !== task.title) updateTask(task.id, { title: v }); }}
             style={{ width: '100%', marginTop: 11, fontSize: 16.5, fontWeight: 700, lineHeight: 1.32, letterSpacing: '-.01em', color: '#16181D', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
         </div>
 
@@ -222,7 +230,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               <span style={metaLabel}>Responsable</span>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
                 {owner && <PersonAvatar member={owner} size={22} />}
-                <select value={owner?.name || ''} onChange={(e) => updateTask(task.id, { assignee: e.target.value })} style={selStyle}>
+                <select value={owner?.name || ''} disabled={!canEdit} onChange={(e) => updateTask(task.id, { assignee: e.target.value })} style={selStyle}>
                   <option value="">Sin asignar</option>
                   {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
@@ -232,7 +240,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               <span style={metaLabel}>Revisor</span>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
                 {task.reviewer && <PersonAvatar member={reviewerMember} name={task.reviewer} size={22} ring="#EC4899" />}
-                <select value={task.reviewer || ''} onChange={(e) => updateTask(task.id, { reviewer: e.target.value || null })} style={{ ...selStyle, color: task.reviewer ? '#1A1D26' : '#9CA3AF' }}>
+                <select value={task.reviewer || ''} disabled={!canEdit} onChange={(e) => updateTask(task.id, { reviewer: e.target.value || null })} style={{ ...selStyle, color: task.reviewer ? '#1A1D26' : '#9CA3AF' }}>
                   <option value="">Sin revisor</option>
                   {(teamMembers || []).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
@@ -242,24 +250,24 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <div style={{ ...metaRow, alignItems: 'flex-start' }}><span style={{ ...metaLabel, paddingTop: 1 }}>Objetivo / fase</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right', lineHeight: 1.35 }}>{phaseLabel}</span></div>
             <div style={metaRow}>
               <span style={metaLabel}>Sprint{nSprints > 1 ? ` · lleva ${nSprints}` : ''}</span>
-              <select value={task.sprintId || ''} onChange={(e) => onSprintChange(e.target.value)} style={{ ...selStyle, justifySelf: 'end', color: task.sprintId ? '#1A1D26' : '#9CA3AF' }}>
+              <select value={task.sprintId || ''} disabled={!canEdit} onChange={(e) => onSprintChange(e.target.value)} style={{ ...selStyle, justifySelf: 'end', color: task.sprintId ? '#1A1D26' : '#9CA3AF' }}>
                 <option value="">Sin sprint (solo en Objetivo)</option>
                 {sprintsSorted.map(s => <option key={s.id} value={s.id}>{s.name}{s.status === 'closed' ? ' (cerrado)' : s.id === activeSprint?.id ? ' (actual)' : s.status === 'planned' ? ' (próximo)' : ''}</option>)}
               </select>
             </div>
             <div style={metaRow}>
               <span style={metaLabel}>Prioridad</span>
-              <span style={{ justifySelf: 'end' }}><PriorityPicker value={task.priority} onChange={(p) => updateTask(task.id, { priority: p || 'normal' })} variant="chip" /></span>
+              <span style={{ justifySelf: 'end' }}><PriorityPicker value={task.priority} onChange={(p) => updateTask(task.id, { priority: p || 'normal' })} variant="chip" readOnly={!canEdit} /></span>
             </div>
             <div style={metaRow}>
               <span style={metaLabel}>Área</span>
-              <span style={{ justifySelf: 'end' }}><DepartmentPicker value={task.department} onChange={(d) => updateTask(task.id, { department: d })} variant="chip" /></span>
+              <span style={{ justifySelf: 'end' }}><DepartmentPicker value={task.department} onChange={(d) => updateTask(task.id, { department: d })} variant="chip" readOnly={!canEdit} /></span>
             </div>
             <div style={{ ...metaRow, borderBottom: 'none' }}>
               <span style={metaLabel}>Esfuerzo estimado</span>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
-                <input type="number" min="0" step="0.5" defaultValue={task.estimatedHours ?? ''} placeholder="–"
-                  onBlur={(e) => { const v = e.target.value === '' ? null : Number(e.target.value); if (v !== (task.estimatedHours ?? null)) updateTask(task.id, { estimatedHours: v }); }}
+                <input type="number" min="0" step="0.5" defaultValue={task.estimatedHours ?? ''} placeholder="–" readOnly={!canEdit}
+                  onBlur={(e) => { if (!canEdit) return; const v = e.target.value === '' ? null : Number(e.target.value); if (v !== (task.estimatedHours ?? null)) updateTask(task.id, { estimatedHours: v }); }}
                   style={{ width: 56, fontSize: 12.5, fontWeight: 600, color: '#1A1D26', textAlign: 'center', border: '1px solid #E2E5EB', borderRadius: 7, padding: '4px 8px', background: '#fff', outline: 'none', fontFamily: 'inherit' }} />
                 <span style={{ fontSize: 12, color: '#9CA3AF' }}>h</span>
               </span>
@@ -286,8 +294,8 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <div>
               <div style={{ padding: '18px 18px 16px', borderBottom: '1px solid #F0F1F4' }}>
                 <SectionHead icon={<AlignLeft size={15} />} title="Descripción" sub="Contexto para no dejar dudas" />
-                <textarea defaultValue={task.description || ''} placeholder="Describí la tarea para que no quede lugar a dudas…"
-                  onBlur={(e) => { const v = e.target.value; if (v !== (task.description || '')) updateTask(task.id, { description: v }); }}
+                <textarea defaultValue={task.description || ''} placeholder="Describí la tarea para que no quede lugar a dudas…" readOnly={!canEdit}
+                  onBlur={(e) => { if (!canEdit) return; const v = e.target.value; if (v !== (task.description || '')) updateTask(task.id, { description: v }); }}
                   style={{ width: '100%', minHeight: 104, border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
               </div>
               <div style={{ padding: '16px 18px 20px' }}>
@@ -298,11 +306,13 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                     <div style={{ width: subPct + '%', height: '100%', background: ACC, borderRadius: 999, transition: 'width .3s ease' }} />
                   </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column' }}>{checklist.map(it => checkRow(it, ACC, toggleItem, removeItem, { dragId, setDragId, onReorder: moveChecklist }))}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
-                  <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
-                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>{checklist.map(it => checkRow(it, ACC, toggleItem, removeItem, canEdit ? { dragId, setDragId, onReorder: moveChecklist } : null, canEdit))}</div>
+                {canEdit && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
+                    <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -318,8 +328,8 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
 
               <div style={{ paddingTop: 2 }}>
                 <SectionHead icon={<ClipboardCheck size={15} />} title="Definición de hecho" sub="Cuándo se da por terminada" />
-                <textarea defaultValue={task.definitionOfDone || ''} placeholder="Definí cuándo se considera terminada…"
-                  onBlur={(e) => { const v = e.target.value; if (v !== (task.definitionOfDone || '')) updateTask(task.id, { definitionOfDone: v }); }}
+                <textarea defaultValue={task.definitionOfDone || ''} placeholder="Definí cuándo se considera terminada…" readOnly={!canEdit}
+                  onBlur={(e) => { if (!canEdit) return; const v = e.target.value; if (v !== (task.definitionOfDone || '')) updateTask(task.id, { definitionOfDone: v }); }}
                   style={{ width: '100%', minHeight: 86, border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
               </div>
 
@@ -333,11 +343,13 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 ) : (
                   <div style={{ fontSize: 11.5, lineHeight: 1.5, color: '#9CA3AF', background: '#FAFBFC', border: '1px dashed #E2E5EB', borderRadius: 9, padding: '11px 12px' }}>Sin criterios: la tarea se puede validar libremente. Agregá criterios para exigir que se cumplan antes de validar.</div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column' }}>{criteria.map(it => checkRow(it, '#16A34A', toggleAc, removeAc))}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <input value={newAc} onChange={(e) => setNewAc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAc(); } }} placeholder="Agregar criterio de aceptación…" style={inputStyle} />
-                  <button onClick={addAc} style={addBtnStyle}><Plus size={16} /></button>
-                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>{criteria.map(it => checkRow(it, '#16A34A', toggleAc, removeAc, null, canEdit))}</div>
+                {canEdit && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <input value={newAc} onChange={(e) => setNewAc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAc(); } }} placeholder="Agregar criterio de aceptación…" style={inputStyle} />
+                    <button onClick={addAc} style={addBtnStyle}><Plus size={16} /></button>
+                  </div>
+                )}
               </div>
 
               <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
@@ -356,16 +368,18 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                         <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: done ? '#22C55E' : '#F59E0B' }} />
                         <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: done ? '#9CA3AF' : '#1A1D26', textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={taskLabel(b)}>{taskLabel(b)}</span>
                         <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', padding: '3px 7px', borderRadius: 999, background: done ? '#ECFDF5' : '#FFFBEB', color: done ? '#15803D' : '#B45309', whiteSpace: 'nowrap', flexShrink: 0 }}>{done ? 'HECHO' : 'PENDIENTE'}</span>
-                        <span onClick={() => removeBlocker(b.id)} title="Quitar bloqueo" style={{ cursor: 'pointer', color: '#D1D5DB', display: 'flex', flexShrink: 0 }}><X size={15} /></span>
+                        {canEdit && <span onClick={() => removeBlocker(b.id)} title="Quitar bloqueo" style={{ cursor: 'pointer', color: '#D1D5DB', display: 'flex', flexShrink: 0 }}><X size={15} /></span>}
                       </div>
                     );
                   })}
                 </div>
+                {canEdit && (
                 <select value="" onChange={(e) => { addBlocker(e.target.value); e.target.value = ''; }} disabled={!candidates.length}
                   style={{ width: '100%', marginTop: 8, fontSize: 12, color: candidates.length ? '#6B7280' : '#9CA3AF', border: '1px dashed #D0D5DD', borderRadius: 9, padding: '10px 11px', outline: 'none', background: '#FAFBFC', cursor: candidates.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
                   <option value="">{candidates.length ? '+ Elegí la tarea que la bloquea…' : 'No hay tareas sin completar de este cliente'}</option>
                   {candidatesByPhase.map(g => <optgroup key={g.key} label={g.label}>{g.list.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</optgroup>)}
                 </select>
+                )}
               </div>
             </div>
           )}
@@ -480,7 +494,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             ) : (
               <button disabled title={footerLabel} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#EEF0F3', color: '#9CA3AF', border: 'none', borderRadius: 11, padding: 13, fontSize: 13, fontWeight: 600, cursor: 'not-allowed', fontFamily: 'inherit' }}><Lock size={15} />{footerLabel}</button>
             )}
-            <button onClick={() => { if (window.confirm(`Eliminar la tarea «${task.title}»? Esta acción no se puede deshacer.`)) { deleteTask(task.id); onClose(); } }} title="Eliminar tarea" style={{ width: 46, height: 46, flexShrink: 0, border: '1px solid #FECACA', borderRadius: 11, background: '#fff', color: '#EF4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={17} /></button>
+            {canEdit && <button onClick={() => { if (window.confirm(`Eliminar la tarea «${task.title}»? Esta acción no se puede deshacer.`)) { deleteTask(task.id); onClose(); } }} title="Eliminar tarea" style={{ width: 46, height: 46, flexShrink: 0, border: '1px solid #FECACA', borderRadius: 11, background: '#fff', color: '#EF4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={17} /></button>}
           </div>
         </div>
       </div>

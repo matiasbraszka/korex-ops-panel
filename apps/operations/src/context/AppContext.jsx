@@ -57,7 +57,12 @@ export function AppProvider({ children }) {
   const [taskDueFilter, setTaskDueFilter] = useState('all'); // all | this-week | next-week | this-month
   const [taskDepartment, setTaskDepartment] = useState('all'); // all | ventas | operaciones | programacion | marketing
   // currentUser deriva de Supabase Auth + team_members (ver derivacion mas abajo).
-  const { user: authUser, profile, isAdmin } = useCurrentUser();
+  const { user: authUser, profile, roles, isAdmin } = useCurrentUser();
+  // Rol "invitado": colaborador externo con vista SUPER acotada (solo Tareas:
+  // Objetivos + Tablero Sprint, y solo sus tareas). Se detecta por el rol RBAC,
+  // no por el titulo descriptivo de team_members. Nunca convive con otro rol
+  // (el editor de Equipo lo hace exclusivo), pero exigimos !isAdmin por las dudas.
+  const isGuest = Array.isArray(roles) && roles.includes('invitado') && !isAdmin;
   const currentUser = useMemo(() => {
     if (!profile) return null;
     return {
@@ -70,8 +75,9 @@ export function AppProvider({ children }) {
       canAccessSettings: isAdmin || !!profile.can_access_settings,
       authId: authUser?.id || null,
       isAdmin,
+      isGuest,
     };
-  }, [profile, isAdmin, authUser]);
+  }, [profile, isAdmin, isGuest, authUser]);
   const [briefing, setBriefing] = useState(null);
   const [satByClient, setSatByClient] = useState({}); // satisfacción WhatsApp por client_id (RPC ops_wa_satisfaction)
   const [reportFeedbacks, setReportFeedbacks] = useState([]);

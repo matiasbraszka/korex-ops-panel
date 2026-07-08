@@ -14,12 +14,15 @@ function AreaIcon({ dept, size = 15 }) {
 // Selector de área. variant='icon' muestra solo el ícono (filas/tarjetas);
 // variant='chip' muestra ícono + label + chevron (ficha). El popover usa
 // position:fixed para no quedar recortado por contenedores con overflow.
-export default function DepartmentPicker({ value, onChange, variant = 'icon' }) {
+export default function DepartmentPicker({ value, onChange, variant = 'icon', readOnly = false }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
   const btnRef = useRef(null);
   const dept = value ? DEPARTMENTS[value] : null;
+  // readOnly (invitado): se muestra el área pero no se puede cambiar.
+  const openIf = readOnly ? undefined : () => setOpen(v => !v);
+  const cur = readOnly ? 'default' : 'pointer';
 
   useEffect(() => {
     if (!open) return;
@@ -54,20 +57,20 @@ export default function DepartmentPicker({ value, onChange, variant = 'icon' }) 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }} onClick={(e) => e.stopPropagation()}>
       {variant === 'chip' ? (
-        <span ref={btnRef} onClick={() => setOpen(v => !v)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer', border: '1px solid #E2E5EB', borderRadius: 8, padding: '4px 9px' }}>
+        <span ref={btnRef} onClick={openIf}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, cursor: cur, border: '1px solid #E2E5EB', borderRadius: 8, padding: '4px 9px' }}>
           <AreaIcon dept={dept} />
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1D26' }}>{dept ? dept.label : 'Sin área'}</span>
-          <ChevronDown size={13} stroke="#9CA3AF" />
+          {!readOnly && <ChevronDown size={13} stroke="#9CA3AF" />}
         </span>
       ) : (
-        <button ref={btnRef} type="button" onClick={() => setOpen(v => !v)} title={dept ? `Área: ${dept.label}` : 'Asignar área'}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+        <button ref={btnRef} type="button" onClick={openIf} title={dept ? `Área: ${dept.label}` : 'Asignar área'}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, border: 'none', background: 'transparent', cursor: cur, padding: 0 }}>
           <AreaIcon dept={dept} />
         </button>
       )}
 
-      {open && pos && (
+      {open && pos && !readOnly && (
         <div data-area-popover
           style={{ position: 'fixed', left: pos.left, top: pos.top, width: pos.width, zIndex: 1000, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, boxShadow: '0 12px 32px rgba(10,22,40,.16)', padding: 6 }}>
           {DEPARTMENT_ORDER.map(key => {

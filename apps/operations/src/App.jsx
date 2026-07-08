@@ -290,7 +290,7 @@ function MainLayout() {
   // Areas del panel: cada una tiene color propio, ruta base y modulos.
   // El sidebar muestra un "area switcher" arriba (si el usuario tiene >1)
   // y abajo los modulos del area activa, coloreados con ese mismo color.
-  const opsItems = [
+  const opsItemsFull = [
     { id: 'clients',   label: 'Clientes',      Icon: Users,          path: '/operations/clients' },
     { id: 'tasks',     label: 'Tareas',        Icon: ClipboardList,  path: '/operations/tasks' },
     { id: 'llamadas',  label: 'Llamadas',      Icon: Phone,          path: '/operations/llamadas' },
@@ -298,6 +298,10 @@ function MainLayout() {
     { id: 'equipo',    label: 'Accountability',  Icon: Sparkles,    path: '/operations/equipo' },
     { id: 'videos',    label: 'Tutoriales',    Icon: Play,           path: '/operations/videos' },
   ];
+  // Invitado: vista SUPER acotada → solo Tareas. Recortar los items del área
+  // Operaciones deja el sidebar (PC), el bottom-nav y el drawer mobile con un
+  // único módulo, porque todos leen de este mismo array.
+  const opsItems = currentUser?.isGuest ? opsItemsFull.filter((it) => it.id === 'tasks') : opsItemsFull;
   // Marketing — área aparte (métricas de VSL de Voomly). Visible para quien ve Operaciones.
   const marketingItems = [
     { id: 'vsl', label: 'VSL', Icon: BarChart3, path: '/marketing/vsl' },
@@ -380,9 +384,11 @@ function MainLayout() {
   // Fallback al primer area accesible. Asi un user sin Operaciones que cae en
   // / o /operations/* termina en su area real (Ventas) en vez de ver un
   // ClientsPage sin permisos.
-  const homePath = canAccessOperations
-    ? '/operations/clients'
-    : (canAccessSales ? '/sales/kpis' : (canAccessSoporte ? '/soporte/inbox' : (canAccessMarketing ? '/marketing/vsl' : '/operations/clients')));
+  const homePath = currentUser?.isGuest
+    ? '/operations/tasks'
+    : (canAccessOperations
+      ? '/operations/clients'
+      : (canAccessSales ? '/sales/kpis' : (canAccessSoporte ? '/soporte/inbox' : (canAccessMarketing ? '/marketing/vsl' : '/operations/clients'))));
   // Guard: si el user NO tiene acceso a operaciones, redirigimos cualquier
   // /operations/* a su home. Antes solo se gateaba el sidebar y la ruta de
   // /admin/settings — las rutas /operations/* quedaban abiertas y un vendedor
@@ -390,6 +396,9 @@ function MainLayout() {
   // momentaneamente el modulo Clientes/Tareas hasta refrescar.
   const opsGuarded = (node) => (canAccessOperations ? node : <Navigate to={homePath} replace />);
   const marketingGuarded = (node) => (canAccessMarketing ? node : <Navigate to={homePath} replace />);
+  // Invitado: solo puede entrar a /operations/tasks. Cualquier otra ruta de
+  // Operaciones (aunque tenga permiso operations) lo redirige a Tareas.
+  const guestBlock = (node) => (currentUser?.isGuest ? <Navigate to="/operations/tasks" replace /> : opsGuarded(node));
 
   // Rutas del modulo Operaciones bajo el prefix /operations. El shell a
   // futuro (Fase 1+) va a agregar mas prefixes como /sales.
@@ -398,22 +407,22 @@ function MainLayout() {
     <Routes>
       <Route path="/" element={<Navigate to={homePath} replace />} />
       <Route path="/operations" element={<Navigate to={homePath} replace />} />
-      <Route path="/operations/clients" element={opsGuarded(<ClientsPage />)} />
+      <Route path="/operations/clients" element={guestBlock(<ClientsPage />)} />
       <Route path="/operations/tasks" element={opsGuarded(<TareasPage />)} />
-      <Route path="/operations/llamadas" element={opsGuarded(<LlamadasPage />)} />
-      <Route path="/operations/dme" element={opsGuarded(<DmePage />)} />
-      <Route path="/operations/equipo" element={opsGuarded(<EquipoPage />)} />
+      <Route path="/operations/llamadas" element={guestBlock(<LlamadasPage />)} />
+      <Route path="/operations/dme" element={guestBlock(<DmePage />)} />
+      <Route path="/operations/equipo" element={guestBlock(<EquipoPage />)} />
       {/* Compat: rutas viejas → /operations/equipo */}
       <Route path="/operations/informes" element={<Navigate to="/operations/equipo" replace />} />
       <Route path="/operations/ideas" element={<Navigate to="/operations/equipo" replace />} />
-      <Route path="/operations/videos" element={opsGuarded(<VideosPage />)} />
+      <Route path="/operations/videos" element={guestBlock(<VideosPage />)} />
       {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
       <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
-      <Route path="/operations/publicidad" element={opsGuarded(<PublicidadPage />)} />
-      <Route path="/operations/feedback" element={opsGuarded(<FeedbackPage />)} />
-      <Route path="/operations/dashboard" element={opsGuarded(<DashboardPage />)} />
+      <Route path="/operations/publicidad" element={guestBlock(<PublicidadPage />)} />
+      <Route path="/operations/feedback" element={guestBlock(<FeedbackPage />)} />
+      <Route path="/operations/dashboard" element={guestBlock(<DashboardPage />)} />
       {/* Compat: rutas viejas redirigen a /admin/settings. */}
       <Route path="/operations/settings" element={<Navigate to="/admin/settings" replace />} />
       <Route path="/admin/users" element={<Navigate to="/admin/settings" replace />} />
@@ -744,10 +753,12 @@ function MainLayout() {
             <span className={`inline-flex items-center gap-1 text-[10px] py-0.5 px-2 rounded-xl bg-surface2 max-md:hidden ${syncStatus === 'syncing' ? 'text-blue' : syncStatus === 'error' ? 'text-red' : 'text-text3'}`}>
               {syncStatus === 'syncing' ? '↻ Guardando...' : syncStatus === 'error' ? '✕ Error sync' : '● Sincronizado'}
             </span>
-            {/* Campana de notificaciones — visible en todas las áreas */}
-            <NotificationBell />
-            {/* SearchBar global solo busca clientes/tareas de Operaciones — ocultar en area Ventas */}
-            {pathPrefix !== 'sales' && <SearchBar />}
+            {/* Campana de notificaciones — visible en todas las áreas.
+                Oculta para el invitado (vista mínima; puede referir a otros clientes). */}
+            {!currentUser?.isGuest && <NotificationBell />}
+            {/* SearchBar global busca TODOS los clientes/tareas de Operaciones →
+                se oculta para Ventas y para el invitado (le filtraría clientes ajenos). */}
+            {pathPrefix !== 'sales' && !currentUser?.isGuest && <SearchBar />}
             {view === 'clients' && (
               <button
                 className="py-1.5 px-2.5 rounded-md border-none bg-blue text-white text-xs font-medium cursor-pointer font-sans hover:bg-blue-dark flex items-center gap-1.5 shrink-0 max-md:py-1 max-md:px-2 max-md:text-[11px]"

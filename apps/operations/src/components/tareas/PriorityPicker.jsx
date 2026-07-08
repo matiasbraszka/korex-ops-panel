@@ -7,12 +7,15 @@ import { TASK_PRIORITY, TASK_PRIORITY_ORDER } from '../../utils/constants';
 // variant='chip'  → chip con label + chevron (ficha de la tarea).
 // El popover usa position:fixed para no quedar recortado por contenedores con
 // overflow (mismo patrón que DepartmentPicker).
-export default function PriorityPicker({ value, onChange, variant = 'pill' }) {
+export default function PriorityPicker({ value, onChange, variant = 'pill', readOnly = false }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
   const btnRef = useRef(null);
   const prio = value ? TASK_PRIORITY[value] : null;
+  // readOnly (invitado): se muestra la prioridad pero no se puede cambiar.
+  const openIf = readOnly ? undefined : () => setOpen(v => !v);
+  const cur = readOnly ? 'default' : 'pointer';
 
   useEffect(() => {
     if (!open) return;
@@ -47,25 +50,27 @@ export default function PriorityPicker({ value, onChange, variant = 'pill' }) {
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
       {variant === 'chip' ? (
-        <span ref={btnRef} onClick={() => setOpen(v => !v)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer', border: '1px solid #E2E5EB', borderRadius: 8, padding: '4px 9px', background: prio ? prio.bg : '#fff' }}>
+        <span ref={btnRef} onClick={openIf}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, cursor: cur, border: '1px solid #E2E5EB', borderRadius: 8, padding: '4px 9px', background: prio ? prio.bg : '#fff' }}>
           <Flag size={13} fill={prio ? prio.color : 'none'} stroke={prio ? prio.color : '#9CA3AF'} />
           <span style={{ fontSize: 13, fontWeight: 600, color: prio ? prio.color : '#9CA3AF' }}>{prio ? prio.label : 'Sin prioridad'}</span>
-          <ChevronDown size={13} stroke="#9CA3AF" />
+          {!readOnly && <ChevronDown size={13} stroke="#9CA3AF" />}
         </span>
       ) : prio ? (
-        <span ref={btnRef} onClick={() => setOpen(v => !v)} title={`Prioridad: ${prio.label}`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', borderRadius: 6, padding: '2px 7px', background: prio.bg, color: prio.color, fontSize: 10.5, fontWeight: 700, lineHeight: 1.4, whiteSpace: 'nowrap' }}>
+        <span ref={btnRef} onClick={openIf} title={`Prioridad: ${prio.label}`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: cur, borderRadius: 6, padding: '2px 7px', background: prio.bg, color: prio.color, fontSize: 10.5, fontWeight: 700, lineHeight: 1.4, whiteSpace: 'nowrap' }}>
           <Flag size={10} fill={prio.color} stroke={prio.color} />{prio.short}
         </span>
+      ) : readOnly ? (
+        <span title="Sin prioridad" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24 }}><Flag size={14} stroke="#C7CBD3" /></span>
       ) : (
-        <button ref={btnRef} type="button" onClick={() => setOpen(v => !v)} title="Asignar prioridad"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+        <button ref={btnRef} type="button" onClick={openIf} title="Asignar prioridad"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, border: 'none', background: 'transparent', cursor: cur, padding: 0 }}>
           <Flag size={14} stroke="#C7CBD3" />
         </button>
       )}
 
-      {open && pos && (
+      {open && pos && !readOnly && (
         <div data-prio-popover
           style={{ position: 'fixed', left: pos.left, top: pos.top, width: pos.width, zIndex: 1000, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, boxShadow: '0 12px 32px rgba(10,22,40,.16)', padding: 6 }}>
           {TASK_PRIORITY_ORDER.map(key => {

@@ -18,8 +18,11 @@ const TAB_ICONS = {
 export default function TareasToolbar({ view, setView, views = [], onlySprint, setOnlySprint }) {
   const {
     activeSprint, teamMembers, clients, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter,
-    closeSprint, hideCompletedTasks, setHideCompletedTasks,
+    closeSprint, hideCompletedTasks, setHideCompletedTasks, currentUser,
   } = useApp();
+  // Invitado: sin selectores que listen TODOS los clientes/encargados (fuga) ni
+  // "Cerrar sprint" (acción de líder). Conserva las pestañas y el menú Filtros.
+  const isGuest = !!currentUser?.isGuest;
   const isObj = view === 'objetivos';
   const isSprint = view === 'sprint';
   // Solo las vistas con tareas filtrables muestran los controles.
@@ -72,6 +75,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
       {showFilters && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* Cliente */}
+          {!isGuest && (
           <div ref={cRef} style={{ position: 'relative' }}>
             <span onClick={() => setClientOpen(v => !v)} style={trigger}>
               {selClient
@@ -102,8 +106,10 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
               </div>
             )}
           </div>
+          )}
 
           {/* Encargado */}
+          {!isGuest && (
           <div ref={pRef} style={{ position: 'relative' }}>
             <span onClick={() => setPersonOpen(v => !v)} style={trigger}>
               {selMember
@@ -130,6 +136,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
               </div>
             )}
           </div>
+          )}
 
           {/* Filtros (toggles) */}
           <div ref={fRef} style={{ position: 'relative' }}>
@@ -154,7 +161,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
             )}
           </div>
 
-          {isSprint && activeSprint && (
+          {isSprint && activeSprint && !isGuest && (
             <span onClick={() => { if (window.confirm('Cerrar el sprint en curso: lo no terminado pasa al sprint siguiente y se archiva el resumen. ¿Continuar?')) closeSprint(); }}
               style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: '#5B7CF5', borderRadius: 9, padding: '6px 13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Cerrar sprint</span>
           )}

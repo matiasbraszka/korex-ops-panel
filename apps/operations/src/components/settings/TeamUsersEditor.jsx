@@ -76,13 +76,15 @@ export default function TeamUsersEditor() {
     const has = current.has(role);
 
     let nextRoles;
-    if (role === 'admin') {
-      // admin exclusivo: si lo activan, queda solo admin; si lo apagan, queda vacio.
-      nextRoles = has ? [] : ['admin'];
+    if (role === 'admin' || role === 'invitado') {
+      // Roles exclusivos: admin (ya implica acceso total) e invitado (vista SUPER
+      // acotada que no debe convivir con otros roles, o el recorte de UI se rompe).
+      nextRoles = has ? [] : [role];
     } else {
-      // operations / sales: no pueden convivir con admin (admin ya implica acceso).
+      // operations / sales / etc: no conviven con admin ni con invitado.
       const set = new Set(current);
       set.delete('admin');
+      set.delete('invitado');
       if (has) set.delete(role); else set.add(role);
       nextRoles = [...set];
     }
