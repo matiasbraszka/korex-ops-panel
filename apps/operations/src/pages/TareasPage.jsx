@@ -88,7 +88,7 @@ export default function TareasPage() {
       {isSprint && view === 'rendimiento' && <RendimientoView />}
       {isSprint && view === 'objetivos' && <ObjetivosView onlySprint={onlySprint} />}
       {isSprint && view === 'sprint' && <SprintBoardView />}
-      {isSprint && view === 'calendario' && <CalendarView />}
+      {isSprint && view === 'calendario' && <CalendarView onlySprint={onlySprint} />}
       {isSprint && view === 'todo' && <WeeklyTodoView />}
 
       {/* Vistas legacy */}

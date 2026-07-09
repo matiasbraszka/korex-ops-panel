@@ -25,8 +25,9 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
   const isGuest = !!currentUser?.isGuest;
   const isObj = view === 'objetivos';
   const isSprint = view === 'sprint';
+  const isCal = view === 'calendario';
   // Solo las vistas con tareas filtrables muestran los controles.
-  const showFilters = isObj || isSprint || view === 'lista' || view === 'calendario';
+  const showFilters = isObj || isSprint || view === 'lista' || isCal;
 
   const [personOpen, setPersonOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
@@ -53,7 +54,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
   const selMember = (teamMembers || []).find(m => m.name === taskAssignee);
 
   const trigger = { display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#3F4653', border: '1px solid #E2E5EB', borderRadius: 9, padding: '5px 10px', cursor: 'pointer', background: '#fff', whiteSpace: 'nowrap' };
-  const activeFilters = (hideCompletedTasks ? 1 : 0) + (isObj && onlySprint ? 1 : 0);
+  const activeFilters = (hideCompletedTasks ? 1 : 0) + ((isObj || isCal) && onlySprint ? 1 : 0);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 12, padding: '7px 10px' }}>
@@ -150,7 +151,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
                   <span style={{ width: 18, height: 18, borderRadius: 5, border: hideCompletedTasks ? 'none' : '1.5px solid #D0D5DD', background: hideCompletedTasks ? '#5B7CF5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{hideCompletedTasks && <Check size={12} stroke="#fff" strokeWidth={3} />}</span>
                   <span style={{ fontSize: 13, color: '#1A1D26' }}>Ocultar completadas</span>
                 </div>
-                {isObj && (
+                {(isObj || isCal) && (
                   <div onClick={() => setOnlySprint(!onlySprint)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 9px', borderRadius: 8, cursor: 'pointer' }}>
                     <span style={{ width: 18, height: 18, borderRadius: 5, border: onlySprint ? 'none' : '1.5px solid #D0D5DD', background: onlySprint ? '#5B7CF5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{onlySprint && <Check size={12} stroke="#fff" strokeWidth={3} />}</span>
                     <Zap size={13} fill="#5B7CF5" stroke="none" />

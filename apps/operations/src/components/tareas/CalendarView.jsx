@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DEPARTMENTS, TASK_STATUS } from '../../utils/constants';
 import { today, daysAgo, daysBetween, assigneeMatches, userSeesTask } from '../../utils/helpers';
@@ -16,9 +16,9 @@ const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 // 'YYYY-MM-DD' local de un objeto Date (sin pasar por UTC, igual criterio que today()).
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export default function CalendarView() {
+export default function CalendarView({ onlySprint = false }) {
   const {
-    tasks, clients, teamMembers, updateTask, currentUser,
+    tasks, clients, teamMembers, updateTask, currentUser, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
@@ -36,6 +36,7 @@ export default function CalendarView() {
     if (!t.dueDate) return false;
     if (restricted && !userSeesTask(t, currentUser, teamMembers)) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
+    if (onlySprint && (!activeSprint || t.sprintId !== activeSprint.id)) return false;
     if (!assigneeMatches(t.assignee, taskAssignee)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
     return true;
@@ -54,7 +55,7 @@ export default function CalendarView() {
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, clients, teamMembers, taskAssignee, taskClientFilter, hideCompletedTasks, currentUser]);
+  }, [tasks, clients, teamMembers, taskAssignee, taskClientFilter, hideCompletedTasks, onlySprint, activeSprint, currentUser]);
 
   // Grilla del mes (Lun→Dom), sólo las semanas necesarias.
   const first = new Date(cursor.y, cursor.m, 1);
@@ -107,6 +108,7 @@ export default function CalendarView() {
     const overdue = t.status !== 'done' && iso < todayIso;
     const isDone = t.status === 'done';
     const age = ageOf(t);
+    const inSprint = !!activeSprint && t.sprintId === activeSprint.id;
     return (
       <div
         key={t.id}
@@ -128,6 +130,9 @@ export default function CalendarView() {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
               </span>
             : <span style={{ flex: 1, minWidth: 0, fontSize: 9.5, color: '#9CA3AF' }}>Interno</span>}
+          {inSprint
+            ? <span title="En el sprint actual" style={{ display: 'inline-flex', flexShrink: 0 }}><Zap size={11} fill="#5B7CF5" stroke="none" /></span>
+            : <span title="Fuera del sprint" style={{ display: 'inline-flex', flexShrink: 0 }}><Zap size={11} fill="none" stroke="#D0D5DD" strokeWidth={2} /></span>}
           {area && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={area.color} strokeWidth="2" style={{ flexShrink: 0 }}><title>{area.label}</title><path d={area.path} /></svg>}
         </div>
         <div style={{ fontSize: 12, fontWeight: 500, color: '#1A1D26', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.title}</div>
