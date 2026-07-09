@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DEPARTMENTS, TASK_STATUS } from '../../utils/constants';
 import { today, daysBetween, isKorexClient, userOwnsTask } from '../../utils/helpers';
@@ -7,30 +6,29 @@ import TaskDetailDrawer from './TaskDetailDrawer';
 
 // Calendario mensual de ENTREGABLES: toda tarea con "fecha de entrega" (dueDate)
 // cae en su día. Muy visual, respeta los filtros de encargado/cliente/alcance de
-// la barra de Tareas. Reusa el mismo drawer de detalle del Tablero Sprint.
+// la barra de Tareas (TareasBar). La navegación de mes vive en esa misma barra
+// (props month/setMonth, elevadas a TareasPage) para seguir la estética del resto.
+// Reusa el mismo drawer de detalle del Tablero Sprint.
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 // 'YYYY-MM-DD' local de un objeto Date (sin pasar por UTC, igual criterio que today()).
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export default function CalendarView({ scope = 'cli' }) {
+export default function CalendarView({ scope = 'cli', month }) {
   const {
     tasks, clients, teamMembers, updateTask, currentUser,
     taskAssignee, taskClientFilter, hideCompletedTasks,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
-  const [cursor, setCursor] = useState(() => {
-    const [y, m] = today().split('-').map(Number);
-    return { y, m: m - 1 }; // m: 0-indexed
-  });
   const [openTaskId, setOpenTaskId] = useState(null);
   const [draggedId, setDraggedId] = useState(null);
   const [overDay, setOverDay] = useState(null);
   const [expandedDays, setExpandedDays] = useState(() => new Set());
 
   const todayIso = today();
+  const cur = month || (() => { const [y, m] = todayIso.split('-').map(Number); return { y, m: m - 1 }; })();
   const clientById = (id) => (clients || []).find(c => c.id === id);
 
   const visible = (t) => {
@@ -63,30 +61,20 @@ export default function CalendarView({ scope = 'cli' }) {
   }, [tasks, clients, teamMembers, taskAssignee, taskClientFilter, hideCompletedTasks, scope, currentUser]);
 
   // Grilla del mes (Lun→Dom), sólo las semanas necesarias.
-  const first = new Date(cursor.y, cursor.m, 1);
+  const first = new Date(cur.y, cur.m, 1);
   const offset = (first.getDay() + 6) % 7; // 0 = lunes
-  const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
+  const daysInMonth = new Date(cur.y, cur.m + 1, 0).getDate();
   const weeks = Math.ceil((offset + daysInMonth) / 7);
-  const gridStart = new Date(cursor.y, cursor.m, 1 - offset);
+  const gridStart = new Date(cur.y, cur.m, 1 - offset);
   const cells = Array.from({ length: weeks * 7 }, (_, i) => {
     const d = new Date(gridStart);
     d.setDate(gridStart.getDate() + i);
     return d;
   });
 
-  const monthLabel = (() => {
-    const s = first.toLocaleDateString('es', { month: 'long', year: 'numeric' });
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  })();
   const monthCount = cells
-    .filter(d => d.getMonth() === cursor.m)
+    .filter(d => d.getMonth() === cur.m)
     .reduce((n, d) => n + (byDay.get(isoOf(d))?.length || 0), 0);
-
-  const goMonth = (delta) => setCursor(c => {
-    const d = new Date(c.y, c.m + delta, 1);
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
-  const goToday = () => { const [y, m] = todayIso.split('-').map(Number); setCursor({ y, m: m - 1 }); };
 
   const memberOf = (name) => {
     const f = String(name || '').split(',')[0]?.trim().toLowerCase();
@@ -111,8 +99,6 @@ export default function CalendarView({ scope = 'cli' }) {
     if (!t || String(t.dueDate).slice(0, 10) === iso) return;
     updateTask(id, { dueDate: iso });
   };
-
-  const btn = { display: 'flex', width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 8, color: '#6B7280', cursor: 'pointer', border: '1px solid #E2E5EB', background: '#fff' };
 
   const renderCard = (t) => {
     const c = clientById(t.clientId);
@@ -158,16 +144,8 @@ export default function CalendarView({ scope = 'cli' }) {
 
   return (
     <div>
-      {/* Cabecera: navegación de mes + contador */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={btn} onClick={() => goMonth(-1)} title="Mes anterior"><ChevronLeft size={16} /></span>
-            <span style={btn} onClick={() => goMonth(1)} title="Mes siguiente"><ChevronRight size={16} /></span>
-          </div>
-          <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em', color: '#1A1D26' }}>{monthLabel}</span>
-          <span onClick={goToday} style={{ fontSize: 12, fontWeight: 600, color: '#5B7CF5', background: '#EEF2FF', borderRadius: 8, padding: '5px 11px', cursor: 'pointer' }}>Hoy</span>
-        </div>
+      {/* Contador del mes (la navegación de mes vive en TareasBar) */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
         <span style={{ fontSize: 12.5, color: '#6B7280' }}>
           <b style={{ color: '#1A1D26' }}>{monthCount}</b> {monthCount === 1 ? 'entregable' : 'entregables'} este mes
         </span>
@@ -184,7 +162,7 @@ export default function CalendarView({ scope = 'cli' }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8 }}>
         {cells.map((d) => {
           const iso = isoOf(d);
-          const inMonth = d.getMonth() === cursor.m;
+          const inMonth = d.getMonth() === cur.m;
           const isToday = iso === todayIso;
           const list = byDay.get(iso) || [];
           const expanded = expandedDays.has(iso);

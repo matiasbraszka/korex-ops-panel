@@ -50,6 +50,8 @@ export default function TareasPage() {
   // Filtros del diseño: alcance (Clientes/Internos) y "solo en el sprint".
   const [scope, setScope] = useState('cli');
   const [onlySprint, setOnlySprint] = useState(false);
+  // Mes visible del Calendario (elevado acá para que la navegación viva en TareasBar).
+  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
 
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* ignore */ }
@@ -77,7 +79,7 @@ export default function TareasPage() {
 
       {/* Barra de contexto del diseño (Objetivos + Sprint) */}
       {showBar && (
-        <TareasBar view={view} scope={scope} setScope={setScope} onlySprint={onlySprint} setOnlySprint={setOnlySprint} />
+        <TareasBar view={view} scope={scope} setScope={setScope} onlySprint={onlySprint} setOnlySprint={setOnlySprint} calMonth={calMonth} setCalMonth={setCalMonth} />
       )}
       {/* Layout legacy usa la barra de filtros vieja */}
       {!isSprint && view !== 'mi-semana' && <FiltersBar />}
@@ -86,7 +88,7 @@ export default function TareasPage() {
       {isSprint && view === 'rendimiento' && <RendimientoView />}
       {isSprint && view === 'objetivos' && <ObjetivosView scope={scope} onlySprint={onlySprint} />}
       {isSprint && view === 'sprint' && <SprintBoardView scope={scope} />}
-      {isSprint && view === 'calendario' && <CalendarView scope={scope} />}
+      {isSprint && view === 'calendario' && <CalendarView scope={scope} month={calMonth} />}
       {isSprint && view === 'lista' && <ListaView scope={scope} />}
       {isSprint && view === 'todo' && <WeeklyTodoView />}
 

@@ -5,10 +5,11 @@ import { sprintDaysLeft } from '../../utils/helpers';
 
 // Barra de contexto del diseño: alcance (Clientes/Internos), navegación de mes
 // o info del sprint, "En el sprint", filtro por persona y cerrar sprint.
-export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySprint }) {
+export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySprint, calMonth, setCalMonth }) {
   const { activeSprint, teamMembers, clients, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, closeSprint, hideCompletedTasks, setHideCompletedTasks } = useApp();
   const isObj = view === 'objetivos';
   const isSprint = view === 'sprint';
+  const isCal = view === 'calendario';
   const showSprintInfo = view === 'sprint' || view === 'lista';
 
   const [personOpen, setPersonOpen] = useState(false);
@@ -35,6 +36,19 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
   const monthLabel = (() => { const s = new Date().toLocaleDateString('es', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); })();
   const daysLeft = sprintDaysLeft(activeSprint);
 
+  // Calendario: etiqueta y navegación del mes visible (estado en TareasPage).
+  const calLabel = (() => {
+    const d = calMonth ? new Date(calMonth.y, calMonth.m, 1) : new Date();
+    const s = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+  const stepCalMonth = (delta) => setCalMonth && setCalMonth(cm => {
+    const base = cm || (() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; })();
+    const d = new Date(base.y, base.m + delta, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const goCalToday = () => setCalMonth && setCalMonth(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
+
   const seg = (active) => ({ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 7, cursor: 'pointer', background: active ? '#FFFFFF' : 'transparent', color: active ? '#1A1D26' : '#6B7280', boxShadow: active ? '0 1px 2px rgba(10,22,40,.08)' : 'none' });
   const navBtn = { display: 'flex', width: 26, height: 26, alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#6B7280' };
 
@@ -53,6 +67,16 @@ export default function TareasBar({ view, scope, setScope, onlySprint, setOnlySp
           <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>{activeSprint?.name || 'Sin sprint'}</span>
           {activeSprint && <span style={{ fontSize: 13, color: '#9CA3AF' }}>{activeSprint.startDate} → {activeSprint.endDate}</span>}
           {daysLeft != null && <span style={{ fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 999, padding: '3px 11px' }}>quedan {daysLeft} {daysLeft === 1 ? 'día' : 'días'}</span>}
+        </div>
+      )}
+      {isCal && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid #E2E5EB', borderRadius: 9, padding: 3 }}>
+            <span style={navBtn} onClick={() => stepCalMonth(-1)}><ChevronLeft size={15} /></span>
+            <span style={{ fontSize: 13, fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', minWidth: 120, textAlign: 'center' }}>{calLabel}</span>
+            <span style={navBtn} onClick={() => stepCalMonth(1)}><ChevronRight size={15} /></span>
+          </div>
+          <span onClick={goCalToday} style={{ fontSize: 12, fontWeight: 600, color: '#5B7CF5', background: '#EEF2FF', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>Hoy</span>
         </div>
       )}
 
