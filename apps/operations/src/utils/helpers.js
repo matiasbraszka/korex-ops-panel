@@ -144,6 +144,16 @@ export function fmtDate(d) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
 }
 
+// Fecha + hora corta de un timestamp COMPLETO (p.ej. last_seen_at, created_at).
+// A diferencia de fmtDate (que asume fecha sin hora), acepta el timestamp tal cual
+// lo devuelve Supabase y nunca imprime "Invalid Date": si no parsea, muestra "\u2014".
+export function fmtDateTime(d) {
+  if (!d) return '\u2014';
+  const date = new Date(typeof d === 'string' ? d.replace(' ', 'T') : d);
+  if (isNaN(date.getTime())) return '\u2014';
+  return date.toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 /**
  * Formato corto dia-semana + numero (ej: "Mar 13" para martes 13).
  * Pensado para etiquetas compactas en el timeline.

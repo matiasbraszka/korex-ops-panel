@@ -6,7 +6,7 @@ import { sbFetch, supabase } from '@korex/db';
 import {
   Search, X, ExternalLink, RefreshCw, ChevronRight, Folder, Plus, Link2, Key, Pin, Pencil,
 } from 'lucide-react';
-import { fmtDate } from '../../utils/helpers';
+import { fmtDate, fmtDateTime } from '../../utils/helpers';
 import {
   CopyButton, NODE_ICON, isDisplayableNode, isDelDoc, isOnboardingDoc, isAutoPinned, pinBadge, buildChildrenMap,
   AccessFormModal, LinkFormModal, openUrl, CredRow,
@@ -246,7 +246,7 @@ export default function CarpetasView({ client }) {
         <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border border-[#E2E5EB] rounded-[10px] bg-white text-[#1A1D26] text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-60"><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar'}</button>
       </div>
       <div className="flex items-center gap-[7px] text-[#9CA3AF] text-[11.5px] mb-4">
-        <RefreshCw size={13} />Se sincroniza solo todos los días{lastSync ? <> · última actualización <b className="text-[#6B7280]">{fmtDate(lastSync)}</b></> : null}
+        <RefreshCw size={13} />Se sincroniza solo todos los días{lastSync ? <> · última actualización <b className="text-[#6B7280]">{fmtDateTime(lastSync)}</b></> : null}
       </div>
 
       {/* Barra: enlaces + accesos del cliente */}
