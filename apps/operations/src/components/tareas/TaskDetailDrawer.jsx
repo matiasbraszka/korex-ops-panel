@@ -70,6 +70,14 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <div style={metaRow}><span style={metaLabel}>Cliente</span><span style={{ fontSize: 13, fontWeight: 600, color: '#1A1D26', textAlign: 'right', whiteSpace: 'nowrap' }}>{client?.name || '—'}</span></div>
             <div style={metaRow}><span style={metaLabel}>Objetivo / fase</span><span style={{ fontSize: 13, fontWeight: 600, color: '#1A1D26', textAlign: 'right' }}>{phaseLabel}</span></div>
             <div style={metaRow}>
+              <span style={metaLabel}>Fecha de entrega</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <input type="date" value={task.dueDate || ''} onChange={(e) => updateTask(task.id, { dueDate: e.target.value || null })}
+                  style={{ fontSize: 13, fontWeight: 600, color: '#1A1D26', border: '1px solid #E2E5EB', borderRadius: 7, padding: '5px 8px', background: '#fff', outline: 'none', fontFamily: 'inherit', cursor: 'pointer' }} />
+                {task.dueDate && <span onClick={() => updateTask(task.id, { dueDate: null })} title="Quitar fecha" style={{ cursor: 'pointer', color: '#C7CBD3', display: 'flex' }}><X size={15} /></span>}
+              </span>
+            </div>
+            <div style={metaRow}>
               <span style={metaLabel}>Área</span>
               <DepartmentPicker value={task.department} onChange={(d) => updateTask(task.id, { department: d })} variant="chip" />
             </div>

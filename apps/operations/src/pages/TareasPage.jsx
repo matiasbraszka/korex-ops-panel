@@ -9,6 +9,7 @@ import TimelineView from '../components/tareas/TimelineView';
 import WeeklyTodoView from '../components/tareas/WeeklyTodoView';
 import ObjetivosView from '../components/tareas/ObjetivosView';
 import SprintBoardView from '../components/tareas/SprintBoardView';
+import CalendarView from '../components/tareas/CalendarView';
 import ListaView from '../components/tareas/ListaView';
 import RendimientoView from '../components/tareas/RendimientoView';
 import TasksPage from './TasksPage';
@@ -19,6 +20,7 @@ const SPRINT_VIEWS = [
   { id: 'rendimiento', label: 'Rendimiento' },
   { id: 'objetivos', label: 'Objetivos' },
   { id: 'sprint', label: 'Tablero Sprint' },
+  { id: 'calendario', label: 'Calendario' },
   // Vista "Lista" oculta: resultaba repetitiva con el Tablero Sprint.
   // El componente sigue disponible (ListaView) por si se quiere reactivar.
   { id: 'todo', label: 'To-Do diario' },
@@ -67,7 +69,7 @@ export default function TareasPage() {
     setView('lista');
   };
 
-  const showBar = isSprint && (view === 'objetivos' || view === 'sprint' || view === 'lista');
+  const showBar = isSprint && (view === 'objetivos' || view === 'sprint' || view === 'lista' || view === 'calendario');
 
   return (
     <div className="space-y-4">
@@ -84,6 +86,7 @@ export default function TareasPage() {
       {isSprint && view === 'rendimiento' && <RendimientoView />}
       {isSprint && view === 'objetivos' && <ObjetivosView scope={scope} onlySprint={onlySprint} />}
       {isSprint && view === 'sprint' && <SprintBoardView scope={scope} />}
+      {isSprint && view === 'calendario' && <CalendarView scope={scope} />}
       {isSprint && view === 'lista' && <ListaView scope={scope} />}
       {isSprint && view === 'todo' && <WeeklyTodoView />}
 
