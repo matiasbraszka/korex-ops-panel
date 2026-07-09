@@ -16,16 +16,21 @@ import {
 function TreeRow({ row }) {
   const cfg = NODE_ICON[row.node_type] || NODE_ICON.document;
   const Icon = cfg.Icon;
+  // Carpeta vacía (sin nada adentro): la resaltamos en rojizo para que salte a la vista.
+  const empty = row.empty;
   return (
-    <div className="flex items-center gap-1.5 py-[7px] pr-2 rounded-lg group/tr" style={{ paddingLeft: row.indent, background: row.pinned ? '#FFFCF2' : 'transparent' }}>
+    <div className="flex items-center gap-1.5 py-[7px] pr-2 rounded-lg group/tr" style={{ paddingLeft: row.indent, background: row.pinned ? '#FFFCF2' : empty ? '#FEF6F4' : 'transparent' }}>
       <button onClick={row.onMain} className="flex-1 min-w-0 flex items-center gap-2.5 bg-transparent border-none p-0 font-sans cursor-pointer text-left">
         {row.expandable
           ? <ChevronRight size={13} className="shrink-0 text-[#A8AFBC] transition-transform" style={{ transform: row.open ? 'rotate(90deg)' : 'rotate(0deg)' }} strokeWidth={2.3} />
           : <span className="w-[13px] shrink-0" />}
-        <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: cfg.bg }}>
-          <Icon size={13} style={{ color: cfg.color }} />
+        <span className="w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0" style={{ background: empty ? '#FCE4DE' : cfg.bg }}>
+          <Icon size={13} style={{ color: empty ? '#D6533A' : cfg.color }} />
         </span>
-        <span className="flex-1 min-w-0 text-[12.5px] truncate" style={{ fontWeight: row.node_type === 'folder' ? 600 : 400, color: '#1A1D26' }} title={row.name}>{row.name}</span>
+        <span className="flex-1 min-w-0 text-[12.5px] truncate" style={{ fontWeight: row.node_type === 'folder' ? 600 : 400, color: empty ? '#B4402A' : '#1A1D26' }} title={row.name}>{row.name}</span>
+        {empty && (
+          <span className="inline-flex items-center py-[1px] px-[7px] rounded-full text-[10px] font-bold shrink-0" style={{ background: '#FCE4DE', color: '#C23C22' }}>vacía</span>
+        )}
         {row.pinned && (
           <span className="inline-flex items-center gap-1 py-[1px] px-[7px] rounded-full text-[10px] font-bold shrink-0" style={{ background: '#FFF4D6', color: '#B27D0B' }}>
             <Pin size={10} fill="currentColor" stroke="none" />{row.badge}
@@ -103,10 +108,11 @@ function StrategyBlock({ s, nodes, pages, q }) {
     for (const n of items) {
       const kids = (childrenByParent.get(n.id) || []).filter(isDisplayableNode);
       const expandable = n.node_type === 'folder' && kids.length > 0;
+      const empty = n.node_type === 'folder' && kids.length === 0;
       const opened = expandable && folders.has(n.id);
       rows.push({
         key: n.id, name: n.name, node_type: n.node_type,
-        indent: 12 + depth * 22, expandable, open: opened,
+        indent: 12 + depth * 22, expandable, open: opened, empty,
         pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n),
         onMain: expandable ? () => toggleFolder(n.id) : () => openUrl(n.web_url),
         onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n),
@@ -118,7 +124,8 @@ function StrategyBlock({ s, nodes, pages, q }) {
   const searchWalk = (parentId) => {
     for (const n of (childrenByParent.get(parentId) || []).filter(isDisplayableNode)) {
       if ((n.name || '').toLowerCase().includes(query)) {
-        searchRows.push({ key: n.id, name: n.name, node_type: n.node_type, indent: 12, expandable: false, open: false, pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n), onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n) });
+        const empty = n.node_type === 'folder' && (childrenByParent.get(n.id) || []).filter(isDisplayableNode).length === 0;
+        searchRows.push({ key: n.id, name: n.name, node_type: n.node_type, indent: 12, expandable: false, open: false, empty, pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n), onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n) });
       }
       searchWalk(n.id);
     }
