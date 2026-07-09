@@ -249,6 +249,15 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
             <div style={metaRow}><span style={metaLabel}>Cliente</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{client?.name || '—'}</span></div>
             <div style={{ ...metaRow, alignItems: 'flex-start' }}><span style={{ ...metaLabel, paddingTop: 1 }}>Objetivo / fase</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right', lineHeight: 1.35 }}>{phaseLabel}</span></div>
             <div style={metaRow}>
+              <span style={metaLabel}>Fecha de entrega</span>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
+                <input type="date" value={task.dueDate || ''} disabled={!canEdit}
+                  onChange={(e) => { if (!canEdit) return; updateTask(task.id, { dueDate: e.target.value || null }); }}
+                  style={{ fontSize: 12.5, fontWeight: 600, color: task.dueDate ? '#1A1D26' : '#9CA3AF', border: '1px solid #E2E5EB', borderRadius: 7, padding: '4px 8px', background: '#fff', outline: 'none', fontFamily: 'inherit', cursor: canEdit ? 'pointer' : 'default' }} />
+                {task.dueDate && canEdit && <span onClick={() => updateTask(task.id, { dueDate: null })} title="Quitar fecha" style={{ cursor: 'pointer', color: '#C7CBD3', display: 'flex' }}><X size={14} /></span>}
+              </span>
+            </div>
+            <div style={metaRow}>
               <span style={metaLabel}>Sprint{nSprints > 1 ? ` · lleva ${nSprints}` : ''}</span>
               <select value={task.sprintId || ''} disabled={!canEdit} onChange={(e) => onSprintChange(e.target.value)} style={{ ...selStyle, justifySelf: 'end', color: task.sprintId ? '#1A1D26' : '#9CA3AF' }}>
                 <option value="">Sin sprint (solo en Objetivo)</option>

@@ -26,7 +26,7 @@ export default function TareasToolbar({ view, setView, views = [], onlySprint, s
   const isObj = view === 'objetivos';
   const isSprint = view === 'sprint';
   // Solo las vistas con tareas filtrables muestran los controles.
-  const showFilters = isObj || isSprint || view === 'lista';
+  const showFilters = isObj || isSprint || view === 'lista' || view === 'calendario';
 
   const [personOpen, setPersonOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
