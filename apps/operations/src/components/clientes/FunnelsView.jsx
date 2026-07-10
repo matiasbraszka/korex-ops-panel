@@ -162,7 +162,7 @@ function AvatarStatusPill({ status, onChange }) {
 
 const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
 
-function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
+function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack }) {
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
@@ -201,7 +201,10 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
           <div className="min-w-0 flex-1">
             <input key={f.id + 'name'} defaultValue={f.name} onClick={e => e.stopPropagation()} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[13.5px] font-semibold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none" style={{ color: '#1A1D26' }} />
             <div className="flex items-center gap-[7px] mt-0.5">
-              <span className="text-[11px] text-[#9CA3AF]">{strategyName}</span>
+              <select value={f.strategy_id} onClick={e => e.stopPropagation()} onChange={e => onUpdate(f.id, { strategy_id: e.target.value })} title="Estrategia del funnel (editable)" className="text-[11px] text-[#6B7280] bg-transparent border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 cursor-pointer outline-none max-w-[150px]">
+                {!strategyOptions.some(o => o.id === f.strategy_id) && <option value={f.strategy_id}>{strategyName}</option>}
+                {strategyOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
               {f.official_domain && <span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0E9384] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span>}
               <span className="inline-flex items-center gap-1 text-[11px] text-[#9CA3AF]" onClick={e => e.stopPropagation()}>Creado
                 <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[11px] text-[#6B7280] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
@@ -327,6 +330,7 @@ export default function FunnelsView({ clientId }) {
   const stratIds = new Set(myStrategies.map(s => s.id));
   const funnels = useMemo(() => (strategyPages || []).filter(p => stratIds.has(p.strategy_id)), [strategyPages, myStrategies]);
   const stratName = (sid) => { const s = myStrategies.find(x => x.id === sid); return s ? `Estrategia #${(s.position ?? 0) + 1}` : '—'; };
+  const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
 
   const [filter, setFilter] = useState('todos');
   const [modal, setModal] = useState(false);
@@ -373,7 +377,7 @@ export default function FunnelsView({ clientId }) {
         </div>
         {filtered.length === 0
           ? <div className="flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">{funnels.length === 0 ? 'Todavía no hay funnels' : 'Sin resultados con ese filtro'}</div><div className="text-[11.5px] text-text2">{myStrategies.length === 0 ? 'Primero sincronizá las carpetas del cliente.' : 'Creá uno con "Nuevo funnel".'}</div></div>
-          : filtered.map(f => <FunnelRow key={f.id} f={f} strategyName={stratName(f.strategy_id)} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} />)}
+          : filtered.map(f => <FunnelRow key={f.id} f={f} strategyName={stratName(f.strategy_id)} strategyOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} />)}
       </div>
 
       {/* Modal nuevo funnel */}
