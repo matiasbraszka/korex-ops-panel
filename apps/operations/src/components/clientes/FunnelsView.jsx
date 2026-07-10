@@ -194,11 +194,11 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
 
   return (
     <div className="border-b border-[#F0F2F5] last:border-b-0">
-      <button onClick={() => setOpen(o => !o)} className="w-full grid items-center py-[13px] px-4 bg-white border-none font-sans cursor-pointer text-left hover:bg-[#FAFBFC]" style={{ gridTemplateColumns: GRID, borderLeft: `3px solid ${st.color}` }}>
+      <div onClick={() => setOpen(o => !o)} className="w-full grid items-center py-[13px] px-4 bg-white font-sans cursor-pointer text-left hover:bg-[#FAFBFC]" style={{ gridTemplateColumns: GRID, borderLeft: `3px solid ${st.color}` }}>
         <div className="flex items-center gap-[11px] min-w-0">
           <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#EEF2FF', color: '#2E69E0' }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></svg></span>
-          <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold truncate" style={{ color: '#1A1D26' }}>{f.name}</div>
+          <div className="min-w-0 flex-1">
+            <input key={f.id + 'name'} defaultValue={f.name} onClick={e => e.stopPropagation()} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[13.5px] font-semibold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none" style={{ color: '#1A1D26' }} />
             <div className="flex items-center gap-[7px] mt-0.5">
               <span className="text-[11px] text-[#9CA3AF]">{strategyName}</span>
               {f.official_domain && <span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0E9384] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span>}
@@ -216,7 +216,7 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
         </div>
         <div className="text-[12px] text-[#6B7280]">{f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-AR') : '—'}</div>
         <div className="flex justify-end"><ChevronDown size={16} className="text-[#B0B6C0] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }} /></div>
-      </button>
+      </div>
 
       {open && (
         <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
