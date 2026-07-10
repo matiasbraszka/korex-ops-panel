@@ -23,8 +23,10 @@ export default function TeamUsersEditor() {
   const [accountModal, setAccountModal] = useState(null); // { member, role }
   // Modal alta de miembro nuevo (no estaba en la lista).
   const [newMemberModal, setNewMemberModal] = useState(false);
-  // Modal alta de invitado (login por código, sin correo).
+  // Modal alta de invitado (login por código, sin correo). Botón "Nuevo invitado".
   const [newGuestModal, setNewGuestModal] = useState(false);
+  // Alta de invitado desde el check de la tabla (sobre un miembro ya existente).
+  const [guestAccountModal, setGuestAccountModal] = useState(null); // member | null
   // Modal de activacion masiva.
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
@@ -71,7 +73,9 @@ export default function TeamUsersEditor() {
 
   const handleToggle = (member, role) => {
     if (!member.user_id) {
-      // Sin cuenta: abrir mini-modal para crearla ya con este rol marcado.
+      // Invitado: se crea con CÓDIGO de acceso (sin correo). El resto de los roles:
+      // mini-modal de email + contraseña.
+      if (role === 'invitado') { setGuestAccountModal(member); return; }
       setAccountModal({ member, role });
       return;
     }
@@ -264,6 +268,14 @@ export default function TeamUsersEditor() {
         <NewGuestModal
           onClose={() => setNewGuestModal(false)}
           onDone={async () => { setNewGuestModal(false); await load(); }}
+        />
+      )}
+
+      {guestAccountModal && (
+        <NewGuestModal
+          member={guestAccountModal}
+          onClose={() => setGuestAccountModal(null)}
+          onDone={async () => { setGuestAccountModal(null); await load(); }}
         />
       )}
 
@@ -707,16 +719,19 @@ function NewUserModal({ rolesCatalog, addTeamMember, onClose, onDone }) {
 // Modal "Nuevo invitado": crea un colaborador externo que entra con un CÓDIGO
 // (sin correo). El código es su credencial; por detrás se crea la cuenta con un
 // correo sintético derivado del código y el rol RBAC "invitado".
-function NewGuestModal({ onClose, onDone }) {
-  const [name, setName] = useState('');
+// Si recibe `member`, vincula la cuenta a ese miembro existente (se usa cuando se
+// tilda el check "invitado" en la tabla) y NO pide el nombre.
+function NewGuestModal({ member = null, onClose, onDone }) {
+  const [name, setName] = useState(member?.name || '');
   const [code, setCode] = useState(() => generateGuestCode());
-  const [color, setColor] = useState('#5B7CF5');
+  const [color, setColor] = useState(member?.color || '#5B7CF5');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null); // { name, code, link }
   const [copied, setCopied] = useState('');
 
   const loginLink = (() => { try { return window.location.origin + '/invitado'; } catch { return '/invitado'; } })();
+  const guestName = member ? member.name : name;
 
   const copy = (text, which) => {
     navigator.clipboard?.writeText(text);
@@ -728,15 +743,16 @@ function NewGuestModal({ onClose, onDone }) {
     e.preventDefault();
     setError('');
     const c = normalizeGuestCode(code);
-    if (!name.trim()) { setError('El nombre es obligatorio.'); return; }
-    if (c.length < 6) { setError('El código debe tener al menos 6 caracteres.'); return; }
+    if (!member && !name.trim()) { setError('El nombre es obligatorio.'); return; }
+    if (c.length < 8) { setError('El código debe tener al menos 8 caracteres.'); return; }
     setSubmitting(true);
     const { data, error: fnErr } = await supabase.functions.invoke('admin-create-user', {
       body: {
         email: guestEmailForCode(c),
         password: c,
-        name: name.trim(),
-        role: 'Invitado',
+        name: guestName.trim(),
+        team_member_id: member?.id,
+        role: member ? undefined : 'Invitado',
         color,
         roles: ['invitado'],
       },
@@ -746,7 +762,7 @@ function NewGuestModal({ onClose, onDone }) {
       setError(data?.detail || data?.error || fnErr?.message || 'Error creando el invitado');
       return;
     }
-    setCreated({ name: name.trim(), code: c, link: loginLink });
+    setCreated({ name: guestName.trim(), code: c, link: loginLink });
   };
 
   const close = () => { if (created) onDone(); else onClose(); };
@@ -757,32 +773,38 @@ function NewGuestModal({ onClose, onDone }) {
         {!created ? (
           <form onSubmit={submit}>
             <div className="p-5 border-b border-border">
-              <h2 className="text-[15px] font-bold flex items-center gap-2"><KeyRound size={15} /> Nuevo invitado</h2>
+              <h2 className="text-[15px] font-bold flex items-center gap-2"><KeyRound size={15} /> {member ? `Invitado: ${member.name}` : 'Nuevo invitado'}</h2>
               <p className="text-xs text-text3 mt-1">
-                Colaborador externo con acceso <strong>solo a Tareas</strong> (sus propias tareas). Entra con un <strong>código</strong>, sin correo. Vos le pasás el código por WhatsApp.
+                {member
+                  ? <>Le damos acceso por <strong>código</strong> (sin correo), <strong>solo a Tareas</strong>. Elegí su código y pasáselo por WhatsApp.</>
+                  : <>Colaborador externo con acceso <strong>solo a Tareas</strong> (sus propias tareas). Entra con un <strong>código</strong>, sin correo. Vos le pasás el código por WhatsApp.</>}
               </p>
             </div>
             <div className="p-5 space-y-3">
-              <Field label="Nombre *">
-                <input value={name} onChange={(e) => setName(e.target.value)}
-                       placeholder="Juan Pérez" required className={inputCls} autoFocus />
-                <p className="text-[10px] text-text3 mt-1">Con este nombre le asignás las tareas.</p>
-              </Field>
+              {!member && (
+                <Field label="Nombre *">
+                  <input value={name} onChange={(e) => setName(e.target.value)}
+                         placeholder="Juan Pérez" required className={inputCls} autoFocus />
+                  <p className="text-[10px] text-text3 mt-1">Con este nombre le asignás las tareas.</p>
+                </Field>
+              )}
               <div className="grid grid-cols-[1fr_auto] gap-3">
                 <Field label="Código de acceso">
                   <div className="flex gap-2">
                     <input value={code} onChange={(e) => setCode(e.target.value)}
-                           minLength={6} required className={inputCls + ' font-mono'} />
+                           minLength={8} required autoFocus={!!member} className={inputCls + ' font-mono'} />
                     <button type="button" onClick={() => setCode(generateGuestCode())}
                             className="py-2 px-3 rounded-md border border-border bg-white text-text2 text-[12px] hover:bg-surface2 shrink-0">
                       Generar
                     </button>
                   </div>
                 </Field>
-                <Field label="Color">
-                  <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
-                         className="w-full h-[38px] rounded-md border border-border cursor-pointer bg-bg" />
-                </Field>
+                {!member && (
+                  <Field label="Color">
+                    <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
+                           className="w-full h-[38px] rounded-md border border-border cursor-pointer bg-bg" />
+                  </Field>
+                )}
               </div>
               {error && <div className="text-red text-xs bg-red/5 rounded-md p-2">{error}</div>}
             </div>
