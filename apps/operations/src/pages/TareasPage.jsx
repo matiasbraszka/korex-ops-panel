@@ -35,8 +35,8 @@ export default function TareasPage() {
   const { setTaskClientFilter, currentUser } = useApp();
   const isSprint = TAREAS_LAYOUT === 'sprint';
   const isGuest = !!currentUser?.isGuest;
-  // Invitado: solo Objetivos + Tablero Sprint (sin Rendimiento ni To-Do diario).
-  const sprintViews = isGuest ? SPRINT_VIEWS.filter(v => v.id === 'objetivos' || v.id === 'sprint') : SPRINT_VIEWS;
+  // Invitado: Objetivos + Tablero Sprint + Calendario (sin Rendimiento ni To-Do diario).
+  const sprintViews = isGuest ? SPRINT_VIEWS.filter(v => ['objetivos', 'sprint', 'calendario'].includes(v.id)) : SPRINT_VIEWS;
   const VIEWS = isSprint ? sprintViews : LEGACY_VIEWS;
   const DEFAULT_VIEW = isSprint ? 'objetivos' : 'roadmap';
   const validIds = VIEWS.map(v => v.id);
