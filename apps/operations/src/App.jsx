@@ -24,6 +24,7 @@ import useSoporteUnread from './hooks/useSoporteUnread';
 import EditClientModal from './components/clientes/EditClientModal';
 import CommentsSidePanel from './components/comments/CommentsSidePanel';
 import NotificationBell from './components/notifications/NotificationBell';
+import KorexAccessButton from './components/KorexAccessButton';
 import NotificationsPanel from './components/notifications/NotificationsPanel';
 import NotificationToast from './components/notifications/NotificationToast';
 
@@ -828,6 +829,9 @@ function MainLayout() {
             {/* Campana de notificaciones — visible en todas las áreas.
                 Oculta para el invitado (vista mínima; puede referir a otros clientes). */}
             {!currentUser?.isGuest && <NotificationBell />}
+            {/* Accesos generales de Korex (no de un cliente) — solo en Operaciones,
+                no en Ventas ni para el invitado. */}
+            {pathPrefix !== 'sales' && !currentUser?.isGuest && <KorexAccessButton />}
             {/* SearchBar global busca TODOS los clientes/tareas de Operaciones →
                 se oculta para Ventas y para el invitado (le filtraría clientes ajenos). */}
             {pathPrefix !== 'sales' && !currentUser?.isGuest && <SearchBar />}
