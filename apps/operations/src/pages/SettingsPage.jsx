@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -12,9 +12,11 @@ import FinanzasDefaultsEditor from '../components/settings/FinanzasDefaultsEdito
 import PersonalEditor from '../components/settings/PersonalEditor';
 import DmeConfigEditor from '../components/settings/DmeConfigEditor';
 import ReunionesConfigEditor from '../components/settings/ReunionesConfigEditor';
+import NotificationsAlertsEditor from '../components/settings/NotificationsAlertsEditor';
 
 const TABS = [
   { id: 'team',          label: 'Equipo y usuarios',     Icon: Users },
+  { id: 'notif',         label: 'Notificaciones y alertas', Icon: Bell },
   { id: 'personal',      label: 'Personal',              Icon: Contact },
   { id: 'onboarding',    label: 'Onboarding',            Icon: Workflow },
   { id: 'reuniones',     label: 'Reuniones de equipo',   Icon: Phone },
@@ -60,6 +62,7 @@ export default function SettingsPage() {
 
       <div>
         {tab === 'team'        && <TeamUsersEditor />}
+        {tab === 'notif'       && <NotificationsAlertsEditor />}
         {tab === 'personal'    && <PersonalEditor />}
         {tab === 'onboarding'  && <OnboardingConfigEditor />}
         {tab === 'reuniones'   && <ReunionesConfigEditor />}

@@ -102,10 +102,18 @@ async function postSlackBot(botToken: string, channel: string, text: string): Pr
 
 // Misma alerta que el webhook: avisa una sola vez por transacción (candado
 // alerted_at). Devuelve true si avisó.
+// ¿Está prendida esta alerta en Administración? (interruptor maestro)
+async function notifEnabled(type: string): Promise<boolean> {
+  const { data } = await admin.rpc("korex_notif_enabled", { p_type: type });
+  return data !== false;
+}
+
 async function alertFailed(
   cfg: MercuryConfig,
   tx: { id: string; account_id: string | null; card_id: string | null; amount: number | null; currency: string; counterparty_name: string | null; reason_for_failure: string | null; merchant: any },
 ): Promise<boolean> {
+  // Apagada desde Administración → no avisa (ni panel ni Slack) y no consume el candado.
+  if (!(await notifEnabled("mercury_failed_transaction"))) return false;
   const { data: locked } = await admin
     .from("mercury_transactions")
     .update({ alerted_at: new Date().toISOString() })

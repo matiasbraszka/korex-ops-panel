@@ -207,10 +207,17 @@ async function postSlackBot(botToken: string, channel: string, text: string) {
   } catch (e) { console.error("stripe-sync: fallo post a slack", e); }
 }
 
+// ¿Está prendida esta alerta en Administración? (interruptor maestro)
+async function notifEnabled(type: string): Promise<boolean> {
+  const { data } = await admin.rpc("korex_notif_enabled", { p_type: type });
+  return data !== false;
+}
+
 // Avisa una sola vez por reembolso (candado alerted_at), solo si es reciente.
 async function tryAlertRefund(cfg: StripeConfig, row: ReturnType<typeof refundRow>): Promise<boolean> {
   const recent = row.created_at ? Date.now() - new Date(row.created_at).getTime() <= ALERT_WINDOW_MS : false;
   if (!recent) return false;
+  if (!(await notifEnabled("stripe_refund"))) return false;
   const { data: locked } = await admin.from("stripe_refunds")
     .update({ alerted_at: new Date().toISOString() })
     .eq("id", row.id).is("alerted_at", null).select("id");
@@ -227,6 +234,7 @@ async function tryAlertRefund(cfg: StripeConfig, row: ReturnType<typeof refundRo
 async function tryAlertDispute(cfg: StripeConfig, row: ReturnType<typeof disputeRow>): Promise<boolean> {
   const recent = row.created_at ? Date.now() - new Date(row.created_at).getTime() <= ALERT_WINDOW_MS : false;
   if (!recent) return false;
+  if (!(await notifEnabled("stripe_dispute"))) return false;
   const { data: locked } = await admin.from("stripe_disputes")
     .update({ alerted_at: new Date().toISOString() })
     .eq("id", row.id).is("alerted_at", null).select("id");

@@ -1,4 +1,4 @@
-import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTriangle, Bell, CreditCard, AtSign, FileSignature, FileWarning, CalendarClock, Landmark, Bitcoin, Undo2, ShieldAlert } from 'lucide-react';
+import { ClipboardList, MessageSquare, CornerDownRight, FileText, Ban, AlertTriangle, Bell, CreditCard, AtSign, FileSignature, FileWarning, CalendarClock, Landmark, Bitcoin, Undo2, ShieldAlert, Headphones } from 'lucide-react';
 
 // Mapeo tipo de notificación -> ícono + color. Centralizado para que el panel
 // y el toast se vean consistentes. Los colores siguen la paleta del panel.
@@ -24,6 +24,7 @@ const META = {
   contract_unlinked:     { Icon: FileWarning,     color: '#F59E0B' },
   contract_renewal:      { Icon: CalendarClock,   color: '#F97316' },
   mention:               { Icon: AtSign,          color: '#9333EA' },
+  soporte_chat_assigned: { Icon: Headphones,      color: '#0EA5E9' },
 };
 
 export function notifMeta(type) {
