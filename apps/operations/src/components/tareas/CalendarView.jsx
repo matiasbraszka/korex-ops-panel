@@ -22,6 +22,9 @@ export default function CalendarView({ onlySprint = false }) {
     taskAssignee, taskClientFilter, hideCompletedTasks,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
+  // Invitado: ve el calendario (solo sus entregables) pero no puede REPROGRAMAR
+  // arrastrando (eso cambia la fecha de entrega = editar). Abrir la tarjeta sí.
+  const isGuest = !!currentUser?.isGuest;
 
   const todayIso = today();
   const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -112,8 +115,8 @@ export default function CalendarView({ onlySprint = false }) {
     return (
       <div
         key={t.id}
-        draggable
-        onDragStart={(e) => { setDraggedId(t.id); e.stopPropagation(); }}
+        draggable={!isGuest}
+        onDragStart={(e) => { if (isGuest) return; setDraggedId(t.id); e.stopPropagation(); }}
         onDragEnd={() => { setDraggedId(null); setOverDay(null); }}
         onClick={() => setOpenTaskId(t.id)}
         title={t.title}
