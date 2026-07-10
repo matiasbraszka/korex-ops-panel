@@ -372,7 +372,7 @@ function BulkActivateModal({ unlinkedMembers, rolesCatalog, onClose, onDone }) {
                       <th className="text-left py-2 px-2">Nombre</th>
                       <th className="text-left py-2 px-2">Email</th>
                       <th className="text-left py-2 px-2">Contraseña</th>
-                      {rolesCatalog.map((rc) => (
+                      {rolesCatalog.filter((rc) => rc.name !== 'invitado').map((rc) => (
                         <th key={rc.name} className="text-center py-2 px-2 capitalize w-[70px]">{rc.name}</th>
                       ))}
                     </tr>
@@ -400,7 +400,7 @@ function BulkActivateModal({ unlinkedMembers, rolesCatalog, onClose, onDone }) {
                                     className="text-[10px] text-text3 hover:text-blue px-1">⟳</button>
                           </div>
                         </td>
-                        {rolesCatalog.map((rc) => {
+                        {rolesCatalog.filter((rc) => rc.name !== 'invitado').map((rc) => {
                           const checked = r.roles.includes(rc.name);
                           const greyed = rc.name !== 'admin' && r.roles.includes('admin');
                           return (
@@ -685,7 +685,9 @@ function NewUserModal({ rolesCatalog, addTeamMember, onClose, onDone }) {
                 <div>
                   <label className="block text-xs font-semibold text-text2 mb-1.5">Roles del sistema</label>
                   <div className="space-y-1">
-                    {rolesCatalog.map((r) => (
+                    {/* "invitado" NO se ofrece acá: se crea con el botón "Nuevo invitado"
+                        (entra con código, sin correo). Esta pantalla es para personal. */}
+                    {rolesCatalog.filter((r) => r.name !== 'invitado').map((r) => (
                       <label key={r.name} className="flex items-center gap-2 text-[13px] cursor-pointer">
                         <input type="checkbox" checked={form.roles.includes(r.name)}
                                onChange={() => handleRoleToggle(r.name)} />
@@ -694,6 +696,7 @@ function NewUserModal({ rolesCatalog, addTeamMember, onClose, onDone }) {
                       </label>
                     ))}
                   </div>
+                  <p className="text-[10px] text-text3 mt-1.5">¿Es un invitado externo? Cerrá esto y usá el botón <strong>«Nuevo invitado»</strong> (entra con código, sin correo).</p>
                 </div>
               </>
             )}
