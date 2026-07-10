@@ -203,6 +203,9 @@ function FunnelRow({ f, strategyName, onUpdate, onDelete, onTrack }) {
             <div className="flex items-center gap-[7px] mt-0.5">
               <span className="text-[11px] text-[#9CA3AF]">{strategyName}</span>
               {f.official_domain && <span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0E9384] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span>}
+              <span className="inline-flex items-center gap-1 text-[11px] text-[#9CA3AF]" onClick={e => e.stopPropagation()}>Creado
+                <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[11px] text-[#6B7280] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
+              </span>
               {missing > 0 && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#A16207] bg-[#FEF9E7] border border-[#F5E6B8] rounded-md py-px px-1.5">Faltan {missing}</span>}
             </div>
           </div>

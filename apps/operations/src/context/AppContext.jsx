@@ -1492,6 +1492,7 @@ export function AppProvider({ children }) {
       clarity_id: data.clarity_id || null,
       avatars: Array.isArray(data.avatars) ? data.avatars : [],
       visual_resources: Array.isArray(data.visual_resources) ? data.visual_resources : [],
+      created_date: data.created_date || new Date().toISOString().slice(0, 10),
       updated_at: new Date().toISOString(),
     };
     await sbFetch('strategy_pages', {
