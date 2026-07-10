@@ -10,11 +10,12 @@ import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
 
 const FUNNEL_STATUS = {
-  activa:   { label: 'Activa', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
+  activa:   { label: 'Activo', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
   borrador: { label: 'Borrador', bg: '#FEFCE8', color: '#A16207', dot: '#A16207' },
-  pausada:  { label: 'Pausada', bg: '#FEF2F2', color: '#DC2626', dot: '#DC2626' },
+  pausada:  { label: 'Pausado', bg: '#FEF2F2', color: '#DC2626', dot: '#DC2626' },
+  antiguo:  { label: 'Antiguo', bg: '#F1F3F6', color: '#6B7280', dot: '#9CA3AF' },
 };
-const STATUS_ORDER = ['activa', 'borrador', 'pausada'];
+const STATUS_ORDER = ['activa', 'borrador', 'pausada', 'antiguo'];
 const AVATAR_STATUS = {
   'En grabación': { short: 'Grabación', bg: '#FEF3E7', color: '#C2630A' },
   'En edición':   { short: 'Edición',   bg: '#EEF2FF', color: '#2E69E0' },
