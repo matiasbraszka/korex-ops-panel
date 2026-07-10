@@ -5,9 +5,19 @@ import {
   fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
   patchSoporteConfig, fetchAppointments, fetchParticipants, fetchGroupNames,
   invokeSend, invokeCita, invokeMedia, invokeGroup, invokeLink,
-  invokeAgendar, invokeDeleteForEveryone, PAGE_SIZE,
+  invokeAgendar, invokeDeleteForEveryone, fetchAllAssignees, PAGE_SIZE,
 } from '../lib/api.js';
 import { fmtNextCita } from '../lib/format.js';
+
+// Construye el mapa conversación → [member_id...] desde las filas de asignados.
+function buildAssigneesMap(rows) {
+  const m = {};
+  for (const r of (Array.isArray(rows) ? rows : [])) {
+    if (!r?.conversation_id || !r?.member_id) continue;
+    (m[r.conversation_id] ||= []).push(r.member_id);
+  }
+  return m;
+}
 
 // Contexto del modulo Soporte: bandeja de WhatsApp.
 // Vive solo dentro de /soporte/* (montado por SoporteRoutes), asi su estado y
@@ -31,6 +41,9 @@ export function SoporteProvider({ children }) {
   const [conversations, setConversations] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [filters, setFilters] = useState({ scope: 'all', tagId: null, assigneeId: null, clientId: null, search: '' });
+  // Mapa conversación → [member_id...] (asignación múltiple). Alimenta el filtro
+  // "Asignado a X" y sus conteos. member_id = team_members.id.
+  const [assigneesMap, setAssigneesMap] = useState({});
   // threads: { [convId]: { items, hasMore, loadingOlder, loaded } }
   const [threads, setThreads] = useState({});
   const [config, setConfig] = useState({ tags: [], appointment_template: '' });
@@ -48,9 +61,12 @@ export function SoporteProvider({ children }) {
 
   // ── Carga inicial ──
   const loadAll = useCallback(async () => {
-    const [convs, cfg] = await Promise.all([fetchConversations(), fetchSoporteConfig()]);
+    const [convs, cfg, asg] = await Promise.all([
+      fetchConversations(), fetchSoporteConfig(), fetchAllAssignees(),
+    ]);
     if (Array.isArray(convs)) setConversations(convs);
     if (cfg) setConfig(cfg);
+    setAssigneesMap(buildAssigneesMap(asg));
     setLoading(false);
   }, []);
 
@@ -184,6 +200,7 @@ export function SoporteProvider({ children }) {
       setConversations(convs);
       if (selectedRef.current && !convs.some((c) => c.id === selectedRef.current)) setSelectedId(null);
     }
+    fetchAllAssignees().then((asg) => setAssigneesMap(buildAssigneesMap(asg))).catch(() => {});
     // Delta del hilo abierto: solo lo nuevo despues del ultimo cargado.
     const convId = selectedRef.current;
     const t = convId ? threadsRef.current[convId] : null;
@@ -604,7 +621,9 @@ export function SoporteProvider({ children }) {
       if (filters.scope === 'dm' && c.is_group) return false;
       if (filters.scope === 'groups' && !c.is_group) return false;
       if (filters.tagId && !(c.tags || []).includes(filters.tagId)) return false;
-      if (filters.assigneeId && c.assigned_to !== filters.assigneeId) return false;
+      // Asignado a X: matchea contra TODOS los asignados del chat (múltiple),
+      // no solo el primario. assigneesMap[c.id] = [member_id...].
+      if (filters.assigneeId && !(assigneesMap[c.id] || []).includes(filters.assigneeId)) return false;
       if (filters.clientId && c.client_id !== filters.clientId) return false;
       if (q) {
         const hay = `${c.wa_profile_name || ''} ${c.wa_phone || ''} ${c.contact?.full_name || ''} ${c.client?.name || ''}`.toLowerCase();
@@ -612,7 +631,7 @@ export function SoporteProvider({ children }) {
       }
       return true;
     });
-  }, [sortedConversations, filters, selectedId]);
+  }, [sortedConversations, filters, selectedId, assigneesMap]);
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId) || null,
@@ -641,6 +660,23 @@ export function SoporteProvider({ children }) {
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [conversations]);
 
+  // Conteo de chats (no archivados) por persona asignada — para el filtro
+  // "Asignado a" con el número de chats de cada uno. member_id = team_members.id.
+  const assigneeCounts = useMemo(() => {
+    const counts = {};
+    for (const c of conversations) {
+      if (c.archived) continue;
+      for (const mid of (assigneesMap[c.id] || [])) counts[mid] = (counts[mid] || 0) + 1;
+    }
+    return counts;
+  }, [conversations, assigneesMap]);
+
+  // Refresca el set de asignados de un chat en el mapa (lo llama ContactPanel al
+  // cambiar la asignación, así el filtro y los conteos quedan al toque).
+  const updateConvAssignees = useCallback((convId, memberIds) => {
+    setAssigneesMap((prev) => ({ ...prev, [convId]: [...(memberIds || [])] }));
+  }, []);
+
   const unreadTotal = useMemo(
     () => conversations.reduce((acc, c) => acc + (c.id === selectedId || c.archived ? 0 : (c.unread_count || 0)), 0),
     [conversations, selectedId],
@@ -657,7 +693,7 @@ export function SoporteProvider({ children }) {
     unreadTotal,
     selectedId, selectedConversation, selectConversation,
     filters, setFilters,
-    tagCounts, linkedClients,
+    tagCounts, linkedClients, assigneeCounts,
     threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage,
     tagsCatalog: config.tags || [],
@@ -669,6 +705,7 @@ export function SoporteProvider({ children }) {
     waLinks: config.wa_links || [],
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
     updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone,
+    updateConvAssignees,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
@@ -676,10 +713,11 @@ export function SoporteProvider({ children }) {
     getDraft, setDraft, refresh,
   }), [
     loading, realtimeOk, visibleConversations, conversations, unreadTotal, selectedId,
-    selectedConversation, selectConversation, filters, tagCounts, linkedClients, threads, loadOlder,
+    selectedConversation, selectConversation, filters, tagCounts, linkedClients, assigneeCounts, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone, appointmentsByConv,
+    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone,
+    updateConvAssignees, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,

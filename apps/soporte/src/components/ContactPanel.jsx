@@ -34,7 +34,7 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
   const {
     selectedConversation: conv, updateNotes, updateConversation,
     appointmentsByConv, loadAppointments, cancelAppointment,
-    groupDirByConv, loadGroupDirectory, agendarContact,
+    groupDirByConv, loadGroupDirectory, agendarContact, updateConvAssignees,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
   } = useSoporte();
   const { isAdmin } = useAuth();
@@ -160,7 +160,9 @@ export default function ContactPanel({ open, onClose, onSchedule, onReschedule }
     setAssigneesBusy(true);
     try {
       const rows = await setAssignees(conv.id, next);
-      setAssigneeIds(rows.map((r) => r.member_id));
+      const ids = rows.map((r) => r.member_id);
+      setAssigneeIds(ids);
+      updateConvAssignees(conv.id, ids); // refresca filtro + conteos de la bandeja
     } catch (e) {
       console.error('set assignees', e);
       setAssigneeIds(prev);

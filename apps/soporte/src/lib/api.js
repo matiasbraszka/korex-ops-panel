@@ -245,6 +245,16 @@ export async function searchFinPeople(q) {
   return Array.isArray(data) ? data : [];
 }
 
+// TODAS las asignaciones (para el filtro "asignado a X" y sus conteos). Devuelve
+// filas {conversation_id, member_id}. RLS: cualquiera con soporte:read las lee.
+export async function fetchAllAssignees() {
+  const rows = await sbFetch(
+    'wa_conversation_assignees?select=conversation_id,member_id&limit=5000',
+    { headers: { Prefer: 'return=representation' } },
+  ).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
 // Personas asignadas a un chat (control de acceso). member_id = team_members.id.
 // Un usuario NO admin con rol soporte solo ve los chats que tiene asignados.
 export async function fetchAssignees(convId) {

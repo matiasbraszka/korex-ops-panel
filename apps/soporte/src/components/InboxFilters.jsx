@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, X, PenSquare, Building2, Settings2, SlidersHorizontal, Check } from 'lucide-react';
+import { Search, X, PenSquare, Building2, Settings2, SlidersHorizontal, Check, UserCheck } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { fetchTeamMembers } from '../lib/api.js';
 import TagManager from './TagManager.jsx';
@@ -16,7 +16,7 @@ const SCOPES = [
 ];
 
 export default function InboxFilters({ unreadCount = 0 }) {
-  const { filters, setFilters, tagsCatalog, tagCounts, linkedClients } = useSoporte();
+  const { filters, setFilters, tagsCatalog, tagCounts, linkedClients, assigneeCounts } = useSoporte();
   const searchRef = useRef(null);
   const [team, setTeam] = useState([]);
   const [open, setOpen] = useState(false);
@@ -32,6 +32,10 @@ export default function InboxFilters({ unreadCount = 0 }) {
   const activeClient = linkedClients.find((c) => c.id === filters.clientId);
   const activeMember = team.find((m) => m.id === filters.assigneeId);
   const activeScope = SCOPES.find((s) => s.id === filters.scope);
+  // Personas que tienen al menos un chat asignado, ordenadas por cantidad (desc).
+  const assigneeMembers = team
+    .filter((m) => assigneeCounts[m.id])
+    .sort((a, b) => (assigneeCounts[b.id] || 0) - (assigneeCounts[a.id] || 0));
 
   // Filtros no-por-defecto aplicados (scope 'all' no cuenta).
   const activeCount =
@@ -112,15 +116,23 @@ export default function InboxFilters({ unreadCount = 0 }) {
                   </div>
                 </div>
 
-                {/* Asignado a */}
-                {team.length > 0 && (
+                {/* Asignado a — cada persona con la cantidad de chats que tiene
+                    asignados (múltiple: un chat puede estar en más de una). */}
+                {assigneeMembers.length > 0 && (
                   <div>
                     <div className="px-0.5 pb-1.5 text-[10px] font-bold tracking-widest text-text3 uppercase">Asignado a</div>
-                    <select value={filters.assigneeId || ''} onChange={(e) => set({ assigneeId: e.target.value || null })}
-                            className="w-full text-[12.5px] px-2.5 py-1.5 rounded-lg border border-border bg-white outline-none cursor-pointer focus:border-[#F59E0B]">
-                      <option value="">Cualquiera</option>
-                      {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    <div className="max-h-[150px] overflow-y-auto flex flex-col gap-0.5">
+                      {assigneeMembers.map((m) => (
+                        <button key={m.id} onClick={() => set({ assigneeId: filters.assigneeId === m.id ? null : m.id })}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer border-0 text-left transition-colors duration-150 ${
+                                  filters.assigneeId === m.id ? 'bg-[#FFFBF2]' : 'bg-transparent hover:bg-surface2'}`}>
+                          <UserCheck size={12} className="text-[#B45309] shrink-0" />
+                          <span className="flex-1 text-[12.5px] font-medium truncate">{m.name}</span>
+                          {filters.assigneeId === m.id && <Check size={13} className="text-[#B45309] shrink-0" />}
+                          <span className="text-[11px] font-semibold text-text3">{assigneeCounts[m.id] || 0}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
