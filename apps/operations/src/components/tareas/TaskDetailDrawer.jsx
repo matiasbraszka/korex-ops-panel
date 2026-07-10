@@ -315,13 +315,13 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                     <div style={{ width: subPct + '%', height: '100%', background: ACC, borderRadius: 999, transition: 'width .3s ease' }} />
                   </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column' }}>{checklist.map(it => checkRow(it, ACC, toggleItem, removeItem, canEdit ? { dragId, setDragId, onReorder: moveChecklist } : null, canEdit))}</div>
-                {canEdit && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
-                    <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
-                  </div>
-                )}
+                {/* Checklist: SIEMPRE usable (también por el invitado). Marcar/agregar
+                    subtareas es "avanzar la tarea", no editar su definición. */}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>{checklist.map(it => checkRow(it, ACC, toggleItem, removeItem, { dragId, setDragId, onReorder: moveChecklist }))}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
+                  <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
+                </div>
               </div>
             </div>
           )}
@@ -352,13 +352,11 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 ) : (
                   <div style={{ fontSize: 11.5, lineHeight: 1.5, color: '#9CA3AF', background: '#FAFBFC', border: '1px dashed #E2E5EB', borderRadius: 9, padding: '11px 12px' }}>Sin criterios: la tarea se puede validar libremente. Agregá criterios para exigir que se cumplan antes de validar.</div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column' }}>{criteria.map(it => checkRow(it, '#16A34A', toggleAc, removeAc, null, canEdit))}</div>
-                {canEdit && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <input value={newAc} onChange={(e) => setNewAc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAc(); } }} placeholder="Agregar criterio de aceptación…" style={inputStyle} />
-                    <button onClick={addAc} style={addBtnStyle}><Plus size={16} /></button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>{criteria.map(it => checkRow(it, '#16A34A', toggleAc, removeAc, null))}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <input value={newAc} onChange={(e) => setNewAc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAc(); } }} placeholder="Agregar criterio de aceptación…" style={inputStyle} />
+                  <button onClick={addAc} style={addBtnStyle}><Plus size={16} /></button>
+                </div>
               </div>
 
               <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
