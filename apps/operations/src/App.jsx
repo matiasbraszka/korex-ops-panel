@@ -492,7 +492,7 @@ function MainLayout() {
       <Route path="/operations/ideas" element={<Navigate to="/operations/equipo" replace />} />
       <Route path="/operations/videos" element={guestBlock(<VideosPage />)} />
       {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
-      <Route path="/marketing" element={<Navigate to="/marketing/embudo" replace />} />
+      <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/marketing/embudo" element={marketingGuarded(<EmbudoPage />)} />
       <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
