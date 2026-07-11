@@ -207,6 +207,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
   const events = normEvents(f.conversion_events);
   const pOk = !!(f.pixel_code && f.pixel_code.trim());
   const cOk = !!(f.clarity_id && f.clarity_id.trim());
+  // Para la spec del avatar solo se ofrecen docs dedicados (kind='extra'), NO el DEL.
+  const specDocs = contextDocs.filter(d => d.doc_kind === 'extra');
 
   const links = [];
   if (f.prod_url) links.push({ short: 'Prod', bg: '#EEF2FF', color: '#2E69E0', border: '#DCE3FF', url: f.prod_url });
@@ -319,17 +321,20 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
                            <button onClick={() => copyText(av.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>
                         : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin VSL</span>}
                     </div>
-                    {/* Especificación del avatar: se vincula un documento de contexto de la estrategia */}
-                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold shrink-0" style={{ color: '#EC4899' }}><Brain size={11} />Spec</span>
-                      <select value={av.spec_node_id || ''} onChange={e => { const nd = contextDocs.find(d => d.node_id === e.target.value); setAvatar(av.id, { spec_node_id: e.target.value || null, spec_title: nd?.title || null }); }} title="Documento que describe este avatar (entra al cerebro)" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue cursor-pointer">
-                        <option value="">Sin especificación vinculada…</option>
-                        {av.spec_node_id && !contextDocs.some(d => d.node_id === av.spec_node_id) && <option value={av.spec_node_id}>{av.spec_title || 'Documento vinculado'}</option>}
-                        {contextDocs.map(d => <option key={d.node_id} value={d.node_id}>{d.title}</option>)}
-                      </select>
-                      {(() => { const nd = contextDocs.find(d => d.node_id === av.spec_node_id); return nd?.web_url
-                        ? <button onClick={() => openUrl(nd.web_url)} title="Abrir la spec en Drive" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><FileText size={12} />Ver</button>
-                        : null; })()}
+                    {/* Especificación del avatar: su documento propio (no el DEL) y/o su descripción en texto */}
+                    <div className="mt-1.5 pl-[40px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold shrink-0" style={{ color: '#EC4899' }}><Brain size={11} />Spec</span>
+                        <select value={av.spec_node_id || ''} onChange={e => { const nd = specDocs.find(d => d.node_id === e.target.value); setAvatar(av.id, { spec_node_id: e.target.value || null, spec_title: nd?.title || null }); }} title="Documento propio de este avatar (no el DEL)" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue cursor-pointer">
+                          <option value="">Documento propio del avatar…</option>
+                          {av.spec_node_id && !specDocs.some(d => d.node_id === av.spec_node_id) && <option value={av.spec_node_id}>{av.spec_title || 'Documento vinculado'}</option>}
+                          {specDocs.map(d => <option key={d.node_id} value={d.node_id}>{d.title}</option>)}
+                        </select>
+                        {(() => { const nd = specDocs.find(d => d.node_id === av.spec_node_id); return nd?.web_url
+                          ? <button onClick={() => openUrl(nd.web_url)} title="Abrir en Drive" className="inline-flex items-center justify-center w-7 h-[26px] border-none rounded-lg cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><FileText size={12} /></button>
+                          : null; })()}
+                      </div>
+                      <textarea key={av.id + 'spec'} defaultValue={av.spec_text || ''} onBlur={e => { const v = e.target.value; if (v !== (av.spec_text || '')) setAvatar(av.id, { spec_text: v || null }); }} placeholder="Descripción de este avatar (si está dentro del DEL, pegá su parte acá)…" rows={2} className="w-full mt-1.5 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white resize-y outline-none focus:border-blue leading-relaxed" />
                     </div>
                   </div>
                 ))}
@@ -390,12 +395,13 @@ function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onT
       </div>
       {open && (
         <div className="p-3.5">
-          {docs.length > 0 && (
+          {docs.filter(d => d.doc_kind !== 'extra').length > 0 && (
             <div className="mb-3.5">
-              <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documentos de la estrategia</div>
-              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-                {docs.map(d => <ContextDocCard key={d.id} doc={d} />)}
+              <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documento maestro de la estrategia</div>
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                {docs.filter(d => d.doc_kind !== 'extra').map(d => <ContextDocCard key={d.id} doc={d} />)}
               </div>
+              <div className="text-[10.5px] text-[#9CA3AF] mt-1.5 flex items-center gap-1"><Sparkles size={11} className="text-[#C79A3E]" />El DEL contiene todos los avatares juntos. A cada avatar vinculale su documento propio, o pegá su parte en la descripción; después el cerebro lo divide solo.</div>
             </div>
           )}
           <div className="border border-[#ECEEF2] rounded-xl overflow-hidden">
