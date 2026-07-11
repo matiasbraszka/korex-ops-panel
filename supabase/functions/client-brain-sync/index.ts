@@ -81,7 +81,7 @@ async function syncClient(
 
   const { data: nodes, error: nErr } = await supabase
     .from("client_drive_nodes")
-    .select("id, name, node_type, mime_type, web_url, modified_time")
+    .select("id, name, node_type, mime_type, web_url, modified_time, strategy_id")
     .eq("client_id", clientId)
     .neq("node_type", "folder");
   if (nErr) return { ok: false, docs: 0, skipped: 0, error: String(nErr.message) };
@@ -89,6 +89,26 @@ async function syncClient(
   const { data: pins } = await supabase
     .from("client_brain_pins").select("node_id").eq("client_id", clientId);
   const pinIds = new Set((pins ?? []).map((p) => p.node_id));
+
+  // Specs vinculadas a un avatar (avatars[].spec_node_id) en los funnels del cliente.
+  const { data: strats } = await supabase.from("strategies").select("id").eq("client_id", clientId);
+  const stratIds = (strats ?? []).map((s) => s.id);
+  const avatarSpecIds = new Set<string>();
+  if (stratIds.length) {
+    const { data: pages } = await supabase.from("strategy_pages").select("avatars").in("strategy_id", stratIds);
+    for (const p of (pages ?? [])) {
+      for (const av of (Array.isArray(p.avatars) ? p.avatars : [])) {
+        if (av?.spec_node_id) avatarSpecIds.add(av.spec_node_id);
+      }
+    }
+  }
+
+  // Nivel (scope) del documento: cliente / estrategia / avatar.
+  const scopeOf = (kind: string, nodeId: string): string => {
+    if (kind === "onboarding" || kind === "investigacion") return "client";
+    if (avatarSpecIds.has(nodeId)) return "avatar";
+    return "strategy";
+  };
 
   // Documentos deseados: node_id -> { node, kind }
   const desired = new Map<string, { node: typeof nodes[number]; kind: string }>();
@@ -98,8 +118,8 @@ async function syncClient(
       const kind = docKind(n.name || "");
       if (kind) desired.set(n.id, { node: n, kind });
     }
-    // Fijados a mano: cualquier tipo, salvo que ya sea un match auto (mantiene su kind).
-    if (pinIds.has(n.id) && !desired.has(n.id)) desired.set(n.id, { node: n, kind: "extra" });
+    // Fijados (🧠) o vinculados a un avatar: cualquier tipo, si no es ya un match auto.
+    if ((pinIds.has(n.id) || avatarSpecIds.has(n.id)) && !desired.has(n.id)) desired.set(n.id, { node: n, kind: "extra" });
   }
 
   // Estado actual (para saltar lo que no cambió y borrar lo que sobra).
@@ -109,11 +129,17 @@ async function syncClient(
 
   let docs = 0, skipped = 0;
   for (const [nodeId, { node: n, kind }] of desired) {
+    const scope = scopeOf(kind, n.id);
+    const stratId = scope === "client" ? null : (n.strategy_id || null);
     const prev = byNode.get(nodeId);
     const unchanged = prev && prev.char_count > 0
       && str(prev.source_modified_time) && str(n.modified_time)
       && new Date(prev.source_modified_time as string).getTime() === new Date(n.modified_time as string).getTime();
-    if (unchanged) { skipped++; continue; }
+    if (unchanged) {
+      // El texto no cambió, pero el nivel (scope/estrategia) sí pudo cambiar (ej. se vinculó a un avatar).
+      await supabase.from("client_brain_docs").update({ scope, strategy_id: stratId }).eq("client_id", clientId).eq("node_id", nodeId);
+      skipped++; continue;
+    }
 
     const got = await fetchDocText(cfg.appscriptUrl, cfg.appscriptSecret, n.id, n.mime_type || "");
     if (!got) { skipped++; continue; }
@@ -124,6 +150,8 @@ async function syncClient(
       client_id: clientId,
       node_id: n.id,
       doc_kind: kind,
+      scope,
+      strategy_id: stratId,
       title: got.title || n.name || "",
       text,
       char_count: text.length,

@@ -1,13 +1,48 @@
-// Pestaña "Funnels": páginas del cliente con variantes de avatar, tracking
-// (pixel/clarity/eventos) y material a completar. Diseño "Recursos y Carpetas".
-import { useState, useMemo, useRef } from 'react';
+// Pestaña "Funnels": el workspace del cliente. Envuelve TODO en la estrategia:
+// contexto del cliente (onboarding), y por estrategia sus documentos (DEL, etc.) +
+// sus funnels (con avatares, tracking, material y la spec de cada avatar).
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
+import { sbFetch, supabase } from '@korex/db';
 import {
-  Plus, X, ExternalLink, Copy, ChevronDown, Users, ArrowRight, Megaphone,
+  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, ArrowRight, Megaphone,
   Check, Trash2, Activity, Zap, Link2, Globe, Rocket, Clapperboard,
+  Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers,
 } from 'lucide-react';
 import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
+import { fmtDateTime } from '../../utils/helpers';
+
+// Metadatos por tipo de documento de contexto.
+const DOC_META = {
+  del:           { label: 'DEL', Icon: Sparkles, color: '#C79A3E', bg: '#FCEFD0' },
+  onboarding:    { label: 'Onboarding', Icon: FileText, color: '#2E69E0', bg: '#E9F1FF' },
+  investigacion: { label: 'Investigación', Icon: SearchIcon, color: '#7C3AED', bg: '#F4F1FE' },
+  extra:         { label: 'Contexto', Icon: Brain, color: '#EC4899', bg: '#FDF2F8' },
+};
+
+// Tarjeta compacta de un documento de contexto (título, tipo, preview expandible).
+function ContextDocCard({ doc }) {
+  const [open, setOpen] = useState(false);
+  const meta = DOC_META[doc.doc_kind] || DOC_META.extra;
+  const { Icon } = meta;
+  const text = doc.text || '';
+  const hasMore = text.length > 400;
+  return (
+    <div className="border border-[#E8EBF0] rounded-[11px] bg-white overflow-hidden">
+      <div className="flex items-center gap-2 p-2.5">
+        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: meta.bg, color: meta.color }}><Icon size={14} /></span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-semibold text-[#1A1D26] truncate" title={doc.title}>{doc.title || meta.label}</div>
+          <div className="text-[10.5px] text-[#9CA3AF]">{meta.label} · {(doc.char_count || 0).toLocaleString()} car.</div>
+        </div>
+        {hasMore && <button onClick={() => setOpen(o => !o)} title={open ? 'Ver menos' : 'Ver texto'} className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none' }} /></button>}
+        {doc.web_url && <button onClick={() => openUrl(doc.web_url)} title="Abrir en Drive" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={13} /></button>}
+      </div>
+      {open && text && <div className="px-2.5 pb-2.5 text-[11.5px] leading-relaxed text-[#4B5563] whitespace-pre-wrap max-h-[280px] overflow-y-auto">{text}</div>}
+    </div>
+  );
+}
 
 const FUNNEL_STATUS = {
   activa:   { label: 'Activo', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
@@ -162,7 +197,7 @@ function AvatarStatusPill({ status, onChange }) {
 
 const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
 
-function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack }) {
+function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack, contextDocs = [] }) {
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
@@ -284,6 +319,18 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
                            <button onClick={() => copyText(av.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>
                         : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin VSL</span>}
                     </div>
+                    {/* Especificación del avatar: se vincula un documento de contexto de la estrategia */}
+                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold shrink-0" style={{ color: '#EC4899' }}><Brain size={11} />Spec</span>
+                      <select value={av.spec_node_id || ''} onChange={e => { const nd = contextDocs.find(d => d.node_id === e.target.value); setAvatar(av.id, { spec_node_id: e.target.value || null, spec_title: nd?.title || null }); }} title="Documento que describe este avatar (entra al cerebro)" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue cursor-pointer">
+                        <option value="">Sin especificación vinculada…</option>
+                        {av.spec_node_id && !contextDocs.some(d => d.node_id === av.spec_node_id) && <option value={av.spec_node_id}>{av.spec_title || 'Documento vinculado'}</option>}
+                        {contextDocs.map(d => <option key={d.node_id} value={d.node_id}>{d.title}</option>)}
+                      </select>
+                      {(() => { const nd = contextDocs.find(d => d.node_id === av.spec_node_id); return nd?.web_url
+                        ? <button onClick={() => openUrl(nd.web_url)} title="Abrir la spec en Drive" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><FileText size={12} />Ver</button>
+                        : null; })()}
+                    </div>
                   </div>
                 ))}
                 <button onClick={addAvatar} className="inline-flex items-center gap-1.5 mt-1 mb-0.5 ml-2 py-[7px] px-2.5 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={12} />Agregar variante de avatar</button>
@@ -324,22 +371,73 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
   );
 }
 
-export default function FunnelsView({ clientId }) {
-  const { strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
-  const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
-  const stratIds = new Set(myStrategies.map(s => s.id));
-  const funnels = useMemo(() => (strategyPages || []).filter(p => stratIds.has(p.strategy_id)), [strategyPages, myStrategies]);
-  const stratName = (sid) => { const s = myStrategies.find(x => x.id === sid); return s ? `Estrategia #${(s.position ?? 0) + 1}` : '—'; };
-  const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
+// Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
+function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onTrack, onNew }) {
+  const [open, setOpen] = useState(true);
+  const num = (s.position ?? 0) + 1;
+  const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
+  const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
+  return (
+    <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
+      <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
+        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2.5 flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left p-0">
+          <ChevronRight size={15} className="shrink-0 text-[#C58BB0] transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'none' }} strokeWidth={2.2} />
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><Layers size={15} /></span>
+          <span className="text-[14px] font-bold truncate" style={{ color: '#1A1D26' }}>Estrategia #{num}{cleanName ? <> <span className="text-[#D8C3D2] font-medium">·</span> {cleanName}</> : null}</span>
+          <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: st.bg, color: st.color }}>{st.label}</span>
+        </button>
+        <span className="text-[11px] text-[#9CA3AF] font-semibold shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
+      </div>
+      {open && (
+        <div className="p-3.5">
+          {docs.length > 0 && (
+            <div className="mb-3.5">
+              <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documentos de la estrategia</div>
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                {docs.map(d => <ContextDocCard key={d.id} doc={d} />)}
+              </div>
+            </div>
+          )}
+          <div className="border border-[#ECEEF2] rounded-xl overflow-hidden">
+            <div className="grid items-center py-[10px] px-4 border-b border-[#ECEEF2]" style={{ gridTemplateColumns: GRID, background: '#FAFBFC' }}>
+              {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#9CA3AF]">{h}</div>)}
+            </div>
+            {funnels.length === 0
+              ? <div className="text-[12px] text-[#9CA3AF] py-6 text-center">Sin funnels en esta estrategia.</div>
+              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} contextDocs={docs} />)}
+          </div>
+          <button onClick={() => onNew(s.id)} className="inline-flex items-center gap-1.5 mt-2.5 py-2 px-3 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[12px] font-semibold cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={13} />Nuevo funnel en esta estrategia</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const [filter, setFilter] = useState('todos');
+export default function FunnelsView({ clientId }) {
+  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
+  const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
+  const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
+  const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
+  const funnelsOf = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid);
+
+  // Documentos de contexto (client_brain_docs) por nivel.
+  const [docs, setDocs] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const fetchDocs = useCallback(async () => {
+    try { const d = await sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(clientId)}&select=*`); setDocs(Array.isArray(d) ? d : []); } catch { /* noop */ }
+  }, [clientId]);
+  useEffect(() => { fetchDocs(); }, [fetchDocs]);
+  const clientDocs = useMemo(() => docs.filter(d => d.scope === 'client'), [docs]);
+  const docsOf = (sid) => docs.filter(d => d.strategy_id === sid);
+  const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
+  const sync = async () => { setSyncing(true); try { await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } }); await fetchDocs(); } catch { /* noop */ } finally { setSyncing(false); } };
+
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
   const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
-  const blankForm = () => ({ name: '', strategy_id: myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
+  const blankForm = (sid) => ({ name: '', strategy_id: sid || myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
   const [form, setForm] = useState(blankForm);
-
-  const filtered = funnels.filter(f => filter === 'todos' ? true : filter === 'activos' ? f.status === 'activa' : (Array.isArray(f.visual_resources) ? f.visual_resources.filter(n => !n.done).length : 0) > 0);
+  const openNew = (sid) => { setForm(blankForm(sid)); setModal(true); };
 
   const create = () => {
     if (!form.name.trim() || !form.strategy_id) return;
@@ -354,31 +452,38 @@ export default function FunnelsView({ clientId }) {
   };
   const saveTrack = (val) => { updateStrategyPage(trackFunnel.id, { pixel_code: val.pixel_code || null, clarity_id: val.clarity_id || null, conversion_events: val.events }); setTrackFunnel(null); };
 
-  const filters = [
-    { id: 'todos', label: 'Todos', count: funnels.length },
-    { id: 'activos', label: 'Activos', count: funnels.filter(f => f.status === 'activa').length },
-    { id: 'faltantes', label: 'Con faltantes', count: funnels.filter(f => (Array.isArray(f.visual_resources) ? f.visual_resources.filter(n => !n.done).length : 0) > 0).length },
-  ];
-
   return (
     <div style={{ background: '#FAFBFC' }} className="p-[18px] -mx-1 rounded-xl">
-      <div className="flex items-center gap-2.5 mb-3.5 flex-wrap">
-        <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
-          {filters.map(x => { const active = filter === x.id; return (
-            <button key={x.id} onClick={() => setFilter(x.id)} className="inline-flex items-center gap-1.5 py-2 px-3 rounded-[9px] text-[12.5px] font-semibold font-sans cursor-pointer" style={{ border: `1px solid ${active ? '#C9D6FF' : '#E2E5EB'}`, background: active ? '#EEF2FF' : '#fff', color: active ? '#2E69E0' : '#6B7280' }}>{x.label}<span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-lg text-[10px] font-bold" style={{ background: active ? '#fff' : '#F0F2F5', color: active ? '#2E69E0' : '#7B8190' }}>{x.count}</span></button>
-          ); })}
+      {/* Contexto del cliente (alimenta todas las estrategias) */}
+      <div className="border border-[#E2E5EB] rounded-xl bg-white p-4 mb-4">
+        <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><Brain size={17} /></span>
+          <div className="flex-1 min-w-[160px]">
+            <div className="text-[13.5px] font-bold text-[#1A1D26]">Contexto del cliente</div>
+            <div className="text-[11px] text-[#9CA3AF]">Alimenta a todas las estrategias{lastSync ? ` · sincronizado ${fmtDateTime(lastSync)}` : ''}</div>
+          </div>
+          <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-2 px-3 border-none rounded-[9px] text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50" style={{ background: '#EC4899' }}><RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar contexto'}</button>
         </div>
-        <button onClick={() => { setForm(blankForm()); setModal(true); }} disabled={myStrategies.length === 0} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[9px] bg-blue text-white text-[12.5px] font-semibold font-sans cursor-pointer hover:bg-blue-dark disabled:opacity-50" title={myStrategies.length === 0 ? 'Primero sincronizá las carpetas (pestaña Carpetas)' : ''}><Plus size={14} />Nuevo funnel</button>
+        <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          {[['Nicho', client.niche, '#EC4899', Target], ['Servicio', client.service, '#1A1D26', Sparkles], ['Cuello de botella', client.bottleneck, '#CA8A04', Activity]].map((row) => {
+            const [lbl, val, col, Ic] = row;
+            return (
+              <div key={lbl} className="border border-[#F0F2F5] rounded-lg p-2.5 bg-[#FAFBFC]">
+                <div className="inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider mb-1 text-[#9CA3AF]"><Ic size={11} />{lbl}</div>
+                <div className="text-[12px] font-semibold leading-snug" style={{ color: val ? col : '#C4C9D2' }}>{val || '—'}</div>
+              </div>
+            );
+          })}
+        </div>
+        {clientDocs.length > 0
+          ? <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>{clientDocs.map(d => <ContextDocCard key={d.id} doc={d} />)}</div>
+          : <div className="text-[11.5px] text-[#9CA3AF]">Sin documentos de cliente. Marcá el onboarding con 🧠 en Carpetas y tocá Sincronizar.</div>}
       </div>
 
-      <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden">
-        <div className="grid items-center py-[11px] px-4 border-b border-[#E2E5EB]" style={{ gridTemplateColumns: GRID, background: '#FAFBFC' }}>
-          {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#9CA3AF]">{h}</div>)}
-        </div>
-        {filtered.length === 0
-          ? <div className="flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">{funnels.length === 0 ? 'Todavía no hay funnels' : 'Sin resultados con ese filtro'}</div><div className="text-[11.5px] text-text2">{myStrategies.length === 0 ? 'Primero sincronizá las carpetas del cliente.' : 'Creá uno con "Nuevo funnel".'}</div></div>
-          : filtered.map(f => <FunnelRow key={f.id} f={f} strategyName={stratName(f.strategy_id)} strategyOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} />)}
-      </div>
+      {/* Estrategias, cada una envolviendo sus documentos y funnels */}
+      {myStrategies.length === 0
+        ? <div className="border border-[#E2E5EB] rounded-xl bg-white flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
 
       {/* Modal nuevo funnel */}
       {modal && (
