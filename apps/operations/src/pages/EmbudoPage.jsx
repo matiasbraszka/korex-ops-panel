@@ -193,7 +193,7 @@ function FunnelBars({ steps, tagId }) {
 // ── Tabla comparativa de todos los funnels ───────────────────────────────────
 function CompareTable({ list, sort, onSort, onPick }) {
   const cols = [
-    { k: 'name',           label: 'Funnel',     sub: 'cliente · días de datos' },
+    { k: 'name',           label: 'Funnel',     sub: 'cliente · días con tráfico' },
     { k: 'entrada',        label: 'Visitas',    sub: 'a la prelanding' },
     { k: 'toVsl',          label: 'Registros',  sub: '% s/ visitas', pctv: true },
     { k: 'toGracias',      label: 'Reg. final', sub: '% s/ visitas', pctv: true },
@@ -231,7 +231,7 @@ function CompareTable({ list, sort, onSort, onPick }) {
                   {c.k === 'name' ? (
                     <>
                       <span className="font-semibold text-text truncate">{m.view.label}</span>
-                      <span className="text-[10px] text-text3 mt-0.5">{m.days} {m.days === 1 ? 'día' : 'días'}{m.daysTraffic < m.days ? ` · ${m.daysTraffic} c/ tráfico` : ''}</span>
+                      <span className="text-[10px] text-text3 mt-0.5">{m.daysTraffic} {m.daysTraffic === 1 ? 'día' : 'días'} c/ tráfico{m.days > m.daysTraffic ? ` · de ${m.days}` : ''}</span>
                     </>
                   ) : c.k === 'entrada' ? (
                     <>
@@ -296,7 +296,7 @@ function FunnelDetail({ view }) {
         <div className="bg-white border border-border rounded-2xl p-5">
           <div className="flex justify-between items-center">
             <div className="text-[13px] font-bold">Embudo paso a paso</div>
-            <span className="text-[11px] font-bold text-[#4F46E5] bg-[#EEF0FF] px-2 py-0.5 rounded-full">{r.days} {r.days === 1 ? 'día' : 'días'}</span>
+            <span className="text-[11px] font-bold text-[#4F46E5] bg-[#EEF0FF] px-2 py-0.5 rounded-full">{r.days_traffic} {r.days_traffic === 1 ? 'día' : 'días'} c/ tráfico</span>
           </div>
           <div className="text-[12px] text-text3 mt-0.5 mb-3">El ancho de cada barra es proporcional a las visitas reales: se ve dónde se cae la gente.</div>
           <FunnelBars steps={funnel?.steps} tagId={cur.tag_id} />
@@ -402,7 +402,7 @@ function FunnelDetail({ view }) {
       </div>
 
       <div className="text-[11px] text-text3 mt-4 flex gap-4 flex-wrap">
-        <span>● Embudo, visitas y scroll: <b>Clarity · {r.days} días</b> (se actualiza a diario)</span>
+        <span>● Embudo, visitas y scroll: <b>Clarity · {r.days_traffic} días c/ tráfico</b> (de {r.days} · se actualiza a diario)</span>
         <span>● CTAs, quiz y WhatsApp: <b>último scrape de Clarity/Voomly</b></span>
         {cur.last_synced_at && <span>● Última actualización: {new Date(cur.last_synced_at).toLocaleString('es-AR')}</span>}
       </div>
