@@ -6,6 +6,15 @@ const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('es-AR'));
 const pct = (n) => (n == null ? '—' : `${(Math.round(n * 10) / 10).toLocaleString('es-AR')}%`);
 // Color por scroll (verde bien / ámbar medio / rojo flojo).
 const scrollColor = (v) => (v == null ? '#9AA5B1' : v >= 50 ? '#16A34A' : v >= 25 ? '#D97706' : '#DC2626');
+const isoDaysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+
+// Ventanas de tiempo. 'Máximo' = todos los días que tenga cada funnel.
+const WINDOWS = [
+  { key: 'all', label: 'Máximo', days: null },
+  { key: 'd30', label: '30 días', days: 30 },
+  { key: 'd14', label: '14 días', days: 14 },
+  { key: 'd7', label: '7 días', days: 7 },
+];
 
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
 const stepInfo = (u) => {
@@ -16,6 +25,36 @@ const stepInfo = (u) => {
   return { type: 'other', label: p.replace(/\/index\.html$/, '').replace(/^\//, '') || p };
 };
 const RANK = { prelanding: 0, vsl: 1, other: 2, gracias: 3 };
+
+// Agrega N días de clarity_daily de UN funnel en un único resumen (embudo por URL + KPIs).
+function aggregate(rows, days) {
+  const cutoff = days ? isoDaysAgo(days) : null;
+  const win = (rows || []).filter((r) => !cutoff || r.date >= cutoff);
+  if (!win.length) return null;
+  let sessions = 0, bots = 0, scrollNum = 0, scrollDen = 0;
+  const paths = new Map();
+  const dates = new Set(), datesTraffic = new Set();
+  let minD = null, maxD = null;
+  for (const r of win) {
+    sessions += r.sessions || 0;
+    bots += r.bot_sessions || 0;
+    if (r.avg_scroll_depth != null) { scrollNum += r.avg_scroll_depth * (r.sessions || 0); scrollDen += (r.sessions || 0); }
+    for (const pp of (r.popular_pages || [])) {
+      const url = pp.url; const c = Number(pp.visitsCount ?? pp.count ?? 0) || 0;
+      if (url) paths.set(url, (paths.get(url) || 0) + c);
+    }
+    dates.add(r.date);
+    if ((r.sessions || 0) > 0) datesTraffic.add(r.date);
+    if (!minD || r.date < minD) minD = r.date;
+    if (!maxD || r.date > maxD) maxD = r.date;
+  }
+  const top_paths = [...paths.entries()].map(([url, count]) => ({ url, count })).sort((a, b) => b.count - a.count);
+  return {
+    sessions, bot_sessions: bots,
+    avg_scroll_depth: scrollDen ? Math.round((scrollNum / scrollDen) * 100) / 100 : null,
+    top_paths, days: dates.size, days_traffic: datesTraffic.size, range_min: minD, range_max: maxD,
+  };
+}
 
 // Arma el embudo de un dominio puntual a partir de las páginas (top_paths).
 function buildFunnel(topPaths, domain) {
@@ -42,9 +81,7 @@ const shortDom = (h) => (h || '').replace(/^www\./, '').replace(/\.metodokorex\.
 const isSelector = (l) => !l || l.length < 3 || l.includes('>') || /^[A-Z][A-Z0-9]*(\.|#|\[)/.test(l) || /^[A-Z]+(\[\d+\])?$/.test(l) || /^▫+/.test(l);
 const clicksPages = (clicks) => clicks?.pages || [];
 const findPage = (clicks, re) => clicksPages(clicks).find((p) => re.test(p.step || '')) || null;
-// filtra los clicks de una página al dominio elegido
 const clicksForDomain = (clicks, domain) => ({ pages: clicksPages(clicks).filter((p) => !domain || hostOf(p.url) === domain) });
-// opciones legibles del quiz / CTAs de la página intermedia, dedup por texto (máximo click)
 function readableClicks(page) {
   const map = new Map();
   for (const e of (page?.top || [])) {
@@ -54,7 +91,6 @@ function readableClicks(page) {
   }
   return [...map.values()].sort((a, b) => b.clicks - a.clicks);
 }
-// clicks al botón de WhatsApp en la página de gracias (botón CTA, suma de instancias)
 function whatsappClicks(page) {
   let total = 0;
   for (const e of (page?.top || [])) {
@@ -62,23 +98,27 @@ function whatsappClicks(page) {
   }
   return total;
 }
-
-// ¿es un CTA (botón de acción) o una opción de respuesta del quiz?
 const isCTA = (l) => /^[¡]?\s*(QUIERO|EMPEZAR|EMPIEZA|COMENZAR|COMIENZA|VER\b|COMUNICAR|VAMOS|CONTINUAR|SIGUIENTE|UNIRME|ÚNETE|UNETE|DESCUBRIR|GENERAR|AGENDAR|RESERVAR)/i.test(l) || (l === l.toUpperCase() && /[A-ZÁÉÍÓÚÑ]{3}/.test(l) && l.length <= 42);
 
-// Métricas clave de una vista (funnel × dominio) — todo derivado de range_30d (fresco a diario).
+// Métricas clave de una vista (funnel × dominio). r = resumen agregado del rango elegido.
 function metricsOf(view) {
-  const r = view.funnel?.range_30d || null;
+  const r = view.funnel?.range || null;
   const funnel = r ? buildFunnel(r.top_paths, view.domain) : null;
   const entrada = funnel?.steps?.[0]?.count || 0;
   const vslStep = funnel?.steps?.find((s) => s.type === 'vsl');
   const graciasStep = funnel?.steps?.find((s) => s.type === 'gracias');
   const toVsl = entrada && vslStep ? (vslStep.count / entrada) * 100 : null;
-  const toGracias = entrada && graciasStep ? (graciasStep.count / entrada) * 100 : null;
+  const toGracias = entrada && graciasStep ? (graciasStep.count / entrada) * 100 : null;          // s/ visitas
+  const toGraciasLeads = vslStep?.count && graciasStep ? (graciasStep.count / vslStep.count) * 100 : null; // s/ leads
   const sessions = r?.sessions || 0;
   const bots = r?.bot_sessions || 0;
   const botPct = sessions ? (bots / sessions) * 100 : 0;
   const scroll = r?.avg_scroll_depth ?? null;
+  // WhatsApp en la página de gracias (viene del scrape de clicks)
+  const clicks = clicksForDomain(view.funnel?.clicks_30d, view.domain);
+  const graciasPage = findPage(clicks, /gracias|thank|thanks/);
+  const waClicks = whatsappClicks(graciasPage);
+  const waPct = graciasStep?.count ? (waClicks / graciasStep.count) * 100 : null;
   // mayor caída entre pasos (cuello)
   let cuello = null;
   if (funnel?.steps?.length) {
@@ -89,7 +129,11 @@ function metricsOf(view) {
       if (!cuello || drop > cuello.drop) cuello = { from: prev, to: s, drop };
     }
   }
-  return { view, r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, sessions, bots, botPct, scroll, cuello };
+  return {
+    view, r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, toGraciasLeads,
+    sessions, bots, botPct, scroll, waClicks, waPct, cuello,
+    days: r?.days ?? 0, daysTraffic: r?.days_traffic ?? 0,
+  };
 }
 
 function Kpi({ label, value, sub, color }) {
@@ -149,20 +193,21 @@ function FunnelBars({ steps, tagId }) {
 // ── Tabla comparativa de todos los funnels ───────────────────────────────────
 function CompareTable({ list, sort, onSort, onPick }) {
   const cols = [
-    { k: 'name',      label: 'Funnel',         sub: 'cliente · dominio' },
-    { k: 'entrada',   label: 'Visitas',        sub: 'a la prelanding' },
-    { k: 'toVsl',     label: 'Registros',      sub: '% que va al VSL', pctv: true },
-    { k: 'toGracias', label: 'Registro final', sub: '% que llega a gracias', pctv: true },
-    { k: 'scroll',    label: 'Scroll',         sub: 'cuánto bajan', pctv: true, color: true },
-    { k: 'botPct',    label: 'Bots',           sub: '% tráfico bot', pctv: true, muted: true },
+    { k: 'name',           label: 'Funnel',     sub: 'cliente · días de datos' },
+    { k: 'entrada',        label: 'Visitas',    sub: 'a la prelanding' },
+    { k: 'toVsl',          label: 'Registros',  sub: '% s/ visitas', pctv: true },
+    { k: 'toGracias',      label: 'Reg. final', sub: '% s/ visitas', pctv: true },
+    { k: 'toGraciasLeads', label: 'Reg. final', sub: '% s/ leads', pctv: true },
+    { k: 'waPct',          label: 'WhatsApp',   sub: '% s/ leads', pctv: true, muted: true },
+    { k: 'scroll',         label: 'Scroll',     sub: 'proyecto', pctv: true, color: true },
   ];
-  const GRID = 'grid grid-cols-[2fr_1fr_1.1fr_1.2fr_1fr_0.9fr]';
+  const GRID = 'grid grid-cols-[1.8fr_0.9fr_1fr_1fr_1fr_1fr_0.9fr]';
   const maxEntrada = Math.max(1, ...list.map((m) => m.entrada || 0));
   return (
     <div className="bg-white border border-border rounded-xl overflow-hidden">
-      <div className="text-[12px] text-text3 px-4 pt-3 pb-1">Comparando <b className="text-text">{list.length}</b> funnels · últimos 30 días</div>
+      <div className="text-[12px] text-text3 px-4 pt-3 pb-1">Comparando <b className="text-text">{list.length}</b> funnels</div>
       <div className="overflow-x-auto">
-        <div className="min-w-[720px]">
+        <div className="min-w-[860px]">
           <div className={`${GRID} bg-[#FAFBFC] border-y border-border`}>
             {cols.map((c, i) => {
               const active = sort.key === c.k;
@@ -186,7 +231,7 @@ function CompareTable({ list, sort, onSort, onPick }) {
                   {c.k === 'name' ? (
                     <>
                       <span className="font-semibold text-text truncate">{m.view.label}</span>
-                      {m.view.multi && <span className="text-[10px] text-text3 mt-0.5">{shortDom(m.view.domain)}</span>}
+                      <span className="text-[10px] text-text3 mt-0.5">{m.days} {m.days === 1 ? 'día' : 'días'}{m.daysTraffic < m.days ? ` · ${m.daysTraffic} c/ tráfico` : ''}</span>
                     </>
                   ) : c.k === 'entrada' ? (
                     <>
@@ -208,6 +253,7 @@ function CompareTable({ list, sort, onSort, onPick }) {
       </div>
       <div className="px-4 py-2.5 text-[11px] text-text3 bg-[#FAFBFC] border-t border-border flex items-center gap-3 flex-wrap">
         <span>Clic en un título para ordenar · clic en un funnel para abrir su detalle.</span>
+        <span>Reg. final <b>s/ visitas</b> = sobre las visitas totales · <b>s/ leads</b> = sobre los que se registraron.</span>
         <span className="flex items-center gap-1">Scroll: <span style={{ color: '#16A34A' }}>●</span> bien <span style={{ color: '#D97706' }}>●</span> medio <span style={{ color: '#DC2626' }}>●</span> flojo</span>
       </div>
     </div>
@@ -219,16 +265,13 @@ function FunnelDetail({ view }) {
   const cur = view.funnel;
   const dom = view.domain;
   const m = useMemo(() => metricsOf(view), [view]);
-  const { r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, cuello, botPct } = m;
+  const { r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, toGraciasLeads, cuello, botPct, waClicks, waPct } = m;
   const humans = r ? (r.sessions || 0) - (r.bot_sessions || 0) : 0;
 
-  // Comportamiento: quiz, WhatsApp, compromiso con el VSL (clicks filtrados al dominio elegido)
   const clicks = useMemo(() => clicksForDomain(cur?.clicks_30d, dom), [cur, dom]);
-  const vsl = (view.primary && cur?.vsl_cross) ? cur.vsl_cross : null; // el cruce automático es del dominio principal
+  const vsl = (view.primary && cur?.vsl_cross) ? cur.vsl_cross : null;
   const midPage = useMemo(() => findPage(clicks, /vsl|landing|register|focus/), [clicks]);
-  const graciasPage = useMemo(() => findPage(clicks, /gracias|thank|thanks/), [clicks]);
   const prelandingPage = useMemo(() => findPage(clicks, /prelanding/), [clicks]);
-  const waClicks = useMemo(() => whatsappClicks(graciasPage), [graciasPage]);
   const preTop = useMemo(() => readableClicks(prelandingPage).slice(0, 5), [prelandingPage]);
   const ctas = useMemo(() => {
     const pre = readableClicks(prelandingPage).filter((q) => isCTA(q.label)).map((q) => ({ ...q, src: 'Prelanding' }));
@@ -241,18 +284,19 @@ function FunnelDetail({ view }) {
 
   return (
     <>
-      <div className="grid grid-cols-4 gap-3.5 mb-5 max-md:grid-cols-2">
+      <div className="grid grid-cols-5 gap-3.5 mb-5 max-md:grid-cols-2">
         <Kpi label="Visitas a la prelanding" value={fmt(entrada)} sub={view.multi ? `dominio ${shortDom(dom)} · ${fmt(r.sessions)} ses. proyecto` : `${Math.round(botPct)}% bots · ${fmt(humans)} reales (proyecto)`} color="#4F46E5" />
         <Kpi label="Registros (al VSL)" value={pct(toVsl)} sub={vslStep ? `${fmt(vslStep.count)} leads · de ${fmt(entrada)} visitas` : 'sin paso de VSL'} color="#0EA5A5" />
-        <Kpi label="Registro final" value={pct(toGracias)} sub={graciasStep ? `${fmt(graciasStep.count)} llegan a "gracias"` : 'sin página de gracias'} color="#16A34A" />
-        <Kpi label="Scroll promedio" value={r.avg_scroll_depth != null ? pct(r.avg_scroll_depth) : '—'} sub={view.multi ? 'del proyecto (ambos dominios)' : 'cuánto baja la página'} color="#D97706" />
+        <Kpi label="Registro final · s/ visitas" value={pct(toGracias)} sub={graciasStep ? `${fmt(graciasStep.count)} llegan a "gracias"` : 'sin página de gracias'} color="#16A34A" />
+        <Kpi label="Registro final · s/ leads" value={pct(toGraciasLeads)} sub={vslStep?.count ? `de ${fmt(vslStep.count)} registrados` : 'sin leads'} color="#0891B2" />
+        <Kpi label="Scroll promedio" value={r.avg_scroll_depth != null ? pct(r.avg_scroll_depth) : '—'} sub="del proyecto (no por página)" color="#D97706" />
       </div>
 
       <div className="grid grid-cols-[1.5fr_1fr] gap-4 items-start max-md:grid-cols-1">
         <div className="bg-white border border-border rounded-2xl p-5">
           <div className="flex justify-between items-center">
             <div className="text-[13px] font-bold">Embudo paso a paso</div>
-            <span className="text-[11px] font-bold text-[#4F46E5] bg-[#EEF0FF] px-2 py-0.5 rounded-full">30 días</span>
+            <span className="text-[11px] font-bold text-[#4F46E5] bg-[#EEF0FF] px-2 py-0.5 rounded-full">{r.days} {r.days === 1 ? 'día' : 'días'}</span>
           </div>
           <div className="text-[12px] text-text3 mt-0.5 mb-3">El ancho de cada barra es proporcional a las visitas reales: se ve dónde se cae la gente.</div>
           <FunnelBars steps={funnel?.steps} tagId={cur.tag_id} />
@@ -269,15 +313,15 @@ function FunnelDetail({ view }) {
                 <div className="text-[13px] leading-snug"><b>Cuello principal:</b> {Math.round(cuello.drop)}% se cae entre <b>{cuello.from.label}</b> y <b>{cuello.to.label}</b>. Es donde más se pierde gente.</div>
               </div>
             )}
-            {toVsl != null && vslStep && graciasStep && (vslStep.count ? (graciasStep.count / vslStep.count) : 0) >= 0.4 && (
+            {toGraciasLeads != null && toGraciasLeads >= 40 && (
               <div className="flex gap-2.5 items-start py-2.5 border-t border-border">
                 <div className="w-6 h-6 rounded-lg bg-[#E9F8EF] text-[#16A34A] flex items-center justify-center shrink-0"><CheckCircle2 size={14} /></div>
-                <div className="text-[13px] leading-snug"><b>Lo que sí funciona:</b> de los que llegan al VSL, {pct((graciasStep.count / vslStep.count) * 100)} avanza a "gracias". El cierre va bien; el problema es traer gente al VSL.</div>
+                <div className="text-[13px] leading-snug"><b>Lo que sí funciona:</b> de los que llegan al VSL, {pct(toGraciasLeads)} avanza a "gracias". El cierre va bien; el problema es traer gente al VSL.</div>
               </div>
             )}
             <div className="flex gap-2.5 items-start py-2.5 border-t border-border">
               <div className="w-6 h-6 rounded-lg bg-[#FEF3E2] text-[#D97706] flex items-center justify-center shrink-0"><AlertTriangle size={14} /></div>
-              <div className="text-[13px] leading-snug"><b>Scroll {pct(r.avg_scroll_depth)}:</b> {r.avg_scroll_depth >= 50 ? 'la gente baja bien la página.' : 'la gente baja poco la página — revisar lo de arriba (above the fold).'}</div>
+              <div className="text-[13px] leading-snug"><b>Scroll {pct(r.avg_scroll_depth)}:</b> {r.avg_scroll_depth >= 50 ? 'la gente baja bien la página.' : 'la gente baja poco la página — revisar lo de arriba (above the fold).'} <span className="text-text3">Es del proyecto entero (Clarity no separa scroll por página vía API).</span></div>
             </div>
           </div>
           <a href={`https://clarity.microsoft.com/projects/view/${cur.tag_id}/heatmaps`} target="_blank" rel="noreferrer"
@@ -341,8 +385,11 @@ function FunnelDetail({ view }) {
         <div className="bg-white border border-border rounded-2xl p-5">
           <div className="text-[13px] font-bold flex items-center gap-1.5"><MessageCircle size={14} className="text-[#16A34A]" /> WhatsApp en la página de gracias</div>
           <div className="text-[12px] text-text3 mt-0.5 mb-2">Clicks al botón para escribir por WhatsApp.</div>
-          <div className="text-[34px] font-extrabold tracking-tight" style={{ color: '#16A34A' }}>{fmt(waClicks)}</div>
-          <div className="text-[12px] text-text3">{graciasStep ? `sobre ${fmt(graciasStep.count)} visitas a "gracias"` : 'clicks al CTA final'}</div>
+          <div className="flex items-baseline gap-2">
+            <div className="text-[34px] font-extrabold tracking-tight" style={{ color: '#16A34A' }}>{fmt(waClicks)}</div>
+            {waPct != null && <div className="text-[16px] font-bold text-[#16A34A]">· {pct(waPct)}</div>}
+          </div>
+          <div className="text-[12px] text-text3">{graciasStep ? `${pct(waPct)} de los ${fmt(graciasStep.count)} que llegaron a "gracias"` : 'clicks al CTA final'}</div>
           {preTop.length > 0 && (
             <div className="mt-4 pt-3 border-t border-border">
               <div className="text-[12px] font-semibold mb-1.5">Dónde clickean en la prelanding</div>
@@ -355,8 +402,8 @@ function FunnelDetail({ view }) {
       </div>
 
       <div className="text-[11px] text-text3 mt-4 flex gap-4 flex-wrap">
-        <span>● Embudo, visitas y scroll: <b>Clarity · 30 días</b> (se actualiza a diario)</span>
-        <span>● CTAs, quiz y VSL: <b>último scrape de Clarity/Voomly</b></span>
+        <span>● Embudo, visitas y scroll: <b>Clarity · {r.days} días</b> (se actualiza a diario)</span>
+        <span>● CTAs, quiz y WhatsApp: <b>último scrape de Clarity/Voomly</b></span>
         {cur.last_synced_at && <span>● Última actualización: {new Date(cur.last_synced_at).toLocaleString('es-AR')}</span>}
       </div>
     </>
@@ -364,34 +411,50 @@ function FunnelDetail({ view }) {
 }
 
 export default function EmbudoPage() {
-  const [funnels, setFunnels] = useState([]);
+  const [meta, setMeta] = useState([]);
+  const [daily, setDaily] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [selected, setSelected] = useState('all'); // 'all' = tabla comparativa | view.key = detalle
   const [sort, setSort] = useState({ key: 'entrada', dir: 'desc' });
+  const [win, setWin] = useState('all'); // ventana de tiempo
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from('clarity_funnels')
-        .select('id, label, tag_id, client_id, range_30d, clicks_30d, vsl_cross, last_synced_at, client:clients(name)')
-        .eq('active', true);
+      const [mRes, dRes] = await Promise.all([
+        supabase.from('clarity_funnels').select('id, label, tag_id, client_id, clicks_30d, vsl_cross, last_synced_at, client:clients(name)').eq('active', true),
+        supabase.from('clarity_daily').select('funnel_id, date, sessions, bot_sessions, avg_scroll_depth, popular_pages').gte('date', isoDaysAgo(180)).order('date'),
+      ]);
       if (!active) return;
-      if (error) { setErr(error.message); setLoading(false); return; }
-      const rows = (data || []).filter((r) => r.range_30d);
-      rows.sort((a, b) => (b.range_30d?.sessions || 0) - (a.range_30d?.sessions || 0));
-      setFunnels(rows);
+      if (mRes.error || dRes.error) { setErr((mRes.error || dRes.error).message); setLoading(false); return; }
+      setMeta(mRes.data || []);
+      setDaily(dRes.data || []);
       setLoading(false);
     })();
     return () => { active = false; };
   }, []);
 
-  // vistas = funnel × dominio (un cliente con varios dominios = varios funnels separados)
+  const dailyByFunnel = useMemo(() => {
+    const map = {};
+    for (const r of daily) (map[r.funnel_id] ||= []).push(r);
+    return map;
+  }, [daily]);
+
+  const winDays = WINDOWS.find((w) => w.key === win)?.days ?? null;
+
+  // funnels con su resumen agregado del rango elegido
+  const funnels = useMemo(() => meta
+    .map((f) => ({ ...f, range: aggregate(dailyByFunnel[f.id], winDays) }))
+    .filter((f) => f.range && f.range.top_paths.length)
+    .sort((a, b) => (b.range.sessions || 0) - (a.range.sessions || 0)),
+  [meta, dailyByFunnel, winDays]);
+
+  // vistas = funnel × dominio
   const views = useMemo(() => {
     const out = [];
     for (const f of funnels) {
-      const doms = domainsOf(f.range_30d?.top_paths);
+      const doms = domainsOf(f.range?.top_paths);
       doms.forEach((d, i) => out.push({ key: `${f.id}|${d}`, funnel: f, domain: d, primary: i === 0, multi: doms.length > 1, label: doms.length > 1 ? `${f.client?.name || 'Cliente'} · ${shortDom(d)}` : (f.client?.name || f.label) }));
     }
     return out;
@@ -411,9 +474,9 @@ export default function EmbudoPage() {
   const setSortKey = (key) => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }));
   const current = selected !== 'all' ? views.find((v) => v.key === selected) : null;
   const lastSync = useMemo(() => {
-    const ts = funnels.map((f) => f.last_synced_at).filter(Boolean).sort().pop();
+    const ts = meta.map((f) => f.last_synced_at).filter(Boolean).sort().pop();
     return ts ? new Date(ts) : null;
-  }, [funnels]);
+  }, [meta]);
 
   return (
     <div className="p-6 max-w-[1180px] mx-auto">
@@ -437,13 +500,18 @@ export default function EmbudoPage() {
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text3 pointer-events-none" />
             </div>
           )}
-          <span className="bg-white border border-border rounded-xl px-3 py-2 text-[13px] font-semibold text-text3">Últimos 30 días</span>
+          <div className="flex gap-1 bg-[#F3F4F6] p-1 rounded-xl">
+            {WINDOWS.map((w) => (
+              <button key={w.key} onClick={() => setWin(w.key)} className="text-[12px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
+                style={win === w.key ? { background: '#4F46E5', color: '#fff', boxShadow: '0 1px 3px rgba(79,70,229,0.4)' } : { color: '#6B7280' }}>{w.label}</button>
+            ))}
+          </div>
         </div>
       </div>
 
       {loading && <div className="text-text3 text-[13px] py-10 text-center">Cargando métricas…</div>}
       {err && <div className="text-[#DC2626] text-[13px] bg-[#FDECEC] border border-[#F5C2C2] rounded-xl p-3">Error: {err}</div>}
-      {!loading && !err && !funnels.length && <div className="text-text3 text-[13px] py-10 text-center">Todavía no hay datos de Clarity cargados.</div>}
+      {!loading && !err && !views.length && <div className="text-text3 text-[13px] py-10 text-center">Sin datos de Clarity en este rango.</div>}
 
       {!loading && !err && views.length > 0 && (
         current ? <FunnelDetail view={current} /> : <CompareTable list={sorted} sort={sort} onSort={setSortKey} onPick={setSelected} />
