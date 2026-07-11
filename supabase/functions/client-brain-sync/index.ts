@@ -1,13 +1,14 @@
 // supabase/functions/client-brain-sync/index.ts
-// Ingesta del "mini-cerebro" de cada cliente: lee el TEXTO de sus 3 documentos
-// clave —DEL (documento en limpio), Onboarding e Investigación— y lo guarda en
-// client_brain_docs para que el cerebro de marketing pueda razonar sobre ellos.
+// Ingesta del "mini-cerebro" de cada cliente: lee el TEXTO de los documentos de
+// contexto —DEL, Onboarding, Investigación (auto por nombre) + los fijados a mano
+// (pins)— y lo guarda en client_brain_docs para que el cerebro de marketing razone.
 //
 // Por cada cliente:
-//   1. Recorre client_drive_nodes (ya sincronizado por drive-sync) y detecta los
-//      3 docs por nombre (mismas reglas que el panel: DEL / Onboarding / Investigación).
+//   1. Recorre client_drive_nodes (ya sincronizado por drive-sync). Marca como
+//      contexto: los Google Docs cuyo nombre matchea DEL/Onboarding/Investigación
+//      (puede haber varios por tipo) + los node_id de client_brain_pins (kind=extra).
 //   2. Si el doc cambió desde la última extracción (modified_time), pide su texto a
-//      un Apps Script (acción read_doc) y hace upsert en client_brain_docs. Idempotente.
+//      un Apps Script (acción read_doc) y hace upsert. Borra lo que ya no corresponde.
 //
 // La llama el botón "Sincronizar" del panel (?client_id=) y un pg_cron diario
 // (después del drive-sync de las 06:00 BUE). SOLO esta función escribe (service_role).
@@ -68,13 +69,16 @@ async function fetchDocText(
 }
 
 // ── Sincroniza los docs de un cliente ────────────────────────────────────────────
+// Ingiere: (a) TODOS los Google Docs que matchean DEL/onboarding/investigación por
+// nombre (permite guardar varios, ej. onboarding estructurado + transcripción), y
+// (b) los documentos FIJADOS a mano en client_brain_pins (doc_kind='extra', de
+// cualquier tipo). Borra de client_brain_docs lo que ya no corresponde (desfijado).
 async function syncClient(
   client: { id: string; name: string },
   cfg: { appscriptUrl: string; appscriptSecret: string },
 ): Promise<{ ok: boolean; docs: number; skipped: number; error?: string }> {
   const clientId = client.id;
 
-  // Nodos del árbol (documentos; excluye carpetas).
   const { data: nodes, error: nErr } = await supabase
     .from("client_drive_nodes")
     .select("id, name, node_type, mime_type, web_url, modified_time")
@@ -82,28 +86,30 @@ async function syncClient(
     .neq("node_type", "folder");
   if (nErr) return { ok: false, docs: 0, skipped: 0, error: String(nErr.message) };
 
-  // Elegir el mejor candidato por tipo (el primero que matchea; docs > otros).
-  const chosen = new Map<string, typeof nodes[number]>();
-  for (const n of (nodes ?? [])) {
-    const kind = docKind(n.name || "");
-    if (!kind) continue;
-    const prev = chosen.get(kind);
-    // Preferir Google Docs sobre otros formatos, y el más recientemente modificado.
-    const better = !prev
-      || (n.node_type === "document" && prev.node_type !== "document")
-      || (n.node_type === prev.node_type && (n.modified_time || "") > (prev.modified_time || ""));
-    if (better) chosen.set(kind, n);
-  }
-  if (!chosen.size) return { ok: true, docs: 0, skipped: 0 };
+  const { data: pins } = await supabase
+    .from("client_brain_pins").select("node_id").eq("client_id", clientId);
+  const pinIds = new Set((pins ?? []).map((p) => p.node_id));
 
-  // Estado actual de lo ya ingerido (para saltar lo que no cambió).
+  // Documentos deseados: node_id -> { node, kind }
+  const desired = new Map<string, { node: typeof nodes[number]; kind: string }>();
+  for (const n of (nodes ?? [])) {
+    // Auto: solo Google Docs (los .docx/pdf dan texto sucio). Puede haber varios por tipo.
+    if (n.node_type === "document") {
+      const kind = docKind(n.name || "");
+      if (kind) desired.set(n.id, { node: n, kind });
+    }
+    // Fijados a mano: cualquier tipo, salvo que ya sea un match auto (mantiene su kind).
+    if (pinIds.has(n.id) && !desired.has(n.id)) desired.set(n.id, { node: n, kind: "extra" });
+  }
+
+  // Estado actual (para saltar lo que no cambió y borrar lo que sobra).
   const { data: existing } = await supabase
-    .from("client_brain_docs").select("doc_kind, source_modified_time, char_count").eq("client_id", clientId);
-  const byKind = new Map((existing ?? []).map((e) => [e.doc_kind, e]));
+    .from("client_brain_docs").select("node_id, source_modified_time, char_count").eq("client_id", clientId);
+  const byNode = new Map((existing ?? []).map((e) => [e.node_id, e]));
 
   let docs = 0, skipped = 0;
-  for (const [kind, n] of chosen) {
-    const prev = byKind.get(kind);
+  for (const [nodeId, { node: n, kind }] of desired) {
+    const prev = byNode.get(nodeId);
     const unchanged = prev && prev.char_count > 0
       && str(prev.source_modified_time) && str(n.modified_time)
       && new Date(prev.source_modified_time as string).getTime() === new Date(n.modified_time as string).getTime();
@@ -114,7 +120,7 @@ async function syncClient(
     const text = got.text || "";
 
     const { error: uErr } = await supabase.from("client_brain_docs").upsert({
-      id: `cbd_${clientId}_${kind}`,
+      id: `cbd_${n.id}`,
       client_id: clientId,
       node_id: n.id,
       doc_kind: kind,
@@ -124,9 +130,15 @@ async function syncClient(
       web_url: n.web_url || null,
       source_modified_time: n.modified_time || null,
       synced_at: new Date().toISOString(),
-    }, { onConflict: "client_id,doc_kind" });
-    if (uErr) { console.error("brain upsert error", clientId, kind, uErr); skipped++; continue; }
+    }, { onConflict: "client_id,node_id" });
+    if (uErr) { console.error("brain upsert error", clientId, nodeId, uErr); skipped++; continue; }
     docs++;
+  }
+
+  // Borrar lo que ya no corresponde (docs viejos o pins removidos).
+  const toDelete = (existing ?? []).map((e) => e.node_id).filter((id) => !desired.has(id));
+  if (toDelete.length) {
+    await supabase.from("client_brain_docs").delete().eq("client_id", clientId).in("node_id", toDelete);
   }
 
   return { ok: true, docs, skipped };
