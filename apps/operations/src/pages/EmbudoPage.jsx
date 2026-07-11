@@ -110,10 +110,17 @@ function metricsOf(view) {
   const toVsl = entrada && vslStep ? (vslStep.count / entrada) * 100 : null;
   const toGracias = entrada && graciasStep ? (graciasStep.count / entrada) * 100 : null;          // s/ visitas
   const toGraciasLeads = vslStep?.count && graciasStep ? (graciasStep.count / vslStep.count) * 100 : null; // s/ leads
-  const sessions = r?.sessions || 0;
+  // OJO: Clarity reporta 'sessions' SIN bots (los cuenta aparte). Total = sessions + bots.
+  const sessions = r?.sessions || 0;    // sesiones humanas
   const bots = r?.bot_sessions || 0;
-  const botPct = sessions ? (bots / sessions) * 100 : 0;
-  const scroll = r?.avg_scroll_depth ?? null;
+  const totalSes = sessions + bots;
+  const humans = sessions;
+  const botPct = totalSes ? (bots / totalSes) * 100 : 0;
+  const scroll = r?.avg_scroll_depth ?? null; // del proyecto entero
+  // scroll por página (lo llena el scrape del heatmap; null hasta entonces)
+  const sbp = (view.funnel?.scroll_by_page?.pages || []).filter((p) => !view.domain || hostOf(p.url) === view.domain);
+  const scrollPre = sbp.find((p) => /prelanding|^1/.test(p.step || ''))?.scroll ?? null;
+  const scrollVsl = sbp.find((p) => /vsl|landing|register|focus|^2/.test(p.step || ''))?.scroll ?? null;
   // WhatsApp en la página de gracias (viene del scrape de clicks)
   const clicks = clicksForDomain(view.funnel?.clicks_30d, view.domain);
   const graciasPage = findPage(clicks, /gracias|thank|thanks/);
@@ -129,9 +136,20 @@ function metricsOf(view) {
       if (!cuello || drop > cuello.drop) cuello = { from: prev, to: s, drop };
     }
   }
+  // anomalías de tracking: valores imposibles en un embudo real
+  const anomalies = [];
+  if (bots > sessions && totalSes > 0) anomalies.push(`Los bots (${bots}) superan a las sesiones humanas (${sessions}).`);
+  if (funnel?.steps?.length) {
+    for (let i = 1; i < funnel.steps.length; i++) {
+      if (funnel.steps[i].count > funnel.steps[i - 1].count)
+        anomalies.push(`"${funnel.steps[i].label}" (${funnel.steps[i].count}) tiene más visitas que el paso anterior "${funnel.steps[i - 1].label}" (${funnel.steps[i - 1].count}).`);
+    }
+  }
+  if (totalSes > 0 && entrada === 0) anomalies.push('Hay tráfico pero no se detecta la página de prelanding.');
   return {
     view, r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, toGraciasLeads,
-    sessions, bots, botPct, scroll, waClicks, waPct, cuello,
+    vslCount: vslStep?.count ?? null, graciasCount: graciasStep?.count ?? null,
+    sessions, bots, totalSes, humans, botPct, scroll, scrollPre, scrollVsl, waClicks, waPct, cuello, anomalies,
     days: r?.days ?? 0, daysTraffic: r?.days_traffic ?? 0,
   };
 }
@@ -166,7 +184,7 @@ function FunnelBars({ steps, tagId }) {
                 <span className="font-semibold text-[#16A34A] bg-[#E9F8EF] px-2 py-0.5 rounded-full">{pct(conv)} pasa</span>
                 {drop != null && drop >= 1 && (
                   <span className="font-semibold text-[#DC2626] bg-[#FDECEC] px-2 py-0.5 rounded-full">
-                    −{pct(drop)} se cae{drop >= 70 ? ' · cuello' : ''}
+                    se cae {pct(drop)}{drop >= 70 ? ' · cuello' : ''}
                   </span>
                 )}
               </div>
@@ -195,19 +213,19 @@ function CompareTable({ list, sort, onSort, onPick }) {
   const cols = [
     { k: 'name',           label: 'Funnel',     sub: 'cliente · días con tráfico' },
     { k: 'entrada',        label: 'Visitas',    sub: 'a la prelanding' },
-    { k: 'toVsl',          label: 'Registros',  sub: '% s/ visitas', pctv: true },
-    { k: 'toGracias',      label: 'Reg. final', sub: '% s/ visitas', pctv: true },
-    { k: 'toGraciasLeads', label: 'Reg. final', sub: '% s/ leads', pctv: true },
-    { k: 'waPct',          label: 'WhatsApp',   sub: '% s/ leads', pctv: true, muted: true },
-    { k: 'scroll',         label: 'Scroll',     sub: 'proyecto', pctv: true, color: true },
+    { k: 'toVsl',          label: 'Registros',  sub: '% · leads', pctv: true, cnt: 'vslCount', unit: 'leads' },
+    { k: 'toGracias',      label: 'Reg. final', sub: '% s/ visitas', pctv: true, cnt: 'graciasCount', unit: 'a gracias' },
+    { k: 'toGraciasLeads', label: 'Reg. final', sub: '% s/ leads', pctv: true, cnt: 'graciasCount', unit: 'a gracias' },
+    { k: 'waPct',          label: 'WhatsApp',   sub: '% · clicks', pctv: true, cnt: 'waClicks', unit: 'clicks', muted: true },
+    { k: 'scroll',         label: 'Scroll',     sub: 'prelanding · VSL', scrollcol: true },
   ];
-  const GRID = 'grid grid-cols-[1.8fr_0.9fr_1fr_1fr_1fr_1fr_0.9fr]';
+  const GRID = 'grid grid-cols-[1.9fr_0.9fr_1fr_1fr_1fr_1fr_1fr]';
   const maxEntrada = Math.max(1, ...list.map((m) => m.entrada || 0));
   return (
     <div className="bg-white border border-border rounded-xl overflow-hidden">
       <div className="text-[12px] text-text3 px-4 pt-3 pb-1">Comparando <b className="text-text">{list.length}</b> funnels</div>
       <div className="overflow-x-auto">
-        <div className="min-w-[860px]">
+        <div className="min-w-[900px]">
           <div className={`${GRID} bg-[#FAFBFC] border-y border-border`}>
             {cols.map((c, i) => {
               const active = sort.key === c.k;
@@ -230,7 +248,10 @@ function CompareTable({ list, sort, onSort, onPick }) {
                 <div key={c.k} className={`px-3 py-3 text-[13px] flex flex-col justify-center ${i ? 'border-l border-border' : ''}`}>
                   {c.k === 'name' ? (
                     <>
-                      <span className="font-semibold text-text truncate">{m.view.label}</span>
+                      <span className="font-semibold text-text truncate flex items-center gap-1">
+                        {m.anomalies.length > 0 && <AlertTriangle size={13} className="text-[#DC2626] shrink-0" />}
+                        {m.view.label}
+                      </span>
                       <span className="text-[10px] text-text3 mt-0.5">{m.daysTraffic} {m.daysTraffic === 1 ? 'día' : 'días'} c/ tráfico{m.days > m.daysTraffic ? ` · de ${m.days}` : ''}</span>
                     </>
                   ) : c.k === 'entrada' ? (
@@ -238,12 +259,17 @@ function CompareTable({ list, sort, onSort, onPick }) {
                       <span className="font-semibold text-text">{fmt(m.entrada)}</span>
                       <div className="h-1.5 bg-[#F1F3F9] rounded-full overflow-hidden mt-1"><div className="h-full rounded-full" style={{ width: `${Math.max(4, (m.entrada / maxEntrada) * 100)}%`, background: '#4F46E5' }} /></div>
                     </>
-                  ) : c.color ? (
-                    <span className="font-bold" style={{ color: scrollColor(m[c.k]) }}>{pct(m[c.k])}</span>
-                  ) : c.muted ? (
-                    <span className="text-text3">{pct(m[c.k])}</span>
+                  ) : c.scrollcol ? (
+                    <>
+                      <span className="text-[12px]">Pre <b style={{ color: scrollColor(m.scrollPre) }}>{pct(m.scrollPre)}</b></span>
+                      <span className="text-[12px]">VSL <b style={{ color: scrollColor(m.scrollVsl) }}>{pct(m.scrollVsl)}</b></span>
+                      <span className="text-[10px] text-text3">proy. {pct(m.scroll)}</span>
+                    </>
                   ) : (
-                    <span className="font-bold text-text">{pct(m[c.k])}</span>
+                    <>
+                      <span className={c.muted ? 'text-text3 font-semibold' : 'font-bold text-text'}>{pct(m[c.k])}</span>
+                      {c.cnt && <span className="text-[10px] text-text3">{m[c.cnt] != null ? `${fmt(m[c.cnt])} ${c.unit}` : '—'}</span>}
+                    </>
                   )}
                 </div>
               ))}
@@ -251,10 +277,9 @@ function CompareTable({ list, sort, onSort, onPick }) {
           ))}
         </div>
       </div>
-      <div className="px-4 py-2.5 text-[11px] text-text3 bg-[#FAFBFC] border-t border-border flex items-center gap-3 flex-wrap">
-        <span>Clic en un título para ordenar · clic en un funnel para abrir su detalle.</span>
-        <span>Reg. final <b>s/ visitas</b> = sobre las visitas totales · <b>s/ leads</b> = sobre los que se registraron.</span>
-        <span className="flex items-center gap-1">Scroll: <span style={{ color: '#16A34A' }}>●</span> bien <span style={{ color: '#D97706' }}>●</span> medio <span style={{ color: '#DC2626' }}>●</span> flojo</span>
+      <div className="px-4 py-2.5 text-[11px] text-text3 bg-[#FAFBFC] border-t border-border flex flex-col gap-1">
+        <span>Clic en un título para ordenar · clic en un funnel para abrir su detalle · <b className="text-[#DC2626]">△</b> = posible problema de tracking (ver detalle).</span>
+        <span>Reg. final <b>s/ visitas</b> = sobre las visitas · <b>s/ leads</b> = sobre los registrados. Scroll <b>Pre/VSL</b> se llena con el scrape del heatmap; <b>proy.</b> es el del proyecto (lo único que da la API hoy).</span>
       </div>
     </div>
   );
@@ -265,8 +290,7 @@ function FunnelDetail({ view }) {
   const cur = view.funnel;
   const dom = view.domain;
   const m = useMemo(() => metricsOf(view), [view]);
-  const { r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, toGraciasLeads, cuello, botPct, waClicks, waPct } = m;
-  const humans = r ? (r.sessions || 0) - (r.bot_sessions || 0) : 0;
+  const { r, funnel, entrada, vslStep, graciasStep, toVsl, toGracias, toGraciasLeads, cuello, botPct, humans, waClicks, waPct, anomalies } = m;
 
   const clicks = useMemo(() => clicksForDomain(cur?.clicks_30d, dom), [cur, dom]);
   const vsl = (view.primary && cur?.vsl_cross) ? cur.vsl_cross : null;
@@ -284,6 +308,14 @@ function FunnelDetail({ view }) {
 
   return (
     <>
+      {anomalies.length > 0 && (
+        <div className="mb-4 rounded-xl border border-[#F5C2C2] bg-[#FDECEC] p-3">
+          <div className="text-[13px] font-bold text-[#DC2626] flex items-center gap-1.5"><AlertTriangle size={15} /> Posible problema de tracking en este funnel</div>
+          <ul className="mt-1 text-[12.5px] text-[#991B1B] list-disc pl-5 space-y-0.5">
+            {anomalies.map((a, i) => <li key={i}>{a}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="grid grid-cols-5 gap-3.5 mb-5 max-md:grid-cols-2">
         <Kpi label="Visitas a la prelanding" value={fmt(entrada)} sub={view.multi ? `dominio ${shortDom(dom)} · ${fmt(r.sessions)} ses. proyecto` : `${Math.round(botPct)}% bots · ${fmt(humans)} reales (proyecto)`} color="#4F46E5" />
         <Kpi label="Registros (al VSL)" value={pct(toVsl)} sub={vslStep ? `${fmt(vslStep.count)} leads · de ${fmt(entrada)} visitas` : 'sin paso de VSL'} color="#0EA5A5" />
@@ -512,6 +544,13 @@ export default function EmbudoPage() {
       {loading && <div className="text-text3 text-[13px] py-10 text-center">Cargando métricas…</div>}
       {err && <div className="text-[#DC2626] text-[13px] bg-[#FDECEC] border border-[#F5C2C2] rounded-xl p-3">Error: {err}</div>}
       {!loading && !err && !views.length && <div className="text-text3 text-[13px] py-10 text-center">Sin datos de Clarity en este rango.</div>}
+
+      {!loading && !err && !current && sorted.some((m) => m.anomalies.length > 0) && (
+        <div className="mb-3 rounded-xl border border-[#F5C2C2] bg-[#FDECEC] p-3">
+          <div className="text-[13px] font-bold text-[#DC2626] flex items-center gap-1.5"><AlertTriangle size={15} /> {sorted.filter((m) => m.anomalies.length).length} funnel(s) con posible problema de tracking</div>
+          <div className="text-[12px] text-[#991B1B] mt-0.5">{sorted.filter((m) => m.anomalies.length).map((m) => m.view.label).join(' · ')} — abrí el funnel para ver el detalle. También se avisa a Slack #alertas-general.</div>
+        </div>
+      )}
 
       {!loading && !err && views.length > 0 && (
         current ? <FunnelDetail view={current} /> : <CompareTable list={sorted} sort={sort} onSort={setSortKey} onPick={setSelected} />
