@@ -11,6 +11,7 @@ import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
 import FunnelsView from '../components/clientes/FunnelsView';
 import CarpetasView from '../components/clientes/CarpetasView';
+import CerebroView from '../components/clientes/CerebroView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
@@ -186,6 +187,7 @@ export default function ClientDetail({ client: c }) {
         const tabs = [
           { key: 'trabajo', label: 'Funnels', count: funnelsCount },
           { key: 'drive', label: 'Carpetas' },
+          { key: 'cerebro', label: 'Cerebro' },
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
@@ -269,6 +271,8 @@ export default function ClientDetail({ client: c }) {
             {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
 
             {activeTab === 'drive' && <CarpetasView client={c} />}
+
+            {activeTab === 'cerebro' && <CerebroView client={c} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 

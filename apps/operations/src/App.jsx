@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, Brain } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -18,6 +18,7 @@ const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const DmePage = lazy(() => import('./pages/DmePage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 const VslPage = lazy(() => import('./pages/VslPage'));
+const CerebroPage = lazy(() => import('./pages/CerebroPage'));
 const EmbudoPage = lazy(() => import('./pages/EmbudoPage'));
 const CuentasPage = lazy(() => import('./pages/CuentasPage'));
 import SearchBar from './components/SearchBar';
@@ -377,6 +378,7 @@ function MainLayout() {
   const marketingItems = [
     { id: 'embudo', label: 'Embudo', Icon: TrendingDown, path: '/marketing/embudo' },
     { id: 'vsl', label: 'VSL', Icon: BarChart3, path: '/marketing/vsl' },
+    { id: 'cerebro', label: 'Cerebro', Icon: Brain, path: '/marketing/cerebro' },
   ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
   const salesItems = currentUser?.isAdmin
@@ -495,6 +497,7 @@ function MainLayout() {
       <Route path="/marketing" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/marketing/embudo" element={marketingGuarded(<EmbudoPage />)} />
       <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
+      <Route path="/marketing/cerebro" element={marketingGuarded(<CerebroPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/operations/publicidad" element={guestBlock(<PublicidadPage />)} />
       <Route path="/operations/feedback" element={guestBlock(<FeedbackPage />)} />

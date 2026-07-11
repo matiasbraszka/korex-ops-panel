@@ -54,6 +54,12 @@ export function isOnboardingDoc(n) {
   return /\bonboarding\b/i.test(n.name || '');
 }
 
+// El doc de investigación del cliente/empresa (avatar, mercado, ángulos).
+export function isInvestigacionDoc(n) {
+  if (!n || n.node_type === 'folder') return false;
+  return /investigaci[oó]n/i.test(n.name || '');
+}
+
 // ¿Se fija solo? (DEL u onboarding). No se puede des-fijar a mano.
 export function isAutoPinned(n) { return isDelDoc(n) || isOnboardingDoc(n); }
 export function pinBadge(n) { return isDelDoc(n) ? 'DEL' : isOnboardingDoc(n) ? 'Onboarding' : 'Fijado'; }
