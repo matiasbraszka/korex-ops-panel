@@ -4,13 +4,18 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
-  Search, X, ExternalLink, RefreshCw, ChevronRight, Folder, Plus, Link2, Key, Pin, Pencil,
+  Search, X, ExternalLink, RefreshCw, ChevronRight, Folder, Plus, Link2, Key, Pin, Pencil, Brain,
 } from 'lucide-react';
 import { fmtDate, fmtDateTime } from '../../utils/helpers';
 import {
-  CopyButton, NODE_ICON, isDisplayableNode, isDelDoc, isOnboardingDoc, isAutoPinned, pinBadge, buildChildrenMap,
+  CopyButton, NODE_ICON, isDisplayableNode, isDelDoc, isOnboardingDoc, isInvestigacionDoc, isAutoPinned, pinBadge, buildChildrenMap,
   AccessFormModal, LinkFormModal, openUrl, CredRow,
 } from './recursosShared';
+
+// ¿El documento entra al análisis del cerebro de marketing?
+// Automático: DEL / onboarding / investigación (por nombre). Manual: marcado con 🧠.
+const isBrainAuto = (n) => isDelDoc(n) || isOnboardingDoc(n) || isInvestigacionDoc(n);
+const isBrainDoc = (n) => ['document', 'sheet', 'slides'].includes(n.node_type);
 
 // Una fila del árbol (ya aplanado): carpeta o documento.
 function TreeRow({ row }) {
@@ -37,6 +42,14 @@ function TreeRow({ row }) {
           </span>
         )}
       </button>
+      {row.brain?.show && (
+        <button onClick={row.brain.locked ? undefined : row.brain.onToggle} disabled={row.brain.locked}
+          title={row.brain.locked ? 'Entra al cerebro (automático: DEL/onboarding)' : row.brain.active ? 'Quitar del cerebro' : 'Marcar: entra al análisis del cerebro'}
+          className="w-[26px] h-[26px] rounded-md inline-flex items-center justify-center shrink-0 bg-transparent border-none hover:bg-[#FDF2F8]"
+          style={{ color: row.brain.active ? '#EC4899' : '#C2C7D0', cursor: row.brain.locked ? 'default' : 'pointer', opacity: row.brain.locked ? 0.75 : 1 }}>
+          <Brain size={13} fill={row.brain.active ? '#FBD6E8' : 'none'} />
+        </button>
+      )}
       <button onClick={row.onPin} title={row.pinned ? 'Quitar de fijados' : 'Fijar arriba'}
         className="w-[26px] h-[26px] rounded-md inline-flex items-center justify-center shrink-0 bg-transparent border-none cursor-pointer hover:bg-[#EEF0F4]" style={{ color: row.pinned ? '#E0A93B' : '#C2C7D0' }}>
         <Pin size={13} fill={row.pinned ? '#FBE6B0' : 'none'} />
@@ -49,8 +62,14 @@ function TreeRow({ row }) {
 }
 
 // Un bloque = una estrategia (definida por su carpeta de Drive).
-function StrategyBlock({ s, nodes, pages, q }) {
+function StrategyBlock({ s, nodes, pages, q, brainSet, onToggleBrain }) {
   const { updateStrategy } = useApp();
+  // Info del botón 🧠 (entra al cerebro) por nodo.
+  const brainOf = (n) => {
+    if (!isBrainDoc(n)) return { show: false };
+    const auto = isBrainAuto(n);
+    return { show: true, active: auto || brainSet.has(n.id), locked: auto, onToggle: () => onToggleBrain(n) };
+  };
   const [open, setOpen] = useState(true);
   const [folders, setFolders] = useState(() => new Set());
   const toggleFolder = (id) => setFolders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -97,6 +116,7 @@ function StrategyBlock({ s, nodes, pages, q }) {
   const pinnedRow = (n) => ({
     key: 'pin-' + n.id, name: n.name, node_type: n.node_type, indent: 12,
     expandable: false, open: false, pinned: true, badge: pinBadge(n), locked: isAutoPinned(n),
+    brain: brainOf(n),
     onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n),
   });
 
@@ -114,6 +134,7 @@ function StrategyBlock({ s, nodes, pages, q }) {
         key: n.id, name: n.name, node_type: n.node_type,
         indent: 12 + depth * 22, expandable, open: opened, empty,
         pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n),
+        brain: brainOf(n),
         onMain: expandable ? () => toggleFolder(n.id) : () => openUrl(n.web_url),
         onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n),
       });
@@ -125,7 +146,7 @@ function StrategyBlock({ s, nodes, pages, q }) {
     for (const n of (childrenByParent.get(parentId) || []).filter(isDisplayableNode)) {
       if ((n.name || '').toLowerCase().includes(query)) {
         const empty = n.node_type === 'folder' && (childrenByParent.get(n.id) || []).filter(isDisplayableNode).length === 0;
-        searchRows.push({ key: n.id, name: n.name, node_type: n.node_type, indent: 12, expandable: false, open: false, empty, pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n), onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n) });
+        searchRows.push({ key: n.id, name: n.name, node_type: n.node_type, indent: 12, expandable: false, open: false, empty, pinned: isPinned(n), badge: pinBadge(n), locked: isAutoPinned(n), brain: brainOf(n), onMain: () => openUrl(n.web_url), onOpen: () => openUrl(n.web_url), onPin: () => togglePin(n) });
       }
       searchWalk(n.id);
     }
@@ -192,14 +213,29 @@ export default function CarpetasView({ client }) {
   const [accModal, setAccModal] = useState(null);
   const [linkModal, setLinkModal] = useState(null);
   const [accView, setAccView] = useState(null);
+  const [brainSet, setBrainSet] = useState(() => new Set()); // docs marcados 🧠 (entran al cerebro)
 
   const fetchNodes = async () => {
     try {
-      const rows = await sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(c.id)}&select=*`);
+      const [rows, pins] = await Promise.all([
+        sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(c.id)}&select=*`),
+        sbFetch(`client_brain_pins?client_id=eq.${encodeURIComponent(c.id)}&select=node_id`),
+      ]);
       setNodes(Array.isArray(rows) ? rows : []);
+      setBrainSet(new Set((Array.isArray(pins) ? pins : []).map(p => p.node_id)));
     } catch { setNodes([]); } finally { setLoading(false); }
   };
   useEffect(() => { let alive = true; setLoading(true); (async () => { await fetchNodes(); if (!alive) return; })(); return () => { alive = false; }; /* eslint-disable-next-line */ }, [c.id]);
+
+  // Marcar/desmarcar un documento para el cerebro (tabla client_brain_pins).
+  const toggleBrain = async (n) => {
+    const on = !brainSet.has(n.id);
+    setBrainSet(prev => { const s = new Set(prev); on ? s.add(n.id) : s.delete(n.id); return s; });
+    try {
+      if (on) await supabase.from('client_brain_pins').insert({ client_id: c.id, node_id: n.id, label: n.name || null });
+      else await supabase.from('client_brain_pins').delete().eq('client_id', c.id).eq('node_id', n.id);
+    } catch { fetchNodes(); }
+  };
 
   // Solo estrategias respaldadas por Drive: con carpeta vinculada o con archivos
   // sincronizados. Las huérfanas (sin carpeta ni archivos) no se muestran acá.
@@ -296,7 +332,7 @@ export default function CarpetasView({ client }) {
           </div>
         )}
         {!loading && myStrategies.map(s => (
-          <StrategyBlock key={s.id} s={s} nodes={nodes} pages={pagesByStrategy(s.id)} q={q} />
+          <StrategyBlock key={s.id} s={s} nodes={nodes} pages={pagesByStrategy(s.id)} q={q} brainSet={brainSet} onToggleBrain={toggleBrain} />
         ))}
       </div>
 

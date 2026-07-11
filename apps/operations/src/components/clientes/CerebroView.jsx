@@ -1,18 +1,18 @@
-// CerebroView — el "mini-cerebro" de un cliente: el contexto que alimenta al
-// cerebro de marketing. Muestra, de forma visual, los pilares:
+// CerebroView — el "mini-cerebro" de un cliente: VISTA del contexto que alimenta al
+// cerebro de marketing. Muestra:
 //   1. Identidad (nicho, servicio, cuello de botella)
 //   2. Documentos de contexto con su TEXTO ingerido: DEL · Onboarding · Investigación · Extra
-//   3. Fijar documentos a mano (pins) → suma avatares/análisis que no se detectan por nombre
-//   4. Estrategia actual (avatares → funnels → VSL/anuncios)
+//   3. Estrategia actual (avatares → funnels → VSL/anuncios)
 //
 // El texto se ingiere con la edge function `client-brain-sync` ("Sincronizar
-// contexto"); el panel lee client_brain_docs y administra client_brain_pins.
+// contexto"). Los documentos que entran se MARCAN con 🧠 en la pestaña Carpetas
+// (o se vinculan al avatar en el Funnel); acá solo se ven.
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
   Brain, RefreshCw, FileText, Search as SearchIcon, Sparkles, Target,
-  Layers, Megaphone, Film, ExternalLink, ChevronDown, ChevronRight, Users, Pin, Plus, X,
+  Layers, Megaphone, Film, ExternalLink, ChevronDown, ChevronRight, Users, Pin,
 } from 'lucide-react';
 import { fmtDateTime } from '../../utils/helpers';
 import { openUrl } from './recursosShared';
@@ -100,84 +100,19 @@ function AvatarRow({ av }) {
   );
 }
 
-// Selector para FIJAR documentos del Drive al contexto (los que no se detectan por nombre).
-function PinPicker({ driveDocs, pinned, onToggle }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const list = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return driveDocs
-      .filter(d => !needle || (d.name || '').toLowerCase().includes(needle))
-      .sort((a, b) => {
-        const ap = pinned.has(a.id) ? 0 : 1, bp = pinned.has(b.id) ? 0 : 1;
-        if (ap !== bp) return ap - bp;
-        return (a.name || '').localeCompare(b.name || '', 'es');
-      });
-  }, [driveDocs, q, pinned]);
-
-  return (
-    <div className="bg-white border border-[#E2E5EB] rounded-xl overflow-hidden mb-4">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 p-3.5 bg-transparent border-none cursor-pointer text-left">
-        <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><Pin size={15} /></div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold text-[#1A1D26]">Sumar documentos al contexto</div>
-          <div className="text-[11px] text-[#9CA3AF]">Fijá a mano avatares, análisis o cualquier doc que el cerebro deba conocer{pinned.size ? ` · ${pinned.size} fijado(s)` : ''}</div>
-        </div>
-        {open ? <ChevronDown size={16} className="text-[#9CA3AF]" /> : <ChevronRight size={16} className="text-[#9CA3AF]" />}
-      </button>
-      {open && (
-        <div className="border-t border-[#F0F2F5] p-3.5">
-          <div className="flex items-center gap-2 mb-2.5 py-2 px-3 border border-[#E2E5EB] rounded-[10px] bg-[#FAFBFC]">
-            <SearchIcon size={14} className="text-[#9CA3AF]" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar documento del Drive…" className="flex-1 border-none bg-transparent text-[13px] text-[#1A1D26] p-0 outline-none" />
-            {q && <button onClick={() => setQ('')} className="inline-flex items-center justify-center w-[18px] h-[18px] border-none rounded-full bg-[#EEF0F4] text-[#6B7280] cursor-pointer shrink-0"><X size={11} /></button>}
-          </div>
-          <div className="grid gap-1.5 max-h-[340px] overflow-y-auto pr-1">
-            {list.length === 0 && <div className="text-[12px] text-[#9CA3AF] py-2">Sin documentos.</div>}
-            {list.map(d => {
-              const isPinned = pinned.has(d.id);
-              return (
-                <div key={d.id} className="flex items-center gap-2 py-2 px-2.5 rounded-lg border" style={isPinned ? { background: '#FDF2F8', borderColor: '#FBCFE8' } : { background: '#fff', borderColor: '#F0F2F5' }}>
-                  <FileText size={13} className="shrink-0" style={{ color: isPinned ? '#EC4899' : '#9CA3AF' }} />
-                  <span className="flex-1 min-w-0 text-[12.5px] text-[#1A1D26] truncate" title={d.name}>{d.name}</span>
-                  {d.web_url && <button onClick={() => openUrl(d.web_url)} title="Abrir" className="inline-flex items-center justify-center w-6 h-6 rounded-md border-none bg-transparent text-[#9CA3AF] hover:text-[#2E69E0] cursor-pointer shrink-0"><ExternalLink size={12} /></button>}
-                  <button onClick={() => onToggle(d, !isPinned)} className="inline-flex items-center gap-1 py-1 px-2 rounded-md text-[11px] font-semibold cursor-pointer border shrink-0" style={isPinned ? { background: '#EC4899', color: '#fff', borderColor: '#EC4899' } : { background: '#fff', color: '#6B7280', borderColor: '#E2E5EB' }}>
-                    {isPinned ? <><Pin size={11} /> Fijado</> : <><Plus size={11} /> Fijar</>}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <div className="text-[11px] text-[#9CA3AF] mt-2.5 flex items-center gap-1.5">
-            <RefreshCw size={11} /> Después de fijar, tocá "Sincronizar contexto" arriba para traer el texto.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function CerebroView({ client }) {
   const { clients, strategies, strategyPages } = useApp();
   const c = (clients || []).find(x => x.id === client?.id) || client || {};
 
   const [docs, setDocs] = useState([]);
-  const [driveDocs, setDriveDocs] = useState([]);
-  const [pinned, setPinned] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, nodes, pins] = await Promise.all([
-        sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(c.id)}&select=*`),
-        sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(c.id)}&node_type=in.(document,sheet,slides,pdf)&select=id,name,node_type,web_url`),
-        sbFetch(`client_brain_pins?client_id=eq.${encodeURIComponent(c.id)}&select=node_id`),
-      ]);
+      const d = await sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(c.id)}&select=*`);
       setDocs(Array.isArray(d) ? d : []);
-      setDriveDocs(Array.isArray(nodes) ? nodes : []);
-      setPinned(new Set((Array.isArray(pins) ? pins : []).map(p => p.node_id)));
     } catch { /* noop */ } finally { setLoading(false); }
   }, [c.id]);
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -194,15 +129,6 @@ export default function CerebroView({ client }) {
 
   const myStrategies = (strategies || []).filter(s => s.client_id === c.id).sort((a, b) => (a.position || 0) - (b.position || 0));
   const pagesByStrategy = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid).sort((a, b) => (a.position || 0) - (b.position || 0));
-
-  const togglePin = async (doc, pin) => {
-    // Optimista
-    setPinned(prev => { const n = new Set(prev); if (pin) n.add(doc.id); else n.delete(doc.id); return n; });
-    try {
-      if (pin) await supabase.from('client_brain_pins').insert({ client_id: c.id, node_id: doc.id, label: doc.name || null });
-      else await supabase.from('client_brain_pins').delete().eq('client_id', c.id).eq('node_id', doc.id);
-    } catch { fetchAll(); /* revertir con la verdad del server */ }
-  };
 
   const sync = async () => {
     setSyncing(true);
@@ -256,8 +182,13 @@ export default function CerebroView({ client }) {
         <Sparkles size={11} /> El briefing, la personalidad y el objetivo del cliente viven dentro del DEL. El cerebro los lee de ahí.
       </div>
 
-      {/* 3. Fijar documentos a mano */}
-      {!loading && <PinPicker driveDocs={driveDocs} pinned={pinned} onToggle={togglePin} />}
+      {/* Marcar más documentos: se hace con 🧠 en la pestaña Carpetas */}
+      <div className="bg-white border border-[#E2E5EB] rounded-xl p-3.5 mb-4 flex items-start gap-2">
+        <Brain size={15} className="text-[#EC4899] shrink-0 mt-0.5" />
+        <div className="text-[12px] text-[#6B7280] leading-relaxed">
+          ¿Falta un documento en el contexto? Marcalo con el botón <strong className="text-[#EC4899]">🧠</strong> en la pestaña <strong>Carpetas</strong> (o vinculá su spec en el Funnel del avatar) y volvé a tocar <strong>Sincronizar contexto</strong>.
+        </div>
+      </div>
 
       {/* 4. Estrategia actual */}
       <div className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-2">Estrategia actual · avatares → funnels → VSL/anuncios</div>
