@@ -200,19 +200,19 @@ Deno.serve(async (req) => {
           items: {
             type: "object",
             properties: {
-              name: { type: "string", description: "Título corto del avatar, lo MÁS PARECIDO a como aparece en el DEL (ej. 'AVATAR 1 - Emprendedores'). No inventar." },
+              name: { type: "string", description: "Título corto del avatar. Si el avatar corresponde a una PERSONA concreta que graba (líder/networker, ej. Jonathan), usá SU nombre (ej. 'Jonathan — Avatar 1 Padres'). Si el DEL solo lo rotula por número, lo MÁS PARECIDO a como aparece (ej. 'AVATAR 1 - Emprendedores'). No inventar." },
               audience: { type: "string", description: "Segmentación (edad, sexo, ubicación, intereses) de ESTE avatar. Del DEL si está; si no, resumida en 1 línea." },
               spec_section: { type: "string", description: "Título EXACTO de la sección del DEL que contiene la DESCRIPCIÓN (dolores/deseos/miedos/perfil) de ESTE avatar (ej. 'Avatares'). NUNCA la landing. '' si no hay." },
               spec_start: { type: "string", description: "Las primeras ~12 palabras EXACTAS (copiadas del DEL, con tildes/mayúsculas) donde EMPIEZA el fragmento de ESTE avatar/subavatar dentro de esa sección. Incluí algún dato único (ej. 'AVATAR 2' o 'SUBAVATAR 3') para no confundir con otro." },
               spec_end: { type: "string", description: "Las últimas ~12 palabras EXACTAS donde TERMINA el fragmento de ESTE avatar (justo antes de que empiece el del siguiente avatar)." },
-              ad_sections: { type: "array", items: { type: "string" }, description: "Títulos EXACTOS de las secciones con los ANUNCIOS de ESTE avatar (ej. 'Ads avatar 1'). Mapear por significado." },
+              ad_sections: { type: "array", items: { type: "string" }, description: "Títulos EXACTOS de las secciones con los ANUNCIOS de ESTE avatar (ej. 'Ads avatar 1'). Mapear por significado. Si los anuncios están rotulados por PERSONA (ej. 'Anuncios Jonathan'), usá la pestaña con el nombre de la persona de este avatar." },
               ad_start: { type: "string", description: "Si dentro de la sección de anuncios los anuncios están SEPARADOS por subavatar, las primeras ~10 palabras EXACTAS donde arrancan los anuncios de ESTE subavatar (ej. 'TEXTO BASE PARA SUBAVATAR 2'). Vacío si los anuncios son comunes/no distinguidos." },
               ad_end: { type: "string", description: "Las últimas ~10 palabras EXACTAS donde terminan los anuncios de ESTE subavatar (justo antes del siguiente). Vacío si son comunes." },
             },
             required: ["name", "audience", "spec_section", "ad_sections"],
           },
         },
-        vsl_section: { type: "string", description: "Título EXACTO de la sección del GUIÓN de VSL (el video) que corresponde a ESTE funnel/avatar (ej. 'VSL Avatar 1'). El VSL suele decir al principio a qué avatar va. NO la 'Landing Page VSL'. '' si no hay o si es compartida y no se sabe." },
+        vsl_section: { type: "string", description: "Título EXACTO de la sección del GUIÓN de VSL (el video) que corresponde a ESTE funnel/avatar. Las pestañas de VSL pueden estar rotuladas por NÚMERO ('VSL Avatar 1') o por PERSONA/número+persona ('VSL 1 Jonathan', 'VSL Jonathan'): si el avatar de este funnel es una persona (ej. Jonathan), elegí la pestaña de VSL que lleva SU nombre. NO la 'Landing Page VSL' ni 'Landing VSL'. '' solo si de verdad no hay VSL para este avatar." },
       },
       required: ["avatars"],
     },
@@ -227,13 +227,15 @@ Deno.serve(async (req) => {
     "- El DEL a veces ROTULA el avatar con su funnel (ej. 'AVATAR 1 … FUNNEL EMPRENDEDORES', 'AVATAR 2 … Networkers'). Respetá esa asociación.",
     "- Si un avatar NO corresponde a este funnel, NO lo incluyas.",
     "",
+    "EL AVATAR PUEDE SER UNA PERSONA (muy importante): en muchos DEL el avatar es la PERSONA que graba (el líder/networker). Ahí las pestañas de anuncios y de VSL están rotuladas por NOMBRE de persona ('Anuncios Jonathan', 'VSL 1 Jonathan') en vez de por número. La descripción/segmentación de esa persona suele venir de un perfil demográfico ('Avatar 1', 'Avatar 2') que el propio DEL le asigna en prosa (ej. 'Jonathan es padre de familia → Avatar 1'; 'Samantha y Meli → Avatar 2'). En ese caso: el avatar = la persona; su descripción = el perfil (Avatar N) que le corresponde; sus anuncios/VSL = las pestañas con SU nombre. DOS personas pueden compartir el MISMO perfil (misma spec) y está bien. Tolerá variantes de grafía del nombre (ej. 'Mely' = 'Meli').",
+    "",
     "FRAGMENTO EXACTO (clave): la sección de descripción (ej. 'Avatares') suele traer VARIOS avatares uno tras otro. NO devuelvas la hoja entera.",
     "Para cada avatar indicá spec_section + spec_start (primeras ~12 palabras EXACTAS donde arranca SU parte, incluyendo algo único como 'AVATAR 2') + spec_end (últimas ~12 palabras EXACTAS donde termina SU parte, antes del siguiente avatar). El sistema corta ese pedazo TAL CUAL. Copiá las palabras EXACTAS del DEL (con tildes y mayúsculas).",
     "",
     "SUBAVATARES (IMPORTANTE): si el avatar de este funnel tiene SUB-AVATARES o variantes explícitas (ej. 'SUBAVATAR 1 — 35 a 54 años · …', 'SUBAVATAR 2 — …', o variantes por perfil/edad), devolvé UN AVATAR POR CADA SUBAVATAR (no lo colapses en uno solo). Para cada subavatar: name que lo distinga (ej. 'AVATAR 1 · Subavatar 1 — 35-54'); audience = su segmentación específica; spec_start/spec_end = el fragmento ESPECÍFICO de ESE subavatar (desde su encabezado 'SUBAVATAR N …' hasta justo antes del siguiente subavatar).",
     "ANUNCIOS POR SUBAVATAR: la sección de anuncios (ej. 'Ads avatar 1') CASI SIEMPRE separa los anuncios por subavatar, con marcadores en CUALQUIER formato: 'TEXTO BASE SUBAVATAR 1', 'TEXTO BASE PARA SUBAVATAR 2', 'Titulares para SUBAVATAR 3', 'SUBAVATAR N – VERSIÓN X', etc. Para CADA subavatar (INCLUIDO el 1) poné ad_sections con esa hoja Y ad_start/ad_end para cortar SOLO sus anuncios: ad_start = las primeras ~10 palabras EXACTAS donde arrancan los anuncios de ESE subavatar (para el subavatar 1, buscá su primer marcador 'SUBAVATAR 1' o, si sus anuncios empiezan al principio de la hoja, el comienzo de la hoja); ad_end = las ~10 palabras EXACTAS justo ANTES de que empiecen los del SIGUIENTE subavatar (ej. antes de 'Titulares para SUBAVATAR 2' / 'TEXTO BASE PARA SUBAVATAR 2'). NUNCA dejes que el subavatar 1 se lleve toda la hoja. Solo dejá ad_start/ad_end vacíos si de VERDAD no hay marcadores por subavatar.",
     "",
-    "VSL: elegí en vsl_section la sección del guión de VSL (el video) que va con el avatar de ESTE funnel (ej. 'VSL Avatar 1'). El guión suele decir al principio a qué avatar apunta. Distintos funnels casi siempre tienen VSL distinta. NO uses la 'Landing Page VSL'.",
+    "VSL: elegí en vsl_section la sección del guión de VSL (el video) que va con el avatar de ESTE funnel. La pestaña puede llamarse por número ('VSL Avatar 1') o por persona/número+persona ('VSL 1 Jonathan', 'VSL Jonathan'): si el avatar de este funnel es una persona, elegí la pestaña de VSL que lleva SU nombre. El guión suele decir al principio a qué avatar apunta. NO uses 'Landing Page VSL' ni 'Landing VSL'. Casi siempre hay VSL para el avatar: no la dejes vacía salvo que realmente no exista.",
     "",
     "REGLAS:",
     "- El título (name) debe ser lo MÁS PARECIDO posible a como aparece en el DEL. No inventes.",
@@ -326,7 +328,18 @@ Deno.serve(async (req) => {
   }).filter((a) => a.name);
 
   // VSL que corresponde a ESTE funnel (verbatim de "VSL Avatar N", nunca la landing de la VSL).
-  const vslScript = vslSection ? sectionContent(tabs, vslSection, VSL_BLOCK) : "";
+  // Fallback por código: si la IA no marcó vsl_section pero hay UNA pestaña 'VSL ...' que lleva el
+  // nombre de alguno de los avatares de este funnel (person-named), la usamos. Nunca la landing.
+  let vslSectionResolved = vslSection;
+  if (!vslSectionResolved) {
+    const vslTabs = sectionTitles.filter((t) => /\bvsl\b/i.test(t) && !/landing|p[aá]gina/i.test(t));
+    for (const av of built) {
+      const toks = norm(av.name).split(" ").filter((w) => w.length > 2);
+      const hit = vslTabs.find((t) => { const nt = norm(t); return toks.some((w) => nt.includes(w)); });
+      if (hit) { vslSectionResolved = hit; break; }
+    }
+  }
+  const vslScript = vslSectionResolved ? sectionContent(tabs, vslSectionResolved, VSL_BLOCK) : "";
 
   // Merge según modo.
   let finalAvatars;
