@@ -467,6 +467,27 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     if (overwriting && !window.confirm('Algunos avatares ya tienen copys. ¿Reemplazarlos con lo del DEL?')) return;
     setPulling(true); onUpdate(f.id, { avatars: nextAvatars }); setTimeout(() => setPulling(false), 400);
   };
+  const pullAdOne = (av, idx) => {
+    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia.'); return; }
+    const ad = pullAdScript(delText, idx + 1);
+    if (!ad) { window.alert('No encontré la sección de anuncios de este avatar en el DEL.'); return; }
+    if (av.ad_script && !window.confirm('Este avatar ya tiene copys. ¿Reemplazarlos con el del DEL?')) return;
+    setAvatar(av.id, { ad_script: ad });
+  };
+
+  // Recursos automáticos: arma la lista "Para completar el funnel" desde las subcarpetas de la
+  // carpeta "Recursos" del Drive. Subcarpeta con archivos = entregado (check); vacía = pendiente.
+  const [syncingRes, setSyncingRes] = useState(false);
+  const syncResources = async () => {
+    setSyncingRes(true);
+    try {
+      const { data } = await supabase.rpc('cerebro_recursos', { p_strategy_id: f.strategy_id });
+      if (!data || !data.length) { window.alert('No encontré subcarpetas dentro de "Recursos" para esta estrategia. Sincronizá las Carpetas del cliente primero.'); return; }
+      const list = data.map(r => ({ label: r.name, done: r.files > 0, url: r.url, count: r.files }));
+      onUpdate(f.id, { visual_resources: list });
+    } catch { window.alert('Error sincronizando recursos.'); }
+    finally { setSyncingRes(false); }
+  };
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
@@ -622,9 +643,18 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                         </div>
                       )}
                     </div>
-                    {/* 5) Copys de anuncios (guión) — lo llena la IA o se trae del DEL. */}
+                    {/* 5) Copys de anuncios — preview estilo VSL/descripción + sync minimalista. */}
                     <div className="mt-1.5 pl-[40px]">
-                      <button onClick={() => openAdScript(av, i)} title="Ver/editar los copys/guión de los anuncios de este avatar. Podés traerlos del DEL." className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer" style={av.ad_script ? { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#D5E1FF' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}><FileText size={12} />Copys de anuncios{av.ad_script ? <Check size={11} strokeWidth={3} /> : <span className="font-normal">· vacío</span>}</button>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#1D4FD8' }}><FileText size={11} />Copys de anuncios</span>
+                        <button onClick={() => openAdScript(av, i)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#1D4FD8' }}><Maximize2 size={11} />Ampliar / editar</button>
+                      </div>
+                      <button onClick={() => openAdScript(av, i)} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#1D4FD8] transition-colors">
+                        <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {av.ad_script ? av.ad_script.slice(0, 260) + (av.ad_script.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin copys. Clic para escribir, o traelos del DEL con el botón de abajo.</span>}
+                        </div>
+                      </button>
+                      <button onClick={() => pullAdOne(av, i)} title="Trae/actualiza los copys de este avatar desde el DEL. Lo revisás y editás después." className="inline-flex items-center gap-1 mt-1 py-1 bg-transparent border-none cursor-pointer text-[10.5px] font-semibold hover:underline" style={{ color: '#2E69E0' }}><RefreshCw size={10} />Traer / sincronizar del DEL</button>
                     </div>
                   </div>
                 ))}
@@ -635,7 +665,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
             <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
               <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
                 <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: doneCount === needs.length ? '#ECFDF5' : '#FEF9E7', color: doneCount === needs.length ? '#16A34A' : '#C2630A' }}><ArrowRight size={14} /></span>
-                <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Para completar el funnel</div></div>
+                <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Para completar el funnel</div><div className="text-[11px] text-[#9CA3AF]">Sale de la carpeta “Recursos”: subcarpeta con archivos = entregado</div></div>
+                <button onClick={syncResources} disabled={syncingRes} title="Lee la carpeta Recursos del Drive y arma la lista: cada subcarpeta con archivos queda marcada como entregada." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={11} className={syncingRes ? 'animate-spin' : ''} />{syncingRes ? 'Sincronizando…' : 'Sincronizar recursos'}</button>
                 <span className="text-[11px] font-bold" style={{ color: doneCount === needs.length ? '#16A34A' : '#A16207' }}>{doneCount} / {needs.length}</span>
               </div>
               <div className="py-1.5 px-2">
@@ -645,6 +676,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                     <div className="flex items-center gap-2">
                       <button onClick={() => setNeed(i, { done: !n.done })} title={n.done ? 'Marcar pendiente' : 'Marcar listo'} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer border-none" style={n.done ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{n.done && <Check size={12} strokeWidth={3} />}</button>
                       <input value={n.label} onChange={e => setNeed(i, { label: e.target.value })} placeholder="Nombre del material" className="flex-1 min-w-0 py-1 px-2 border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md text-[12.5px] bg-transparent focus:bg-white outline-none" style={{ color: n.done ? '#1A1D26' : '#6B7280' }} />
+                      {typeof n.count === 'number' && <span className="text-[10px] font-bold rounded-md py-0.5 px-1.5 shrink-0" style={n.count > 0 ? { background: '#ECFDF5', color: '#15803D' } : { background: '#F4F5F7', color: '#9CA3AF' }}>{n.count} arch.</span>}
                       <button onClick={() => onUpdate(f.id, { visual_resources: needs.filter((_, j) => j !== i) })} title="Borrar material" className="inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0 bg-transparent border-none cursor-pointer text-[#C2C7D0] hover:text-[#DC2626] hover:bg-[#FEECEC]"><Trash2 size={12} /></button>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 pl-7">
