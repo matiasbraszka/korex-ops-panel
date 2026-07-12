@@ -233,6 +233,7 @@ Deno.serve(async (req) => {
     "Para cada avatar indicá spec_section + spec_start (primeras ~12 palabras EXACTAS donde arranca SU parte, incluyendo algo único como 'AVATAR 2') + spec_end (últimas ~12 palabras EXACTAS donde termina SU parte, antes del siguiente avatar). El sistema corta ese pedazo TAL CUAL. Copiá las palabras EXACTAS del DEL (con tildes y mayúsculas).",
     "",
     "SUBAVATARES (IMPORTANTE): si el avatar de este funnel tiene SUB-AVATARES o variantes explícitas (ej. 'SUBAVATAR 1 — 35 a 54 años · …', 'SUBAVATAR 2 — …', o variantes por perfil/edad), devolvé UN AVATAR POR CADA SUBAVATAR (no lo colapses en uno solo). Para cada subavatar: name que lo distinga (ej. 'AVATAR 1 · Subavatar 1 — 35-54'); audience = su segmentación específica; spec_start/spec_end = el fragmento ESPECÍFICO de ESE subavatar (desde su encabezado 'SUBAVATAR N …' hasta justo antes del siguiente subavatar).",
+    "HOJA DEDICADA vs COMPARTIDA: si la hoja de anuncios es SOLO de una persona/avatar (ej. 'Anuncios Jonathan') y NO tiene subavatares, dejá ad_start y ad_end VACÍOS → se toma la hoja ENTERA con TODOS sus anuncios (suele haber varias versiones, no uno solo). Usá ad_start/ad_end SOLO cuando una MISMA hoja está compartida por varios subavatares.",
     "ANUNCIOS POR SUBAVATAR: la sección de anuncios (ej. 'Ads avatar 1') CASI SIEMPRE separa los anuncios por subavatar, con marcadores en CUALQUIER formato: 'TEXTO BASE SUBAVATAR 1', 'TEXTO BASE PARA SUBAVATAR 2', 'Titulares para SUBAVATAR 3', 'SUBAVATAR N – VERSIÓN X', etc. Para CADA subavatar (INCLUIDO el 1) poné ad_sections con esa hoja Y ad_start/ad_end para cortar SOLO sus anuncios: ad_start = las primeras ~10 palabras EXACTAS donde arrancan los anuncios de ESE subavatar (para el subavatar 1, buscá su primer marcador 'SUBAVATAR 1' o, si sus anuncios empiezan al principio de la hoja, el comienzo de la hoja); ad_end = las ~10 palabras EXACTAS justo ANTES de que empiecen los del SIGUIENTE subavatar (ej. antes de 'Titulares para SUBAVATAR 2' / 'TEXTO BASE PARA SUBAVATAR 2'). NUNCA dejes que el subavatar 1 se lleve toda la hoja. Solo dejá ad_start/ad_end vacíos si de VERDAD no hay marcadores por subavatar.",
     "",
     "VSL: elegí en vsl_section la sección del guión de VSL (el video) que va con el avatar de ESTE funnel. La pestaña puede llamarse por número ('VSL Avatar 1') o por persona/número+persona ('VSL 1 Jonathan', 'VSL Jonathan'): si el avatar de este funnel es una persona, elegí la pestaña de VSL que lleva SU nombre. El guión suele decir al principio a qué avatar apunta. NO uses 'Landing Page VSL' ni 'Landing VSL'. Casi siempre hay VSL para el avatar: no la dejes vacía salvo que realmente no exista.",
@@ -300,15 +301,23 @@ Deno.serve(async (req) => {
     vslSection = str((block?.input as Record<string, unknown>)?.vsl_section);
   } catch { raw = []; }
 
+  // ¿Cuántos avatares de ESTE batch usan cada hoja de anuncios? (para saber si es compartida).
+  const adTabUse: Record<string, number> = {};
+  for (const a of raw) for (const t of (a.ad_sections || [])) { const k = norm(str(t)); adTabUse[k] = (adTabUse[k] || 0) + 1; }
+
   // Resolver a avatares del panel: descripción = fragmento EXACTO (verbatim); anuncios = secciones.
   const built = raw.map((a) => {
     const secContent = sectionContent(tabs, str(a.spec_section), LANDING_RE); // spec nunca de landing/vsl
     const spec = sliceFragment(secContent, str(a.spec_start), str(a.spec_end));
-    // Anuncios: toda la sección; o el fragmento del subavatar.
+    // Anuncios: por defecto la hoja ENTERA (todos los anuncios del avatar).
     let ad = pullSections(tabs, a.ad_sections || [], LANDING_RE);
     const adRaw = (a.ad_sections || []).map((t) => sectionContent(tabs, t, LANDING_RE)).filter(Boolean).join("\n\n");
-    // 1) Si la IA marcó anclas, cortamos por ellas.
-    if (str(a.ad_start)) { const cut = sliceFragment(adRaw, str(a.ad_start), str(a.ad_end)); if (cut) ad = cut; }
+    // Solo cortamos por anclas si la hoja es COMPARTIDA (varios avatares/subavatares la usan) o el
+    // avatar es un subavatar. Si la hoja es DEDICADA (ej. "Anuncios Jonathan"), va ENTERA: no se corta.
+    const isSub = /subavatar/i.test(str(a.name));
+    const shared = (a.ad_sections || []).some((t) => (adTabUse[norm(str(t))] || 0) > 1);
+    // 1) Si corresponde cortar y la IA marcó anclas, cortamos por ellas.
+    if ((isSub || shared) && str(a.ad_start)) { const cut = sliceFragment(adRaw, str(a.ad_start), str(a.ad_end)); if (cut) ad = cut; }
     // 2) Refuerzo por código: si es un subavatar y 'ad' sigue siendo CASI toda la hoja (la IA no lo
     //    cortó o la marcó mal), cortamos por los marcadores 'SUBAVATAR N'. Robusto, sin depender de la IA.
     const m = /subavatar\s*(\d+)/i.exec(str(a.name));
