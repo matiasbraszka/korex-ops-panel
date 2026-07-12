@@ -295,27 +295,72 @@ function AvatarStatusPill({ status, onChange }) {
 
 const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
 
-// Modal grande tipo nota para ver/editar la descripción del avatar cómodamente.
-function AvatarNoteModal({ av, onClose, onSave }) {
-  const [text, setText] = useState(av.spec_text || '');
+// Parte el texto del DEL en pestañas por su marcador "===== Título =====" → { titulo: contenido }.
+function parseDelTabs(text) {
+  const map = {};
+  if (!text) return map;
+  const chunks = String(text).split(/=====\s*([^=\n]{1,80}?)\s*=====/);
+  for (let i = 1; i < chunks.length; i += 2) {
+    const title = (chunks[i] || '').trim();
+    const content = (chunks[i + 1] || '').trim();
+    if (title) map[title] = (map[title] ? map[title] + '\n\n' : '') + content;
+  }
+  return map;
+}
+// Concatena las pestañas cuyo título matchea un patrón (con su título como encabezado).
+function pullTabs(delText, re) {
+  const tabs = parseDelTabs(delText);
+  const hits = Object.keys(tabs).filter(t => re.test(t));
+  if (!hits.length) return '';
+  return hits.map(t => `— ${t} —\n${tabs[t]}`).join('\n\n');
+}
+// Guión del VSL: todas las pestañas "VSL…" del DEL.
+function pullVslScript(delText) { return pullTabs(delText, /vsl/i); }
+// Guión de anuncios para el avatar Nº (1-based): su pestaña "Ads avatar N"/"Anuncio N" si existe,
+// si no todas las "Ads…" del DEL (el equipo revisa/recorta antes de guardar).
+function pullAdScript(delText, idx1) {
+  const tabs = parseDelTabs(delText);
+  const exact = Object.keys(tabs).find(t => new RegExp('(ads|anuncio)[^0-9]*\\b' + idx1 + '\\b', 'i').test(t));
+  if (exact) return `— ${exact} —\n${tabs[exact]}`;
+  return pullTabs(delText, /ads|anuncio/i);
+}
+
+// Modal grande tipo nota, reutilizable: descripción del avatar, guión del anuncio, guión del VSL.
+// Si recibe `onPull`, muestra un botón minimalista "Traer del DEL" que rellena el editor para revisar.
+function NoteModal({ title, initial, placeholder, onPull, onClose, onSave }) {
+  const [text, setText] = useState(initial || '');
+  const pull = () => { const t = onPull ? onPull() : ''; if (!t) { window.alert('No encontré esa sección en el DEL. Revisá que el DEL esté sincronizado y tenga esa pestaña.'); return; } setText(t); };
   return (
-    <Modal open onClose={onClose} title={`Descripción del avatar · ${av.name || 'Avatar'}`} maxWidth={820}
-      footer={<div className="flex justify-end gap-2 w-full">
-        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
-        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark inline-flex items-center gap-1.5" onClick={() => onSave(text)}><Check size={14} />Guardar</button>
+    <Modal open onClose={onClose} title={title} maxWidth={820}
+      footer={<div className="flex justify-between items-center gap-2 w-full">
+        <div>{onPull && <button onClick={pull} title="Copia el texto de esa sección del DEL para que lo revises antes de guardar" className="text-[12px] py-2 px-3 rounded-[9px] border border-[#DCE3FF] bg-[#F5F7FF] text-[#2E69E0] font-semibold cursor-pointer hover:bg-[#EEF2FF] inline-flex items-center gap-1.5"><FileText size={13} />Traer del DEL</button>}</div>
+        <div className="flex gap-2">
+          <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
+          <button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark inline-flex items-center gap-1.5" onClick={() => onSave(text)}><Check size={14} />Guardar</button>
+        </div>
       </div>}>
-      <textarea value={text} onChange={e => setText(e.target.value)} autoFocus placeholder="Descripción de este avatar (pegá su parte del DEL, con su estructura)…" className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[13px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '58vh', whiteSpace: 'pre-wrap' }} />
+      <textarea value={text} onChange={e => setText(e.target.value)} autoFocus placeholder={placeholder} className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[13px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '58vh', whiteSpace: 'pre-wrap' }} />
     </Modal>
   );
 }
 
 // Semáforo del pipeline Korex por funnel (gates duros: cerebro_pipeline_status).
-// Estados: listo (verde) · pendiente/generable (ámbar) · bloqueado (gris, candado).
+// Etapas base (estrategia/DEL/avatares): color por estado. Piezas de producción (VSL/Anuncios/
+// Landing): color por SUB-ESTADO real → 0 (sin empezar) · guión/copy · grabado · editado/diseñado.
 const STAGE_SHORT = { estrategia: 'Estrategia', del: 'DEL', avatares: 'Avatares', vsl: 'VSL', anuncios: 'Anuncios', landing: 'Landing' };
 const GATE_STYLE = {
   listo: { dot: '#16A34A', bg: '#ECFDF5', color: '#15803D', border: '#C7EBD4' },
   pendiente: { dot: '#CA8A04', bg: '#FEF9E7', color: '#A16207', border: '#F1E3B0' },
   bloqueado: { dot: '#B0B6C0', bg: '#F4F5F7', color: '#9CA3AF', border: '#E7E9ED' },
+};
+// Sub-estado de cada pieza de producción: define color + etiqueta corta.
+const SUBSTATE = {
+  nada:     { label: '0',        dot: '#C4C9D2', bg: '#F4F5F7', color: '#9CA3AF', border: '#E7E9ED' },
+  guion:    { label: 'guión',    dot: '#2563EB', bg: '#EEF3FF', color: '#1D4FD8', border: '#D5E1FF' },
+  copy:     { label: 'copy',     dot: '#2563EB', bg: '#EEF3FF', color: '#1D4FD8', border: '#D5E1FF' },
+  grabado:  { label: 'grabado',  dot: '#D97706', bg: '#FEF3E2', color: '#B45309', border: '#F6E0B8' },
+  editado:  { label: 'editado',  dot: '#16A34A', bg: '#ECFDF5', color: '#15803D', border: '#C7EBD4' },
+  disenado: { label: 'diseñado', dot: '#16A34A', bg: '#ECFDF5', color: '#15803D', border: '#C7EBD4' },
 };
 function PipelineSemaforo({ stages }) {
   if (!stages || !stages.length) return null;
@@ -324,13 +369,17 @@ function PipelineSemaforo({ stages }) {
     <div className="flex items-center gap-1 flex-wrap py-2 px-4 pl-[19px] border-t border-[#F2F3F6]" style={{ background: '#FCFCFD' }}>
       <span className="text-[9px] font-bold uppercase tracking-[0.09em] text-[#B7BCC6] mr-1 shrink-0">Pipeline</span>
       {stages.map((s, i) => {
-        const g = GATE_STYLE[s.status] || GATE_STYLE.bloqueado;
+        const blocked = s.status === 'bloqueado';
+        // Color: bloqueado = gris+candado; piezas de producción = por sub-estado; resto = por estado.
+        const g = blocked ? GATE_STYLE.bloqueado : (s.substate ? SUBSTATE[s.substate] : GATE_STYLE[s.status]) || GATE_STYLE.bloqueado;
+        const subLabel = s.substate ? SUBSTATE[s.substate]?.label : null;
         const isNext = firstPend && s.stage === firstPend.stage;
         return (
           <span key={s.stage} className="inline-flex items-center">
             <span title={`${s.stage_label} — ${s.detail}`} className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10.5px] font-semibold cursor-default" style={{ background: g.bg, color: g.color, border: `1px solid ${isNext ? '#E8B93E' : g.border}`, boxShadow: isNext ? '0 0 0 1px #F1E3B0' : 'none' }}>
-              {s.status === 'bloqueado' ? <Lock size={9} strokeWidth={2.4} /> : <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: g.dot }} />}
+              {blocked ? <Lock size={9} strokeWidth={2.4} /> : <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: g.dot }} />}
               {STAGE_SHORT[s.stage] || s.stage_label}
+              {!blocked && subLabel && <span className="opacity-70">· {subLabel}</span>}
               {isNext && <span className="text-[8.5px] font-bold ml-0.5" style={{ color: '#B8860B' }}>· próximo</span>}
             </span>
             {i < stages.length - 1 && <ChevronRight size={11} className="text-[#D8DCE3] mx-px shrink-0" strokeWidth={2.4} />}
@@ -341,8 +390,8 @@ function PipelineSemaforo({ stages }) {
   );
 }
 
-function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, onDelete, onTrack }) {
-  const [noteAvatar, setNoteAvatar] = useState(null);
+function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', onUpdate, onDelete, onTrack }) {
+  const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
@@ -378,6 +427,27 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
     } catch { window.alert('Error creando las carpetas.'); }
     finally { setFolding(false); }
   };
+  const namedAvatars = avatars.filter(a => (a.name || '').trim());
+  const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
+
+  // Editores tipo nota (modal grande). Descripción + guión de anuncio (por avatar) + guión de VSL (funnel).
+  const openDesc = (av) => setNote({
+    title: `Descripción del avatar · ${av.name || 'Avatar'}`, initial: av.spec_text || '',
+    placeholder: 'Descripción de este avatar (pegá su parte del DEL, con su estructura)…',
+    onSave: (t) => { setAvatar(av.id, { spec_text: t || null }); setNote(null); },
+  });
+  const openAdScript = (av, idx) => setNote({
+    title: `Guión del anuncio · ${av.name || 'Avatar ' + (idx + 1)}`, initial: av.ad_script || '',
+    placeholder: 'Guión / copy del anuncio de este avatar. Usá "Traer del DEL" para copiar su sección.',
+    onPull: () => pullAdScript(delText, idx + 1),
+    onSave: (t) => { setAvatar(av.id, { ad_script: t || null }); setNote(null); },
+  });
+  const openVslScript = () => setNote({
+    title: `Guión del VSL · ${f.name || 'Funnel'}`, initial: f.vsl_script || '',
+    placeholder: 'Guión del VSL de este funnel. Usá "Traer del DEL" para copiar la sección VSL.',
+    onPull: () => pullVslScript(delText),
+    onSave: (t) => { onUpdate(f.id, { vsl_script: t || null }); setNote(null); },
+  });
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
@@ -449,7 +519,10 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
             <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">Pegá o editá y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
             {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
             <div className="mt-2.5 pt-2.5 border-t border-[#F0F2F5]">
-              <div className="flex items-center gap-1.5 mb-1 text-[11px] font-bold" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal">· 1 por funnel</span></div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold flex-1" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal">· 1 por funnel</span></span>
+                <button onClick={openVslScript} title="Ver/editar el guión del VSL. Podés traerlo del DEL." className="inline-flex items-center gap-1 py-1 px-2 border rounded-md text-[10.5px] font-semibold cursor-pointer shrink-0" style={f.vsl_script ? { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#D5E1FF' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}><FileText size={11} />Guión{f.vsl_script ? <Check size={10} strokeWidth={3} /> : ' · vacío'}</button>
+              </div>
               <div className="flex items-center gap-1.5">
                 <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
                 {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
@@ -463,7 +536,10 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
               <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
                 <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Users size={14} /></span>
                 <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Variantes de avatar</div><div className="text-[11px] text-[#9CA3AF]">A quién se le publicita · anuncio por avatar</div></div>
-                <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#E7E0FB] rounded-lg bg-[#F8F5FE] text-[#7C3AED] text-[11px] font-semibold cursor-pointer hover:bg-[#F1EBFD] disabled:opacity-50 shrink-0">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
+                {namedAvatars.length > 0 && (foldersReady
+                  ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#E7E9ED] rounded-lg bg-white text-[#9CA3AF] text-[10.5px] font-semibold cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50 shrink-0"><RefreshCw size={11} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
+                  : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#E7E0FB] rounded-lg bg-[#F8F5FE] text-[#7C3AED] text-[11px] font-semibold cursor-pointer hover:bg-[#F1EBFD] disabled:opacity-50 shrink-0">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
+                )}
                 <span className="text-[11px] font-bold text-[#7B8190] bg-[#F0F2F5] rounded-lg py-0.5 px-2">{avatars.length}</span>
               </div>
               <div className="p-2">
@@ -485,6 +561,10 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
                            <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
                         : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
                     </div>
+                    {/* Guión del anuncio de este avatar (lo llena la IA o se trae del DEL). */}
+                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
+                      <button onClick={() => openAdScript(av, i)} title="Ver/editar el guión del anuncio de este avatar. Podés traerlo del DEL." className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer" style={av.ad_script ? { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#D5E1FF' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}><FileText size={12} />Guión del anuncio{av.ad_script ? <Check size={11} strokeWidth={3} /> : <span className="font-normal">· vacío</span>}</button>
+                    </div>
                     {/* Carpetas del avatar en Drive: Grabaciones y Ediciones (badge si ya tienen archivos). */}
                     {(av.rec_folder_url || av.edit_folder_url) && (
                       <div className="flex items-center gap-1.5 mt-1.5 pl-[40px] flex-wrap">
@@ -504,9 +584,9 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
                     <div className="mt-1.5 pl-[40px]">
                       <div className="flex items-center justify-between mb-1">
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#EC4899' }}><Brain size={11} />Descripción</span>
-                        <button onClick={() => setNoteAvatar(av)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#EC4899' }}><Maximize2 size={11} />Ampliar / editar</button>
+                        <button onClick={() => openDesc(av)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#EC4899' }}><Maximize2 size={11} />Ampliar / editar</button>
                       </div>
-                      <button onClick={() => setNoteAvatar(av)} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#EC4899] transition-colors">
+                      <button onClick={() => openDesc(av)} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#EC4899] transition-colors">
                         <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                           {av.spec_text ? av.spec_text.slice(0, 260) + (av.spec_text.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin descripción. Clic para escribir o pegar la del DEL.</span>}
                         </div>
@@ -548,7 +628,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
           </div>
         </div>
       )}
-      {noteAvatar && <AvatarNoteModal av={noteAvatar} onClose={() => setNoteAvatar(null)} onSave={(text) => { setAvatar(noteAvatar.id, { spec_text: text || null }); setNoteAvatar(null); }} />}
+      {note && <NoteModal {...note} onClose={() => setNote(null)} />}
     </div>
   );
 }
@@ -559,6 +639,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
+  const delText = (docs.find(d => d.doc_kind === 'del')?.text) || '';
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
       <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
@@ -587,7 +668,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
             </div>
             {funnels.length === 0
               ? <div className="text-[12px] text-[#9CA3AF] py-6 text-center">Sin funnels en esta estrategia.</div>
-              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} />)}
+              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} />)}
           </div>
           <button onClick={() => onNew(s.id)} className="inline-flex items-center gap-1.5 mt-2.5 py-2 px-3 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[12px] font-semibold cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={13} />Nuevo funnel en esta estrategia</button>
         </div>

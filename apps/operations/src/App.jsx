@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, Brain } from 'lucide-react';
-import { useAuth, useCan, signIn, sendPasswordReset } from '@korex/auth';
+import { useAuth, useCan, signIn, sendPasswordReset, signOut } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
 import { guestEmailForCode, normalizeGuestCode } from './utils/guest';
@@ -209,6 +209,11 @@ function AccountPending({ email }) {
           perfil del equipo ni tiene roles asignados. Contactá a un administrador
           para que complete la configuración de tu cuenta.
         </p>
+        <button
+          onClick={async () => { try { await signOut(); } finally { window.location.reload(); } }}
+          className="inline-flex items-center gap-2 py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 text-sm font-semibold cursor-pointer hover:bg-surface2">
+          <span>→</span> Cerrar sesión e ingresar con otra cuenta
+        </button>
       </div>
     </div>
   );
