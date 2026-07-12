@@ -7,7 +7,7 @@ import { sbFetch, supabase } from '@korex/db';
 import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, ArrowRight, Megaphone,
   Check, Trash2, Activity, Zap, Link2, Globe, Rocket, Clapperboard,
-  Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers,
+  Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2,
 } from 'lucide-react';
 import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
@@ -294,7 +294,22 @@ function AvatarStatusPill({ status, onChange }) {
 
 const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
 
+// Modal grande tipo nota para ver/editar la descripción del avatar cómodamente.
+function AvatarNoteModal({ av, onClose, onSave }) {
+  const [text, setText] = useState(av.spec_text || '');
+  return (
+    <Modal open onClose={onClose} title={`Descripción del avatar · ${av.name || 'Avatar'}`} maxWidth={820}
+      footer={<div className="flex justify-end gap-2 w-full">
+        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
+        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark inline-flex items-center gap-1.5" onClick={() => onSave(text)}><Check size={14} />Guardar</button>
+      </div>}>
+      <textarea value={text} onChange={e => setText(e.target.value)} autoFocus placeholder="Descripción de este avatar (pegá su parte del DEL, con su estructura)…" className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[13px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '58vh', whiteSpace: 'pre-wrap' }} />
+    </Modal>
+  );
+}
+
 function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack }) {
+  const [noteAvatar, setNoteAvatar] = useState(null);
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
@@ -359,6 +374,15 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
 
       {open && (
         <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
+          {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
+          <div className="border rounded-xl bg-white p-3 mb-3.5" style={{ borderColor: f.vsl_url ? '#CFEBD9' : '#ECEEF2' }}>
+            <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-bold uppercase tracking-[0.04em]" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal normal-case tracking-normal">· 1 por funnel</span></div>
+            <div className="flex items-center gap-1.5">
+              <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+              {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
+                <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>}
+            </div>
+          </div>
           {/* Enlaces del funnel (editables) */}
           <div className="border border-[#ECEEF2] rounded-xl bg-white p-3 mb-3.5">
             <div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[#9CA3AF] mb-2.5">Enlaces del funnel</div>
@@ -409,17 +433,17 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
                            <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
                         : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <input key={av.id + 'v'} defaultValue={av.vsl_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.vsl_url || '')) setAvatar(av.id, { vsl_url: v }); }} placeholder="Link del VSL…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
-                      {av.vsl_url
-                        ? <><button onClick={() => openUrl(av.vsl_url)} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />VSL</button>
-                           <button onClick={() => copyText(av.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>
-                        : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin VSL</span>}
-                    </div>
-                    {/* Descripción / segmentación del avatar — la completa la IA desde el DEL (editable). */}
+                    {/* Descripción del avatar — clic para abrir en grande (nota) y editar cómodo. */}
                     <div className="mt-1.5 pl-[40px]">
-                      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#EC4899' }}><Brain size={11} />Descripción · segmentación</div>
-                      <textarea key={av.id + 'spec'} defaultValue={av.spec_text || ''} onBlur={e => { const v = e.target.value; if (v !== (av.spec_text || '')) setAvatar(av.id, { spec_text: v || null }); }} placeholder="La completa la IA desde el DEL (o escribila). Fragmento que describe a este avatar…" rows={2} className="w-full py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white resize-y outline-none focus:border-blue leading-relaxed" />
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#EC4899' }}><Brain size={11} />Descripción</span>
+                        <button onClick={() => setNoteAvatar(av)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#EC4899' }}><Maximize2 size={11} />Ampliar / editar</button>
+                      </div>
+                      <button onClick={() => setNoteAvatar(av)} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#EC4899] transition-colors">
+                        <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {av.spec_text ? av.spec_text.slice(0, 260) + (av.spec_text.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin descripción. Clic para escribir o pegar la del DEL.</span>}
+                        </div>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -457,6 +481,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
           </div>
         </div>
       )}
+      {noteAvatar && <AvatarNoteModal av={noteAvatar} onClose={() => setNoteAvatar(null)} onSave={(text) => { setAvatar(noteAvatar.id, { spec_text: text || null }); setNoteAvatar(null); }} />}
     </div>
   );
 }
