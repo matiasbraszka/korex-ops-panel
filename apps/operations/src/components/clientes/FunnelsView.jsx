@@ -462,21 +462,11 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onTrack, onNew, onAvatarAI }) {
+function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onTrack, onNew }) {
   const [open, setOpen] = useState(true);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiMsg, setAiMsg] = useState(null);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
-  const hasDel = docs.some(d => d.doc_kind === 'del');
-  const runAI = async () => {
-    setAiBusy(true); setAiMsg(null);
-    const r = await onAvatarAI(s.id);
-    setAiBusy(false);
-    setAiMsg(r?.ok ? { ok: true, text: `Listo · ${r.avatars} avatar(es) en ${r.funnels} funnel(s)` } : { ok: false, text: r?.message || 'No se pudo completar' });
-    setTimeout(() => setAiMsg(null), 6000);
-  };
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
       <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
@@ -487,11 +477,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onT
           <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: st.bg, color: st.color }}>{st.label}</span>
         </button>
         <span className="text-[11px] text-[#9CA3AF] font-semibold shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
-        <button onClick={runAI} disabled={aiBusy || !hasDel || funnels.length === 0} title={hasDel ? 'La IA completa los avatares de cada funnel leyendo el DEL' : 'Falta el DEL sincronizado de esta estrategia'} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-white text-[11px] font-semibold cursor-pointer disabled:opacity-40 shrink-0" style={{ background: '#7C3AED' }}>
-          {aiBusy ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}{aiBusy ? 'Completando…' : 'Completar avatares con IA'}
-        </button>
       </div>
-      {aiMsg && <div className="py-1.5 px-4 text-[11.5px] font-semibold" style={{ background: aiMsg.ok ? '#ECFDF5' : '#FEF2F2', color: aiMsg.ok ? '#16A34A' : '#DC2626', borderBottom: '1px solid #F1E5EE' }}>{aiMsg.text}</div>}
       {open && (
         <div className="p-3.5">
           {docs.filter(d => d.doc_kind !== 'extra').length > 0 && (
@@ -551,20 +537,6 @@ export default function FunnelsView({ clientId }) {
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
   const sync = async () => { setSyncing(true); try { await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } }); await fetchContext(); } catch { /* noop */ } finally { setSyncing(false); } };
 
-  // La IA completa los avatares de cada funnel de una estrategia leyendo su DEL.
-  const runAvatarAI = async (strategyId) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('cerebro-avatares', { body: { strategy_id: strategyId } });
-      if (error) return { ok: false, message: 'No se pudo conectar con el cerebro.' };
-      if (data?.ok) {
-        // Reflejar en la UI: recargar los avatares que la IA escribió.
-        const rows = await sbFetch(`strategy_pages?strategy_id=eq.${encodeURIComponent(strategyId)}&select=id,avatars`);
-        for (const r of (Array.isArray(rows) ? rows : [])) updateStrategyPage(r.id, { avatars: r.avatars });
-      }
-      return data || { ok: false, message: 'Sin respuesta.' };
-    } catch { return { ok: false, message: 'Error inesperado.' }; }
-  };
-
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
   const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
@@ -620,7 +592,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="border border-[#E2E5EB] rounded-xl bg-white flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onAvatarAI={runAvatarAI} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
 
       {/* Modal nuevo funnel */}
       {modal && (
