@@ -33,10 +33,14 @@ const cors = {
 
 function str(v: unknown) { return v === null || v === undefined ? "" : String(v).trim(); }
 
-// Auto por nombre: SOLO el DEL (maestro de estrategia). El onboarding, la
-// investigación, etc. pasan por CASILLEROS (slot) de cliente, asignados a mano.
+// Auto por nombre: el DEL (maestro de estrategia) y el BRIEF (personalidad, nivel
+// cliente, lo mantiene vivo el subagente brief-expert). El onboarding y la
+// investigación pasan por CASILLEROS (slot) de cliente, asignados a mano.
 function isDelDoc(name: string): boolean {
   return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
+}
+function isBriefDoc(name: string): boolean {
+  return /\bbrief\b/i.test(name) || /personalidad/i.test(name);
 }
 
 // ── Apps Script: texto de un documento ───────────────────────────────────────────
@@ -102,6 +106,7 @@ async function syncClient(
   const desired = new Map<string, { node: typeof nodes[number]; kind: string; scope: string }>();
   for (const n of (nodes ?? [])) {
     if (slotByNode.has(n.id)) { desired.set(n.id, { node: n, kind: slotByNode.get(n.id)!, scope: "client" }); continue; }
+    if (n.node_type === "document" && isBriefDoc(n.name || "")) { desired.set(n.id, { node: n, kind: "briefing", scope: "client" }); continue; }
     if (n.node_type === "document" && isDelDoc(n.name || "")) { desired.set(n.id, { node: n, kind: "del", scope: "strategy" }); continue; }
     if (avatarSpecIds.has(n.id)) { desired.set(n.id, { node: n, kind: "extra", scope: "avatar" }); continue; }
     if (plainPins.has(n.id)) { desired.set(n.id, { node: n, kind: "extra", scope: "strategy" }); }
