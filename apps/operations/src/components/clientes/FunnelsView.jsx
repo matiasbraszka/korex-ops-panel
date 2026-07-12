@@ -489,9 +489,10 @@ function VoomlyPicker({ clientName, funnelName, current, onPick, onClose }) {
   );
 }
 
-// Selector MANUAL de carpeta del Drive (fallback cuando "Traer carpeta" no la encuentra sola):
-// lista las carpetas ya sincronizadas del cliente, prioriza las de "ediciones/editado" que matcheen
-// el avatar, deja buscar, y muestra la ruta (carpeta padre / carpeta) para no confundirse. Evita ir al Drive.
+// Selector MANUAL de carpeta del Drive (fallback cuando "Traer carpeta" no la encuentra sola).
+// Muestra SOLO lo que cuelga de una carpeta "Anuncios" (dentro de Anuncios › Grabaciones/Ediciones/
+// Terminados…), con la RUTA completa (Estrategia 2 › Anuncios › Editados) y la fecha, prioriza las de
+// "ediciones/editado" que matcheen el avatar, y deja buscar. Así el equipo no tiene que ir al Drive.
 function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
@@ -499,53 +500,74 @@ function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
     let alive = true;
     (async () => {
       try {
-        const data = await sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=eq.folder&select=id,name,web_url,parent_id&order=name`);
+        const data = await sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=eq.folder&select=id,name,web_url,parent_id,is_root,modified_time&order=name`);
         if (alive) setRows(Array.isArray(data) ? data : []);
       } catch { if (alive) setRows([]); }
     })();
     return () => { alive = false; };
   }, [clientId]);
-  const parentName = useMemo(() => { const m = {}; for (const r of (rows || [])) m[r.id] = r.name; return m; }, [rows]);
+  const byId = useMemo(() => { const m = {}; for (const r of (rows || [])) m[r.id] = r; return m; }, [rows]);
+  // Cadena de ancestros (de arriba hacia la carpeta), sin la raíz del cliente.
+  const chainOf = useCallback((r) => {
+    const segs = []; let cur = r, g = 0;
+    while (cur && g++ < 25) { if (!cur.is_root) segs.unshift(cur); cur = cur.parent_id ? byId[cur.parent_id] : null; }
+    return segs;
+  }, [byId]);
+  const insideAnuncios = useCallback((r) => chainOf(r).slice(0, -1).some(n => /anuncios/i.test(n.name)), [chainOf]);
   const aTokens = useMemo(() => new Set(normVoomly(avatarName || '').split(' ').filter(t => t.length > 2)), [avatarName]);
   const scored = useMemo(() => {
-    const list = (rows || []).map(r => {
+    const all = rows || [];
+    // Solo lo que cuelga de "Anuncios"; si no hay nada (naming raro), caemos a todas para no dejar vacío.
+    let pool = all.filter(insideAnuncios);
+    const scoped = pool.length > 0;
+    if (!scoped) pool = all;
+    const list = pool.map(r => {
+      const chain = chainOf(r);
+      const ancestors = chain.slice(0, -1);
+      const inEdit = ancestors.some(n => /edici|editad|termina|final|listo/i.test(n.name));
       const n = normVoomly(r.name);
       let score = 0;
-      if (/edici|editad|termina|final|listo/.test(n)) score += 3;
+      if (inEdit || /edici|editad|termina|final|listo/.test(n)) score += 3;
       for (const t of aTokens) if (n.includes(t)) score += 2;
-      if (/anuncio|ads/.test(n)) score += 0.5;
-      return { r, n, score };
+      const path = ancestors.map(a => a.name);
+      return { r, n, score, path };
     });
     const ql = normVoomly(q);
-    const filtered = ql ? list.filter(x => x.n.includes(ql) || normVoomly(parentName[x.r.parent_id] || '').includes(ql)) : list;
-    return filtered.sort((a, b) => b.score - a.score || a.n.localeCompare(b.n));
-  }, [rows, aTokens, q, parentName]);
+    const filtered = ql ? list.filter(x => x.n.includes(ql) || normVoomly(x.path.join(' ')).includes(ql)) : list;
+    filtered.sort((a, b) => b.score - a.score || a.n.localeCompare(b.n));
+    return { list: filtered, scoped };
+  }, [rows, aTokens, q, chainOf, insideAnuncios]);
+  const fmtDay = (d) => { if (!d) return ''; try { return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return ''; } };
   return (
-    <Modal open onClose={onClose} title={`Elegir la carpeta de ediciones · ${avatarName || 'avatar'}`} maxWidth={640}
+    <Modal open onClose={onClose} title={`Elegir la carpeta de ediciones · ${avatarName || 'avatar'}`} maxWidth={660}
       footer={<div className="flex justify-between items-center gap-2 w-full">
-        <span className="text-[11px] text-[#9098A4]">Elegí la carpeta donde están los anuncios editados de este avatar.</span>
+        <span className="text-[11px] text-[#9098A4]">{scored.scoped ? 'Carpetas dentro de “Anuncios”.' : 'No encontré “Anuncios”: muestro todas.'} Elegí dónde están los anuncios editados.</span>
         <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
       </div>}>
       <div className="p-1">
         <div className="relative mb-3">
           <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9098A4] pointer-events-none" />
-          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Buscar carpeta por nombre…" className="w-full py-2.5 pl-9 pr-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Buscar carpeta por nombre o ruta…" className="w-full py-2.5 pl-9 pr-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
         </div>
         {rows === null
           ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">Cargando carpetas del Drive…</div>
-          : scored.length === 0
+          : scored.list.length === 0
             ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">No hay carpetas{q ? ' para esa búsqueda' : ''}. Sincronizá la pestaña Carpetas.</div>
             : <div className="flex flex-col gap-2 max-h-[52vh] overflow-auto pr-1">
-                {scored.slice(0, 60).map(({ r, score }) => {
+                {scored.list.slice(0, 80).map(({ r, score, path }) => {
                   const isCur = r.web_url && r.web_url === current;
                   const suggested = score >= 3;
-                  const parent = parentName[r.parent_id];
+                  const crumb = path.slice(-3).join(' › ');
+                  const day = fmtDay(r.modified_time);
                   return (
                     <div key={r.id} className="flex items-center gap-2.5 border rounded-[10px] py-2.5 px-3" style={{ borderColor: isCur ? '#C9F0D8' : suggested ? '#E4DBFF' : '#EDF0F5', background: isCur ? '#F4FDF7' : suggested ? '#F7F3FF' : '#fff' }}>
                       <FolderOpen size={15} className="shrink-0" style={{ color: suggested ? '#7C3AED' : '#9098A4' }} />
                       <div className="min-w-0 flex-1">
                         <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</div>
-                        {parent && <div className="text-[10.5px] text-[#9098A4] truncate">en: {parent}</div>}
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {crumb && <span className="text-[10.5px] text-[#9098A4] truncate max-w-[320px]" title={path.join(' › ')}>{crumb}</span>}
+                          {day && <span className="text-[10px] text-[#B0B6C0]">· {day}</span>}
+                        </div>
                       </div>
                       {suggested && !isCur && <span className="text-[10px] font-bold text-[#7C3AED] shrink-0">sugerida</span>}
                       {isCur
