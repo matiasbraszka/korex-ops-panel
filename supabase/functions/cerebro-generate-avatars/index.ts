@@ -54,15 +54,25 @@ function parseDelTabs(text: string): Record<string, string> {
   return map;
 }
 function norm(s: string) { return (s || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim(); }
-// Copia VERBATIM el contenido de las secciones pedidas (match exacto o aproximado por título).
-function pullSections(tabs: Record<string, string>, titles: string[]): string {
+
+// Secciones de la LANDING (NO son la descripción del avatar): pre-landing, landing,
+// formulario, thank you page, testimonios, feedback, VSL. Candado: nunca se copian a
+// la descripción del avatar aunque la IA las señale por error.
+const LANDING_RE = /pre\s*-?\s*landing|\blanding\b|formul|thank\s*you|thankyou|p[aá]gina\s+de\s+gracias|testimon|feedback|\bvsl\b/i;
+const SPEC_MISSING = "— No se encontró la descripción de este avatar en el DEL —";
+
+// Copia VERBATIM el contenido de las secciones pedidas (match exacto o aproximado por
+// título). Si se pasa blockRe, ignora las secciones que matcheen (ej. las de la landing).
+function pullSections(tabs: Record<string, string>, titles: string[], blockRe?: RegExp): string {
   const keys = Object.keys(tabs);
   const out: { k: string; c: string }[] = [];
   for (const t of (titles || [])) {
+    if (blockRe && blockRe.test(t)) continue;             // el título pedido es de la landing → fuera
     const nt = norm(t);
     if (!nt) continue;
     let k = keys.find((k) => norm(k) === nt);
     if (!k) k = keys.find((k) => norm(k).includes(nt) || nt.includes(norm(k)));
+    if (k && blockRe && blockRe.test(k)) continue;         // la sección matcheada es de la landing → fuera
     if (k && !out.some((o) => o.k === k)) out.push({ k, c: tabs[k] });
   }
   return out.map((o) => `— ${o.k} —\n${o.c}`).join("\n\n");
@@ -165,7 +175,9 @@ Deno.serve(async (req) => {
     "- El título (name) debe ser lo MÁS PARECIDO posible a como aparece en el DEL (ej. 'AVATAR 1 - Mujeres'). No inventes.",
     "- Para la descripción y los anuncios NO reescribas: indicá los TÍTULOS de las secciones del DEL que los contienen (spec_sections / ad_sections). El sistema copiará ese texto TAL CUAL.",
     "- Mapeá los anuncios por SIGNIFICADO (ej. 'ANUNCIOS MUJERES' es del avatar Mujeres; 'anuncios avatar 2' es del avatar 2).",
-    "- Solo si algún contenido NO está bajo una sección '===== Título =====', usá spec_text_inline / ad_text_inline con el texto EXACTO.",
+    "- IMPORTANTÍSIMO: las secciones de la LANDING (Pre-landing, Landing, LANDING VSL, Formulario, Thank You Page, Testimonios, Feedback, VSL) NO son la descripción del avatar. NUNCA las pongas en spec_sections.",
+    "- La DESCRIPCIÓN del avatar (spec_sections) es la sección que describe sus DOLORES, DESEOS y perfil (ej. 'AVATAR', 'plan de segmentación', 'Avatar 1 - …'). Si NO existe una sección así para ese avatar, dejá spec_sections vacío Y spec_text_inline vacío (el sistema pondrá 'no encontrada').",
+    "- Solo si los ANUNCIOS no están bajo una sección '===== Título =====', usá ad_text_inline con el texto EXACTO.",
     "",
     "Secciones disponibles en el DEL (usá estos títulos EXACTOS):",
     sectionTitles.length ? sectionTitles.map((t) => `- ${t}`).join("\n") : "(el DEL no usa marcadores de sección; usá los campos _inline)",
@@ -220,13 +232,14 @@ Deno.serve(async (req) => {
 
   // Resolver a avatares del panel, copiando el texto VERBATIM del DEL.
   const built = raw.map((a) => {
-    const specFromSections = pullSections(tabs, a.spec_sections || []);
-    const adFromSections = pullSections(tabs, a.ad_sections || []);
+    // Descripción: nunca de la landing (candado LANDING_RE). Si no hay, texto de "no encontrada".
+    const specFromSections = pullSections(tabs, a.spec_sections || [], LANDING_RE);
+    const adFromSections = pullSections(tabs, a.ad_sections || [], LANDING_RE);
     return {
       id: rid(),
       name: str(a.name),
       audience: str(a.audience),
-      spec_text: specFromSections || str(a.spec_text_inline) || "",
+      spec_text: specFromSections || str(a.spec_text_inline) || SPEC_MISSING,
       ad_script: adFromSections || str(a.ad_text_inline) || "",
       status: "En grabación",
       ad_url: "",
