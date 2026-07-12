@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { Check, X, Loader2, Search, Layers, Filter } from 'lucide-react';
+import { Check, X, Loader2, Search, Layers, Filter, Link2 } from 'lucide-react';
 
-// Panorama "qué tenemos / qué falta" por cliente (sub-pestaña de Clientes).
-// Lee el RPC clients_resumen(): estrategias, funnels (+dominio) y recursos
-// (branding/logo, colores, imágenes, testimonios). Foco en lo que FALTA.
+// Panorama "qué tenemos / qué falta" por cliente Y por ESTRATEGIA (sub-pestaña de
+// Clientes). Cada cliente se divide en tantas filas como estrategias tenga, para
+// segmentar bien sus funnels, recursos y el estado del DEL. Lee clients_panorama():
+// por estrategia → funnels (+dominio), DEL vinculado, y recursos (logo/colores/
+// imágenes/testimonios) de SU carpeta Recursos. Foco en lo que FALTA.
 
 // Celda de presencia: verde con ✓ si está, roja con ✗ si falta. Muestra conteo opcional.
 function Have({ ok, count }) {
@@ -34,6 +36,22 @@ function TipoBadge({ tipo }) {
   );
 }
 
+// Celda del cliente: ocupa (rowSpan) todas las filas de sus estrategias.
+function ClienteCell({ r, rowSpan }) {
+  return (
+    <td rowSpan={rowSpan} className="py-2.5 px-3 align-top border-r border-[#EEF1F6] bg-[#FCFDFE]"
+      style={{ borderTop: '2px solid #E7EAF0', minWidth: 150 }}>
+      <div className="text-[13px] font-semibold text-[#1A1D26] leading-tight">{r.client_name}</div>
+      {r.company && <div className="text-[11px] text-[#9098A4] leading-tight">{r.company}</div>}
+      {r.n_estrategias > 1 && (
+        <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#8A93A3]">
+          <Layers size={10} />{r.n_estrategias} estrategias
+        </div>
+      )}
+    </td>
+  );
+}
+
 export default function PanoramaRecursos() {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
@@ -43,29 +61,36 @@ export default function PanoramaRecursos() {
     let alive = true;
     (async () => {
       try {
-        const { data } = await supabase.rpc('clients_resumen');
+        const { data } = await supabase.rpc('clients_panorama');
         if (alive) setRows(Array.isArray(data) ? data : []);
       } catch { if (alive) setRows([]); }
     })();
     return () => { alive = false; };
   }, []);
 
-  const falta = (r) => !r.tiene_logo || r.imagenes_files === 0 || r.testimonios_files === 0 || r.n_sin_dominio > 0;
+  // ¿A esta estrategia le falta algo? (DEL sin vincular, sin branding, sin imágenes,
+  // sin testimonios, o algún funnel sin dominio).
+  const estrFalta = (e) => !e.del_ok || !e.tiene_logo || e.imagenes_files === 0 || e.testimonios_files === 0 || e.n_sin_dominio > 0;
+  const clientFalta = (r) => (r.estrategias || []).length === 0 || (r.estrategias || []).some(estrFalta);
 
   const filtered = useMemo(() => {
     let list = rows || [];
     const term = q.trim().toLowerCase();
     if (term) list = list.filter(r => (r.client_name || '').toLowerCase().includes(term) || (r.company || '').toLowerCase().includes(term));
-    if (soloFaltantes) list = list.filter(falta);
+    if (soloFaltantes) list = list.filter(clientFalta);
     return list;
   }, [rows, q, soloFaltantes]);
+
+  const totalEstr = useMemo(() => (filtered || []).reduce((a, r) => a + Math.max(1, (r.estrategias || []).length), 0), [filtered]);
 
   if (rows === null) {
     return <div className="flex items-center gap-2 text-[13px] text-gray-500 py-10 justify-center"><Loader2 size={16} className="animate-spin" />Cargando panorama…</div>;
   }
 
   const th = 'text-left text-[10.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] py-2 px-3 whitespace-nowrap';
-  const td = 'py-2.5 px-3 align-middle border-t border-[#F1F3F7]';
+  // Borde superior según sea la 1ª fila del cliente (fuerte) o una continuación (tenue).
+  const cellStyle = (first) => ({ borderTop: first ? '2px solid #E7EAF0' : '1px solid #F4F6F9' });
+  const tdBase = 'py-2.5 px-3 align-top';
 
   return (
     <div>
@@ -81,16 +106,17 @@ export default function PanoramaRecursos() {
           style={soloFaltantes ? { background: '#FDECEC', color: '#DC2626', borderColor: '#F7C6C6' } : { background: '#fff', color: '#4B5563', borderColor: '#E2E5EB' }}>
           <Filter size={13} />Solo con faltantes
         </button>
-        <span className="text-[12px] text-[#9098A4] ml-auto">{filtered.length} clientes</span>
+        <span className="text-[12px] text-[#9098A4] ml-auto">{filtered.length} clientes · {totalEstr} estrategias</span>
       </div>
 
       {/* Tabla */}
       <div className="border border-[#E7EAF0] rounded-xl overflow-x-auto bg-white">
-        <table className="w-full border-collapse min-w-[960px]">
+        <table className="w-full border-collapse min-w-[1080px]">
           <thead>
             <tr className="bg-[#F8FAFD]">
               <th className={th}>Cliente</th>
-              <th className={th}>Estrategias</th>
+              <th className={th}>Estrategia</th>
+              <th className={th}>DEL</th>
               <th className={th}>Funnels</th>
               <th className={th}>Dominio</th>
               <th className={th}>Logo</th>
@@ -100,51 +126,68 @@ export default function PanoramaRecursos() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
-              <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
-                <td className={td}>
-                  <div className="text-[13px] font-semibold text-[#1A1D26] leading-tight">{r.client_name}</div>
-                  {r.company && <div className="text-[11px] text-[#9098A4] leading-tight">{r.company}</div>}
-                </td>
-                <td className={td}>
-                  {r.n_estrategias === 0
-                    ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                    : <div className="flex flex-wrap items-center gap-y-1">
-                        {(r.estrategias || []).map((s, i) => (
-                          <span key={i} className="inline-flex items-center text-[11.5px] text-[#3F4653] mr-2">
-                            <TipoBadge tipo={s.tipo} />{s.name}
-                          </span>
-                        ))}
-                      </div>}
-                </td>
-                <td className={td}>
-                  {r.n_funnels === 0
-                    ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                    : <div className="flex flex-col gap-1">
-                        {(r.funnels || []).map((f, i) => (
-                          <span key={i} className="text-[11.5px] text-[#3F4653] leading-[18px] h-[18px] truncate max-w-[220px]" title={f.name}>{f.name}</span>
-                        ))}
-                      </div>}
-                </td>
-                <td className={td}>
-                  {r.n_funnels === 0
-                    ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                    : <div className="flex flex-col gap-1">
-                        {(r.funnels || []).map((f, i) => (
-                          f.dominio
-                            ? <a key={i} href={/^https?:\/\//i.test(f.dominio) ? f.dominio : `https://${f.dominio}`} target="_blank" rel="noopener" className="text-[11.5px] text-[#15803D] font-medium leading-[18px] h-[18px] truncate max-w-[240px] hover:underline" title={f.dominio}>{cleanDomain(f.dominio)}</a>
-                            : <span key={i} className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#DC2626] leading-[18px] h-[18px]"><X size={11} strokeWidth={3} />Falta</span>
-                        ))}
-                      </div>}
-                </td>
-                <td className={td}><Have ok={r.tiene_logo} /></td>
-                <td className={td}><Have ok={r.tiene_colores} /></td>
-                <td className={td}><Have ok={r.imagenes_files > 0} count={r.imagenes_files} /></td>
-                <td className={td}><Have ok={r.testimonios_files > 0} count={r.testimonios_files} /></td>
-              </tr>
-            ))}
+            {filtered.map(r => {
+              const estr = r.estrategias || [];
+              // Cliente sin estrategias → una sola fila con placeholder.
+              if (estr.length === 0) {
+                return (
+                  <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
+                    <ClienteCell r={r} rowSpan={1} />
+                    <td className={tdBase} style={cellStyle(true)} colSpan={8}>
+                      <span className="text-[11.5px] text-[#C2C7D0]">— sin estrategia creada —</span>
+                    </td>
+                  </tr>
+                );
+              }
+              return estr.map((e, i) => {
+                const st = cellStyle(i === 0);
+                return (
+                  <tr key={r.client_id + ':' + (e.id || i)} className="hover:bg-[#FBFCFE]">
+                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length} />}
+                    {/* Estrategia */}
+                    <td className={tdBase} style={st}>
+                      <span className="inline-flex items-center text-[11.5px] text-[#3F4653] leading-tight">
+                        <TipoBadge tipo={e.tipo} />{e.name}
+                      </span>
+                    </td>
+                    {/* DEL vinculado */}
+                    <td className={tdBase} style={st}>
+                      {e.del_ok
+                        ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#E6F7EE', color: '#15803D' }}><Link2 size={11} strokeWidth={3} />Vinculado</span>
+                        : <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#FDECEC', color: '#DC2626' }}><X size={11} strokeWidth={3} />Falta</span>}
+                    </td>
+                    {/* Funnels */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0
+                        ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">
+                            {(e.funnels || []).map((f, j) => (
+                              <span key={j} className="text-[11.5px] text-[#3F4653] leading-[18px] h-[18px] truncate max-w-[220px]" title={f.name}>{f.name}</span>
+                            ))}
+                          </div>}
+                    </td>
+                    {/* Dominio (alineado con cada funnel) */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0
+                        ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">
+                            {(e.funnels || []).map((f, j) => (
+                              f.dominio
+                                ? <a key={j} href={/^https?:\/\//i.test(f.dominio) ? f.dominio : `https://${f.dominio}`} target="_blank" rel="noopener" className="text-[11.5px] text-[#15803D] font-medium leading-[18px] h-[18px] truncate max-w-[240px] hover:underline" title={f.dominio}>{cleanDomain(f.dominio)}</a>
+                                : <span key={j} className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#DC2626] leading-[18px] h-[18px]"><X size={11} strokeWidth={3} />Falta</span>
+                            ))}
+                          </div>}
+                    </td>
+                    <td className={tdBase} style={st}><Have ok={e.tiene_logo} /></td>
+                    <td className={tdBase} style={st}><Have ok={e.tiene_colores} /></td>
+                    <td className={tdBase} style={st}><Have ok={e.imagenes_files > 0} count={e.imagenes_files} /></td>
+                    <td className={tdBase} style={st}><Have ok={e.testimonios_files > 0} count={e.testimonios_files} /></td>
+                  </tr>
+                );
+              });
+            })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
+              <tr><td colSpan={9} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
             )}
           </tbody>
         </table>
@@ -153,7 +196,8 @@ export default function PanoramaRecursos() {
       <div className="flex items-center gap-3 mt-3 text-[11px] text-[#9098A4] flex-wrap">
         <span className="inline-flex items-center gap-1"><Check size={12} className="text-[#15803D]" strokeWidth={3} />Está</span>
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
-        <span className="inline-flex items-center gap-1"><Layers size={12} />Cada funnel está alineado con su dominio; el foco es ver qué falta de cada cliente.</span>
+        <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = el documento está detectado y leído por el cerebro para esa estrategia.</span>
+        <span className="inline-flex items-center gap-1"><Layers size={12} />Cada estrategia se lista en su propia fila con sus funnels y recursos.</span>
       </div>
     </div>
   );
