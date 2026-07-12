@@ -437,8 +437,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     onSave: (t) => { setAvatar(av.id, { spec_text: t || null }); setNote(null); },
   });
   const openAdScript = (av, idx) => setNote({
-    title: `Guión del anuncio · ${av.name || 'Avatar ' + (idx + 1)}`, initial: av.ad_script || '',
-    placeholder: 'Guión / copy del anuncio de este avatar. Usá "Traer del DEL" para copiar su sección.',
+    title: `Copys de anuncios · ${av.name || 'Avatar ' + (idx + 1)}`, initial: av.ad_script || '',
+    placeholder: 'Copys / guión de los anuncios de este avatar. Usá "Traer del DEL" para copiar su sección.',
     onPull: () => pullAdScript(delText, idx + 1),
     onSave: (t) => { setAvatar(av.id, { ad_script: t || null }); setNote(null); },
   });
@@ -448,6 +448,24 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     onPull: () => pullVslScript(delText),
     onSave: (t) => { onUpdate(f.id, { vsl_script: t || null }); setNote(null); },
   });
+
+  // Semi-automático: completa de UNA el guión del VSL + los copys de cada avatar, si están en el DEL.
+  // Solo escribe lo que encuentra; si algo ya estaba cargado, pide confirmación antes de reemplazar.
+  const [pulling, setPulling] = useState(false);
+  const pullAllScripts = () => {
+    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia.'); return; }
+    const vsl = pullVslScript(delText);
+    const nextAvatars = avatars.map((a, i) => { const ad = pullAdScript(delText, i + 1); return ad ? { ...a, ad_script: ad } : a; });
+    const foundAds = nextAvatars.filter((a, i) => a.ad_script && a.ad_script !== (avatars[i].ad_script || null)).length;
+    if (!vsl && !foundAds) { window.alert('No encontré guiones en el DEL (revisá que tenga las pestañas VSL / Ads y esté sincronizado).'); return; }
+    const overwriting = (vsl && f.vsl_script) || avatars.some((a, i) => a.ad_script && nextAvatars[i].ad_script && nextAvatars[i].ad_script !== a.ad_script);
+    if (overwriting && !window.confirm('Ya hay guiones cargados. ¿Reemplazarlos con lo que está hoy en el DEL?')) return;
+    setPulling(true);
+    const patch = { avatars: nextAvatars };
+    if (vsl) patch.vsl_script = vsl;
+    onUpdate(f.id, patch);
+    setTimeout(() => setPulling(false), 400);
+  };
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
@@ -528,6 +546,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                 {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
                   <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>}
               </div>
+              {/* Semi-automático: completa VSL + copys de todos los avatares desde el DEL de un click. */}
+              <button onClick={pullAllScripts} disabled={pulling} title="Completa el guión del VSL y los copys de anuncios de todos los avatares desde el DEL (si están cargados). Revisás y editás después." className="inline-flex items-center gap-1.5 mt-2 py-2 px-3 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50">{pulling ? <RefreshCw size={13} className="animate-spin" /> : <FileText size={13} />}{pulling ? 'Trayendo…' : 'Traer guiones del DEL (VSL + copys de anuncios)'}</button>
             </div>
           </div>
           <div className="grid gap-3.5 items-start" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
@@ -551,36 +571,11 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                       <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
                       <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#B0B6C0] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={12} /></button>
                     </div>
+                    {/* 2) Segmentación */}
                     <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="¿A quién se le publicita?" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                      <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="Segmentación: ¿a quién se le publicita? (edad, sexo, intereses…)" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <input key={av.id + 'u'} defaultValue={av.ad_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.ad_url || '')) setAvatar(av.id, { ad_url: v }); }} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
-                      {av.ad_url
-                        ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
-                           <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
-                        : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
-                    </div>
-                    {/* Guión del anuncio de este avatar (lo llena la IA o se trae del DEL). */}
-                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <button onClick={() => openAdScript(av, i)} title="Ver/editar el guión del anuncio de este avatar. Podés traerlo del DEL." className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer" style={av.ad_script ? { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#D5E1FF' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}><FileText size={12} />Guión del anuncio{av.ad_script ? <Check size={11} strokeWidth={3} /> : <span className="font-normal">· vacío</span>}</button>
-                    </div>
-                    {/* Carpetas del avatar en Drive: Grabaciones y Ediciones (badge si ya tienen archivos). */}
-                    {(av.rec_folder_url || av.edit_folder_url) && (
-                      <div className="flex items-center gap-1.5 mt-1.5 pl-[40px] flex-wrap">
-                        {av.rec_folder_url && (
-                          <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF5', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
-                            <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />grabado</span> : <span className="text-[#B7BCC6]">vacía</span>}
-                          </button>
-                        )}
-                        {av.edit_folder_url && (
-                          <button onClick={() => openUrl(av.edit_folder_url)} title="Carpeta de ediciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.edit_files > 0 ? { background: '#F4F1FE', color: '#7C3AED', borderColor: '#E7E0FB' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
-                            <FolderOpen size={11} />Ediciones{av.edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />editado</span> : <span className="text-[#B7BCC6]">vacía</span>}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {/* Descripción del avatar — clic para abrir en grande (nota) y editar cómodo. */}
+                    {/* 3) Descripción del avatar — clic para abrir en grande y editar cómodo. */}
                     <div className="mt-1.5 pl-[40px]">
                       <div className="flex items-center justify-between mb-1">
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#EC4899' }}><Brain size={11} />Descripción</span>
@@ -591,6 +586,35 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                           {av.spec_text ? av.spec_text.slice(0, 260) + (av.spec_text.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin descripción. Clic para escribir o pegar la del DEL.</span>}
                         </div>
                       </button>
+                    </div>
+                    {/* 4) Anuncios editados: link del anuncio (Meta) + carpetas Grabaciones/Ediciones. */}
+                    <div className="mt-1.5 pl-[40px]">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#7C3AED] mb-1"><Megaphone size={11} />Anuncios (editado)</span>
+                      <div className="flex items-center gap-1.5">
+                        <input key={av.id + 'u'} defaultValue={av.ad_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.ad_url || '')) setAvatar(av.id, { ad_url: v }); }} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
+                        {av.ad_url
+                          ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
+                             <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
+                          : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
+                      </div>
+                      {(av.rec_folder_url || av.edit_folder_url) && (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {av.rec_folder_url && (
+                            <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF5', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
+                              <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />grabado</span> : <span className="text-[#B7BCC6]">vacía</span>}
+                            </button>
+                          )}
+                          {av.edit_folder_url && (
+                            <button onClick={() => openUrl(av.edit_folder_url)} title="Carpeta de ediciones (anuncios editados) de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.edit_files > 0 ? { background: '#F4F1FE', color: '#7C3AED', borderColor: '#E7E0FB' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
+                              <FolderOpen size={11} />Ediciones{av.edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />editado</span> : <span className="text-[#B7BCC6]">vacía</span>}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* 5) Copys de anuncios (guión) — lo llena la IA o se trae del DEL. */}
+                    <div className="mt-1.5 pl-[40px]">
+                      <button onClick={() => openAdScript(av, i)} title="Ver/editar los copys/guión de los anuncios de este avatar. Podés traerlos del DEL." className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer" style={av.ad_script ? { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#D5E1FF' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}><FileText size={12} />Copys de anuncios{av.ad_script ? <Check size={11} strokeWidth={3} /> : <span className="font-normal">· vacío</span>}</button>
                     </div>
                   </div>
                 ))}
