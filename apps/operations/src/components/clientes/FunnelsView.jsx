@@ -489,10 +489,82 @@ function VoomlyPicker({ clientName, funnelName, current, onPick, onClose }) {
   );
 }
 
-function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
+// Selector MANUAL de carpeta del Drive (fallback cuando "Traer carpeta" no la encuentra sola):
+// lista las carpetas ya sincronizadas del cliente, prioriza las de "ediciones/editado" que matcheen
+// el avatar, deja buscar, y muestra la ruta (carpeta padre / carpeta) para no confundirse. Evita ir al Drive.
+function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=eq.folder&select=id,name,web_url,parent_id&order=name`);
+        if (alive) setRows(Array.isArray(data) ? data : []);
+      } catch { if (alive) setRows([]); }
+    })();
+    return () => { alive = false; };
+  }, [clientId]);
+  const parentName = useMemo(() => { const m = {}; for (const r of (rows || [])) m[r.id] = r.name; return m; }, [rows]);
+  const aTokens = useMemo(() => new Set(normVoomly(avatarName || '').split(' ').filter(t => t.length > 2)), [avatarName]);
+  const scored = useMemo(() => {
+    const list = (rows || []).map(r => {
+      const n = normVoomly(r.name);
+      let score = 0;
+      if (/edici|editad|termina|final|listo/.test(n)) score += 3;
+      for (const t of aTokens) if (n.includes(t)) score += 2;
+      if (/anuncio|ads/.test(n)) score += 0.5;
+      return { r, n, score };
+    });
+    const ql = normVoomly(q);
+    const filtered = ql ? list.filter(x => x.n.includes(ql) || normVoomly(parentName[x.r.parent_id] || '').includes(ql)) : list;
+    return filtered.sort((a, b) => b.score - a.score || a.n.localeCompare(b.n));
+  }, [rows, aTokens, q, parentName]);
+  return (
+    <Modal open onClose={onClose} title={`Elegir la carpeta de ediciones · ${avatarName || 'avatar'}`} maxWidth={640}
+      footer={<div className="flex justify-between items-center gap-2 w-full">
+        <span className="text-[11px] text-[#9098A4]">Elegí la carpeta donde están los anuncios editados de este avatar.</span>
+        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
+      </div>}>
+      <div className="p-1">
+        <div className="relative mb-3">
+          <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9098A4] pointer-events-none" />
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Buscar carpeta por nombre…" className="w-full py-2.5 pl-9 pr-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+        </div>
+        {rows === null
+          ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">Cargando carpetas del Drive…</div>
+          : scored.length === 0
+            ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">No hay carpetas{q ? ' para esa búsqueda' : ''}. Sincronizá la pestaña Carpetas.</div>
+            : <div className="flex flex-col gap-2 max-h-[52vh] overflow-auto pr-1">
+                {scored.slice(0, 60).map(({ r, score }) => {
+                  const isCur = r.web_url && r.web_url === current;
+                  const suggested = score >= 3;
+                  const parent = parentName[r.parent_id];
+                  return (
+                    <div key={r.id} className="flex items-center gap-2.5 border rounded-[10px] py-2.5 px-3" style={{ borderColor: isCur ? '#C9F0D8' : suggested ? '#E4DBFF' : '#EDF0F5', background: isCur ? '#F4FDF7' : suggested ? '#F7F3FF' : '#fff' }}>
+                      <FolderOpen size={15} className="shrink-0" style={{ color: suggested ? '#7C3AED' : '#9098A4' }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</div>
+                        {parent && <div className="text-[10.5px] text-[#9098A4] truncate">en: {parent}</div>}
+                      </div>
+                      {suggested && !isCur && <span className="text-[10px] font-bold text-[#7C3AED] shrink-0">sugerida</span>}
+                      {isCur
+                        ? <span className="inline-flex items-center gap-1 py-1.5 px-3 rounded-lg text-[11px] font-bold shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Check size={12} strokeWidth={3} />Actual</span>
+                        : <button onClick={() => { onPick(r.web_url); onClose(); }} disabled={!r.web_url} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[11.5px] font-semibold cursor-pointer shrink-0 disabled:opacity-40" style={{ background: '#7C3AED', color: '#fff', border: 'none' }}>Usar esta</button>}
+                    </div>
+                  );
+                })}
+              </div>}
+      </div>
+    </Modal>
+  );
+}
+
+function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const [voomlyOpen, setVoomlyOpen] = useState(false);
+  const [folderPick, setFolderPick] = useState(null); // avatar para el que se elige carpeta a mano
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
@@ -529,6 +601,23 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
   };
   const fetchFolders = () => runFolders('read');
   const createFolders = () => runFolders('create');
+  // Trae la carpeta de EDICIONES de UN avatar: intenta encontrarla sola (mode read); si no la
+  // encuentra, abre el selector manual para que el equipo la elija sin ir al Drive.
+  const bringEditFolder = async (av) => {
+    const name = (av.name || '').trim();
+    if (!name) { window.alert('Poné el nombre del avatar primero.'); return; }
+    setFolderBusy('read');
+    try {
+      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'read' } });
+      if (!error && data?.ok) {
+        const merged = avatars.map(a => { const info = data.byName?.[(a.name || '').trim()]; return info ? { ...a, ...info } : a; });
+        onUpdate(f.id, { avatars: merged });
+        if (data.byName?.[name]?.edit_folder_url) { setFolderBusy('idle'); return; } // la encontró sola ✓
+      }
+    } catch { /* cae al selector manual */ }
+    setFolderBusy('idle');
+    setFolderPick(av); // no la encontró → elegir a mano
+  };
   const namedAvatars = avatars.filter(a => (a.name || '').trim());
   const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
 
@@ -598,12 +687,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
           <div className="min-w-0 flex-1">
             <input key={f.id + 'name'} defaultValue={f.name} onClick={e => e.stopPropagation()} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[15px] font-bold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none tracking-[-.01em]" style={{ color: '#1A1D26' }} />
             <div className="flex items-center gap-[7px] mt-0.5 flex-wrap">
-              <select value={f.strategy_id} onClick={e => e.stopPropagation()} onChange={e => onUpdate(f.id, { strategy_id: e.target.value })} title="Estrategia del funnel (editable)" className="text-[10.5px] text-[#9098A4] bg-transparent border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 cursor-pointer outline-none max-w-[130px]">
-                {!strategyOptions.some(o => o.id === f.strategy_id) && <option value={f.strategy_id}>{strategyName}</option>}
-                {strategyOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-              </select>
-              {f.official_domain && <><span className="text-[#C3C9D4]">·</span><span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#2E69E0] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span></>}
-              <span className="text-[#C3C9D4]">·</span>
+              {f.official_domain && <><span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#2E69E0] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span><span className="text-[#C3C9D4]">·</span></>}
               <span className="inline-flex items-center gap-1 text-[10.5px] text-[#9098A4]" onClick={e => e.stopPropagation()}>Creado
                 <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[10.5px] text-[#9098A4] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
               </span>
@@ -722,26 +806,23 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                       {/* Descripción */}
                       <ScriptPreview Icon={FileText} color="#DB2777" label="Descripción" text={av.spec_text} onOpen={() => openDesc(av)} locked emptyHint="Sin descripción. Sale del DEL: tocá “Generar avatares del DEL”." />
 
-                      {/* Anuncios (editado): link del anuncio (Meta) + carpetas Grabaciones/Ediciones. */}
+                      {/* Anuncios (editado): la CARPETA de ediciones de este avatar (ahí viven los anuncios editados). */}
                       <div>
                         <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#7C3AED] mb-1.5"><Megaphone size={12} />Anuncios <span className="text-[#A78BFA] normal-case tracking-normal">(editado)</span></div>
-                        <div className="flex items-center gap-2">
-                          <input key={av.id + 'u'} defaultValue={av.ad_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.ad_url || '')) setAvatar(av.id, { ad_url: v }); }} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
-                          {av.ad_url
-                            ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
-                               <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E4DBFF] rounded-lg cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Copy size={12} /></button></>
-                            : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin anuncio</span>}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <input key={av.id + 'edit'} defaultValue={av.edit_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.edit_folder_url || '')) setAvatar(av.id, { edit_folder_url: v || null }); }} placeholder="Carpeta de ediciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
+                          <button onClick={() => bringEditFolder(av)} disabled={folderBusy !== 'idle'} title="Trae la carpeta de ediciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
+                          {av.edit_folder_url
+                            ? <><button onClick={() => openUrl(av.edit_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><FolderOpen size={12} />Abrir</button>
+                               <button onClick={() => copyText(av.edit_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E4DBFF] rounded-lg cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Copy size={12} /></button></>
+                            : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
                         </div>
-                        {(av.rec_folder_url || av.edit_folder_url) && (
+                        {(av.edit_folder_url || av.rec_folder_url) && (
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {av.edit_folder_url && <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.edit_files > 0 ? <><Check size={9} strokeWidth={3.5} />editado · {av.edit_files} arch.</> : 'carpeta vacía'}</span>}
                             {av.rec_folder_url && (
                               <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
                                 <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabado</span> : <span className="text-[#C3C9D4]">vacía</span>}
-                              </button>
-                            )}
-                            {av.edit_folder_url && (
-                              <button onClick={() => openUrl(av.edit_folder_url)} title="Carpeta de ediciones (anuncios editados) de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
-                                <FolderOpen size={11} />Ediciones{av.edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />editado</span> : <span className="text-[#C3C9D4]">vacía</span>}
                               </button>
                             )}
                           </div>
@@ -765,12 +846,13 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
       )}
       {note && <NoteModal {...note} onClose={() => setNote(null)} />}
       {voomlyOpen && <VoomlyPicker clientName={clientName} funnelName={f.name || ''} current={f.vsl_url || ''} onPick={(url) => onUpdate(f.id, { vsl_url: url || null })} onClose={() => setVoomlyOpen(false)} />}
+      {folderPick && <FolderPicker clientId={clientId} avatarName={folderPick.name || ''} current={folderPick.edit_folder_url || ''} onPick={(url) => setAvatar(folderPick.id, { edit_folder_url: url || null })} onClose={() => setFolderPick(null)} />}
     </div>
   );
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, clientName, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew, onRefreshPage }) {
+function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew, onRefreshPage }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -868,7 +950,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, clientName, o
               </div>
               {funnels.length === 0
                 ? <div className="text-[12px] text-[#9098A4] py-7 text-center">Sin funnels en esta estrategia.</div>
-                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} clientId={s.client_id} clientName={clientName} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
+                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={delText} clientId={s.client_id} clientName={clientName} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
             </div>
           </div>
 
@@ -883,7 +965,6 @@ export default function FunnelsView({ clientId }) {
   const { clients, strategies, strategyPages, updateStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
-  const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
   const funnelsOf = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid);
 
   // Contexto (client_brain_docs ingerido) + Drive docs (para asignar) + casilleros.
@@ -990,7 +1071,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
 
       {/* Nueva estrategia (informativo: se crean solas desde las carpetas del Drive) */}
       {myStrategies.length > 0 && (
