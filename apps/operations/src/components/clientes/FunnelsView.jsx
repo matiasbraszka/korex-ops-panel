@@ -431,7 +431,7 @@ function ScriptPreview({ Icon, color, label, text, onOpen, emptyHint }) {
   );
 }
 
-function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', onUpdate, onDelete, onTrack, last }) {
+function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', clientId, onUpdate, onDelete, onTrack, onRefreshPage, last }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
@@ -514,6 +514,31 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
 
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
+
+  // ── Generador de avatares del DEL (API de Anthropic · a pedido, instantáneo) ──
+  // Toca una edge function que lee el DEL, la IA identifica los avatares y señala
+  // qué sección tiene la descripción/anuncios de cada uno; el TEXTO se copia tal
+  // cual del DEL. Sincrónico: en unos segundos aparecen. Nada corre en segundo plano.
+  const [gen, setGen] = useState({ status: 'idle' }); // idle | running | done | error
+  const generateAvatars = async (mode = 'append') => {
+    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero.'); return; }
+    if (avatars.length && !window.confirm(mode === 'replace'
+      ? 'La IA va a leer el DEL y REEMPLAZAR los avatares actuales. ¿Seguir?'
+      : 'La IA va a leer el DEL y AGREGAR los avatares nuevos que encuentre (sin borrar los actuales). ¿Seguir?')) return;
+    setGen({ status: 'running' });
+    try {
+      const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
+        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, mode },
+      });
+      let payload = data;
+      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
+      if (!payload?.ok) { setGen({ status: 'error', msg: payload?.detail || error?.message || 'No pude generar los avatares.' }); return; }
+      await onRefreshPage?.(f.id);
+      setGen({ status: 'done', cost: payload.cost_usd, n: payload.detected });
+      setTimeout(() => setGen({ status: 'idle' }), 7000);
+    } catch (e) { setGen({ status: 'error', msg: String(e?.message || e) }); }
+  };
+  const genActive = gen.status === 'running';
 
   const trk = [
     pOk ? { label: 'Pixel', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
@@ -606,13 +631,31 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
           {/* Variantes de avatar */}
           <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
             <CardHead Icon={Users} iconBg="#FCE7F3" iconColor="#DB2777" title="Variantes de avatar" subtitle="A quién se le publicita · un anuncio por avatar">
-              {avatars.length > 0 && <button onClick={pullAllAds} disabled={pulling} title="Trae los copys de anuncios de TODOS los avatares desde el DEL (si están). Revisás y editás después." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#3F4653] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50">{pulling ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}Traer copys del DEL</button>}
+              <button onClick={() => generateAvatars('append')} disabled={genActive} title="La IA lee el DEL (aunque esté desordenado), identifica los avatares con su segmentación y les engancha los copys de anuncios por significado. Tarda 1-2 minutos." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default" style={{ background: genActive ? '#FCE7F3' : '#DB2777', color: genActive ? '#DB2777' : '#fff', border: 'none' }}>{genActive ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}{genActive ? 'Generando…' : 'Generar avatares del DEL'}</button>
               {namedAvatars.length > 0 && (foldersReady
                 ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#9098A4] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50"><RefreshCw size={12} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
                 : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
               )}
               <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
             </CardHead>
+            {genActive && (
+              <div className="mx-[14px] mt-[14px] -mb-1 flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#FDF2F8', color: '#BE185D', border: '1px solid #FBCFE8' }}>
+                <RefreshCw size={13} className="animate-spin shrink-0" />
+                La IA está leyendo el DEL y armando los avatares… unos segundos.
+              </div>
+            )}
+            {gen.status === 'done' && (
+              <div className="mx-[14px] mt-[14px] -mb-1 flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }}>
+                <Check size={13} className="shrink-0" strokeWidth={3} />
+                Listo — {gen.n} avatar{gen.n === 1 ? '' : 'es'} del DEL{typeof gen.cost === 'number' ? ` · costo US$${gen.cost.toFixed(4)}` : ''}. Revisalos y ajustá lo que quieras.
+              </div>
+            )}
+            {gen.status === 'error' && (
+              <div className="mx-[14px] mt-[14px] -mb-1 flex items-start gap-2 text-[11.5px] py-2.5 px-3 rounded-lg" style={{ background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
+                <X size={13} className="shrink-0 mt-px" />
+                <span>{gen.msg || 'No pude generar los avatares.'} <button onClick={() => generateAvatars('append')} className="underline font-semibold cursor-pointer bg-transparent border-none p-0 text-[#B91C1C]">Reintentar</button></span>
+              </div>
+            )}
             <div className="p-[14px] flex flex-col gap-3">
               {avatars.map((av, i) => {
                 const acfg = AVATAR_STATUS[av.status] || AVATAR_STATUS['En grabación'];
@@ -684,7 +727,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew }) {
+function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew, onRefreshPage }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -782,7 +825,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onU
               </div>
               {funnels.length === 0
                 ? <div className="text-[12px] text-[#9098A4] py-7 text-center">Sin funnels en esta estrategia.</div>
-                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} last={i === funnels.length - 1} />)}
+                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} clientId={s.client_id} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
             </div>
           </div>
 
@@ -794,7 +837,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onU
 }
 
 export default function FunnelsView({ clientId }) {
-  const { clients, strategies, strategyPages, updateStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
+  const { clients, strategies, strategyPages, updateStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
   const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
@@ -904,7 +947,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
 
       {/* Nueva estrategia (informativo: se crean solas desde las carpetas del Drive) */}
       {myStrategies.length > 0 && (

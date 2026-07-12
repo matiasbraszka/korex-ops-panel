@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell, Cpu } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -13,6 +13,7 @@ import PersonalEditor from '../components/settings/PersonalEditor';
 import DmeConfigEditor from '../components/settings/DmeConfigEditor';
 import ReunionesConfigEditor from '../components/settings/ReunionesConfigEditor';
 import NotificationsAlertsEditor from '../components/settings/NotificationsAlertsEditor';
+import ApiUsageEditor from '../components/settings/ApiUsageEditor';
 
 const TABS = [
   { id: 'team',          label: 'Equipo y usuarios',     Icon: Users },
@@ -28,6 +29,7 @@ const TABS = [
   { id: 'hist-email',    label: 'Email del Historial',   Icon: Mail },
   { id: 'finanzas',      label: 'Alta en finanzas',      Icon: DollarSign },
   { id: 'dme-metricas',  label: 'Métricas DME',          Icon: Gauge },
+  { id: 'api-usage',     label: 'Gasto de API',          Icon: Cpu },
 ];
 
 export default function SettingsPage() {
@@ -74,6 +76,7 @@ export default function SettingsPage() {
         {tab === 'hist-email'  && <HistorialEmailEditor />}
         {tab === 'finanzas'    && <FinanzasDefaultsEditor />}
         {tab === 'dme-metricas' && <DmeConfigEditor />}
+        {tab === 'api-usage'   && <ApiUsageEditor />}
       </div>
     </div>
   );

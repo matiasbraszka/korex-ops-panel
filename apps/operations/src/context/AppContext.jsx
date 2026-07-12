@@ -1523,6 +1523,15 @@ export function AppProvider({ children }) {
     setStrategyPages(prev => prev.filter(p => p.id !== id));
   }, []);
 
+  // Re-lee UNA página desde la DB y la mergea al estado (sin escribir). Se usa
+  // cuando algo externo al panel la modifica (ej. la rutina "Generar avatares
+  // del DEL" escribe strategy_pages.avatars desde la nube).
+  const refreshStrategyPage = useCallback(async (id) => {
+    const rows = await sbFetch('strategy_pages?id=eq.' + encodeURIComponent(id) + '&select=*&limit=1');
+    if (Array.isArray(rows) && rows[0]) setStrategyPages(prev => prev.map(p => p.id === id ? rows[0] : p));
+    return Array.isArray(rows) ? rows[0] : null;
+  }, []);
+
   // ── CRUD: invoices ──
   // Historial de facturas emitidas a cada cliente. Cascade en DB borra todas
   // las facturas al borrar el cliente.
@@ -2889,6 +2898,7 @@ export function AppProvider({ children }) {
     addStrategyPage,
     updateStrategyPage,
     deleteStrategyPage,
+    refreshStrategyPage,
     invoices,
     addInvoice,
     updateInvoice,
@@ -2938,7 +2948,7 @@ export function AppProvider({ children }) {
     openNotifications, closeNotifications, markNotificationRead,
     markAllNotificationsRead, dismissNotifToast,
     addStrategy, updateStrategy, deleteStrategy, addStrategyPage,
-    updateStrategyPage, deleteStrategyPage, addInvoice, updateInvoice,
+    updateStrategyPage, deleteStrategyPage, refreshStrategyPage, addInvoice, updateInvoice,
     deleteInvoice, linkContract, addContract, updateContract, deleteContract,
     getPriorityLabel, getAllPriorityLabels, getPriorityList, isPriorityHidden,
   ]);
