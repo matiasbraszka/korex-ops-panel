@@ -406,9 +406,93 @@ function ScriptPreview({ Icon, color, label, text, onOpen, emptyHint, locked }) 
   );
 }
 
-function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', clientId, onUpdate, onDelete, onTrack, onRefreshPage, last }) {
+// Normaliza un nombre de video/cliente para matchear (sin extensión, sin "vsl", sin acentos).
+function normVoomly(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\.(mp4|mov|webm|m4v)$/i, '').replace(/\bvsl\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+const voomlyUrl = (r) => (r?.embed_id ? `https://embed.voomly.com/b/${r.embed_id}` : '');
+
+// Selector de VSL de Voomly: cruza la tabla vsl_voomly (que no tiene client_id) por NOMBRE
+// contra el cliente + el funnel, sugiere los más parecidos y deja buscar. Al elegir, arma el
+// link embed.voomly.com/b/<embed_id>. No inventa: el equipo confirma cuál es.
+function VoomlyPicker({ clientName, funnelName, current, onPick, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase.from('vsl_voomly')
+          .select('voomly_id,name,kind,embed_id,total_plays,play_rate,uploaded_at')
+          .order('uploaded_at', { ascending: false, nullsFirst: false });
+        if (alive) setRows(Array.isArray(data) ? data : []);
+      } catch { if (alive) setRows([]); }
+    })();
+    return () => { alive = false; };
+  }, []);
+  const cTokens = useMemo(() => new Set(normVoomly(`${clientName || ''} ${funnelName || ''}`).split(' ').filter(t => t.length > 2)), [clientName, funnelName]);
+  const scored = useMemo(() => {
+    const list = (rows || []).map(r => {
+      const n = normVoomly(r.name);
+      const toks = new Set(n.split(' ').filter(Boolean));
+      let score = 0;
+      for (const t of cTokens) { if (toks.has(t)) score += 2; else if (n.includes(t)) score += 1; }
+      if ((r.kind || '') === 'VSL') score += 0.5;
+      return { r, n, score };
+    });
+    const ql = normVoomly(q);
+    const filtered = ql ? list.filter(x => x.n.includes(ql)) : list;
+    return filtered.sort((a, b) => b.score - a.score || (b.r.total_plays || 0) - (a.r.total_plays || 0));
+  }, [rows, cTokens, q]);
+  const curUrl = current || '';
+  return (
+    <Modal open onClose={onClose} title="Traer link del VSL desde Voomly" maxWidth={640}
+      footer={<div className="flex justify-between items-center gap-2 w-full">
+        <span className="text-[11px] text-[#9098A4]">Cruce por nombre con «{clientName || 'cliente'}». Confirmá cuál es el VSL de este funnel.</span>
+        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
+      </div>}>
+      <div className="p-1">
+        <div className="relative mb-3">
+          <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9098A4] pointer-events-none" />
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Buscar por nombre del video…" className="w-full py-2.5 pl-9 pr-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+        </div>
+        {rows === null
+          ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">Cargando videos de Voomly…</div>
+          : scored.length === 0
+            ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">No encontré videos{q ? ' para esa búsqueda' : ''}.</div>
+            : <div className="flex flex-col gap-2 max-h-[52vh] overflow-auto pr-1">
+                {scored.slice(0, 40).map(({ r, score }) => {
+                  const url = voomlyUrl(r);
+                  const isCur = url && url === curUrl;
+                  const suggested = score >= 2;
+                  return (
+                    <div key={r.voomly_id} className="flex items-center gap-2.5 border rounded-[10px] py-2.5 px-3" style={{ borderColor: isCur ? '#C9F0D8' : suggested ? '#FBCFE8' : '#EDF0F5', background: isCur ? '#F4FDF7' : suggested ? '#FDF2F8' : '#fff' }}>
+                      <Clapperboard size={15} className="shrink-0" style={{ color: (r.kind === 'VSL') ? '#16A34A' : '#9098A4' }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</div>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[10px] font-bold py-0.5 px-1.5 rounded-full" style={(r.kind === 'VSL') ? { background: '#DCFCE7', color: '#15803D' } : { background: '#F1F3F7', color: '#9098A4' }}>{r.kind || 'Otro'}</span>
+                          <span className="text-[10.5px] text-[#9098A4]">{(r.total_plays || 0).toLocaleString()} plays · {r.play_rate || 0}% play rate</span>
+                          {suggested && !isCur && <span className="text-[10px] font-bold text-[#DB2777]">sugerido</span>}
+                        </div>
+                      </div>
+                      {isCur
+                        ? <span className="inline-flex items-center gap-1 py-1.5 px-3 rounded-lg text-[11px] font-bold shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Check size={12} strokeWidth={3} />Actual</span>
+                        : <button onClick={() => { onPick(url); onClose(); }} disabled={!url} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[11.5px] font-semibold cursor-pointer shrink-0 disabled:opacity-40" style={{ background: '#DB2777', color: '#fff', border: 'none' }}>Usar este</button>}
+                    </div>
+                  );
+                })}
+              </div>}
+      </div>
+    </Modal>
+  );
+}
+
+function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
+  const [voomlyOpen, setVoomlyOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
@@ -569,8 +653,9 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
             <div className="p-[14px] flex flex-col gap-3.5">
               <div>
                 <div className="text-[10.5px] font-bold text-[#16A34A] uppercase tracking-[0.06em] mb-1.5">Link del VSL</div>
-                <div className="flex items-center gap-1.5">
-                  <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <input key={f.id + 'vslurl'} defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                  <button onClick={() => setVoomlyOpen(true)} title="Buscar el VSL en la tabla de Voomly y traer su link automáticamente." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#DB2777', borderColor: '#FBCFE8' }}><SearchIcon size={12} />Traer de Voomly</button>
                   {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
                     <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Copy size={12} /></button></>}
                 </div>
@@ -673,12 +758,13 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
         </div>
       )}
       {note && <NoteModal {...note} onClose={() => setNote(null)} />}
+      {voomlyOpen && <VoomlyPicker clientName={clientName} funnelName={f.name || ''} current={f.vsl_url || ''} onPick={(url) => onUpdate(f.id, { vsl_url: url || null })} onClose={() => setVoomlyOpen(false)} />}
     </div>
   );
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew, onRefreshPage }) {
+function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, clientName, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew, onRefreshPage }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -776,7 +862,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onU
               </div>
               {funnels.length === 0
                 ? <div className="text-[12px] text-[#9098A4] py-7 text-center">Sin funnels en esta estrategia.</div>
-                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} clientId={s.client_id} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
+                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} clientId={s.client_id} clientName={clientName} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
             </div>
           </div>
 
@@ -898,7 +984,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
 
       {/* Nueva estrategia (informativo: se crean solas desde las carpetas del Drive) */}
       {myStrategies.length > 0 && (
