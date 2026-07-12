@@ -63,6 +63,12 @@ function doPost(e) {
     // No crea nada; solo devuelve metadata de carpetas + archivos.
     if (b.action === 'list_folder_tree') return listFolderTree(b);
 
+    // Reordenar estrategias/carpetas desde el panel (el cerebro mueve docs entre estrategias).
+    // move_node: mueve un archivo o carpeta a otra carpeta. { nodeId, targetFolderId }
+    if (b.action === 'move_node') return moveNode(b);
+    // trash_node: manda a la papelera un archivo o carpeta (ej. carpeta de estrategia vacía). { nodeId }
+    if (b.action === 'trash_node') return trashNode(b);
+
     const name = String(b.name || '').trim();
     if (!name) return json({ ok: false, error: 'missing_name' });
     const empresa = String(b.empresa || '').trim();
@@ -208,6 +214,48 @@ function facCarpetaMes(date) {
   var raiz = DriveApp.getFolderById(FAC_FOLDER_ID);
   var it = raiz.getFoldersByName(nombre);
   return it.hasNext() ? it.next() : raiz.createFolder(nombre);
+}
+
+// ---------- Reordenar Drive (acciones 'move_node' / 'trash_node') ----------
+// El cerebro de marketing las usa para consolidar/separar estrategias (que son un
+// espejo de las carpetas "Estrategia #N" del Drive del cliente). Después de mover,
+// el panel corre drive-sync para reflejar el cambio.
+
+// Devuelve el File o la Folder por id (probando ambos), o lanza si no existe.
+function driveNodeById(id) {
+  try { return DriveApp.getFileById(id); }
+  catch (e1) {
+    try { return DriveApp.getFolderById(id); }
+    catch (e2) { throw new Error('node_not_found'); }
+  }
+}
+
+// Mueve un archivo o carpeta a otra carpeta destino. { nodeId, targetFolderId }
+function moveNode(b) {
+  var nodeId = String(b.nodeId || b.fileId || '').trim();
+  var targetId = String(b.targetFolderId || '').trim();
+  if (!nodeId || !targetId) return json({ ok: false, error: 'missing_params' });
+  var target;
+  try { target = DriveApp.getFolderById(targetId); }
+  catch (e) { return json({ ok: false, error: 'target_not_found' }); }
+  var item;
+  try { item = driveNodeById(nodeId); }
+  catch (e) { return json({ ok: false, error: 'node_not_found' }); }
+  item.moveTo(target); // API moderna: lo saca de TODOS los padres actuales y lo deja solo en target
+  return json({ ok: true, moved: nodeId, to: targetId, name: item.getName() });
+}
+
+// Manda a la papelera un archivo o carpeta (ej. una carpeta de estrategia que quedó vacía).
+// No borra definitivo (queda recuperable en la papelera). { nodeId }
+function trashNode(b) {
+  var nodeId = String(b.nodeId || b.fileId || '').trim();
+  if (!nodeId) return json({ ok: false, error: 'missing_params' });
+  var item;
+  try { item = driveNodeById(nodeId); }
+  catch (e) { return json({ ok: false, error: 'node_not_found' }); }
+  var name = item.getName();
+  item.setTrashed(true);
+  return json({ ok: true, trashed: nodeId, name: name });
 }
 
 // ---------- Lectura del árbol (acción 'list_folder_tree') ----------
