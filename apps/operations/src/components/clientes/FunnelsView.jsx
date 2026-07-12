@@ -508,21 +508,27 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
 
   const setAvatar = (id, patch) => onUpdate(f.id, { avatars: avatars.map(a => a.id === id ? { ...a, ...patch } : a) });
 
-  // Crea/ordena las subcarpetas por avatar (Anuncios › Grabaciones|Ediciones › <avatar>) y trae
-  // sus links + si ya tienen archivos (grabado/editado). Escribe los links en cada avatar.
-  const [folding, setFolding] = useState(false);
-  const ensureFolders = async () => {
+  // Carpetas por avatar (Anuncios › Grabaciones|Ediciones › <avatar>). SON DOS COSAS DISTINTAS:
+  //  · TRAER (mode 'read'): solo VINCULA las carpetas que ya existen en el Drive sincronizado y lee
+  //    su estado (grabado/editado). No crea nada → cero riesgo.
+  //  · CREAR (mode 'create'): arma la estructura que falte (vía Apps Script). Acción explícita, aparte.
+  // En ambos casos mergeamos los links/conteos en cada avatar.
+  const [folderBusy, setFolderBusy] = useState('idle'); // idle | read | create
+  const runFolders = async (mode) => {
     const named = avatars.filter(a => (a.name || '').trim());
-    if (!named.length) { window.alert('Poné el nombre de al menos un avatar antes de crear las carpetas.'); return; }
-    setFolding(true);
+    if (!named.length) { window.alert('Poné el nombre de al menos un avatar primero.'); return; }
+    setFolderBusy(mode);
     try {
-      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id } });
-      if (error || !data?.ok) { window.alert(data?.hint || 'No se pudieron crear las carpetas' + (data?.error ? ` (${data.error})` : '')); return; }
+      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode } });
+      if (error || !data?.ok) { window.alert(data?.hint || `No se pudieron ${mode === 'read' ? 'traer' : 'crear'} las carpetas` + (data?.error ? ` (${data.error})` : '')); return; }
+      if (mode === 'read' && data.found === false) { window.alert('No encontré las carpetas por avatar en el Drive. Sincronizá la pestaña Carpetas, o usá "Crear carpetas" para armarlas.'); return; }
       const merged = avatars.map(a => { const info = data.byName?.[(a.name || '').trim()]; return info ? { ...a, ...info } : a; });
       onUpdate(f.id, { avatars: merged });
-    } catch { window.alert('Error creando las carpetas.'); }
-    finally { setFolding(false); }
+    } catch { window.alert(`Error al ${mode === 'read' ? 'traer' : 'crear'} las carpetas.`); }
+    finally { setFolderBusy('idle'); }
   };
+  const fetchFolders = () => runFolders('read');
+  const createFolders = () => runFolders('create');
   const namedAvatars = avatars.filter(a => (a.name || '').trim());
   const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
 
@@ -668,10 +674,10 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
           <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
             <CardHead Icon={Users} iconBg="#FCE7F3" iconColor="#DB2777" title="Variantes de avatar" subtitle="A quién se le publicita · un anuncio por avatar">
               <button onClick={() => generateAvatars('append')} disabled={genActive} title="La IA lee el DEL (aunque esté desordenado), identifica los avatares con su segmentación y les engancha los copys de anuncios por significado. Tarda 1-2 minutos." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default" style={{ background: genActive ? '#FCE7F3' : '#DB2777', color: genActive ? '#DB2777' : '#fff', border: 'none' }}>{genActive ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}{genActive ? 'Generando…' : 'Generar avatares del DEL'}</button>
-              {namedAvatars.length > 0 && (foldersReady
-                ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#9098A4] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50"><RefreshCw size={12} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
-                : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
-              )}
+              {namedAvatars.length > 0 && <>
+                <button onClick={fetchFolders} disabled={folderBusy !== 'idle'} title="Vincula las carpetas por avatar que YA existen en el Drive y lee su estado (grabado/editado). No crea nada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50" style={foldersReady ? { color: '#15803D', borderColor: '#C9F0D8' } : { color: '#3F4653', borderColor: '#D8DDE6' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : foldersReady ? <Check size={12} strokeWidth={3} /> : <FolderOpen size={12} />}{folderBusy === 'read' ? 'Trayendo…' : 'Traer carpeta'}</button>
+                <button onClick={createFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive lo que falte: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar. Acción aparte de traer." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folderBusy === 'create' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'create' ? 'Creando…' : 'Crear carpetas'}</button>
+              </>}
               {canUndo && <button onClick={undoGenerate} title="Restaurar los avatares y la VSL que había antes de la última generación de la IA." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
               <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
             </CardHead>

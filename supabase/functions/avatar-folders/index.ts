@@ -78,6 +78,68 @@ function pickAnunciosFolder(nodes: Array<{ id: string; name: string; depth: numb
   return pool[0].id;
 }
 
+// Normaliza un nombre para matchear carpeta ↔ avatar (sin acentos, minúsculas, alfanumérico).
+function normName(s: string) {
+  return str(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+// ¿La carpeta corresponde a este avatar? (nombre exacto normalizado, o una contiene a la otra).
+function folderMatchesAvatar(folderName: string, avatarName: string) {
+  const f = normName(folderName), a = normName(avatarName);
+  if (!f || !a) return false;
+  if (f === a) return true;
+  // "Grabacion Pelayo Padre" contra avatar "Pelayo Padre", o viceversa.
+  return f.includes(a) || a.includes(f);
+}
+
+// MODO LECTURA (sin crear nada): resuelve las carpetas por avatar desde el árbol de Drive YA
+// sincronizado (client_drive_nodes) y cuenta sus archivos. Cero riesgo de crear carpetas.
+async function readFoldersFromTree(anunciosFolderId: string, names: string[]) {
+  // Hijos directos de "Anuncios": buscamos las carpetas Grabaciones y Ediciones.
+  const { data: lvl1 } = await supabase
+    .from("client_drive_nodes").select("id, name, web_url, node_type")
+    .eq("parent_id", anunciosFolderId).eq("node_type", "folder");
+  const pick = (re: RegExp) => (lvl1 ?? []).find((n) => re.test(str(n.name)));
+  const grab = pick(/grabaci/i);
+  // El bucket de "editado" varía por cliente (legacy): Ediciones / Terminados / Editados / Finales.
+  const edic = pick(/edici|editad|termina|final|listo/i);
+  const bucketIds = [grab?.id, edic?.id].filter(Boolean) as string[];
+
+  const byName: Record<string, unknown> = {};
+  if (!bucketIds.length) {
+    for (const nm of names) byName[nm] = { rec_folder_url: null, edit_folder_url: null, rec_files: 0, edit_files: 0 };
+    return { grabacionesUrl: grab?.web_url ?? null, edicionesUrl: edic?.web_url ?? null, byName, found: false };
+  }
+
+  // Subcarpetas por avatar dentro de Grabaciones/Ediciones.
+  const { data: subs } = await supabase
+    .from("client_drive_nodes").select("id, name, web_url, parent_id")
+    .in("parent_id", bucketIds).eq("node_type", "folder");
+  const subList = (subs ?? []) as Array<{ id: string; name: string; web_url: string | null; parent_id: string }>;
+
+  // Conteo de archivos (no-carpetas) por subcarpeta de avatar.
+  const subIds = subList.map((s) => s.id);
+  const counts: Record<string, number> = {};
+  if (subIds.length) {
+    const { data: files } = await supabase
+      .from("client_drive_nodes").select("id, parent_id")
+      .in("parent_id", subIds).neq("node_type", "folder");
+    for (const f of (files ?? [])) counts[str((f as Record<string, unknown>).parent_id)] = (counts[str((f as Record<string, unknown>).parent_id)] || 0) + 1;
+  }
+
+  for (const nm of names) {
+    const recSub = subList.find((s) => s.parent_id === grab?.id && folderMatchesAvatar(s.name, nm));
+    const edSub = subList.find((s) => s.parent_id === edic?.id && folderMatchesAvatar(s.name, nm));
+    byName[nm] = {
+      rec_folder_url: recSub?.web_url ?? null,
+      edit_folder_url: edSub?.web_url ?? null,
+      rec_files: recSub ? (counts[recSub.id] || 0) : 0,
+      edit_files: edSub ? (counts[edSub.id] || 0) : 0,
+    };
+  }
+  const found = subList.length > 0;
+  return { grabacionesUrl: grab?.web_url ?? null, edicionesUrl: edic?.web_url ?? null, byName, found };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -90,10 +152,9 @@ Deno.serve(async (req) => {
 
   const appscriptUrl = str(vcfg.appscript_url);
   const appscriptSecret = str(vcfg.appscript_secret);
-  if (!appscriptUrl) return j({ ok: false, error: "missing_appscript_url" }, 500);
 
-  let funnelId = "";
-  try { const b = await req.json(); funnelId = str((b as Record<string, unknown>)?.funnel_id); } catch { /* sin body */ }
+  let funnelId = "", mode = "create";
+  try { const b = await req.json() as Record<string, unknown>; funnelId = str(b?.funnel_id); mode = str(b?.mode) || "create"; } catch { /* sin body */ }
   if (!funnelId) return j({ ok: false, error: "missing_funnel_id" }, 400);
 
   const { data: page, error: pErr } = await supabase
@@ -109,6 +170,14 @@ Deno.serve(async (req) => {
     .eq("strategy_id", page.strategy_id).eq("node_type", "folder").ilike("name", "%anuncios%");
   const anunciosFolderId = pickAnunciosFolder((folders ?? []) as Array<{ id: string; name: string; depth: number }>);
   if (!anunciosFolderId) return j({ ok: false, error: "no_anuncios_folder", hint: "Falta la carpeta Anuncios en el Drive de esta estrategia (sincronizá Carpetas)." }, 404);
+
+  // MODO LECTURA: solo vincula/lee las carpetas existentes del árbol ya sincronizado. NO crea nada.
+  if (mode === "read") {
+    const r = await readFoldersFromTree(anunciosFolderId, names);
+    return j({ ok: true, mode: "read", ...r });
+  }
+
+  if (!appscriptUrl) return j({ ok: false, error: "missing_appscript_url" }, 500);
 
   // Apps Script crea/asegura las subcarpetas por avatar y devuelve links + conteo de archivos.
   // callAppScript reintenta ante blips (timeout/5xx/cold start); lanza si sigue caído.
