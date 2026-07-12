@@ -109,6 +109,38 @@ function ClientContextSlots({ clientId, driveDocs, docsByNode, slotPins, onChang
   );
 }
 
+// Links de webs de contexto (sitio del cliente, web de la empresa MLM, etc.).
+function WebLinks({ clientId, webs, onChanged }) {
+  const [url, setUrl] = useState('');
+  const [label, setLabel] = useState('');
+  const add = async () => {
+    const u = url.trim(); if (!u) return;
+    await supabase.from('client_brain_webs').insert({ id: rid('web'), client_id: clientId, url: /^https?:\/\//i.test(u) ? u : 'https://' + u, label: label.trim() || null });
+    setUrl(''); setLabel(''); onChanged();
+  };
+  const remove = async (id) => { await supabase.from('client_brain_webs').delete().eq('id', id); onChanged(); };
+  return (
+    <div>
+      {webs.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {webs.map(w => (
+            <span key={w.id} className="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-[#F0F7FF] border border-[#DCE7FB] text-[11.5px]">
+              <Globe size={11} className="text-[#2E69E0]" />
+              <button onClick={() => openUrl(w.url)} className="bg-transparent border-none p-0 cursor-pointer text-[#2E69E0] font-semibold hover:underline max-w-[220px] truncate" title={w.url}>{w.label || w.url}</button>
+              <button onClick={() => remove(w.id)} title="Quitar" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#DC2626]"><X size={11} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Nombre (opcional)" className="w-[140px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+        <input value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="https://sitio.com" className="flex-1 min-w-[180px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+        <button onClick={add} disabled={!url.trim()} className="inline-flex items-center gap-1 py-1.5 px-2.5 border-none rounded-lg bg-[#2E69E0] text-white text-[11.5px] font-semibold cursor-pointer disabled:opacity-50"><Plus size={12} />Agregar web</button>
+      </div>
+    </div>
+  );
+}
+
 const FUNNEL_STATUS = {
   activa:   { label: 'Activo', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
   borrador: { label: 'Borrador', bg: '#FEFCE8', color: '#A16207', dot: '#A16207' },
@@ -262,7 +294,7 @@ function AvatarStatusPill({ status, onChange }) {
 
 const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
 
-function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack, contextDocs = [] }) {
+function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack }) {
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
@@ -272,8 +304,6 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
   const events = normEvents(f.conversion_events);
   const pOk = !!(f.pixel_code && f.pixel_code.trim());
   const cOk = !!(f.clarity_id && f.clarity_id.trim());
-  // Para la spec del avatar solo se ofrecen docs dedicados (kind='extra'), NO el DEL.
-  const specDocs = contextDocs.filter(d => d.doc_kind === 'extra');
 
   const links = [];
   if (f.prod_url) links.push({ short: 'Prod', bg: '#EEF2FF', color: '#2E69E0', border: '#DCE3FF', url: f.prod_url });
@@ -386,20 +416,10 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
                            <button onClick={() => copyText(av.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>
                         : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin VSL</span>}
                     </div>
-                    {/* Especificación del avatar: su documento propio (no el DEL) y/o su descripción en texto */}
+                    {/* Descripción / segmentación del avatar — la completa la IA desde el DEL (editable). */}
                     <div className="mt-1.5 pl-[40px]">
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold shrink-0" style={{ color: '#EC4899' }}><Brain size={11} />Spec</span>
-                        <select value={av.spec_node_id || ''} onChange={e => { const nd = specDocs.find(d => d.node_id === e.target.value); setAvatar(av.id, { spec_node_id: e.target.value || null, spec_title: nd?.title || null }); }} title="Documento propio de este avatar (no el DEL)" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue cursor-pointer">
-                          <option value="">Documento propio del avatar…</option>
-                          {av.spec_node_id && !specDocs.some(d => d.node_id === av.spec_node_id) && <option value={av.spec_node_id}>{av.spec_title || 'Documento vinculado'}</option>}
-                          {specDocs.map(d => <option key={d.node_id} value={d.node_id}>{d.title}</option>)}
-                        </select>
-                        {(() => { const nd = specDocs.find(d => d.node_id === av.spec_node_id); return nd?.web_url
-                          ? <button onClick={() => openUrl(nd.web_url)} title="Abrir en Drive" className="inline-flex items-center justify-center w-7 h-[26px] border-none rounded-lg cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><FileText size={12} /></button>
-                          : null; })()}
-                      </div>
-                      <textarea key={av.id + 'spec'} defaultValue={av.spec_text || ''} onBlur={e => { const v = e.target.value; if (v !== (av.spec_text || '')) setAvatar(av.id, { spec_text: v || null }); }} placeholder="Descripción de este avatar (si está dentro del DEL, pegá su parte acá)…" rows={2} className="w-full mt-1.5 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white resize-y outline-none focus:border-blue leading-relaxed" />
+                      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#EC4899' }}><Brain size={11} />Descripción · segmentación</div>
+                      <textarea key={av.id + 'spec'} defaultValue={av.spec_text || ''} onBlur={e => { const v = e.target.value; if (v !== (av.spec_text || '')) setAvatar(av.id, { spec_text: v || null }); }} placeholder="La completa la IA desde el DEL (o escribila). Fragmento que describe a este avatar…" rows={2} className="w-full py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white resize-y outline-none focus:border-blue leading-relaxed" />
                     </div>
                   </div>
                 ))}
@@ -442,11 +462,21 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onTrack, onNew }) {
+function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onTrack, onNew, onAvatarAI }) {
   const [open, setOpen] = useState(true);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState(null);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
+  const hasDel = docs.some(d => d.doc_kind === 'del');
+  const runAI = async () => {
+    setAiBusy(true); setAiMsg(null);
+    const r = await onAvatarAI(s.id);
+    setAiBusy(false);
+    setAiMsg(r?.ok ? { ok: true, text: `Listo · ${r.avatars} avatar(es) en ${r.funnels} funnel(s)` } : { ok: false, text: r?.message || 'No se pudo completar' });
+    setTimeout(() => setAiMsg(null), 6000);
+  };
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
       <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
@@ -457,7 +487,11 @@ function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onT
           <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: st.bg, color: st.color }}>{st.label}</span>
         </button>
         <span className="text-[11px] text-[#9CA3AF] font-semibold shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
+        <button onClick={runAI} disabled={aiBusy || !hasDel || funnels.length === 0} title={hasDel ? 'La IA completa los avatares de cada funnel leyendo el DEL' : 'Falta el DEL sincronizado de esta estrategia'} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-white text-[11px] font-semibold cursor-pointer disabled:opacity-40 shrink-0" style={{ background: '#7C3AED' }}>
+          {aiBusy ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}{aiBusy ? 'Completando…' : 'Completar avatares con IA'}
+        </button>
       </div>
+      {aiMsg && <div className="py-1.5 px-4 text-[11.5px] font-semibold" style={{ background: aiMsg.ok ? '#ECFDF5' : '#FEF2F2', color: aiMsg.ok ? '#16A34A' : '#DC2626', borderBottom: '1px solid #F1E5EE' }}>{aiMsg.text}</div>}
       {open && (
         <div className="p-3.5">
           {docs.filter(d => d.doc_kind !== 'extra').length > 0 && (
@@ -475,7 +509,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onT
             </div>
             {funnels.length === 0
               ? <div className="text-[12px] text-[#9CA3AF] py-6 text-center">Sin funnels en esta estrategia.</div>
-              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} contextDocs={docs} />)}
+              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} />)}
           </div>
           <button onClick={() => onNew(s.id)} className="inline-flex items-center gap-1.5 mt-2.5 py-2 px-3 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[12px] font-semibold cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={13} />Nuevo funnel en esta estrategia</button>
         </div>
@@ -495,17 +529,20 @@ export default function FunnelsView({ clientId }) {
   const [docs, setDocs] = useState([]);
   const [driveDocs, setDriveDocs] = useState([]);
   const [slotPins, setSlotPins] = useState([]);
+  const [webs, setWebs] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const fetchContext = useCallback(async () => {
     try {
-      const [d, nodes, pins] = await Promise.all([
+      const [d, nodes, pins, webRows] = await Promise.all([
         sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(clientId)}&select=*`),
         sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=in.(document,sheet,slides,pdf)&select=id,name,node_type,web_url`),
         sbFetch(`client_brain_pins?client_id=eq.${encodeURIComponent(clientId)}&slot=not.is.null&select=node_id,slot,label`),
+        sbFetch(`client_brain_webs?client_id=eq.${encodeURIComponent(clientId)}&select=*&order=created_at`),
       ]);
       setDocs(Array.isArray(d) ? d : []);
       setDriveDocs(Array.isArray(nodes) ? nodes : []);
       setSlotPins(Array.isArray(pins) ? pins : []);
+      setWebs(Array.isArray(webRows) ? webRows : []);
     } catch { /* noop */ }
   }, [clientId]);
   useEffect(() => { fetchContext(); }, [fetchContext]);
@@ -513,6 +550,20 @@ export default function FunnelsView({ clientId }) {
   const docsOf = (sid) => docs.filter(d => d.strategy_id === sid);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
   const sync = async () => { setSyncing(true); try { await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } }); await fetchContext(); } catch { /* noop */ } finally { setSyncing(false); } };
+
+  // La IA completa los avatares de cada funnel de una estrategia leyendo su DEL.
+  const runAvatarAI = async (strategyId) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('cerebro-avatares', { body: { strategy_id: strategyId } });
+      if (error) return { ok: false, message: 'No se pudo conectar con el cerebro.' };
+      if (data?.ok) {
+        // Reflejar en la UI: recargar los avatares que la IA escribió.
+        const rows = await sbFetch(`strategy_pages?strategy_id=eq.${encodeURIComponent(strategyId)}&select=id,avatars`);
+        for (const r of (Array.isArray(rows) ? rows : [])) updateStrategyPage(r.id, { avatars: r.avatars });
+      }
+      return data || { ok: false, message: 'Sin respuesta.' };
+    } catch { return { ok: false, message: 'Error inesperado.' }; }
+  };
 
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
@@ -560,12 +611,16 @@ export default function FunnelsView({ clientId }) {
         <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documentos del cliente</div>
         <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
         <div className="text-[10.5px] text-[#9CA3AF] mt-2 flex items-center gap-1"><RefreshCw size={10} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
+
+        <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2 mt-4">Webs de contexto</div>
+        <WebLinks clientId={clientId} webs={webs} onChanged={fetchContext} />
+        <div className="text-[10.5px] text-[#9CA3AF] mt-2 flex items-center gap-1"><Globe size={10} />Sumá el sitio del cliente o de la empresa MLM. Los dominios de tus funnels también nutren el contexto (el funnel es donde llega el prospecto tras el anuncio).</div>
       </div>
 
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="border border-[#E2E5EB] rounded-xl bg-white flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onAvatarAI={runAvatarAI} />)}
 
       {/* Modal nuevo funnel */}
       {modal && (
