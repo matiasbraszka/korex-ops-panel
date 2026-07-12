@@ -5,7 +5,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
-  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, ArrowRight, Megaphone,
+  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, Megaphone,
   Check, Trash2, Activity, Zap, Link2, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
   FolderOpen, Film, FolderPlus,
@@ -48,8 +48,7 @@ function ContextDocCard({ doc }) {
 // Casilleros de contexto de CLIENTE (nivel: todas las estrategias). Reemplazan el
 // "adivino por nombre": el equipo asigna cada documento a su casillero (removible).
 const CLIENT_SLOTS = [
-  { key: 'inv_cliente', label: 'Investigación del cliente', desc: 'De la persona / el cliente', match: /investigaci/i },
-  { key: 'inv_empresa', label: 'Investigación de la empresa (MLM)', desc: 'De la compañía / multinivel', match: /investigaci|empresa|mlm|multinivel/i },
+  { key: 'investigacion', label: 'Investigaciones', desc: 'Del cliente y/o de la empresa (MLM). Podés asignar varias.', match: /investigaci|empresa|mlm|multinivel/i },
   { key: 'onboarding', label: 'Onboarding', desc: 'Viejo o nuevo (podés quitarlo)', match: /onboarding/i },
   { key: 'briefing', label: 'Briefing · Personalidad · Tono', desc: 'Brief, tono y contexto actual', match: /brief|personalidad|tono|contexto/i },
 ];
@@ -155,7 +154,6 @@ const AVATAR_STATUS = {
   'Editados':     { short: 'Editados',  bg: '#ECFDF5', color: '#16A34A' },
 };
 const AVATAR_OPTS = ['En grabación', 'En edición', 'Editados'];
-const DEFAULT_NEEDS = ['Imágenes de autoridad', 'Branding / logo', 'Imágenes de empresa o producto', 'Testimonios'];
 // Eventos de conversión estándar: se pre-cargan en cada funnel nuevo; los demás son personalizados.
 const STD_EVENTS = ['Visitas', 'Registro lead', 'Thank you page'];
 const stdEvents = () => STD_EVENTS.map(n => ({ id: rid('ev'), name: n, purpose: '', code: '' }));
@@ -394,10 +392,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
-  const needs = Array.isArray(f.visual_resources) ? f.visual_resources : [];
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
-  const doneCount = needs.filter(n => n.done).length;
-  const missing = needs.length - doneCount;
   const events = normEvents(f.conversion_events);
   const pOk = !!(f.pixel_code && f.pixel_code.trim());
   const cOk = !!(f.clarity_id && f.clarity_id.trim());
@@ -409,7 +404,6 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
   const missingLinks = [];
   if (!f.prod_url) missingLinks.push('Prod'); if (!f.testing_url) missingLinks.push('Test');
 
-  const setNeed = (i, patch) => onUpdate(f.id, { visual_resources: needs.map((n, j) => j === i ? { ...n, ...patch } : n) });
   const setAvatar = (id, patch) => onUpdate(f.id, { avatars: avatars.map(a => a.id === id ? { ...a, ...patch } : a) });
 
   // Crea/ordena las subcarpetas por avatar (Anuncios › Grabaciones|Ediciones › <avatar>) y trae
@@ -475,19 +469,6 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     setAvatar(av.id, { ad_script: ad });
   };
 
-  // Recursos automáticos: arma la lista "Para completar el funnel" desde las subcarpetas de la
-  // carpeta "Recursos" del Drive. Subcarpeta con archivos = entregado (check); vacía = pendiente.
-  const [syncingRes, setSyncingRes] = useState(false);
-  const syncResources = async () => {
-    setSyncingRes(true);
-    try {
-      const { data } = await supabase.rpc('cerebro_recursos', { p_strategy_id: f.strategy_id });
-      if (!data || !data.length) { window.alert('No encontré subcarpetas dentro de "Recursos" para esta estrategia. Sincronizá las Carpetas del cliente primero.'); return; }
-      const list = data.map(r => ({ label: r.name, done: r.files > 0, url: r.url, count: r.files }));
-      onUpdate(f.id, { visual_resources: list });
-    } catch { window.alert('Error sincronizando recursos.'); }
-    finally { setSyncingRes(false); }
-  };
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
@@ -515,7 +496,6 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
               <span className="inline-flex items-center gap-1 text-[11px] text-[#9CA3AF]" onClick={e => e.stopPropagation()}>Creado
                 <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[11px] text-[#6B7280] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
               </span>
-              {missing > 0 && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#A16207] bg-[#FEF9E7] border border-[#F5E6B8] rounded-md py-px px-1.5">Faltan {missing}</span>}
             </div>
           </div>
         </div>
@@ -580,8 +560,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
               </div>
             </div>
           </div>
-          <div className="grid gap-3.5 items-start" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
-            {/* Avatares */}
+          <div>
+            {/* Avatares (a lo ancho; los recursos se muestran a nivel estrategia) */}
             <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
               <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
                 <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Users size={14} /></span>
@@ -661,33 +641,6 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                 <button onClick={addAvatar} className="inline-flex items-center gap-1.5 mt-1 mb-0.5 ml-2 py-[7px] px-2.5 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={12} />Agregar variante de avatar</button>
               </div>
             </div>
-            {/* Material */}
-            <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
-              <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
-                <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: doneCount === needs.length ? '#ECFDF5' : '#FEF9E7', color: doneCount === needs.length ? '#16A34A' : '#C2630A' }}><ArrowRight size={14} /></span>
-                <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Para completar el funnel</div><div className="text-[11px] text-[#9CA3AF]">Sale de la carpeta “Recursos”: subcarpeta con archivos = entregado</div></div>
-                <button onClick={syncResources} disabled={syncingRes} title="Lee la carpeta Recursos del Drive y arma la lista: cada subcarpeta con archivos queda marcada como entregada." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={11} className={syncingRes ? 'animate-spin' : ''} />{syncingRes ? 'Sincronizando…' : 'Sincronizar recursos'}</button>
-                <span className="text-[11px] font-bold" style={{ color: doneCount === needs.length ? '#16A34A' : '#A16207' }}>{doneCount} / {needs.length}</span>
-              </div>
-              <div className="py-1.5 px-2">
-                {needs.length === 0 && <div className="text-[11.5px] text-[#AEB4BF] py-2 px-2">Sin material. Agregá con “Material”.</div>}
-                {needs.map((n, i) => (
-                  <div key={i} className="py-1.5 px-2 rounded-lg hover:bg-[#FAFBFC]">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setNeed(i, { done: !n.done })} title={n.done ? 'Marcar pendiente' : 'Marcar listo'} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer border-none" style={n.done ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{n.done && <Check size={12} strokeWidth={3} />}</button>
-                      <input value={n.label} onChange={e => setNeed(i, { label: e.target.value })} placeholder="Nombre del material" className="flex-1 min-w-0 py-1 px-2 border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md text-[12.5px] bg-transparent focus:bg-white outline-none" style={{ color: n.done ? '#1A1D26' : '#6B7280' }} />
-                      {typeof n.count === 'number' && <span className="text-[10px] font-bold rounded-md py-0.5 px-1.5 shrink-0" style={n.count > 0 ? { background: '#ECFDF5', color: '#15803D' } : { background: '#F4F5F7', color: '#9CA3AF' }}>{n.count} arch.</span>}
-                      <button onClick={() => onUpdate(f.id, { visual_resources: needs.filter((_, j) => j !== i) })} title="Borrar material" className="inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0 bg-transparent border-none cursor-pointer text-[#C2C7D0] hover:text-[#DC2626] hover:bg-[#FEECEC]"><Trash2 size={12} /></button>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1 pl-7">
-                      <input value={n.url || ''} onChange={e => setNeed(i, { url: e.target.value })} placeholder="Link (Drive)…" className="flex-1 min-w-0 py-1 px-2 border border-[#E2E5EB] rounded-md text-[11px] text-[#4B5563] bg-white outline-none focus:border-blue" />
-                      {n.url && <button onClick={() => openUrl(n.url)} className="inline-flex items-center gap-1 py-1 px-2 border border-[#DCE3FF] rounded-md bg-[#F5F7FF] text-[#2E69E0] text-[10.5px] font-semibold font-sans cursor-pointer shrink-0 hover:bg-[#EEF2FF]">Ver</button>}
-                    </div>
-                  </div>
-                ))}
-                <button onClick={() => onUpdate(f.id, { visual_resources: [...needs, { label: '', done: false, url: '' }] })} className="inline-flex items-center gap-1.5 mt-1 ml-2 py-1.5 px-2.5 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={12} />Material</button>
-              </div>
-            </div>
           </div>
           <div className="flex justify-end mt-2.5">
             <button onClick={() => { if (window.confirm(`¿Borrar el funnel "${f.name}"?`)) onDelete(f.id); }} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-transparent border-none text-text3 text-[11.5px] font-semibold cursor-pointer hover:bg-red-bg hover:text-red-500"><Trash2 size={12} />Borrar funnel</button>
@@ -706,6 +659,18 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
   const delText = (docs.find(d => d.doc_kind === 'del')?.text) || '';
+
+  // Recursos de la estrategia (subcarpetas de "Recursos" en Drive) — los comparten todos los funnels.
+  const [recursos, setRecursos] = useState(null);
+  const [loadingRec, setLoadingRec] = useState(false);
+  const loadRecursos = useCallback(async () => {
+    setLoadingRec(true);
+    try { const { data } = await supabase.rpc('cerebro_recursos', { p_strategy_id: s.id }); setRecursos(data || []); }
+    catch { setRecursos([]); }
+    finally { setLoadingRec(false); }
+  }, [s.id]);
+  useEffect(() => { if (open) loadRecursos(); }, [open, loadRecursos]);
+  const recDone = (recursos || []).filter(r => r.files > 0).length;
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
       <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
@@ -728,6 +693,26 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
               <div className="text-[10.5px] text-[#9CA3AF] mt-1.5 flex items-center gap-1"><Sparkles size={11} className="text-[#C79A3E]" />El DEL contiene todos los avatares juntos. A cada avatar vinculale su documento propio, o pegá su parte en la descripción; después el cerebro lo divide solo.</div>
             </div>
           )}
+          {/* Recursos de la estrategia — automáticos desde la carpeta "Recursos" del Drive. */}
+          <div className="mb-3.5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] flex-1">Recursos de la estrategia <span className="text-[#C4C9D2] normal-case font-medium tracking-normal">· los comparten todos los funnels</span></span>
+              {recursos && recursos.length > 0 && <span className="text-[10.5px] font-bold shrink-0" style={{ color: recDone === recursos.length ? '#16A34A' : '#A16207' }}>{recDone}/{recursos.length} entregados</span>}
+              <button onClick={loadRecursos} disabled={loadingRec} title="Lee la carpeta Recursos del Drive: cada subcarpeta con archivos = entregado." className="inline-flex items-center gap-1 py-1 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={10} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
+            </div>
+            {recursos === null ? <div className="text-[11px] text-[#AEB4BF] py-1">Cargando recursos…</div>
+              : recursos.length === 0 ? <div className="text-[11px] text-[#AEB4BF] py-1">No encontré subcarpetas dentro de “Recursos”. Sincronizá las Carpetas del cliente (pestaña Carpetas).</div>
+              : <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
+                  {recursos.map(r => (
+                    <div key={r.folder_id} className="flex items-center gap-2 py-2 px-2.5 border rounded-lg bg-white" style={{ borderColor: r.files > 0 ? '#CDEBD9' : '#E7E9EE' }}>
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0" style={r.files > 0 ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{r.files > 0 && <Check size={12} strokeWidth={3} />}</span>
+                      <span className="flex-1 min-w-0 text-[12px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</span>
+                      <span className="text-[10px] font-bold rounded-md py-0.5 px-1.5 shrink-0" style={r.files > 0 ? { background: '#ECFDF5', color: '#15803D' } : { background: '#F4F5F7', color: '#9CA3AF' }}>{r.files}</span>
+                      {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={12} /></button>}
+                    </div>
+                  ))}
+                </div>}
+          </div>
           <div className="border border-[#ECEEF2] rounded-xl overflow-hidden">
             <div className="grid items-center py-[10px] px-4 border-b border-[#ECEEF2]" style={{ gridTemplateColumns: GRID, background: '#FAFBFC' }}>
               {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#9CA3AF]">{h}</div>)}
@@ -804,7 +789,6 @@ export default function FunnelsView({ clientId }) {
       prod_url: form.prod_url || null, testing_url: form.testing_url || null, ads_url: form.ads_url || null,
       pixel_code: form.pixel_code || null, clarity_id: form.clarity_id || null,
       conversion_events: form.events, avatars: form.avatars,
-      visual_resources: DEFAULT_NEEDS.map(l => ({ label: l, done: false, url: '' })),
     });
     setModal(false); setForm(blankForm());
   };
@@ -823,7 +807,7 @@ export default function FunnelsView({ clientId }) {
           <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-2 px-3 border-none rounded-[9px] text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50" style={{ background: '#EC4899' }}><RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar contexto'}</button>
         </div>
         <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          {[['Nicho', client.niche, '#EC4899', Target], ['Servicio', client.service, '#1A1D26', Sparkles], ['Cuello de botella', client.bottleneck, '#CA8A04', Activity]].map((row) => {
+          {[['Nicho', client.niche, '#EC4899', Target], ['Cuello de botella', client.bottleneck, '#CA8A04', Activity]].map((row) => {
             const [lbl, val, col, Ic] = row;
             return (
               <div key={lbl} className="border border-[#F0F2F5] rounded-lg p-2.5 bg-[#FAFBFC]">
