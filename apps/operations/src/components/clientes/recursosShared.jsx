@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import {
   Copy, Check, Folder, FileText, FileSpreadsheet, Presentation,
-  ExternalLink, Eye, EyeOff, Mail, Key,
+  ExternalLink, Eye, EyeOff, Mail, Key, Film, Image as ImageIcon, File as FileIcon, Music,
 } from 'lucide-react';
 import Modal from '../Modal';
 
@@ -33,8 +33,16 @@ export const NODE_ICON = {
   document: { Icon: FileText,        color: '#2E69E0', bg: '#E9F1FF' }, // azul  = documento
   sheet:    { Icon: FileSpreadsheet, color: '#16A34A', bg: '#E6F7EE' },
   slides:   { Icon: Presentation,    color: '#A855F7', bg: '#F4ECFE' },
+  video:    { Icon: Film,            color: '#DC2626', bg: '#FDECEC' }, // rojo  = video (grabaciones/anuncios)
+  image:    { Icon: ImageIcon,       color: '#0EA5E9', bg: '#E6F6FE' },
+  pdf:      { Icon: FileIcon,        color: '#B91C1C', bg: '#FBE9E9' },
+  audio:    { Icon: Music,           color: '#7C3AED', bg: '#F4ECFE' },
+  other:    { Icon: FileIcon,        color: '#6B7280', bg: '#F1F3F6' },
 };
-export const isDisplayableNode = (n) => ['folder', 'document', 'sheet', 'slides'].includes(n.node_type);
+// Mostramos TODOS los tipos de nodo (docs + videos/imágenes/pdf/etc.). Antes solo docs/sheets/
+// slides, y una carpeta con SOLO videos (ej. "Terminados" con los anuncios/grabaciones) salía
+// falsamente VACÍA (roja) y no se podía expandir. Los archivos SON contenido.
+export const isDisplayableNode = (n) => !!n && n.node_type !== undefined && n.node_type !== null;
 
 export function normLabel(v) {
   return (v || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
