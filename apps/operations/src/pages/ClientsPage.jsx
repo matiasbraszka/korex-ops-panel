@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical } from 'lucide-react';
+import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical, LayoutGrid } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, clientPill } from '../utils/helpers';
@@ -9,10 +9,11 @@ import ClientDetail from './ClientDetail';
 import PublicidadPage from './PublicidadPage';
 import FeedbackPage from './FeedbackPage';
 import InformePage from './InformePage';
+import PanoramaRecursos from '../components/clientes/PanoramaRecursos';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
 // 'informe' queda oculto del menu pero la ruta interna sigue funcionando.
-const VALID_TABS = ['lista', 'publicidad'];
+const VALID_TABS = ['lista', 'publicidad', 'panorama'];
 
 // Pildora de estado de publicidad. Lee metaMetrics.adsActive + pauseStatus.
 // Estados de Meta differenciados:
@@ -258,6 +259,7 @@ export default function ClientsPage() {
       <div className="inline-flex items-center p-1 bg-gray-100 rounded-lg gap-0.5 mb-4 max-md:w-full">
         {[
           { id: 'lista',      label: 'Lista',      Icon: Users },
+          { id: 'panorama',   label: 'Panorama',   Icon: LayoutGrid },
           { id: 'publicidad', label: 'Publicidad', Icon: Megaphone },
         ].map(t => (
           <button
@@ -272,6 +274,9 @@ export default function ClientsPage() {
           </button>
         ))}
       </div>
+
+      {/* Panorama tab — qué tenemos / qué falta de cada cliente */}
+      {tab === 'panorama' && <PanoramaRecursos />}
 
       {/* Publicidad tab — embed full PublicidadPage */}
       {tab === 'publicidad' && <PublicidadPage />}
