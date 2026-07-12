@@ -19,6 +19,10 @@ function Have({ ok, count }) {
   );
 }
 
+// Deja solo el "nombre del dominio": saca protocolo, ruta y ?ref=… (ej.
+// "https://viajeros.metodokorex.com?ref=17728" → "viajeros.metodokorex.com").
+const cleanDomain = (d) => (d || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').split(/[/?#]/)[0];
+
 function TipoBadge({ tipo }) {
   if (!tipo) return null;
   const prod = /producto/i.test(tipo);
@@ -82,12 +86,13 @@ export default function PanoramaRecursos() {
 
       {/* Tabla */}
       <div className="border border-[#E7EAF0] rounded-xl overflow-x-auto bg-white">
-        <table className="w-full border-collapse min-w-[820px]">
+        <table className="w-full border-collapse min-w-[960px]">
           <thead>
             <tr className="bg-[#F8FAFD]">
               <th className={th}>Cliente</th>
               <th className={th}>Estrategias</th>
               <th className={th}>Funnels</th>
+              <th className={th}>Dominio</th>
               <th className={th}>Logo</th>
               <th className={th}>Colores</th>
               <th className={th}>Imágenes</th>
@@ -114,13 +119,21 @@ export default function PanoramaRecursos() {
                 </td>
                 <td className={td}>
                   {r.n_funnels === 0
-                    ? <Have ok={false} />
-                    : <div className="flex flex-col gap-0.5">
+                    ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                    : <div className="flex flex-col gap-1">
                         {(r.funnels || []).map((f, i) => (
-                          <span key={i} className="inline-flex items-center gap-1.5 text-[11.5px] text-[#3F4653]" title={f.dominio ? 'Dominio puesto' : 'Falta poner el dominio'}>
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.dominio ? '#16A34A' : '#DC2626' }} />
-                            {f.name}{!f.dominio && <span className="text-[10px] font-bold text-[#DC2626]">sin dominio</span>}
-                          </span>
+                          <span key={i} className="text-[11.5px] text-[#3F4653] leading-[18px] h-[18px] truncate max-w-[220px]" title={f.name}>{f.name}</span>
+                        ))}
+                      </div>}
+                </td>
+                <td className={td}>
+                  {r.n_funnels === 0
+                    ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                    : <div className="flex flex-col gap-1">
+                        {(r.funnels || []).map((f, i) => (
+                          f.dominio
+                            ? <a key={i} href={/^https?:\/\//i.test(f.dominio) ? f.dominio : `https://${f.dominio}`} target="_blank" rel="noopener" className="text-[11.5px] text-[#15803D] font-medium leading-[18px] h-[18px] truncate max-w-[240px] hover:underline" title={f.dominio}>{cleanDomain(f.dominio)}</a>
+                            : <span key={i} className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#DC2626] leading-[18px] h-[18px]"><X size={11} strokeWidth={3} />Falta</span>
                         ))}
                       </div>}
                 </td>
@@ -131,7 +144,7 @@ export default function PanoramaRecursos() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
+              <tr><td colSpan={8} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
             )}
           </tbody>
         </table>
@@ -140,8 +153,7 @@ export default function PanoramaRecursos() {
       <div className="flex items-center gap-3 mt-3 text-[11px] text-[#9098A4] flex-wrap">
         <span className="inline-flex items-center gap-1"><Check size={12} className="text-[#15803D]" strokeWidth={3} />Está</span>
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
-        <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />funnel sin dominio</span>
-        <span className="inline-flex items-center gap-1"><Layers size={12} />El foco es ver de un vistazo qué recurso falta de cada cliente.</span>
+        <span className="inline-flex items-center gap-1"><Layers size={12} />Cada funnel está alineado con su dominio; el foco es ver qué falta de cada cliente.</span>
       </div>
     </div>
   );
