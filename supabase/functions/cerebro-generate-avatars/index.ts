@@ -336,19 +336,19 @@ Deno.serve(async (req) => {
     };
   }).filter((a) => a.name);
 
-  // VSL que corresponde a ESTE funnel (verbatim de "VSL Avatar N", nunca la landing de la VSL).
-  // Fallback por código: si la IA no marcó vsl_section pero hay UNA pestaña 'VSL ...' que lleva el
-  // nombre de alguno de los avatares de este funnel (person-named), la usamos. Nunca la landing.
-  let vslSectionResolved = vslSection;
-  if (!vslSectionResolved) {
+  // VSL que corresponde a ESTE funnel (verbatim de "VSL Avatar N"/"VSL <persona>", nunca la landing).
+  let vslScript = vslSection ? sectionContent(tabs, vslSection, VSL_BLOCK) : "";
+  // Fallback por código: si la IA no marcó vsl_section, o marcó una que NO resuelve a contenido
+  // (ej. grafía distinta: "Meli" vs la pestaña "Mely"), enganchamos la pestaña 'VSL ...' que lleve
+  // el nombre de algún avatar de este funnel (person-named). Nunca la landing.
+  if (!vslScript) {
     const vslTabs = sectionTitles.filter((t) => /\bvsl\b/i.test(t) && !/landing|p[aá]gina/i.test(t));
     for (const av of built) {
       const toks = norm(av.name).split(" ").filter((w) => w.length > 2);
       const hit = vslTabs.find((t) => { const nt = norm(t); return toks.some((w) => nt.includes(w)); });
-      if (hit) { vslSectionResolved = hit; break; }
+      if (hit) { const c = sectionContent(tabs, hit, VSL_BLOCK); if (c) { vslScript = c; break; } }
     }
   }
-  const vslScript = vslSectionResolved ? sectionContent(tabs, vslSectionResolved, VSL_BLOCK) : "";
 
   // Merge según modo.
   let finalAvatars;
