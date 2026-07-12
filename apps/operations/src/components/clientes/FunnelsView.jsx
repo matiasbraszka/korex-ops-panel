@@ -303,8 +303,24 @@ function pullTabs(delText, re) {
   if (!hits.length) return '';
   return hits.map(t => `— ${t} —\n${tabs[t]}`).join('\n\n');
 }
-// Guión del VSL: todas las pestañas "VSL…" del DEL.
-function pullVslScript(delText) { return pullTabs(delText, /vsl/i); }
+// Guión del VSL (el VIDEO), NO la landing/página donde se incrusta la VSL.
+// Una pestaña "Landing VSL" / "Página de la VSL" es copy de la web, no el guión.
+function isVslScriptTab(title) {
+  const t = (title || '').toLowerCase();
+  if (!/\bvsl\b/.test(t)) return false;
+  if (/landing|p[áa]gina|pagina|\bweb\b|copy de la|estructura de la p/.test(t)) return false;
+  return true;
+}
+// Prefiere las pestañas que dicen explícitamente "guión/script de VSL"; si no hay,
+// cualquier pestaña VSL que no sea la landing. Si el cliente tiene VARIAS VSL en el
+// funnel, concatena todas (el equipo revisa/recorta antes de guardar).
+function pullVslScript(delText) {
+  const tabs = parseDelTabs(delText);
+  let hits = Object.keys(tabs).filter(t => isVslScriptTab(t) && /gui[oó]n|script|texto/i.test(t));
+  if (!hits.length) hits = Object.keys(tabs).filter(isVslScriptTab);
+  if (!hits.length) return '';
+  return hits.map(t => `— ${t} —\n${tabs[t]}`).join('\n\n');
+}
 // Guión de anuncios para el avatar Nº (1-based): su pestaña "Ads avatar N"/"Anuncio N" si existe,
 // si no todas las "Ads…" del DEL (el equipo revisa/recorta antes de guardar).
 function pullAdScript(delText, idx1) {
