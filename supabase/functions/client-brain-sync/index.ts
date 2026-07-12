@@ -33,21 +33,10 @@ const cors = {
 
 function str(v: unknown) { return v === null || v === undefined ? "" : String(v).trim(); }
 
-// ── Detección de los 3 docs (mismas reglas que recursosShared.jsx del panel) ─────
+// Auto por nombre: SOLO el DEL (maestro de estrategia). El onboarding, la
+// investigación, etc. pasan por CASILLEROS (slot) de cliente, asignados a mano.
 function isDelDoc(name: string): boolean {
   return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
-}
-function isOnboardingDoc(name: string): boolean {
-  return /\bonboarding\b/i.test(name);
-}
-function isInvestigacionDoc(name: string): boolean {
-  return /investigaci[oó]n/i.test(name);
-}
-function docKind(name: string): "del" | "onboarding" | "investigacion" | null {
-  if (isDelDoc(name)) return "del";
-  if (isOnboardingDoc(name)) return "onboarding";
-  if (isInvestigacionDoc(name)) return "investigacion";
-  return null;
 }
 
 // ── Apps Script: texto de un documento ───────────────────────────────────────────
@@ -86,9 +75,14 @@ async function syncClient(
     .neq("node_type", "folder");
   if (nErr) return { ok: false, docs: 0, skipped: 0, error: String(nErr.message) };
 
+  // Pins: con `slot` = casillero de nivel cliente; sin slot = marca de estrategia (🧠 Carpetas).
   const { data: pins } = await supabase
-    .from("client_brain_pins").select("node_id").eq("client_id", clientId);
-  const pinIds = new Set((pins ?? []).map((p) => p.node_id));
+    .from("client_brain_pins").select("node_id, slot").eq("client_id", clientId);
+  const slotByNode = new Map<string, string>();
+  const plainPins = new Set<string>();
+  for (const p of (pins ?? [])) {
+    if (p.slot) slotByNode.set(p.node_id, p.slot); else plainPins.add(p.node_id);
+  }
 
   // Specs vinculadas a un avatar (avatars[].spec_node_id) en los funnels del cliente.
   const { data: strats } = await supabase.from("strategies").select("id").eq("client_id", clientId);
@@ -103,23 +97,14 @@ async function syncClient(
     }
   }
 
-  // Nivel (scope) del documento: cliente / estrategia / avatar.
-  const scopeOf = (kind: string, nodeId: string): string => {
-    if (kind === "onboarding" || kind === "investigacion") return "client";
-    if (avatarSpecIds.has(nodeId)) return "avatar";
-    return "strategy";
-  };
-
-  // Documentos deseados: node_id -> { node, kind }
-  const desired = new Map<string, { node: typeof nodes[number]; kind: string }>();
+  // Documentos deseados: node_id -> { node, kind, scope }
+  // Prioridad: casillero de cliente > DEL (estrategia) > spec de avatar > marca 🧠 (estrategia).
+  const desired = new Map<string, { node: typeof nodes[number]; kind: string; scope: string }>();
   for (const n of (nodes ?? [])) {
-    // Auto: solo Google Docs (los .docx/pdf dan texto sucio). Puede haber varios por tipo.
-    if (n.node_type === "document") {
-      const kind = docKind(n.name || "");
-      if (kind) desired.set(n.id, { node: n, kind });
-    }
-    // Fijados (🧠) o vinculados a un avatar: cualquier tipo, si no es ya un match auto.
-    if ((pinIds.has(n.id) || avatarSpecIds.has(n.id)) && !desired.has(n.id)) desired.set(n.id, { node: n, kind: "extra" });
+    if (slotByNode.has(n.id)) { desired.set(n.id, { node: n, kind: slotByNode.get(n.id)!, scope: "client" }); continue; }
+    if (n.node_type === "document" && isDelDoc(n.name || "")) { desired.set(n.id, { node: n, kind: "del", scope: "strategy" }); continue; }
+    if (avatarSpecIds.has(n.id)) { desired.set(n.id, { node: n, kind: "extra", scope: "avatar" }); continue; }
+    if (plainPins.has(n.id)) { desired.set(n.id, { node: n, kind: "extra", scope: "strategy" }); }
   }
 
   // Estado actual (para saltar lo que no cambió y borrar lo que sobra).
@@ -128,8 +113,7 @@ async function syncClient(
   const byNode = new Map((existing ?? []).map((e) => [e.node_id, e]));
 
   let docs = 0, skipped = 0;
-  for (const [nodeId, { node: n, kind }] of desired) {
-    const scope = scopeOf(kind, n.id);
+  for (const [nodeId, { node: n, kind, scope }] of desired) {
     const stratId = scope === "client" ? null : (n.strategy_id || null);
     const prev = byNode.get(nodeId);
     const unchanged = prev && prev.char_count > 0

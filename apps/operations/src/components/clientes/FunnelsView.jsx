@@ -44,6 +44,71 @@ function ContextDocCard({ doc }) {
   );
 }
 
+// Casilleros de contexto de CLIENTE (nivel: todas las estrategias). Reemplazan el
+// "adivino por nombre": el equipo asigna cada documento a su casillero (removible).
+const CLIENT_SLOTS = [
+  { key: 'inv_cliente', label: 'Investigación del cliente', desc: 'De la persona / el cliente', match: /investigaci/i },
+  { key: 'inv_empresa', label: 'Investigación de la empresa (MLM)', desc: 'De la compañía / multinivel', match: /investigaci|empresa|mlm|multinivel/i },
+  { key: 'onboarding', label: 'Onboarding', desc: 'Viejo o nuevo (podés quitarlo)', match: /onboarding/i },
+  { key: 'briefing', label: 'Briefing · Personalidad · Tono', desc: 'Brief, tono y contexto actual', match: /brief|personalidad|tono|contexto/i },
+];
+
+function SlotCard({ slot, assigned, driveDocs, docsByNode, onAssign, onRemove }) {
+  const assignedIds = new Set(assigned.map(a => a.node_id));
+  const options = driveDocs.filter(d => !assignedIds.has(d.id));
+  const suggested = options.filter(d => slot.match.test(d.name || ''));
+  const rest = options.filter(d => !slot.match.test(d.name || ''));
+  const complete = assigned.length > 0;
+  return (
+    <div className="rounded-xl p-3 bg-white border" style={{ borderColor: complete ? '#CDEBD9' : '#E7E9EE' }}>
+      <div className="flex items-center gap-2 mb-0.5">
+        <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1 min-w-0">{slot.label}</span>
+        <span className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-full text-[9.5px] font-bold shrink-0" style={complete ? { background: '#ECFDF5', color: '#16A34A' } : { background: '#FEF9E7', color: '#B27D0B' }}>{complete ? <><Check size={9} strokeWidth={3} />Listo</> : 'Falta'}</span>
+      </div>
+      <div className="text-[10.5px] text-[#9CA3AF] mb-2">{slot.desc}</div>
+      <div className="grid gap-1.5 mb-1.5">
+        {assigned.map(a => {
+          const doc = docsByNode[a.node_id];
+          return (
+            <div key={a.node_id} className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-[#FAFBFC] border border-[#F0F2F5]">
+              <FileText size={12} className="text-[#2E69E0] shrink-0" />
+              <span className="flex-1 min-w-0 text-[11.5px] text-[#1A1D26] truncate" title={a.label || doc?.title}>{a.label || doc?.title || 'Documento'}</span>
+              {doc ? <span className="text-[9.5px] text-[#16A34A] font-semibold shrink-0">{(doc.char_count || 0).toLocaleString()} car.</span> : <span className="text-[9.5px] text-[#B27D0B] font-semibold shrink-0">sincronizá</span>}
+              {doc?.web_url && <button onClick={() => openUrl(doc.web_url)} title="Abrir" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={12} /></button>}
+              <button onClick={() => onRemove(slot.key, a.node_id)} title="Quitar" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#C2C7D0] hover:text-[#DC2626] shrink-0"><Trash2 size={12} /></button>
+            </div>
+          );
+        })}
+      </div>
+      <select value="" onChange={e => { if (e.target.value) { const nd = driveDocs.find(d => d.id === e.target.value); onAssign(slot.key, nd); } }} className="w-full py-1.5 px-2 border border-dashed border-[#D0D5DD] rounded-lg text-[11.5px] text-[#5B7CF5] bg-white outline-none focus:border-blue cursor-pointer font-semibold">
+        <option value="">+ Asignar documento…</option>
+        {suggested.length > 0 && <optgroup label="Sugeridos">{suggested.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
+        {rest.length > 0 && <optgroup label="Todos los documentos">{rest.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
+      </select>
+    </div>
+  );
+}
+
+function ClientContextSlots({ clientId, driveDocs, docsByNode, slotPins, onChanged }) {
+  const bySlot = (key) => slotPins.filter(p => p.slot === key);
+  const assign = async (slotKey, nd) => {
+    if (!nd) return;
+    await supabase.from('client_brain_pins').upsert({ client_id: clientId, node_id: nd.id, slot: slotKey, label: nd.name || null }, { onConflict: 'client_id,node_id' });
+    onChanged();
+  };
+  const remove = async (slotKey, nodeId) => {
+    await supabase.from('client_brain_pins').delete().eq('client_id', clientId).eq('node_id', nodeId);
+    onChanged();
+  };
+  return (
+    <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      {CLIENT_SLOTS.map(slot => (
+        <SlotCard key={slot.key} slot={slot} assigned={bySlot(slot.key)} driveDocs={driveDocs} docsByNode={docsByNode} onAssign={assign} onRemove={remove} />
+      ))}
+    </div>
+  );
+}
+
 const FUNNEL_STATUS = {
   activa:   { label: 'Activo', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
   borrador: { label: 'Borrador', bg: '#FEFCE8', color: '#A16207', dot: '#A16207' },
@@ -426,17 +491,28 @@ export default function FunnelsView({ clientId }) {
   const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
   const funnelsOf = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid);
 
-  // Documentos de contexto (client_brain_docs) por nivel.
+  // Contexto (client_brain_docs ingerido) + Drive docs (para asignar) + casilleros.
   const [docs, setDocs] = useState([]);
+  const [driveDocs, setDriveDocs] = useState([]);
+  const [slotPins, setSlotPins] = useState([]);
   const [syncing, setSyncing] = useState(false);
-  const fetchDocs = useCallback(async () => {
-    try { const d = await sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(clientId)}&select=*`); setDocs(Array.isArray(d) ? d : []); } catch { /* noop */ }
+  const fetchContext = useCallback(async () => {
+    try {
+      const [d, nodes, pins] = await Promise.all([
+        sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(clientId)}&select=*`),
+        sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=in.(document,sheet,slides,pdf)&select=id,name,node_type,web_url`),
+        sbFetch(`client_brain_pins?client_id=eq.${encodeURIComponent(clientId)}&slot=not.is.null&select=node_id,slot,label`),
+      ]);
+      setDocs(Array.isArray(d) ? d : []);
+      setDriveDocs(Array.isArray(nodes) ? nodes : []);
+      setSlotPins(Array.isArray(pins) ? pins : []);
+    } catch { /* noop */ }
   }, [clientId]);
-  useEffect(() => { fetchDocs(); }, [fetchDocs]);
-  const clientDocs = useMemo(() => docs.filter(d => d.scope === 'client'), [docs]);
+  useEffect(() => { fetchContext(); }, [fetchContext]);
+  const docsByNode = useMemo(() => { const m = {}; for (const d of docs) m[d.node_id] = d; return m; }, [docs]);
   const docsOf = (sid) => docs.filter(d => d.strategy_id === sid);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
-  const sync = async () => { setSyncing(true); try { await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } }); await fetchDocs(); } catch { /* noop */ } finally { setSyncing(false); } };
+  const sync = async () => { setSyncing(true); try { await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } }); await fetchContext(); } catch { /* noop */ } finally { setSyncing(false); } };
 
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
@@ -481,9 +557,9 @@ export default function FunnelsView({ clientId }) {
             );
           })}
         </div>
-        {clientDocs.length > 0
-          ? <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>{clientDocs.map(d => <ContextDocCard key={d.id} doc={d} />)}</div>
-          : <div className="text-[11.5px] text-[#9CA3AF]">Sin documentos de cliente. Marcá el onboarding con 🧠 en Carpetas y tocá Sincronizar.</div>}
+        <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documentos del cliente</div>
+        <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
+        <div className="text-[10.5px] text-[#9CA3AF] mt-2 flex items-center gap-1"><RefreshCw size={10} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
       </div>
 
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
