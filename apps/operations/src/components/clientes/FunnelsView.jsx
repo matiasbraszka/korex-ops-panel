@@ -1,14 +1,15 @@
 // Pestaña "Funnels": el workspace del cliente. Envuelve TODO en la estrategia:
 // contexto del cliente (onboarding), y por estrategia sus documentos (DEL, etc.) +
 // sus funnels (con avatares, tracking, material y la spec de cada avatar).
+// Rediseño visual 2026-07 (Claude Design): gradientes, tarjetas con header, chips.
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, Megaphone,
-  Check, Trash2, Activity, Zap, Link2, Globe, Rocket, Clapperboard,
+  Check, Trash2, Activity, Zap, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
-  FolderOpen, Film, FolderPlus,
+  FolderOpen, Film, FolderPlus, Link2,
 } from 'lucide-react';
 import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
@@ -16,41 +17,19 @@ import { fmtDateTime } from '../../utils/helpers';
 
 // Metadatos por tipo de documento de contexto.
 const DOC_META = {
-  del:           { label: 'DEL', Icon: Sparkles, color: '#C79A3E', bg: '#FCEFD0' },
+  del:           { label: 'DEL', Icon: Sparkles, color: '#15803D', bg: '#DCFCE7' },
   onboarding:    { label: 'Onboarding', Icon: FileText, color: '#2E69E0', bg: '#E9F1FF' },
   investigacion: { label: 'Investigación', Icon: SearchIcon, color: '#7C3AED', bg: '#F4F1FE' },
+  briefing:      { label: 'Briefing', Icon: Brain, color: '#EC4899', bg: '#FDF2F8' },
   extra:         { label: 'Contexto', Icon: Brain, color: '#EC4899', bg: '#FDF2F8' },
 };
-
-// Tarjeta compacta de un documento de contexto (título, tipo, preview expandible).
-function ContextDocCard({ doc }) {
-  const [open, setOpen] = useState(false);
-  const meta = DOC_META[doc.doc_kind] || DOC_META.extra;
-  const { Icon } = meta;
-  const text = doc.text || '';
-  const hasMore = text.length > 400;
-  return (
-    <div className="border border-[#E8EBF0] rounded-[11px] bg-white overflow-hidden">
-      <div className="flex items-center gap-2 p-2.5">
-        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: meta.bg, color: meta.color }}><Icon size={14} /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-semibold text-[#1A1D26] truncate" title={doc.title}>{doc.title || meta.label}</div>
-          <div className="text-[10.5px] text-[#9CA3AF]">{meta.label} · {(doc.char_count || 0).toLocaleString()} car.</div>
-        </div>
-        {hasMore && <button onClick={() => setOpen(o => !o)} title={open ? 'Ver menos' : 'Ver texto'} className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none' }} /></button>}
-        {doc.web_url && <button onClick={() => openUrl(doc.web_url)} title="Abrir en Drive" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={13} /></button>}
-      </div>
-      {open && text && <div className="px-2.5 pb-2.5 text-[11.5px] leading-relaxed text-[#4B5563] whitespace-pre-wrap max-h-[280px] overflow-y-auto">{text}</div>}
-    </div>
-  );
-}
 
 // Casilleros de contexto de CLIENTE (nivel: todas las estrategias). Reemplazan el
 // "adivino por nombre": el equipo asigna cada documento a su casillero (removible).
 const CLIENT_SLOTS = [
   { key: 'investigacion', label: 'Investigaciones', desc: 'Del cliente y/o de la empresa (MLM). Podés asignar varias.', match: /investigaci|empresa|mlm|multinivel/i },
-  { key: 'onboarding', label: 'Onboarding', desc: 'Viejo o nuevo (podés quitarlo)', match: /onboarding/i },
-  { key: 'briefing', label: 'Briefing · Personalidad · Tono', desc: 'Brief, tono y contexto actual', match: /brief|personalidad|tono|contexto/i },
+  { key: 'onboarding', label: 'Onboarding', desc: 'Viejo o nuevo (podés quitarlo).', match: /onboarding/i },
+  { key: 'briefing', label: 'Briefing · Personalidad · Tono', desc: 'Brief, tono y contexto actual.', match: /brief|personalidad|tono|contexto/i },
 ];
 
 function SlotCard({ slot, assigned, driveDocs, docsByNode, onAssign, onRemove }) {
@@ -60,31 +39,42 @@ function SlotCard({ slot, assigned, driveDocs, docsByNode, onAssign, onRemove })
   const rest = options.filter(d => !slot.match.test(d.name || ''));
   const complete = assigned.length > 0;
   return (
-    <div className="rounded-xl p-3 bg-white border" style={{ borderColor: complete ? '#CDEBD9' : '#E7E9EE' }}>
-      <div className="flex items-center gap-2 mb-0.5">
-        <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1 min-w-0">{slot.label}</span>
-        <span className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-full text-[9.5px] font-bold shrink-0" style={complete ? { background: '#ECFDF5', color: '#16A34A' } : { background: '#FEF9E7', color: '#B27D0B' }}>{complete ? <><Check size={9} strokeWidth={3} />Listo</> : 'Falta'}</span>
+    <div className="rounded-xl p-3.5 bg-white border border-[#EDF0F5] flex flex-col">
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <span className="text-[13px] font-semibold text-[#1A1D26] min-w-0">{slot.label}</span>
+        {complete
+          ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }}><Check size={10} strokeWidth={3.5} />Listo</span>
+          : <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: '#FEF3C7', color: '#B45309', border: '1px solid #FBE6BE' }}>Falta</span>}
       </div>
-      <div className="text-[10.5px] text-[#9CA3AF] mb-2">{slot.desc}</div>
-      <div className="grid gap-1.5 mb-1.5">
-        {assigned.map(a => {
-          const doc = docsByNode[a.node_id];
-          return (
-            <div key={a.node_id} className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-[#FAFBFC] border border-[#F0F2F5]">
-              <FileText size={12} className="text-[#2E69E0] shrink-0" />
-              <span className="flex-1 min-w-0 text-[11.5px] text-[#1A1D26] truncate" title={a.label || doc?.title}>{a.label || doc?.title || 'Documento'}</span>
-              {doc ? <span className="text-[9.5px] text-[#16A34A] font-semibold shrink-0">{(doc.char_count || 0).toLocaleString()} car.</span> : <span className="text-[9.5px] text-[#B27D0B] font-semibold shrink-0">sincronizá</span>}
-              {doc?.web_url && <button onClick={() => openUrl(doc.web_url)} title="Abrir" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={12} /></button>}
-              <button onClick={() => onRemove(slot.key, a.node_id)} title="Quitar" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#C2C7D0] hover:text-[#DC2626] shrink-0"><Trash2 size={12} /></button>
-            </div>
-          );
-        })}
+      <div className="text-[11px] text-[#9098A4] mb-3">{slot.desc}</div>
+      {assigned.length === 0
+        ? <div className="border-[1.5px] border-dashed border-[#D8DDE6] rounded-[9px] p-4 text-center text-[#AEB4BF] text-[12px] mb-2.5 flex-1 flex flex-col items-center justify-center gap-1">
+            <FileText size={18} />Sin documentos asignados
+          </div>
+        : <div className="flex flex-col gap-2 mb-2.5">
+            {assigned.map(a => {
+              const doc = docsByNode[a.node_id];
+              return (
+                <div key={a.node_id} className="flex items-center gap-2.5 border border-[#EDF0F5] rounded-[9px] py-2 px-2.5 bg-[#FBFCFE]">
+                  <FileText size={15} className="text-[#6B7280] shrink-0" />
+                  <span className="flex-1 min-w-0 text-[12px] font-medium text-[#1A1D26] truncate" title={a.label || doc?.title}>{a.label || doc?.title || 'Documento'}</span>
+                  {doc ? <span className="text-[10.5px] text-[#16A34A] font-semibold shrink-0 whitespace-nowrap">{(doc.char_count || 0).toLocaleString()} car.</span> : <span className="text-[10.5px] text-[#B45309] font-semibold shrink-0">sincronizá</span>}
+                  {doc?.web_url && <button onClick={() => openUrl(doc.web_url)} title="Abrir en Drive" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9098A4] hover:text-[#2E69E0] shrink-0"><ExternalLink size={13} /></button>}
+                  <button onClick={() => onRemove(slot.key, a.node_id)} title="Quitar" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#C3C9D4] hover:text-[#DC2626] shrink-0"><Trash2 size={13} /></button>
+                </div>
+              );
+            })}
+          </div>}
+      <div className="relative mt-auto">
+        <select value="" onChange={e => { if (e.target.value) { const nd = driveDocs.find(d => d.id === e.target.value); onAssign(slot.key, nd); } }}
+          className="w-full appearance-none border border-[#DBE6FF] rounded-[9px] py-[9px] pl-9 pr-8 bg-[#F7FAFF] text-[#2E69E0] font-semibold text-[12px] outline-none cursor-pointer hover:bg-[#EFF5FF]">
+          <option value="">Asignar documento…</option>
+          {suggested.length > 0 && <optgroup label="Sugeridos">{suggested.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
+          {rest.length > 0 && <optgroup label="Todos los documentos">{rest.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
+        </select>
+        <Plus size={14} strokeWidth={2.4} className="text-[#2E69E0] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <ChevronDown size={14} className="text-[#2E69E0] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
       </div>
-      <select value="" onChange={e => { if (e.target.value) { const nd = driveDocs.find(d => d.id === e.target.value); onAssign(slot.key, nd); } }} className="w-full py-1.5 px-2 border border-dashed border-[#D0D5DD] rounded-lg text-[11.5px] text-[#5B7CF5] bg-white outline-none focus:border-blue cursor-pointer font-semibold">
-        <option value="">+ Asignar documento…</option>
-        {suggested.length > 0 && <optgroup label="Sugeridos">{suggested.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
-        {rest.length > 0 && <optgroup label="Todos los documentos">{rest.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
-      </select>
     </div>
   );
 }
@@ -101,7 +91,7 @@ function ClientContextSlots({ clientId, driveDocs, docsByNode, slotPins, onChang
     onChanged();
   };
   return (
-    <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+    <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
       {CLIENT_SLOTS.map(slot => (
         <SlotCard key={slot.key} slot={slot} assigned={bySlot(slot.key)} driveDocs={driveDocs} docsByNode={docsByNode} onAssign={assign} onRemove={remove} />
       ))}
@@ -122,36 +112,36 @@ function WebLinks({ clientId, webs, onChanged }) {
   return (
     <div>
       {webs.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
+        <div className="flex flex-wrap gap-2 mb-2.5">
           {webs.map(w => (
-            <span key={w.id} className="inline-flex items-center gap-1.5 py-1 px-2 rounded-lg bg-[#F0F7FF] border border-[#DCE7FB] text-[11.5px]">
+            <span key={w.id} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-[#F0F7FF] border border-[#DCE7FB] text-[11.5px]">
               <Globe size={11} className="text-[#2E69E0]" />
               <button onClick={() => openUrl(w.url)} className="bg-transparent border-none p-0 cursor-pointer text-[#2E69E0] font-semibold hover:underline max-w-[220px] truncate" title={w.url}>{w.label || w.url}</button>
-              <button onClick={() => remove(w.id)} title="Quitar" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#DC2626]"><X size={11} /></button>
+              <button onClick={() => remove(w.id)} title="Quitar" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-transparent border-none cursor-pointer text-[#9098A4] hover:text-[#DC2626]"><X size={11} /></button>
             </span>
           ))}
         </div>
       )}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Nombre (opcional)" className="w-[140px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-        <input value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="https://sitio.com" className="flex-1 min-w-[180px] py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-        <button onClick={add} disabled={!url.trim()} className="inline-flex items-center gap-1 py-1.5 px-2.5 border-none rounded-lg bg-[#2E69E0] text-white text-[11.5px] font-semibold cursor-pointer disabled:opacity-50"><Plus size={12} />Agregar web</button>
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Nombre (opcional)" className="w-[180px] py-[9px] px-3 border border-[#E2E5EB] rounded-[9px] text-[12.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+        <input value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="https://sitio.com" className="flex-1 min-w-[200px] py-[9px] px-3 border border-[#E2E5EB] rounded-[9px] text-[12.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+        <button onClick={add} disabled={!url.trim()} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[9px] bg-[#2E69E0] text-white text-[12.5px] font-semibold cursor-pointer disabled:opacity-50 hover:bg-[#1D4FD8]"><Plus size={14} strokeWidth={2.4} />Agregar web</button>
       </div>
     </div>
   );
 }
 
 const FUNNEL_STATUS = {
-  activa:   { label: 'Activo', bg: '#ECFDF5', color: '#16A34A', dot: '#16A34A' },
-  borrador: { label: 'Borrador', bg: '#FEFCE8', color: '#A16207', dot: '#A16207' },
-  pausada:  { label: 'Pausado', bg: '#FEF2F2', color: '#DC2626', dot: '#DC2626' },
-  antiguo:  { label: 'Antiguo', bg: '#F1F3F6', color: '#6B7280', dot: '#9CA3AF' },
+  activa:   { label: 'Activo', bg: '#ECFDF3', color: '#15803D', dot: '#22C55E', border: '#C9F0D8', side: '#22C55E' },
+  borrador: { label: 'Borrador', bg: '#FEF3C7', color: '#B45309', dot: '#EAB308', border: '#FBE6BE', side: '#EAB308' },
+  pausada:  { label: 'Pausado', bg: '#FEF2F2', color: '#DC2626', dot: '#EF4444', border: '#F5C2C2', side: '#EF4444' },
+  antiguo:  { label: 'Antiguo', bg: '#F1F3F7', color: '#6B7280', dot: '#94A3B8', border: '#E2E5EB', side: '#C3C9D4' },
 };
 const STATUS_ORDER = ['activa', 'borrador', 'pausada', 'antiguo'];
 const AVATAR_STATUS = {
-  'En grabación': { short: 'Grabación', bg: '#FEF3E7', color: '#C2630A' },
-  'En edición':   { short: 'Edición',   bg: '#EEF2FF', color: '#2E69E0' },
-  'Editados':     { short: 'Editados',  bg: '#ECFDF5', color: '#16A34A' },
+  'En grabación': { short: 'Grabación', bg: '#FFF1E7', color: '#C2410C', dot: '#F97316' },
+  'En edición':   { short: 'Edición',   bg: '#EEF3FF', color: '#2E69E0', dot: '#2E69E0' },
+  'Editados':     { short: 'Editados',  bg: '#ECFDF3', color: '#15803D', dot: '#22C55E' },
 };
 const AVATAR_OPTS = ['En grabación', 'En edición', 'Editados'];
 // Eventos de conversión estándar: se pre-cargan en cada funnel nuevo; los demás son personalizados.
@@ -235,8 +225,8 @@ function StatusPill({ status, onChange }) {
   };
   return (
     <span className="inline-block" onClick={e => e.stopPropagation()}>
-      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[11px] font-bold border-none cursor-pointer" style={{ background: cfg.bg, color: cfg.color }}>
-        <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.color }} />{cfg.label}<ChevronDown size={10} />
+      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-full text-[11.5px] font-semibold border cursor-pointer" style={{ background: cfg.bg, color: cfg.color, borderColor: cfg.border }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.dot }} />{cfg.label}<ChevronDown size={11} />
       </button>
       {open && pos && (<>
         {/* menú con position:fixed para que no lo corte el borde de la tabla */}
@@ -257,7 +247,7 @@ function CopyLinkChip({ short, url, bg, color, border }) {
   return (
     <span onClick={(e) => { e.stopPropagation(); copyText(url); setDone(true); setTimeout(() => setDone(false), 1200); }}
       title={`Copiar ${short}: ${url}`}
-      className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md text-[11px] font-semibold cursor-pointer"
+      className="inline-flex items-center gap-1 py-1 px-2.5 rounded-[7px] text-[10.5px] font-semibold cursor-pointer"
       style={{ background: bg, color, border: `1px solid ${border}` }}>
       {short}{done ? <Check size={10} strokeWidth={3} /> : <Copy size={10} />}
     </span>
@@ -276,14 +266,14 @@ function AvatarStatusPill({ status, onChange }) {
   };
   return (
     <span className="inline-block shrink-0" onClick={e => e.stopPropagation()}>
-      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-1 py-1 px-2 rounded-full text-[10.5px] font-bold border-none cursor-pointer whitespace-nowrap" style={{ background: cfg.bg, color: cfg.color }}>
-        <span className="w-[5px] h-[5px] rounded-full" style={{ background: cfg.color }} />{cfg.short}<ChevronDown size={9} />
+      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[10.5px] font-bold border-none cursor-pointer whitespace-nowrap" style={{ background: cfg.bg, color: cfg.color }}>
+        <span className="w-[6px] h-[6px] rounded-full" style={{ background: cfg.dot }} />{cfg.short}<ChevronDown size={9} />
       </button>
       {open && pos && (<>
         <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
         <div className="fixed bg-white border border-[#E2E5EB] rounded-lg shadow-lg z-[61] min-w-[120px] overflow-hidden py-0.5" style={{ left: pos.left, top: pos.top }}>
           {AVATAR_OPTS.map(o => { const c = AVATAR_STATUS[o]; return (
-            <button key={o} onClick={() => { onChange(o); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer font-medium" style={{ color: c.color }}><span className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.short}</button>
+            <button key={o} onClick={() => { onChange(o); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer font-medium" style={{ color: c.color }}><span className="w-2 h-2 rounded-full" style={{ background: c.dot }} />{c.short}</button>
           ); })}
         </div>
       </>)}
@@ -291,7 +281,8 @@ function AvatarStatusPill({ status, onChange }) {
   );
 }
 
-const GRID = '2.3fr 116px 1.5fr 1.5fr 116px 34px';
+// Grid de la tabla de funnels (mismo layout que el mockup; scroll horizontal si no entra).
+const GRID = 'minmax(230px,1.6fr) 120px 150px 210px 100px 34px';
 
 // Parte el texto del DEL en pestañas por su marcador "===== Título =====" → { titulo: contenido }.
 function parseDelTabs(text) {
@@ -364,31 +355,66 @@ function PipelineSemaforo({ stages }) {
   if (!stages || !stages.length) return null;
   const firstPend = stages.find(s => s.status === 'pendiente');
   return (
-    <div className="flex items-center gap-1 flex-wrap py-2 px-4 pl-[19px] border-t border-[#F2F3F6]" style={{ background: '#FCFCFD' }}>
-      <span className="text-[9px] font-bold uppercase tracking-[0.09em] text-[#B7BCC6] mr-1 shrink-0">Pipeline</span>
-      {stages.map((s, i) => {
-        const blocked = s.status === 'bloqueado';
-        // Color: bloqueado = gris+candado; piezas de producción = por sub-estado; resto = por estado.
-        const g = blocked ? GATE_STYLE.bloqueado : (s.substate ? SUBSTATE[s.substate] : GATE_STYLE[s.status]) || GATE_STYLE.bloqueado;
-        const subLabel = s.substate ? SUBSTATE[s.substate]?.label : null;
-        const isNext = firstPend && s.stage === firstPend.stage;
-        return (
-          <span key={s.stage} className="inline-flex items-center">
-            <span title={`${s.stage_label} — ${s.detail}`} className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10.5px] font-semibold cursor-default" style={{ background: g.bg, color: g.color, border: `1px solid ${isNext ? '#E8B93E' : g.border}`, boxShadow: isNext ? '0 0 0 1px #F1E3B0' : 'none' }}>
-              {blocked ? <Lock size={9} strokeWidth={2.4} /> : <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: g.dot }} />}
-              {STAGE_SHORT[s.stage] || s.stage_label}
-              {!blocked && subLabel && <span className="opacity-70">· {subLabel}</span>}
-              {isNext && <span className="text-[8.5px] font-bold ml-0.5" style={{ color: '#B8860B' }}>· próximo</span>}
+    <div className="flex items-center gap-3 flex-wrap py-[11px] px-4" style={{ borderTop: '1px dashed #EDF0F5' }}>
+      <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#C3C9D4] shrink-0">Pipeline</span>
+      <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+        {stages.map((s, i) => {
+          const blocked = s.status === 'bloqueado';
+          // Color: bloqueado = gris+candado; piezas de producción = por sub-estado; resto = por estado.
+          const g = blocked ? GATE_STYLE.bloqueado : (s.substate ? SUBSTATE[s.substate] : GATE_STYLE[s.status]) || GATE_STYLE.bloqueado;
+          const subLabel = s.substate ? SUBSTATE[s.substate]?.label : null;
+          const isNext = firstPend && s.stage === firstPend.stage;
+          return (
+            <span key={s.stage} className="inline-flex items-center gap-1.5">
+              {i > 0 && <ChevronRight size={11} className="text-[#DCE0E7] shrink-0" strokeWidth={2.4} />}
+              <span title={`${s.stage_label} — ${s.detail}`} className="inline-flex items-center gap-1.5 py-[3px] px-2 rounded-md text-[11px] font-semibold cursor-default whitespace-nowrap" style={{ background: g.bg, color: g.color, border: `1px solid ${isNext ? '#E8B93E' : g.border}`, boxShadow: isNext ? '0 0 0 2px rgba(234,179,8,.18)' : 'none' }}>
+                {blocked ? <Lock size={10} strokeWidth={2.2} /> : <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: g.dot, animation: isNext ? 'mkPulse 1.8s ease-in-out infinite' : 'none' }} />}
+                {STAGE_SHORT[s.stage] || s.stage_label}
+                {!blocked && subLabel && <span className="opacity-70">· {subLabel}</span>}
+                {isNext && <span className="text-[8.5px] font-bold uppercase tracking-[0.04em]" style={{ color: '#B8860B' }}>· próximo</span>}
+              </span>
             </span>
-            {i < stages.length - 1 && <ChevronRight size={11} className="text-[#D8DCE3] mx-px shrink-0" strokeWidth={2.4} />}
-          </span>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', onUpdate, onDelete, onTrack }) {
+// Encabezado de tarjeta interna (icono en chip de color + título + subtítulo).
+function CardHead({ Icon, iconBg, iconColor, title, subtitle, children }) {
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap py-3 px-[15px] border-b border-[#EDF0F5]" style={{ background: '#FBFCFE' }}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: iconBg, color: iconColor }}><Icon size={15} /></span>
+        <div className="min-w-0">
+          <div className="text-[12.5px] font-bold text-[#1A1D26] truncate">{title}</div>
+          {subtitle && <div className="text-[10.5px] text-[#9098A4]">{subtitle}</div>}
+        </div>
+      </div>
+      {children && <div className="flex items-center gap-2 flex-wrap">{children}</div>}
+    </div>
+  );
+}
+
+// Preview de guión/descripción con botón "Ampliar / editar" (estilo uniforme).
+function ScriptPreview({ Icon, color, label, text, onOpen, emptyHint }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em]" style={{ color }}><Icon size={12} />{label}</span>
+        <button onClick={onOpen} className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color }}><Maximize2 size={12} />Ampliar / editar</button>
+      </div>
+      <button onClick={onOpen} className="w-full text-left border border-[#EDF0F5] rounded-lg py-[11px] px-[13px] bg-[#FBFCFE] cursor-pointer transition-colors" style={{ borderColor: '#EDF0F5' }} onMouseEnter={e => e.currentTarget.style.borderColor = color} onMouseLeave={e => e.currentTarget.style.borderColor = '#EDF0F5'}>
+        <div className="text-[12px] text-[#3F4653] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {text ? text.slice(0, 320) + (text.length > 320 ? '…' : '') : <span className="text-[#AEB4BF]">{emptyHint}</span>}
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = '', onUpdate, onDelete, onTrack, last }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
@@ -398,9 +424,9 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
   const cOk = !!(f.clarity_id && f.clarity_id.trim());
 
   const links = [];
-  if (f.prod_url) links.push({ short: 'Prod', bg: '#EEF2FF', color: '#2E69E0', border: '#DCE3FF', url: f.prod_url });
-  if (f.testing_url) links.push({ short: 'Test', bg: '#F1F3F6', color: '#6B7280', border: '#E2E5EB', url: f.testing_url });
-  if (f.ads_url) links.push({ short: 'Pub', bg: '#F4F1FE', color: '#7C3AED', border: '#E7E0FB', url: f.ads_url });
+  if (f.prod_url) links.push({ short: 'Prod', bg: '#EEF3FF', color: '#2E69E0', border: '#DBE6FF', url: f.prod_url });
+  if (f.testing_url) links.push({ short: 'Test', bg: '#F1F3F7', color: '#6B7280', border: '#E2E5EB', url: f.testing_url });
+  if (f.ads_url) links.push({ short: 'Pub', bg: '#F5F3FF', color: '#7C3AED', border: '#E4DBFF', url: f.ads_url });
   const missingLinks = [];
   if (!f.prod_url) missingLinks.push('Prod'); if (!f.testing_url) missingLinks.push('Test');
 
@@ -473,28 +499,29 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
   const trk = [
-    pOk ? { label: 'Pixel', bg: '#ECFDF5', color: '#16A34A', border: 'transparent', solid: true, ok: true }
-        : { label: 'Pixel', bg: '#fff', color: '#B0926A', border: '#E6D3A3', solid: false, ok: false },
-    cOk ? { label: 'Clarity', bg: '#E0F2FE', color: '#0B6FA8', border: 'transparent', solid: true, ok: true }
-        : { label: 'Clarity', bg: '#fff', color: '#B0926A', border: '#E6D3A3', solid: false, ok: false },
-    { label: events.length + ' eventos', bg: events.length ? '#F1ECFE' : '#fff', color: events.length ? '#7C3AED' : '#B0926A', border: events.length ? 'transparent' : '#E6D3A3', solid: !!events.length, ok: false },
+    pOk ? { label: 'Pixel', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
+        : { label: 'Pixel', bg: '#F5F6F9', color: '#AEB4BF', border: '#EDF0F5', solid: true, ok: false },
+    cOk ? { label: 'Clarity', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
+        : { label: 'Clarity', bg: '#F5F6F9', color: '#AEB4BF', border: '#EDF0F5', solid: true, ok: false },
+    { label: events.length + ' eventos', bg: events.length ? '#F5F3FF' : '#F5F6F9', color: events.length ? '#7C3AED' : '#AEB4BF', border: events.length ? '#E4DBFF' : '#EDF0F5', solid: true, ok: false },
   ];
 
   return (
-    <div className="border-b border-[#F0F2F5] last:border-b-0">
-      <div onClick={() => setOpen(o => !o)} className="w-full grid items-center py-[13px] px-4 bg-white font-sans cursor-pointer text-left hover:bg-[#FAFBFC]" style={{ gridTemplateColumns: GRID, borderLeft: `3px solid ${st.color}` }}>
-        <div className="flex items-center gap-[11px] min-w-0">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#EEF2FF', color: '#2E69E0' }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></svg></span>
+    <div style={{ borderLeft: `3px solid ${st.side}`, borderBottom: last ? 'none' : '1px solid #EDF0F5' }}>
+      <div onClick={() => setOpen(o => !o)} className="grid items-center py-3 px-4 font-sans cursor-pointer text-left hover:bg-[#FCFCFD]" style={{ gridTemplateColumns: GRID, gap: 12, background: open ? '#FCFCFD' : '#fff' }}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="text-[#94A3B8] shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg></span>
           <div className="min-w-0 flex-1">
-            <input key={f.id + 'name'} defaultValue={f.name} onClick={e => e.stopPropagation()} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[13.5px] font-semibold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none" style={{ color: '#1A1D26' }} />
-            <div className="flex items-center gap-[7px] mt-0.5">
-              <select value={f.strategy_id} onClick={e => e.stopPropagation()} onChange={e => onUpdate(f.id, { strategy_id: e.target.value })} title="Estrategia del funnel (editable)" className="text-[11px] text-[#6B7280] bg-transparent border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 cursor-pointer outline-none max-w-[150px]">
+            <input key={f.id + 'name'} defaultValue={f.name} onClick={e => e.stopPropagation()} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[15px] font-bold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none tracking-[-.01em]" style={{ color: '#1A1D26' }} />
+            <div className="flex items-center gap-[7px] mt-0.5 flex-wrap">
+              <select value={f.strategy_id} onClick={e => e.stopPropagation()} onChange={e => onUpdate(f.id, { strategy_id: e.target.value })} title="Estrategia del funnel (editable)" className="text-[10.5px] text-[#9098A4] bg-transparent border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 cursor-pointer outline-none max-w-[130px]">
                 {!strategyOptions.some(o => o.id === f.strategy_id) && <option value={f.strategy_id}>{strategyName}</option>}
                 {strategyOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
               </select>
-              {f.official_domain && <span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0E9384] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span>}
-              <span className="inline-flex items-center gap-1 text-[11px] text-[#9CA3AF]" onClick={e => e.stopPropagation()}>Creado
-                <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[11px] text-[#6B7280] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
+              {f.official_domain && <><span className="text-[#C3C9D4]">·</span><span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#2E69E0] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span></>}
+              <span className="text-[#C3C9D4]">·</span>
+              <span className="inline-flex items-center gap-1 text-[10.5px] text-[#9098A4]" onClick={e => e.stopPropagation()}>Creado
+                <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[10.5px] text-[#9098A4] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
               </span>
             </div>
           </div>
@@ -502,148 +529,135 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
         <div><StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} /></div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {links.map((l, i) => <CopyLinkChip key={i} {...l} />)}
-          {missingLinks.map((m, i) => <span key={'m' + i} className="inline-flex items-center py-1 px-2.5 border border-dashed border-[#D7DBE2] rounded-md bg-white text-[#AEB4BF] text-[11px] font-semibold">{m}</span>)}
+          {missingLinks.map((m, i) => <span key={'m' + i} className="inline-flex items-center py-1 px-2.5 rounded-[7px] bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold">{m}</span>)}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {trk.map((t, i) => <span key={i} onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="inline-flex items-center gap-1 py-1 px-2 rounded-md text-[11px] font-semibold cursor-pointer" style={{ background: t.bg, color: t.color, border: `1px ${t.solid ? 'solid' : 'dashed'} ${t.border}` }}>{t.ok && <Check size={10} strokeWidth={3} />}{t.label}</span>)}
+          {trk.map((t, i) => <span key={i} onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10px] font-semibold cursor-pointer" style={{ background: t.bg, color: t.color, border: `1px solid ${t.border}` }}>{t.ok && <Check size={9} strokeWidth={3.5} />}{t.label}</span>)}
         </div>
-        <div className="text-[12px] text-[#6B7280]">{f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-AR') : '—'}</div>
-        <div className="flex justify-end"><ChevronDown size={16} className="text-[#B0B6C0] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }} /></div>
+        <div className="text-[11px] text-[#9098A4]">{f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-AR') : '—'}</div>
+        <div className="flex justify-end"><ChevronDown size={16} className="transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#2E69E0' : '#C3C9D4' }} /></div>
       </div>
 
-      <PipelineSemaforo stages={stages} />
+      <div style={{ background: open ? '#FCFCFD' : '#fff' }}><PipelineSemaforo stages={stages} /></div>
 
       {open && (
-        <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
+        <div className="pt-1 px-4 pb-[18px]" style={{ background: '#FCFCFD' }}>
           {/* Enlaces del funnel (editables) */}
-          <div className="border border-[#ECEEF2] rounded-xl bg-white p-3 mb-3.5">
-            <div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[#9CA3AF] mb-2.5">Enlaces del funnel</div>
-            <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
-              {[['prod_url', 'Producción', '#2E69E0'], ['testing_url', 'Testing', '#9CA3AF'], ['official_domain', 'Dominio oficial', '#0EA5A0'], ['ads_url', 'Publicidad', '#7C3AED']].map(([k, lbl, col]) => (
-                <div key={k}>
-                  <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold" style={{ color: col }}>{k === 'official_domain' ? <Globe size={11} /> : <span className="w-2 h-2 rounded-[3px]" style={{ background: col }} />}{lbl}</div>
-                  <input defaultValue={f[k] || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f[k] || '')) onUpdate(f.id, { [k]: v || null }); }} placeholder={k === 'official_domain' ? 'tudominio.com' : 'https://…'} className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-                </div>
-              ))}
-            </div>
-            <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: '2fr 1fr' }}>
-              <div>
-                <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold" style={{ color: '#EA580C' }}><Rocket size={11} />Boost</div>
-                <input defaultValue={f.boost_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.boost_url || '')) onUpdate(f.id, { boost_url: v || null }); }} placeholder="Link para hacer el boost…" className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold text-[#6B7280]">ID del Pipeline</div>
-                <input defaultValue={f.pipeline_id || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.pipeline_id || '')) onUpdate(f.id, { pipeline_id: v || null }); }} placeholder="Ej. 9" className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue font-mono" />
-              </div>
-            </div>
-            <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">Pegá o editá y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
-            {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
-            <div className="mt-2.5 pt-2.5 border-t border-[#F0F2F5]">
-              <span className="flex items-center gap-1.5 text-[11px] font-bold mb-1.5" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal">· 1 por funnel</span></span>
-              <div className="flex items-center gap-1.5">
-                <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-                {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
-                  <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>}
-              </div>
-              {/* Guión del VSL — preview estilo descripción del avatar + sync minimalista debajo. */}
-              <div className="mt-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#16A34A' }}><FileText size={11} />Guión del VSL</span>
-                  <button onClick={openVslScript} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#16A34A' }}><Maximize2 size={11} />Ampliar / editar</button>
-                </div>
-                <button onClick={openVslScript} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#16A34A] transition-colors">
-                  <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {f.vsl_script ? f.vsl_script.slice(0, 260) + (f.vsl_script.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin guión. Clic para escribir, o traelo del DEL con el botón de abajo.</span>}
-                  </div>
-                </button>
-                <button onClick={pullVslOnly} title="Trae/actualiza el guión del VSL desde el DEL. Lo revisás y editás después." className="inline-flex items-center gap-1 mt-1 py-1 bg-transparent border-none cursor-pointer text-[10.5px] font-semibold hover:underline" style={{ color: '#2E69E0' }}><RefreshCw size={10} />Traer / sincronizar del DEL</button>
-              </div>
-            </div>
-          </div>
-          <div>
-            {/* Avatares (a lo ancho; los recursos se muestran a nivel estrategia) */}
-            <div className="border border-[#ECEEF2] rounded-xl bg-white overflow-hidden">
-              <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
-                <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Users size={14} /></span>
-                <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Variantes de avatar</div><div className="text-[11px] text-[#9CA3AF]">A quién se le publicita · anuncio por avatar</div></div>
-                {avatars.length > 0 && <button onClick={pullAllAds} disabled={pulling} title="Trae los copys de anuncios de TODOS los avatares desde el DEL (si están). Revisás y editás después." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0">{pulling ? <RefreshCw size={11} className="animate-spin" /> : <FileText size={11} />}Traer copys del DEL</button>}
-                {namedAvatars.length > 0 && (foldersReady
-                  ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#E7E9ED] rounded-lg bg-white text-[#9CA3AF] text-[10.5px] font-semibold cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50 shrink-0"><RefreshCw size={11} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
-                  : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#E7E0FB] rounded-lg bg-[#F8F5FE] text-[#7C3AED] text-[11px] font-semibold cursor-pointer hover:bg-[#F1EBFD] disabled:opacity-50 shrink-0">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
-                )}
-                <span className="text-[11px] font-bold text-[#7B8190] bg-[#F0F2F5] rounded-lg py-0.5 px-2">{avatars.length}</span>
-              </div>
-              <div className="p-2">
-                {avatars.map((av, i) => (
-                  <div key={av.id} className="rounded-[9px] p-2 hover:bg-[#FAFBFC]">
-                    <div className="flex items-center gap-2.5">
-                      <span className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-lg bg-[#EEF0F4] text-[#4B5563] text-[13px] font-bold shrink-0">{i + 1}</span>
-                      <input key={av.id + 'n'} defaultValue={av.name} onBlur={e => { if (e.target.value !== (av.name || '')) setAvatar(av.id, { name: e.target.value }); }} placeholder="Nombre del avatar" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] font-semibold text-[#1A1D26] bg-white outline-none focus:border-blue" />
-                      <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
-                      <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#B0B6C0] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={12} /></button>
-                    </div>
-                    {/* 2) Segmentación */}
-                    <div className="flex items-center gap-1.5 mt-1.5 pl-[40px]">
-                      <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="Segmentación: ¿a quién se le publicita? (edad, sexo, intereses…)" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
-                    </div>
-                    {/* 3) Descripción del avatar — clic para abrir en grande y editar cómodo. */}
-                    <div className="mt-1.5 pl-[40px]">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#EC4899' }}><Brain size={11} />Descripción</span>
-                        <button onClick={() => openDesc(av)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#EC4899' }}><Maximize2 size={11} />Ampliar / editar</button>
-                      </div>
-                      <button onClick={() => openDesc(av)} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#EC4899] transition-colors">
-                        <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {av.spec_text ? av.spec_text.slice(0, 260) + (av.spec_text.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin descripción. Clic para escribir o pegar la del DEL.</span>}
-                        </div>
-                      </button>
-                    </div>
-                    {/* 4) Anuncios editados: link del anuncio (Meta) + carpetas Grabaciones/Ediciones. */}
-                    <div className="mt-1.5 pl-[40px]">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#7C3AED] mb-1"><Megaphone size={11} />Anuncios (editado)</span>
-                      <div className="flex items-center gap-1.5">
-                        <input key={av.id + 'u'} defaultValue={av.ad_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.ad_url || '')) setAvatar(av.id, { ad_url: v }); }} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg text-[11.5px] text-[#4B5563] bg-white outline-none focus:border-blue" />
-                        {av.ad_url
-                          ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
-                             <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
-                          : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
-                      </div>
-                      {(av.rec_folder_url || av.edit_folder_url) && (
-                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                          {av.rec_folder_url && (
-                            <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF5', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
-                              <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />grabado</span> : <span className="text-[#B7BCC6]">vacía</span>}
-                            </button>
-                          )}
-                          {av.edit_folder_url && (
-                            <button onClick={() => openUrl(av.edit_folder_url)} title="Carpeta de ediciones (anuncios editados) de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.edit_files > 0 ? { background: '#F4F1FE', color: '#7C3AED', borderColor: '#E7E0FB' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
-                              <FolderOpen size={11} />Ediciones{av.edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />editado</span> : <span className="text-[#B7BCC6]">vacía</span>}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {/* 5) Copys de anuncios — preview estilo VSL/descripción + sync minimalista. */}
-                    <div className="mt-1.5 pl-[40px]">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#1D4FD8' }}><FileText size={11} />Copys de anuncios</span>
-                        <button onClick={() => openAdScript(av, i)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#1D4FD8' }}><Maximize2 size={11} />Ampliar / editar</button>
-                      </div>
-                      <button onClick={() => openAdScript(av, i)} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#1D4FD8] transition-colors">
-                        <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {av.ad_script ? av.ad_script.slice(0, 260) + (av.ad_script.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin copys. Clic para escribir, o traelos del DEL con el botón de abajo.</span>}
-                        </div>
-                      </button>
-                      <button onClick={() => pullAdOne(av, i)} title="Trae/actualiza los copys de este avatar desde el DEL. Lo revisás y editás después." className="inline-flex items-center gap-1 mt-1 py-1 bg-transparent border-none cursor-pointer text-[10.5px] font-semibold hover:underline" style={{ color: '#2E69E0' }}><RefreshCw size={10} />Traer / sincronizar del DEL</button>
-                    </div>
+          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
+            <CardHead Icon={Link2} iconBg="#EEF3FF" iconColor="#2E69E0" title="Enlaces del funnel" subtitle="Producción, testing, dominio y publicidad" />
+            <div className="p-[14px]">
+              <div className="grid gap-3 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
+                {[['prod_url', 'Producción', '#2E69E0'], ['testing_url', 'Testing', '#94A3B8'], ['official_domain', 'Dominio oficial', '#22C55E'], ['ads_url', 'Publicidad', '#8B5CF6']].map(([k, lbl, col]) => (
+                  <div key={k}>
+                    <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold" style={{ color: col }}>{k === 'official_domain' ? <span className="w-[7px] h-[7px] rounded-full" style={{ background: col }} /> : <span className="w-[7px] h-[7px] rounded-full" style={{ background: col }} />}{lbl}</div>
+                    <input defaultValue={f[k] || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f[k] || '')) onUpdate(f.id, { [k]: v || null }); }} placeholder={k === 'official_domain' ? 'tudominio.com' : 'https://…'} className="w-full py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
                   </div>
                 ))}
-                <button onClick={addAvatar} className="inline-flex items-center gap-1.5 mt-1 mb-0.5 ml-2 py-[7px] px-2.5 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[11.5px] font-semibold font-sans cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={12} />Agregar variante de avatar</button>
               </div>
+              <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 200px' }}>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold" style={{ color: '#F97316' }}><Rocket size={12} />Boost</div>
+                  <input defaultValue={f.boost_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.boost_url || '')) onUpdate(f.id, { boost_url: v || null }); }} placeholder="Link para hacer el boost…" className="w-full py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-[#6B7280] mb-1.5">ID del Pipeline</div>
+                  <input defaultValue={f.pipeline_id || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.pipeline_id || '')) onUpdate(f.id, { pipeline_id: v || null }); }} placeholder="Ej. 9" className="w-full py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue font-mono" />
+                </div>
+              </div>
+              <div className="text-[10.5px] text-[#AEB4BF] mt-2.5">Pegá o editá y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
             </div>
           </div>
-          <div className="flex justify-end mt-2.5">
-            <button onClick={() => { if (window.confirm(`¿Borrar el funnel "${f.name}"?`)) onDelete(f.id); }} className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-transparent border-none text-text3 text-[11.5px] font-semibold cursor-pointer hover:bg-red-bg hover:text-red-500"><Trash2 size={12} />Borrar funnel</button>
+
+          {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
+          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
+            <CardHead Icon={Clapperboard} iconBg="#ECFDF3" iconColor="#16A34A" title="VSL del funnel" subtitle="1 video por funnel · con su guión">
+              <button onClick={pullVslOnly} title="Trae/actualiza el guión del VSL desde el DEL. Lo revisás y editás después." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#3F4653] cursor-pointer hover:bg-[#F7F8FA]"><RefreshCw size={12} />Traer / sincronizar del DEL</button>
+            </CardHead>
+            <div className="p-[14px] flex flex-col gap-3.5">
+              <div>
+                <div className="text-[10.5px] font-bold text-[#16A34A] uppercase tracking-[0.06em] mb-1.5">Link del VSL</div>
+                <div className="flex items-center gap-1.5">
+                  <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                  {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
+                    <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Copy size={12} /></button></>}
+                </div>
+              </div>
+              <ScriptPreview Icon={FileText} color="#16A34A" label="Guión del VSL" text={f.vsl_script} onOpen={openVslScript} emptyHint="Sin guión. Clic para escribir, o traelo del DEL con el botón de arriba." />
+            </div>
+          </div>
+
+          {/* Variantes de avatar */}
+          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
+            <CardHead Icon={Users} iconBg="#FCE7F3" iconColor="#DB2777" title="Variantes de avatar" subtitle="A quién se le publicita · un anuncio por avatar">
+              {avatars.length > 0 && <button onClick={pullAllAds} disabled={pulling} title="Trae los copys de anuncios de TODOS los avatares desde el DEL (si están). Revisás y editás después." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#3F4653] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50">{pulling ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}Traer copys del DEL</button>}
+              {namedAvatars.length > 0 && (foldersReady
+                ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#9098A4] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50"><RefreshCw size={12} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
+                : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
+              )}
+              <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
+            </CardHead>
+            <div className="p-[14px] flex flex-col gap-3">
+              {avatars.map((av, i) => {
+                const acfg = AVATAR_STATUS[av.status] || AVATAR_STATUS['En grabación'];
+                return (
+                  <div key={av.id} className="border border-[#EDF0F5] rounded-[11px] p-[14px] bg-white" style={{ borderLeft: '3px solid #EC4899' }}>
+                    <div className="flex items-start gap-2.5 mb-2.5">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-[7px] bg-[#FCE7F3] text-[#DB2777] text-[12px] font-bold shrink-0">{i + 1}</span>
+                      <input key={av.id + 'n'} defaultValue={av.name} onBlur={e => { if (e.target.value !== (av.name || '')) setAvatar(av.id, { name: e.target.value }); }} placeholder="Nombre del avatar" className="flex-1 min-w-0 text-[13.5px] font-semibold text-[#1A1D26] leading-snug border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none" />
+                      <span className="inline-flex items-center gap-1.5 py-[3px] px-2.5 rounded-full text-[10.5px] font-bold shrink-0 whitespace-nowrap" style={{ background: acfg.bg, color: acfg.color }}><span className="w-[6px] h-[6px] rounded-full" style={{ background: acfg.dot }} /></span>
+                      <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
+                      <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      {/* Segmentación */}
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#DB2777] mb-1.5"><Target size={12} />Segmentación</div>
+                        <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="¿A quién se le publicita? (edad, sexo, ubicación, intereses…)" className="w-full py-2 px-[11px] border border-[#EDF0F5] rounded-lg text-[11.5px] text-[#3F4653] bg-[#FAFBFD] outline-none focus:border-blue focus:bg-white" />
+                      </div>
+
+                      {/* Descripción */}
+                      <ScriptPreview Icon={FileText} color="#DB2777" label="Descripción" text={av.spec_text} onOpen={() => openDesc(av)} emptyHint="Sin descripción. Clic para escribir o pegar la del DEL." />
+
+                      {/* Anuncios (editado): link del anuncio (Meta) + carpetas Grabaciones/Ediciones. */}
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#7C3AED] mb-1.5"><Megaphone size={12} />Anuncios <span className="text-[#A78BFA] normal-case tracking-normal">(editado)</span></div>
+                        <div className="flex items-center gap-2">
+                          <input key={av.id + 'u'} defaultValue={av.ad_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.ad_url || '')) setAvatar(av.id, { ad_url: v }); }} placeholder="Link del anuncio (Meta)…" className="flex-1 min-w-0 py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
+                          {av.ad_url
+                            ? <><button onClick={() => openUrl(av.ad_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Megaphone size={12} />Anuncio</button>
+                               <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E4DBFF] rounded-lg cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Copy size={12} /></button></>
+                            : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin anuncio</span>}
+                        </div>
+                        {(av.rec_folder_url || av.edit_folder_url) && (
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {av.rec_folder_url && (
+                              <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                                <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabado</span> : <span className="text-[#C3C9D4]">vacía</span>}
+                              </button>
+                            )}
+                            {av.edit_folder_url && (
+                              <button onClick={() => openUrl(av.edit_folder_url)} title="Carpeta de ediciones (anuncios editados) de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                                <FolderOpen size={11} />Ediciones{av.edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />editado</span> : <span className="text-[#C3C9D4]">vacía</span>}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Copys de anuncios */}
+                      <ScriptPreview Icon={FileText} color="#2E69E0" label="Copys de anuncios" text={av.ad_script} onOpen={() => openAdScript(av, i)} emptyHint="Sin copys. Clic para escribir, o traelos del DEL con el botón de abajo." />
+                      <button onClick={() => pullAdOne(av, i)} title="Trae/actualiza los copys de este avatar desde el DEL. Lo revisás y editás después." className="inline-flex items-center gap-1.5 -mt-1 py-1 bg-transparent border-none cursor-pointer text-[11px] font-semibold hover:underline w-fit" style={{ color: '#2E69E0' }}><RefreshCw size={11} />Traer / sincronizar del DEL</button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button onClick={addAvatar} className="flex items-center justify-center gap-2.5 w-full border-[1.5px] border-dashed border-[#F0C4DD] rounded-[11px] bg-[#FDF5FA] text-[#DB2777] text-[12.5px] font-semibold py-3 px-3.5 cursor-pointer hover:bg-[#FCEBF4] hover:border-[#DB2777] transition-colors"><span className="w-5 h-5 rounded-full bg-[#DB2777] text-white inline-flex items-center justify-center shrink-0"><Plus size={12} strokeWidth={2.6} /></span>Agregar variante de avatar</button>
+            </div>
+          </div>
+
+          <div className="flex justify-end mt-3">
+            <button onClick={() => { if (window.confirm(`¿Borrar el funnel "${f.name}"?`)) onDelete(f.id); }} className="inline-flex items-center gap-1.5 py-[7px] px-3 rounded-lg bg-white border border-[#F5C2C2] text-[#DC2626] text-[11.5px] font-semibold cursor-pointer hover:bg-[#FEF2F2]"><Trash2 size={13} />Borrar funnel</button>
           </div>
         </div>
       )}
@@ -659,6 +673,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onU
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
   const delText = (docs.find(d => d.doc_kind === 'del')?.text) || '';
+  const masterDocs = docs.filter(d => d.doc_kind !== 'extra');
 
   // Recursos de la estrategia (subcarpetas de "Recursos" en Drive) — los comparten todos los funnels.
   const [recursos, setRecursos] = useState(null);
@@ -686,54 +701,75 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onU
   }, [s.client_id, loadRecursos]);
   useEffect(() => { if (open && recursos === null) loadRecursos(); }, [open, recursos, loadRecursos]);
   const recDone = (recursos || []).filter(isDone).length;
+
   return (
-    <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
-      <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
-        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2.5 flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left p-0">
-          <ChevronRight size={15} className="shrink-0 text-[#C58BB0] transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'none' }} strokeWidth={2.2} />
-          <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><Layers size={15} /></span>
-          <span className="text-[14px] font-bold truncate" style={{ color: '#1A1D26' }}>Estrategia #{num}{cleanName ? <> <span className="text-[#D8C3D2] font-medium">·</span> {cleanName}</> : null}</span>
-          <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: st.bg, color: st.color }}>{st.label}</span>
-        </button>
-        <span className="text-[11px] text-[#9CA3AF] font-semibold shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
+    <div className="bg-white rounded-2xl overflow-hidden mb-5" style={{ border: '1px solid #E7EAF0', borderLeft: '3px solid #EC4899', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+      <div onClick={() => setOpen(o => !o)} className="flex items-center gap-3 py-4 px-5 cursor-pointer border-b border-[#F1F3F7]" style={{ background: 'linear-gradient(180deg,#FDF2F8 0%,#fff 100%)' }}>
+        <span className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-[10px] shrink-0" style={{ background: '#FCE7F3', color: '#DB2777' }}><Layers size={18} /></span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-[15px] font-bold text-[#1A1D26]">Estrategia #{num}</span>
+            {cleanName && <><span className="text-[#C3C9D4]">·</span><span className="text-[14px] font-semibold text-[#3F4653]">{cleanName}</span></>}
+            <span className="inline-flex items-center gap-1.5 py-0.5 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em]" style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}><span className="w-[6px] h-[6px] rounded-full" style={{ background: st.dot }} />{st.label}</span>
+          </div>
+        </div>
+        <span className="text-[11.5px] text-[#9098A4] font-medium shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
+        <ChevronDown size={18} className="text-[#C3C9D4] shrink-0 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
       </div>
+
       {open && (
-        <div className="p-3.5">
+        <div className="py-[18px] px-5">
           {/* Recursos de la estrategia — el documento maestro (DEL) + las carpetas de "Recursos" del Drive, juntos. */}
-          <div className="mb-3.5">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] flex-1">Recursos de la estrategia <span className="text-[#C4C9D2] normal-case font-medium tracking-normal">· los comparten todos los funnels</span></span>
-              {recursos && recursos.length > 0 && <span className="text-[10.5px] font-bold shrink-0" style={{ color: recDone === recursos.length ? '#16A34A' : '#A16207' }}>{recDone}/{recursos.length} entregados</span>}
-              <button onClick={syncRecursos} disabled={loadingRec} title="Relee la carpeta Recursos del Drive (trae carpetas nuevas). El check lo marcás vos a mano." className="inline-flex items-center gap-1 py-1 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={10} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
-            </div>
-            {docs.filter(d => d.doc_kind !== 'extra').length > 0 && (
-              <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-                {docs.filter(d => d.doc_kind !== 'extra').map(d => <ContextDocCard key={d.id} doc={d} />)}
+          <div className="mb-4">
+            <div className="flex items-center justify-between gap-2.5 flex-wrap mb-3">
+              <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4]">Recursos de la estrategia <span className="text-[#C3C9D4] normal-case font-medium tracking-normal">· los comparten todos los funnels</span></span>
+              <div className="flex items-center gap-2.5">
+                {recursos && recursos.length > 0 && <span className="inline-flex items-center py-[3px] px-2.5 rounded-full text-[11px] font-semibold" style={recDone === recursos.length ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' } : { background: '#FEF3C7', color: '#B45309', border: '1px solid #FBE6BE' }}>{recDone}/{recursos.length} entregados</span>}
+                <button onClick={syncRecursos} disabled={loadingRec} title="Relee la carpeta Recursos del Drive (trae carpetas nuevas). El check lo marcás vos a mano." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#2E69E0] bg-[#EEF3FF] border border-[#DBE6FF] rounded-lg py-[5px] px-2.5 cursor-pointer hover:bg-[#DFEAFF] disabled:opacity-50"><RefreshCw size={12} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
               </div>
-            )}
-            {recursos === null ? <div className="text-[11px] text-[#AEB4BF] py-1">Cargando recursos…</div>
-              : recursos.length === 0 ? <div className="text-[11px] text-[#AEB4BF] py-1">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar” o revisá la pestaña Carpetas del cliente.</div>
-              : <><div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
-                  {recursos.map(r => { const done = isDone(r); const auto = r.files > 0; return (
-                    <div key={r.folder_id} className="flex items-center gap-2 py-2 px-2.5 border rounded-lg bg-white" style={{ borderColor: done ? '#CDEBD9' : '#E7E9EE' }}>
-                      <button onClick={() => toggleDone(r)} title={done ? 'Marcar como NO entregado' : 'Marcar como entregado'} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer p-0" style={done ? { background: '#16A34A', color: '#fff', border: 'none' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{done && <Check size={12} strokeWidth={3} />}</button>
-                      <span className="flex-1 min-w-0 text-[12px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</span>
-                      <span className="text-[10px] font-bold rounded-md py-0.5 px-1.5 shrink-0" title={`${r.files} archivo${r.files === 1 ? '' : 's'} en la carpeta`} style={auto ? { background: '#ECFDF5', color: '#15803D' } : { background: '#F4F5F7', color: '#9CA3AF' }}>{r.files}</span>
-                      {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={12} /></button>}
+            </div>
+            <div className="flex gap-2.5 flex-wrap">
+              {/* Documento maestro (DEL / master docs) como chip verde con su tag */}
+              {masterDocs.map(d => {
+                const meta = DOC_META[d.doc_kind] || DOC_META.extra;
+                return (
+                  <div key={d.id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={{ borderColor: '#C9F0D8', background: '#F4FDF7' }} title={`${meta.label} · ${(d.char_count || 0).toLocaleString()} caracteres`}>
+                    <span className="w-[19px] h-[19px] rounded-md bg-[#22C55E] text-white inline-flex items-center justify-center shrink-0"><Check size={12} strokeWidth={3.5} /></span>
+                    <span className="text-[9px] font-extrabold tracking-[0.06em] text-[#15803D] bg-[#DCFCE7] py-0.5 px-1.5 rounded-[5px]">{meta.label.toUpperCase()}</span>
+                    <span className="font-semibold text-[12.5px] text-[#1A1D26] max-w-[160px] truncate">{d.title || meta.label}</span>
+                    <span className="text-[10.5px] text-[#9098A4] whitespace-nowrap">{(d.char_count || 0).toLocaleString()} car.</span>
+                    {d.web_url && <button onClick={() => openUrl(d.web_url)} title="Abrir en Drive" className="text-[#9098A4] hover:text-[#2E69E0] inline-flex"><ExternalLink size={13} /></button>}
+                  </div>
+                );
+              })}
+              {/* Subcarpetas de "Recursos" (chips con check manual + conteo) */}
+              {recursos === null ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">Cargando recursos…</div>
+                : (recursos.length === 0 && masterDocs.length === 0) ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar” o revisá la pestaña Carpetas del cliente.</div>
+                : recursos.map(r => { const done = isDone(r); const auto = r.files > 0; return (
+                    <div key={r.folder_id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={done ? { borderColor: '#C9F0D8', background: '#F4FDF7' } : { border: '1.5px dashed #D8DDE6', background: '#FBFCFE' }}>
+                      <button onClick={() => toggleDone(r)} title={done ? 'Marcar como NO entregado' : 'Marcar como entregado'} className="w-[19px] h-[19px] rounded-md inline-flex items-center justify-center shrink-0 cursor-pointer p-0" style={done ? { background: '#22C55E', color: '#fff', border: 'none' } : { background: '#fff', border: '1.5px dashed #C3C9D4' }}>{done && <Check size={12} strokeWidth={3.5} />}</button>
+                      <span className="font-semibold text-[12.5px] max-w-[160px] truncate" style={{ color: done ? '#1A1D26' : '#6B7280' }} title={r.name}>{r.name}</span>
+                      <span className="text-[10.5px] font-bold py-0.5 px-1.5 rounded-full whitespace-nowrap" title={`${r.files} archivo${r.files === 1 ? '' : 's'} en la carpeta`} style={auto ? { background: '#DCFCE7', color: '#15803D' } : { background: '#F1F3F7', color: '#AEB4BF' }}>{r.files}</span>
+                      {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="hover:text-[#2E69E0] inline-flex" style={{ color: done ? '#9098A4' : '#C3C9D4' }}><ExternalLink size={13} /></button>}
                     </div>
                   ); })}
-                </div>
-                <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">El número es lo que hay en la carpeta; el check lo marcás vos (por si el conteo no refleja bien lo entregado).</div></>}
-          </div>
-          <div className="border border-[#ECEEF2] rounded-xl overflow-hidden">
-            <div className="grid items-center py-[10px] px-4 border-b border-[#ECEEF2]" style={{ gridTemplateColumns: GRID, background: '#FAFBFC' }}>
-              {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[10px] font-bold tracking-[0.08em] uppercase text-[#9CA3AF]">{h}</div>)}
             </div>
-            {funnels.length === 0
-              ? <div className="text-[12px] text-[#9CA3AF] py-6 text-center">Sin funnels en esta estrategia.</div>
-              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} />)}
+            {recursos && recursos.length > 0 && <div className="text-[11px] text-[#AEB4BF] mt-2">El número es lo que hay en la carpeta; el check lo marcás vos (por si el conteo no refleja bien lo entregado).</div>}
           </div>
-          <button onClick={() => onNew(s.id)} className="inline-flex items-center gap-1.5 mt-2.5 py-2 px-3 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[12px] font-semibold cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={13} />Nuevo funnel en esta estrategia</button>
+
+          {/* Tabla de funnels (scroll horizontal si no entra) */}
+          <div className="border border-[#EDF0F5] rounded-xl overflow-x-auto">
+            <div style={{ minWidth: 820 }}>
+              <div className="grid items-center py-[9px] px-4 border-b border-[#EDF0F5]" style={{ gridTemplateColumns: GRID, gap: 12, background: '#FAFBFD' }}>
+                {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
+              </div>
+              {funnels.length === 0
+                ? <div className="text-[12px] text-[#9098A4] py-7 text-center">Sin funnels en esta estrategia.</div>
+                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} delText={delText} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} last={i === funnels.length - 1} />)}
+            </div>
+          </div>
+
+          <button onClick={() => onNew(s.id)} className="flex items-center justify-center gap-2.5 w-full mt-3.5 border-[1.5px] border-dashed border-[#B9CCFB] rounded-xl bg-[#F5F9FF] text-[#2E69E0] text-[13px] font-semibold py-3.5 px-4 cursor-pointer hover:bg-[#EAF1FF] hover:border-[#2E69E0] transition-colors"><span className="w-[22px] h-[22px] rounded-full bg-[#2E69E0] text-white inline-flex items-center justify-center shrink-0"><Plus size={13} strokeWidth={2.6} /></span>Nuevo funnel en esta estrategia</button>
         </div>
       )}
     </div>
@@ -807,41 +843,58 @@ export default function FunnelsView({ clientId }) {
   const saveTrack = (val) => { updateStrategyPage(trackFunnel.id, { pixel_code: val.pixel_code || null, clarity_id: val.clarity_id || null, conversion_events: val.events }); setTrackFunnel(null); };
 
   return (
-    <div style={{ background: '#FAFBFC' }} className="p-[18px] -mx-1 rounded-xl">
+    <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
       {/* Contexto del cliente (alimenta todas las estrategias) */}
-      <div className="border border-[#E2E5EB] rounded-xl bg-white p-4 mb-4">
-        <div className="flex items-center gap-2.5 mb-3 flex-wrap">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0" style={{ background: '#FDF2F8', color: '#EC4899' }}><Brain size={17} /></span>
-          <div className="flex-1 min-w-[160px]">
-            <div className="text-[13.5px] font-bold text-[#1A1D26]">Contexto del cliente</div>
-            <div className="text-[11px] text-[#9CA3AF]">Alimenta a todas las estrategias{lastSync ? ` · sincronizado ${fmtDateTime(lastSync)}` : ''}</div>
+      <div className="bg-white rounded-2xl overflow-hidden mb-6" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap py-[18px] px-5 border-b border-[#F1F3F7]" style={{ background: 'linear-gradient(180deg,#FDF2F8 0%,#fff 100%)' }}>
+          <div className="flex gap-3 items-center">
+            <span className="inline-flex items-center justify-center w-[38px] h-[38px] rounded-[11px] shrink-0" style={{ background: '#FCE7F3', color: '#DB2777' }}><Sparkles size={20} /></span>
+            <div>
+              <div className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em]">Contexto del cliente</div>
+              <div className="text-[11.5px] text-[#9098A4] mt-px">Alimenta a todas las estrategias{lastSync ? ` · sincronizado ${fmtDateTime(lastSync)}` : ''}</div>
+            </div>
           </div>
-          <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-2 px-3 border-none rounded-[9px] text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50" style={{ background: '#EC4899' }}><RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar contexto'}</button>
+          <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[10px] text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50 hover:brightness-95" style={{ background: '#EC4899', boxShadow: '0 1px 2px rgba(236,72,153,.35)' }}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar contexto'}</button>
         </div>
-        <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          {[['Nicho', client.niche, '#EC4899', Target], ['Cuello de botella', client.bottleneck, '#CA8A04', Activity]].map((row) => {
-            const [lbl, val, col, Ic] = row;
-            return (
-              <div key={lbl} className="border border-[#F0F2F5] rounded-lg p-2.5 bg-[#FAFBFC]">
-                <div className="inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider mb-1 text-[#9CA3AF]"><Ic size={11} />{lbl}</div>
-                <div className="text-[12px] font-semibold leading-snug" style={{ color: val ? col : '#C4C9D2' }}>{val || '—'}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documentos del cliente</div>
-        <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
-        <div className="text-[10.5px] text-[#9CA3AF] mt-2 flex items-center gap-1"><RefreshCw size={10} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
 
-        <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2 mt-4">Webs de contexto</div>
-        <WebLinks clientId={clientId} webs={webs} onChanged={fetchContext} />
-        <div className="text-[10.5px] text-[#9CA3AF] mt-2 flex items-center gap-1"><Globe size={10} />Sumá el sitio del cliente o de la empresa MLM. Los dominios de tus funnels también nutren el contexto (el funnel es donde llega el prospecto tras el anuncio).</div>
+        <div className="py-[18px] px-5">
+          {/* Nicho + cuello */}
+          <div className="grid gap-3.5 mb-5" style={{ gridTemplateColumns: 'minmax(200px,1fr) minmax(280px,1.6fr)' }}>
+            <div className="border border-[#EDF0F5] rounded-xl py-[13px] px-[15px] bg-[#FBFCFE]">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[#9098A4] mb-2"><Target size={13} />Nicho</div>
+              <div className="text-[13px] font-semibold leading-snug" style={{ color: client.niche ? '#EC4899' : '#C3C9D4' }}>{client.niche || '—'}</div>
+            </div>
+            <div className="border rounded-xl py-[13px] px-[15px]" style={{ borderColor: '#FBE6BE', background: '#FFFBEB' }}>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] mb-2" style={{ color: '#B45309' }}><Activity size={13} />Cuello de botella</div>
+              <div className="text-[13px] leading-snug font-medium" style={{ color: client.bottleneck ? '#78350F' : '#C3C9D4' }}>{client.bottleneck || '—'}</div>
+            </div>
+          </div>
+
+          {/* Documentos */}
+          <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Documentos del cliente</div>
+          <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
+          <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-3.5"><RefreshCw size={13} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
+
+          {/* Webs de contexto */}
+          <div className="mt-5 pt-[18px] border-t border-[#F1F3F7]">
+            <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Webs de contexto</div>
+            <WebLinks clientId={clientId} webs={webs} onChanged={fetchContext} />
+            <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-2.5 leading-snug"><Globe size={13} className="shrink-0" />Sumá el sitio del cliente o de la empresa MLM. Los dominios de tus funnels también nutren el contexto (el funnel es donde llega el prospecto tras el anuncio).</div>
+          </div>
+        </div>
       </div>
 
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
-        ? <div className="border border-[#E2E5EB] rounded-xl bg-white flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
+        ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
         : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
+
+      {/* Nueva estrategia (informativo: se crean solas desde las carpetas del Drive) */}
+      {myStrategies.length > 0 && (
+        <div className="flex items-center gap-2 justify-center text-[11.5px] text-[#9098A4] mt-1">
+          <Layers size={13} />Las estrategias se crean solas al sincronizar las carpetas "Estrategia #N" del Drive (pestaña Carpetas).
+        </div>
+      )}
 
       {/* Modal nuevo funnel */}
       {modal && (
