@@ -208,6 +208,10 @@ async function syncClient(
   const { data: strats } = await supabase
     .from("strategies").select("id, position, name, drive_folder_id, start_date, folders, archivos, drive_url")
     .eq("client_id", clientId).order("position", { ascending: true });
+  // Raíz del árbol (carpeta del cliente entero). Un link de estrategia que apunte
+  // acá NO debe propagar: se tragaría TODO el árbol y dejaría las demás estrategias
+  // "sin sincronizar". La dueña de cada subárbol la define la carpeta "Estrategia #N".
+  const rootId = (typed.find((n) => n.isRoot) || typed.find((n) => !n.parentId))?.id ?? null;
   const strategyOf = new Map<string, string>();
   for (const s of (strats ?? [])) {
     const ids: string[] = [];
@@ -215,7 +219,9 @@ async function syncClient(
     for (const a of (Array.isArray(s.archivos) ? s.archivos : [])) { if (str(a?.category) === "folder") { const id = driveId(a?.url); if (id) ids.push(id); } }
     { const id = driveId(s.drive_url); if (id) ids.push(id); }
     for (const fid of ids) {
-      if (!nodeById.has(fid)) continue; // link viejo/roto: el panel lo marca aparte
+      const fnode = nodeById.get(fid);
+      if (!fnode) continue;                       // link viejo/roto: el panel lo marca aparte
+      if (fnode.isRoot || fid === rootId) continue; // mislink a la carpeta raíz del cliente
       const stack = [fid];
       while (stack.length) {
         const cur = stack.pop()!;
