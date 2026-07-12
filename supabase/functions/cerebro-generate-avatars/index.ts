@@ -173,10 +173,12 @@ Deno.serve(async (req) => {
     }
   } catch { /* si falla el chequeo, seguimos (el max_tokens acota igual) */ }
 
-  // DEL de la estrategia.
-  let delQ = supabase.from("client_brain_docs").select("text").eq("client_id", clientId).eq("doc_kind", "del");
+  // DEL de la estrategia. Si hay varios "del" (ej. un falso positivo del detector por nombre,
+  // como "Copia de HISTORIA Y LINK DEL VIDEO"), gana el MÁS GRANDE: el DEL real es enorme y el
+  // falso positivo suele ser un doc corto. Robusto sin borrar nada.
+  let delQ = supabase.from("client_brain_docs").select("text,char_count").eq("client_id", clientId).eq("doc_kind", "del");
   if (strategyId) delQ = delQ.eq("strategy_id", strategyId);
-  const { data: delRows } = await delQ.limit(1);
+  const { data: delRows } = await delQ.order("char_count", { ascending: false }).limit(1);
   const delText = str((delRows && delRows[0]?.text) || "").slice(0, 200000); // cota de seguridad
   if (!delText) return j({ ok: false, error: "no_del", detail: "No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero." }, 400);
 
@@ -336,6 +338,19 @@ Deno.serve(async (req) => {
     };
   }).filter((a) => a.name);
 
+  // Recuperación de descripción para funnels de UN SOLO avatar: si quedó sin spec pero el DEL
+  // tiene una hoja de perfil ("Avatar"/"Avatares"/"Perfil"/"Buyer persona"), usala ENTERA. Las
+  // anclas spec_start/spec_end solo hacen falta cuando VARIOS avatares comparten la misma hoja;
+  // con un único avatar, toda la hoja ES su descripción.
+  if (built.length === 1 && built[0].spec_text === SPEC_MISSING) {
+    let recovered = sectionContent(tabs, str(raw[0]?.spec_section), LANDING_RE);
+    if (!recovered) {
+      const profTab = sectionTitles.find((t) => /^\s*avatar(es)?\s*$|\bperfil\b|buyer\s*persona/i.test(t) && !LANDING_RE.test(t));
+      if (profTab) recovered = sectionContent(tabs, profTab, LANDING_RE);
+    }
+    if (recovered) built[0].spec_text = recovered.slice(0, 8000);
+  }
+
   // VSL que corresponde a ESTE funnel (verbatim de "VSL Avatar N"/"VSL <persona>", nunca la landing).
   let vslScript = vslSection ? sectionContent(tabs, vslSection, VSL_BLOCK) : "";
   // Fallback por código: si la IA no marcó vsl_section, o marcó una que NO resuelve a contenido
@@ -347,6 +362,20 @@ Deno.serve(async (req) => {
       const toks = norm(av.name).split(" ").filter((w) => w.length > 2);
       const hit = vslTabs.find((t) => { const nt = norm(t); return toks.some((w) => nt.includes(w)); });
       if (hit) { const c = sectionContent(tabs, hit, VSL_BLOCK); if (c) { vslScript = c; break; } }
+    }
+    // Última red: si el DEL tiene UNA sola pestaña "VSL" genérica (no nombrada por persona) —
+    // típico de un funnel de un solo avatar/producto— usala. Si hay varias (Summit: "VSL 1 Jonathan",
+    // "VSL 2 Mely"…) NO se aplica: ésas se resuelven por nombre arriba y no queremos mezclar.
+    if (!vslScript && vslTabs.length === 1) {
+      const c = sectionContent(tabs, vslTabs[0], VSL_BLOCK);
+      if (c) vslScript = c;
+    }
+    // Último recurso: entre VARIAS pestañas 'VSL', quedate con la PRINCIPAL (el guión), descartando
+    // notas/sugerencias/cambios/ideas/análisis/retargeting (ej. Piquer: 'Guion VSL' vs 'Sugerencias
+    // cambios VSL' → gana 'Guion VSL'). Si tras el filtro queda exactamente una, usala.
+    if (!vslScript) {
+      const primary = vslTabs.filter((t) => !/sugeren|cambio|nota|idea|an[aá]lisis|retarget|feedback|mejora/i.test(t));
+      if (primary.length === 1) { const c = sectionContent(tabs, primary[0], VSL_BLOCK); if (c) vslScript = c; }
     }
   }
 
