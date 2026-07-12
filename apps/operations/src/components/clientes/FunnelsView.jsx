@@ -374,15 +374,6 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
 
       {open && (
         <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
-          {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
-          <div className="border rounded-xl bg-white p-3 mb-3.5" style={{ borderColor: f.vsl_url ? '#CFEBD9' : '#ECEEF2' }}>
-            <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-bold uppercase tracking-[0.04em]" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal normal-case tracking-normal">· 1 por funnel</span></div>
-            <div className="flex items-center gap-1.5">
-              <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-              {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
-                <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>}
-            </div>
-          </div>
           {/* Enlaces del funnel (editables) */}
           <div className="border border-[#ECEEF2] rounded-xl bg-white p-3 mb-3.5">
             <div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[#9CA3AF] mb-2.5">Enlaces del funnel</div>
@@ -405,6 +396,15 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
               </div>
             </div>
             <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">Pegá o editá y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
+            {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
+            <div className="mt-2.5 pt-2.5 border-t border-[#F0F2F5]">
+              <div className="flex items-center gap-1.5 mb-1 text-[11px] font-bold" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal">· 1 por funnel</span></div>
+              <div className="flex items-center gap-1.5">
+                <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+                {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
+                  <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>}
+              </div>
+            </div>
           </div>
           <div className="grid gap-3.5 items-start" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
             {/* Avatares */}
