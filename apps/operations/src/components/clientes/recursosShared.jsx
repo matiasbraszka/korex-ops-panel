@@ -57,7 +57,7 @@ export function isOnboardingDoc(n) {
 // El doc de investigación del cliente/empresa (avatar, mercado, ángulos).
 export function isInvestigacionDoc(n) {
   if (!n || n.node_type === 'folder') return false;
-  return /investigaci[oó]n/i.test(n.name || '');
+  return /investigaci[oó]n|research|search|serch/i.test(n.name || '');
 }
 
 // ¿Se fija solo? (DEL u onboarding). No se puede des-fijar a mano.

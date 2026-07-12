@@ -526,6 +526,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
       ? 'La IA va a leer el DEL y REEMPLAZAR los avatares actuales. ¿Seguir?'
       : 'La IA va a leer el DEL y AGREGAR los avatares nuevos que encuentre (sin borrar los actuales). ¿Seguir?')) return;
     setGen({ status: 'running' });
+    // Red de seguridad: guardamos el estado ACTUAL antes de que la IA lo pise, para poder deshacer.
+    try { await onUpdate(f.id, { avatars_backup: avatars, vsl_script_backup: f.vsl_script || null, backup_at: new Date().toISOString() }); } catch { /* noop */ }
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
         body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode },
@@ -539,6 +541,13 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     } catch (e) { setGen({ status: 'error', msg: String(e?.message || e) }); }
   };
   const genActive = gen.status === 'running';
+  // Deshacer: restaura los avatares + VSL que había ANTES de la última generación (red de seguridad).
+  const canUndo = Array.isArray(f.avatars_backup);
+  const undoGenerate = () => {
+    if (!canUndo) return;
+    if (!window.confirm('¿Restaurar los avatares y la VSL que había ANTES de la última generación? Se pierde lo que generó la IA en esa corrida.')) return;
+    onUpdate(f.id, { avatars: f.avatars_backup, vsl_script: (f.vsl_script_backup ?? f.vsl_script) || null });
+  };
 
   const trk = [
     pOk ? { label: 'Pixel', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
@@ -636,6 +645,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
                 ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#9098A4] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50"><RefreshCw size={12} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
                 : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
               )}
+              {canUndo && <button onClick={undoGenerate} title="Restaurar los avatares y la VSL que había antes de la última generación de la IA." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
               <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
             </CardHead>
             {genActive && (
