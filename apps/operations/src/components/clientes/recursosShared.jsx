@@ -42,10 +42,16 @@ export function normLabel(v) {
 }
 
 // El documento clave: "DEL" (acrónimo mayúsculas) o "Documento en limpio…".
+// OJO: "DEL" en mayúsculas también es la preposición "del" en títulos todo-mayúsculas
+// (ej. "…LINK DEL VIDEO") → falso positivo. Para evitarlo, "DEL" tiene que ser la ETIQUETA:
+// al inicio (o tras "Copia de"), o entre separadores (| DEL |). Nunca en medio de una frase.
 export function isDelDoc(n) {
   if (!n || n.node_type === 'folder') return false;
-  const name = n.name || '';
-  return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
+  const name = (n.name || '').trim();
+  if (/documento\s+en\s+limpio/i.test(name)) return true;
+  if (/^(?:[Cc]opia\s+de\s+)?DEL\b/.test(name)) return true;      // empieza con DEL (o "Copia de DEL")
+  if (/[|\-–—]\s*DEL\s*[|\-–—]/.test(name)) return true;          // "… | DEL | …" como etiqueta entre separadores
+  return false;
 }
 
 // El doc de onboarding del cliente (lo crea el Apps Script: "Onboarding Korex y …").

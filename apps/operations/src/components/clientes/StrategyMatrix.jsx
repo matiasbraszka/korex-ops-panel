@@ -260,10 +260,15 @@ function normLabel(v) {
 }
 // El DEL es el documento clave de la estrategia: lleva el acrónimo "DEL" en mayúsculas.
 // El documento clave puede titularse "DEL" (acrónimo en mayúsculas) o "Documento en limpio…".
+// "DEL" tiene que ser la ETIQUETA (al inicio, tras "Copia de", o entre separadores | DEL |),
+// no la preposición "del" de un título todo-mayúsculas (ej. "…LINK DEL VIDEO").
 function isDelDoc(n) {
   if (!n || n.node_type === 'folder') return false;
-  const name = n.name || '';
-  return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
+  const name = (n.name || '').trim();
+  if (/documento\s+en\s+limpio/i.test(name)) return true;
+  if (/^(?:[Cc]opia\s+de\s+)?DEL\b/.test(name)) return true;
+  if (/[|\-–—]\s*DEL\s*[|\-–—]/.test(name)) return true;
+  return false;
 }
 
 // Carpetas de la estrategia (para pickers de material / auto-match), las menos profundas primero.

@@ -37,7 +37,13 @@ function str(v: unknown) { return v === null || v === undefined ? "" : String(v)
 // cliente, lo mantiene vivo el subagente brief-expert). El onboarding y la
 // investigación pasan por CASILLEROS (slot) de cliente, asignados a mano.
 function isDelDoc(name: string): boolean {
-  return /\bDEL\b/.test(name) || /documento\s+en\s+limpio/i.test(name);
+  const n = str(name);
+  if (/documento\s+en\s+limpio/i.test(n)) return true;
+  // "DEL" tiene que ser la ETIQUETA del doc (al inicio, tras "Copia de", o entre separadores
+  // | DEL |), NO la preposición "del" de un título todo-mayúsculas (ej. "…LINK DEL VIDEO").
+  if (/^(?:[Cc]opia\s+de\s+)?DEL\b/.test(n)) return true;
+  if (/[|\-–—]\s*DEL\s*[|\-–—]/.test(n)) return true;
+  return false;
 }
 function isBriefDoc(name: string): boolean {
   return /\bbrief\b/i.test(name) || /personalidad/i.test(name);
