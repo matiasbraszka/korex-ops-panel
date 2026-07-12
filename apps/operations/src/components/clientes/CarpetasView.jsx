@@ -158,6 +158,10 @@ function StrategyBlock({ s, nodes, pages, q, brainSet, onToggleBrain }) {
   const created = s.start_date ? fmtDate(s.start_date) : '';
   // Nombre sin el prefijo "Estrategia #N |" (algunas estrategias viejas lo traen embebido).
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
+  // Etiqueta de tipo (Reclutamiento vs Producto) para diferenciar de un vistazo.
+  const stratType = /\bproducto\b/i.test(s.name || '') ? { label: 'Producto', color: '#15803D', bg: '#E6F7EE' }
+    : /\breclutamiento\b/i.test(s.name || '') ? { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF' }
+    : null;
 
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden">
@@ -167,6 +171,9 @@ function StrategyBlock({ s, nodes, pages, q, brainSet, onToggleBrain }) {
         <span className="flex-1 min-w-0 text-[14px] font-bold truncate" style={{ color: '#1A1D26' }}>
           Estrategia #{num}{cleanName ? <> <span className="text-[#B9C2D6] font-medium">|</span> {cleanName}</> : null}{created ? <> <span className="text-[#B9C2D6] font-medium">|</span> {created}</> : null}
         </span>
+        {stratType && (
+          <span className="text-[11px] font-bold shrink-0 rounded-full py-0.5 px-2.5" style={{ color: stratType.color, background: stratType.bg }}>{stratType.label}</span>
+        )}
         <span className="text-[12px] text-[#8FA0C0] font-bold shrink-0 bg-[#E7EDFB] rounded-lg py-0.5 px-2.5">{topLevel.length}</span>
         {entryNode?.web_url && (
           <span onClick={(e) => { e.stopPropagation(); openUrl(entryNode.web_url); }} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[#2E69E0] text-[12.5px] font-semibold cursor-pointer shrink-0 hover:bg-[#DDE7FB]">

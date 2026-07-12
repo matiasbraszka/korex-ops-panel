@@ -879,6 +879,10 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpd
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
   const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
+  // Etiqueta de tipo (Reclutamiento vs Producto) para diferenciar de un vistazo.
+  const stratType = /\bproducto\b/i.test(s.name || '') ? { label: 'Producto', color: '#15803D', bg: '#E6F7EE', border: '#BBF0D0' }
+    : /\breclutamiento\b/i.test(s.name || '') ? { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF', border: '#C7DBFB' }
+    : null;
   const delText = (docs.find(d => d.doc_kind === 'del')?.text) || '';
   const masterDocs = docs.filter(d => d.doc_kind !== 'extra');
 
@@ -917,6 +921,7 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpd
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-[15px] font-bold text-[#1A1D26]">Estrategia #{num}</span>
             {cleanName && <><span className="text-[#C3C9D4]">·</span><span className="text-[14px] font-semibold text-[#3F4653]">{cleanName}</span></>}
+            {stratType && <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em]" style={{ background: stratType.bg, color: stratType.color, border: `1px solid ${stratType.border}` }}>{stratType.label}</span>}
             <span className="inline-flex items-center gap-1.5 py-0.5 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em]" style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}><span className="w-[6px] h-[6px] rounded-full" style={{ background: st.dot }} />{st.label}</span>
           </div>
         </div>
