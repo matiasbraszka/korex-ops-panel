@@ -699,22 +699,18 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onU
       </div>
       {open && (
         <div className="p-3.5">
-          {docs.filter(d => d.doc_kind !== 'extra').length > 0 && (
-            <div className="mb-3.5">
-              <div className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] mb-2">Documento maestro de la estrategia</div>
-              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-                {docs.filter(d => d.doc_kind !== 'extra').map(d => <ContextDocCard key={d.id} doc={d} />)}
-              </div>
-              <div className="text-[10.5px] text-[#9CA3AF] mt-1.5 flex items-center gap-1"><Sparkles size={11} className="text-[#C79A3E]" />El DEL contiene todos los avatares juntos. A cada avatar vinculale su documento propio, o pegá su parte en la descripción; después el cerebro lo divide solo.</div>
-            </div>
-          )}
-          {/* Recursos de la estrategia — automáticos desde la carpeta "Recursos" del Drive. */}
+          {/* Recursos de la estrategia — el documento maestro (DEL) + las carpetas de "Recursos" del Drive, juntos. */}
           <div className="mb-3.5">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] flex-1">Recursos de la estrategia <span className="text-[#C4C9D2] normal-case font-medium tracking-normal">· los comparten todos los funnels</span></span>
               {recursos && recursos.length > 0 && <span className="text-[10.5px] font-bold shrink-0" style={{ color: recDone === recursos.length ? '#16A34A' : '#A16207' }}>{recDone}/{recursos.length} entregados</span>}
               <button onClick={syncRecursos} disabled={loadingRec} title="Relee la carpeta Recursos del Drive (trae carpetas nuevas). El check lo marcás vos a mano." className="inline-flex items-center gap-1 py-1 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={10} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
             </div>
+            {docs.filter(d => d.doc_kind !== 'extra').length > 0 && (
+              <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                {docs.filter(d => d.doc_kind !== 'extra').map(d => <ContextDocCard key={d.id} doc={d} />)}
+              </div>
+            )}
             {recursos === null ? <div className="text-[11px] text-[#AEB4BF] py-1">Cargando recursos…</div>
               : recursos.length === 0 ? <div className="text-[11px] text-[#AEB4BF] py-1">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar” o revisá la pestaña Carpetas del cliente.</div>
               : <><div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
