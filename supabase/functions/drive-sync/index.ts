@@ -145,15 +145,35 @@ async function postSlack(token: string, channelId: string, text: string): Promis
 
 // ── Apps Script: árbol de una carpeta ─────────────────────────────────────────────
 interface RawNode { id: string; name: string; parentId: string | null; mimeType: string; url: string; modified: string | null; depth: number; isRoot: boolean; }
+// Puente resiliente a Apps Script: reintenta ante blips (timeout/5xx/cold start/no-JSON).
+// Lanza "appscript_unreachable: <motivo>" si sigue caído tras los intentos.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function callAppScript(url: string, payload: Record<string, unknown>, tries = 3, timeoutMs = 120000): Promise<any> {
+  let lastErr = "desconocido";
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok) {
+        const txt = await res.text();
+        try { return JSON.parse(txt); }
+        catch { lastErr = "respuesta no-JSON (deploy/permisos del Apps Script)"; }
+      } else {
+        lastErr = "http " + res.status;
+        if (res.status < 500 && res.status !== 429) break; // 4xx duro: no reintenta
+      }
+    } catch (e) { lastErr = String((e as Error)?.message || e); } // red/timeout: transitorio
+    if (attempt < tries) await new Promise((r) => setTimeout(r, 800 * attempt)); // backoff 0.8s, 1.6s
+  }
+  throw new Error("appscript_unreachable: " + lastErr);
+}
+
 async function fetchTree(url: string, secret: string, folderId: string): Promise<{ nodes: RawNode[]; truncated: boolean }> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret, action: "list_folder_tree", folderId }),
-    signal: AbortSignal.timeout(120000),
-  });
-  if (!res.ok) throw new Error("appscript http " + res.status);
-  const j = await res.json();
+  const j = await callAppScript(url, { secret, action: "list_folder_tree", folderId }); // reintenta; lanza si está caído
   if (!j.ok) throw new Error("appscript: " + (j.error || "unknown"));
   return { nodes: (j.nodes || []) as RawNode[], truncated: !!j.truncated };
 }
@@ -406,15 +426,22 @@ Deno.serve(async (req) => {
 
   const sharedCfg = { appscriptUrl, appscriptSecret, botToken, adminIds, alertsChannel };
   const results: Record<string, unknown>[] = [];
-  let okCount = 0, totalDupes = 0;
+  let okCount = 0, totalDupes = 0, unreachable = 0;
   for (const c of (clients ?? [])) {
     if (!str(c.drive_folder_url)) continue;
     const r = await syncClient(c as { id: string; name: string; drive_folder_url: string; slack_channel_id: string }, sharedCfg);
     if (r.ok) { okCount++; totalDupes += r.dupes || 0; }
+    else if (String(r.error || "").includes("appscript_unreachable")) unreachable++;
     results.push({ client: c.id, ...r });
   }
 
-  return new Response(JSON.stringify({ ok: true, clients: results.length, synced: okCount, new_dupes: totalDupes, results }), {
+  // Apps Script caído (tras reintentos) en ≥1 cliente → un aviso al canal de alertas.
+  if (unreachable > 0) {
+    await postSlack(botToken, alertsChannel,
+      `⚠️ *Drive-sync:* no pude conectar con Apps Script (Google) en ${unreachable} cliente(s) tras reintentar. Suele ser el *deploy o los permisos* del Apps Script (revisar que esté publicado y con acceso). Afecta también al cerebro (lectura de documentos y carpetas).`);
+  }
+
+  return new Response(JSON.stringify({ ok: true, clients: results.length, synced: okCount, new_dupes: totalDupes, appscript_down: unreachable, results }), {
     headers: { ...cors, "Content-Type": "application/json" },
   });
 });
