@@ -309,6 +309,7 @@ function isVslScriptTab(title) {
   const t = (title || '').toLowerCase();
   if (!/\bvsl\b/.test(t)) return false;
   if (/landing|p[áa]gina|pagina|\bweb\b|copy de la|estructura de la p/.test(t)) return false;
+  if (/no usar|no-usar|descartad|deprecad|\bviejo\b|antiguo/.test(t)) return false; // variantes marcadas para no usar
   return true;
 }
 // Prefiere las pestañas que dicen explícitamente "guión/script de VSL"; si no hay,
