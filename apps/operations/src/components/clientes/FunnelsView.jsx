@@ -8,6 +8,7 @@ import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, ArrowRight, Megaphone,
   Check, Trash2, Activity, Zap, Link2, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
+  FolderOpen, Film, FolderPlus,
 } from 'lucide-react';
 import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
@@ -361,6 +362,22 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
 
   const setNeed = (i, patch) => onUpdate(f.id, { visual_resources: needs.map((n, j) => j === i ? { ...n, ...patch } : n) });
   const setAvatar = (id, patch) => onUpdate(f.id, { avatars: avatars.map(a => a.id === id ? { ...a, ...patch } : a) });
+
+  // Crea/ordena las subcarpetas por avatar (Anuncios › Grabaciones|Ediciones › <avatar>) y trae
+  // sus links + si ya tienen archivos (grabado/editado). Escribe los links en cada avatar.
+  const [folding, setFolding] = useState(false);
+  const ensureFolders = async () => {
+    const named = avatars.filter(a => (a.name || '').trim());
+    if (!named.length) { window.alert('Poné el nombre de al menos un avatar antes de crear las carpetas.'); return; }
+    setFolding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id } });
+      if (error || !data?.ok) { window.alert(data?.hint || 'No se pudieron crear las carpetas' + (data?.error ? ` (${data.error})` : '')); return; }
+      const merged = avatars.map(a => { const info = data.byName?.[(a.name || '').trim()]; return info ? { ...a, ...info } : a; });
+      onUpdate(f.id, { avatars: merged });
+    } catch { window.alert('Error creando las carpetas.'); }
+    finally { setFolding(false); }
+  };
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
@@ -446,6 +463,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
               <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
                 <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Users size={14} /></span>
                 <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Variantes de avatar</div><div className="text-[11px] text-[#9CA3AF]">A quién se le publicita · anuncio por avatar</div></div>
+                <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#E7E0FB] rounded-lg bg-[#F8F5FE] text-[#7C3AED] text-[11px] font-semibold cursor-pointer hover:bg-[#F1EBFD] disabled:opacity-50 shrink-0">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
                 <span className="text-[11px] font-bold text-[#7B8190] bg-[#F0F2F5] rounded-lg py-0.5 px-2">{avatars.length}</span>
               </div>
               <div className="p-2">
@@ -467,6 +485,21 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, on
                            <button onClick={() => copyText(av.ad_url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-[26px] border border-[#E7E0FB] rounded-lg cursor-pointer shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Copy size={12} /></button></>
                         : <span className="inline-flex items-center py-1.5 px-2.5 border border-dashed border-[#D7DBE2] rounded-lg bg-white text-[#AEB4BF] text-[11px] font-semibold shrink-0">Sin anuncio</span>}
                     </div>
+                    {/* Carpetas del avatar en Drive: Grabaciones y Ediciones (badge si ya tienen archivos). */}
+                    {(av.rec_folder_url || av.edit_folder_url) && (
+                      <div className="flex items-center gap-1.5 mt-1.5 pl-[40px] flex-wrap">
+                        {av.rec_folder_url && (
+                          <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF5', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
+                            <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />grabado</span> : <span className="text-[#B7BCC6]">vacía</span>}
+                          </button>
+                        )}
+                        {av.edit_folder_url && (
+                          <button onClick={() => openUrl(av.edit_folder_url)} title="Carpeta de ediciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.edit_files > 0 ? { background: '#F4F1FE', color: '#7C3AED', borderColor: '#E7E0FB' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}>
+                            <FolderOpen size={11} />Ediciones{av.edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3} />editado</span> : <span className="text-[#B7BCC6]">vacía</span>}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {/* Descripción del avatar — clic para abrir en grande (nota) y editar cómodo. */}
                     <div className="mt-1.5 pl-[40px]">
                       <div className="flex items-center justify-between mb-1">
