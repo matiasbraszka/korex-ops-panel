@@ -62,13 +62,16 @@ function TreeRow({ row }) {
 }
 
 // Un bloque = una estrategia (definida por su carpeta de Drive).
-function StrategyBlock({ s, nodes, pages, q, brainSet, onToggleBrain }) {
+function StrategyBlock({ s, nodes, pages, q, brainSet, excludeSet, onToggleBrain }) {
   const { updateStrategy } = useApp();
   // Info del botón 🧠 (entra al cerebro) por nodo.
   const brainOf = (n) => {
     if (!isBrainDoc(n)) return { show: false };
     const auto = isBrainAuto(n);
-    return { show: true, active: auto || brainSet.has(n.id), locked: auto, onToggle: () => onToggleBrain(n) };
+    // La exclusión manda: si está excluido, NO está en el cerebro (aunque sea auto por nombre).
+    const active = !excludeSet.has(n.id) && (auto || brainSet.has(n.id));
+    // Ya NO se bloquea: hasta los auto (DEL/onboarding/investigación) se pueden sacar (excluir).
+    return { show: true, active, locked: false, onToggle: () => onToggleBrain(n) };
   };
   const [open, setOpen] = useState(true);
   const [folders, setFolders] = useState(() => new Set());
@@ -221,26 +224,46 @@ export default function CarpetasView({ client }) {
   const [linkModal, setLinkModal] = useState(null);
   const [accView, setAccView] = useState(null);
   const [brainSet, setBrainSet] = useState(() => new Set()); // docs marcados 🧠 (entran al cerebro)
+  const [excludeSet, setExcludeSet] = useState(() => new Set()); // docs EXCLUIDOS a mano del cerebro
 
   const fetchNodes = async () => {
     try {
-      const [rows, pins] = await Promise.all([
+      const [rows, pins, excl] = await Promise.all([
         sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(c.id)}&select=*`),
         sbFetch(`client_brain_pins?client_id=eq.${encodeURIComponent(c.id)}&select=node_id`),
+        sbFetch(`client_brain_excludes?client_id=eq.${encodeURIComponent(c.id)}&select=node_id`),
       ]);
       setNodes(Array.isArray(rows) ? rows : []);
       setBrainSet(new Set((Array.isArray(pins) ? pins : []).map(p => p.node_id)));
+      setExcludeSet(new Set((Array.isArray(excl) ? excl : []).map(p => p.node_id)));
     } catch { setNodes([]); } finally { setLoading(false); }
   };
   useEffect(() => { let alive = true; setLoading(true); (async () => { await fetchNodes(); if (!alive) return; })(); return () => { alive = false; }; /* eslint-disable-next-line */ }, [c.id]);
 
-  // Marcar/desmarcar un documento para el cerebro (tabla client_brain_pins).
+  // Marcar/desmarcar un documento para el cerebro.
+  // - Docs AUTO (DEL/onboarding/investigación por nombre): NO se pueden borrar de Drive, pero SÍ
+  //   se pueden EXCLUIR del cerebro (tabla client_brain_excludes; el sync los saltea). La exclusión
+  //   manda sobre todo lo demás.
+  // - Docs comunes: se marcan/desmarcan con un pin en client_brain_pins.
   const toggleBrain = async (n) => {
-    const on = !brainSet.has(n.id);
-    setBrainSet(prev => { const s = new Set(prev); on ? s.add(n.id) : s.delete(n.id); return s; });
+    const auto = isBrainAuto(n);
+    const excluded = excludeSet.has(n.id);
+    const pinned = brainSet.has(n.id);
+    const active = !excluded && (auto || pinned);
     try {
-      if (on) await supabase.from('client_brain_pins').insert({ client_id: c.id, node_id: n.id, label: n.name || null });
-      else await supabase.from('client_brain_pins').delete().eq('client_id', c.id).eq('node_id', n.id);
+      if (active) {
+        // Sacar del cerebro → EXCLUIR (override universal, sirve para auto y para pineados).
+        setExcludeSet(prev => new Set(prev).add(n.id));
+        await supabase.from('client_brain_excludes').upsert({ client_id: c.id, node_id: n.id, label: n.name || null }, { onConflict: 'client_id,node_id' });
+      } else if (excluded) {
+        // Volver a incluir un doc excluido → quitar la exclusión.
+        setExcludeSet(prev => { const s = new Set(prev); s.delete(n.id); return s; });
+        await supabase.from('client_brain_excludes').delete().eq('client_id', c.id).eq('node_id', n.id);
+      } else {
+        // Doc común no marcado → agregarlo al cerebro con un pin.
+        setBrainSet(prev => new Set(prev).add(n.id));
+        await supabase.from('client_brain_pins').insert({ client_id: c.id, node_id: n.id, label: n.name || null });
+      }
     } catch { fetchNodes(); }
   };
 
@@ -339,7 +362,7 @@ export default function CarpetasView({ client }) {
           </div>
         )}
         {!loading && myStrategies.map(s => (
-          <StrategyBlock key={s.id} s={s} nodes={nodes} pages={pagesByStrategy(s.id)} q={q} brainSet={brainSet} onToggleBrain={toggleBrain} />
+          <StrategyBlock key={s.id} s={s} nodes={nodes} pages={pagesByStrategy(s.id)} q={q} brainSet={brainSet} excludeSet={excludeSet} onToggleBrain={toggleBrain} />
         ))}
       </div>
 

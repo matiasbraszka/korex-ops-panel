@@ -240,6 +240,8 @@ Deno.serve(async (req) => {
     "",
     "VSL: elegí en vsl_section la sección del guión de VSL (el video) que va con el avatar de ESTE funnel. La pestaña puede llamarse por número ('VSL Avatar 1') o por persona/número+persona ('VSL 1 Jonathan', 'VSL Jonathan'): si el avatar de este funnel es una persona, elegí la pestaña de VSL que lleva SU nombre. El guión suele decir al principio a qué avatar apunta. NO uses 'Landing Page VSL' ni 'Landing VSL'. Casi siempre hay VSL para el avatar: no la dejes vacía salvo que realmente no exista.",
     "",
+    "VERSIÓN NUEVA vs VIEJA (MUY IMPORTANTE): si el DEL tiene una sección VIEJA y una NUEVA del mismo tipo (ej. 'Anuncios' y 'Nuevos ads'/'Anuncios nuevos'; 'VSL' y 'VSL nuevo'/'Nueva VSL'), usá SIEMPRE la NUEVA — tanto en ad_sections como en vsl_section. La nueva es la vigente; la vieja quedó de histórico.",
+    "",
     "REGLAS:",
     "- El título (name) debe ser lo MÁS PARECIDO posible a como aparece en el DEL. No inventes.",
     "- Los anuncios (ad_sections) por SIGNIFICADO (ej. 'Ads avatar 1' es del avatar 1).",
@@ -375,7 +377,10 @@ Deno.serve(async (req) => {
     // cambios VSL' → gana 'Guion VSL'). Si tras el filtro queda exactamente una, usala.
     if (!vslScript) {
       const primary = vslTabs.filter((t) => !/sugeren|cambio|nota|idea|an[aá]lisis|retarget|feedback|mejora/i.test(t));
-      if (primary.length === 1) { const c = sectionContent(tabs, primary[0], VSL_BLOCK); if (c) vslScript = c; }
+      // Si hay versión vieja + NUEVA (ej. "VSL" y "VSL nuevo"), gana la NUEVA. Si no, y queda una sola, esa.
+      const nuevos = primary.filter((t) => /nuev[oa]s?/i.test(t));
+      const pick = nuevos.length === 1 ? nuevos[0] : (primary.length === 1 ? primary[0] : null);
+      if (pick) { const c = sectionContent(tabs, pick, VSL_BLOCK); if (c) vslScript = c; }
     }
   }
 

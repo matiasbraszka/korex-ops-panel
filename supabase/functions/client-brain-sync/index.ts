@@ -129,6 +129,11 @@ async function syncClient(
     if (p.slot) slotByNode.set(p.node_id, p.slot); else plainPins.add(p.node_id);
   }
 
+  // Docs EXCLUIDOS del cerebro a mano (aunque el detector por nombre los tome). No se ingieren.
+  const { data: exc } = await supabase
+    .from("client_brain_excludes").select("node_id").eq("client_id", clientId);
+  const excludeSet = new Set<string>((exc ?? []).map((e) => e.node_id));
+
   // Specs vinculadas a un avatar (avatars[].spec_node_id) en los funnels del cliente.
   const { data: strats } = await supabase.from("strategies").select("id").eq("client_id", clientId);
   const stratIds = (strats ?? []).map((s) => s.id);
@@ -146,6 +151,7 @@ async function syncClient(
   // Prioridad: casillero de cliente > DEL (estrategia) > spec de avatar > marca 🧠 (estrategia).
   const desired = new Map<string, { node: typeof nodes[number]; kind: string; scope: string }>();
   for (const n of (nodes ?? [])) {
+    if (excludeSet.has(n.id)) continue; // excluido a mano del cerebro → no se ingiere
     if (slotByNode.has(n.id)) { desired.set(n.id, { node: n, kind: slotByNode.get(n.id)!, scope: "client" }); continue; }
     if (n.node_type === "document" && isBriefDoc(n.name || "")) { desired.set(n.id, { node: n, kind: "briefing", scope: "client" }); continue; }
     if (n.node_type === "document" && isDelDoc(n.name || "")) { desired.set(n.id, { node: n, kind: "del", scope: "strategy" }); continue; }
