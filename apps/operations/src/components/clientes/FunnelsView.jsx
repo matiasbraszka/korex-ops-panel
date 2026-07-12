@@ -653,7 +653,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onDelete, onTrack, onNew }) {
+function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -663,14 +663,29 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
   // Recursos de la estrategia (subcarpetas de "Recursos" en Drive) — los comparten todos los funnels.
   const [recursos, setRecursos] = useState(null);
   const [loadingRec, setLoadingRec] = useState(false);
+  // Marca MANUAL de entregado por carpeta (folder_id -> bool). Si existe, manda sobre files>0.
+  const [overrides, setOverrides] = useState(s.recursos_overrides || {});
+  useEffect(() => { setOverrides(s.recursos_overrides || {}); }, [s.recursos_overrides]);
+  const isDone = useCallback((r) => (r.folder_id in overrides ? !!overrides[r.folder_id] : r.files > 0), [overrides]);
+  const toggleDone = (r) => {
+    const next = { ...overrides, [r.folder_id]: !isDone(r) };
+    setOverrides(next);
+    try { onUpdateStrategy?.(s.id, { recursos_overrides: next }); } catch { /* noop */ }
+  };
+  // Sincronizar = relee el Drive (drive-sync) para que aparezcan carpetas nuevas, y recarga.
   const loadRecursos = useCallback(async () => {
-    setLoadingRec(true);
     try { const { data } = await supabase.rpc('cerebro_recursos', { p_strategy_id: s.id }); setRecursos(data || []); }
     catch { setRecursos([]); }
-    finally { setLoadingRec(false); }
   }, [s.id]);
-  useEffect(() => { if (open) loadRecursos(); }, [open, loadRecursos]);
-  const recDone = (recursos || []).filter(r => r.files > 0).length;
+  const syncRecursos = useCallback(async () => {
+    setLoadingRec(true);
+    try {
+      if (s.client_id) await supabase.functions.invoke('drive-sync', { body: { client_id: s.client_id } });
+      await loadRecursos();
+    } catch { /* noop */ } finally { setLoadingRec(false); }
+  }, [s.client_id, loadRecursos]);
+  useEffect(() => { if (open && recursos === null) loadRecursos(); }, [open, recursos, loadRecursos]);
+  const recDone = (recursos || []).filter(isDone).length;
   return (
     <div className="border border-[#E2E5EB] rounded-xl bg-white overflow-hidden mb-3.5">
       <div className="flex items-center gap-2.5 py-3 px-4" style={{ background: '#FBF5FA', borderBottom: open ? '1px solid #F1E5EE' : 'none' }}>
@@ -698,20 +713,21 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[10px] font-bold tracking-[0.06em] uppercase text-[#9CA3AF] flex-1">Recursos de la estrategia <span className="text-[#C4C9D2] normal-case font-medium tracking-normal">· los comparten todos los funnels</span></span>
               {recursos && recursos.length > 0 && <span className="text-[10.5px] font-bold shrink-0" style={{ color: recDone === recursos.length ? '#16A34A' : '#A16207' }}>{recDone}/{recursos.length} entregados</span>}
-              <button onClick={loadRecursos} disabled={loadingRec} title="Lee la carpeta Recursos del Drive: cada subcarpeta con archivos = entregado." className="inline-flex items-center gap-1 py-1 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={10} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
+              <button onClick={syncRecursos} disabled={loadingRec} title="Relee la carpeta Recursos del Drive (trae carpetas nuevas). El check lo marcás vos a mano." className="inline-flex items-center gap-1 py-1 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0"><RefreshCw size={10} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
             </div>
             {recursos === null ? <div className="text-[11px] text-[#AEB4BF] py-1">Cargando recursos…</div>
-              : recursos.length === 0 ? <div className="text-[11px] text-[#AEB4BF] py-1">No encontré subcarpetas dentro de “Recursos”. Sincronizá las Carpetas del cliente (pestaña Carpetas).</div>
-              : <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
-                  {recursos.map(r => (
-                    <div key={r.folder_id} className="flex items-center gap-2 py-2 px-2.5 border rounded-lg bg-white" style={{ borderColor: r.files > 0 ? '#CDEBD9' : '#E7E9EE' }}>
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0" style={r.files > 0 ? { background: '#16A34A', color: '#fff' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{r.files > 0 && <Check size={12} strokeWidth={3} />}</span>
+              : recursos.length === 0 ? <div className="text-[11px] text-[#AEB4BF] py-1">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar” o revisá la pestaña Carpetas del cliente.</div>
+              : <><div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
+                  {recursos.map(r => { const done = isDone(r); const auto = r.files > 0; return (
+                    <div key={r.folder_id} className="flex items-center gap-2 py-2 px-2.5 border rounded-lg bg-white" style={{ borderColor: done ? '#CDEBD9' : '#E7E9EE' }}>
+                      <button onClick={() => toggleDone(r)} title={done ? 'Marcar como NO entregado' : 'Marcar como entregado'} className="inline-flex items-center justify-center w-5 h-5 rounded-md shrink-0 cursor-pointer p-0" style={done ? { background: '#16A34A', color: '#fff', border: 'none' } : { background: '#fff', border: '1.5px dashed #D7B86A' }}>{done && <Check size={12} strokeWidth={3} />}</button>
                       <span className="flex-1 min-w-0 text-[12px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</span>
-                      <span className="text-[10px] font-bold rounded-md py-0.5 px-1.5 shrink-0" style={r.files > 0 ? { background: '#ECFDF5', color: '#15803D' } : { background: '#F4F5F7', color: '#9CA3AF' }}>{r.files}</span>
+                      <span className="text-[10px] font-bold rounded-md py-0.5 px-1.5 shrink-0" title={`${r.files} archivo${r.files === 1 ? '' : 's'} en la carpeta`} style={auto ? { background: '#ECFDF5', color: '#15803D' } : { background: '#F4F5F7', color: '#9CA3AF' }}>{r.files}</span>
                       {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9CA3AF] hover:text-[#2E69E0] shrink-0"><ExternalLink size={12} /></button>}
                     </div>
-                  ))}
-                </div>}
+                  ); })}
+                </div>
+                <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">El número es lo que hay en la carpeta; el check lo marcás vos (por si el conteo no refleja bien lo entregado).</div></>}
           </div>
           <div className="border border-[#ECEEF2] rounded-xl overflow-hidden">
             <div className="grid items-center py-[10px] px-4 border-b border-[#ECEEF2]" style={{ gridTemplateColumns: GRID, background: '#FAFBFC' }}>
@@ -729,7 +745,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onD
 }
 
 export default function FunnelsView({ clientId }) {
-  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
+  const { clients, strategies, strategyPages, updateStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage } = useApp();
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
   const stratOptions = myStrategies.map(s => ({ id: s.id, label: `Estrategia #${(s.position ?? 0) + 1}` }));
@@ -829,7 +845,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="border border-[#E2E5EB] rounded-xl bg-white flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
 
       {/* Modal nuevo funnel */}
       {modal && (
