@@ -528,7 +528,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     setGen({ status: 'running' });
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, mode },
+        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }

@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
   const clientId = str(body.client_id);
   const strategyId = str(body.strategy_id);
   const funnelId = str(body.funnel_id);
+  const funnelName = str(body.funnel_name);
   const mode = str(body.mode) === "replace" ? "replace" : "append";
   if (!clientId || !funnelId) return j({ ok: false, error: "missing_params" }, 400);
 
@@ -169,7 +170,13 @@ Deno.serve(async (req) => {
   };
   const prompt = [
     "Sos el extractor de avatares del cerebro de Método Korex. Te paso el DEL (documento maestro) de una estrategia.",
-    "Identificá los AVATARES (perfiles de público) y devolvelos con la tool emit_avatars.",
+    `Estás generando los avatares SOLO para UN funnel específico, llamado: «${funnelName || "(sin nombre)"}».`,
+    "Devolvé ÚNICAMENTE el/los avatar(es) del DEL que corresponden a ESTE funnel (no todos los del DEL).",
+    "",
+    "CÓMO ASOCIAR un avatar a este funnel:",
+    "- El NOMBRE del funnel suele describir a un avatar específico (ej. funnel 'Emprendedores' → el avatar de emprendedores).",
+    "- El DEL a veces ROTULA el avatar con su funnel (ej. 'AVATAR 1 Funnel de emprendedores', 'AVATAR 2 Funnel de networkers'). Respetá esa asociación si está.",
+    "- Si un avatar NO corresponde a este funnel, NO lo incluyas. Si ninguno matchea con claridad, devolvé el/los que más se parezcan al nombre del funnel (o vacío si de verdad no hay).",
     "",
     "REGLAS:",
     "- El título (name) debe ser lo MÁS PARECIDO posible a como aparece en el DEL (ej. 'AVATAR 1 - Mujeres'). No inventes.",
