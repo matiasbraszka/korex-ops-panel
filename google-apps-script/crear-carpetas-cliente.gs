@@ -45,6 +45,7 @@ function doPost(e) {
     // Reordenar estrategias/carpetas desde el panel (el cerebro mueve docs entre estrategias).
     if (b.action === 'move_node') return moveNode(b);                    // mueve un archivo/carpeta a otra carpeta
     if (b.action === 'trash_node') return trashNode(b);                  // manda a la papelera un archivo/carpeta
+    if (b.action === 'rename_node') return renameNode(b);                // renombra un archivo/carpeta (ej. tipo de estrategia)
 
     if (b.action === 'read_doc') return readDoc(b);                       // texto de un documento (todas las pestañas)
     if (b.action === 'write_brief') return writeBrief(b);                 // crea/actualiza el brief del cliente
@@ -257,6 +258,20 @@ function trashNode(b) {
   var name = item.getName();
   item.setTrashed(true); // a la papelera (recuperable), no borrado definitivo
   return json({ ok: true, trashed: nodeId, name: name });
+}
+
+// Renombra un archivo o carpeta (ej. corregir el TIPO de una estrategia en el nombre de la
+// carpeta "Estrategia #N | Producto | fecha", que es de donde el panel lee el tipo). { nodeId, newName }
+function renameNode(b) {
+  var nodeId = String(b.nodeId || '').trim();
+  var newName = String(b.newName || '').trim();
+  if (!nodeId || !newName) return json({ ok: false, error: 'missing_params' });
+  var item;
+  try { item = driveNodeById(nodeId); }
+  catch (e) { return json({ ok: false, error: 'node_not_found' }); }
+  var old = item.getName();
+  item.setName(newName);
+  return json({ ok: true, renamed: nodeId, from: old, to: newName });
 }
 
 // ---------- Lectura del TEXTO de un documento (acción 'read_doc') ----------
