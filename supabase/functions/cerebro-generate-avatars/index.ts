@@ -113,7 +113,7 @@ function sliceFragment(content: string, start: string, end: string): string {
   return content.slice(sm.s, sm.s + Math.min(8000, content.length - sm.s)).trim();
 }
 
-interface RawAvatar { name?: string; audience?: string; spec_section?: string; spec_start?: string; spec_end?: string; ad_sections?: string[]; }
+interface RawAvatar { name?: string; audience?: string; spec_section?: string; spec_start?: string; spec_end?: string; ad_sections?: string[]; ad_start?: string; ad_end?: string; }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -194,6 +194,8 @@ Deno.serve(async (req) => {
               spec_start: { type: "string", description: "Las primeras ~12 palabras EXACTAS (copiadas del DEL, con tildes/mayúsculas) donde EMPIEZA el fragmento de ESTE avatar/subavatar dentro de esa sección. Incluí algún dato único (ej. 'AVATAR 2' o 'SUBAVATAR 3') para no confundir con otro." },
               spec_end: { type: "string", description: "Las últimas ~12 palabras EXACTAS donde TERMINA el fragmento de ESTE avatar (justo antes de que empiece el del siguiente avatar)." },
               ad_sections: { type: "array", items: { type: "string" }, description: "Títulos EXACTOS de las secciones con los ANUNCIOS de ESTE avatar (ej. 'Ads avatar 1'). Mapear por significado." },
+              ad_start: { type: "string", description: "Si dentro de la sección de anuncios los anuncios están SEPARADOS por subavatar, las primeras ~10 palabras EXACTAS donde arrancan los anuncios de ESTE subavatar (ej. 'TEXTO BASE PARA SUBAVATAR 2'). Vacío si los anuncios son comunes/no distinguidos." },
+              ad_end: { type: "string", description: "Las últimas ~10 palabras EXACTAS donde terminan los anuncios de ESTE subavatar (justo antes del siguiente). Vacío si son comunes." },
             },
             required: ["name", "audience", "spec_section", "ad_sections"],
           },
@@ -216,7 +218,8 @@ Deno.serve(async (req) => {
     "FRAGMENTO EXACTO (clave): la sección de descripción (ej. 'Avatares') suele traer VARIOS avatares uno tras otro. NO devuelvas la hoja entera.",
     "Para cada avatar indicá spec_section + spec_start (primeras ~12 palabras EXACTAS donde arranca SU parte, incluyendo algo único como 'AVATAR 2') + spec_end (últimas ~12 palabras EXACTAS donde termina SU parte, antes del siguiente avatar). El sistema corta ese pedazo TAL CUAL. Copiá las palabras EXACTAS del DEL (con tildes y mayúsculas).",
     "",
-    "SUBAVATARES (IMPORTANTE): si el avatar de este funnel tiene SUB-AVATARES o variantes explícitas (ej. 'SUBAVATAR 1 — 35 a 54 años · …', 'SUBAVATAR 2 — …', o variantes por perfil/edad), devolvé UN AVATAR POR CADA SUBAVATAR (no lo colapses en uno solo). Para cada subavatar: name que lo distinga (ej. 'AVATAR 1 · Subavatar 1 — 35-54'); audience = su segmentación específica; spec_start/spec_end = el fragmento ESPECÍFICO de ESE subavatar (desde su encabezado 'SUBAVATAR N …' hasta justo antes del siguiente subavatar). Los ad_sections y vsl_section suelen ser los mismos del avatar padre.",
+    "SUBAVATARES (IMPORTANTE): si el avatar de este funnel tiene SUB-AVATARES o variantes explícitas (ej. 'SUBAVATAR 1 — 35 a 54 años · …', 'SUBAVATAR 2 — …', o variantes por perfil/edad), devolvé UN AVATAR POR CADA SUBAVATAR (no lo colapses en uno solo). Para cada subavatar: name que lo distinga (ej. 'AVATAR 1 · Subavatar 1 — 35-54'); audience = su segmentación específica; spec_start/spec_end = el fragmento ESPECÍFICO de ESE subavatar (desde su encabezado 'SUBAVATAR N …' hasta justo antes del siguiente subavatar).",
+    "ANUNCIOS POR SUBAVATAR: la sección de anuncios (ej. 'Ads avatar 1') MUCHAS VECES separa los anuncios por subavatar (ej. 'Titulares para SUBAVATAR 2', 'TEXTO BASE PARA SUBAVATAR 3'). Si es así, para cada subavatar poné ad_sections con esa hoja Y ad_start/ad_end para cortar SOLO los anuncios de ESE subavatar. Esto vale TAMBIÉN para el PRIMER subavatar: poné su ad_start (inicio de SUS anuncios) y ad_end (justo antes de los del siguiente, ej. 'Titulares para SUBAVATAR 2') para que NO se lleve los de todos. Solo si los anuncios son de verdad COMUNES (no separados por subavatar), dejá ad_start/ad_end vacíos.",
     "",
     "VSL: elegí en vsl_section la sección del guión de VSL (el video) que va con el avatar de ESTE funnel (ej. 'VSL Avatar 1'). El guión suele decir al principio a qué avatar apunta. Distintos funnels casi siempre tienen VSL distinta. NO uses la 'Landing Page VSL'.",
     "",
@@ -287,7 +290,13 @@ Deno.serve(async (req) => {
   const built = raw.map((a) => {
     const secContent = sectionContent(tabs, str(a.spec_section), LANDING_RE); // spec nunca de landing/vsl
     const spec = sliceFragment(secContent, str(a.spec_start), str(a.spec_end));
-    const ad = pullSections(tabs, a.ad_sections || [], LANDING_RE);
+    // Anuncios: toda la sección; o el fragmento del subavatar si la IA marcó anclas (ad_start/ad_end).
+    let ad = pullSections(tabs, a.ad_sections || [], LANDING_RE);
+    if (str(a.ad_start)) {
+      const adRaw = (a.ad_sections || []).map((t) => sectionContent(tabs, t, LANDING_RE)).filter(Boolean).join("\n\n");
+      const cut = sliceFragment(adRaw, str(a.ad_start), str(a.ad_end));
+      if (cut) ad = cut;
+    }
     return {
       id: rid(),
       name: str(a.name),
