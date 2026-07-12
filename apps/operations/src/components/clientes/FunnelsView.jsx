@@ -449,22 +449,23 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
     onSave: (t) => { onUpdate(f.id, { vsl_script: t || null }); setNote(null); },
   });
 
-  // Semi-automático: completa de UNA el guión del VSL + los copys de cada avatar, si están en el DEL.
-  // Solo escribe lo que encuentra; si algo ya estaba cargado, pide confirmación antes de reemplazar.
+  // Sincronización semi-automática (manual, con confirmación): trae el guión desde el DEL.
   const [pulling, setPulling] = useState(false);
-  const pullAllScripts = () => {
+  const pullVslOnly = () => {
     if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia.'); return; }
     const vsl = pullVslScript(delText);
+    if (!vsl) { window.alert('No encontré la sección VSL en el DEL (revisá que tenga la pestaña VSL y esté sincronizado).'); return; }
+    if (f.vsl_script && !window.confirm('Ya hay un guión de VSL cargado. ¿Reemplazarlo con el del DEL?')) return;
+    onUpdate(f.id, { vsl_script: vsl });
+  };
+  const pullAllAds = () => {
+    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia.'); return; }
     const nextAvatars = avatars.map((a, i) => { const ad = pullAdScript(delText, i + 1); return ad ? { ...a, ad_script: ad } : a; });
-    const foundAds = nextAvatars.filter((a, i) => a.ad_script && a.ad_script !== (avatars[i].ad_script || null)).length;
-    if (!vsl && !foundAds) { window.alert('No encontré guiones en el DEL (revisá que tenga las pestañas VSL / Ads y esté sincronizado).'); return; }
-    const overwriting = (vsl && f.vsl_script) || avatars.some((a, i) => a.ad_script && nextAvatars[i].ad_script && nextAvatars[i].ad_script !== a.ad_script);
-    if (overwriting && !window.confirm('Ya hay guiones cargados. ¿Reemplazarlos con lo que está hoy en el DEL?')) return;
-    setPulling(true);
-    const patch = { avatars: nextAvatars };
-    if (vsl) patch.vsl_script = vsl;
-    onUpdate(f.id, patch);
-    setTimeout(() => setPulling(false), 400);
+    const changed = nextAvatars.some((a, i) => a.ad_script && a.ad_script !== (avatars[i].ad_script || null));
+    if (!changed) { window.alert('No encontré copys de anuncios en el DEL (revisá las pestañas Ads y que esté sincronizado).'); return; }
+    const overwriting = avatars.some((a, i) => a.ad_script && nextAvatars[i].ad_script && nextAvatars[i].ad_script !== a.ad_script);
+    if (overwriting && !window.confirm('Algunos avatares ya tienen copys. ¿Reemplazarlos con lo del DEL?')) return;
+    setPulling(true); onUpdate(f.id, { avatars: nextAvatars }); setTimeout(() => setPulling(false), 400);
   };
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
@@ -537,17 +538,25 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
             <div className="text-[10.5px] text-[#AEB4BF] mt-1.5">Pegá o editá y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
             {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
             <div className="mt-2.5 pt-2.5 border-t border-[#F0F2F5]">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="flex items-center gap-1.5 text-[11px] font-bold flex-1" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal">· 1 por funnel</span></span>
-                <button onClick={openVslScript} title="Ver/editar el guión del VSL. Podés traerlo del DEL." className="inline-flex items-center gap-1 py-1 px-2 border rounded-md text-[10.5px] font-semibold cursor-pointer shrink-0" style={f.vsl_script ? { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#D5E1FF' } : { background: '#fff', color: '#9CA3AF', borderColor: '#E5E8EC' }}><FileText size={11} />Guión{f.vsl_script ? <Check size={10} strokeWidth={3} /> : ' · vacío'}</button>
-              </div>
+              <span className="flex items-center gap-1.5 text-[11px] font-bold mb-1.5" style={{ color: '#16A34A' }}><Clapperboard size={12} />VSL del funnel <span className="text-[#9CA3AF] font-normal">· 1 por funnel</span></span>
               <div className="flex items-center gap-1.5">
                 <input defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
                 {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
                   <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#CFEBD9] rounded-lg cursor-pointer shrink-0" style={{ background: '#EAF7EF', color: '#16A34A' }}><Copy size={12} /></button></>}
               </div>
-              {/* Semi-automático: completa VSL + copys de todos los avatares desde el DEL de un click. */}
-              <button onClick={pullAllScripts} disabled={pulling} title="Completa el guión del VSL y los copys de anuncios de todos los avatares desde el DEL (si están cargados). Revisás y editás después." className="inline-flex items-center gap-1.5 mt-2 py-2 px-3 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50">{pulling ? <RefreshCw size={13} className="animate-spin" /> : <FileText size={13} />}{pulling ? 'Trayendo…' : 'Traer guiones del DEL (VSL + copys de anuncios)'}</button>
+              {/* Guión del VSL — preview estilo descripción del avatar + sync minimalista debajo. */}
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#16A34A' }}><FileText size={11} />Guión del VSL</span>
+                  <button onClick={openVslScript} className="inline-flex items-center gap-1 text-[10.5px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color: '#16A34A' }}><Maximize2 size={11} />Ampliar / editar</button>
+                </div>
+                <button onClick={openVslScript} className="w-full text-left py-1.5 px-2.5 border border-[#E2E5EB] rounded-lg bg-white cursor-pointer hover:border-[#16A34A] transition-colors">
+                  <div className="text-[11.5px] text-[#4B5563] leading-relaxed whitespace-pre-wrap" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {f.vsl_script ? f.vsl_script.slice(0, 260) + (f.vsl_script.length > 260 ? '…' : '') : <span className="text-[#AEB4BF]">Sin guión. Clic para escribir, o traelo del DEL con el botón de abajo.</span>}
+                  </div>
+                </button>
+                <button onClick={pullVslOnly} title="Trae/actualiza el guión del VSL desde el DEL. Lo revisás y editás después." className="inline-flex items-center gap-1 mt-1 py-1 bg-transparent border-none cursor-pointer text-[10.5px] font-semibold hover:underline" style={{ color: '#2E69E0' }}><RefreshCw size={10} />Traer / sincronizar del DEL</button>
+              </div>
             </div>
           </div>
           <div className="grid gap-3.5 items-start" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
@@ -556,6 +565,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], stages, delText = ''
               <div className="flex items-center gap-2.5 py-3 px-3.5 border-b border-[#F0F2F5]">
                 <span className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-[7px] shrink-0" style={{ background: '#F4F1FE', color: '#7C3AED' }}><Users size={14} /></span>
                 <div className="flex-1"><div className="text-[12.5px] font-bold text-[#1A1D26]">Variantes de avatar</div><div className="text-[11px] text-[#9CA3AF]">A quién se le publicita · anuncio por avatar</div></div>
+                {avatars.length > 0 && <button onClick={pullAllAds} disabled={pulling} title="Trae los copys de anuncios de TODOS los avatares desde el DEL (si están). Revisás y editás después." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#DCE3FF] rounded-lg bg-[#F5F7FF] text-[#2E69E0] text-[10.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF] disabled:opacity-50 shrink-0">{pulling ? <RefreshCw size={11} className="animate-spin" /> : <FileText size={11} />}Traer copys del DEL</button>}
                 {namedAvatars.length > 0 && (foldersReady
                   ? <button onClick={ensureFolders} disabled={folding} title="Carpetas por avatar ya creadas. Clic para actualizar su estado (grabado/editado)." className="inline-flex items-center gap-1 py-1.5 px-2 border border-[#E7E9ED] rounded-lg bg-white text-[#9CA3AF] text-[10.5px] font-semibold cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50 shrink-0"><RefreshCw size={11} className={folding ? 'animate-spin' : ''} />{folding ? 'Actualizando…' : 'Carpetas ✓'}</button>
                   : <button onClick={ensureFolders} disabled={folding} title="Crea/ordena en el Drive: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 border border-[#E7E0FB] rounded-lg bg-[#F8F5FE] text-[#7C3AED] text-[11px] font-semibold cursor-pointer hover:bg-[#F1EBFD] disabled:opacity-50 shrink-0">{folding ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folding ? 'Ordenando…' : 'Ordenar carpetas'}</button>
