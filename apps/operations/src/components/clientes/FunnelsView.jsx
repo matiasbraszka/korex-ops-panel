@@ -7,7 +7,7 @@ import { sbFetch, supabase } from '@korex/db';
 import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, ArrowRight, Megaphone,
   Check, Trash2, Activity, Zap, Link2, Globe, Rocket, Clapperboard,
-  Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2,
+  Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
 } from 'lucide-react';
 import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
@@ -308,7 +308,39 @@ function AvatarNoteModal({ av, onClose, onSave }) {
   );
 }
 
-function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, onTrack }) {
+// Semáforo del pipeline Korex por funnel (gates duros: cerebro_pipeline_status).
+// Estados: listo (verde) · pendiente/generable (ámbar) · bloqueado (gris, candado).
+const STAGE_SHORT = { estrategia: 'Estrategia', del: 'DEL', avatares: 'Avatares', vsl: 'VSL', anuncios: 'Anuncios', landing: 'Landing' };
+const GATE_STYLE = {
+  listo: { dot: '#16A34A', bg: '#ECFDF5', color: '#15803D', border: '#C7EBD4' },
+  pendiente: { dot: '#CA8A04', bg: '#FEF9E7', color: '#A16207', border: '#F1E3B0' },
+  bloqueado: { dot: '#B0B6C0', bg: '#F4F5F7', color: '#9CA3AF', border: '#E7E9ED' },
+};
+function PipelineSemaforo({ stages }) {
+  if (!stages || !stages.length) return null;
+  const firstPend = stages.find(s => s.status === 'pendiente');
+  return (
+    <div className="flex items-center gap-1 flex-wrap py-2 px-4 pl-[19px] border-t border-[#F2F3F6]" style={{ background: '#FCFCFD' }}>
+      <span className="text-[9px] font-bold uppercase tracking-[0.09em] text-[#B7BCC6] mr-1 shrink-0">Pipeline</span>
+      {stages.map((s, i) => {
+        const g = GATE_STYLE[s.status] || GATE_STYLE.bloqueado;
+        const isNext = firstPend && s.stage === firstPend.stage;
+        return (
+          <span key={s.stage} className="inline-flex items-center">
+            <span title={`${s.stage_label} — ${s.detail}`} className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10.5px] font-semibold cursor-default" style={{ background: g.bg, color: g.color, border: `1px solid ${isNext ? '#E8B93E' : g.border}`, boxShadow: isNext ? '0 0 0 1px #F1E3B0' : 'none' }}>
+              {s.status === 'bloqueado' ? <Lock size={9} strokeWidth={2.4} /> : <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: g.dot }} />}
+              {STAGE_SHORT[s.stage] || s.stage_label}
+              {isNext && <span className="text-[8.5px] font-bold ml-0.5" style={{ color: '#B8860B' }}>· próximo</span>}
+            </span>
+            {i < stages.length - 1 && <ChevronRight size={11} className="text-[#D8DCE3] mx-px shrink-0" strokeWidth={2.4} />}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function FunnelRow({ f, strategyName, strategyOptions = [], stages, onUpdate, onDelete, onTrack }) {
   const [noteAvatar, setNoteAvatar] = useState(null);
   const [open, setOpen] = useState(false);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
@@ -371,6 +403,8 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
         <div className="text-[12px] text-[#6B7280]">{f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-AR') : '—'}</div>
         <div className="flex justify-end"><ChevronDown size={16} className="text-[#B0B6C0] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }} /></div>
       </div>
+
+      <PipelineSemaforo stages={stages} />
 
       {open && (
         <div className="py-1 px-4 pb-[18px] pl-[19px]" style={{ background: '#FCFCFD' }}>
@@ -487,7 +521,7 @@ function FunnelRow({ f, strategyName, strategyOptions = [], onUpdate, onDelete, 
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onTrack, onNew }) {
+function StrategyGroup({ s, funnels, docs, stratOptions, pipeline, onUpdate, onDelete, onTrack, onNew }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -520,7 +554,7 @@ function StrategyGroup({ s, funnels, docs, stratOptions, onUpdate, onDelete, onT
             </div>
             {funnels.length === 0
               ? <div className="text-[12px] text-[#9CA3AF] py-6 text-center">Sin funnels en esta estrategia.</div>
-              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} />)}
+              : funnels.map(f => <FunnelRow key={f.id} f={f} strategyName={`Estrategia #${num}`} strategyOptions={stratOptions} stages={pipeline?.[f.id]} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} />)}
           </div>
           <button onClick={() => onNew(s.id)} className="inline-flex items-center gap-1.5 mt-2.5 py-2 px-3 border border-dashed border-[#D0D5DD] rounded-lg bg-white text-[#5B7CF5] text-[12px] font-semibold cursor-pointer hover:bg-[#F5F7FF] hover:border-blue"><Plus size={13} />Nuevo funnel en esta estrategia</button>
         </div>
@@ -557,6 +591,20 @@ export default function FunnelsView({ clientId }) {
     } catch { /* noop */ }
   }, [clientId]);
   useEffect(() => { fetchContext(); }, [fetchContext]);
+
+  // Semáforo del pipeline (gates duros) por funnel, calculado por la base.
+  const [pipeline, setPipeline] = useState({});
+  const loadPipeline = useCallback(async () => {
+    try {
+      const { data } = await supabase.rpc('cerebro_pipeline_status', { p_client_id: clientId });
+      const byFunnel = {};
+      for (const r of (data || [])) (byFunnel[r.funnel_id] ||= []).push(r);
+      for (const k in byFunnel) byFunnel[k].sort((a, b) => a.ord - b.ord);
+      setPipeline(byFunnel);
+    } catch { /* noop */ }
+  }, [clientId]);
+  useEffect(() => { loadPipeline(); }, [loadPipeline, docs, strategyPages, strategies]);
+
   const docsByNode = useMemo(() => { const m = {}; for (const d of docs) m[d.node_id] = d; return m; }, [docs]);
   const docsOf = (sid) => docs.filter(d => d.strategy_id === sid);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
@@ -617,7 +665,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="border border-[#E2E5EB] rounded-xl bg-white flex flex-col items-center justify-center text-center py-12 px-5 gap-2"><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} stratOptions={stratOptions} pipeline={pipeline} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} />)}
 
       {/* Modal nuevo funnel */}
       {modal && (
