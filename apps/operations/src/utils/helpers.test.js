@@ -375,17 +375,23 @@ describe('isReviewerOf (revisor ve la tarea solo en-revisión)', () => {
   });
 });
 
-describe('userSeesTask (responsable o revisor en-revisión)', () => {
+describe('userSeesTask (responsable, creador o revisor)', () => {
   const rev = { id: 'u9', name: 'Matías Braszka' };
   it('el responsable siempre la ve', () => {
     expect(userSeesTask({ assignee: 'Matias Braszka', status: 'backlog' }, rev)).toBe(true);
   });
-  it('el revisor la ve solo cuando está en-revisión', () => {
+  it('el revisor la ve en cualquier estado (para modificársela a la otra persona)', () => {
     expect(userSeesTask({ assignee: 'Ana', reviewer: 'Matías Braszka', status: 'en-revision' }, rev)).toBe(true);
-    expect(userSeesTask({ assignee: 'Ana', reviewer: 'Matías Braszka', status: 'in-progress' }, rev)).toBe(false);
+    expect(userSeesTask({ assignee: 'Ana', reviewer: 'Matías Braszka', status: 'in-progress' }, rev)).toBe(true);
+    expect(userSeesTask({ assignee: 'Ana', reviewer: 'Matías Braszka', status: 'backlog' }, rev)).toBe(true);
+  });
+  it('el creador la ve aunque se la asigne a otra persona', () => {
+    expect(userSeesTask({ assignee: 'Ana', createdBy: 'u9', status: 'backlog' }, rev)).toBe(true);
+    expect(userSeesTask({ assignee: 'Ana', createdBy: 'otro', status: 'backlog' }, rev)).toBe(false);
   });
   it('sin relación, no la ve', () => {
     expect(userSeesTask({ assignee: 'Ana', reviewer: 'Pedro', status: 'en-revision' }, rev)).toBe(false);
+    expect(userSeesTask({ assignee: 'Ana', status: 'backlog' }, rev)).toBe(false);
   });
 });
 

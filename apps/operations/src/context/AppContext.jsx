@@ -327,6 +327,7 @@ export function AppProvider({ children }) {
       sprint_events: Array.isArray(t.sprintEvents) ? t.sprintEvents : [],
       status_history: Array.isArray(t.statusHistory) ? t.statusHistory : [],
       last_actor_id: currentUserIdRef.current,
+      created_by: t.createdBy || null,
     };
     // Anti-bucle: si este MISMO payload ya se mandó para esta tarea hace <4s, lo
     // coalescemos (no reenviamos). Corta en seco cualquier re-render en loop sin
@@ -450,6 +451,7 @@ export function AppProvider({ children }) {
         sprint_events: Array.isArray(t.sprintEvents) ? t.sprintEvents : [],
         status_history: Array.isArray(t.statusHistory) ? t.statusHistory : [],
         last_actor_id: currentUserIdRef.current,
+        created_by: t.createdBy || null,
       }));
       for (let i = 0; i < taskRows.length; i += 20) {
         const batch = taskRows.slice(i, i + 20);
@@ -684,6 +686,9 @@ export function AppProvider({ children }) {
   const createTask = useCallback((title, clientId, assignee, priority, status, notes, stepIdx, phase) => {
     const t = mkTask(title, clientId, assignee, priority, status, notes, stepIdx);
     if (phase) t.phase = phase; // crear ya con su objetivo/fase (sin paso intermedio)
+    // Quién la creó: estable, no cambia al editar. Habilita que el creador siga
+    // viendo la tarea aunque se la asigne a otra persona (visibilidad acotada).
+    t.createdBy = currentUserIdRef.current || null;
     // Área automática según el responsable (si no viene una y hay responsable).
     if (assignee && !t.department) {
       const dep = departmentForAssignee(assignee, teamMembersRef.current);
@@ -2126,7 +2131,7 @@ export function AppProvider({ children }) {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
       const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,drive_folder_url,contract_signer_email,korex_code';
-      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history';
+      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,created_by';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
         // order=created_at.DESC: si algún día se supera el límite, se descartan
@@ -2360,6 +2365,7 @@ export function AppProvider({ children }) {
           sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : [],
           sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : [],
           statusHistory: Array.isArray(t.status_history) ? t.status_history : [],
+          createdBy: t.created_by || null,
         }));
 
         // Backfill: normalizar startedDate usando createdDate como aproximaci\u00f3n.
@@ -2456,7 +2462,7 @@ export function AppProvider({ children }) {
       // tareas nuevas detectadas por el poll lleguen completas (con phase,
       // depends_on, due_date, etc.). Si solo trajéramos un subset, una tarea
       // nueva se agregaría sin fase y caería en "Sin fase" en el roadmap.
-      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,updated_at';
+      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,updated_at,created_by';
       const remoteTasks = await sbFetch('tasks?select=' + POLL_TASK_COLS + '&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
       // Refrescar sprints en el mismo poll (livianito: lista corta).
       loadSprints();
@@ -2488,6 +2494,7 @@ export function AppProvider({ children }) {
         sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : [],
         sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : [],
         statusHistory: Array.isArray(t.status_history) ? t.status_history : [],
+        createdBy: t.created_by || null,
       });
 
       setTasks(prev => {

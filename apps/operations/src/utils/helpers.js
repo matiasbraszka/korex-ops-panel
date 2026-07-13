@@ -397,16 +397,28 @@ export function isReviewerOf(task, filter) {
 }
 
 /**
- * userSeesTask: ¿el usuario ve la tarea en su tablero? Es responsable, O es el
- * revisor y la tarea está en revisión (para poder validarla). Se usa donde la
- * visibilidad de un no-admin hoy usa `userOwnsTask` en el tablero de tareas, así
- * el revisor no-admin ve la tarea justo cuando le toca revisarla.
+ * userCreatedTask: ¿la tarea la creó el usuario actual? Se compara contra
+ * `createdBy` (id de team_members que quedó grabado al crearla). Permite que
+ * cualquiera cree tareas para otra persona y las meta al sprint sin perderlas de
+ * vista. Las tareas viejas sin `createdBy` devuelven false (no rompe nada).
+ */
+export function userCreatedTask(task, currentUser) {
+  if (!task?.createdBy || !currentUser?.id) return false;
+  return String(task.createdBy) === String(currentUser.id);
+}
+
+/**
+ * userSeesTask: ¿el usuario ve la tarea en su tablero? La ve si:
+ *  - es el RESPONSABLE (userOwnsTask), o
+ *  - la CREÓ él (userCreatedTask), aunque sea de otra persona, o
+ *  - es el REVISOR (en cualquier estado), para poder modificársela a la otra
+ *    persona cuando quiera (no solo mientras está "en-revisión").
+ * Se usa como filtro de visibilidad de los no-admin en el tablero de tareas.
  */
 export function userSeesTask(task, currentUser, teamMembers = []) {
   if (userOwnsTask(task, currentUser, teamMembers)) return true;
-  if (task?.status === 'en-revision' && task?.reviewer) {
-    return userOwnsTask({ assignee: task.reviewer }, currentUser, teamMembers);
-  }
+  if (userCreatedTask(task, currentUser)) return true;
+  if (task?.reviewer && userOwnsTask({ assignee: task.reviewer }, currentUser, teamMembers)) return true;
   return false;
 }
 
@@ -629,6 +641,7 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     startedDate: null, completedDate: null, blockedSince: null, dueDate: null,
     definitionOfDone: '', acceptanceCriteria: [], reviewer: null,
     validatedBy: null, validatedAt: null, sprintHistory: [], statusHistory: [],
+    createdBy: null,
   };
 }
 
