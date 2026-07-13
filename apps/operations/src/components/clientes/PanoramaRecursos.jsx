@@ -22,16 +22,26 @@ function Have({ ok, count }) {
   );
 }
 
-// Tracking: 3 chips compactos (Pixel / Clarity / Eventos), verde si está, gris si falta.
+// Indicador ✓/✗ compacto (por funnel), entra en una fila de 18px alineada con el funnel.
+function CellDot({ ok }) {
+  return (
+    <span title={ok ? 'sí' : 'falta'} className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full shrink-0"
+      style={ok ? { background: '#E6F7EE', color: '#15803D' } : { background: '#FDECEC', color: '#DC2626' }}>
+      {ok ? <Check size={11} strokeWidth={3.5} /> : <X size={11} strokeWidth={3} />}
+    </span>
+  );
+}
+
+// Tracking por funnel: 3 chips compactos P/C/E (Pixel / Clarity / Eventos), verde si está, gris si falta.
 function TrackDots({ pixel, clarity, eventos }) {
   const items = [['P', 'Pixel de Meta', pixel], ['C', 'Microsoft Clarity', clarity], ['E', 'Eventos de conversión', eventos]];
   return (
     <div className="flex items-center gap-1">
       {items.map(([letra, label, ok]) => (
         <span key={letra} title={`${label}: ${ok ? 'sí' : 'falta'}`}
-          className="inline-flex items-center gap-0.5 py-0.5 px-1.5 rounded-md text-[10px] font-bold"
+          className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-md text-[10px] font-bold leading-none"
           style={ok ? { background: '#E6F7EE', color: '#15803D' } : { background: '#F1F3F7', color: '#B4BAC6' }}>
-          {letra}{ok ? <Check size={9} strokeWidth={3.5} /> : <X size={9} strokeWidth={3} />}
+          {letra}
         </span>
       ))}
     </div>
@@ -197,14 +207,26 @@ export default function PanoramaRecursos() {
                         ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#E6F7EE', color: '#15803D' }}><Link2 size={11} strokeWidth={3} />Vinculado</span>
                         : <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#FDECEC', color: '#DC2626' }}><X size={11} strokeWidth={3} />Falta</span>}
                     </td>
-                    {/* ≥1 avatar cargado */}
-                    <td className={tdBase} style={st}><Have ok={!!e.tiene_avatar} /></td>
-                    {/* VSL guionado (guión escrito) */}
-                    <td className={tdBase} style={st}><Have ok={!!e.vsl_guionado} /></td>
-                    {/* VSL editado (link del video ya editado) */}
-                    <td className={tdBase} style={st}><Have ok={!!e.vsl_editado} /></td>
-                    {/* Tracking: pixel / clarity / eventos */}
-                    <td className={tdBase} style={st}><TrackDots pixel={!!e.tiene_pixel} clarity={!!e.tiene_clarity} eventos={!!e.tiene_eventos} /></td>
+                    {/* Avatar — por funnel (alineado con cada funnel) */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.tiene_avatar} /></div>))}</div>}
+                    </td>
+                    {/* VSL guión — por funnel */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.vsl_guionado} /></div>))}</div>}
+                    </td>
+                    {/* VSL editado — por funnel */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.vsl_editado} /></div>))}</div>}
+                    </td>
+                    {/* Tracking (P/C/E) — por funnel */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><TrackDots pixel={!!f.tiene_pixel} clarity={!!f.tiene_clarity} eventos={!!f.tiene_eventos} /></div>))}</div>}
+                    </td>
                     {/* Funnels */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0
@@ -243,7 +265,7 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
         <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = detectado y leído por el cerebro.</span>
         <span className="inline-flex items-center gap-1"><b>Avatar</b> = al menos 1 avatar cargado · <b>VSL guión</b> = guión escrito · <b>VSL editado</b> = link del video listo · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
-        <span className="inline-flex items-center gap-1"><Layers size={12} />Nicho y recursos son del cliente (una vez); avatar/VSL/tracking son por estrategia (✓ si al menos un funnel lo tiene).</span>
+        <span className="inline-flex items-center gap-1"><Layers size={12} />Nicho y recursos son del cliente (una vez); Avatar/VSL/Tracking son por FUNNEL, alineados con cada funnel de la columna.</span>
       </div>
     </div>
   );
