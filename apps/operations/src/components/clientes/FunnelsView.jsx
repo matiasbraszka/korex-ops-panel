@@ -1057,6 +1057,26 @@ export default function FunnelsView({ clientId }) {
   };
   const saveTrack = (val) => { updateStrategyPage(trackFunnel.id, { pixel_code: val.pixel_code || null, clarity_id: val.clarity_id || null, conversion_events: val.events }); setTrackFunnel(null); };
 
+  // ── Briefing / Personalidad: el equipo escribe el brief del cliente → se guarda como Google Doc,
+  //    se ingiere al cerebro y se fija SOLO en el casillero "Briefing · Personalidad" de arriba.
+  const [briefModal, setBriefModal] = useState(false);
+  const [briefText, setBriefText] = useState('');
+  const [briefBusy, setBriefBusy] = useState(false);
+  const openBrief = () => { setBriefText((docs.find(d => d.doc_kind === 'briefing')?.text) || ''); setBriefModal(true); };
+  const saveBrief = async () => {
+    if (!briefText.trim()) return;
+    setBriefBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('save-brief', { body: { client_id: clientId, content: briefText } });
+      let payload = data;
+      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
+      if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude guardar el briefing.'); return; }
+      setBriefModal(false);
+      await fetchContext();
+    } catch (e) { window.alert(String(e?.message || e)); }
+    finally { setBriefBusy(false); }
+  };
+
   // ── Agregar estrategia: crea en el Drive la carpeta "Estrategia #N | Tipo | fecha" con el
   //    esqueleto estándar (Anuncios/VSL/Recursos/…) + un DEL en blanco, y la trae al panel.
   const [stratModal, setStratModal] = useState(false);
@@ -1108,7 +1128,10 @@ export default function FunnelsView({ clientId }) {
           </div>
 
           {/* Documentos */}
-          <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Documentos del cliente</div>
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+            <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4]">Documentos del cliente</span>
+            <button onClick={openBrief} title="Escribir/actualizar el briefing y la personalidad del cliente; se fija solo en su casillero" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border text-[11.5px] font-semibold cursor-pointer hover:bg-[#FDF2F8]" style={{ color: '#DB2777', borderColor: '#F5C2DD', background: '#fff' }}><Brain size={13} />Escribir briefing / personalidad</button>
+          </div>
           <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
           <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-3.5"><RefreshCw size={13} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
 
@@ -1209,6 +1232,23 @@ export default function FunnelsView({ clientId }) {
               <div className="text-[13px] font-bold text-[#1A1D26] mt-1">Estrategia #{nextStratN} | {stratTipoFinal} | (hoy)</div>
               <div className="text-[11px] text-[#9098A4] mt-1.5 leading-relaxed">…con las subcarpetas estándar (Anuncios, Estrategia, VSL, Mural, Auditorías, Otros) y una copia del DEL en blanco. Los Recursos (branding, testimonios, imágenes) son del cliente y se comparten con todas las estrategias.</div>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal briefing / personalidad del cliente */}
+      {briefModal && (
+        <Modal open={briefModal} onClose={() => setBriefModal(false)} title="Briefing y personalidad del cliente" maxWidth={720}
+          footer={<div className="flex justify-between items-center gap-2 w-full">
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[#9098A4] font-medium"><Brain size={13} />Se guarda como Google Doc, lo lee el cerebro y se fija solo en el casillero de personalidad.</span>
+            <div className="flex gap-2">
+              <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2 disabled:opacity-50" onClick={() => setBriefModal(false)} disabled={briefBusy}>Cancelar</button>
+              <button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none text-white font-semibold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5" style={{ background: '#DB2777' }} disabled={briefBusy || !briefText.trim()} onClick={saveBrief}>{briefBusy ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}{briefBusy ? 'Guardando…' : 'Guardar briefing'}</button>
+            </div>
+          </div>}>
+          <div className="p-1">
+            <div className="text-[12px] text-[#6B7280] mb-2.5 leading-relaxed">Escribí acá la <b>personalidad, el tono y el contexto</b> del cliente (cómo habla, qué valores transmite, qué evitar, referencias de marca). Es lo que el cerebro usa para que los anuncios/VSL suenen a él.</div>
+            <textarea value={briefText} onChange={e => setBriefText(e.target.value)} autoFocus placeholder="Ej. Tono cercano y motivador, tutea, evita tecnicismos. Valores: libertad, familia, comunidad. Referentes de marca: … Palabras que usa: … Qué NO decir: …" className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[13px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '46vh', whiteSpace: 'pre-wrap' }} />
           </div>
         </Modal>
       )}
