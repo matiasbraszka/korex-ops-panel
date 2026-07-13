@@ -4,10 +4,10 @@ import { Check, X, Loader2, Search, Layers, Filter, Link2 } from 'lucide-react';
 
 // Panorama "qué tenemos / qué falta" por cliente Y por ESTRATEGIA (sub-pestaña de
 // Clientes). Cada cliente se divide en tantas filas como estrategias tenga, para
-// segmentar bien sus funnels y el estado del DEL. Lee clients_panorama():
-// por estrategia → funnels (+dominio) y DEL vinculado; los recursos (logo/colores/
-// imágenes/testimonios) son del CLIENTE (compartidos por todas las estrategias) y van
-// una sola vez en la celda del cliente. Foco en lo que FALTA.
+// segmentar bien su estado. Lee clients_panorama(): por estrategia → DEL, avatar,
+// VSL guionado/editado, tracking (pixel/clarity/eventos), funnels (+dominio). Nicho y
+// recursos (logo/colores/imágenes/testimonios) son del CLIENTE y van una vez en su celda.
+// Foco en lo que FALTA (panorama completo de cada cliente).
 
 // Celda de presencia: verde con ✓ si está, roja con ✗ si falta. Muestra conteo opcional.
 function Have({ ok, count }) {
@@ -19,6 +19,22 @@ function Have({ ok, count }) {
       {ok ? <Check size={12} strokeWidth={3} /> : <X size={12} strokeWidth={3} />}
       {ok && count != null ? count : (ok ? '' : 'Falta')}
     </span>
+  );
+}
+
+// Tracking: 3 chips compactos (Pixel / Clarity / Eventos), verde si está, gris si falta.
+function TrackDots({ pixel, clarity, eventos }) {
+  const items = [['P', 'Pixel de Meta', pixel], ['C', 'Microsoft Clarity', clarity], ['E', 'Eventos de conversión', eventos]];
+  return (
+    <div className="flex items-center gap-1">
+      {items.map(([letra, label, ok]) => (
+        <span key={letra} title={`${label}: ${ok ? 'sí' : 'falta'}`}
+          className="inline-flex items-center gap-0.5 py-0.5 px-1.5 rounded-md text-[10px] font-bold"
+          style={ok ? { background: '#E6F7EE', color: '#15803D' } : { background: '#F1F3F7', color: '#B4BAC6' }}>
+          {letra}{ok ? <Check size={9} strokeWidth={3.5} /> : <X size={9} strokeWidth={3} />}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -56,6 +72,9 @@ function ClienteCell({ r, rowSpan }) {
       style={{ borderTop: '2px solid #E7EAF0', minWidth: 190 }}>
       <div className="text-[13px] font-semibold text-[#1A1D26] leading-tight">{r.client_name}</div>
       {r.company && <div className="text-[11px] text-[#9098A4] leading-tight">{r.company}</div>}
+      {r.niche
+        ? <div className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#7C3AED] bg-[#F4F1FE] py-0.5 px-1.5 rounded-md" title="Nicho del cliente">{r.niche}</div>
+        : <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#B4BAC6] bg-[#F4F5F7] py-0.5 px-1.5 rounded-md" title="Nicho sin definir">nicho —</div>}
       {r.n_estrategias > 1 && (
         <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#8A93A3]">
           <Layers size={10} />{r.n_estrategias} estrategias
@@ -88,8 +107,8 @@ export default function PanoramaRecursos() {
     return () => { alive = false; };
   }, []);
 
-  // Falta a nivel ESTRATEGIA: DEL sin vincular o algún funnel sin dominio.
-  const estrFalta = (e) => !e.del_ok || e.n_sin_dominio > 0;
+  // Falta a nivel ESTRATEGIA: DEL sin vincular, sin avatar, sin guión de VSL, o algún funnel sin dominio.
+  const estrFalta = (e) => !e.del_ok || e.n_sin_dominio > 0 || !e.tiene_avatar || !e.vsl_guionado;
   // Falta a nivel CLIENTE: recursos compartidos incompletos (logo/imágenes/testimonios),
   // sin estrategias, o alguna estrategia con faltantes.
   const clientFalta = (r) => !r.tiene_logo || r.imagenes_files === 0 || r.testimonios_files === 0
@@ -133,12 +152,16 @@ export default function PanoramaRecursos() {
 
       {/* Tabla */}
       <div className="border border-[#E7EAF0] rounded-xl overflow-x-auto bg-white">
-        <table className="w-full border-collapse min-w-[820px]">
+        <table className="w-full border-collapse min-w-[1180px]">
           <thead>
             <tr className="bg-[#F8FAFD]">
-              <th className={th}>Cliente · Recursos</th>
+              <th className={th}>Cliente · Nicho · Recursos</th>
               <th className={th}>Estrategia</th>
               <th className={th}>DEL</th>
+              <th className={th}>Avatar</th>
+              <th className={th}>VSL guión</th>
+              <th className={th}>VSL editado</th>
+              <th className={th}>Tracking</th>
               <th className={th}>Funnels</th>
               <th className={th}>Dominio</th>
             </tr>
@@ -151,7 +174,7 @@ export default function PanoramaRecursos() {
                 return (
                   <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
                     <ClienteCell r={r} rowSpan={1} />
-                    <td className={tdBase} style={cellStyle(true)} colSpan={4}>
+                    <td className={tdBase} style={cellStyle(true)} colSpan={8}>
                       <span className="text-[11.5px] text-[#C2C7D0]">— sin estrategia creada —</span>
                     </td>
                   </tr>
@@ -174,6 +197,14 @@ export default function PanoramaRecursos() {
                         ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#E6F7EE', color: '#15803D' }}><Link2 size={11} strokeWidth={3} />Vinculado</span>
                         : <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#FDECEC', color: '#DC2626' }}><X size={11} strokeWidth={3} />Falta</span>}
                     </td>
+                    {/* ≥1 avatar cargado */}
+                    <td className={tdBase} style={st}><Have ok={!!e.tiene_avatar} /></td>
+                    {/* VSL guionado (guión escrito) */}
+                    <td className={tdBase} style={st}><Have ok={!!e.vsl_guionado} /></td>
+                    {/* VSL editado (link del video ya editado) */}
+                    <td className={tdBase} style={st}><Have ok={!!e.vsl_editado} /></td>
+                    {/* Tracking: pixel / clarity / eventos */}
+                    <td className={tdBase} style={st}><TrackDots pixel={!!e.tiene_pixel} clarity={!!e.tiene_clarity} eventos={!!e.tiene_eventos} /></td>
                     {/* Funnels */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0
@@ -201,7 +232,7 @@ export default function PanoramaRecursos() {
               });
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={5} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
+              <tr><td colSpan={9} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
             )}
           </tbody>
         </table>
@@ -210,8 +241,9 @@ export default function PanoramaRecursos() {
       <div className="flex items-center gap-3 mt-3 text-[11px] text-[#9098A4] flex-wrap">
         <span className="inline-flex items-center gap-1"><Check size={12} className="text-[#15803D]" strokeWidth={3} />Está</span>
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
-        <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = el documento está detectado y leído por el cerebro para esa estrategia.</span>
-        <span className="inline-flex items-center gap-1"><Layers size={12} />Los recursos (logo/colores/imágenes/testimonios) son del cliente y se comparten entre sus estrategias; cada estrategia tiene su propio DEL y funnels.</span>
+        <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = detectado y leído por el cerebro.</span>
+        <span className="inline-flex items-center gap-1"><b>Avatar</b> = al menos 1 avatar cargado · <b>VSL guión</b> = guión escrito · <b>VSL editado</b> = link del video listo · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
+        <span className="inline-flex items-center gap-1"><Layers size={12} />Nicho y recursos son del cliente (una vez); avatar/VSL/tracking son por estrategia (✓ si al menos un funnel lo tiene).</span>
       </div>
     </div>
   );
