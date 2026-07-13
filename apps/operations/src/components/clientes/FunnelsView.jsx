@@ -1076,6 +1076,20 @@ export default function FunnelsView({ clientId }) {
     } catch (e) { window.alert(String(e?.message || e)); }
     finally { setBriefBusy(false); }
   };
+  // Generar la personalidad AUTOMÁTICO con IA desde onboarding + investigación + DEL + llamadas.
+  const [briefGenBusy, setBriefGenBusy] = useState(false);
+  const generateBrief = async () => {
+    setBriefGenBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-brief', { body: { client_id: clientId } });
+      let payload = data;
+      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
+      if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude generar la personalidad.'); return; }
+      setBriefText(payload.text || '');
+      await fetchContext();
+    } catch (e) { window.alert(String(e?.message || e)); }
+    finally { setBriefGenBusy(false); }
+  };
 
   // ── Agregar estrategia: crea en el Drive la carpeta "Estrategia #N | Tipo | fecha" con el
   //    esqueleto estándar (Anuncios/VSL/Recursos/…) + un DEL en blanco, y la trae al panel.
@@ -1247,8 +1261,16 @@ export default function FunnelsView({ clientId }) {
             </div>
           </div>}>
           <div className="p-1">
-            <div className="text-[12px] text-[#6B7280] mb-2.5 leading-relaxed">Escribí acá la <b>personalidad, el tono y el contexto</b> del cliente (cómo habla, qué valores transmite, qué evitar, referencias de marca). Es lo que el cerebro usa para que los anuncios/VSL suenen a él.</div>
-            <textarea value={briefText} onChange={e => setBriefText(e.target.value)} autoFocus placeholder="Ej. Tono cercano y motivador, tutea, evita tecnicismos. Valores: libertad, familia, comunidad. Referentes de marca: … Palabras que usa: … Qué NO decir: …" className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[13px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '46vh', whiteSpace: 'pre-wrap' }} />
+            {/* Generación automática con IA desde toda la data del cliente */}
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3 p-3 rounded-xl border" style={{ borderColor: '#F0D6EA', background: 'linear-gradient(180deg,#FDF2F8 0%,#fff 100%)' }}>
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-bold text-[#1A1D26]">Generar automático con IA</div>
+                <div className="text-[11px] text-[#9098A4]">Lee las llamadas, el onboarding, la investigación y el DEL, y escribe la personalidad solo. Podés editarla después.</div>
+              </div>
+              <button onClick={generateBrief} disabled={briefGenBusy || briefBusy} className="inline-flex items-center gap-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer disabled:opacity-50 shrink-0 hover:brightness-95" style={{ background: '#DB2777' }}>{briefGenBusy ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}{briefGenBusy ? 'Generando…' : 'Generar con IA'}</button>
+            </div>
+            <div className="text-[12px] text-[#6B7280] mb-2.5 leading-relaxed">O escribí/editá a mano la <b>personalidad, el tono y el contexto</b> del cliente (cómo habla, qué valores transmite, qué evitar, referencias de marca).</div>
+            <textarea value={briefText} onChange={e => setBriefText(e.target.value)} placeholder="Tocá “Generar con IA” para que la escriba sola desde la data del cliente, o escribila acá…" className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[13px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '42vh', whiteSpace: 'pre-wrap' }} />
           </div>
         </Modal>
       )}
