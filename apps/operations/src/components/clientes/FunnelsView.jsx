@@ -893,7 +893,7 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDelete, onTrack, onNew, onRefreshPage }) {
+function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDelete, onDeleteStrategy, onTrack, onNew, onRefreshPage }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -920,6 +920,16 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDel
           </div>
         </div>
         <span className="text-[11.5px] text-[#9098A4] font-medium shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.confirm(`¿Borrar la "Estrategia #${num}${cleanName ? ' · ' + cleanName : ''}" y sus ${funnels.length} funnel(s) del panel?\n\nOJO: si la carpeta "Estrategia #${num}…" TODAVÍA está en el Drive, la próxima sincronización la vuelve a crear. Borrala o renombrala en el Drive primero (que no empiece con "Estrategia #").`)) {
+              onDeleteStrategy?.(s.id);
+            }
+          }}
+          title="Borrar estrategia del panel"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-transparent border-none cursor-pointer text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#DC2626] shrink-0"
+        ><Trash2 size={15} /></button>
         <ChevronDown size={18} className="text-[#C3C9D4] shrink-0 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
       </div>
 
@@ -966,7 +976,7 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDel
 }
 
 export default function FunnelsView({ clientId }) {
-  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
+  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage, deleteStrategy, refreshStrategyPage } = useApp();
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
   const funnelsOf = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid);
@@ -1134,7 +1144,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2.5" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2 max-w-[430px]">Creala acá (arma sola las carpetas en el Drive con su DEL) o sincronizá una carpeta "Estrategia #N" existente desde la pestaña Carpetas.</div><button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#DB2777' }}><FolderPlus size={14} />Agregar estrategia</button></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onDeleteStrategy={deleteStrategy} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
 
       {/* Agregar estrategia: crea la carpeta de Drive "Estrategia #N" con su estructura + DEL en blanco */}
       {myStrategies.length > 0 && (
