@@ -874,7 +874,7 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
 }
 
 // Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpdateStrategy, onDelete, onTrack, onNew, onRefreshPage }) {
+function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDelete, onTrack, onNew, onRefreshPage }) {
   const [open, setOpen] = useState(true);
   const num = (s.position ?? 0) + 1;
   const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
@@ -885,33 +885,8 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpd
     : null;
   const delText = (docs.find(d => d.doc_kind === 'del')?.text) || '';
   const masterDocs = docs.filter(d => d.doc_kind !== 'extra');
-
-  // Recursos de la estrategia (subcarpetas de "Recursos" en Drive) — los comparten todos los funnels.
-  const [recursos, setRecursos] = useState(null);
-  const [loadingRec, setLoadingRec] = useState(false);
-  // Marca MANUAL de entregado por carpeta (folder_id -> bool). Si existe, manda sobre files>0.
-  const [overrides, setOverrides] = useState(s.recursos_overrides || {});
-  useEffect(() => { setOverrides(s.recursos_overrides || {}); }, [s.recursos_overrides]);
-  const isDone = useCallback((r) => (r.folder_id in overrides ? !!overrides[r.folder_id] : r.files > 0), [overrides]);
-  const toggleDone = (r) => {
-    const next = { ...overrides, [r.folder_id]: !isDone(r) };
-    setOverrides(next);
-    try { onUpdateStrategy?.(s.id, { recursos_overrides: next }); } catch { /* noop */ }
-  };
-  // Sincronizar = relee el Drive (drive-sync) para que aparezcan carpetas nuevas, y recarga.
-  const loadRecursos = useCallback(async () => {
-    try { const { data } = await supabase.rpc('cerebro_recursos', { p_strategy_id: s.id }); setRecursos(data || []); }
-    catch { setRecursos([]); }
-  }, [s.id]);
-  const syncRecursos = useCallback(async () => {
-    setLoadingRec(true);
-    try {
-      if (s.client_id) await supabase.functions.invoke('drive-sync', { body: { client_id: s.client_id } });
-      await loadRecursos();
-    } catch { /* noop */ } finally { setLoadingRec(false); }
-  }, [s.client_id, loadRecursos]);
-  useEffect(() => { if (open && recursos === null) loadRecursos(); }, [open, recursos, loadRecursos]);
-  const recDone = (recursos || []).filter(isDone).length;
+  // Nota: los Recursos (branding/testimonios/imágenes) ya NO viven acá: son del CLIENTE
+  // (bloque "Recursos del cliente" en el Contexto de arriba), compartidos por todas las estrategias.
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden mb-5" style={{ border: '1px solid #E7EAF0', borderLeft: '3px solid #EC4899', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
@@ -931,42 +906,25 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpd
 
       {open && (
         <div className="py-[18px] px-5">
-          {/* Recursos de la estrategia — el documento maestro (DEL) + las carpetas de "Recursos" del Drive, juntos. */}
+          {/* Documento maestro (DEL) de esta estrategia. Los Recursos ya no van acá (son del cliente). */}
           <div className="mb-4">
-            <div className="flex items-center justify-between gap-2.5 flex-wrap mb-3">
-              <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4]">Recursos de la estrategia <span className="text-[#C3C9D4] normal-case font-medium tracking-normal">· los comparten todos los funnels</span></span>
-              <div className="flex items-center gap-2.5">
-                {recursos && recursos.length > 0 && <span className="inline-flex items-center py-[3px] px-2.5 rounded-full text-[11px] font-semibold" style={recDone === recursos.length ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' } : { background: '#FEF3C7', color: '#B45309', border: '1px solid #FBE6BE' }}>{recDone}/{recursos.length} entregados</span>}
-                <button onClick={syncRecursos} disabled={loadingRec} title="Relee la carpeta Recursos del Drive (trae carpetas nuevas). El check lo marcás vos a mano." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#2E69E0] bg-[#EEF3FF] border border-[#DBE6FF] rounded-lg py-[5px] px-2.5 cursor-pointer hover:bg-[#DFEAFF] disabled:opacity-50"><RefreshCw size={12} className={loadingRec ? 'animate-spin' : ''} />{loadingRec ? 'Sincronizando…' : 'Sincronizar'}</button>
-              </div>
-            </div>
+            <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Documento de la estrategia (DEL)</div>
             <div className="flex gap-2.5 flex-wrap">
-              {/* Documento maestro (DEL / master docs) como chip verde con su tag */}
-              {masterDocs.map(d => {
-                const meta = DOC_META[d.doc_kind] || DOC_META.extra;
-                return (
-                  <div key={d.id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={{ borderColor: '#C9F0D8', background: '#F4FDF7' }} title={`${meta.label} · ${(d.char_count || 0).toLocaleString()} caracteres`}>
-                    <span className="w-[19px] h-[19px] rounded-md bg-[#22C55E] text-white inline-flex items-center justify-center shrink-0"><Check size={12} strokeWidth={3.5} /></span>
-                    <span className="text-[9px] font-extrabold tracking-[0.06em] text-[#15803D] bg-[#DCFCE7] py-0.5 px-1.5 rounded-[5px]">{meta.label.toUpperCase()}</span>
-                    <span className="font-semibold text-[12.5px] text-[#1A1D26] max-w-[160px] truncate">{d.title || meta.label}</span>
-                    <span className="text-[10.5px] text-[#9098A4] whitespace-nowrap">{(d.char_count || 0).toLocaleString()} car.</span>
-                    {d.web_url && <button onClick={() => openUrl(d.web_url)} title="Abrir en Drive" className="text-[#9098A4] hover:text-[#2E69E0] inline-flex"><ExternalLink size={13} /></button>}
-                  </div>
-                );
-              })}
-              {/* Subcarpetas de "Recursos" (chips con check manual + conteo) */}
-              {recursos === null ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">Cargando recursos…</div>
-                : (recursos.length === 0 && masterDocs.length === 0) ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar” o revisá la pestaña Carpetas del cliente.</div>
-                : recursos.map(r => { const done = isDone(r); const auto = r.files > 0; return (
-                    <div key={r.folder_id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={done ? { borderColor: '#C9F0D8', background: '#F4FDF7' } : { border: '1.5px dashed #D8DDE6', background: '#FBFCFE' }}>
-                      <button onClick={() => toggleDone(r)} title={done ? 'Marcar como NO entregado' : 'Marcar como entregado'} className="w-[19px] h-[19px] rounded-md inline-flex items-center justify-center shrink-0 cursor-pointer p-0" style={done ? { background: '#22C55E', color: '#fff', border: 'none' } : { background: '#fff', border: '1.5px dashed #C3C9D4' }}>{done && <Check size={12} strokeWidth={3.5} />}</button>
-                      <span className="font-semibold text-[12.5px] max-w-[160px] truncate" style={{ color: done ? '#1A1D26' : '#6B7280' }} title={r.name}>{r.name}</span>
-                      <span className="text-[10.5px] font-bold py-0.5 px-1.5 rounded-full whitespace-nowrap" title={`${r.files} archivo${r.files === 1 ? '' : 's'} en la carpeta`} style={auto ? { background: '#DCFCE7', color: '#15803D' } : { background: '#F1F3F7', color: '#AEB4BF' }}>{r.files}</span>
-                      {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="hover:text-[#2E69E0] inline-flex" style={{ color: done ? '#9098A4' : '#C3C9D4' }}><ExternalLink size={13} /></button>}
-                    </div>
-                  ); })}
+              {masterDocs.length === 0
+                ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">Sin DEL vinculado en esta estrategia. Asignalo desde la pestaña Carpetas o generá avatares del DEL.</div>
+                : masterDocs.map(d => {
+                    const meta = DOC_META[d.doc_kind] || DOC_META.extra;
+                    return (
+                      <div key={d.id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={{ borderColor: '#C9F0D8', background: '#F4FDF7' }} title={`${meta.label} · ${(d.char_count || 0).toLocaleString()} caracteres`}>
+                        <span className="w-[19px] h-[19px] rounded-md bg-[#22C55E] text-white inline-flex items-center justify-center shrink-0"><Check size={12} strokeWidth={3.5} /></span>
+                        <span className="text-[9px] font-extrabold tracking-[0.06em] text-[#15803D] bg-[#DCFCE7] py-0.5 px-1.5 rounded-[5px]">{meta.label.toUpperCase()}</span>
+                        <span className="font-semibold text-[12.5px] text-[#1A1D26] max-w-[160px] truncate">{d.title || meta.label}</span>
+                        <span className="text-[10.5px] text-[#9098A4] whitespace-nowrap">{(d.char_count || 0).toLocaleString()} car.</span>
+                        {d.web_url && <button onClick={() => openUrl(d.web_url)} title="Abrir en Drive" className="text-[#9098A4] hover:text-[#2E69E0] inline-flex"><ExternalLink size={13} /></button>}
+                      </div>
+                    );
+                  })}
             </div>
-            {recursos && recursos.length > 0 && <div className="text-[11px] text-[#AEB4BF] mt-2">El número es lo que hay en la carpeta; el check lo marcás vos (por si el conteo no refleja bien lo entregado).</div>}
           </div>
 
           {/* Tabla de funnels (scroll horizontal si no entra) */}
@@ -989,7 +947,7 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onUpd
 }
 
 export default function FunnelsView({ clientId }) {
-  const { clients, strategies, strategyPages, updateStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
+  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
   const funnelsOf = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid);
@@ -1029,10 +987,27 @@ export default function FunnelsView({ clientId }) {
   }, [clientId]);
   useEffect(() => { loadPipeline(); }, [loadPipeline, docs, strategyPages, strategies]);
 
+  // Recursos a nivel CLIENTE (branding, testimonios, imágenes) — compartidos por todas las estrategias.
+  const [recursos, setRecursos] = useState(null);
+  const loadRecursos = useCallback(async () => {
+    try { const { data } = await supabase.rpc('cerebro_recursos_cliente', { p_client_id: clientId }); setRecursos(Array.isArray(data) ? data : []); }
+    catch { setRecursos([]); }
+  }, [clientId]);
+  useEffect(() => { loadRecursos(); }, [loadRecursos]);
+
   const docsByNode = useMemo(() => { const m = {}; for (const d of docs) m[d.node_id] = d; return m; }, [docs]);
   const docsOf = (sid) => docs.filter(d => d.strategy_id === sid);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
-  const sync = async () => { setSyncing(true); try { await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } }); await fetchContext(); } catch { /* noop */ } finally { setSyncing(false); } };
+  // Sincronizar contexto = relee documentos (client-brain-sync) Y el árbol de Drive (drive-sync,
+  // para traer carpetas nuevas de Recursos), y recarga todo.
+  const sync = async () => {
+    setSyncing(true);
+    try {
+      await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } });
+      await supabase.functions.invoke('drive-sync', { body: { client_id: clientId } });
+      await Promise.all([fetchContext(), loadRecursos()]);
+    } catch { /* noop */ } finally { setSyncing(false); }
+  };
 
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
@@ -1086,6 +1061,26 @@ export default function FunnelsView({ clientId }) {
           <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
           <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-3.5"><RefreshCw size={13} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
 
+          {/* Recursos del cliente (branding, testimonios, imágenes, info empresa) — compartidos por TODAS las estrategias */}
+          <div className="mt-5 pt-[18px] border-t border-[#F1F3F7]">
+            <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Recursos del cliente <span className="text-[#C3C9D4] normal-case font-medium tracking-normal">· los comparten todas las estrategias</span></div>
+            {recursos === null
+              ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">Cargando recursos…</div>
+              : recursos.length === 0
+                ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar contexto” o revisá la pestaña Carpetas.</div>
+                : <div className="flex gap-2.5 flex-wrap">
+                    {recursos.map(r => { const has = r.files > 0; return (
+                      <div key={r.folder_id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={has ? { borderColor: '#C9F0D8', background: '#F4FDF7' } : { border: '1.5px dashed #D8DDE6', background: '#FBFCFE' }}>
+                        <FolderOpen size={15} className="shrink-0" style={{ color: has ? '#16A34A' : '#C3C9D4' }} />
+                        <span className="font-semibold text-[12.5px] max-w-[170px] truncate" style={{ color: has ? '#1A1D26' : '#6B7280' }} title={r.name}>{r.name}</span>
+                        <span className="text-[10.5px] font-bold py-0.5 px-1.5 rounded-full whitespace-nowrap" title={`${r.files} archivo${r.files === 1 ? '' : 's'} en la carpeta`} style={has ? { background: '#DCFCE7', color: '#15803D' } : { background: '#F1F3F7', color: '#AEB4BF' }}>{r.files}</span>
+                        {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="hover:text-[#2E69E0] inline-flex" style={{ color: has ? '#9098A4' : '#C3C9D4' }}><ExternalLink size={13} /></button>}
+                      </div>
+                    ); })}
+                  </div>}
+            <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-2.5"><FolderOpen size={13} className="shrink-0" />Logo, colores, fotos/imágenes y testimonios del cliente. El número es lo que hay en cada carpeta del Drive.</div>
+          </div>
+
           {/* Webs de contexto */}
           <div className="mt-5 pt-[18px] border-t border-[#F1F3F7]">
             <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Webs de contexto</div>
@@ -1098,7 +1093,7 @@ export default function FunnelsView({ clientId }) {
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
         ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onUpdateStrategy={updateStrategy} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
+        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
 
       {/* Nueva estrategia (informativo: se crean solas desde las carpetas del Drive) */}
       {myStrategies.length > 0 && (

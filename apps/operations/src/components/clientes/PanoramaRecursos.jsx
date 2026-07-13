@@ -4,9 +4,10 @@ import { Check, X, Loader2, Search, Layers, Filter, Link2 } from 'lucide-react';
 
 // Panorama "qué tenemos / qué falta" por cliente Y por ESTRATEGIA (sub-pestaña de
 // Clientes). Cada cliente se divide en tantas filas como estrategias tenga, para
-// segmentar bien sus funnels, recursos y el estado del DEL. Lee clients_panorama():
-// por estrategia → funnels (+dominio), DEL vinculado, y recursos (logo/colores/
-// imágenes/testimonios) de SU carpeta Recursos. Foco en lo que FALTA.
+// segmentar bien sus funnels y el estado del DEL. Lee clients_panorama():
+// por estrategia → funnels (+dominio) y DEL vinculado; los recursos (logo/colores/
+// imágenes/testimonios) son del CLIENTE (compartidos por todas las estrategias) y van
+// una sola vez en la celda del cliente. Foco en lo que FALTA.
 
 // Celda de presencia: verde con ✓ si está, roja con ✗ si falta. Muestra conteo opcional.
 function Have({ ok, count }) {
@@ -36,11 +37,23 @@ function TipoBadge({ tipo }) {
   );
 }
 
-// Celda del cliente: ocupa (rowSpan) todas las filas de sus estrategias.
+// Fila compacta de un recurso (etiqueta + ✓/✗) dentro de la celda del cliente.
+function ResChip({ label, ok, count }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10.5px]">
+      <span className="w-[70px] shrink-0 text-[#9098A4] font-medium">{label}</span>
+      <Have ok={ok} count={count} />
+    </span>
+  );
+}
+
+// Celda del cliente: ocupa (rowSpan) todas las filas de sus estrategias e incluye los
+// RECURSOS del cliente (branding/colores/imágenes/testimonios), que son compartidos por
+// todas las estrategias — por eso van una sola vez acá, no por estrategia.
 function ClienteCell({ r, rowSpan }) {
   return (
     <td rowSpan={rowSpan} className="py-2.5 px-3 align-top border-r border-[#EEF1F6] bg-[#FCFDFE]"
-      style={{ borderTop: '2px solid #E7EAF0', minWidth: 150 }}>
+      style={{ borderTop: '2px solid #E7EAF0', minWidth: 190 }}>
       <div className="text-[13px] font-semibold text-[#1A1D26] leading-tight">{r.client_name}</div>
       {r.company && <div className="text-[11px] text-[#9098A4] leading-tight">{r.company}</div>}
       {r.n_estrategias > 1 && (
@@ -48,6 +61,13 @@ function ClienteCell({ r, rowSpan }) {
           <Layers size={10} />{r.n_estrategias} estrategias
         </div>
       )}
+      <div className="mt-2.5 pt-2 border-t border-[#EEF1F6] flex flex-col gap-1">
+        <div className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#B4BAC6] mb-0.5">Recursos</div>
+        <ResChip label="Logo" ok={r.tiene_logo} />
+        <ResChip label="Colores" ok={r.tiene_colores} />
+        <ResChip label="Imágenes" ok={r.imagenes_files > 0} count={r.imagenes_files} />
+        <ResChip label="Testimonios" ok={r.testimonios_files > 0} count={r.testimonios_files} />
+      </div>
     </td>
   );
 }
@@ -68,10 +88,12 @@ export default function PanoramaRecursos() {
     return () => { alive = false; };
   }, []);
 
-  // ¿A esta estrategia le falta algo? (DEL sin vincular, sin branding, sin imágenes,
-  // sin testimonios, o algún funnel sin dominio).
-  const estrFalta = (e) => !e.del_ok || !e.tiene_logo || e.imagenes_files === 0 || e.testimonios_files === 0 || e.n_sin_dominio > 0;
-  const clientFalta = (r) => (r.estrategias || []).length === 0 || (r.estrategias || []).some(estrFalta);
+  // Falta a nivel ESTRATEGIA: DEL sin vincular o algún funnel sin dominio.
+  const estrFalta = (e) => !e.del_ok || e.n_sin_dominio > 0;
+  // Falta a nivel CLIENTE: recursos compartidos incompletos (logo/imágenes/testimonios),
+  // sin estrategias, o alguna estrategia con faltantes.
+  const clientFalta = (r) => !r.tiene_logo || r.imagenes_files === 0 || r.testimonios_files === 0
+    || (r.estrategias || []).length === 0 || (r.estrategias || []).some(estrFalta);
 
   const filtered = useMemo(() => {
     let list = rows || [];
@@ -111,18 +133,14 @@ export default function PanoramaRecursos() {
 
       {/* Tabla */}
       <div className="border border-[#E7EAF0] rounded-xl overflow-x-auto bg-white">
-        <table className="w-full border-collapse min-w-[1080px]">
+        <table className="w-full border-collapse min-w-[820px]">
           <thead>
             <tr className="bg-[#F8FAFD]">
-              <th className={th}>Cliente</th>
+              <th className={th}>Cliente · Recursos</th>
               <th className={th}>Estrategia</th>
               <th className={th}>DEL</th>
               <th className={th}>Funnels</th>
               <th className={th}>Dominio</th>
-              <th className={th}>Logo</th>
-              <th className={th}>Colores</th>
-              <th className={th}>Imágenes</th>
-              <th className={th}>Testimonios</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +151,7 @@ export default function PanoramaRecursos() {
                 return (
                   <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
                     <ClienteCell r={r} rowSpan={1} />
-                    <td className={tdBase} style={cellStyle(true)} colSpan={8}>
+                    <td className={tdBase} style={cellStyle(true)} colSpan={4}>
                       <span className="text-[11.5px] text-[#C2C7D0]">— sin estrategia creada —</span>
                     </td>
                   </tr>
@@ -178,16 +196,12 @@ export default function PanoramaRecursos() {
                             ))}
                           </div>}
                     </td>
-                    <td className={tdBase} style={st}><Have ok={e.tiene_logo} /></td>
-                    <td className={tdBase} style={st}><Have ok={e.tiene_colores} /></td>
-                    <td className={tdBase} style={st}><Have ok={e.imagenes_files > 0} count={e.imagenes_files} /></td>
-                    <td className={tdBase} style={st}><Have ok={e.testimonios_files > 0} count={e.testimonios_files} /></td>
                   </tr>
                 );
               });
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
+              <tr><td colSpan={5} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
             )}
           </tbody>
         </table>
@@ -197,7 +211,7 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><Check size={12} className="text-[#15803D]" strokeWidth={3} />Está</span>
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
         <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = el documento está detectado y leído por el cerebro para esa estrategia.</span>
-        <span className="inline-flex items-center gap-1"><Layers size={12} />Cada estrategia se lista en su propia fila con sus funnels y recursos.</span>
+        <span className="inline-flex items-center gap-1"><Layers size={12} />Los recursos (logo/colores/imágenes/testimonios) son del cliente y se comparten entre sus estrategias; cada estrategia tiene su propio DEL y funnels.</span>
       </div>
     </div>
   );
