@@ -693,6 +693,23 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
     onUpdate(f.id, { avatars: f.avatars_backup, vsl_script: (f.vsl_script_backup ?? f.vsl_script) || null });
   };
 
+  // Traer SOLO el guión del VSL de este funnel desde el DEL (por código, SIN IA → gratis).
+  const [vslBusy, setVslBusy] = useState(false);
+  const syncVsl = async () => {
+    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero.'); return; }
+    setVslBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
+        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode: 'vsl' },
+      });
+      let payload = data;
+      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
+      if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude traer el guión del VSL.'); return; }
+      await onRefreshPage?.(f.id);
+    } catch (e) { window.alert(String(e?.message || e)); }
+    finally { setVslBusy(false); }
+  };
+
   const trk = [
     pOk ? { label: 'Pixel', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
         : { label: 'Pixel', bg: '#F5F6F9', color: '#AEB4BF', border: '#EDF0F5', solid: true, ok: false },
@@ -760,7 +777,9 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
 
           {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
           <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
-            <CardHead Icon={Clapperboard} iconBg="#ECFDF3" iconColor="#16A34A" title="VSL del funnel" subtitle="1 video por funnel · con su guión" />
+            <CardHead Icon={Clapperboard} iconBg="#ECFDF3" iconColor="#16A34A" title="VSL del funnel" subtitle="1 video por funnel · con su guión">
+              <button onClick={syncVsl} disabled={vslBusy} title="Trae SOLO el guión del VSL desde el DEL (por código, sin IA, gratis). Si el DEL tiene varias VSL y no puede decidir cuál, usá “Generar avatares del DEL”." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F0FDF4] disabled:opacity-50" style={{ color: '#16A34A', borderColor: '#C9F0D8' }}>{vslBusy ? <RefreshCw size={12} className="animate-spin" /> : <FileText size={12} />}{vslBusy ? 'Trayendo…' : 'Traer guión del DEL'}</button>
+            </CardHead>
 
             <div className="p-[14px] flex flex-col gap-3.5">
               <div>
@@ -1028,6 +1047,28 @@ export default function FunnelsView({ clientId }) {
   };
   const saveTrack = (val) => { updateStrategyPage(trackFunnel.id, { pixel_code: val.pixel_code || null, clarity_id: val.clarity_id || null, conversion_events: val.events }); setTrackFunnel(null); };
 
+  // ── Agregar estrategia: crea en el Drive la carpeta "Estrategia #N | Tipo | fecha" con el
+  //    esqueleto estándar (Anuncios/VSL/Recursos/…) + un DEL en blanco, y la trae al panel.
+  const [stratModal, setStratModal] = useState(false);
+  const [stratTipo, setStratTipo] = useState('Reclutamiento');
+  const [stratOtro, setStratOtro] = useState('');
+  const [stratBusy, setStratBusy] = useState(false);
+  const nextStratN = myStrategies.length + 1;
+  const stratTipoFinal = stratTipo === 'Otro' ? (stratOtro.trim() || 'A DEFINIR') : stratTipo;
+  const createStrategy = async () => {
+    setStratBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-strategy', { body: { client_id: clientId, tipo: stratTipoFinal } });
+      let payload = data;
+      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
+      if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude crear la estrategia.'); return; }
+      setStratModal(false); setStratOtro('');
+      await fetchContext();
+      window.alert(`Estrategia creada en el Drive: “${payload.strategyName}”, con sus carpetas y un DEL en blanco.\n\nRecargá el panel para verla en la lista.`);
+    } catch (e) { window.alert(String(e?.message || e)); }
+    finally { setStratBusy(false); }
+  };
+
   return (
     <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
       {/* Contexto del cliente (alimenta todas las estrategias) */}
@@ -1092,13 +1133,14 @@ export default function FunnelsView({ clientId }) {
 
       {/* Estrategias, cada una envolviendo sus documentos y funnels */}
       {myStrategies.length === 0
-        ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2">Sincronizá las carpetas del cliente (pestaña Carpetas): las "Estrategia #N" se crean solas.</div></div>
+        ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2.5" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2 max-w-[430px]">Creala acá (arma sola las carpetas en el Drive con su DEL) o sincronizá una carpeta "Estrategia #N" existente desde la pestaña Carpetas.</div><button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#DB2777' }}><FolderPlus size={14} />Agregar estrategia</button></div>
         : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
 
-      {/* Nueva estrategia (informativo: se crean solas desde las carpetas del Drive) */}
+      {/* Agregar estrategia: crea la carpeta de Drive "Estrategia #N" con su estructura + DEL en blanco */}
       {myStrategies.length > 0 && (
-        <div className="flex items-center gap-2 justify-center text-[11.5px] text-[#9098A4] mt-1">
-          <Layers size={13} />Las estrategias se crean solas al sincronizar las carpetas "Estrategia #N" del Drive (pestaña Carpetas).
+        <div className="flex flex-col items-center gap-1.5 mt-2">
+          <button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[10px] border border-dashed text-[12px] font-semibold cursor-pointer hover:bg-[#FFF5FA] bg-white" style={{ color: '#DB2777', borderColor: '#F5C2DD' }}><FolderPlus size={14} />Agregar estrategia</button>
+          <div className="flex items-center gap-1.5 text-[11px] text-[#9098A4]"><Layers size={12} />Crea la carpeta "Estrategia #N" en el Drive con su estructura. Una carpeta ya existente se trae sincronizando (pestaña Carpetas).</div>
         </div>
       )}
 
@@ -1135,6 +1177,29 @@ export default function FunnelsView({ clientId }) {
         <Modal open={!!trackFunnel} onClose={() => setTrackFunnel(null)} title={`Tracking · ${trackFunnel.name}`} maxWidth={580}
           footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={() => setTrackFunnel(null)}>Cerrar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark inline-flex items-center gap-1.5" onClick={() => saveTrack(trackFunnel._edit)}><Check size={14} />Guardar tracking</button></div>}>
           <div className="p-1"><TrackingEditor value={trackFunnel._edit} onChange={(v) => setTrackFunnel(tf => ({ ...tf, _edit: v }))} /></div>
+        </Modal>
+      )}
+
+      {/* Modal agregar estrategia */}
+      {stratModal && (
+        <Modal open={stratModal} onClose={() => setStratModal(false)} title="Agregar estrategia" maxWidth={480}
+          footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2 disabled:opacity-50" onClick={() => setStratModal(false)} disabled={stratBusy}>Cancelar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none text-white font-semibold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5" style={{ background: '#DB2777' }} disabled={stratBusy} onClick={createStrategy}>{stratBusy ? <RefreshCw size={14} className="animate-spin" /> : <FolderPlus size={14} />}{stratBusy ? 'Creando…' : 'Crear estrategia'}</button></div>}>
+          <div className="flex flex-col gap-4 p-1">
+            <div>
+              <label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-2">Tipo de estrategia</label>
+              <div className="flex gap-2 flex-wrap">
+                {['Reclutamiento', 'Producto', 'Otro'].map(t => (
+                  <button key={t} onClick={() => setStratTipo(t)} className="py-2 px-3.5 rounded-lg text-[12.5px] font-semibold border cursor-pointer" style={stratTipo === t ? { background: '#FCE7F3', color: '#BE185D', borderColor: '#F5C2DD' } : { background: '#fff', color: '#4B5563', borderColor: '#E2E5EB' }}>{t}</button>
+                ))}
+              </div>
+              {stratTipo === 'Otro' && <input value={stratOtro} onChange={e => setStratOtro(e.target.value)} placeholder="Nombre del tipo (ej. Evento, Webinar…)" autoFocus className="w-full mt-2.5 py-2 px-3 border border-[#E2E5EB] rounded-[9px] text-[13px] bg-white outline-none focus:border-blue" />}
+            </div>
+            <div className="border border-[#EDF0F5] rounded-xl bg-[#FBFCFE] p-3.5">
+              <div className="text-[11px] text-[#6B7280]">Se creará en el Drive del cliente la carpeta:</div>
+              <div className="text-[13px] font-bold text-[#1A1D26] mt-1">Estrategia #{nextStratN} | {stratTipoFinal} | (hoy)</div>
+              <div className="text-[11px] text-[#9098A4] mt-1.5 leading-relaxed">…con las subcarpetas estándar (Anuncios, Estrategia, VSL, Mural, Auditorías, Otros) y una copia del DEL en blanco. Los Recursos (branding, testimonios, imágenes) son del cliente y se comparten con todas las estrategias.</div>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
