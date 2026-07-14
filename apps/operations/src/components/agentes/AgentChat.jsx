@@ -2,7 +2,7 @@
 // (botón "Generar anuncios") + guardado del copy en el avatar. Honra el gate del pipeline.
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@korex/db';
-import { Send, Loader2, Lock, Sparkles, Bot, User, Save, Check, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Send, Loader2, Lock, Sparkles, Bot, User, Save, Check, ChevronRight, AlertTriangle, Square } from 'lucide-react';
 
 const PINK = '#EC4899';
 const QUICK_STARTS = [
@@ -12,12 +12,18 @@ const QUICK_STARTS = [
   '¿Qué ángulo todavía no estamos explotando con este avatar?',
 ];
 
-// Aplana un anuncio estructurado a texto (para guardar en el avatar y para copiar).
+// Hooks de un ángulo (tolera formato viejo con un solo `hook`).
+function adHooks(a) {
+  return Array.isArray(a.hooks) ? a.hooks.filter(Boolean) : (a.hook ? [a.hook] : []);
+}
+
+// Aplana un ángulo estructurado a texto (para guardar en el avatar y para copiar).
 function adToText(a, i) {
+  const hooks = adHooks(a);
   return [
-    `ANUNCIO ${i + 1}${a.angle ? ` · ${a.angle}` : ''}`,
-    a.hook ? `Gancho: ${a.hook}` : '',
-    a.primary_text ? `Texto principal:\n${a.primary_text}` : '',
+    `ÁNGULO ${i + 1}${a.angle ? ` · ${a.angle}` : ''}`,
+    a.primary_text ? `Texto base:\n${a.primary_text}` : '',
+    hooks.length ? `Hooks:\n${hooks.map((h, k) => `${k + 1}. ${h}`).join('\n')}` : '',
     a.headline ? `Titular: ${a.headline}` : '',
     a.description ? `Descripción: ${a.description}` : '',
     a.creative_note ? `Nota creativa: ${a.creative_note}` : '',
@@ -45,17 +51,25 @@ function GateBanner({ gate }) {
 }
 
 function AdCard({ ad, idx, onSave, saved }) {
+  const hooks = adHooks(ad);
   return (
     <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
       <div className="flex items-center justify-between gap-2 py-2 px-3 border-b border-[#F1F3F7] bg-[#FBFCFE]">
-        <span className="text-[12px] font-bold text-[#1A1D26] truncate">Anuncio {idx + 1}{ad.angle ? ` · ${ad.angle}` : ''}</span>
+        <span className="text-[12px] font-bold text-[#1A1D26] truncate">Ángulo {idx + 1}{ad.angle ? ` · ${ad.angle}` : ''}</span>
         <button onClick={() => onSave(ad, idx)} disabled={saved} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-semibold cursor-pointer border shrink-0" style={saved ? { background: '#ECFDF5', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: PINK, borderColor: '#F5C2DD' }}>
           {saved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> Guardar en avatar</>}
         </button>
       </div>
-      <div className="p-3 grid gap-2 text-[12.5px] text-[#374151]">
-        {ad.hook && <div><span className="text-[10px] font-bold uppercase tracking-wider text-[#9098A4]">Gancho</span><div className="mt-0.5">{ad.hook}</div></div>}
-        {ad.primary_text && <div><span className="text-[10px] font-bold uppercase tracking-wider text-[#9098A4]">Texto principal</span><div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{ad.primary_text}</div></div>}
+      <div className="p-3 grid gap-2.5 text-[12.5px] text-[#374151]">
+        {ad.primary_text && <div><span className="text-[10px] font-bold uppercase tracking-wider text-[#9098A4]">Texto base</span><div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{ad.primary_text}</div></div>}
+        {hooks.length > 0 && (
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#9098A4]">Hooks ({hooks.length}) · intercambiables con el texto base</span>
+            <ol className="mt-1 grid gap-1 list-decimal pl-5">
+              {hooks.map((h, k) => <li key={k} className="text-[#1A1D26] leading-snug">{h}</li>)}
+            </ol>
+          </div>
+        )}
         <div className="flex gap-4 flex-wrap">
           {ad.headline && <div className="min-w-0"><span className="text-[10px] font-bold uppercase tracking-wider text-[#9098A4]">Titular</span><div className="mt-0.5">{ad.headline}</div></div>}
           {ad.description && <div className="min-w-0"><span className="text-[10px] font-bold uppercase tracking-wider text-[#9098A4]">Descripción</span><div className="mt-0.5">{ad.description}</div></div>}
@@ -73,6 +87,7 @@ export default function AgentChat({ sel, gate, onSaveCopy, chatKey, initialMessa
   const [savedKeys, setSavedKeys] = useState({});
   const [totalCost, setTotalCost] = useState(0);
   const scrollRef = useRef(null);
+  const reqSeqRef = useRef(0); // para poder DETENER la respuesta en curso
 
   // Reset/carga al cambiar de conversación (chat nuevo o al abrir uno del historial).
   useEffect(() => { setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0); }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -93,6 +108,12 @@ export default function AgentChat({ sel, gate, onSaveCopy, chatKey, initialMessa
     return data;
   }
 
+  function stopReply() {
+    reqSeqRef.current++; // invalida la respuesta en curso: cuando llegue, se descarta
+    setBusy(false);
+    setMessages(m => [...m, { role: 'assistant', kind: 'notice', content: '⏹ Respuesta detenida. Podés escribir de nuevo.' }]);
+  }
+
   async function send(text, mode = 'chat') {
     const content = (text ?? input).trim();
     if ((!content && mode === 'chat') || busy) return;
@@ -101,6 +122,7 @@ export default function AgentChat({ sel, gate, onSaveCopy, chatKey, initialMessa
     setMessages(withUser);
     setInput('');
     setBusy(true);
+    const mySeq = ++reqSeqRef.current;
     let assistantMsg;
     try {
       const data = await callAgent(withUser, mode);
@@ -112,12 +134,12 @@ export default function AgentChat({ sel, gate, onSaveCopy, chatKey, initialMessa
       } else {
         assistantMsg = { role: 'assistant', content: data.reply || '(sin respuesta)' };
       }
-      if (data?.cost_usd) setTotalCost(c => c + Number(data.cost_usd));
+      if (data?.cost_usd && reqSeqRef.current === mySeq) setTotalCost(c => c + Number(data.cost_usd));
     } catch (e) {
       assistantMsg = { role: 'assistant', kind: 'notice', content: String(e.message || e) };
-    } finally {
-      setBusy(false);
     }
+    if (reqSeqRef.current !== mySeq) return; // se detuvo o fue reemplazada → descartar
+    setBusy(false);
     const finalMsgs = [...withUser, assistantMsg];
     setMessages(finalMsgs);
     onTurn?.(finalMsgs); // persiste la conversación (historial)
@@ -201,8 +223,8 @@ export default function AgentChat({ sel, gate, onSaveCopy, chatKey, initialMessa
             className="flex-1 py-2.5 px-3.5 border border-[#E2E5EB] rounded-xl text-[13px] resize-none outline-none focus:border-[#EC4899] max-h-[140px] leading-relaxed"
             style={{ minHeight: 44 }}
           />
-          <button onClick={() => send()} disabled={busy || !input.trim()} className="inline-flex items-center justify-center w-11 h-11 rounded-xl text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0" style={{ background: '#5B7CF5' }}>
-            {busy ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+          <button onClick={() => (busy ? stopReply() : send())} disabled={!busy && !input.trim()} title={busy ? 'Detener la respuesta' : 'Enviar'} className="inline-flex items-center justify-center w-11 h-11 rounded-xl text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0" style={{ background: busy ? '#DC2626' : '#5B7CF5' }}>
+            {busy ? <Square size={15} fill="#fff" /> : <Send size={18} />}
           </button>
         </div>
       </div>

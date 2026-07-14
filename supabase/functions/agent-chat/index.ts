@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
   // Modelo POR agente (app_settings.api_config.chat_models[subagent]) con fallback al global.
   const chatModels = (cfg.chat_models as Record<string, string>) || {};
   const model = str(chatModels[subagentKey]) || str(cfg.chat_model) || "claude-sonnet-5";
-  const maxTokens = Number(mode === "generate" ? (cfg.chat_generate_max_tokens ?? 4096) : (cfg.chat_max_tokens ?? 4000));
+  const maxTokens = Number(mode === "generate" ? (cfg.chat_generate_max_tokens ?? 4096) : (cfg.chat_max_tokens ?? 6000));
   const dailyCap = Number(cfg.daily_cap_usd ?? 5);
   const monthlyCap = Number(cfg.monthly_cap_usd ?? 100);
   const prices = (cfg.prices as Record<string, { in: number; out: number }>) || {};
@@ -221,23 +221,24 @@ Deno.serve(async (req) => {
 
   const tool = {
     name: "emit_ad_copy",
-    description: "Devuelve una tanda de anuncios de Meta listos para revisar y guardar.",
+    description: "Devuelve una tanda de anuncios de Meta agrupados POR ÁNGULO (formato Korex: por ángulo, 1 texto base + varios hooks alineados).",
     input_schema: {
       type: "object",
       properties: {
         ads: {
           type: "array",
+          description: "Un grupo por ÁNGULO. Cada grupo = el texto base + su abanico de hooks.",
           items: {
             type: "object",
             properties: {
-              angle: { type: "string", description: "El ángulo / gran idea del anuncio. Uno distinto por anuncio." },
-              hook: { type: "string", description: "Gancho: la primera línea que frena el scroll, en la voz del avatar." },
-              primary_text: { type: "string", description: "Texto principal (cuerpo) del anuncio de Meta." },
+              angle: { type: "string", description: "El ángulo / gran idea. Uno distinto por grupo." },
+              primary_text: { type: "string", description: "El TEXTO BASE (cuerpo) del anuncio de Meta para este ángulo." },
+              hooks: { type: "array", items: { type: "string" }, description: "5 ganchos (hooks) distintos, TODOS alineados al MISMO texto base e INTERCAMBIABLES: cualquiera debe encajar como primera línea del texto base sin romper la promesa/oferta." },
               headline: { type: "string", description: "Titular corto, debajo del creativo." },
               description: { type: "string", description: "Descripción/línea de apoyo (opcional)." },
               creative_note: { type: "string", description: "Nota creativa: formato/visual sugerido y segmentación si aplica." },
             },
-            required: ["angle", "hook", "primary_text", "headline"],
+            required: ["angle", "primary_text", "hooks"],
           },
         },
         notes: { type: "string", description: "Razonamiento breve / sugerencia de testeo (opcional)." },
