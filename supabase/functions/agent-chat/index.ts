@@ -33,6 +33,7 @@ const cors = {
 const j = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 function str(v: unknown) { return v === null || v === undefined ? "" : String(v).trim(); }
 function clip(s: string, n: number) { const t = str(s); return t.length > n ? t.slice(0, n) + "\n…[recortado]" : t; }
+function norm(s: string) { return str(s).toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim(); }
 
 // Solo usuarios logueados del panel (no anon, no público).
 async function authedUser(req: Request): Promise<boolean> {
@@ -118,10 +119,18 @@ Deno.serve(async (req) => {
     return bodyTxt ? `${head}\n${bodyTxt}` : head;
   }).filter(Boolean).join("\n\n");
 
+  // Blueprint maestro de anuncios (método fijo, se cachea con el resto de lo estable).
+  let blueprint = "";
+  if (subagentKey === "anuncios") {
+    const { data: bpRow } = await supabase.from("marketing_ad_library").select("content").eq("id", "mal_blueprint").maybeSingle();
+    blueprint = clip(str(bpRow?.content), 16000);
+  }
+
   const stableSystem = [
     general || "# Método Korex — (capa general no configurada)",
     `\n\n===== ESPECIALISTA: ${specialistName} =====\n`,
     specialistInstr || "(sin instrucciones del especialista)",
+    blueprint ? `\n\n===== BLUEPRINT MAESTRO DE ANUNCIOS (el método, seguilo) =====\n${blueprint}` : "",
     material ? `\n\n===== MATERIAL DE CAPACITACIÓN (${specialistName}) =====\n${material}` : "",
   ].join("");
 
@@ -151,6 +160,30 @@ Deno.serve(async (req) => {
     return `Ganador ${i + 1}: ${str(w.ad_name) || "(sin nombre)"} — CPL ${str(w.cpl)} · hook ${str(w.hook_rate)} · hold ${str(w.hold_rate)} · CTR ${str(w.ctr)}${t ? `\nTranscript: ${t}` : ""}`;
   }).join("\n\n");
 
+  // Ejemplos de anuncios del MISMO nicho (o parecido) — biblioteca Korex (marketing_ad_library).
+  // Traemos SOLO los del nicho del cliente (matcheo por niche + niche_tags), nunca las 200 páginas.
+  let examplesText = "";
+  if (subagentKey === "anuncios") {
+    try {
+      const nicheStr = norm(str(client?.niche));
+      const cTokens = nicheStr.split(" ").filter((w) => w.length > 3);
+      const { data: exList } = await supabase.from("marketing_ad_library").select("id,niche,niche_tags,title").eq("part", "example");
+      const scored = (Array.isArray(exList) ? exList : []).map((r) => {
+        const rowNiche = norm(str(r.niche));
+        const hay = norm([str(r.niche), ...(Array.isArray(r.niche_tags) ? r.niche_tags : [])].join(" "));
+        let score = 0;
+        if (nicheStr && hay.includes(nicheStr)) score += 3;                 // el nicho del cliente aparece en los tags
+        if (rowNiche && nicheStr && nicheStr.includes(rowNiche)) score += 3; // el nicho de la fila aparece en el del cliente
+        for (const t of cTokens) if (hay.includes(t)) score += 1;           // solape de palabras
+        return { id: str(r.id), title: str(r.title) || str(r.niche), score };
+      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 2);
+      if (scored.length) {
+        const { data: full } = await supabase.from("marketing_ad_library").select("niche,title,content").in("id", scored.map((s) => s.id));
+        examplesText = (Array.isArray(full) ? full : []).map((f) => `— ${str(f.title) || str(f.niche)} —\n${clip(str(f.content), 6000)}`).join("\n\n");
+      }
+    } catch { examplesText = ""; }
+  }
+
   // Gate del pipeline (autoridad server-side).
   let gate: Record<string, unknown> | null = null;
   try {
@@ -171,6 +204,7 @@ Deno.serve(async (req) => {
     `\n— GUIÓN DEL VSL DEL FUNNEL (el anuncio SALE de acá) —\n${vslScript ? clip(vslScript, 5000) : "(sin guión de VSL cargado)"}`,
     briefText ? `\n— BRIEF / PERSONALIDAD DEL LÍDER —\n${briefText}` : "",
     winners ? `\n— ANUNCIOS GANADORES DE ESTE CLIENTE (piso, no techo: proponé ÁNGULOS NUEVOS) —\n${winners}` : "\n— (Aún no hay anuncios ganadores cargados para este cliente) —",
+    examplesText ? `\n— EJEMPLOS DE ANUNCIOS DE NICHO SIMILAR (biblioteca Korex; usalos como referencia de estilo/estructura/ángulos, NO los copies literal) —\n${examplesText}` : "",
     client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
     gate ? `\n— ESTADO DEL PIPELINE (etapa anuncios) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
     gateBlockedHard
