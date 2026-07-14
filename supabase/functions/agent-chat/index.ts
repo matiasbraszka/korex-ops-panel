@@ -82,7 +82,9 @@ Deno.serve(async (req) => {
   if (!apiKey) return j({ ok: false, error: "missing_api_key", detail: "Falta configurar la API key de Anthropic." }, 500);
   const { data: cfgRow } = await supabase.from("app_settings").select("value").eq("key", "api_config").maybeSingle();
   const cfg = (cfgRow?.value as Record<string, unknown>) ?? {};
-  const model = str(cfg.chat_model) || "claude-sonnet-5";
+  // Modelo POR agente (app_settings.api_config.chat_models[subagent]) con fallback al global.
+  const chatModels = (cfg.chat_models as Record<string, string>) || {};
+  const model = str(chatModels[subagentKey]) || str(cfg.chat_model) || "claude-sonnet-5";
   const maxTokens = Number(mode === "generate" ? (cfg.chat_generate_max_tokens ?? 4096) : (cfg.chat_max_tokens ?? 1800));
   const dailyCap = Number(cfg.daily_cap_usd ?? 5);
   const monthlyCap = Number(cfg.monthly_cap_usd ?? 100);
