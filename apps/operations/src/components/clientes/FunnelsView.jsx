@@ -689,12 +689,12 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
   const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
 
   // ── Mensaje para el editor ──────────────────────────────────────────────────
-  // Arma el mensaje que se le manda al editor para editar los anuncios + VSL. Las piezas se
-  // DETECTAN SOLAS leyendo los copys de anuncios de cada avatar (countPieces): "completas" =
-  // textos base; "recortadas/variaciones" = hooks − textos base (mismo cuerpo, distinto hook).
-  // Rellena lo que tenemos (guiones/carpetas por avatar) y deja entre corchetes lo variable
-  // (Loom, estilo, recursos, branding, pestañas) para completar a mano.
-  const buildEditorMessage = () => {
+  // Arma el mensaje que se le manda al editor para editar los anuncios + VSL. Rellena TODO lo que
+  // el sistema conoce: guiones (=DEL), pestañas (Anuncios/VSL), carpeta de Recursos + Branding,
+  // estilo del cliente (redactado por la personalidad → clients.editor_style) y las carpetas de
+  // subida por avatar. Las piezas se DETECTAN SOLAS de los copys (countPieces): completas = textos
+  // base; recortadas = hooks − base. Lo ÚNICO que queda [entre corchetes] es el Loom (cambia siempre).
+  const buildEditorMessage = ({ recursosUrl = '', brandingUrl = '', editorStyle = '' } = {}) => {
     const per = namedAvatars.map((a, i) => {
       const { hooks, base } = countPieces(a.ad_script);
       const variaciones = Math.max(0, hooks - base);
@@ -712,16 +712,19 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
     const subirVsl = hasVsl
       ? per.filter(p => p.vslEdit).map(p => `  ${p.name || 's/nombre'} → ${p.vslEdit}`).join('\n')
       : '  [pegá la carpeta de la VSL editada]';
-    return `Guiones: ${delDocUrl || '[link]'}. Las partes en negrita son las que hay que resaltar en pantalla.
-Pestaña en la que se encuentra los guiones de anuncios: [pestaña]
-Pestaña en la que se encuentra los guiones de VSL: [pestaña]
+    const estilo = editorStyle
+      ? `Estilo del cliente: ${editorStyle}`
+      : 'Estilo del cliente: [generá la personalidad del cliente para que se complete solo]';
+    return `Guiones: ${delDocUrl || '[pegá el link del documento de guiones]'}. Las partes en negrita son las que hay que resaltar en pantalla.
+Pestaña en la que se encuentra los guiones de anuncios: Anuncios
+Pestaña en la que se encuentra los guiones de VSL: VSL
 
-Carpeta de Recursos (fotos/videos del cliente): [link].
-Branding (colores, logo): [link].
+Carpeta de Recursos (fotos/videos del cliente): ${recursosUrl || '[pegá la carpeta de Recursos]'}.
+Branding (colores, logo): ${brandingUrl || '[pegá la carpeta de Branding]'}.
 
 Loom explicativo: [link]. Ahí te explico qué grabación va con cuál y qué unir.
 
-Estilo del cliente: [formal / femenino / cercano…]. El video tiene que transmitir [...].
+${estilo}
 Piezas a entregar: ${totTotal} en total → ${totBase} completas y ${totVar} recortadas (mismo cuerpo con distintos hooks).
 Por avatar:
 ${porAvatar}
@@ -738,7 +741,25 @@ ${subirVsl}
 Importante: trabajamos con plazos que hay que cumplir. Si en algún momento ves que no llegás, avisame con antelación. Si pasan 24 horas sin novedades tuyas, tengo que reasignar el pedido.
 Quedo a la espera de tu respuesta`;
   };
-  const openEditorMsg = () => setEditorMsg(buildEditorMessage());
+  // Al abrir, busca la carpeta de Recursos + Branding del cliente y su estilo redactado, y arma todo.
+  const [msgBusy, setMsgBusy] = useState(false);
+  const openEditorMsg = async () => {
+    setMsgBusy(true);
+    let recursosUrl = '', brandingUrl = '', editorStyle = '';
+    try {
+      const [recRes, rootRows, cliRows] = await Promise.all([
+        supabase.rpc('cerebro_recursos_cliente', { p_client_id: clientId }),
+        sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=eq.folder&name=ilike.*recursos*&is_root=eq.false&select=name,web_url,depth&order=depth`),
+        sbFetch(`clients?id=eq.${encodeURIComponent(clientId)}&select=editor_style`),
+      ]);
+      const subs = Array.isArray(recRes?.data) ? recRes.data : [];
+      brandingUrl = (subs.find(r => /brand|logo/i.test(r.name || ''))?.url) || '';
+      recursosUrl = (Array.isArray(rootRows) && rootRows[0]?.web_url) || '';
+      editorStyle = (Array.isArray(cliRows) && cliRows[0]?.editor_style) || '';
+    } catch { /* si algo falla, quedan los placeholders */ }
+    setMsgBusy(false);
+    setEditorMsg(buildEditorMessage({ recursosUrl, brandingUrl, editorStyle }));
+  };
 
   // Visores tipo nota (modal grande, SOLO LECTURA). Descripción + copys de anuncios (por avatar)
   // + guión de VSL (funnel) salen del DEL: para cambiarlos se actualiza el documento y se aprieta
@@ -855,7 +876,7 @@ Quedo a la espera de tu respuesta`;
                 <div className="text-[10.5px] text-[#9098A4]">Guiones + carpetas de subida + piezas por avatar, listo para pegar</div>
               </div>
             </div>
-            <button onClick={openEditorMsg} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0"><MessageSquare size={14} />Armar mensaje</button>
+            <button onClick={openEditorMsg} disabled={msgBusy} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0 disabled:opacity-60">{msgBusy ? <RefreshCw size={14} className="animate-spin" /> : <MessageSquare size={14} />}{msgBusy ? 'Armando…' : 'Armar mensaje'}</button>
           </div>
 
           {/* Enlaces del funnel (editables) */}
