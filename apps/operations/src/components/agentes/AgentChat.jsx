@@ -66,16 +66,16 @@ function AdCard({ ad, idx, onSave, saved }) {
   );
 }
 
-export default function AgentChat({ sel, gate, onSaveCopy }) {
-  const [messages, setMessages] = useState([]);
+export default function AgentChat({ sel, gate, onSaveCopy, chatKey, initialMessages = [], onTurn }) {
+  const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [savedKeys, setSavedKeys] = useState({});
   const [totalCost, setTotalCost] = useState(0);
   const scrollRef = useRef(null);
 
-  // Reset al cambiar de avatar/funnel.
-  useEffect(() => { setMessages([]); setSavedKeys({}); setTotalCost(0); }, [sel.funnelId, sel.avatarId]);
+  // Reset/carga al cambiar de conversación (chat nuevo o al abrir uno del historial).
+  useEffect(() => { setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0); }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
   const blocked = gate?.status === 'bloqueado';
@@ -97,26 +97,30 @@ export default function AgentChat({ sel, gate, onSaveCopy }) {
     const content = (text ?? input).trim();
     if ((!content && mode === 'chat') || busy) return;
     const userMsg = { role: 'user', content: content || (mode === 'generate' ? 'Generá anuncios para este avatar.' : '') };
-    const next = [...messages, userMsg];
-    setMessages(next);
+    const withUser = [...messages, userMsg];
+    setMessages(withUser);
     setInput('');
     setBusy(true);
+    let assistantMsg;
     try {
-      const data = await callAgent(next, mode);
+      const data = await callAgent(withUser, mode);
       if (!data?.ok) {
         const detail = data?.detail || (data?.error === 'gate_blocked' ? 'Falta el VSL de este funnel para generar anuncios.' : 'Ocurrió un problema.');
-        setMessages(m => [...m, { role: 'assistant', kind: 'notice', content: detail }]);
+        assistantMsg = { role: 'assistant', kind: 'notice', content: detail };
       } else if (mode === 'generate' && data.ad_copy?.ads?.length) {
-        setMessages(m => [...m, { role: 'assistant', kind: 'ads', ads: data.ad_copy.ads, notes: data.ad_copy.notes || '' }]);
+        assistantMsg = { role: 'assistant', kind: 'ads', ads: data.ad_copy.ads, notes: data.ad_copy.notes || '' };
       } else {
-        setMessages(m => [...m, { role: 'assistant', content: data.reply || '(sin respuesta)' }]);
+        assistantMsg = { role: 'assistant', content: data.reply || '(sin respuesta)' };
       }
       if (data?.cost_usd) setTotalCost(c => c + Number(data.cost_usd));
     } catch (e) {
-      setMessages(m => [...m, { role: 'assistant', kind: 'notice', content: String(e.message || e) }]);
+      assistantMsg = { role: 'assistant', kind: 'notice', content: String(e.message || e) };
     } finally {
       setBusy(false);
     }
+    const finalMsgs = [...withUser, assistantMsg];
+    setMessages(finalMsgs);
+    onTurn?.(finalMsgs); // persiste la conversación (historial)
   }
 
   function saveAd(ad, idx) {
