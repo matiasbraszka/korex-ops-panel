@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
   // Modelo POR agente (app_settings.api_config.chat_models[subagent]) con fallback al global.
   const chatModels = (cfg.chat_models as Record<string, string>) || {};
   const model = str(chatModels[subagentKey]) || str(cfg.chat_model) || "claude-sonnet-5";
-  const maxTokens = Number(mode === "generate" ? (cfg.chat_generate_max_tokens ?? 4096) : (cfg.chat_max_tokens ?? 1800));
+  const maxTokens = Number(mode === "generate" ? (cfg.chat_generate_max_tokens ?? 4096) : (cfg.chat_max_tokens ?? 4000));
   const dailyCap = Number(cfg.daily_cap_usd ?? 5);
   const monthlyCap = Number(cfg.monthly_cap_usd ?? 100);
   const prices = (cfg.prices as Record<string, { in: number; out: number }>) || {};
@@ -250,6 +250,10 @@ Deno.serve(async (req) => {
   const reqBody: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
+    // Agente interactivo: SIN "pensar interno" (adaptive thinking). En Sonnet 5 el thinking está
+    // ON por defecto y se come el presupuesto de max_tokens → respuestas cortadas/vacías. Para copy
+    // de anuncios no hace falta; así es rápido, barato y todo el presupuesto va a la respuesta.
+    thinking: { type: "disabled" },
     system: [
       { type: "text", text: stableSystem, cache_control: { type: "ephemeral" } },
       { type: "text", text: volatileParts },
@@ -291,6 +295,7 @@ Deno.serve(async (req) => {
   const inTok = Number(usage.input_tokens || 0) + Number(usage.cache_read_input_tokens || 0) + Number(usage.cache_creation_input_tokens || 0);
   const outTok = Number(usage.output_tokens || 0);
   const cost = Number(((inTok / 1e6) * price.in + (outTok / 1e6) * price.out).toFixed(6));
+  const stopReason = str(data?.stop_reason);
 
   let reply = "";
   let adCopy: Record<string, unknown> | null = null;
@@ -303,11 +308,16 @@ Deno.serve(async (req) => {
     }
   } catch { /* nada */ }
 
+  // Red de seguridad: si quedó vacío por tope de tokens, avisamos claro en vez de "(sin respuesta)".
+  if (!reply && !adCopy && stopReason === "max_tokens") {
+    reply = "(La respuesta se cortó por el límite de longitud. Pedímelo en partes o más corto, o suban el tope de respuesta en Administración.)";
+  }
+
   await supabase.from("api_usage").insert({
     fn: "agent_chat", model, input_tokens: inTok, output_tokens: outTok, cost_usd: cost,
     client_id: clientId, funnel_id: funnelId, status: "ok",
-    meta: { subagent_key: subagentKey, mode, avatar_id: avatarId, turns: messages.length, ads: adCopy ? (Array.isArray(adCopy.ads) ? adCopy.ads.length : 0) : undefined },
+    meta: { subagent_key: subagentKey, mode, avatar_id: avatarId, turns: messages.length, stop: stopReason, ads: adCopy ? (Array.isArray(adCopy.ads) ? adCopy.ads.length : 0) : undefined },
   });
 
-  return j({ ok: true, mode, reply, ad_copy: adCopy, gate, cost_usd: cost, tokens: { in: inTok, out: outTok } });
+  return j({ ok: true, mode, reply, ad_copy: adCopy, gate, cost_usd: cost, tokens: { in: inTok, out: outTok }, stop_reason: stopReason });
 });
