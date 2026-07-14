@@ -9,7 +9,7 @@ import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, Megaphone,
   Check, Trash2, Activity, Zap, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
-  FolderOpen, Film, FolderPlus, Link2,
+  FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard,
 } from 'lucide-react';
 import Modal from '../Modal';
 import { openUrl, copyText } from './recursosShared';
@@ -493,7 +493,10 @@ function VoomlyPicker({ clientName, funnelName, current, onPick, onClose }) {
 // Muestra SOLO lo que cuelga de una carpeta "Anuncios" (dentro de Anuncios › Grabaciones/Ediciones/
 // Terminados…), con la RUTA completa (Estrategia 2 › Anuncios › Editados) y la fecha, prioriza las de
 // "ediciones/editado" que matcheen el avatar, y deja buscar. Así el equipo no tiene que ir al Drive.
-function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
+function FolderPicker({ clientId, avatarName, current, onPick, onClose, kind = 'edit' }) {
+  const isRec = kind === 'rec';
+  // Bucket que se prioriza según qué carpeta se busca (grabaciones vs ediciones).
+  const buckRe = isRec ? /grabaci|grabado|record|crudo|raw/i : /edici|editad|termina|final|listo/i;
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
   useEffect(() => {
@@ -524,10 +527,10 @@ function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
     const list = pool.map(r => {
       const chain = chainOf(r);
       const ancestors = chain.slice(0, -1);
-      const inEdit = ancestors.some(n => /edici|editad|termina|final|listo/i.test(n.name));
+      const inEdit = ancestors.some(n => buckRe.test(n.name));
       const n = normVoomly(r.name);
       let score = 0;
-      if (inEdit || /edici|editad|termina|final|listo/.test(n)) score += 3;
+      if (inEdit || buckRe.test(n)) score += 3;
       for (const t of aTokens) if (n.includes(t)) score += 2;
       const path = ancestors.map(a => a.name);
       return { r, n, score, path };
@@ -536,12 +539,12 @@ function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
     const filtered = ql ? list.filter(x => x.n.includes(ql) || normVoomly(x.path.join(' ')).includes(ql)) : list;
     filtered.sort((a, b) => b.score - a.score || a.n.localeCompare(b.n));
     return { list: filtered, scoped };
-  }, [rows, aTokens, q, chainOf, insideAnuncios]);
+  }, [rows, aTokens, q, chainOf, insideAnuncios, isRec]);
   const fmtDay = (d) => { if (!d) return ''; try { return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return ''; } };
   return (
-    <Modal open onClose={onClose} title={`Elegir la carpeta de ediciones · ${avatarName || 'avatar'}`} maxWidth={660}
+    <Modal open onClose={onClose} title={`Elegir la carpeta de ${isRec ? 'grabaciones' : 'ediciones'} · ${avatarName || 'avatar'}`} maxWidth={660}
       footer={<div className="flex justify-between items-center gap-2 w-full">
-        <span className="text-[11px] text-[#9098A4]">{scored.scoped ? 'Carpetas dentro de “Anuncios”.' : 'No encontré “Anuncios”: muestro todas.'} Elegí dónde están los anuncios editados.</span>
+        <span className="text-[11px] text-[#9098A4]">{scored.scoped ? 'Carpetas dentro de “Anuncios”.' : 'No encontré “Anuncios”: muestro todas.'} Elegí dónde están los anuncios {isRec ? 'grabados' : 'editados'}.</span>
         <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
       </div>}>
       <div className="p-1">
@@ -582,11 +585,31 @@ function FolderPicker({ clientId, avatarName, current, onPick, onClose }) {
   );
 }
 
-function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
+// Modal del mensaje para el editor: muestra el mensaje ya armado (editable) + botón "Copiar".
+// El texto se puede retocar antes de copiar (algunas partes son variables: Loom, estilo, pestañas).
+function EditorMessageModal({ initial, onClose }) {
+  const [text, setText] = useState(initial || '');
+  const [done, setDone] = useState(false);
+  return (
+    <Modal open onClose={onClose} title="Mensaje para el editor" maxWidth={760}
+      footer={<div className="flex justify-between items-center gap-2 w-full">
+        <span className="text-[11px] text-[#9098A4]">Revisá y completá lo que esté entre corchetes […] antes de enviarlo.</span>
+        <div className="flex gap-2">
+          <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
+          <button onClick={() => { copyText(text); setDone(true); setTimeout(() => setDone(false), 1500); }} className="inline-flex items-center gap-1.5 text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark">{done ? <Check size={14} strokeWidth={3} /> : <Clipboard size={14} />}{done ? '¡Copiado!' : 'Copiar mensaje'}</button>
+        </div>
+      </div>}>
+      <textarea value={text} onChange={e => setText(e.target.value)} className="w-full py-3.5 px-4 border border-[#E2E5EB] rounded-xl text-[12.5px] text-[#1A1D26] bg-[#FBFCFE] resize-y outline-none focus:border-blue leading-relaxed" style={{ minHeight: '56vh', whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' }} />
+    </Modal>
+  );
+}
+
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const [voomlyOpen, setVoomlyOpen] = useState(false);
-  const [folderPick, setFolderPick] = useState(null); // avatar para el que se elige carpeta a mano
+  const [folderPick, setFolderPick] = useState(null); // { av, kind } — carpeta que se elige a mano
+  const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
@@ -630,25 +653,78 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
   const fetchFolders = () => runFolders('read', 'anuncios');
   const createFolders = () => runFolders('create', 'anuncios');
   const createVslFolders = () => runFolders('create', 'vsl');
-  // Trae la carpeta de EDICIONES de UN avatar: intenta encontrarla sola (mode read); si no la
-  // encuentra, abre el selector manual para que el equipo la elija sin ir al Drive.
-  const bringEditFolder = async (av) => {
+  // Trae la carpeta de GRABACIONES ('rec') o EDICIONES ('edit') de UN avatar: intenta encontrarla
+  // sola (mode read); si no la encuentra, abre el selector manual para elegirla sin ir al Drive.
+  const bringFolder = async (av, kind) => {
     const name = (av.name || '').trim();
     if (!name) { window.alert('Poné el nombre del avatar primero.'); return; }
+    const field = kind === 'rec' ? 'rec_folder_url' : 'edit_folder_url';
     setFolderBusy('read');
     try {
       const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'read' } });
       if (!error && data?.ok) {
         const merged = avatars.map(a => { const info = data.byName?.[(a.name || '').trim()]; return info ? { ...a, ...info } : a; });
         onUpdate(f.id, { avatars: merged });
-        if (data.byName?.[name]?.edit_folder_url) { setFolderBusy('idle'); return; } // la encontró sola ✓
+        if (data.byName?.[name]?.[field]) { setFolderBusy('idle'); return; } // la encontró sola ✓
       }
     } catch { /* cae al selector manual */ }
     setFolderBusy('idle');
-    setFolderPick(av); // no la encontró → elegir a mano
+    setFolderPick({ av, kind }); // no la encontró → elegir a mano
   };
   const namedAvatars = avatars.filter(a => (a.name || '').trim());
   const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
+
+  // ── Mensaje para el editor ──────────────────────────────────────────────────
+  // Arma el mensaje que se le manda al editor para editar los anuncios + VSL. Cuenta las piezas
+  // POR AVATAR: "completas" = guiones base cargados; "recortadas/variaciones" = hooks − base
+  // (mismo cuerpo, distinto hook). Rellena lo que tenemos (guiones/carpetas por avatar) y deja
+  // entre corchetes lo variable (Loom, estilo, recursos, branding, pestañas) para completar a mano.
+  const buildEditorMessage = () => {
+    const per = namedAvatars.map((a, i) => {
+      const hooks = Math.max(0, parseInt(a.hooks_count, 10) || 0);
+      const base = Math.max(0, parseInt(a.base_count, 10) || 0);
+      const variaciones = Math.max(0, hooks - base);
+      const total = base + variaciones; // = hooks cuando hooks ≥ base
+      return { n: i + 1, name: (a.name || '').trim(), hooks, base, variaciones, total, edit: a.edit_folder_url || '', vslEdit: a.vsl_edit_folder_url || '' };
+    });
+    const totBase = per.reduce((s, p) => s + p.base, 0);
+    const totVar = per.reduce((s, p) => s + p.variaciones, 0);
+    const totTotal = per.reduce((s, p) => s + p.total, 0);
+    const porAvatar = per.map(p => `  • Avatar ${p.n} (${p.name || 's/nombre'}): ${p.total} en total → ${p.base} completas y ${p.variaciones} recortadas`).join('\n');
+    const subirAnuncios = per.length
+      ? per.map(p => `  Avatar ${p.n} (${p.name || 's/nombre'}) → ${p.edit || '[pegá la carpeta de este avatar]'}`).join('\n')
+      : '  [definí los avatares]';
+    const hasVsl = per.some(p => p.vslEdit);
+    const subirVsl = hasVsl
+      ? per.filter(p => p.vslEdit).map(p => `  ${p.name || 's/nombre'} → ${p.vslEdit}`).join('\n')
+      : '  [pegá la carpeta de la VSL editada]';
+    return `Guiones: ${delDocUrl || '[link]'}. Las partes en negrita son las que hay que resaltar en pantalla.
+Pestaña en la que se encuentra los guiones de anuncios: [pestaña]
+Pestaña en la que se encuentra los guiones de VSL: [pestaña]
+
+Carpeta de Recursos (fotos/videos del cliente): [link].
+Branding (colores, logo): [link].
+
+Loom explicativo: [link]. Ahí te explico qué grabación va con cuál y qué unir.
+
+Estilo del cliente: [formal / femenino / cercano…]. El video tiene que transmitir [...].
+Piezas a entregar: ${totTotal} en total → ${totBase} completas y ${totVar} recortadas (mismo cuerpo con distintos hooks).
+Por avatar:
+${porAvatar}
+Formato: MP4 4k
+
+Dónde subir:
+Anuncios en esta carpeta:
+${subirAnuncios}
+
+y VSL en esta otra:
+${subirVsl}
+*No subas nada por fuera de esas carpetas.*
+¿Para cuándo podés tenerlo listo, siendo realista? Necesito una fecha concreta.
+Importante: trabajamos con plazos que hay que cumplir. Si en algún momento ves que no llegás, avisame con antelación. Si pasan 24 horas sin novedades tuyas, tengo que reasignar el pedido.
+Quedo a la espera de tu respuesta`;
+  };
+  const openEditorMsg = () => setEditorMsg(buildEditorMessage());
 
   // Visores tipo nota (modal grande, SOLO LECTURA). Descripción + copys de anuncios (por avatar)
   // + guión de VSL (funnel) salen del DEL: para cambiarlos se actualiza el documento y se aprieta
@@ -756,6 +832,18 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
 
       {open && (
         <div className="pt-1 px-4 pb-[18px]" style={{ background: '#FCFCFD' }}>
+          {/* Mensaje para el editor: arma el brief de edición (guiones + carpetas + piezas por avatar) */}
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#DCE7FB' }}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#EEF3FF', color: '#2E69E0' }}><MessageSquare size={15} /></span>
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-bold text-[#1A1D26]">Mensaje para el editor</div>
+                <div className="text-[10.5px] text-[#9098A4]">Guiones + carpetas de subida + piezas por avatar, listo para pegar</div>
+              </div>
+            </div>
+            <button onClick={openEditorMsg} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0"><MessageSquare size={14} />Armar mensaje</button>
+          </div>
+
           {/* Enlaces del funnel (editables) */}
           <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
             <CardHead Icon={Link2} iconBg="#EEF3FF" iconColor="#2E69E0" title="Enlaces del funnel" subtitle="Producción, testing, dominio y publicidad" />
@@ -855,25 +943,38 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
                       {/* Descripción */}
                       <ScriptPreview Icon={FileText} color="#DB2777" label="Descripción" text={av.spec_text} onOpen={() => openDesc(av)} locked emptyHint="Sin descripción. Sale del DEL: tocá “Generar avatares del DEL”." />
 
+                      {/* Grabaciones (grabado): la CARPETA donde va lo que grabó el cliente, por avatar. */}
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#16A34A] mb-1.5"><Film size={12} />Grabaciones <span className="text-[#86C7A2] normal-case tracking-normal">(grabado)</span></div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <input key={av.id + 'rec'} defaultValue={av.rec_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.rec_folder_url || '')) setAvatar(av.id, { rec_folder_url: v || null }); }} placeholder="Carpeta de grabaciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
+                          <button onClick={() => bringFolder(av, 'rec')} disabled={folderBusy !== 'idle'} title="Trae la carpeta de grabaciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
+                          {av.rec_folder_url
+                            ? <><button onClick={() => openUrl(av.rec_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><FolderOpen size={12} />Abrir</button>
+                               <button onClick={() => copyText(av.rec_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Copy size={12} /></button></>
+                            : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
+                        </div>
+                        {av.rec_folder_url && (
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.rec_files > 0 ? <><Check size={9} strokeWidth={3.5} />grabado · {av.rec_files} arch.</> : 'carpeta vacía'}</span>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Anuncios (editado): la CARPETA de ediciones de este avatar (ahí viven los anuncios editados). */}
                       <div>
                         <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#7C3AED] mb-1.5"><Megaphone size={12} />Anuncios <span className="text-[#A78BFA] normal-case tracking-normal">(editado)</span></div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <input key={av.id + 'edit'} defaultValue={av.edit_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.edit_folder_url || '')) setAvatar(av.id, { edit_folder_url: v || null }); }} placeholder="Carpeta de ediciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
-                          <button onClick={() => bringEditFolder(av)} disabled={folderBusy !== 'idle'} title="Trae la carpeta de ediciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
+                          <button onClick={() => bringFolder(av, 'edit')} disabled={folderBusy !== 'idle'} title="Trae la carpeta de ediciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
                           {av.edit_folder_url
                             ? <><button onClick={() => openUrl(av.edit_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><FolderOpen size={12} />Abrir</button>
                                <button onClick={() => copyText(av.edit_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E4DBFF] rounded-lg cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Copy size={12} /></button></>
                             : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
                         </div>
-                        {(av.edit_folder_url || av.rec_folder_url) && (
+                        {av.edit_folder_url && (
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {av.edit_folder_url && <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.edit_files > 0 ? <><Check size={9} strokeWidth={3.5} />editado · {av.edit_files} arch.</> : 'carpeta vacía'}</span>}
-                            {av.rec_folder_url && (
-                              <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
-                                <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabado</span> : <span className="text-[#C3C9D4]">vacía</span>}
-                              </button>
-                            )}
+                            <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.edit_files > 0 ? <><Check size={9} strokeWidth={3.5} />editado · {av.edit_files} arch.</> : 'carpeta vacía'}</span>
                           </div>
                         )}
                         {(av.vsl_edit_folder_url || av.vsl_rec_folder_url) && (
@@ -893,6 +994,20 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
                         )}
                       </div>
 
+                      {/* Piezas para el editor: cuántos guiones base y hooks → completas + recortadas */}
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#2E69E0] mb-1.5"><MessageSquare size={12} />Piezas para el editor</div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <label className="inline-flex items-center gap-1.5 text-[11px] text-[#6B7280]">Guiones base
+                            <input type="number" min="0" key={av.id + 'base'} defaultValue={av.base_count ?? ''} onBlur={e => { const v = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); if (v !== (av.base_count ?? null)) setAvatar(av.id, { base_count: v }); }} placeholder="0" className="w-16 py-1.5 px-2 border border-[#E2E5EB] rounded-lg text-[12px] text-center text-[#1A1D26] bg-white outline-none focus:border-blue" /></label>
+                          <label className="inline-flex items-center gap-1.5 text-[11px] text-[#6B7280]">Hooks (total)
+                            <input type="number" min="0" key={av.id + 'hooks'} defaultValue={av.hooks_count ?? ''} onBlur={e => { const v = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); if (v !== (av.hooks_count ?? null)) setAvatar(av.id, { hooks_count: v }); }} placeholder="0" className="w-16 py-1.5 px-2 border border-[#E2E5EB] rounded-lg text-[12px] text-center text-[#1A1D26] bg-white outline-none focus:border-blue" /></label>
+                          {(() => { const h = Math.max(0, parseInt(av.hooks_count, 10) || 0); const b = Math.max(0, parseInt(av.base_count, 10) || 0); const rec = Math.max(0, h - b); return (h || b)
+                            ? <span className="text-[11px] font-semibold text-[#15803D]">{b + rec} piezas → {b} completas · {rec} recortadas</span>
+                            : <span className="text-[10.5px] text-[#AEB4BF]">Cargá guiones base y hooks para contar las piezas</span>; })()}
+                        </div>
+                      </div>
+
                       {/* Copys de anuncios */}
                       <ScriptPreview Icon={FileText} color="#2E69E0" label="Copys de anuncios" text={av.ad_script} onOpen={() => openAdScript(av, i)} locked emptyHint="Sin copys. Salen del DEL: tocá “Generar avatares del DEL”." />
                     </div>
@@ -910,7 +1025,10 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
       )}
       {note && <NoteModal {...note} onClose={() => setNote(null)} />}
       {voomlyOpen && <VoomlyPicker clientName={clientName} funnelName={f.name || ''} current={f.vsl_url || ''} onPick={(url) => onUpdate(f.id, { vsl_url: url || null })} onClose={() => setVoomlyOpen(false)} />}
-      {folderPick && <FolderPicker clientId={clientId} avatarName={folderPick.name || ''} current={folderPick.edit_folder_url || ''} onPick={(url) => setAvatar(folderPick.id, { edit_folder_url: url || null })} onClose={() => setFolderPick(null)} />}
+      {folderPick && (() => { const field = folderPick.kind === 'rec' ? 'rec_folder_url' : 'edit_folder_url'; return (
+        <FolderPicker clientId={clientId} avatarName={folderPick.av?.name || ''} kind={folderPick.kind} current={folderPick.av?.[field] || ''} onPick={(url) => setAvatar(folderPick.av.id, { [field]: url || null })} onClose={() => setFolderPick(null)} />
+      ); })()}
+      {editorMsg !== null && <EditorMessageModal initial={editorMsg} onClose={() => setEditorMsg(null)} />}
     </div>
   );
 }
@@ -925,7 +1043,9 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDel
   const stratType = /\bproducto\b/i.test(s.name || '') ? { label: 'Producto', color: '#15803D', bg: '#E6F7EE', border: '#BBF0D0' }
     : /\breclutamiento\b/i.test(s.name || '') ? { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF', border: '#C7DBFB' }
     : null;
-  const delText = (docs.find(d => d.doc_kind === 'del')?.text) || '';
+  const delDoc = docs.find(d => d.doc_kind === 'del');
+  const delText = (delDoc?.text) || '';
+  const delDocUrl = delDoc?.web_url || '';
   const masterDocs = docs.filter(d => d.doc_kind !== 'extra');
   // Nota: los Recursos (branding/testimonios/imágenes) ya NO viven acá: son del CLIENTE
   // (bloque "Recursos del cliente" en el Contexto de arriba), compartidos por todas las estrategias.
@@ -987,7 +1107,7 @@ function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDel
               </div>
               {funnels.length === 0
                 ? <div className="text-[12px] text-[#9098A4] py-7 text-center">Sin funnels en esta estrategia.</div>
-                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={delText} clientId={s.client_id} clientName={clientName} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
+                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={delText} delDocUrl={delDocUrl} clientId={s.client_id} clientName={clientName} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
             </div>
           </div>
 
