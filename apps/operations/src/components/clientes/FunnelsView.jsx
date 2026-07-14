@@ -585,6 +585,20 @@ function FolderPicker({ clientId, avatarName, current, onPick, onClose, kind = '
   );
 }
 
+// Cuenta HOOKS y TEXTOS BASE dentro de los copys de anuncios (av.ad_script) que salen del DEL.
+// Convención Korex: cada cuerpo va como "Texto base 1)" y cada gancho como "Hook 1)". Si el DEL
+// no usa esos rótulos, cae a contar bloques "ANUNCIO" como piezas completas (0 recortes).
+function countPieces(adScript) {
+  const t = String(adScript || '');
+  if (!t.trim()) return { hooks: 0, base: 0 };
+  const hooks = (t.match(/(?:^|[\n\r])\s*hook\s*\d*\s*[)\-:.]/gi) || []).length;
+  const base = (t.match(/(?:^|[\n\r])\s*texto\s*base\s*\d*\s*[)\-:.]/gi) || []).length;
+  if (hooks || base) return { hooks, base };
+  // Fallback: "ANUNCIO" (singular, no "Anuncios") como pieza completa suelta.
+  const anuncios = (t.match(/\banuncio\b/gi) || []).length;
+  return { hooks: anuncios, base: anuncios };
+}
+
 // Modal del mensaje para el editor: muestra el mensaje ya armado (editable) + botón "Copiar".
 // El texto se puede retocar antes de copiar (algunas partes son variables: Loom, estilo, pestañas).
 function EditorMessageModal({ initial, onClose }) {
@@ -675,14 +689,14 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
   const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
 
   // ── Mensaje para el editor ──────────────────────────────────────────────────
-  // Arma el mensaje que se le manda al editor para editar los anuncios + VSL. Cuenta las piezas
-  // POR AVATAR: "completas" = guiones base cargados; "recortadas/variaciones" = hooks − base
-  // (mismo cuerpo, distinto hook). Rellena lo que tenemos (guiones/carpetas por avatar) y deja
-  // entre corchetes lo variable (Loom, estilo, recursos, branding, pestañas) para completar a mano.
+  // Arma el mensaje que se le manda al editor para editar los anuncios + VSL. Las piezas se
+  // DETECTAN SOLAS leyendo los copys de anuncios de cada avatar (countPieces): "completas" =
+  // textos base; "recortadas/variaciones" = hooks − textos base (mismo cuerpo, distinto hook).
+  // Rellena lo que tenemos (guiones/carpetas por avatar) y deja entre corchetes lo variable
+  // (Loom, estilo, recursos, branding, pestañas) para completar a mano.
   const buildEditorMessage = () => {
     const per = namedAvatars.map((a, i) => {
-      const hooks = Math.max(0, parseInt(a.hooks_count, 10) || 0);
-      const base = Math.max(0, parseInt(a.base_count, 10) || 0);
+      const { hooks, base } = countPieces(a.ad_script);
       const variaciones = Math.max(0, hooks - base);
       const total = base + variaciones; // = hooks cuando hooks ≥ base
       return { n: i + 1, name: (a.name || '').trim(), hooks, base, variaciones, total, edit: a.edit_folder_url || '', vslEdit: a.vsl_edit_folder_url || '' };
@@ -690,7 +704,7 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
     const totBase = per.reduce((s, p) => s + p.base, 0);
     const totVar = per.reduce((s, p) => s + p.variaciones, 0);
     const totTotal = per.reduce((s, p) => s + p.total, 0);
-    const porAvatar = per.map(p => `  • Avatar ${p.n} (${p.name || 's/nombre'}): ${p.total} en total → ${p.base} completas y ${p.variaciones} recortadas`).join('\n');
+    const porAvatar = per.map(p => `  • Avatar ${p.n} (${p.name || 's/nombre'}): ${p.total} en total → ${p.base} completas y ${p.variaciones} recortadas${p.total === 0 ? '   [revisá los copys de este avatar]' : ''}`).join('\n');
     const subirAnuncios = per.length
       ? per.map(p => `  Avatar ${p.n} (${p.name || 's/nombre'}) → ${p.edit || '[pegá la carpeta de este avatar]'}`).join('\n')
       : '  [definí los avatares]';
@@ -992,20 +1006,6 @@ Quedo a la espera de tu respuesta`;
                             )}
                           </div>
                         )}
-                      </div>
-
-                      {/* Piezas para el editor: cuántos guiones base y hooks → completas + recortadas */}
-                      <div>
-                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#2E69E0] mb-1.5"><MessageSquare size={12} />Piezas para el editor</div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <label className="inline-flex items-center gap-1.5 text-[11px] text-[#6B7280]">Guiones base
-                            <input type="number" min="0" key={av.id + 'base'} defaultValue={av.base_count ?? ''} onBlur={e => { const v = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); if (v !== (av.base_count ?? null)) setAvatar(av.id, { base_count: v }); }} placeholder="0" className="w-16 py-1.5 px-2 border border-[#E2E5EB] rounded-lg text-[12px] text-center text-[#1A1D26] bg-white outline-none focus:border-blue" /></label>
-                          <label className="inline-flex items-center gap-1.5 text-[11px] text-[#6B7280]">Hooks (total)
-                            <input type="number" min="0" key={av.id + 'hooks'} defaultValue={av.hooks_count ?? ''} onBlur={e => { const v = e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0); if (v !== (av.hooks_count ?? null)) setAvatar(av.id, { hooks_count: v }); }} placeholder="0" className="w-16 py-1.5 px-2 border border-[#E2E5EB] rounded-lg text-[12px] text-center text-[#1A1D26] bg-white outline-none focus:border-blue" /></label>
-                          {(() => { const h = Math.max(0, parseInt(av.hooks_count, 10) || 0); const b = Math.max(0, parseInt(av.base_count, 10) || 0); const rec = Math.max(0, h - b); return (h || b)
-                            ? <span className="text-[11px] font-semibold text-[#15803D]">{b + rec} piezas → {b} completas · {rec} recortadas</span>
-                            : <span className="text-[10.5px] text-[#AEB4BF]">Cargá guiones base y hooks para contar las piezas</span>; })()}
-                        </div>
                       </div>
 
                       {/* Copys de anuncios */}
