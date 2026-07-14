@@ -538,7 +538,7 @@ export function buildInitialPendingResources(template) {
   }));
 }
 
-export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier, conector, closer, contractData, niche, email, country, priority, status, notes, billingAmount, billingCurrency, billingCycle, billingInstallments, nextChargeDate, paymentMethod, billingStatus, driveFolderUrl } = {}) {
+export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier, conector, closer, contractData, niche, email, country, priority, status, notes, billingAmount, billingCurrency, billingCycle, billingInstallments, nextChargeDate, paymentMethod, billingStatus, driveFolderUrl, teamName } = {}) {
   return {
     id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     name, company, service, startDate: start, pm,
@@ -546,7 +546,7 @@ export function mkClient(name, company, service, start, pm, clientCount = 0, { p
     status: status || 'active', priority: priority || 5, bottleneck: '', notes: notes || '',
     tier: tier || 'starter',
     conector: conector || '', closer: closer || '', contractData: contractData || '',
-    niche: niche || '', email: email || '', country: country || '',
+    niche: niche || '', teamName: teamName || '', email: email || '', country: country || '',
     billingAmount: billingAmount ?? null,
     billingCurrency: billingCurrency || 'EUR',
     billingCycle: billingCycle || 'mensual',

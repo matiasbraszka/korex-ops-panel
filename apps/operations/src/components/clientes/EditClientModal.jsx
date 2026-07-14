@@ -57,6 +57,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       name: c.name || '',
       company: c.company || '',
       niche: c.niche || '',
+      teamName: c.teamName || '',
       email: c.email || '',
       phone: c.phone || '',
       country: c.country || '',
@@ -97,6 +98,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       }
       const created = createClient(form.name.trim(), form.company.trim(), form.service.trim(), form.startDate || todayStr(), '', {
         niche: form.niche.trim(),
+        teamName: form.teamName.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         country: form.country.trim(),
@@ -128,6 +130,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       name: form.name.trim(),
       company: form.company.trim(),
       niche: form.niche.trim() || null,
+      teamName: form.teamName.trim() || null,
       email: form.email.trim() || null,
       phone: form.phone.trim(),
       country: form.country.trim() || null,
@@ -184,11 +187,14 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
             <Field label="Nombre completo" required>
               <input type="text" value={form.name || ''} onChange={e => set('name', e.target.value)} className={inputClass} placeholder="Sergio Cánovas" />
             </Field>
-            <Field label="Empresa / marca" required>
-              <input type="text" value={form.company || ''} onChange={e => set('company', e.target.value)} className={inputClass} placeholder="Kangen" />
+            <Field label="Empresa MLM" required>
+              <input type="text" value={form.company || ''} onChange={e => set('company', e.target.value)} className={inputClass} placeholder="Farmasi, InCruises, Vida Divina…" />
             </Field>
             <Field label="Nicho / sector">
-              <input type="text" value={form.niche || ''} onChange={e => set('niche', e.target.value)} className={inputClass} placeholder="Salud, MLM, etc." />
+              <input type="text" value={form.niche || ''} onChange={e => set('niche', e.target.value)} className={inputClass} placeholder="Salud, Finanzas, Network Marketing…" />
+            </Field>
+            <Field label="Nombre de equipo">
+              <input type="text" value={form.teamName || ''} onChange={e => set('teamName', e.target.value)} className={inputClass} placeholder="Ej. Los Imparables (opcional)" />
             </Field>
             <Field label="Email">
               <input type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} className={inputClass} placeholder="cliente@empresa.com" />

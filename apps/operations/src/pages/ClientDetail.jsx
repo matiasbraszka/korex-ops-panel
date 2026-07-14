@@ -8,7 +8,7 @@ import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
-import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock } from 'lucide-react';
+import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock, Building2, Users, Tag } from 'lucide-react';
 import FunnelsView from '../components/clientes/FunnelsView';
 import CarpetasView from '../components/clientes/CarpetasView';
 import ContratoTab from '../components/clientes/ContratoTab';
@@ -114,7 +114,11 @@ export default function ClientDetail({ client: c }) {
               />
               <StatusPill text={pill.text} pillClass={pill.pillClass} />
             </div>
-            <div className="text-[13px] font-medium mt-0.5 max-md:text-[12px]" style={{ color: '#6B7280' }}>{c.company}</div>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              {c.company && <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-md text-[11.5px] font-semibold" style={{ background: '#EEF2FF', color: '#4338CA' }} title="Empresa donde hace MLM"><Building2 size={12} />{c.company}</span>}
+              {c.niche && <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-md text-[11.5px] font-semibold" style={{ background: '#F4F1FE', color: '#7C3AED' }} title="Nicho del cliente"><Tag size={12} />{c.niche}</span>}
+              {c.teamName && <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-md text-[11.5px] font-semibold" style={{ background: '#ECFDF5', color: '#15803D' }} title="Nombre de equipo"><Users size={12} />{c.teamName}</span>}
+            </div>
             <div className="flex items-center gap-2 mt-2.5 flex-wrap text-[12px] max-md:gap-1.5 max-md:mt-2 max-md:text-[11px]" style={{ color: '#6B7280' }}>
               <span className="inline-flex items-center gap-1.5"><Inbox size={14} className="text-[#9CA3AF]" />{c.service || '—'}</span>
               <span className="text-[#D0D5DD]">{'·'}</span>
