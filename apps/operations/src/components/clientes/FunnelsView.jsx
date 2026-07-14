@@ -608,21 +608,28 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
   //  · CREAR (mode 'create'): arma la estructura que falte (vía Apps Script). Acción explícita, aparte.
   // En ambos casos mergeamos los links/conteos en cada avatar.
   const [folderBusy, setFolderBusy] = useState('idle'); // idle | read | create
-  const runFolders = async (mode) => {
+  const runFolders = async (mode, target = 'anuncios') => {
     const named = avatars.filter(a => (a.name || '').trim());
     if (!named.length) { window.alert('Poné el nombre de al menos un avatar primero.'); return; }
-    setFolderBusy(mode);
+    setFolderBusy(target === 'vsl' ? 'vsl' : mode);
     try {
-      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode } });
+      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode, target } });
       if (error || !data?.ok) { window.alert(data?.hint || `No se pudieron ${mode === 'read' ? 'traer' : 'crear'} las carpetas` + (data?.error ? ` (${data.error})` : '')); return; }
       if (mode === 'read' && data.found === false) { window.alert('No encontré las carpetas por avatar en el Drive. Sincronizá la pestaña Carpetas, o usá "Crear carpetas" para armarlas.'); return; }
-      const merged = avatars.map(a => { const info = data.byName?.[(a.name || '').trim()]; return info ? { ...a, ...info } : a; });
+      const merged = avatars.map(a => {
+        const info = data.byName?.[(a.name || '').trim()];
+        if (!info) return a;
+        return target === 'vsl'
+          ? { ...a, vsl_rec_folder_url: info.rec_folder_url, vsl_edit_folder_url: info.edit_folder_url, vsl_rec_files: info.rec_files, vsl_edit_files: info.edit_files }
+          : { ...a, ...info };
+      });
       onUpdate(f.id, { avatars: merged });
     } catch { window.alert(`Error al ${mode === 'read' ? 'traer' : 'crear'} las carpetas.`); }
     finally { setFolderBusy('idle'); }
   };
-  const fetchFolders = () => runFolders('read');
-  const createFolders = () => runFolders('create');
+  const fetchFolders = () => runFolders('read', 'anuncios');
+  const createFolders = () => runFolders('create', 'anuncios');
+  const createVslFolders = () => runFolders('create', 'vsl');
   // Trae la carpeta de EDICIONES de UN avatar: intenta encontrarla sola (mode read); si no la
   // encuentra, abre el selector manual para que el equipo la elija sin ir al Drive.
   const bringEditFolder = async (av) => {
@@ -802,6 +809,7 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
               {namedAvatars.length > 0 && <>
                 <button onClick={fetchFolders} disabled={folderBusy !== 'idle'} title="Vincula las carpetas por avatar que YA existen en el Drive y lee su estado (grabado/editado). No crea nada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50" style={foldersReady ? { color: '#15803D', borderColor: '#C9F0D8' } : { color: '#3F4653', borderColor: '#D8DDE6' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : foldersReady ? <Check size={12} strokeWidth={3} /> : <FolderOpen size={12} />}{folderBusy === 'read' ? 'Trayendo…' : 'Traer carpeta'}</button>
                 <button onClick={createFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive lo que falte: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar. Acción aparte de traer." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folderBusy === 'create' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'create' ? 'Creando…' : 'Crear carpetas'}</button>
+                <button onClick={createVslFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive: VSL › Grabaciones|Ediciones › una subcarpeta por avatar. Si la de grabaciones tiene archivos = grabó la VSL; si la de ediciones = VSL editada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#EFF6FF] border border-[#C7DBFB] rounded-lg py-[7px] px-[11px] text-[#2E69E0] cursor-pointer hover:bg-[#E0ECFF] disabled:opacity-50">{folderBusy === 'vsl' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'vsl' ? 'Creando VSL…' : 'Crear carpetas VSL'}</button>
               </>}
               {canUndo && <button onClick={undoGenerate} title="Restaurar los avatares y la VSL que había antes de la última generación de la IA." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
               <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
@@ -864,6 +872,21 @@ function FunnelRow({ f, stages, delText = '', clientId, clientName = '', onUpdat
                             {av.rec_folder_url && (
                               <button onClick={() => openUrl(av.rec_folder_url)} title="Carpeta de grabaciones de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
                                 <Film size={11} />Grabaciones{av.rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabado</span> : <span className="text-[#C3C9D4]">vacía</span>}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {(av.vsl_edit_folder_url || av.vsl_rec_folder_url) && (
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#B4BAC6] shrink-0">VSL</span>
+                            {av.vsl_rec_folder_url && (
+                              <button onClick={() => openUrl(av.vsl_rec_folder_url)} title="Carpeta de grabaciones de la VSL de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.vsl_rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                                <Film size={11} />Grabación{av.vsl_rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabada</span> : <span className="text-[#C3C9D4]">vacía</span>}
+                              </button>
+                            )}
+                            {av.vsl_edit_folder_url && (
+                              <button onClick={() => openUrl(av.vsl_edit_folder_url)} title="Carpeta de la VSL editada de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.vsl_edit_files > 0 ? { background: '#EFF6FF', color: '#2E69E0', borderColor: '#C7DBFB' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                                <Clapperboard size={11} />Editada{av.vsl_edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />lista · {av.vsl_edit_files}</span> : <span className="text-[#C3C9D4]">vacía</span>}
                               </button>
                             )}
                           </div>
