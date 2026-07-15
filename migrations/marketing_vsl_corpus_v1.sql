@@ -180,3 +180,28 @@ $function$;
 
 revoke all on function public.marketing_subagent_set_instructions(text, text, text) from public, anon, authenticated;
 grant execute on function public.marketing_subagent_set_instructions(text, text, text) to anon, authenticated;
+
+-- 7) Metadatos del corpus (nunca el content) para el test del scorer:
+--    scripts/vsl-corpus-test.mjs replica la busqueda de agent-chat contra la DB real y
+--    verifica que un pedido de cada nicho recupere sus casos y su modulo, sin deployar nada.
+create or replace function public.marketing_corpus_meta(p_secret text, p_parts text[])
+returns table (id text, part text, niche text, niche_tags text[], avatar text, title text, client_id text, metrics jsonb)
+language plpgsql
+security definer
+set search_path to 'public', 'pg_temp'
+as $function$
+declare v_secret text;
+begin
+  select value->>'secret' into v_secret from public.app_settings where key='vsl_ingest_secret';
+  if v_secret is null or p_secret is null or p_secret <> v_secret then
+    raise exception 'secreto invalido';
+  end if;
+  return query
+    select t.id, t.part, t.niche, t.niche_tags, t.avatar, t.title, t.client_id, t.metrics
+    from public.marketing_ad_library t
+    where t.part = any(p_parts) and t.status = 'approved';
+end;
+$function$;
+
+revoke all on function public.marketing_corpus_meta(text, text[]) from public, anon, authenticated;
+grant execute on function public.marketing_corpus_meta(text, text[]) to anon, authenticated;
