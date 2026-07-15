@@ -83,6 +83,115 @@ function xmlLineas(xml) {
 
 const docxLineas = (p) => xmlLineas(docxXml(p));
 
+// ---------- docx -> bloques CON estructura ----------
+//
+// xmlLineas() aplasta el documento a texto y con eso se pierde justo lo que hace valioso al
+// material de landings: las tablas (que son el layout), la alineacion y la posicion de las
+// imagenes. Estas funciones recorren el cuerpo respetando el orden y conservan esa forma.
+// El camino de los ejemplos (Copy funnels Korex) sigue usando xmlLineas: ahi las tablas son
+// metadatos (Avatar/Nicho/Estado) y el copy es texto plano, asi que aplastar esta bien.
+
+const soloTexto = (s) => s
+  .replace(/<w:tab\b[^>]*\/>/g, " ")
+  .replace(/<[^>]*>/g, "")
+  .replace(/&(amp|lt|gt|quot|apos);/g, (m) => ENTIDADES[m])
+  .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+  .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+  .replace(/ /g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+/** Parrafos de un fragmento, con su alineacion, si son bullet y si traen imagen. */
+function parrafosDe(frag) {
+  return [...frag.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((m) => {
+    const p = m[0];
+    const t = soloTexto(p);
+    const img = /<w:drawing>|<w:pict>/.test(p);
+    if (!t && !img) return null;
+    return {
+      texto: t,
+      jc: (p.match(/<w:jc w:val="(\w+)"/) || [])[1] || "",
+      bullet: /<w:numPr>/.test(p),
+      img,
+    };
+  }).filter(Boolean);
+}
+
+const filasDe = (tbl) => [...tbl.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)]
+  .map((f) => [...f[0].matchAll(/<w:tc>[\s\S]*?<\/w:tc>/g)].map((c) => c[0]));
+
+/** Recorre el body devolviendo {tipo:'p'|'tbl'} en el orden real del documento. */
+function bloquesDe(xml) {
+  const body = xml.slice(xml.indexOf("<w:body>"));
+  const out = [];
+  for (const m of body.matchAll(/<w:tbl>[\s\S]*?<\/w:tbl>|<w:p\b[\s\S]*?<\/w:p>/g)) {
+    if (m[0].startsWith("<w:tbl>")) out.push({ tipo: "tbl", filas: filasDe(m[0]) });
+    else { const [p] = parrafosDe(m[0]); if (p) out.push({ tipo: "p", ...p }); }
+  }
+  return out;
+}
+
+// El default de Word es izquierda, pero acá el contraste ES el dato: casi toda la pre-landing
+// va centrada y el hero explicitamente a la izquierda. Por eso `left` tambien se rotula.
+const alinea = (jc) => (jc === "center" ? " · centrado" : jc === "right" ? " · a la derecha" : jc === "left" ? " · a la izquierda" : "");
+
+/**
+ * Blueprints: texto + tablas como tabla markdown.
+ * Las tablas de estos docs son de DATOS (las 10 formulas de titular, errores/solucion). Como
+ * texto corrido quedaban ilegibles: "# / Estructura / Ejemplo / 1 / Buscar generar...".
+ */
+function renderBlueprint(xml) {
+  const out = [];
+  for (const b of bloquesDe(xml)) {
+    if (b.tipo === "p") {
+      const t = b.texto;
+      if (t) out.push((b.bullet ? "• " : "") + t);
+      continue;
+    }
+    const filas = b.filas.map((celdas) => celdas.map((c) => parrafosDe(c).map((p) => p.texto).filter(Boolean).join(" — ")));
+    const cols = Math.max(...filas.map((f) => f.length), 0);
+    if (!cols) continue;
+    if (cols === 1) { for (const f of filas) if (f[0]) out.push(f[0]); continue; }
+    const esc = (s) => (s || "").replace(/\|/g, "\\|");
+    out.push("");
+    out.push("| " + filas[0].map(esc).join(" | ") + " |");
+    out.push("|" + " --- |".repeat(filas[0].length));
+    for (const f of filas.slice(1)) out.push("| " + Array.from({ length: filas[0].length }, (_, i) => esc(f[i])).join(" | ") + " |");
+    out.push("");
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/**
+ * Wireframes: la maqueta real de la pagina. Cada FILA de la tabla es una banda horizontal y
+ * cada CELDA una columna dentro de esa banda (2 celdas = copy | foto). Se renderiza en el
+ * MISMO formato que despues tiene que devolver el agente: asi aprende la forma por imitacion
+ * en vez de por descripcion.
+ */
+function renderWireframe(tbl, titulo) {
+  const out = [`===== WIREFRAME — ${titulo} (la estructura exacta, banda por banda) =====`, ""];
+  filasDe(tbl).forEach((celdas, i) => {
+    const cols = celdas.map((c) => parrafosDe(c)).filter((ps) => ps.length);
+    if (!cols.length) return;
+    const dosCol = cols.length > 1;
+    // el nombre de la banda es su primera linea con texto: es como la llama el propio doc
+    const primera = cols[0].find((p) => p.texto)?.texto || "";
+    const jcBanda = cols[0].find((p) => p.jc)?.jc || "";
+    out.push(`## BANDA ${i + 1} · ${primera.slice(0, 46)} — ${dosCol ? "2 columnas" : "1 columna"}${dosCol ? "" : alinea(jcBanda)}`);
+    cols.forEach((ps, j) => {
+      if (dosCol) {
+        // En una banda de 2 columnas el lado ya lo dice el encabezado, asi que "izquierda ·
+        // a la izquierda" es ruido: solo se rotula `centrado`, que ahi si es informacion.
+        const jc = ps.find((p) => p.jc)?.jc || "";
+        out.push(`**${j === 0 ? "Izquierda" : "Derecha"}**${jc === "center" ? " · centrado" : ""}`);
+      }
+      for (const p of ps) out.push((p.bullet ? "• " : "") + (p.texto || (p.img ? "[IMAGEN]" : "")));
+    });
+    out.push("");
+  });
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // ---------- utilidades ----------
 
 const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
@@ -199,8 +308,10 @@ function fichaText(f) {
 
 // ---------- blueprints ----------
 
-// Un archivo por pieza. El (5) queda afuera a proposito: es un subconjunto del (4) y si entra,
-// el agente puede tomar ese esqueleto flaco como el estandar.
+// El (5) NO entra por aca: no es un blueprint mas. Es la MAQUETA (ver WIREFRAMES abajo).
+// Mirando solo su texto parece un subconjunto pobre del (4), y por eso casi queda afuera; su
+// valor no esta en el texto sino en la forma: 2 tablas, 91 parrafos centrados, el hero a la
+// izquierda con la foto al lado. Aplastado a texto, todo eso se pierde.
 const BLUEPRINT = [
   { file: "Flujos de Landings (6).docx", part: "cf_blueprint", title: "SOP — El proceso paso a paso", tags: ["sop", "proceso", "funnel"] },
   { file: "Flujos de Landings (3).docx", part: "cf_blueprint", title: "Errores comunes y cómo evitarlos", tags: ["errores", "auditoria", "checklist"] },
@@ -213,6 +324,11 @@ const BLUEPRINT = [
 // "Secciones Graficas" solo existe en el consolidado suelto; se recorta de ahi.
 const GRAFICAS = { file: "New folder/Flujos de Landings (2).docx", desde: /^3️⃣\s*Secciones Graficas/, title: "Secciones Gráficas", tags: ["graficas", "diseno", "visual", "secciones", "modulos"] };
 
+// La maqueta. Las 2 tablas del (5), en orden: pre-landing y landing VSL. Van al blueprint
+// (capa estable, cacheada) y no al retrieval: son el ESTANDAR de estructura, no un ejemplo,
+// asi que tienen que estar siempre, se pida la pagina que se pida.
+const WIREFRAMES = { file: "Flujos de Landings (5).docx", titulos: ["PRE-LANDING", "LANDING VSL"] };
+
 function limpiar(lineas) {
   return lineas.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -222,10 +338,27 @@ function parseBlueprints(dir) {
   for (const b of BLUEPRINT) {
     const p = join(dir, b.file);
     if (!existsSync(p)) throw new Error(`falta el blueprint: ${b.file}`);
-    const content = limpiar(docxLineas(p));
+    const content = renderBlueprint(docxXml(p));
     if (!content) throw new Error(`${b.file}: quedo vacio tras el parseo`);
     chunks.push({ part: b.part, title: b.title, niche_tags: b.tags, content, source: b.file });
   }
+
+  // Los wireframes: se suman al blueprint, que es la capa que va siempre.
+  const wp = join(dir, WIREFRAMES.file);
+  if (!existsSync(wp)) throw new Error(`falta la maqueta: ${WIREFRAMES.file}`);
+  const tablas = [...docxXml(wp).matchAll(/<w:tbl>[\s\S]*?<\/w:tbl>/g)].map((m) => m[0]);
+  if (tablas.length < WIREFRAMES.titulos.length) {
+    throw new Error(`${WIREFRAMES.file}: se esperaban ${WIREFRAMES.titulos.length} maquetas y hay ${tablas.length}`);
+  }
+  WIREFRAMES.titulos.forEach((titulo, i) => {
+    const content = renderWireframe(tablas[i], titulo);
+    if (!/## BANDA 1/.test(content)) throw new Error(`wireframe ${titulo}: no se reconocio ninguna banda`);
+    chunks.push({
+      part: "cf_blueprint", title: `WIREFRAME — ${titulo}`,
+      niche_tags: ["wireframe", "estructura", "layout", norm(titulo).replace(/[^a-z]/g, "")],
+      content, source: WIREFRAMES.file,
+    });
+  });
 
   const gp = join(dir, GRAFICAS.file);
   if (!existsSync(gp)) throw new Error(`falta el consolidado con Secciones Gráficas: ${GRAFICAS.file}`);

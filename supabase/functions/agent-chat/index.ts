@@ -155,13 +155,22 @@ Deno.serve(async (req) => {
       "- Las acotaciones de dirección (formato, plano, demo) van en *cursiva* o como cita `>`, para que no se confundan con el texto hablado.",
       "- `Caso base:`, `Promesa:`, `Ángulo:`, `Mecanismo:`, `Cierre:` y `Notas:` también se pintan como etiqueta.",
     ].join("\n"),
+    // El copy de una landing no se entiende sin su forma: qué va arriba de qué, qué va al
+    // lado de la foto, qué va centrado. Por eso la salida es la MAQUETA con el copy adentro,
+    // no una lista de textos. El formato es el mismo de los WIREFRAMES del blueprint: se
+    // copian esas bandas y se les cambia el contenido.
     landing: [
       "- Una página del funnel = un `## N) NOMBRE DE LA PÁGINA` (`## 1) PRE-LANDING`, `## 2) LANDING VSL`, `## 3) FORMULARIO`, `## 4) THANK YOU PAGE`). Siempre en el orden en que la persona las recorre.",
-      "- Dentro de cada página, cada sección va como `### SECCIÓN N: NOMBRE` (las del blueprint: HERO, BULLETS, AUTORIDAD, etc.).",
-      "- El copy que va publicado se escribe tal cual, como texto corriente. Usá estas etiquetas al principio de renglón: `Titular:` · `Subtítulo:` · `CTA:` · `Bullets:` · `Notas:`.",
-      "- Los elementos que no son texto van entre corchetes, como en el DEL: `[VSL]`, `[LOGO CLIENTE]`, `[CARRUSEL DE FOTOS]`, `[FOTO DEL MENTOR]`.",
+      "- Dentro de cada página, el copy va SIEMPRE maquetado en BANDAS, igual que los wireframes que tenés arriba. Una banda = una franja horizontal de la página, de arriba hacia abajo:",
+      "  `### BANDA N · <nombre> — 1 columna · centrado`  ó  `### BANDA N · <nombre> — 2 columnas`",
+      "- En las bandas de 2 columnas (el patrón copy + foto), separá con `**Izquierda**` y `**Derecha**`, y aclarás la alineación al lado si no es la de siempre (`· a la izquierda`, `· centrado`).",
+      "- Adentro de cada banda va el copy REAL, renglón por renglón y en el orden exacto en que se lee en pantalla. Podés etiquetar con `Titular:` · `Subtítulo:` · `CTA:` para que se pinten.",
+      "- Los elementos que no son texto van entre corchetes y en el lugar EXACTO donde caen: `[VSL]`, `[LOGO CLIENTE]`, `[CARRUSEL DE FOTOS]`, `[FOTO DEL MENTOR — profesional]`, `[FORMULARIO: Nombre · WhatsApp]`, `[BOTÓN CTA: ...]`.",
+      "- Los bullets de dolor/deseo van con ❌ y ✅, uno por renglón, dentro de su banda.",
+      "- Separá cada banda de la siguiente con `---`.",
+      "- La pre-landing y la landing VSL tienen su wireframe: seguilo banda por banda. El formulario y la thank you page no tienen maqueta cargada — armá sus bandas a partir de su blueprint (pantallas y orden), con el mismo formato, y aclarás en las notas que esa estructura la dedujiste del blueprint.",
       "- Lo que falta del cliente va marcado `[FALTA: ...]` bien visible. No lo inventes.",
-      "- Si auditás en vez de escribir, usá una tabla con `Qué está mal | Por qué | Cómo queda`, y citá con `>` el copy actual que estás señalando.",
+      "- Si auditás en vez de escribir, usá una tabla con `Qué está mal | Por qué | Cómo queda`, y citá con `>` el copy actual que estás señalando. Si lo que falla es la ESTRUCTURA (un elemento fuera de lugar, una banda que no está, algo centrado que va al costado de la foto), decilo con el nombre de la banda.",
     ].join("\n"),
   };
 
@@ -470,10 +479,13 @@ Deno.serve(async (req) => {
           : `\n— EJEMPLOS DE ANUNCIOS DE NICHO SIMILAR (biblioteca Korex; usalos como referencia de estilo/estructura/ángulos, NO los copies literal) —\n${examplesText}`)
       : "",
     vslGuionText ? `\n— GUIÓN COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás su estructura y su ritmo, con el dolor y las cifras de ESTE avatar; jamás copiás sus frases ni sus números) —\n${vslGuionText}` : "",
+    // Los ejemplos son el copy del DEL: texto corrido, SIN maqueta. Hay que decirlo, o el
+    // agente imita esa falta de estructura y devuelve una lista de frases. La maqueta sale
+    // de los wireframes del blueprint; de acá sale el tono y el contenido.
     funnelPagesText
       ? (faseCF
-        ? `\n— LA MISMA PÁGINA EN FUNNELS CERCANOS (copy real, tal cual se publicó; para comparar contra lo que estás auditando) —\nMirá qué resuelven estas y qué le falta a la del cliente. Incluyen sus marcas de elemento ([VSL], [CARRUSEL]) y sus erratas: no las copies literal.\n${funnelPagesText}`
-        : `\n— EL FUNNEL COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás el RECORRIDO y la estructura, con el dolor y las cifras de ESTE avatar; jamás sus frases ni sus números) —\n${funnelPagesText}`)
+        ? `\n— LA MISMA PÁGINA EN FUNNELS CERCANOS (copy real, tal cual se publicó; para comparar contra lo que estás auditando) —\nMirá qué resuelven estas y qué le falta a la del cliente. Incluyen sus marcas de elemento ([VSL], [CARRUSEL]) y sus erratas: no las copies literal.\nOJO: vienen en texto corrido, sin maqueta — así están en el DEL. Eso NO es cómo se entrega: la estructura en bandas la ponés vos siguiendo el wireframe.\n${funnelPagesText}`
+        : `\n— EL FUNNEL COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás el RECORRIDO y la estructura, con el dolor y las cifras de ESTE avatar; jamás sus frases ni sus números) —\nOJO: viene en texto corrido, sin maqueta — así está en el DEL. De acá sacás el tono y el contenido; la estructura en bandas sale del WIREFRAME de tu blueprint.\n${funnelPagesText}`)
       : "",
     client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
     gate ? `\n— ESTADO DEL PIPELINE (etapa ${myStage}) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
