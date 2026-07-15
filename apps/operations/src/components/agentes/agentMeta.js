@@ -4,7 +4,7 @@
 //
 // `live: true` = el backend (edge fn agent-chat) ya sabe responder por ese agente.
 // Los demás se muestran con el cartel "Pronto" y no se pueden abrir.
-import { Megaphone, Video, Target, ClipboardList, ShieldCheck, Bot } from 'lucide-react';
+import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot } from 'lucide-react';
 
 // `general` no es un agente de chat: es la capa base (ADN Korex) que heredan
 // todos los demás. Se edita en Marketing → Configuración, no se chatea con él.
@@ -38,12 +38,18 @@ export const AGENT_META = {
     ],
   },
   landing: {
-    Icon: Target,
-    desc: 'Copy y estructura de landings',
-    live: false,
+    Icon: Route,
+    desc: 'Copy del funnel completo: pre-landing, landing VSL, formulario y thank you page',
+    live: true,
+    // Los atajos nombran la página a propósito: con eso el agente sabe si traer esa página
+    // de varios funnels parecidos (para comparar) o el recorrido entero de un solo caso.
     suggestions: [
-      { label: 'Copy de la landing', prompt: 'Escribí el copy de la landing para este avatar' },
-      { label: 'Estructura', prompt: 'Proponé una estructura de secciones para la landing' },
+      { label: 'Funnel completo', prompt: 'Escribí el copy del funnel completo para este avatar: pre-landing, landing VSL, formulario y thank you page' },
+      { label: 'Auditar la pre-landing', prompt: 'Auditá la pre-landing de este funnel contra el blueprint: qué está mal, por qué, y cómo queda reescrito' },
+      { label: 'Titulares', prompt: 'Dame 5 titulares para la pre-landing con las fórmulas del blueprint, y decime cuál elegirías' },
+      { label: 'Preguntas del formulario', prompt: 'Armá las preguntas del formulario de calificación para este avatar' },
+      { label: 'Thank you page', prompt: 'Escribí la thank you page para que quede clarísimo cuál es el próximo paso' },
+      { label: '¿Qué caso clonar?', prompt: '¿Qué funnel de la biblioteca es el más cercano a este avatar y por qué? ¿Qué estructura le clonarías?' },
     ],
   },
   formularios: {

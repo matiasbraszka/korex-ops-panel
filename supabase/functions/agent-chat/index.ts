@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
   const CORPUS: Record<string, { blueprintId: string; rotulo: string; section: string; example: string }> = {
     anuncios: { blueprintId: "mal_blueprint", rotulo: "BLUEPRINT MAESTRO DE ANUNCIOS", section: "blueprint_section", example: "example" },
     vsl: { blueprintId: "mal_vsl_blueprint", rotulo: "BLUEPRINT MAESTRO DE VSL (v4.0)", section: "vsl_section", example: "vsl_ficha" },
+    landing: { blueprintId: "mal_cf_blueprint", rotulo: "BLUEPRINT MAESTRO DE FUNNELS (SOP + errores comunes)", section: "cf_section", example: "cf_ficha" },
   };
   const corpus = CORPUS[subagentKey] || null;
 
@@ -135,12 +136,61 @@ Deno.serve(async (req) => {
     blueprint = clip(str(bpRow?.content), 24000);  // margen para que la GUARDIA DE COMPLIANCE (al final) nunca se corte
   }
 
+  // ── Formato de la respuesta ──
+  // El panel renderiza markdown (AgentMarkdown.jsx): encabezados, listas, tablas, citas y
+  // las etiquetas de oficio como chips de color. Va acá y no en las instrucciones editables
+  // porque es contrato con el frontend, no criterio de marketing: si cambia el render,
+  // cambia esto, no el texto que edita el equipo.
+  const FORMATO_POR_AGENTE: Record<string, string> = {
+    anuncios: [
+      "- Un `## Ángulo N · <nombre del ángulo>` por cada ángulo. Es el separador principal: sin esto los ángulos se mezclan.",
+      "- Dentro de cada ángulo, usá estas etiquetas al principio de renglón (se pintan solas):",
+      "  `Titular:` · `Hook 1:` `Hook 2:` … (uno por renglón, numerados) · `Texto base:` · `Descripción:` · `Nota creativa:`",
+      "- El `Texto base` va después de los hooks: se muestra destacado, es el cuerpo del anuncio.",
+    ].join("\n"),
+    vsl: [
+      "- Una sección del guión = un `## N) NOMBRE DE LA SECCIÓN` (ej: `## 1) HOOK`, `## 4) DOLOR + EMPATÍA`). El panel las numera y las separa solas.",
+      "- El texto para grabar va como párrafo corriente debajo de su sección, tal cual se dice en cámara.",
+      "- Para el menú de hooks usá `Hook 1:` … `Hook 5:`, uno por renglón, y aclarando la fórmula entre corchetes al principio (ej: `Hook 1: [A] En los próximos 6 minutos…`).",
+      "- Las acotaciones de dirección (formato, plano, demo) van en *cursiva* o como cita `>`, para que no se confundan con el texto hablado.",
+      "- `Caso base:`, `Promesa:`, `Ángulo:`, `Mecanismo:`, `Cierre:` y `Notas:` también se pintan como etiqueta.",
+    ].join("\n"),
+    landing: [
+      "- Una página del funnel = un `## N) NOMBRE DE LA PÁGINA` (`## 1) PRE-LANDING`, `## 2) LANDING VSL`, `## 3) FORMULARIO`, `## 4) THANK YOU PAGE`). Siempre en el orden en que la persona las recorre.",
+      "- Dentro de cada página, cada sección va como `### SECCIÓN N: NOMBRE` (las del blueprint: HERO, BULLETS, AUTORIDAD, etc.).",
+      "- El copy que va publicado se escribe tal cual, como texto corriente. Usá estas etiquetas al principio de renglón: `Titular:` · `Subtítulo:` · `CTA:` · `Bullets:` · `Notas:`.",
+      "- Los elementos que no son texto van entre corchetes, como en el DEL: `[VSL]`, `[LOGO CLIENTE]`, `[CARRUSEL DE FOTOS]`, `[FOTO DEL MENTOR]`.",
+      "- Lo que falta del cliente va marcado `[FALTA: ...]` bien visible. No lo inventes.",
+      "- Si auditás en vez de escribir, usá una tabla con `Qué está mal | Por qué | Cómo queda`, y citá con `>` el copy actual que estás señalando.",
+    ].join("\n"),
+  };
+
+  const formatoBlock = [
+    "\n\n===== CÓMO SE VE TU RESPUESTA (formato) =====",
+    "El panel renderiza markdown de verdad: lo que escribas se muestra con estilo. Escribí para que se lea de un vistazo, no como un muro de texto.",
+    "",
+    "Reglas para todos:",
+    "- `##` para cada bloque grande y `###` para subtítulos. `#` solo si necesitás un título único arriba de todo.",
+    "- `**negrita**` para lo que el ojo tiene que encontrar primero. Nunca subrayes con guiones ni uses MAYÚSCULAS para destacar.",
+    "- Listas con `-` para enumerar; listas `1.` cuando el orden importa (se numeran con un badge).",
+    "- Tablas markdown cuando compares 2+ opciones (ángulos, variantes, antes/después). Son mucho más legibles que un párrafo.",
+    "- `> cita` para las palabras textuales del avatar, del DEL o de un guión de referencia.",
+    "- `---` para separar bloques cuando la respuesta es larga.",
+    "- Nada de HTML: solo markdown. Y nada de emojis decorativos: como mucho uno funcional.",
+    "- Si la respuesta es corta (una pregunta puntual), contestá en prosa directa. El formato es para estructurar, no para inflar.",
+    "",
+    `Propio de ${specialistName}:`,
+    FORMATO_POR_AGENTE[subagentKey] || "- Estructurá con `##` por tema y `**negrita**` en lo importante.",
+    mode === "generate" ? "\n(En este pedido devolvés la salida con la herramienta, no en markdown: el panel la arma en tarjetas.)" : "",
+  ].filter(Boolean).join("\n");
+
   const stableSystem = [
     general || "# Método Korex — (capa general no configurada)",
     `\n\n===== ESPECIALISTA: ${specialistName} =====\n`,
     specialistInstr || "(sin instrucciones del especialista)",
     blueprint ? `\n\n===== ${corpus!.rotulo} (el método, seguilo) =====\n${blueprint}` : "",
     material ? `\n\n===== MATERIAL DE CAPACITACIÓN (${specialistName}) =====\n${material}` : "",
+    formatoBlock,
   ].join("");
 
   // ── Contexto del cliente / funnel / avatar (volátil → NO se cachea) ──
@@ -176,11 +226,39 @@ Deno.serve(async (req) => {
   let examplesText = "";
   let blueprintSectionsText = "";
   let vslGuionText = "";
+  let funnelPagesText = "";
+  let faseCF = "";
   let retrievalMeta: Record<string, unknown> = {};
   if (corpus) {
     try {
       const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
       const qTokens = norm(lastUser).split(" ").filter((w) => w.length > 3);
+
+      // FUNNELS: ¿está pidiendo UNA página o el funnel entero? Cambia qué se recupera:
+      // una página suelta se audita mejor viendo ESA página en varios funnels comparables;
+      // el funnel completo se escribe clonando el recorrido entero de UN caso cercano.
+      // "pre-landing" contiene "landing", así que el orden de este array importa.
+      const FASES_CF: Array<{ fase: string; label: string; re: RegExp }> = [
+        { fase: "prelanding", label: "PRE-LANDING", re: /(pre-?landing|antesala)/ },
+        { fase: "thankyou", label: "THANK YOU PAGE", re: /(thank ?you|pagina de gracias|typ\b)/ },
+        { fase: "formulario", label: "FORMULARIO", re: /(formulario|quiz|cuestionario|preguntas de calificacion)/ },
+        { fase: "landing", label: "LANDING VSL", re: /(landing vsl|landing del vsl|pagina del video|\blanding\b)/ },
+      ];
+      if (subagentKey === "landing") {
+        // Cada fase que matchea se BORRA del texto antes de probar la siguiente: si no,
+        // "pre-landing" dispara además "landing" (el guión cuenta como borde de palabra) y
+        // dos falsos hits se leerían como "pidió el funnel entero".
+        let q = norm(lastUser);
+        const hits: string[] = [];
+        for (const f of FASES_CF) {
+          if (!f.re.test(q)) continue;
+          hits.push(f.fase);
+          q = q.replace(new RegExp(f.re.source, "g"), " ");
+        }
+        // Una sola fase nombrada = pedido puntual. Ninguna o varias = el funnel entero.
+        if (hits.length === 1) faseCF = hits[0];
+        retrievalMeta = { ...retrievalMeta, fase: faseCF || "funnel_completo" };
+      }
       const nicheStr = norm(str(client?.niche));
       const nicheTokens = nicheStr.split(" ").filter((w) => w.length > 3);
       const avatarName = norm(str(avatar?.name));
@@ -209,15 +287,25 @@ Deno.serve(async (req) => {
         if (tier === "ganador") score += 2;
         if (tier === "perdedor") score -= 3;
         if (str(r.client_id) && str(r.client_id) === clientId) score += 1;  // el propio líder primero
-        return { id: str(r.id), score, tier, title: str(r.title) };
-      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+        // Funnels: no hay retención ni CPL comparables, lo único que se sabe es si llegó a
+        // publicarse. Señal débil a propósito: publicado no prueba que haya funcionado.
+        const m = (r.metrics || {}) as Record<string, unknown>;
+        if (m.publicado === true) score += 1;
+        // Si se pidió UNA página, un funnel que no la tiene escrita no sirve de ejemplo.
+        const tienePagina = !faseCF || (Array.isArray(m.paginas) && (m.paginas as string[]).includes(faseCF));
+        return { id: str(r.id), score, tier, title: str(r.title), tienePagina };
+      }).filter((x) => x.score > 0 && x.tienePagina).sort((a, b) => b.score - a.score);
       let exPick = exScored.slice(0, 3);
       // Fallback: si nada matcheó por keywords, al menos traé ejemplos del mismo nicho.
       if (!exPick.length && nicheStr) {
         exPick = (Array.isArray(exList) ? exList : [])
           .filter((r) => { const rn = norm(str(r.niche)); return rn && (nicheStr.includes(rn) || rn.includes(nicheStr)); })
           .filter((r) => tierOf(r) !== "perdedor")
-          .slice(0, 2).map((r) => ({ id: str(r.id), score: 1, tier: tierOf(r), title: str(r.title) }));
+          .filter((r) => {
+            const ps = (r.metrics as Record<string, unknown> | null)?.paginas;
+            return !faseCF || (Array.isArray(ps) && (ps as string[]).includes(faseCF));
+          })
+          .slice(0, 2).map((r) => ({ id: str(r.id), score: 1, tier: tierOf(r), title: str(r.title), tienePagina: true }));
       }
       if (exPick.length) {
         const { data: full } = await supabase.from("marketing_ad_library").select("id,niche,title,content,metrics").in("id", exPick.map((s) => s.id));
@@ -225,9 +313,13 @@ Deno.serve(async (req) => {
           exPick.findIndex((p) => p.id === str(a.id)) - exPick.findIndex((p) => p.id === str(b.id));
         examplesText = (Array.isArray(full) ? full : []).sort(byScore).map((f) => {
           const m = (f.metrics || {}) as Record<string, unknown>;
-          const veredicto = str(m.tier) && str(m.tier) !== "sin_datos"
-            ? ` · Voomly: ${str(m.tier).toUpperCase()} (retención media ${str(m.p50)}%, llega al final ${str(m.p100)}%, ${str(m.uniq_plays)} plays)`
-            : " · sin métricas suficientes";
+          // Los funnels no tienen Voomly ni nada equivalente: lo único cierto es si se publicó.
+          // Se dice así de crudo a propósito, para que el agente no lo lea como un veredicto.
+          const veredicto = subagentKey === "landing"
+            ? (m.publicado === true ? " · publicado" : " · nunca se publicó")
+            : (str(m.tier) && str(m.tier) !== "sin_datos"
+              ? ` · Voomly: ${str(m.tier).toUpperCase()} (retención media ${str(m.p50)}%, llega al final ${str(m.p100)}%, ${str(m.uniq_plays)} plays)`
+              : " · sin métricas suficientes");
           return `— ${str(f.title) || str(f.niche)}${veredicto} —\n${clip(str(f.content), 4500)}`;
         }).join("\n\n");
         retrievalMeta = { ...retrievalMeta, examples: exPick.map((p) => `${p.id}[${p.tier || "?"}]`) };
@@ -240,6 +332,28 @@ Deno.serve(async (req) => {
             .select("title,content").eq("part", "vsl_guion").like("id", `mal_vsl_guion_${mejor}%`).order("id", { ascending: true });
           vslGuionText = (Array.isArray(g) ? g : []).map((x) => `— ${str(x.title)} —\n${clip(str(x.content), 26000)}`).join("\n\n");
           retrievalMeta = { ...retrievalMeta, guion_base: mejor };
+        }
+
+        // 2-bis) FUNNELS: el copy real de las páginas. Qué se trae depende de lo que se pidió:
+        //   una página suelta → ESA página en los 3 funnels cercanos (para comparar y auditar)
+        //   el funnel entero  → las 4 páginas del caso más cercano (para clonar el recorrido)
+        if (subagentKey === "landing") {
+          const idDe = (p: { id: string }) => p.id.replace("mal_cf_ficha_", "");
+          const q = supabase.from("marketing_ad_library").select("id,title,content,metrics").eq("part", "cf_pagina");
+          const { data: pgs } = faseCF
+            ? await q.in("id", exPick.map((p) => `mal_cf_pag_${idDe(p)}__${faseCF}`))
+            : await q.like("id", `mal_cf_pag_${idDe(exPick[0])}__%`);
+          const rows = Array.isArray(pgs) ? pgs : [];
+          // Orden: por ranking si son varios funnels; por recorrido si es un funnel entero.
+          // Nunca alfabético por id, que daría formulario → landing → prelanding → thankyou.
+          const ordenFase = ["prelanding", "landing", "formulario", "thankyou"];
+          rows.sort((a, b) => {
+            const fa = (x: Record<string, unknown>) => str((x.metrics as Record<string, unknown>)?.fase);
+            if (faseCF) return exPick.findIndex((p) => str(a.id).includes(idDe(p))) - exPick.findIndex((p) => str(b.id).includes(idDe(p)));
+            return ordenFase.indexOf(fa(a)) - ordenFase.indexOf(fa(b));
+          });
+          funnelPagesText = rows.map((x) => `— ${str(x.title)} —\n${clip(str(x.content), 6000)}`).join("\n\n");
+          retrievalMeta = { ...retrievalMeta, paginas: rows.map((x) => str(x.id)), funnel_base: faseCF ? null : idDe(exPick[0]) };
         }
       }
 
@@ -351,15 +465,24 @@ Deno.serve(async (req) => {
     examplesText
       ? (subagentKey === "vsl"
         ? `\n— FICHAS DE VSL DE NICHO/AVATAR CERCANO (biblioteca Korex de 28 casos reales, con su veredicto de retención de Voomly) —\nCada ficha trae avatar, promesa, ángulo, mecanismo, cierre y estructura beat a beat. Clonás la ESTRUCTURA del más cercano, no las palabras. Si una ficha dice PERDEDOR, es lo que NO hay que repetir.\n${examplesText}`
-        : `\n— EJEMPLOS DE ANUNCIOS DE NICHO SIMILAR (biblioteca Korex; usalos como referencia de estilo/estructura/ángulos, NO los copies literal) —\n${examplesText}`)
+        : subagentKey === "landing"
+          ? `\n— FICHAS DE FUNNELS DE NICHO/AVATAR CERCANO (biblioteca Korex: 31 funnels reales de 20 clientes) —\nCada ficha trae avatar, nicho, estrategia y el arranque de sus 4 páginas. Son REFERENCIA, no el estándar: el estándar es el blueprint. "Publicado" solo quiere decir que salió a la calle, NO que haya funcionado: de estos funnels no hay métricas de conversión. No los presentes como casos de éxito.\n${examplesText}`
+          : `\n— EJEMPLOS DE ANUNCIOS DE NICHO SIMILAR (biblioteca Korex; usalos como referencia de estilo/estructura/ángulos, NO los copies literal) —\n${examplesText}`)
       : "",
     vslGuionText ? `\n— GUIÓN COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás su estructura y su ritmo, con el dolor y las cifras de ESTE avatar; jamás copiás sus frases ni sus números) —\n${vslGuionText}` : "",
+    funnelPagesText
+      ? (faseCF
+        ? `\n— LA MISMA PÁGINA EN FUNNELS CERCANOS (copy real, tal cual se publicó; para comparar contra lo que estás auditando) —\nMirá qué resuelven estas y qué le falta a la del cliente. Incluyen sus marcas de elemento ([VSL], [CARRUSEL]) y sus erratas: no las copies literal.\n${funnelPagesText}`
+        : `\n— EL FUNNEL COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás el RECORRIDO y la estructura, con el dolor y las cifras de ESTE avatar; jamás sus frases ni sus números) —\n${funnelPagesText}`)
+      : "",
     client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
     gate ? `\n— ESTADO DEL PIPELINE (etapa ${myStage}) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
     gateBlockedHard
       ? (subagentKey === "vsl"
         ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene los avatares del DEL cargados. NO escribas el guión final: sin avatar no hay dolor, y sin dolor no hay VSL. Explicá que primero hay que cargar los avatares, y ofrecé ayudar con eso."
-        : "\n⚠️ GATE BLOQUEADO: este funnel NO tiene el VSL listo. NO escribas anuncios finales. Explicá con claridad que primero hay que tener el VSL (guionado) y el avatar definido, y ofrecé ayudar a avanzar esos prerrequisitos.")
+        : subagentKey === "landing"
+          ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene el guión del VSL. NO escribas el copy final del funnel: cada página se alinea con lo que promete el VSL, así que sin VSL estarías inventando una promesa. Explicá que primero hay que guionar el VSL, y ofrecé ayudar con lo que sí se puede avanzar (definir el objetivo del funnel, el punto diferencial)."
+          : "\n⚠️ GATE BLOQUEADO: este funnel NO tiene el VSL listo. NO escribas anuncios finales. Explicá con claridad que primero hay que tener el VSL (guionado) y el avatar definido, y ofrecé ayudar a avanzar esos prerrequisitos.")
       : "",
   ].filter(Boolean).join("\n");
 
@@ -367,7 +490,9 @@ Deno.serve(async (req) => {
   if (mode === "generate" && gateBlocked) {
     const falta = subagentKey === "vsl"
       ? "Faltan los avatares del DEL en este funnel para escribir el guión."
-      : "Falta el VSL de este funnel para generar anuncios.";
+      : subagentKey === "landing"
+        ? "Falta el guión del VSL de este funnel para escribir el copy de las páginas."
+        : "Falta el VSL de este funnel para generar anuncios.";
     return j({ ok: false, error: "gate_blocked", detail: str(gate?.detail) || falta, gate }, 200);
   }
 
@@ -454,8 +579,11 @@ Deno.serve(async (req) => {
     ],
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
-  const tool = subagentKey === "vsl" ? vslTool : adTool;
-  if (mode === "generate") { reqBody.tools = [tool]; reqBody.tool_choice = { type: "tool", name: tool.name }; }
+  // Un agente sin herramienta responde en markdown y el panel lo pinta (AgentMarkdown).
+  // El de funnels es así a propósito: no guarda en el DEL, se copia del chat.
+  const TOOL_BY_AGENT: Record<string, typeof adTool | typeof vslTool> = { anuncios: adTool, vsl: vslTool };
+  const tool = TOOL_BY_AGENT[subagentKey] || null;
+  if (mode === "generate" && tool) { reqBody.tools = [tool]; reqBody.tool_choice = { type: "tool", name: tool.name }; }
   if (!/sonnet-5|opus-4/i.test(model)) reqBody.temperature = mode === "generate" ? 0 : 0.6;
 
   async function callApi(): Promise<Response> {
@@ -502,7 +630,9 @@ Deno.serve(async (req) => {
   let reply = "";
   let adCopy: Record<string, unknown> | null = null;
   try {
-    if (mode === "generate") {
+    // Sin herramienta no hay salida estructurada que leer: aunque pidan "generate", lo que
+    // vuelve es texto. Es el caso del agente de funnels.
+    if (mode === "generate" && tool) {
       const block = (data.content || []).find((c: Record<string, unknown>) => c.type === "tool_use" && c.name === tool.name);
       adCopy = (block?.input as Record<string, unknown>) || null;
     } else {
