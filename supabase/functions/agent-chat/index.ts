@@ -121,18 +121,25 @@ Deno.serve(async (req) => {
     return bodyTxt ? `${head}\n${bodyTxt}` : head;
   }).filter(Boolean).join("\n\n");
 
-  // Blueprint maestro de anuncios (método fijo, se cachea con el resto de lo estable).
+  // Blueprint maestro (método fijo, se cachea con el resto de lo estable).
+  // Cada agente tiene su corpus dentro de marketing_ad_library, distinguido por `part`.
+  const CORPUS: Record<string, { blueprintId: string; rotulo: string; section: string; example: string }> = {
+    anuncios: { blueprintId: "mal_blueprint", rotulo: "BLUEPRINT MAESTRO DE ANUNCIOS", section: "blueprint_section", example: "example" },
+    vsl: { blueprintId: "mal_vsl_blueprint", rotulo: "BLUEPRINT MAESTRO DE VSL (v4.0)", section: "vsl_section", example: "vsl_ficha" },
+  };
+  const corpus = CORPUS[subagentKey] || null;
+
   let blueprint = "";
-  if (subagentKey === "anuncios") {
-    const { data: bpRow } = await supabase.from("marketing_ad_library").select("content").eq("id", "mal_blueprint").maybeSingle();
-    blueprint = clip(str(bpRow?.content), 16000);
+  if (corpus) {
+    const { data: bpRow } = await supabase.from("marketing_ad_library").select("content").eq("id", corpus.blueprintId).maybeSingle();
+    blueprint = clip(str(bpRow?.content), 24000);  // margen para que la GUARDIA DE COMPLIANCE (al final) nunca se corte
   }
 
   const stableSystem = [
     general || "# Método Korex — (capa general no configurada)",
     `\n\n===== ESPECIALISTA: ${specialistName} =====\n`,
     specialistInstr || "(sin instrucciones del especialista)",
-    blueprint ? `\n\n===== BLUEPRINT MAESTRO DE ANUNCIOS (el método, seguilo) =====\n${blueprint}` : "",
+    blueprint ? `\n\n===== ${corpus!.rotulo} (el método, seguilo) =====\n${blueprint}` : "",
     material ? `\n\n===== MATERIAL DE CAPACITACIÓN (${specialistName}) =====\n${material}` : "",
   ].join("");
 
@@ -140,7 +147,7 @@ Deno.serve(async (req) => {
   const [{ data: client }, { data: strat }, { data: page }] = await Promise.all([
     supabase.from("clients").select("name,niche,company,team_name,service,meta_metrics").eq("id", clientId).maybeSingle(),
     strategyId ? supabase.from("strategies").select("name").eq("id", strategyId).maybeSingle() : Promise.resolve({ data: null }),
-    supabase.from("strategy_pages").select("name,avatars,vsl_script,prod_url,official_domain").eq("id", funnelId).maybeSingle(),
+    supabase.from("strategy_pages").select("name,avatars,vsl_script,prod_url,official_domain,pages_copy").eq("id", funnelId).maybeSingle(),
   ]);
 
   const avatars = Array.isArray(page?.avatars) ? (page!.avatars as Record<string, unknown>[]) : [];
@@ -162,39 +169,166 @@ Deno.serve(async (req) => {
     return `Ganador ${i + 1}: ${str(w.ad_name) || "(sin nombre)"} — CPL ${str(w.cpl)} · hook ${str(w.hook_rate)} · hold ${str(w.hold_rate)} · CTR ${str(w.ctr)}${t ? `\nTranscript: ${t}` : ""}`;
   }).join("\n\n");
 
-  // Ejemplos de anuncios del MISMO nicho (o parecido) — biblioteca Korex (marketing_ad_library).
-  // Traemos SOLO los del nicho del cliente (matcheo por niche + niche_tags), nunca las 200 páginas.
+  // ── RETRIEVAL INTELIGENTE (biblioteca Korex, marketing_ad_library) ──
+  // En vez de mandar las 200 páginas de ejemplos ni las 50 del blueprint, buscamos SOLO lo relevante
+  // a este cliente/nicho/avatar y a lo que el usuario está pidiendo ahora. El resumen del método
+  // (mal_blueprint) ya va siempre en la capa estable; acá traemos las secciones/ejemplos que aplican.
   let examplesText = "";
-  if (subagentKey === "anuncios") {
+  let blueprintSectionsText = "";
+  let vslGuionText = "";
+  let retrievalMeta: Record<string, unknown> = {};
+  if (corpus) {
     try {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+      const qTokens = norm(lastUser).split(" ").filter((w) => w.length > 3);
       const nicheStr = norm(str(client?.niche));
-      const cTokens = nicheStr.split(" ").filter((w) => w.length > 3);
-      const { data: exList } = await supabase.from("marketing_ad_library").select("id,niche,niche_tags,title").eq("part", "example");
-      const scored = (Array.isArray(exList) ? exList : []).map((r) => {
+      const nicheTokens = nicheStr.split(" ").filter((w) => w.length > 3);
+      const avatarName = norm(str(avatar?.name));
+      const hayOf = (r: Record<string, unknown>) =>
+        norm([str(r.niche), str(r.title), ...(Array.isArray(r.niche_tags) ? (r.niche_tags as string[]) : [])].join(" "));
+      const tierOf = (r: Record<string, unknown>) =>
+        str((r.metrics as Record<string, unknown> | null)?.tier);
+
+      // 1) EJEMPLOS: por nicho (fuerte) + avatar + palabras del pedido. Top 3.
+      // En VSL cada fila es la FICHA del caso (no el guión entero): el guión completo se
+      // trae aparte y solo el del mejor caso, que es lo que manda el blueprint
+      // ("buscá el caso más cercano → clonás su estructura").
+      const { data: exList } = await supabase.from("marketing_ad_library")
+        .select("id,niche,niche_tags,title,avatar,client_id,metrics").eq("part", corpus.example).eq("status", "approved");
+      const exScored = (Array.isArray(exList) ? exList : []).map((r) => {
         const rowNiche = norm(str(r.niche));
-        const hay = norm([str(r.niche), ...(Array.isArray(r.niche_tags) ? r.niche_tags : [])].join(" "));
+        const hay = hayOf(r);
         let score = 0;
-        if (nicheStr && hay.includes(nicheStr)) score += 3;                 // el nicho del cliente aparece en los tags
-        if (rowNiche && nicheStr && nicheStr.includes(rowNiche)) score += 3; // el nicho de la fila aparece en el del cliente
-        for (const t of cTokens) if (hay.includes(t)) score += 1;           // solape de palabras
-        return { id: str(r.id), title: str(r.title) || str(r.niche), score };
-      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 2);
-      if (scored.length) {
-        const { data: full } = await supabase.from("marketing_ad_library").select("niche,title,content").in("id", scored.map((s) => s.id));
-        examplesText = (Array.isArray(full) ? full : []).map((f) => `— ${str(f.title) || str(f.niche)} —\n${clip(str(f.content), 6000)}`).join("\n\n");
+        if (nicheStr && rowNiche && (nicheStr.includes(rowNiche) || rowNiche.includes(nicheStr))) score += 5;
+        for (const t of nicheTokens) if (hay.includes(t)) score += 1;
+        const av = norm(str(r.avatar));
+        if (avatarName && av && (avatarName.includes(av) || av.includes(avatarName))) score += 3;
+        for (const t of qTokens) if (hay.includes(t)) score += 1;
+        // Jerarquía por métricas de Voomly: se clona lo que retuvo, no lo que fracasó.
+        const tier = tierOf(r);
+        if (tier === "ganador") score += 2;
+        if (tier === "perdedor") score -= 3;
+        if (str(r.client_id) && str(r.client_id) === clientId) score += 1;  // el propio líder primero
+        return { id: str(r.id), score, tier, title: str(r.title) };
+      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+      let exPick = exScored.slice(0, 3);
+      // Fallback: si nada matcheó por keywords, al menos traé ejemplos del mismo nicho.
+      if (!exPick.length && nicheStr) {
+        exPick = (Array.isArray(exList) ? exList : [])
+          .filter((r) => { const rn = norm(str(r.niche)); return rn && (nicheStr.includes(rn) || rn.includes(nicheStr)); })
+          .filter((r) => tierOf(r) !== "perdedor")
+          .slice(0, 2).map((r) => ({ id: str(r.id), score: 1, tier: tierOf(r), title: str(r.title) }));
       }
-    } catch { examplesText = ""; }
+      if (exPick.length) {
+        const { data: full } = await supabase.from("marketing_ad_library").select("id,niche,title,content,metrics").in("id", exPick.map((s) => s.id));
+        const byScore = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+          exPick.findIndex((p) => p.id === str(a.id)) - exPick.findIndex((p) => p.id === str(b.id));
+        examplesText = (Array.isArray(full) ? full : []).sort(byScore).map((f) => {
+          const m = (f.metrics || {}) as Record<string, unknown>;
+          const veredicto = str(m.tier) && str(m.tier) !== "sin_datos"
+            ? ` · Voomly: ${str(m.tier).toUpperCase()} (retención media ${str(m.p50)}%, llega al final ${str(m.p100)}%, ${str(m.uniq_plays)} plays)`
+            : " · sin métricas suficientes";
+          return `— ${str(f.title) || str(f.niche)}${veredicto} —\n${clip(str(f.content), 4500)}`;
+        }).join("\n\n");
+        retrievalMeta = { ...retrievalMeta, examples: exPick.map((p) => `${p.id}[${p.tier || "?"}]`) };
+
+        // 2) VSL: el guión completo SOLO del mejor caso (los guiones pesan ~10 KB cada uno;
+        //    mandar los 3 costaría ~13k tokens por turno sin cachear).
+        if (subagentKey === "vsl") {
+          const mejor = exPick[0].id.replace("mal_vsl_ficha_", "");
+          const { data: g } = await supabase.from("marketing_ad_library")
+            .select("title,content").eq("part", "vsl_guion").like("id", `mal_vsl_guion_${mejor}%`).order("id", { ascending: true });
+          vslGuionText = (Array.isArray(g) ? g : []).map((x) => `— ${str(x.title)} —\n${clip(str(x.content), 26000)}`).join("\n\n");
+          retrievalMeta = { ...retrievalMeta, guion_base: mejor };
+        }
+      }
+
+      // 3) SECCIONES DEL BLUEPRINT relevantes a lo que pide el usuario (top 3).
+      const { data: bpList } = await supabase.from("marketing_ad_library")
+        .select("id,niche,niche_tags,title").eq("part", corpus.section).eq("status", "approved");
+      const bpScored = (Array.isArray(bpList) ? bpList : []).map((r) => {
+        const hay = hayOf(r);
+        let score = 0;
+        for (const t of qTokens) if (hay.includes(t)) score += 2;
+        for (const t of nicheTokens) if (hay.includes(t)) score += 1;
+        return { id: str(r.id), score };
+      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+      if (bpScored.length) {
+        const { data: full } = await supabase.from("marketing_ad_library").select("title,content").in("id", bpScored.map((s) => s.id));
+        blueprintSectionsText = (Array.isArray(full) ? full : []).map((f) => `— ${str(f.title)} —\n${clip(str(f.content), 3500)}`).join("\n\n");
+        retrievalMeta = { ...retrievalMeta, sections: bpScored.map((s) => s.id) };
+      }
+    } catch { examplesText = ""; blueprintSectionsText = ""; vslGuionText = ""; }
   }
 
-  // Gate del pipeline (autoridad server-side).
+  // Gate del pipeline (autoridad server-side). Cada agente mira SU etapa: si no, el de VSL
+  // hereda el gate de anuncios y se niega a escribir el guión hasta que el guión exista.
+  const STAGE_BY_AGENT: Record<string, string> = { anuncios: "anuncios", vsl: "vsl", landing: "landing" };
+  const myStage = STAGE_BY_AGENT[subagentKey] || "";
   let gate: Record<string, unknown> | null = null;
   try {
     const { data: pipe } = await supabase.rpc("cerebro_pipeline_status", { p_client_id: clientId });
     const rows = Array.isArray(pipe) ? (pipe as Record<string, unknown>[]) : [];
-    gate = rows.find((r) => str(r.funnel_id) === funnelId && str(r.stage) === "anuncios") || null;
+    gate = myStage ? (rows.find((r) => str(r.funnel_id) === funnelId && str(r.stage) === myStage) || null) : null;
   } catch { gate = null; }
-  const gateBlocked = gate ? str(gate.status) === "bloqueado" || gate.can_generate === false : false;
-  const gateBlockedHard = gate ? str(gate.status) === "bloqueado" : false;
+  // Bloquea SOLO si la etapa está bloqueada de verdad (le faltan los prerrequisitos).
+  // Antes esto miraba también `can_generate === false`, pero can_generate = (not done and
+  // prereq_ok): con la etapa ya 'listo' devolvía gate_blocked diciendo que faltaba el
+  // insumo — lo contrario de la verdad. En VSL era peor: la etapa se marca 'listo' apenas
+  // hay vsl_url, o sea que no se podría reescribir el guión de ningún funnel ya grabado.
+  const gateBlocked = gate ? str(gate.status) === "bloqueado" : false;
+  const gateBlockedHard = gateBlocked;
+
+  // ── Copy de las páginas del funnel (verbatim del DEL) ──
+  // La pre-landing es a dónde LLEGA la gente después del clic: el contexto de alineación más
+  // importante para el anuncio. El resto son apoyo. Los clips son ASIMÉTRICOS a propósito:
+  // paga presupuesto lo que mueve la aguja del anuncio, no lo que no (la thank-you casi nunca).
+  // Solo el RECORRIDO de la persona: el feedback del equipo no entra (no es una página).
+  const pagesCopy = (page?.pages_copy && typeof page.pages_copy === "object" && !Array.isArray(page.pages_copy))
+    ? page.pages_copy as Record<string, Record<string, unknown>> : {};
+  //                 clave          rótulo            clip   ¿rotular el titular?
+  const PAGINAS: Array<[string, string, number, boolean]> = [
+    ["prelanding", "PRE-LANDING", 2500, true],
+    ["landing", "Landing (VSL)", 1200, true],
+    ["formulario", "Formulario", 600, false],
+    ["thankyou", "Thank You Page", 400, false],
+    ["testimonios", "Testimonios", 800, false],
+  ];
+  // El DEL no trae el titular aparte, pero en una pre-landing o una landing la primera línea
+  // ES el titular. Solo se rotula en esas dos: en el formulario la primera línea es la primera
+  // pregunta y en la thank-you es el texto entero — llamarlas "TITULAR" sería mentirle al agente.
+  const titularDe = (t: string) => clip(str(t).split(/\r?\n/).map(str).find(Boolean) || "", 200);
+  const seccionesPag = PAGINAS.map(([key, rotulo, tope, rotularTit]) => {
+    const txt = str(pagesCopy[key]?.text as string);
+    if (!txt) return "";
+    const tit = rotularTit ? titularDe(txt) : "";
+    return `— ${rotulo} —${tit ? `\nTITULAR: ${tit}` : ""}\n${clip(txt, tope)}`;
+  }).filter(Boolean);
+  const hayPrelanding = !!str(pagesCopy.prelanding?.text as string);
+
+  // El encuadre habla de hooks → es específico de anuncios. El DATO va para todos: sale de la
+  // misma query que ya corre, y landing/formularios/auditor son consumidores más naturales aún.
+  const guiaPaginas = subagentKey !== "anuncios" ? [] : [
+    hayPrelanding
+      ? "La PRE-LANDING es la más importante: es la primera pantalla que ve la persona apenas hace clic en el anuncio. Su TITULAR es lo central: el anuncio y ese titular tienen que sentirse la MISMA conversación."
+      : "Este funnel no tiene pre-landing: del anuncio se cae directo a la landing. Es normal, no todos la tienen — no la pidas ni la inventes; alineá con la landing.",
+    "Alineá como te sirva mejor: DIRECTA (el anuncio hace eco del titular, mismas palabras) o INDIRECTA (mismo ángulo y misma promesa, otras palabras). Las dos son válidas; elegí según el ángulo. Cuanto más alineado, mejor.",
+    "Alinear NO es clonar: los 5 hooks siguen siendo 5 aperturas DISTINTAS entre sí. Como mucho UNO puede hacer eco literal del titular; si todos lo repiten rompiste el abanico y perdiste el test.",
+    "Las demás páginas son apoyo: te dicen qué se le promete y qué se le pide a la persona más adelante. No prometas en el anuncio algo que estas páginas no sostienen.",
+    mode === "generate"
+      ? "En `notes`, en UNA línea: con qué titular te alineaste y si la alineación fue directa o indirecta."
+      : "",
+  ].filter(Boolean);
+
+  // Sin páginas no va NADA: el preámbulo es lo que crea la expectativa, y sin datos solo
+  // lograría que el agente reclame un dato que no existe.
+  const pagesBlock = !seccionesPag.length ? "" : [
+    subagentKey === "anuncios"
+      ? "\n— PÁGINAS DEL FUNNEL (a dónde LLEGA la gente después del clic; alineá el anuncio con esto) —"
+      : "\n— PÁGINAS DEL FUNNEL (copy verbatim del DEL: es lo que está publicado hoy) —",
+    ...guiaPaginas,
+    ...seccionesPag,
+  ].join("\n");
 
   const tipo = /producto/i.test(str(strat?.name)) ? "Producto" : (/reclut/i.test(str(strat?.name)) ? "Reclutamiento" : str(strat?.name) || "—");
   const volatileParts = [
@@ -203,23 +337,82 @@ Deno.serve(async (req) => {
     `Estrategia: ${str(strat?.name) || "—"} (tipo: ${tipo})`,
     `Funnel: ${str(page?.name) || "—"}`,
     avatar ? `\n— AVATAR SELECCIONADO —\nNombre: ${str(avatar.name)}\nSegmentación: ${str(avatar.audience) || "—"}\nDescripción (del DEL): ${clip(str(avatar.spec_text), 4000) || "—"}${str(avatar.ad_script) ? `\nCopys de anuncios ya existentes (del DEL, para partir de acá y no repetir): ${clip(str(avatar.ad_script), 4000)}` : ""}` : "\n— AVATAR: (ninguno seleccionado o cargado) —",
-    `\n— GUIÓN DEL VSL DEL FUNNEL (el anuncio SALE de acá) —\n${vslScript ? clip(vslScript, 5000) : "(sin guión de VSL cargado)"}`,
+    subagentKey === "vsl"
+      ? `\n— GUIÓN VSL QUE YA TIENE EL FUNNEL (del DEL; es lo que hay hoy) —\n${vslScript ? clip(vslScript, 6000) : "(sin guión de VSL cargado: se escribe desde cero)"}`
+      : `\n— GUIÓN DEL VSL DEL FUNNEL (el anuncio SALE de acá) —\n${vslScript ? clip(vslScript, 5000) : "(sin guión de VSL cargado)"}`,
+    pagesBlock, // a dónde LLEGA: va pegado al VSL para que se lea como un solo recorrido
     briefText ? `\n— BRIEF / PERSONALIDAD DEL LÍDER —\n${briefText}` : "",
-    winners ? `\n— ANUNCIOS GANADORES DE ESTE CLIENTE (piso, no techo: proponé ÁNGULOS NUEVOS) —\n${winners}` : "\n— (Aún no hay anuncios ganadores cargados para este cliente) —",
-    examplesText ? `\n— EJEMPLOS DE ANUNCIOS DE NICHO SIMILAR (biblioteca Korex; usalos como referencia de estilo/estructura/ángulos, NO los copies literal) —\n${examplesText}` : "",
+    // Los anuncios ganadores son insumo del agente de anuncios. Para VSL, el ganador
+    // relevante es el VSL que retuvo (Voomly), que ya viaja etiquetado en los ejemplos.
+    subagentKey === "anuncios"
+      ? (winners ? `\n— ANUNCIOS GANADORES DE ESTE CLIENTE (piso, no techo: proponé ÁNGULOS NUEVOS) —\n${winners}` : "\n— (Aún no hay anuncios ganadores cargados para este cliente) —")
+      : "",
+    blueprintSectionsText ? `\n— SECCIONES DEL BLUEPRINT RELEVANTES A TU PEDIDO (el método Korex en detalle; el resumen ya lo tenés arriba) —\n${blueprintSectionsText}` : "",
+    examplesText
+      ? (subagentKey === "vsl"
+        ? `\n— FICHAS DE VSL DE NICHO/AVATAR CERCANO (biblioteca Korex de 28 casos reales, con su veredicto de retención de Voomly) —\nCada ficha trae avatar, promesa, ángulo, mecanismo, cierre y estructura beat a beat. Clonás la ESTRUCTURA del más cercano, no las palabras. Si una ficha dice PERDEDOR, es lo que NO hay que repetir.\n${examplesText}`
+        : `\n— EJEMPLOS DE ANUNCIOS DE NICHO SIMILAR (biblioteca Korex; usalos como referencia de estilo/estructura/ángulos, NO los copies literal) —\n${examplesText}`)
+      : "",
+    vslGuionText ? `\n— GUIÓN COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás su estructura y su ritmo, con el dolor y las cifras de ESTE avatar; jamás copiás sus frases ni sus números) —\n${vslGuionText}` : "",
     client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
-    gate ? `\n— ESTADO DEL PIPELINE (etapa anuncios) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
+    gate ? `\n— ESTADO DEL PIPELINE (etapa ${myStage}) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
     gateBlockedHard
-      ? "\n⚠️ GATE BLOQUEADO: este funnel NO tiene el VSL listo. NO escribas anuncios finales. Explicá con claridad que primero hay que tener el VSL (guionado) y el avatar definido, y ofrecé ayudar a avanzar esos prerrequisitos."
+      ? (subagentKey === "vsl"
+        ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene los avatares del DEL cargados. NO escribas el guión final: sin avatar no hay dolor, y sin dolor no hay VSL. Explicá que primero hay que cargar los avatares, y ofrecé ayudar con eso."
+        : "\n⚠️ GATE BLOQUEADO: este funnel NO tiene el VSL listo. NO escribas anuncios finales. Explicá con claridad que primero hay que tener el VSL (guionado) y el avatar definido, y ofrecé ayudar a avanzar esos prerrequisitos.")
       : "",
   ].filter(Boolean).join("\n");
 
   // ── Modo GENERATE: salida estructurada, gateada por el candado ──
   if (mode === "generate" && gateBlocked) {
-    return j({ ok: false, error: "gate_blocked", detail: str(gate?.detail) || "Falta el VSL de este funnel para generar anuncios.", gate }, 200);
+    const falta = subagentKey === "vsl"
+      ? "Faltan los avatares del DEL en este funnel para escribir el guión."
+      : "Falta el VSL de este funnel para generar anuncios.";
+    return j({ ok: false, error: "gate_blocked", detail: str(gate?.detail) || falta, gate }, 200);
   }
 
-  const tool = {
+  // Una herramienta por agente: la salida de VSL es un guión de 10 secciones, no anuncios.
+  const vslTool = {
+    name: "emit_vsl_script",
+    description: "Devuelve un guión de VSL Korex completo, con el menú de hooks y las 10 secciones del esqueleto base (o la anatomía de Producto si el nicho es Producto suelto).",
+    input_schema: {
+      type: "object",
+      properties: {
+        hooks: {
+          type: "array",
+          description: "Mínimo 5 hooks DISTINTOS entre sí. El primero es SIEMPRE el Hook A ('En los próximos [X] te voy a [verbo]…'), que es obligatorio en todo VSL Korex.",
+          items: {
+            type: "object",
+            properties: {
+              formula: { type: "string", description: "Qué fórmula es: A (obligatoria), B felicitación+filtro, C cifra, D si-entonces, E plano-dolor, F retrospectiva, G pregunta detonante, o un hook de nicho (Producto)." },
+              texto: { type: "string", description: "El hook, listo para grabar (30-50 palabras)." },
+            },
+            required: ["formula", "texto"],
+          },
+        },
+        secciones: {
+          type: "array",
+          description: "El guión en orden. Por defecto las 10 del esqueleto base (Hook, Identificación, Descalificación, Dolor+empatía, Autoridad+historia, Vehículo, Prueba social, Visualización, Camino A vs B, CTA). Si el nicho es Producto suelto, usá su anatomía propia (9 secciones, síntoma vs causa + reversión de riesgo). Cada sección abre abrazando a la anterior: se tiene que leer como UN guión, no como piezas cosidas.",
+          items: {
+            type: "object",
+            properties: {
+              n: { type: "number", description: "Número de orden." },
+              nombre: { type: "string", description: "Nombre de la sección." },
+              texto: { type: "string", description: "El texto para grabar, palabra por palabra, con la frase-puente al inicio." },
+            },
+            required: ["n", "nombre", "texto"],
+          },
+        },
+        caso_base: { type: "string", description: "Qué caso de la biblioteca clonaste como estructura (ej: 'VSL 25 · Sergio Cánovas · networker estancada') y por qué es el más cercano." },
+        duracion_estimada: { type: "string", description: "Duración estimada (ej: '6 min'). Default 6 min; si es más largo, justificá con 2+ criterios de la Parte 8." },
+        palabras: { type: "number", description: "Total aproximado de palabras del guión." },
+        notas: { type: "string", description: "Qué datos faltan del cliente (cifras, casos de éxito, nombre de la comunidad) y qué se dejó marcado para completar. No inventes cifras ni testimonios." },
+      },
+      required: ["hooks", "secciones"],
+    },
+  };
+
+  const adTool = {
     name: "emit_ad_copy",
     description: "Devuelve una tanda de anuncios de Meta agrupados POR ÁNGULO (formato Korex: por ángulo, 1 texto base + varios hooks alineados).",
     input_schema: {
@@ -261,7 +454,8 @@ Deno.serve(async (req) => {
     ],
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
-  if (mode === "generate") { reqBody.tools = [tool]; reqBody.tool_choice = { type: "tool", name: "emit_ad_copy" }; }
+  const tool = subagentKey === "vsl" ? vslTool : adTool;
+  if (mode === "generate") { reqBody.tools = [tool]; reqBody.tool_choice = { type: "tool", name: tool.name }; }
   if (!/sonnet-5|opus-4/i.test(model)) reqBody.temperature = mode === "generate" ? 0 : 0.6;
 
   async function callApi(): Promise<Response> {
@@ -293,16 +487,23 @@ Deno.serve(async (req) => {
 
   const data = await apiRes.json();
   const usage = data?.usage || {};
-  const inTok = Number(usage.input_tokens || 0) + Number(usage.cache_read_input_tokens || 0) + Number(usage.cache_creation_input_tokens || 0);
+  // Los 3 tipos de token de entrada NO valen lo mismo: leer del cache cuesta 0.1x del precio de
+  // entrada y escribirlo 1.25x (TTL 5 min, el default de ephemeral; con ttl:"1h" sería 2x).
+  // Sumarlos y multiplicarlos por price.in inflaba el costo y disparaba los topes antes de tiempo.
+  const freshTok = Number(usage.input_tokens || 0);
+  const cacheReadTok = Number(usage.cache_read_input_tokens || 0);
+  const cacheWriteTok = Number(usage.cache_creation_input_tokens || 0);
+  const inTok = freshTok + cacheReadTok + cacheWriteTok;
   const outTok = Number(usage.output_tokens || 0);
-  const cost = Number(((inTok / 1e6) * price.in + (outTok / 1e6) * price.out).toFixed(6));
+  const inCost = ((freshTok + cacheReadTok * 0.1 + cacheWriteTok * 1.25) / 1e6) * price.in;
+  const cost = Number((inCost + (outTok / 1e6) * price.out).toFixed(6));
   const stopReason = str(data?.stop_reason);
 
   let reply = "";
   let adCopy: Record<string, unknown> | null = null;
   try {
     if (mode === "generate") {
-      const block = (data.content || []).find((c: Record<string, unknown>) => c.type === "tool_use" && c.name === "emit_ad_copy");
+      const block = (data.content || []).find((c: Record<string, unknown>) => c.type === "tool_use" && c.name === tool.name);
       adCopy = (block?.input as Record<string, unknown>) || null;
     } else {
       reply = (data.content || []).filter((c: Record<string, unknown>) => c.type === "text").map((c: Record<string, unknown>) => str(c.text)).join("\n").trim();
@@ -317,8 +518,33 @@ Deno.serve(async (req) => {
   await supabase.from("api_usage").insert({
     fn: "agent_chat", model, input_tokens: inTok, output_tokens: outTok, cost_usd: cost,
     client_id: clientId, funnel_id: funnelId, status: "ok",
-    meta: { subagent_key: subagentKey, mode, avatar_id: avatarId, turns: messages.length, stop: stopReason, ads: adCopy ? (Array.isArray(adCopy.ads) ? adCopy.ads.length : 0) : undefined },
+    meta: {
+      subagent_key: subagentKey, mode, avatar_id: avatarId, turns: messages.length, stop: stopReason,
+      ads: adCopy ? (Array.isArray(adCopy.ads) ? adCopy.ads.length : 0) : undefined,
+      secciones: adCopy && Array.isArray(adCopy.secciones) ? adCopy.secciones.length : undefined,
+      // Qué recuperó la búsqueda (ids de fichas con su tier + secciones + guión base). Es la
+      // única forma de verificar que trajo el nicho correcto sin adivinar leyendo la respuesta.
+      retrieval: Object.keys(retrievalMeta).length ? retrievalMeta : undefined,
+      // Huella del copy de páginas (NO el copy: meta es jsonb y no es un log de texto). Sirve
+      // para verificar que el bloque llegó de verdad, sin adivinar mirando la respuesta.
+      pages: seccionesPag.length
+        ? {
+          has: PAGINAS.filter(([k]) => str(pagesCopy[k]?.text as string)).map(([k]) => k),
+          titular_len: titularDe(str(pagesCopy.prelanding?.text as string)).length,
+          chars: seccionesPag.join("").length,
+        }
+        : undefined,
+      // Sirve para decidir el TTL del cache: si cache_read viene casi siempre en 0 y cache_write
+      // no, el cache vence entre click y click y estamos pagando el recargo de escritura al pedo.
+      cache_read_tokens: cacheReadTok, cache_write_tokens: cacheWriteTok, fresh_tokens: freshTok,
+    },
   });
 
-  return j({ ok: true, mode, reply, ad_copy: adCopy, gate, cost_usd: cost, tokens: { in: inTok, out: outTok }, stop_reason: stopReason });
+  // ad_copy se mantiene por compatibilidad con el frontend de anuncios; el de VSL lee vsl_script.
+  return j({
+    ok: true, mode, reply, gate, cost_usd: cost,
+    ad_copy: subagentKey === "vsl" ? null : adCopy,
+    vsl_script: subagentKey === "vsl" ? adCopy : null,
+    tokens: { in: inTok, out: outTok, cache_read: cacheReadTok, cache_write: cacheWriteTok }, stop_reason: stopReason,
+  });
 });
