@@ -80,6 +80,11 @@ Deno.serve(async (req) => {
     .map((m) => ({ role: str(m.role) === "assistant" ? "assistant" : "user", content: clip(str(m.content), 6000) }))
     .filter((m) => m.content)
     .slice(-12);
+  // La API exige que el PRIMER mensaje del array sea del usuario. slice() corta por CANTIDAD, no
+  // por rol: un chat que alterna user/assistant manda un número impar de mensajes (2k-1 en el
+  // turno k), así que del turno 7 en adelante la ventana arranca siempre en una respuesta del
+  // agente → 400 → el chat moría justo cuando se ponía larga. Determinista, no intermitente.
+  while (messages.length && messages[0].role !== "user") messages.shift();
   if (!messages.length) return j({ ok: false, error: "no_messages", detail: "No hay mensaje para responder." }, 400);
 
   // Config + secreto.
@@ -94,8 +99,25 @@ Deno.serve(async (req) => {
   const maxTokens = Number(mode === "generate" ? (cfg.chat_generate_max_tokens ?? 4096) : (cfg.chat_max_tokens ?? 6000));
   const dailyCap = Number(cfg.daily_cap_usd ?? 5);
   const monthlyCap = Number(cfg.monthly_cap_usd ?? 100);
+  // Precio por millón de tokens. Manda app_settings.api_config.prices; esto es el respaldo.
+  //
+  // El respaldo es por MODELO y no un número suelto por un motivo concreto: `chat_models[agente]`
+  // se puede cambiar desde la base (no tiene UI todavía), y con un default fijo de 3/15 un agente
+  // movido a Opus registraba un costo 40% MÁS BARATO del real — o sea que los topes, que existen
+  // justamente para frenar la fuga, dejaban pasar de largo. El respaldo tiene que errar caro.
+  //
+  // Son precios de lista. Sonnet 5 está en promo de introducción (US$2/US$10) hasta el 31-08-2026:
+  // no se hardcodea porque vence sola y quedaría subestimando; si querés el número exacto, va en
+  // api_config.prices. Sobreestimar solo hace que el freno salte un poco antes, que es el lado
+  // seguro para equivocarse.
+  const PRECIOS_LISTA: Record<string, { in: number; out: number }> = {
+    "claude-opus-4-8": { in: 5, out: 25 },
+    "claude-sonnet-5": { in: 3, out: 15 },
+    "claude-haiku-4-5-20251001": { in: 1, out: 5 },
+    "claude-haiku-4-5": { in: 1, out: 5 },
+  };
   const prices = (cfg.prices as Record<string, { in: number; out: number }>) || {};
-  const price = prices[model] || { in: 3, out: 15 };
+  const price = prices[model] || PRECIOS_LISTA[model] || { in: 5, out: 25 };
 
   // ── Freno anti-fuga: topes de gasto ──
   try {
@@ -222,7 +244,10 @@ Deno.serve(async (req) => {
     "",
     `Propio de ${specialistName}:`,
     FORMATO_POR_AGENTE[subagentKey] || "- Estructurá con `##` por tema y `**negrita**` en lo importante.",
-    mode === "generate" ? "\n(En este pedido devolvés la salida con la herramienta, no en markdown: el panel la arma en tarjetas.)" : "",
+    // La aclaración del modo generate NO va acá: esto es la capa estable, la que se cachea.
+    // Meter algo que depende del `mode` hacía que el bloque cacheado fuera distinto al chatear
+    // y al generar, y cada vuelta entre los dos re-escribía ~14k tokens a precio de escritura.
+    // Vive en el contexto recuperado (abajo), del lado que no se cachea.
   ].filter(Boolean).join("\n");
 
   const stableSystem = [
@@ -297,17 +322,36 @@ Deno.serve(async (req) => {
       { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
       { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
     ];
-    const crudo = str([...messages].reverse().find((m) => m.role === "user")?.content || "");
-
     // El comando se valida contra estos mismos slugs y no contra el corpus, aunque el menú salga
     // del corpus: tiene que resolverse ACÁ, antes de clipar los documentos, y un `/loquesea` no
     // puede dejar al paso 4 leyendo los recortes del menú. Un comando invalido se ignora y decide
     // la prosa, como si no lo hubieran escrito.
-    const cmd = /^\s*\/([a-z_]+)\b[ \t]*/i.exec(crudo);
-    const pedido = cmd?.[1].toLowerCase() || "";
-    if (pedido && PASOS_DESC.some((p) => p.slug === pedido)) comandoPaso = pedido;
+    const comandoDe = (txt: string) => {
+      const pedido = /^\s*\/([a-z_]+)\b[ \t]*/i.exec(txt)?.[1].toLowerCase() || "";
+      return pedido && PASOS_DESC.some((p) => p.slug === pedido) ? pedido : "";
+    };
+    const primero = str(messages.find((m) => m.role === "user")?.content || "");
+    const ultimo = str([...messages].reverse().find((m) => m.role === "user")?.content || "");
 
-    pasoActivo = comandoPaso || PASOS_DESC.find((p) => p.re.test(norm(crudo)))?.slug || "";
+    // Solo el comando del ÚLTIMO mensaje cuenta como `comandoPaso`: es el que se traduce a su
+    // pedido canónico antes de mandarlo al modelo (ver más abajo).
+    comandoPaso = comandoDe(ultimo);
+
+    // ── El paso lo fija el PRIMER mensaje del chat, no el último ──
+    // Antes se re-decidía en cada turno mirando solo el último mensaje, y eso cambiaba el
+    // material a mitad de conversación: pedías /estrategia (entra el onboarding y el research
+    // enteros) y en el turno 2 decías "profundizá el avatar 2" —que es una aclaración, no un
+    // pedido nuevo— y el agente pasaba al paso 5: cargaba el DEL, soltaba el research y se
+    // quedaba con el historial de una conversación cuyo material ya no tenía delante. Desde
+    // afuera se ve como que se olvida o se contradice.
+    //
+    // Un `/comando` explícito SÍ lo cambia: eso lo elegiste vos del menú, es intencional. La
+    // prosa suelta ya no. Efecto secundario y buscado: dentro de un paso el contexto no cambia,
+    // así que el cache de los documentos (abajo) aguanta toda la conversación.
+    pasoActivo = comandoPaso
+      || comandoDe(primero)
+      || PASOS_DESC.find((p) => p.re.test(norm(primero)))?.slug
+      || "";
   }
 
   // ── Documentos del cliente (solo descubrimiento) ──
@@ -496,6 +540,9 @@ Deno.serve(async (req) => {
   // slug -> la instrucción canónica de ese paso (metrics.pedido). Es lo que se manda en lugar
   // del comando cuando el pedido vino por `/slug`.
   let pedidoPorPaso: Record<string, string> = {};
+  // Si las fichas no cargaron, NO sabemos qué pasos se hacen acá y cuáles no. Ese "no sabemos"
+  // tiene que bloquear, no habilitar: ver el candado más abajo.
+  let fichasOk = false;
   if (subagentKey === "descubrimiento") {
     try {
       const { data: fichas } = await supabase.from("marketing_ad_library")
@@ -508,13 +555,18 @@ Deno.serve(async (req) => {
         if (str(m.pedido)) pedidoPorPaso[str(m.slug)] = str(m.pedido);
       }
 
+      // Se mide contra lo que quedó cargado, no contra "no explotó": supabase-js NO lanza
+      // excepción cuando la consulta falla —devuelve el error como valor y `data` en null—,
+      // así que el catch de abajo casi nunca corre. Un 500 de la base dejaba el mapa vacío y
+      // el `try` terminando bien: ahí es donde el candado se abría solo.
+      fichasOk = Object.keys(ejecutaPorPaso).length > 0;
       retrievalMeta = {
         pedido: pasoActivo || "sin_match", foco: focoDesc, estrategias: estrategiasDesc,
         // Para el tablero: saber cuántos pedidos llegan por comando y cuántos en prosa dice si
         // el menú del "/" sirve o si el ruteo por texto sigue cargando todo el peso.
         via: comandoPaso ? "comando" : pasoActivo ? "prosa" : "gate",
       };
-    } catch { fichasText = ""; pasoActivo = ""; ejecutaPorPaso = {}; pedidoPorPaso = {}; }
+    } catch { fichasText = ""; pasoActivo = ""; ejecutaPorPaso = {}; pedidoPorPaso = {}; fichasOk = false; }
   }
 
   if (corpus && subagentKey !== "descubrimiento") {
@@ -697,7 +749,13 @@ Deno.serve(async (req) => {
       //
       // En los dos casos el agente igual sabe qué es ese paso (la ficha va siempre) y puede
       // decir qué falta y quién lo aporta, que es su trabajo real.
-      const sePuedeAca = ejecutaPorPaso[pasoActivo] !== "fuera";
+      //
+      // La condición es "el corpus dijo que SÍ se hace acá", no "no dijo que se haga afuera".
+      // La diferencia importa: antes esto era `!== "fuera"`, y si la query de las fichas fallaba
+      // el mapa quedaba vacío → `undefined !== "fuera"` → true → cargaba la metodología igual.
+      // O sea: el candado que existe para que no se invente el research fallaba ABIERTO justo
+      // cuando algo ya había salido mal. Un slug con typo en el corpus tenía el mismo efecto.
+      const sePuedeAca = ejecutaPorPaso[pasoActivo] === "chat";
       if (pasoActivo && str(gate?.status) !== "bloqueado" && sePuedeAca) {
         const { data: sk } = await supabase.from("marketing_ad_library")
           .select("content").eq("id", `mal_desc_skill_${pasoActivo}`).maybeSingle();
@@ -759,9 +817,8 @@ Deno.serve(async (req) => {
     "Alineá como te sirva mejor: DIRECTA (el anuncio hace eco del titular, mismas palabras) o INDIRECTA (mismo ángulo y misma promesa, otras palabras). Las dos son válidas; elegí según el ángulo. Cuanto más alineado, mejor.",
     "Alinear NO es clonar: los 5 hooks siguen siendo 5 aperturas DISTINTAS entre sí. Como mucho UNO puede hacer eco literal del titular; si todos lo repiten rompiste el abanico y perdiste el test.",
     "Las demás páginas son apoyo: te dicen qué se le promete y qué se le pide a la persona más adelante. No prometas en el anuncio algo que estas páginas no sostienen.",
-    mode === "generate"
-      ? "En `notes`, en UNA línea: con qué titular te alineaste y si la alineación fue directa o indirecta."
-      : "",
+    // Lo que dependía del `mode` se movió al contexto recuperado: este bloque se cachea y no
+    // puede cambiar entre chatear y generar (ver el corte del cache más abajo).
   ].filter(Boolean);
 
   // Sin páginas no va NADA: el preámbulo es lo que crea la expectativa, y sin datos solo
@@ -807,18 +864,41 @@ Deno.serve(async (req) => {
     // La metodología del paso activo. Es lo único que cambia según lo que pidan.
     skillActivaText
       ? `\n===== METODOLOGÍA DEL PASO ACTIVO: ${pasoActivo.toUpperCase()} =====\nEs el estándar Korex para este paso. Seguila al pie de la letra: su estructura de salida, sus reglas y su formato mandan sobre cualquier instrucción general de formato.\n\n${skillActivaText}`
+      // Sin fichas no sabemos qué paso se hace acá ni cuál se trae de afuera, así que no se
+      // carga ninguna metodología (ver el candado arriba). Decirlo tal cual: llamarlo
+      // "bloqueado" sería mentir sobre qué falta y mandaría a buscar un prerrequisito que
+      // capaz ya está.
+      : (!fichasOk
+        ? `\n===== NO SE PUDO LEER EL MÉTODO DEL DESCUBRIMIENTO =====\nNo es que falte un insumo del cliente: falló la lectura del corpus y no tenés la metodología de ningún paso. NO produzcas ningún entregable de memoria. Decí que hubo un problema técnico leyendo el método, que hay que avisarle a soporte, y limitate a lo que puedas responder con el estado y los documentos que sí tenés.`
       : (pasoActivo && ejecutaPorPaso[pasoActivo] === "fuera"
         // El caso más delicado: el paso se puede hacer, pero NO acá. Si además está sin hacer,
         // el agente es el que tiene que reclamarlo — no producirlo.
         ? `\n===== PASO ${pasoActivo.toUpperCase()}: NO SE HACE DESDE ESTE CHAT =====\nNo recibís su metodología a propósito: necesita herramientas que no tenés (buscar en la web / leer el Ad Library de Meta).\n\nNO lo produzcas ni lo aproximes. No sabés quién es este líder ni qué anuncios corre su competencia: cualquier cosa que escribas sobre eso la estarías inventando, y de ahí salen después la estrategia y el avatar.\n\nLo que SÍ tenés que hacer: decir que ese paso falta, quién lo aporta (lo trae una persona y entra por el Doc de Drive del cliente), y ofrecer avanzar con lo que sí se puede hacer ahora.`
         : (pasoActivo
           ? `\n===== PASO ${pasoActivo.toUpperCase()}: BLOQUEADO =====\nNo recibís su metodología a propósito, porque este paso NO se puede hacer todavía. No la reconstruyas de memoria ni entregues un adelanto "provisional". Decí qué falta (está en el estado de arriba), quién lo aporta, y qué paso sí se puede hacer ahora.`
-          : `\n===== NO HAY UN PASO ACTIVO =====\nEl pedido no dejó claro qué paso querés (o nombró varios, o ya está todo hecho). NO adivines y NO mezcles dos pasos. Decí en qué momento está el cliente, qué paso corresponde según el estado de arriba, y pedí que te lo confirmen.`)),
+          : `\n===== NO HAY UN PASO ACTIVO =====\nEl pedido no dejó claro qué paso querés (o nombró varios, o ya está todo hecho). NO adivines y NO mezcles dos pasos. Decí en qué momento está el cliente, qué paso corresponde según el estado de arriba, y pedí que te lo confirmen.`))),
 
     client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
   ].filter(Boolean).join("\n");
 
-  const volatileParts = subagentKey === "descubrimiento" ? volatileDesc : [
+  // ── QUÉ SE CACHEA Y QUÉ NO ──
+  // El cache de la API es un PREFIJO: se corta en el breakpoint y TODO lo que va después se paga
+  // entero, a precio de tokens frescos, en cada mensaje. Se permiten hasta 4 breakpoints por
+  // pedido; usábamos 1 (el del método, arriba). Todo el contexto del cliente caía del lado caro.
+  //
+  // El costo de eso no era teórico: en Descubrimiento los documentos son hasta 433.000 caracteres
+  // (~108k tokens) y NO cambian entre turnos de la misma conversación — están del lado volátil
+  // porque cambian por CLIENTE, no porque cambien por MENSAJE. Se re-mandaban enteros cada vez:
+  // ~US$0,30 por turno, ~US$2 una conversación de 6 turnos, contra un tope diario de US$5 que es
+  // global para todo el panel. Dos conversaciones y se bloqueaba Anuncios, VSL y Funnels para
+  // todo el equipo. Con el breakpoint, del 2º turno en adelante eso se lee a 0,1x en vez de 1x.
+  //
+  // El corte va por ESTABILIDAD dentro de una conversación, no por tema:
+  //   · descubrimiento → TODO su contexto es estable (mismo cliente, mismo paso: el paso ahora lo
+  //     fija el primer mensaje). Entra entero al cache, sin reordenar nada.
+  //   · el resto → su retrieval (ejemplos, secciones, guión base) se scorea contra el ÚLTIMO
+  //     mensaje: cambia turno a turno y NO se puede cachear. Por eso va partido en dos.
+  const contextoEstable = subagentKey === "descubrimiento" ? volatileDesc : [
     "===== CONTEXTO DE ESTA CONVERSACIÓN (usalo, no lo pidas) =====",
     `Cliente: ${str(client?.name)}${str(client?.company) ? ` · Empresa MLM: ${str(client?.company)}` : ""}${str(client?.niche) ? ` · Nicho: ${str(client?.niche)}` : ""}${str(client?.team_name) ? ` · Equipo: ${str(client?.team_name)}` : ""}`,
     `Estrategia: ${str(strat?.name) || "—"} (tipo: ${tipo})`,
@@ -834,6 +914,23 @@ Deno.serve(async (req) => {
     subagentKey === "anuncios"
       ? (winners ? `\n— ANUNCIOS GANADORES DE ESTE CLIENTE (piso, no techo: proponé ÁNGULOS NUEVOS) —\n${winners}` : "\n— (Aún no hay anuncios ganadores cargados para este cliente) —")
       : "",
+    // El estado del pipeline y las métricas son del cliente/funnel: estables. Van ACÁ y no al
+    // final —donde estaban— para que el corte del cache caiga entre lo estable y lo recuperado.
+    // Es lo único que se reordenó, y no rompe ninguna referencia: nada dice "más abajo".
+    client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
+    gate ? `\n— ESTADO DEL PIPELINE (etapa ${myStage}) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
+    gateBlockedHard
+      ? (subagentKey === "vsl"
+        ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene los avatares del DEL cargados. NO escribas el guión final: sin avatar no hay dolor, y sin dolor no hay VSL. Explicá que primero hay que cargar los avatares, y ofrecé ayudar con eso."
+        : subagentKey === "landing"
+          ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene el guión del VSL. NO escribas el copy final del funnel: cada página se alinea con lo que promete el VSL, así que sin VSL estarías inventando una promesa. Explicá que primero hay que guionar el VSL, y ofrecé ayudar con lo que sí se puede avanzar (definir el objetivo del funnel, el punto diferencial)."
+          : "\n⚠️ GATE BLOQUEADO: este funnel NO tiene el VSL listo. NO escribas anuncios finales. Explicá con claridad que primero hay que tener el VSL (guionado) y el avatar definido, y ofrecé ayudar a avanzar esos prerrequisitos.")
+      : "",
+  ].filter(Boolean).join("\n");
+
+  // Lo que cambia en cada mensaje: el retrieval se scorea contra el último pedido. Descubrimiento
+  // no tiene nada acá (elige QUÉ SKILL entra, no qué párrafos, y eso ya lo fijó el primer mensaje).
+  const contextoRecuperado = subagentKey === "descubrimiento" ? "" : [
     blueprintSectionsText ? `\n— SECCIONES DEL BLUEPRINT RELEVANTES A TU PEDIDO (el método Korex en detalle; el resumen ya lo tenés arriba) —\n${blueprintSectionsText}` : "",
     examplesText
       ? (subagentKey === "vsl"
@@ -851,14 +948,15 @@ Deno.serve(async (req) => {
         ? `\n— LA MISMA PÁGINA EN FUNNELS CERCANOS (copy real, tal cual se publicó; para comparar contra lo que estás auditando) —\nMirá qué resuelven estas y qué le falta a la del cliente. Incluyen sus marcas de elemento ([VSL], [CARRUSEL]) y sus erratas: no las copies literal.\nOJO: vienen en texto corrido, sin maqueta — así están en el DEL. Eso NO es cómo se entrega: la estructura en bandas la ponés vos siguiendo el wireframe.\n${funnelPagesText}`
         : `\n— EL FUNNEL COMPLETO DEL CASO MÁS CERCANO (tu punto de partida: clonás el RECORRIDO y la estructura, con el dolor y las cifras de ESTE avatar; jamás sus frases ni sus números) —\nOJO: viene en texto corrido, sin maqueta — así está en el DEL. De acá sacás el tono y el contenido; la estructura en bandas sale del WIREFRAME de tu blueprint.\n${funnelPagesText}`)
       : "",
-    client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
-    gate ? `\n— ESTADO DEL PIPELINE (etapa ${myStage}) —\nEstado: ${str(gate.status)} · sub-estado: ${str(gate.substate) || "—"} · ${str(gate.detail)}` : "",
-    gateBlockedHard
-      ? (subagentKey === "vsl"
-        ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene los avatares del DEL cargados. NO escribas el guión final: sin avatar no hay dolor, y sin dolor no hay VSL. Explicá que primero hay que cargar los avatares, y ofrecé ayudar con eso."
-        : subagentKey === "landing"
-          ? "\n⚠️ GATE BLOQUEADO: este funnel todavía no tiene el guión del VSL. NO escribas el copy final del funnel: cada página se alinea con lo que promete el VSL, así que sin VSL estarías inventando una promesa. Explicá que primero hay que guionar el VSL, y ofrecé ayudar con lo que sí se puede avanzar (definir el objetivo del funnel, el punto diferencial)."
-          : "\n⚠️ GATE BLOQUEADO: este funnel NO tiene el VSL listo. NO escribas anuncios finales. Explicá con claridad que primero hay que tener el VSL (guionado) y el avatar definido, y ofrecé ayudar a avanzar esos prerrequisitos.")
+    // Lo propio del modo generate va acá, del lado NO cacheado. Si viviera arriba, alternar entre
+    // chatear y apretar "Generar" cambiaría el bloque estable y tiraría su cache en cada vuelta.
+    // Las mismas condiciones que tenía adentro de `guiaPaginas`: solo anuncios, y solo si hay
+    // páginas cargadas (sin páginas no hay titular con el cual alinearse).
+    mode === "generate" && subagentKey === "anuncios" && seccionesPag.length
+      ? "\nEn `notes`, en UNA línea: con qué titular te alineaste y si la alineación fue directa o indirecta."
+      : "",
+    mode === "generate"
+      ? "\n(En este pedido devolvés la salida con la herramienta, no en markdown: el panel la arma en tarjetas.)"
       : "",
   ].filter(Boolean).join("\n");
 
@@ -968,9 +1066,17 @@ Deno.serve(async (req) => {
     // ON por defecto y se come el presupuesto de max_tokens → respuestas cortadas/vacías. Para copy
     // de anuncios no hace falta; así es rápido, barato y todo el presupuesto va a la respuesta.
     thinking: { type: "disabled" },
+    // Dos breakpoints, ordenados de más estable a menos (el cache es un prefijo: lo que se mueve
+    // tiene que ir al final o invalida todo lo de arriba):
+    //   1. el método — estable por agente.
+    //   2. el contexto del cliente — estable dentro de la conversación. Es el que paga: en
+    //      Descubrimiento son hasta ~108k tokens que antes se re-mandaban en cada mensaje.
+    //   3. lo recuperado por el pedido de este turno — sin cachear, cambia siempre.
+    // Se permiten hasta 4; usamos 2.
     system: [
       { type: "text", text: stableSystem, cache_control: { type: "ephemeral" } },
-      { type: "text", text: volatileParts },
+      { type: "text", text: contextoEstable, cache_control: { type: "ephemeral" } },
+      ...(contextoRecuperado ? [{ type: "text", text: contextoRecuperado }] : []),
     ],
     messages: msgsApi,
   };
@@ -978,8 +1084,16 @@ Deno.serve(async (req) => {
   // El de funnels es así a propósito: no guarda en el DEL, se copia del chat.
   const TOOL_BY_AGENT: Record<string, typeof adTool | typeof vslTool> = { anuncios: adTool, vsl: vslTool };
   const tool = TOOL_BY_AGENT[subagentKey] || null;
-  if (mode === "generate" && tool) { reqBody.tools = [tool]; reqBody.tool_choice = { type: "tool", name: tool.name }; }
-  if (!/sonnet-5|opus-4/i.test(model)) reqBody.temperature = mode === "generate" ? 0 : 0.6;
+  // La herramienta va SIEMPRE, y lo que cambia entre chatear y generar es solo `tool_choice`.
+  // No es cosmético: `tools` se renderiza ANTES que `system` y que `messages`, así que agregarla
+  // o sacarla invalida los tres niveles de cache. `tool_choice`, en cambio, no invalida ni las
+  // herramientas ni el system — solo los mensajes. Antes, cada vez que alguien alternaba entre
+  // chatear y apretar "Generar" se pagaba de nuevo TODO el prefijo a precio de escritura.
+  if (tool) {
+    reqBody.tools = [tool];
+    reqBody.tool_choice = mode === "generate" ? { type: "tool", name: tool.name } : { type: "none" };
+  }
+  if (!/sonnet-5|opus-4|fable-5/i.test(model)) reqBody.temperature = mode === "generate" ? 0 : 0.6;
 
   async function callApi(): Promise<Response> {
     return await fetch("https://api.anthropic.com/v1/messages", {
@@ -993,13 +1107,19 @@ Deno.serve(async (req) => {
   let apiRes: Response | null = null;
   let lastErr = "";
   for (let attempt = 1; attempt <= 2; attempt++) { // 1 intento + 1 reintento como MUCHO. Sin loops.
+    let esperar = 1200;
     try {
       apiRes = await callApi();
       if (apiRes.ok) break;
       lastErr = "http " + apiRes.status;
       if (apiRes.status !== 429 && apiRes.status < 500) break; // 4xx duro: no reintenta
+      // En un 429 la API dice en `retry-after` cuántos segundos hay que esperar. Reintentar antes
+      // es garantizar el segundo 429: se quema el único reintento que tenemos y el equipo ve el
+      // error igual. Se acota a 10s porque esto es sincrónico — hay alguien esperando en el panel.
+      const ra = Number(apiRes.headers.get("retry-after"));
+      if (Number.isFinite(ra) && ra > 0) esperar = Math.min(ra * 1000, 10000);
     } catch (e) { lastErr = String((e as Error)?.message || e); }
-    if (attempt < 2) await new Promise((r) => setTimeout(r, 1200));
+    if (attempt < 2) await new Promise((r) => setTimeout(r, esperar));
   }
   if (!apiRes || !apiRes.ok) {
     let detail = lastErr;

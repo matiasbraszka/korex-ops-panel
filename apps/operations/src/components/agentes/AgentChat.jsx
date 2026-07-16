@@ -328,7 +328,8 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const [totalCost, setTotalCost] = useState(0);
   const scrollRef = useRef(null);
   const taRef = useRef(null);
-  const reqSeqRef = useRef(0); // para poder DETENER la respuesta en curso
+  const reqSeqRef = useRef(0); // descarta la respuesta de un pedido viejo si llega tarde
+  const abortRef = useRef(null); // corta el pedido en curso de verdad (ver stopReply)
 
   const meta = agentMeta(agentKey);
   const AgentIcon = meta.Icon;
@@ -342,7 +343,17 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const ANCHO = agentKey === 'landing' ? 'max-w-[1280px]' : 'max-w-[860px]';
 
   // Reset/carga al cambiar de conversación (chat nuevo o al abrir uno del historial).
-  useEffect(() => { setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0); }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Si había una respuesta en vuelo, se corta: cambiaste de cliente o de agente, esa respuesta
+  // ya no va a ningún lado y seguiría facturándose sola.
+  useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    reqSeqRef.current++;
+    setBusy(false);
+    setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0);
+  }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Al desmontar (salir de la pestaña), lo mismo: nada de pedidos huérfanos cobrando.
+  useEffect(() => () => abortRef.current?.abort(), []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
   // El textarea crece con el texto hasta un tope.
   useEffect(() => {
@@ -355,7 +366,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const blocked = gate?.status === 'bloqueado';
   const chatId = chatKey && !String(chatKey).startsWith('new:') ? String(chatKey) : null;
 
-  async function callAgent(historyForApi, mode) {
+  async function callAgent(historyForApi, mode, signal) {
     const body = {
       subagent_key: agentKey,
       client_id: sel.clientId, strategy_id: sel.strategyId, funnel_id: sel.funnelId, avatar_id: sel.avatarId,
@@ -375,13 +386,14 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
         body: JSON.stringify(body),
+        signal,
       });
       const data = await res.json().catch(() => null);
       if (!data) throw new Error(`La edge fn local (${localFn}) no respondió JSON. ¿Está levantada?`);
       return data;
     }
 
-    const { data, error } = await supabase.functions.invoke('agent-chat', { body });
+    const { data, error } = await supabase.functions.invoke('agent-chat', { body, signal });
     // supabase-js devuelve un error genérico ante cualquier status que no sea 2xx —
     // "Edge Function returned a non-2xx status code"— y deja el cuerpo de la respuesta en
     // `error.context`. Ahí está lo que la fn se tomó el trabajo de explicar (qué falta, qué tope
@@ -396,7 +408,13 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   }
 
   function stopReply() {
-    reqSeqRef.current++; // invalida la respuesta en curso: cuando llegue, se descarta
+    // Detener tiene que CORTAR el pedido, no solo taparlo. Antes esto solo descartaba la
+    // respuesta cuando llegaba: la llamada seguía viva y se cobraba igual, y como `busy` pasaba
+    // a false al instante, se podía mandar otro mensaje con el anterior todavía en vuelo → dos
+    // pedidos en paralelo, los dos facturados, uno solo mostrado. Y el descartado ni siquiera
+    // sumaba al contador de gasto, así que el número que ve el equipo mentía para abajo.
+    abortRef.current?.abort();
+    reqSeqRef.current++; // por si la respuesta ya venía en camino cuando se abortó
     setBusy(false);
     setMessages((m) => [...m, { role: 'assistant', kind: 'notice', content: '⏹ Respuesta detenida. Podés escribir de nuevo.' }]);
   }
@@ -406,9 +424,12 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     setMessages(withUser);
     setBusy(true);
     const mySeq = ++reqSeqRef.current;
+    abortRef.current?.abort(); // nunca dos pedidos en vuelo a la vez
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     let assistantMsg;
     try {
-      const data = await callAgent(withUser, mode);
+      const data = await callAgent(withUser, mode, ctrl.signal);
       if (!data?.ok) {
         const faltante = isVsl ? 'Faltan los avatares del DEL en este funnel para escribir el guión.' : 'Falta el VSL de este funnel para generar anuncios.';
         const detail = data?.detail || (data?.error === 'gate_blocked' ? faltante : 'Ocurrió un problema.');
@@ -424,6 +445,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     } catch (e) {
       assistantMsg = { role: 'assistant', kind: 'notice', content: String(e.message || e) };
     }
+    if (abortRef.current === ctrl) abortRef.current = null;
     if (reqSeqRef.current !== mySeq) return; // se detuvo o fue reemplazada → descartar
     setBusy(false);
     const finalMsgs = [...withUser, assistantMsg];
