@@ -266,7 +266,28 @@ Deno.serve(async (req) => {
     del: { label: "DEL / ANÁLISIS ESTRATÉGICO (paso 4, ya hecho)", clip: 8000 },
   };
   let docsDescText = "";
+  // ── El FOCO del cliente: reclutamiento o producto ──
+  // Cambia qué hay que investigar y en qué se profundiza en toda la fase, no solo en un paso.
+  // Se deduce del nombre de las estrategias del cliente, igual que hace el resto de la fn
+  // (`tipo`, más abajo) — pero a nivel CLIENTE, porque acá todavía puede no haber strategy_id.
+  //
+  // El caso que importa: los clientes en pre-llamada —justo los que necesitan el research—
+  // TODAVÍA NO TIENEN ESTRATEGIA CREADA. Ahí el foco no existe en ningún lado y el agente
+  // tiene que preguntarlo, no suponerlo: investigar para reclutamiento cuando el cliente
+  // viene por producto es research tirado.
+  let focoDesc = "";
+  let estrategiasDesc: string[] = [];
   if (subagentKey === "descubrimiento") {
+    const { data: estrats } = await supabase.from("strategies").select("name").eq("client_id", clientId);
+    estrategiasDesc = (Array.isArray(estrats) ? estrats : []).map((e) => str(e.name)).filter(Boolean);
+    const hayReclut = estrategiasDesc.some((n) => /reclut/i.test(n));
+    const hayProd = estrategiasDesc.some((n) => /producto/i.test(n));
+    focoDesc = !estrategiasDesc.length ? "sin_estrategia"
+      : (hayReclut && hayProd) ? "mixto"
+        : hayReclut ? "reclutamiento"
+          : hayProd ? "producto"
+            : "sin_tipo";
+
     const { data: docs } = await supabase.from("client_brain_docs")
       .select("doc_kind,title,text,char_count").eq("client_id", clientId)
       .in("doc_kind", Object.keys(DOCS_DESC)).order("char_count", { ascending: false });
@@ -349,7 +370,7 @@ Deno.serve(async (req) => {
       ];
       const q = norm(lastUser);
       pasoActivo = PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
-      retrievalMeta = { pedido: pasoActivo || "sin_match" };
+      retrievalMeta = { pedido: pasoActivo || "sin_match", foco: focoDesc, estrategias: estrategiasDesc };
 
       const { data: fichas } = await supabase.from("marketing_ad_library")
         .select("content,metrics").eq("part", "desc_ficha").eq("status", "approved").order("position");
@@ -623,9 +644,20 @@ Deno.serve(async (req) => {
   // El contexto de descubrimiento es OTRO: nivel cliente, no funnel. Casi todo el bloque de
   // abajo (avatar, guión del VSL, páginas, ganadores) no existe todavía en esta fase — meterlo
   // vacío sería enseñarle al agente que el cliente "no tiene" cosas que aún no le tocan tener.
+  // El foco manda sobre QUÉ se investiga y en qué se profundiza. Va arriba de todo, antes
+  // incluso del estado: si esto está mal, todo el descubrimiento apunta al lado equivocado.
+  const FOCO_TXT: Record<string, string> = {
+    reclutamiento: "RECLUTAMIENTO. Lo que se vende es la OPORTUNIDAD, y lo que la sostiene es el líder: su autoridad, su historia, su credibilidad, sus resultados y su equipo. Ahí es donde tenés que profundizar en todos los pasos.",
+    producto: "PRODUCTO. Lo que se vende es el PRODUCTO, así que el centro son los productos GANADORES de la empresa: cuáles funcionan, qué resultados dan, qué los diferencia y qué evidencia hay. El líder igual importa (es quien lo vende y da la cara), pero es soporte del producto, no el eje.",
+    mixto: "MIXTO: este cliente tiene estrategias de Reclutamiento Y de Producto. NO las mezcles en un mismo entregable — el método Korex las segmenta siempre. Preguntá para cuál de las dos es lo que te están pidiendo antes de producir.",
+    sin_tipo: "NO SE PUEDE DEDUCIR: el cliente tiene estrategias, pero sus nombres no dicen si son de Reclutamiento o de Producto. Preguntá cuál es el foco antes de producir.",
+    sin_estrategia: "TODAVÍA NO EXISTE: este cliente no tiene ninguna estrategia creada, así que el foco no está definido en ningún lado. PREGUNTALO antes de producir o de coordinar el research — investigar la autoridad del líder cuando el cliente viene por producto es research tirado a la basura, y al revés igual. No lo supongas por el nicho ni por la empresa.",
+  };
+
   const volatileDesc = [
     "===== CONTEXTO DE ESTA CONVERSACIÓN (usalo, no lo pidas) =====",
     `Cliente: ${str(client?.name)}${str(client?.company) ? ` · Empresa MLM: ${str(client?.company)}` : ""}${str(client?.niche) ? ` · Nicho: ${str(client?.niche)}` : ""}${str(client?.team_name) ? ` · Equipo: ${str(client?.team_name)}` : ""}`,
+    `\n— FOCO DEL CLIENTE —\n${FOCO_TXT[focoDesc] || FOCO_TXT.sin_tipo}`,
 
     // El estado va COMPLETO (los 5 pasos), no solo el activo: el agente tiene que poder decir
     // "estás acá, lo que sigue es esto" aunque le hayan preguntado por otro paso.
