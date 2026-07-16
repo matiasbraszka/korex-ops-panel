@@ -251,19 +251,73 @@ Deno.serve(async (req) => {
   const briefDoc = (briefRows || []).find((d) => d.doc_kind === "briefing") || (briefRows || []).find((d) => d.doc_kind === "onboarding");
   const briefText = clip(str(briefDoc?.text), 3000);
 
+  // ── Qué paso del descubrimiento están pidiendo ──
+  // Se resuelve ACÁ, antes de cargar los documentos, porque de esto depende cuánto se le da de
+  // cada uno (ver CLIPS_POR_PASO). Es solo la heurística de ruteo: mira el mensaje y nada más.
+  // Lo que sale del corpus y del gate —las fichas, quién ejecuta cada paso, si está bloqueado—
+  // se resuelve más abajo, cuando ya hay con qué.
+  //
+  // EL PRIMER MATCH GANA: los pedidos reales nombran varios pasos a la vez ("research de la
+  // competencia" trae los dos; "el avatar que eligió el análisis estratégico", también), así que
+  // contar matches solo produce empates. El orden de este array ES la desambiguación, y no es
+  // alfabético ni el del pipeline — es por especificidad, con dos choques que hay que respetar:
+  //
+  //   · `research` va ANTES que `onboarding` porque "pre-onboarding" contiene "onboarding".
+  //     Mismo choque que pre-landing/landing en el agente de funnels.
+  //   · `competencia` y `avatar` van primero porque son los que más se nombran de paso dentro de
+  //     un pedido que es de otra cosa.
+  //
+  // Y si igual se equivoca, el gate corrige: un paso elegido pero bloqueado no se produce. El
+  // ruteo es una heurística; la autoridad es el estado real del cliente.
+  let pasoActivo = "";
+  if (subagentKey === "descubrimiento") {
+    const PASOS_DESC: Array<{ slug: string; re: RegExp }> = [
+      { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
+      { slug: "avatar", re: /(avatar builder|hoja de avatar|profundiza\w*|boton(es)? caliente|psicologic\w+|deseos ocultos|miedos ocultos)/ },
+      { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
+      { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
+      { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto)/ },
+    ];
+    const q = norm([...messages].reverse().find((m) => m.role === "user")?.content || "");
+    pasoActivo = PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
+  }
+
   // ── Documentos del cliente (solo descubrimiento) ──
   // Son los INPUTS de las skills: el research alimenta la estrategia, la estrategia el avatar.
   // Los otros agentes no los necesitan (trabajan con el DEL ya destilado en avatares y guión).
   //
   // Van clipados y no enteros porque son enormes de verdad (promedios reales: onboarding 52 KB,
-  // DEL 57 KB, investigación 26 KB). Los tres completos serían ~35k tokens en CADA turno, sin
-  // cachear. Los clips son asimétricos a propósito: el onboarding es la voz del cliente — de ahí
-  // salen las citas literales que la metodología exige — así que se lleva la porción más grande.
-  // El agente ve cuánto se recortó y avisa si le falta: no adivina.
-  const DOCS_DESC: Record<string, { label: string; clip: number }> = {
-    investigacion: { label: "RESEARCH DEL LÍDER Y LA EMPRESA (paso 1 · fuentes públicas ⇒ NO VERIFICADO)", clip: 14000 },
-    onboarding: { label: "ONBOARDING (la voz del cliente ⇒ CONFIRMADO; de acá salen las citas literales)", clip: 16000 },
-    del: { label: "DEL / ANÁLISIS ESTRATÉGICO (paso 4, ya hecho)", clip: 8000 },
+  // DEL 57 KB, investigación 26 KB) y hay clientes de 224 KB. Los tres enteros en cada turno son
+  // ~35k tokens sin cachear.
+  //
+  // Pero el clip fijo tenía un problema peor que el costo: con el onboarding cortado en 16 KB de
+  // 52 KB, el paso 4 leía EL PRIMER TERCIO de la llamada y le pedíamos citas literales de todo.
+  // Las citas que no estaban las sacaba de donde podía. Un DEL cortado en 8 KB de 57 KB dejaba al
+  // avatar builder trabajando sobre el 14% de su único input.
+  //
+  // La solución no es subir todo (dispara el costo por turno en los 5 pasos por igual), sino dar
+  // el documento ENTERO al paso que de verdad lo usa y recortar los demás a contexto. Es el mismo
+  // criterio de búsqueda inteligente del resto de la fn: traer lo que aplica, no todo.
+  //
+  //   paso 3 (onboarding)  -> el onboarding es lo que consolida: entero.
+  //   paso 4 (estrategia)  -> decide con el onboarding y arma munición con el research: los dos
+  //                           enteros. El DEL casi no hace falta (lo está produciendo él).
+  //   paso 5 (avatar)      -> el DEL es su único input: entero. El resto, contexto.
+  //   sin paso / menú      -> nadie está produciendo nada: alcanza con saber qué hay.
+  //
+  // Los topes de acá son de caracteres. ~4 chars = 1 token, así que el peor caso (paso 4) son
+  // ~37k tokens de documentos. Entra cómodo en Sonnet y el agente ve cuánto se recortó: avisa si
+  // le falta en vez de adivinar.
+  const CLIPS_POR_PASO: Record<string, Record<string, number>> = {
+    onboarding: { investigacion: 14000, onboarding: 100000, del: 3000 },
+    estrategia: { investigacion: 50000, onboarding: 100000, del: 3000 },
+    avatar: { investigacion: 12000, onboarding: 24000, del: 90000 },
+  };
+  const CLIPS_MENU = { investigacion: 6000, onboarding: 8000, del: 6000 };
+  const DOCS_DESC: Record<string, { label: string }> = {
+    investigacion: { label: "RESEARCH DEL LÍDER Y LA EMPRESA (paso 1 · fuentes públicas ⇒ NO VERIFICADO)" },
+    onboarding: { label: "ONBOARDING (la voz del cliente ⇒ CONFIRMADO; de acá salen las citas literales)" },
+    del: { label: "DEL / ANÁLISIS ESTRATÉGICO (paso 4, ya hecho)" },
   };
   let docsDescText = "";
   // ── El FOCO del cliente: reclutamiento o producto ──
@@ -299,10 +353,17 @@ Deno.serve(async (req) => {
         vistos.add(k); return true;
       })
       .map((d) => {
-        const cfg = DOCS_DESC[str(d.doc_kind)];
+        const kind = str(d.doc_kind);
+        const cfg = DOCS_DESC[kind];
+        const tope = (CLIPS_POR_PASO[pasoActivo] || CLIPS_MENU)[kind] ?? 6000;
         const full = str(d.text);
-        const txt = clip(full, cfg.clip);
-        const nota = full.length > cfg.clip ? ` · SE MUESTRAN LOS PRIMEROS ${cfg.clip.toLocaleString()} DE ${full.length.toLocaleString()} CARACTERES` : "";
+        const txt = clip(full, tope);
+        // Cuando se recortó, el agente TIENE que saberlo: es la diferencia entre "no lo dijo" y
+        // "no lo leí". Sin esta línea, un doc cortado se lee como un doc completo y lo que falta
+        // lo completa de memoria.
+        const nota = full.length > tope
+          ? ` · RECORTADO: LEÉS LOS PRIMEROS ${tope.toLocaleString()} DE ${full.length.toLocaleString()} CARACTERES. Si necesitás algo que puede estar en la parte que no ves, decilo en vez de suponerlo.`
+          : ` · COMPLETO (${full.length.toLocaleString()} caracteres)`;
         return `\n— ${cfg.label}${nota} —\n${txt}`;
       }).join("\n");
   }
@@ -339,37 +400,13 @@ Deno.serve(async (req) => {
   //   2. La skill del paso activo, completa (2 KB a 13 KB según cuál).
   let fichasText = "";
   let skillActivaText = "";
-  let pasoActivo = "";
   // slug -> "chat" | "fuera": si el paso se produce en este chat o no. Sale del corpus
   // (metrics.ejecuta de cada ficha), no hardcodeado acá: cuando research y competencia se
   // construyan como jobs, cambia el corpus y esto sigue igual.
   let ejecutaPorPaso: Record<string, string> = {};
   if (subagentKey === "descubrimiento") {
     try {
-      const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
-
-      // Qué paso pidieron. EL PRIMER MATCH GANA: los pedidos reales nombran varios pasos a la
-      // vez ("research de la competencia" trae los dos; "el avatar que eligió el análisis
-      // estratégico", también), así que contar matches solo produce empates. El orden de este
-      // array ES la desambiguación, y no es alfabético ni el del pipeline — es por
-      // especificidad, con dos choques que hay que respetar:
-      //
-      //   · `research` va ANTES que `onboarding` porque "pre-onboarding" contiene "onboarding".
-      //     Mismo choque que pre-landing/landing en el agente de funnels.
-      //   · `competencia` y `avatar` van primero porque son los que más se nombran de paso
-      //     dentro de un pedido que es de otra cosa.
-      //
-      // Y si igual se equivoca, el gate corrige: un paso elegido pero bloqueado no se produce.
-      // El ruteo es una heurística; la autoridad es el estado real del cliente.
-      const PASOS_DESC: Array<{ slug: string; re: RegExp }> = [
-        { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
-        { slug: "avatar", re: /(avatar builder|hoja de avatar|profundiza\w*|boton(es)? caliente|psicologic\w+|deseos ocultos|miedos ocultos)/ },
-        { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
-        { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
-        { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto)/ },
-      ];
-      const q = norm(lastUser);
-      pasoActivo = PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
+      // pasoActivo ya se resolvió arriba (los clips de los documentos dependen de él).
       retrievalMeta = { pedido: pasoActivo || "sin_match", foco: focoDesc, estrategias: estrategiasDesc };
 
       const { data: fichas } = await supabase.from("marketing_ad_library")

@@ -32,6 +32,10 @@ const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run");
 const SRC = join(process.cwd(), "corpus-src", "korex_discovery_skills");
 const SOP = join(process.cwd(), "corpus-src", "descubrimiento-sop.md");
+// Donde viven las versiones adaptadas al chat: corpus-src/skill-<slug>-chat.md. Si existe una
+// para un paso, se carga ESA en vez del SKILL.md original (ver el bucle de mas abajo).
+const CHAT_SRC = join(process.cwd(), "corpus-src");
+const adaptadas = [];
 
 const PARTS = ["desc_blueprint", "desc_ficha", "desc_skill"];
 
@@ -105,7 +109,10 @@ const SKILLS = [
     comoSeHace: "Lo producís vos, acá, siguiendo la metodología. Sus fuentes (research + onboarding) llegan en el contexto.",
     cuando: "Con research y onboarding cerrados. ES LA BISAGRA: sin esto no hay avatar.",
     prereq: "Research (paso 1) + onboarding (paso 3).",
-    output: "Documento estrategico: foco producto vs reclutamiento, valores, historia del lider y el top de avatares con los 2 prioritarios.",
+    // OJO: esto ya NO es el DEL de 10 paginas. La version del chat produce un brief de decision
+    // de 1.200-1.800 palabras (ver corpus-src/skill-estrategia-chat.md). El documento largo se
+    // sigue haciendo en Claude Code con la skill original cuando hace falta.
+    output: "BRIEF de decision (1.200-1.800 palabras, no un documento): que estrategia se desarrolla PRIMERO con score y evidencia, 3-5 avatares scoreados para esa estrategia, las virtudes mas potentes de la empresa y del cliente, y la historia del cliente en bullets con puntero a donde esta el detalle.",
     tags: ["estrategia", "estrategico", "strategy", "analisis", "analizar", "focalizacion",
       "foco", "producto", "reclutamiento", "valores", "top de avatares", "avatares", "consolidar"],
   },
@@ -195,9 +202,24 @@ function buildRows() {
   for (const s of SKILLS) {
     const path = join(SRC, s.dir, "SKILL.md");
     if (!existsSync(path)) throw new Error(`falta la skill: ${path}`);
-    const skill = readFileSync(path, "utf8").trim();
-    const fm = frontmatter(skill);
+    const original = readFileSync(path, "utf8").trim();
+    const fm = frontmatter(original);
     if (!fm.name) throw new Error(`${s.dir}: SKILL.md sin frontmatter name`);
+
+    // Version adaptada al chat, si la hay (corpus-src/skill-<slug>-chat.md).
+    //
+    // El SKILL.md original esta pensado para Claude Code: produce un entregable largo (el
+    // strategy-analyzer son ~10 paginas). En el chat del panel eso no entra —la respuesta se
+    // corta en 6.000 tokens— y ademas no es lo que sirve: los agentes de Korex (anuncios, VSL)
+    // van al grano del resultado y no se enrollan. La version -chat.md dice QUE producir en
+    // este contexto; la original queda intacta para cuando se necesite el documento completo.
+    //
+    // La ficha (el menu del orquestador) sigue saliendo del frontmatter del ORIGINAL a
+    // proposito: describe el paso, que no cambia — lo que cambia es el formato de salida.
+    const chatPath = join(CHAT_SRC, `skill-${s.slug}-chat.md`);
+    const esAdaptada = existsSync(chatPath);
+    const skill = esAdaptada ? readFileSync(chatPath, "utf8").trim() : original;
+    if (esAdaptada) adaptadas.push(s.slug);
 
     const ficha = [
       `# PASO ${s.ord} — ${s.name}`,
@@ -231,7 +253,7 @@ function buildRows() {
       ...base,
       id: `mal_desc_skill_${s.slug}`, part: "desc_skill",
       niche_tags: [...new Set([s.slug, ...s.tags])],
-      title: `METODOLOGIA — ${fm.name}`,
+      title: `METODOLOGIA — ${fm.name}${esAdaptada ? " (adaptada al chat)" : ""}`,
       content: skill, char_count: skill.length,
     });
   }
