@@ -157,18 +157,25 @@ Deno.serve(async (req) => {
     ].join("\n"),
     // El copy de una landing no se entiende sin su forma: qué va arriba de qué, qué va al
     // lado de la foto, qué va centrado. Por eso la salida es la MAQUETA con el copy adentro,
-    // no una lista de textos. El formato es el mismo de los WIREFRAMES del blueprint: se
-    // copian esas bandas y se les cambia el contenido.
+    // y la maqueta se dibuja con TABLAS: una banda = una tabla, y las columnas de la tabla
+    // son las columnas de la página. Es el mismo formato de los WIREFRAMES del blueprint:
+    // se copian esas tablas y se les cambia el contenido. El chat de este agente va ancho.
     landing: [
       "- Una página del funnel = un `## N) NOMBRE DE LA PÁGINA` (`## 1) PRE-LANDING`, `## 2) LANDING VSL`, `## 3) FORMULARIO`, `## 4) THANK YOU PAGE`). Siempre en el orden en que la persona las recorre.",
-      "- Dentro de cada página, el copy va SIEMPRE maquetado en BANDAS, igual que los wireframes que tenés arriba. Una banda = una franja horizontal de la página, de arriba hacia abajo:",
-      "  `### BANDA N · <nombre> — 1 columna · centrado`  ó  `### BANDA N · <nombre> — 2 columnas`",
-      "- En las bandas de 2 columnas (el patrón copy + foto), separá con `**Izquierda**` y `**Derecha**`, y aclarás la alineación al lado si no es la de siempre (`· a la izquierda`, `· centrado`).",
-      "- Adentro de cada banda va el copy REAL, renglón por renglón y en el orden exacto en que se lee en pantalla. Podés etiquetar con `Titular:` · `Subtítulo:` · `CTA:` para que se pinten.",
-      "- Los elementos que no son texto van entre corchetes y en el lugar EXACTO donde caen: `[VSL]`, `[LOGO CLIENTE]`, `[CARRUSEL DE FOTOS]`, `[FOTO DEL MENTOR — profesional]`, `[FORMULARIO: Nombre · WhatsApp]`, `[BOTÓN CTA: ...]`.",
-      "- Los bullets de dolor/deseo van con ❌ y ✅, uno por renglón, dentro de su banda.",
-      "- Separá cada banda de la siguiente con `---`.",
-      "- La pre-landing y la landing VSL tienen su wireframe: seguilo banda por banda. El formulario y la thank you page no tienen maqueta cargada — armá sus bandas a partir de su blueprint (pantallas y orden), con el mismo formato, y aclarás en las notas que esa estructura la dedujiste del blueprint.",
+      "- Dentro de cada página, el copy va SIEMPRE maquetado con TABLAS, igual que los wireframes que tenés arriba. UNA BANDA = UNA TABLA. Una banda es una franja horizontal de la página; van de arriba hacia abajo, en el orden en que se scrollea.",
+      "- Banda de 2 columnas (el patrón copy + foto) — el encabezado nombra la banda y las columnas SON las de la página:",
+      "  `| BANDA 2 · HERO — Izquierda | Derecha |`",
+      "  `| --- | --- |`",
+      "  `| ¡ATENCIÓN NETWORKER!<br>**Titular...**<br>[FORMULARIO: Nombre · WhatsApp]<br>[BOTÓN CTA: ...] | [FOTO DEL MENTOR — profesional] |`",
+      "- Banda de 1 columna — tabla de una sola columna, y la alineación va en el encabezado:",
+      "  `| BANDA 3 · QUÉ VAS A DESCUBRIR — 1 columna · centrado |`",
+      "  `| --- |`",
+      "  `| ¿QUÉ VAS A DESCUBRIR EN ESTE VÍDEO?<br>✅ Beneficio 1<br>✅ Beneficio 2<br>[BOTÓN CTA: ...] |`",
+      "- `<br>` es la ÚNICA etiqueta HTML permitida, y solo para separar renglones DENTRO de una celda: una fila de tabla es una sola línea, así que sin `<br>` no hay maqueta posible. Nada de `<div>`, `<table>` ni estilos.",
+      "- Adentro de cada celda va el copy REAL, renglón por renglón y en el orden exacto en que se lee en pantalla.",
+      "- Los elementos que no son texto van entre corchetes y en la celda EXACTA donde caen: `[VSL]`, `[LOGO CLIENTE]`, `[CARRUSEL DE FOTOS]`, `[FOTO DEL MENTOR — profesional]`, `[FORMULARIO: Nombre · WhatsApp]`, `[BOTÓN CTA: ...]`.",
+      "- Los bullets de dolor/deseo van con ❌ y ✅, separados con `<br>` dentro de su celda.",
+      "- La pre-landing y la landing VSL tienen su wireframe: seguilo tabla por tabla. El formulario y la thank you page no tienen maqueta cargada — armá sus bandas a partir de su blueprint (pantallas y orden), con el mismo formato de tablas, y aclarás en las notas que esa estructura la dedujiste del blueprint.",
       "- Lo que falta del cliente va marcado `[FALTA: ...]` bien visible. No lo inventes.",
       "- Si auditás en vez de escribir, usá una tabla con `Qué está mal | Por qué | Cómo queda`, y citá con `>` el copy actual que estás señalando. Si lo que falla es la ESTRUCTURA (un elemento fuera de lugar, una banda que no está, algo centrado que va al costado de la foto), decilo con el nombre de la banda.",
     ].join("\n"),
@@ -185,7 +192,7 @@ Deno.serve(async (req) => {
     "- Tablas markdown cuando compares 2+ opciones (ángulos, variantes, antes/después). Son mucho más legibles que un párrafo.",
     "- `> cita` para las palabras textuales del avatar, del DEL o de un guión de referencia.",
     "- `---` para separar bloques cuando la respuesta es larga.",
-    "- Nada de HTML: solo markdown. Y nada de emojis decorativos: como mucho uno funcional.",
+    "- Nada de HTML: solo markdown (si el bloque de abajo habilita alguna etiqueta puntual, esa es la única excepción). Y nada de emojis decorativos: como mucho uno funcional.",
     "- Si la respuesta es corta (una pregunta puntual), contestá en prosa directa. El formato es para estructurar, no para inflar.",
     "",
     `Propio de ${specialistName}:`,

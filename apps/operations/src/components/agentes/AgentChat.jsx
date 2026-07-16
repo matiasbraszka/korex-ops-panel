@@ -1,12 +1,14 @@
 // Chat del panel Agentes: conversación con el agente elegido + generación estructurada
-// (botón "Generar anuncios") + guardado del copy en el avatar. Honra el gate del pipeline.
+// (botón "Generar") + guardado en el avatar (anuncios) o en el funnel (VSL).
+// Honra el gate del pipeline.
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import {
   Send, Loader2, Lock, Sparkles, Save, Check, AlertTriangle, Square,
-  ThumbsUp, ThumbsDown, Copy, RefreshCw,
+  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video,
 } from 'lucide-react';
 import { agentMeta } from './agentMeta';
+import AgentMarkdown, { accentOf } from './AgentMarkdown';
 
 const FEEDBACK_TAGS = ['Hook flojo', 'No va al avatar', 'Cliché', 'No alineado al VSL', 'Compliance', 'No se entiende', 'Perfecto'];
 const fbid = () => `afb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -158,44 +160,83 @@ function GateBanner({ gate, agentKey }) {
 function VslCard({ vsl, onSave, saved }) {
   const hooks = Array.isArray(vsl.hooks) ? vsl.hooks : [];
   const secs = Array.isArray(vsl.secciones) ? vsl.secciones : [];
+  const a = accentOf('vsl');
+  const [abierta, setAbierta] = useState(null); // null = todas abiertas
   return (
     <div className="border border-border rounded-xl bg-white overflow-hidden">
-      <div className="flex items-center justify-between gap-2 py-2 px-3 border-b border-[#F1F3F7] bg-blue-bg2">
-        <span className="text-[12px] font-bold text-text truncate">
-          Guión de VSL{vsl.duracion_estimada ? ` · ${vsl.duracion_estimada}` : ''}{vsl.palabras ? ` · ${vsl.palabras} palabras` : ''}
+      <div className="flex items-center justify-between gap-2 py-2.5 px-3 border-b border-[#F1F3F7]" style={{ background: a.bg2 }}>
+        <span className="text-[12px] font-bold text-text truncate flex items-center gap-2">
+          <Video size={14} style={{ color: a.c }} />
+          Guión de VSL
+          {vsl.duracion_estimada && <span className="font-semibold text-[11px] py-0.5 px-2 rounded-full" style={{ background: a.bg, color: a.c }}>{vsl.duracion_estimada}</span>}
+          {vsl.palabras > 0 && <span className="text-[11px] text-text3 font-normal">{vsl.palabras} palabras</span>}
         </span>
         <button onClick={() => onSave(vsl)} disabled={saved}
           className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-semibold cursor-pointer border shrink-0 disabled:cursor-default"
-          style={saved ? { background: 'var(--color-green-bg)', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#2E69E0', borderColor: 'var(--color-blue-light)' }}>
+          style={saved ? { background: 'var(--color-green-bg)', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: a.c, borderColor: a.c + '66' }}>
           {saved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> Guardar en el funnel</>}
         </button>
       </div>
-      <div className="p-3 grid gap-2.5 text-[12.5px] text-[#374151]">
+      <div className="p-3 grid gap-3 text-[12.5px] text-[#374151]">
         {vsl.caso_base && (
-          <div className="text-[11.5px] text-text2 italic border-b border-[#F1F3F7] pb-2">
-            Clonado de: {vsl.caso_base}
+          <div className="text-[11.5px] rounded-lg py-1.5 px-2.5 flex items-start gap-1.5" style={{ background: a.bg, color: '#4B5563' }}>
+            <Sparkles size={12} style={{ color: a.c }} className="shrink-0 mt-0.5" />
+            <span><strong style={{ color: a.c }}>Clonado de:</strong> {vsl.caso_base}</span>
           </div>
         )}
+
         {hooks.length > 0 && (
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text3">Menú de hooks ({hooks.length}) · elegí uno para grabar</span>
-            <ol className="mt-1 grid gap-1.5 list-decimal pl-5">
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>Menú de hooks ({hooks.length}) · elegí uno para grabar</span>
+            <ol className="mt-1.5 grid gap-1.5 list-none p-0">
               {hooks.map((h, k) => (
-                <li key={k} className="text-text leading-snug">
-                  {h.formula && <span className="text-[10px] font-bold text-text3 mr-1">[{h.formula}]</span>}
-                  {h.texto}
+                <li key={k} className="flex gap-2 items-start leading-snug rounded-lg p-2" style={{ background: k === 0 ? a.bg2 : 'transparent', border: k === 0 ? `1px solid ${a.bg}` : '1px solid transparent' }}>
+                  <span className="flex-none w-[19px] h-[19px] rounded-md flex items-center justify-center text-[10.5px] font-bold mt-px" style={{ background: a.bg, color: a.c }}>{k + 1}</span>
+                  <span className="flex-1 min-w-0 text-text">
+                    {h.formula && <span className="text-[10px] font-bold mr-1.5 py-0.5 px-1.5 rounded" style={{ background: a.c, color: '#fff' }}>{h.formula}</span>}
+                    {h.texto}
+                  </span>
                 </li>
               ))}
             </ol>
           </div>
         )}
-        {secs.map((s) => (
-          <div key={s.n} className="border-t border-[#F1F3F7] pt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text3">{s.n}. {s.nombre}</span>
-            <div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{s.texto}</div>
+
+        {/* Las 10 secciones: cada una con su número, plegable para poder leer la estructura
+            de un vistazo sin scrollear 2.000 palabras. */}
+        {secs.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>El guión · {secs.length} secciones</span>
+              <button onClick={() => setAbierta(abierta === 'none' ? null : 'none')}
+                className="text-[10.5px] font-semibold cursor-pointer bg-transparent border-none" style={{ color: a.c }}>
+                {abierta === 'none' ? 'Abrir todas' : 'Ver solo la estructura'}
+              </button>
+            </div>
+            <div className="grid gap-1.5">
+              {secs.map((s) => {
+                const open = abierta !== 'none';
+                return (
+                  <div key={s.n} className="rounded-lg border border-[#EEF0F4] overflow-hidden">
+                    <div className="flex items-center gap-2 py-1.5 px-2" style={{ background: a.bg2 }}>
+                      <span className="flex-none w-[20px] h-[20px] rounded-md text-white flex items-center justify-center text-[10.5px] font-bold" style={{ background: a.c }}>{s.n}</span>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-text">{s.nombre}</span>
+                    </div>
+                    {open && (
+                      <div className="p-2.5 leading-relaxed whitespace-pre-wrap text-[12.5px] text-[#3F4653]">{s.texto}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        ))}
-        {vsl.notas && <div className="text-[11.5px] text-text2 italic border-t border-[#F1F3F7] pt-2">📝 {vsl.notas}</div>}
+        )}
+
+        {vsl.notas && (
+          <div className="text-[11.5px] rounded-lg p-2.5" style={{ background: 'var(--color-yellow-bg)', border: '1px solid #F1E3B0', color: '#7A5B00' }}>
+            <strong>📝 Falta completar:</strong> {vsl.notas}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -203,10 +244,14 @@ function VslCard({ vsl, onSave, saved }) {
 
 function AdCard({ ad, idx, onSave, saved }) {
   const hooks = adHooks(ad);
+  const a = accentOf('anuncios');
   return (
     <div className="border border-border rounded-xl bg-white overflow-hidden">
-      <div className="flex items-center justify-between gap-2 py-2 px-3 border-b border-[#F1F3F7] bg-blue-bg2">
-        <span className="text-[12px] font-bold text-text truncate">Ángulo {idx + 1}{ad.angle ? ` · ${ad.angle}` : ''}</span>
+      <div className="flex items-center justify-between gap-2 py-2 px-3 border-b border-[#F1F3F7]" style={{ background: a.bg2 }}>
+        <span className="text-[12px] font-bold text-text truncate flex items-center gap-2">
+          <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-md text-white text-[10px] font-bold" style={{ background: a.c }}>{idx + 1}</span>
+          {ad.angle || `Ángulo ${idx + 1}`}
+        </span>
         <button onClick={() => onSave(ad, idx)} disabled={saved}
           className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-semibold cursor-pointer border shrink-0 disabled:cursor-default"
           style={saved ? { background: 'var(--color-green-bg)', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#2E69E0', borderColor: 'var(--color-blue-light)' }}>
@@ -214,17 +259,30 @@ function AdCard({ ad, idx, onSave, saved }) {
         </button>
       </div>
       <div className="p-3 grid gap-2.5 text-[12.5px] text-[#374151]">
-        {ad.headline && <div><span className="text-[10px] font-bold uppercase tracking-wider text-text3">Titular</span><div className="mt-0.5 font-semibold text-text">{ad.headline}</div></div>}
+        {ad.headline && <div><span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>Titular</span><div className="mt-0.5 font-semibold text-text">{ad.headline}</div></div>}
         {hooks.length > 0 && (
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text3">Hooks ({hooks.length}) · intercambiables con el texto base</span>
-            <ol className="mt-1 grid gap-1 list-decimal pl-5">
-              {hooks.map((h, k) => <li key={k} className="text-text leading-snug">{h}</li>)}
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>Hooks ({hooks.length}) · intercambiables con el texto base</span>
+            <ol className="mt-1.5 grid gap-1.5 list-none p-0">
+              {hooks.map((h, k) => (
+                <li key={k} className="flex gap-2 items-start text-text leading-snug">
+                  <span className="flex-none w-[19px] h-[19px] rounded-md flex items-center justify-center text-[10.5px] font-bold mt-px" style={{ background: a.bg, color: a.c }}>{k + 1}</span>
+                  <span className="flex-1 min-w-0">{h}</span>
+                </li>
+              ))}
             </ol>
           </div>
         )}
-        {ad.primary_text && <div><span className="text-[10px] font-bold uppercase tracking-wider text-text3">Texto base</span><div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{ad.primary_text}</div></div>}
-        {ad.description && <div><span className="text-[10px] font-bold uppercase tracking-wider text-text3">Descripción</span><div className="mt-0.5">{ad.description}</div></div>}
+        {/* El texto base es el cuerpo del anuncio: se lee mejor destacado del resto. */}
+        {ad.primary_text && (
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>Texto base</span>
+            <div className="mt-1 rounded-lg p-2.5" style={{ background: a.bg2, borderLeft: `3px solid ${a.c}` }}>
+              <AgentMarkdown text={ad.primary_text} agentKey="anuncios" className="text-[12.5px]" />
+            </div>
+          </div>
+        )}
+        {ad.description && <div><span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>Descripción</span><div className="mt-0.5">{ad.description}</div></div>}
         {ad.creative_note && <div className="text-[11.5px] text-text2 italic border-t border-[#F1F3F7] pt-2">🎬 {ad.creative_note}</div>}
       </div>
     </div>
@@ -243,9 +301,14 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
 
   const meta = agentMeta(agentKey);
   const AgentIcon = meta.Icon;
+  const accent = accentOf(agentKey);
   const isAds = agentKey === 'anuncios';
   const isVsl = agentKey === 'vsl';
   const canGenerate = isAds || isVsl; // los demás agentes solo chatean (sin salida estructurada)
+  // El de funnels entrega la landing MAQUETADA en tablas (una banda = una tabla, las celdas
+  // son sus columnas). Con la columna de lectura de 860px esas tablas se estrujan, así que
+  // acá el chat se ensancha. Los demás siguen angostos: para texto corrido, 860 se lee mejor.
+  const ANCHO = agentKey === 'landing' ? 'max-w-[1280px]' : 'max-w-[860px]';
 
   // Reset/carga al cambiar de conversación (chat nuevo o al abrir uno del historial).
   useEffect(() => { setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0); }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,7 +410,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     <>
       {/* Mensajes */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto py-5 px-6 max-md:py-4 max-md:px-3.5">
-        <div className="max-w-[860px] mx-auto flex flex-col gap-5">
+        <div className={`${ANCHO} mx-auto flex flex-col gap-5`}>
           <GateBanner gate={gate} agentKey={agentKey} />
 
           {empty && (
@@ -388,7 +451,8 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
 
             return (
               <div key={i} className="flex gap-3">
-                <span className="w-[34px] h-[34px] rounded-[9px] bg-blue text-white flex items-center justify-center shrink-0" style={{ boxShadow: '0 2px 8px rgba(91,124,245,.3)' }}>
+                <span className="w-[34px] h-[34px] rounded-[9px] text-white flex items-center justify-center shrink-0"
+                  style={{ background: accent.c, boxShadow: `0 2px 8px ${accent.c}4D` }}>
                   <AgentIcon size={18} strokeWidth={1.85} />
                 </span>
                 <div className="flex-1 min-w-0">
@@ -408,9 +472,9 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
                     <VslCard vsl={m.vsl} onSave={saveVsl}
                       saved={!!savedKeys[`${sel.funnelId}:vsl:${JSON.stringify(m.vsl).length}`]} />
                   ) : (
-                    <div className="bg-white border border-border rounded-[4px_16px_16px_16px] py-4 px-[18px] text-[13.5px] leading-[1.62] text-[#3F4653] whitespace-pre-wrap"
+                    <div className="bg-white border border-border rounded-[4px_16px_16px_16px] py-4 px-[18px]"
                       style={{ boxShadow: '0 1px 2px rgba(10,22,40,.04), 0 1px 3px rgba(10,22,40,.06)' }}>
-                      {m.content}
+                      <AgentMarkdown text={m.content} agentKey={agentKey} />
                     </div>
                   )}
 
@@ -434,7 +498,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
 
       {/* Composer */}
       <div className="shrink-0 bg-white border-t border-border py-3 px-6 max-md:py-2.5 max-md:px-3.5">
-        <div className="max-w-[860px] mx-auto">
+        <div className={`${ANCHO} mx-auto`}>
           {suggestions.length > 0 && (
             /* Una sola fila: los chips muestran el atajo corto y scrollean en horizontal
                si no entran, para no comerle alto al chat. */
@@ -444,7 +508,8 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
               </span>
               {suggestions.map((s) => (
                 <button key={s.label} onClick={() => send(s.prompt)} disabled={busy} title={s.prompt}
-                  className="bg-blue-bg2 border border-border text-[#2E69E0] rounded-full py-1 px-2.5 text-[11.5px] font-semibold cursor-pointer whitespace-nowrap shrink-0 hover:bg-blue-bg hover:border-blue-light disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="border rounded-full py-1 px-2.5 text-[11.5px] font-semibold cursor-pointer whitespace-nowrap shrink-0 hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: accent.bg2, borderColor: accent.bg, color: accent.c }}>
                   {s.label}
                 </button>
               ))}
@@ -470,7 +535,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
                       ? (isVsl ? 'Faltan los avatares de este funnel' : 'Falta el VSL de este funnel')
                       : (isVsl ? 'Escribir el guión completo para guardarlo en el funnel' : 'Generar una tanda de anuncios para guardar')}
                     className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-border bg-white text-[12px] font-semibold text-text2 cursor-pointer hover:bg-surface2 hover:text-text disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
-                    {blocked ? <Lock size={14} /> : <Sparkles size={14} className="text-blue" />} {isVsl ? 'Generar guión' : 'Generar anuncios'}
+                    {blocked ? <Lock size={14} /> : <Sparkles size={14} style={{ color: accent.c }} />} {isVsl ? 'Generar guión' : 'Generar anuncios'}
                   </button>
                 )}
                 <span className="text-[11px] text-text3 truncate max-md:hidden">

@@ -163,30 +163,49 @@ function renderBlueprint(xml) {
 }
 
 /**
- * Wireframes: la maqueta real de la pagina. Cada FILA de la tabla es una banda horizontal y
- * cada CELDA una columna dentro de esa banda (2 celdas = copy | foto). Se renderiza en el
- * MISMO formato que despues tiene que devolver el agente: asi aprende la forma por imitacion
- * en vez de por descripcion.
+ * Wireframes: la maqueta real de la pagina. Cada FILA de la tabla del .docx es una banda
+ * horizontal y cada CELDA una columna dentro de esa banda (2 celdas = copy | foto).
+ *
+ * Se renderiza como TABLA markdown — una banda = una tabla — porque asi es como el doc lo
+ * muestra y como el agente lo tiene que devolver: se ve de un vistazo que va al lado de que.
+ * El encabezado lleva el nombre de la banda y su layout; los renglones de una celda van con
+ * <br>, que es la unica forma de maquetar varias lineas dentro de una fila markdown.
+ *
+ * Va en el MISMO formato que despues devuelve el agente: aprende la forma por imitacion.
  */
 function renderWireframe(tbl, titulo) {
-  const out = [`===== WIREFRAME — ${titulo} (la estructura exacta, banda por banda) =====`, ""];
+  const out = [
+    `===== WIREFRAME — ${titulo} (la maqueta exacta: una banda = una tabla) =====`,
+    "Cada tabla es una banda horizontal de la página, en el orden en que se scrollea.",
+    "El encabezado dice qué banda es y cómo se reparte; las columnas de la tabla SON las columnas de la página.",
+    "",
+  ];
+  const celdaMd = (ps) => ps
+    .map((p) => (p.bullet ? "• " : "") + (p.texto || (p.img ? "[IMAGEN]" : "")))
+    .filter(Boolean)
+    .join("<br>")
+    .replace(/\|/g, "\\|");
+
   filasDe(tbl).forEach((celdas, i) => {
     const cols = celdas.map((c) => parrafosDe(c)).filter((ps) => ps.length);
     if (!cols.length) return;
     const dosCol = cols.length > 1;
     // el nombre de la banda es su primera linea con texto: es como la llama el propio doc
     const primera = cols[0].find((p) => p.texto)?.texto || "";
-    const jcBanda = cols[0].find((p) => p.jc)?.jc || "";
-    out.push(`## BANDA ${i + 1} · ${primera.slice(0, 46)} — ${dosCol ? "2 columnas" : "1 columna"}${dosCol ? "" : alinea(jcBanda)}`);
-    cols.forEach((ps, j) => {
-      if (dosCol) {
-        // En una banda de 2 columnas el lado ya lo dice el encabezado, asi que "izquierda ·
-        // a la izquierda" es ruido: solo se rotula `centrado`, que ahi si es informacion.
-        const jc = ps.find((p) => p.jc)?.jc || "";
-        out.push(`**${j === 0 ? "Izquierda" : "Derecha"}**${jc === "center" ? " · centrado" : ""}`);
-      }
-      for (const p of ps) out.push((p.bullet ? "• " : "") + (p.texto || (p.img ? "[IMAGEN]" : "")));
-    });
+    const nombre = `BANDA ${i + 1} · ${primera.slice(0, 42)}`;
+    if (dosCol) {
+      // En una banda de 2 columnas el lado ya lo dice el encabezado, asi que "izquierda ·
+      // a la izquierda" es ruido: solo se rotula `centrado`, que ahi si es informacion.
+      const jcIzq = cols[0].find((p) => p.jc)?.jc || "";
+      out.push(`| ${nombre} — Izquierda${jcIzq === "center" ? " · centrado" : ""} | Derecha |`);
+      out.push("| --- | --- |");
+      out.push(`| ${celdaMd(cols[0])} | ${celdaMd(cols[1])} |`);
+    } else {
+      const jc = cols[0].find((p) => p.jc)?.jc || "";
+      out.push(`| ${nombre} — 1 columna${alinea(jc)} |`);
+      out.push("| --- |");
+      out.push(`| ${celdaMd(cols[0])} |`);
+    }
     out.push("");
   });
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -352,7 +371,8 @@ function parseBlueprints(dir) {
   }
   WIREFRAMES.titulos.forEach((titulo, i) => {
     const content = renderWireframe(tablas[i], titulo);
-    if (!/## BANDA 1/.test(content)) throw new Error(`wireframe ${titulo}: no se reconocio ninguna banda`);
+    // el wireframe se renderiza como tablas: sin la banda 1 y sin fila de tabla, algo se rompio
+    if (!/\| BANDA 1 /.test(content)) throw new Error(`wireframe ${titulo}: no se reconocio ninguna banda`);
     chunks.push({
       part: "cf_blueprint", title: `WIREFRAME — ${titulo}`,
       niche_tags: ["wireframe", "estructura", "layout", norm(titulo).replace(/[^a-z]/g, "")],
