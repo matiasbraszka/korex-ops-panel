@@ -29,7 +29,7 @@ export const AGENT_META = {
       { label: 'Research del líder', prompt: 'Hacé el research del líder y su empresa con fuentes públicas' },
       { label: 'Competencia', prompt: 'Analizá los ads de la competencia del ad library' },
       { label: 'Consolidar onboarding', prompt: 'Consolidá el onboarding del cliente separando lo confirmado de lo que hay que validar' },
-      { label: 'Análisis estratégico', prompt: 'Hacé el análisis estratégico: foco, valores, historia del líder y el top de avatares' },
+      { label: 'Qué estrategia va primero', prompt: 'Hacé el análisis estratégico: qué estrategia desarrollamos primero, a qué avatares apuntamos con ella, y con qué virtudes del cliente y de la empresa. Con scores y evidencia.' },
       { label: 'Profundizar el avatar', prompt: 'Profundizá el avatar prioritario en su hoja psicológica completa, con el botón caliente' },
     ],
   },
