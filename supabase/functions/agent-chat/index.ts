@@ -407,10 +407,20 @@ Deno.serve(async (req) => {
       investigacion: { tope: 90000, usa: "principal" }, // arma la munición con esto (mayor: 84.337)
       del: { tope: 3000, usa: "contexto" },             // lo está produciendo él
     },
+    // ── El paso 5 NO corre sobre el DEL: corre sobre la voz del cliente ──
+    // Antes el DEL era su "principal" con 140.000 y el onboarding quedaba en 24.000 de contexto.
+    // Estaba al revés, y lo dice la propia skill cuando explica cómo se saca el botón caliente:
+    //   1. En el onboarding: ¿qué mencionó más el cliente sobre su público?
+    //   2. En la historia del líder: ¿qué transformación vivió?
+    //   3. En el perfil del avatar del Strategy Analyzer: ¿cuál es su dolor principal?
+    // Dos de las tres salen de acá; del DEL sale UNA cosa, y no es material: es CUÁL avatar, que
+    // te lo dice la persona. Con el reparto viejo, un onboarding real de 41.665 (Liliana Vega) se
+    // recortaba al 58% —justo su fuente principal de psicología— para reservarle 140.000 a un DEL
+    // que muchas veces es la plantilla vacía.
     avatar: {
-      del: { tope: 140000, usa: "principal" },          // su único input (mayor: 138.658)
-      onboarding: { tope: 24000, usa: "contexto" },
-      investigacion: { tope: 12000, usa: "contexto" },
+      onboarding: { tope: 340000, usa: "principal" },   // la voz del cliente, entera: de acá sale todo
+      investigacion: { tope: 90000, usa: "principal" }, // la historia del líder (señal 2 del botón caliente)
+      del: { tope: 140000, usa: "contexto" },           // si está lleno dice qué avatar ganó; si es plantilla NO entra (ver abajo)
     },
   };
   // Sin paso activo nadie produce nada: alcanza con saber qué hay.
@@ -426,6 +436,11 @@ Deno.serve(async (req) => {
     onboarding: { label: "ONBOARDING (la voz del cliente ⇒ CONFIRMADO; de acá salen las citas literales)" },
     del: { label: "DEL / ANÁLISIS ESTRATÉGICO (paso 4, ya hecho)" },
   };
+  // El piso que separa la plantilla del análisis. El DEL se crea desde una plantilla cuando
+  // arranca el funnel y se llena después: las plantillas rondan los 2.500-7.600 caracteres y un
+  // DEL de verdad arranca en 30.000. Es el MISMO número que usa descubrimiento_status(), y tiene
+  // que seguir siéndolo: si acá dijera otra cosa, el estado y el material se contradirían.
+  const DEL_MINIMO = 15000;
   let docsDescText = "";
   // Qué material se cargó de verdad. Se junta ACÁ, en el único lugar que lo sabe, para poder
   // ponerlo arriba de la respuesta. NO se lo pedimos al modelo: si le pedís que declare sus
@@ -478,6 +493,16 @@ Deno.serve(async (req) => {
       if (!full || !DOCS_DESC[kind]) continue;
       const { tope, usa } = materialDe(kind);
       if (restante[kind] === undefined) restante[kind] = tope;
+
+      // El DEL plantilla NO se manda. Son placeholders: el agente los leería como si fueran el
+      // análisis y copiaría los campos vacíos. Esto es lo que antes se lograba bloqueando el paso
+      // entero; ahora el paso corre (la psicología está en el onboarding) y lo único que se saca
+      // es el documento que no dice nada. Se registra igual en `fuentes` para que la línea de
+      // arriba lo diga: "hay un archivo pero está vacío" no es lo mismo que "no hay archivo".
+      if (kind === "del" && full.length < DEL_MINIMO) {
+        fuentes.push({ kind, chars: full.length, leidos: 0, usa, titulo: str(d.title) });
+        continue;
+      }
 
       // Sin presupuesto no se manda medio documento: se registra que quedó afuera. Un documento
       // cortado al azar es peor que uno ausente — el ausente al menos se declara.
@@ -1176,7 +1201,7 @@ Deno.serve(async (req) => {
       const leidos = fs.reduce((a, f) => a + f.leidos, 0);
       // El DEL plantilla: mismo umbral que el gate. Decir "entero" de un archivo de 2.511
       // caracteres con placeholders sería técnicamente cierto y completamente inútil.
-      if (kind === "del" && chars < 15000) return `${rot} ⚠ plantilla sin llenar (${n(chars)})`;
+      if (kind === "del" && chars < DEL_MINIMO) return `${rot} ⚠ plantilla sin llenar (${n(chars)})`;
       if (fs[0].usa === "contexto") return `${rot}${cuantos} (contexto)`;
       if (leidos < chars) return `${rot}${cuantos} ⚠ ${n(leidos)} de ${n(chars)}`;
       return `${rot}${cuantos} ✓`;
