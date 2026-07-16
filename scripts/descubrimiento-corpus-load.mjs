@@ -108,7 +108,7 @@ const SKILLS = [
   {
     slug: "estrategia",
     menu: "Que estrategia y que avatares van primero",
-    pedido: "Hace el analisis estrategico: que estrategia desarrollamos primero y en que pais, a que avatares apuntamos con ella y cual es el boton caliente de cada uno, y con que virtudes del cliente y de la empresa. Con scores y evidencia.",
+    pedido: "Hace el analisis estrategico: que estrategia desarrollamos primero y en que pais; quien da la cara y que historia tiene; a que avatares apuntamos con ella, cual es el boton caliente de cada uno y cual es el avatar espejo; y las virtudes del modelo, del equipo y de quien da la cara. Con scores y evidencia.",
     dir: "korex-strategy-analyzer",
     name: "Analisis estrategico",
     ord: 4,
@@ -120,7 +120,7 @@ const SKILLS = [
     // OJO: esto ya NO es el DEL de 10 paginas. La version del chat produce un brief de decision
     // de 1.200-1.800 palabras (ver corpus-src/skill-estrategia-chat.md). El documento largo se
     // sigue haciendo en Claude Code con la skill original cuando hace falta.
-    output: "BRIEF de decision (1.600-2.200 palabras, no un documento): que estrategia se desarrolla PRIMERO y EN QUE PAIS, con score y evidencia; 3-5 avatares scoreados de esa estrategia, cada uno con su BOTON CALIENTE y su pais; las virtudes mas potentes de la empresa y del cliente; y la historia del cliente en bullets con puntero a donde esta el detalle.",
+    output: "BRIEF de decision (2.500-3.500 palabras, no un documento): que estrategia se desarrolla PRIMERO y EN QUE PAIS con score y evidencia; QUIEN DA LA CARA y su historia (va ANTES de los avatares porque los decide); 3-5 avatares del motor elegido con la rubrica Korex (activos 30 + rentabilidad 25 + resonancia con la historia 25 + Meta 10 + lead 10) mas el BONUS AVATAR ESPEJO (+10), cada uno con su boton caliente y su pais; y las virtudes en los 3 bloques (modelo/producto + equipo/comunidad + quien da la cara). REGLA CLAVE: el avatar espejo le gana al avatar que el cliente nombro.",
     tags: ["estrategia", "estrategico", "strategy", "analisis", "analizar", "focalizacion",
       "foco", "producto", "reclutamiento", "valores", "top de avatares", "avatares", "consolidar"],
   },

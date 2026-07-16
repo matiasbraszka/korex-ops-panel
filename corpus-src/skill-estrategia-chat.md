@@ -1,217 +1,265 @@
 # Análisis estratégico — la decisión, no el documento
 
 Adaptación Korex del skill `korex-strategy-analyzer` al chat del panel. La metodología original
-produce un documento Word de ~10 páginas; **acá no**. Este chat sigue el mismo patrón que el
-agente de Anuncios y el de VSL: va al grano del resultado que se busca y no se enrolla con
-contenido que no mueve la aguja.
+produce un documento Word de ~10 páginas; **acá no**. Este chat va al grano del resultado que se
+busca y no se enrolla con contenido que no mueve la aguja.
+
+Pero **al grano no es corto**: es sin relleno. Las virtudes, la historia y el espejo NO son
+relleno — son la munición con la que se escribe todo lo que viene después. Lo que no va son las
+diez secciones de un documento para archivar.
 
 La skill original sigue existiendo y se corre en Claude Code cuando hace falta el DEL completo.
-Lo de acá es otra cosa: **el brief con el que se arranca a producir**.
 
 ## La única pregunta que contesta este paso
 
 > **¿Qué estrategia desarrollamos PRIMERO, en qué país, a qué avatares le hacemos publicidad en
 > Meta, con qué munición, y por qué?**
 
-Todo lo que no sirva para contestar eso, no va. Si dudás si una sección aporta, preguntate: ¿esto
-cambia a quién le hago el anuncio o qué le digo? Si no, afuera.
+Lo que sale de acá alimenta directo la hoja profunda del avatar (paso 5), la oferta, el VSL, los
+anuncios y el funnel. Es el punto de partida de la producción.
 
-Lo que sale de acá alimenta directo lo que sigue: la hoja profunda del avatar (paso 5), la oferta,
-el VSL, los anuncios y el funnel. Es el punto de partida de la producción, no un entregable para
-archivar.
+## ANTES DE EMPEZAR: ¿quién da la cara?
+
+**Esta pregunta va primero y puede frenar todo el paso.** No es un detalle de producción: define
+de quién se busca el espejo, y el espejo decide el avatar (ver abajo).
+
+Buscala en este orden:
+
+1. **En el onboarding.** La plantilla oficial tiene la pregunta *"¿Quién es el encargado de grabar
+   los anuncios?"* (sección 5). Si está contestada, ya está: esa es la persona.
+2. **En lo que dijo en la llamada.** A veces no está en la ficha pero lo dice al pasar.
+3. **Si no está en ningún lado: PREGUNTÁ Y PARÁ.** No lo supongas. No asumas que es el líder
+   porque es el cliente.
+
+Por qué es tan grave suponerlo: si el research y la historia son del líder pero la que graba es
+otra persona del equipo, **el espejo hay que buscarlo en ELLA, no en él**. Un avatar construido
+sobre la historia de alguien que nunca va a aparecer en cámara no conecta con nadie, y todo lo que
+salga después —VSL, anuncios— hereda el error.
+
+Casos posibles, y qué cambia:
+- **Graba el líder (el cliente)** — el caso normal en reclutamiento. Su historia es el activo
+  central y el espejo se busca en él.
+- **Graba otra persona del equipo** — el espejo se busca en ESA persona. Si no tenés su historia,
+  pedila: es un hueco bloqueante, va a la sección 5.
+- **No graba nadie / son anuncios de producto sin cara** — no hay espejo. Decilo, y los avatares
+  se puntúan sin ese bonus. La historia del líder pasa a ser contexto, no material.
+
+## LA REGLA DEL AVATAR ESPEJO (lo más importante de este paso)
+
+**El avatar espejo le gana al avatar que el cliente nombró.**
+
+Un Avatar Espejo es alguien que **se parece a quien da la cara** — su trayectoria, las etapas que
+vivió, su escepticismo, su dolor original — o a su entorno cercano relevante (pareja, hijo/a
+adulto/a, el caso top que usa como prueba social).
+
+Por qué es decisivo: cuando el cliente vende su propia historia transformada, la identificación es
+inmediata. Alguien que escucha "yo era como vos, esto me pasó a mí" **no necesita argumentos
+racionales, ya está convencido emocionalmente**. Por eso un espejo con viabilidad comercial mínima
+(subtotal ≥70) le gana al avatar más rentable que no sea espejo.
+
+**El orden importa y no es negociable.** Primero analizás quién da la cara, qué historia tiene, qué
+etapas vivió y quién está cerca suyo. **Recién después** generás candidatos a avatar y ves cuál es
+espejo. **Nunca al revés**: generar avatares primero y después preguntarse "¿este se parece al
+líder?" produce avatares de manual y se pierde el activo principal del caso. Este paso es el que
+separa un análisis fuerte de uno mediocre.
+
+**Las 5 preguntas guía.** Si el candidato contesta que sí a 3 o más, es Avatar Espejo:
+
+1. ¿Se parece a quien da la cara, en su momento actual o en una etapa pasada?
+2. ¿Vivió las mismas etapas, ciclos o transformaciones?
+3. ¿Comparte el escepticismo, la trayectoria o el dolor original?
+4. ¿Puede contar la transformación de ese avatar como si contara la propia?
+5. ¿Hay alguien cercano (pareja, hermano, amigo, hijo adulto) que ES literalmente este avatar?
+
+**Si el cliente prefiere un avatar que NO es el espejo:** no lo contradigas de frente. Presentá los
+dos —el que él nombró y el espejo— con el espejo como recomendado y los argumentos claros. La
+decisión final es del cliente; nuestro trabajo es darle el mejor diagnóstico. Y si el bonus del
+espejo cambia el ranking, **decilo explícitamente en un párrafo aparte**, para que se entienda por
+qué se eligió así.
+
+Si no hay espejo claro (equipo joven, sin casos verificables, foco producto), **decilo**. Es una
+limitación real del caso, se prioriza por coherencia comercial y se revisita cuando haya tracción.
 
 ## Las fuentes y cuánto pesa cada una
 
-**El onboarding manda para la DECISIÓN.** La estrategia a focalizar y el país se deciden con lo
-que el cliente dijo en su llamada, no con lo que parece razonable desde afuera. Si el onboarding
-alcanza para decidir, decidí con eso y punto.
+**El onboarding manda para la DECISIÓN.** La estrategia y el país se deciden con lo que el cliente
+dijo en su llamada, no con lo que parece razonable desde afuera.
 
-**El research aporta el CONTEXTO Y LA MUNICIÓN**: qué empresa es, qué vende, dónde fabrica y dónde
-puede entregar, qué productos tiene, qué autoridad tiene el líder, qué se puede verificar. Sirve
-para armar los avatares y las virtudes — no para decidir el foco por encima de lo que pidió el
-cliente.
+**El research aporta el CONTEXTO Y LA MUNICIÓN**: qué empresa es, qué vende, dónde puede entregar,
+qué productos tiene, qué autoridad tiene el líder, qué se puede verificar.
 
-**Distinguí siempre el origen de cada afirmación:**
+**Distinguí siempre el origen:**
 - **CONFIRMADO** — lo dijo el cliente en el onboarding. Es la verdad.
 - **NO VERIFICADO** — sale del research (fuentes públicas). Puede estar mal o desactualizado.
 
-Si el onboarding y el research se contradicen, **gana el onboarding** y lo marcás como tensión a
-resolver. No lo maquilles.
+Si se contradicen, **gana el onboarding** y lo marcás como tensión a resolver.
+
+Vas a recibir **varios documentos por tipo**, cada uno con su título: la transcripción cruda, la
+ficha ya rellenada, a veces llamadas de personas distintas del equipo, a veces una de producto y
+otra de reclutamiento. **Fijate en el título antes de citar** y decí de cuál sale cada cosa. No
+todos hablan del mismo motor ni de la misma persona.
 
 ## Reglas duras
 
-1. **Extensión: 1.600 a 2.200 palabras.** Es un techo real, no una sugerencia. Si no entra, es que
-   estás poniendo cosas que no hacen falta.
-2. **Cada afirmación que importa lleva su evidencia.** Cita literal del onboarding entre comillas,
-   o el dato del research con su fuente. Una afirmación sin respaldo no va: preferí decir "esto no
-   está en el material" antes que rellenarlo.
-3. **Las citas van literales, no arregladas.** Si el cliente dijo "yo lo que quiero es dejar de
-   perseguir gente", va así. Limpiarle el registro para que suene profesional destruye el activo:
-   esas palabras son las que después van al anuncio.
-4. **No inventes scores.** El número sale de la rúbrica de abajo, y al lado va el motivo. Un score
-   sin evidencia es una opinión disfrazada de dato.
-5. **Si algo no se puede determinar, va a la sección 5.** No lo adivines ni lo dejes implícito.
-6. **Un avatar sin botón caliente y sin país no sirve.** Son las dos cosas que hacen falta para
-   escribir y para segmentar el anuncio. Si de alguno no podés deducirlos, decilo ahí mismo.
+1. **Extensión: 2.500 a 3.500 palabras.** Suficiente para la munición completa, no para un
+   documento. Si te pasás, es que estás explicando en vez de decidir.
+2. **Cada afirmación que importa lleva su evidencia.** Cita literal entre comillas, o el dato del
+   research con su fuente. Antes que rellenar, decí "esto no está en el material".
+3. **Las citas van literales, no arregladas.** Si dijo "yo lo que quiero es dejar de perseguir
+   gente", va así. Limpiarle el registro destruye el activo: esas palabras van al anuncio.
+4. **No inventes scores.** Salen de la rúbrica, con el motivo al lado.
+5. **Si algo no se puede determinar, va a la sección 5.**
+6. **Un avatar sin botón caliente y sin país no sirve**: son las dos cosas que hacen falta para
+   escribir y para segmentar.
 
-## Hasta dónde llegás con el avatar (y dónde para)
+## Hasta dónde llegás con el avatar
 
-Acá das **el botón caliente de cada avatar y por qué**. Eso es lo que permite elegir entre ellos:
-un avatar sin botón caliente es una descripción demográfica, y con eso no se decide nada.
+Acá das el **botón caliente** de cada avatar y por qué. Un avatar sin botón caliente es una
+descripción demográfica y con eso no se decide nada.
 
-Lo que **NO** hacés acá es la hoja completa del paso 5: problemas externos / internos /
-filosóficos, deseos ocultos, miedos ocultos, ángulos. Eso es del avatar builder, sobre el avatar
-que ya se eligió. Acá es un botón por avatar, no la disección.
+Lo que **NO** hacés es la hoja completa del paso 5: problemas externos / internos / filosóficos,
+deseos ocultos, miedos ocultos, ángulos. Eso es del avatar builder, sobre el avatar ya elegido.
 
 ## Cómo se puntúa
 
-Dos ejes, siempre los mismos, porque son los dos que importan:
+**El motor** (sección 1), dos ejes de 50: *lo quiere el cliente* (evidencia: sus citas) y
+*potencial de resultado* (ticket, ciclo, autoridad, producto, capacidad real de ejecución). Si
+apuntan a lados distintos, **decilo**: "quiere A pero B rinde más, y esta es la razón".
 
-- **Lo quiere el cliente** — qué tan explícito, insistente y consistente fue en el onboarding.
-  Evidencia = sus citas.
-- **Potencial de resultado** — qué tan probable es que funcione: ticket, ciclo de cierre, autoridad
-  disponible, producto, y sobre todo la capacidad real de ejecución de ESTE cliente.
+**Cada avatar**, subtotal sobre 100 (rúbrica Korex):
 
-Cuando los dos ejes apuntan a lados distintos, **decilo explícitamente**: "quiere A pero B tiene
-más potencial, y esta es la razón". Esa tensión es información valiosa para la reunión, no un
-problema a esconder.
+| Dimensión | Puntos | Qué mide |
+|---|---|---|
+| Coherencia con los activos | 30 | qué tan bien encaja con líder, equipo, producto, marca |
+| Rentabilidad esperada | 25 | capacidad de invertir, LTV, recompra |
+| **Resonancia con la historia** | **25** | ¿la historia de quien da la cara le habla directo? |
+| Captación en Meta | 10 | segmentación clara, CPL esperado, tamaño |
+| Calidad esperada del lead | 10 | compromiso, capacidad de ejecución, curiosos vs serios |
 
-**Los sub-scores van siempre a la vista**, en los motores y en los avatares. Un total de 88 sin
-mostrar de dónde sale no se puede discutir, y estos números existen justamente para discutirse.
+**Más el BONUS Avatar Espejo**, que puede ser decisivo:
+- **+10** espejo de quien da la cara (es como es hoy, o como fue)
+- **+10** espejo de su entorno cercano (pareja, hijo/a adulto/a, su caso testimonial principal)
+- **+5** espejo de un caso secundario del equipo
+- **0** sin espejo claro
+
+Total sobre 110, capeado a 100. **Los scores NO se comparan entre motores**: cada motor tiene su
+escala y su prioritario.
 
 ## ESTRUCTURA DE SALIDA (obligatoria)
 
 ### 1. LA DECISIÓN
 
-Arrancá con el veredicto en una línea, en negrita. Sin preámbulo.
+Veredicto en una línea, en negrita, sin preámbulo:
 
 > **Arrancamos por RECLUTAMIENTO.** / **Arrancamos por PRODUCTO.** / **Las dos, empezando por X.**
 
-Después la tabla:
-
 | Motor | Lo quiere el cliente /50 | Potencial de resultado /50 | TOTAL /100 |
 |---|---|---|---|
-| Reclutamiento | | | |
-| Producto | | | |
 
-Y 3 a 5 bullets con el porqué. **Cada bullet lleva su cita literal del onboarding o su dato del
-research.** Un bullet sin evidencia no va.
+3 a 5 bullets con el porqué, **cada uno con su cita literal o su dato**. Si quiere las dos: cuál
+primero y qué queda congelado. Korex las segmenta SIEMPRE.
 
-Si el cliente quiere las dos: cuál va primero, por qué, y qué queda congelado mientras tanto.
-Korex las segmenta SIEMPRE — nunca las mezclás en el mismo embudo, porque forzarlas al mismo
-mensaje destruye las dos.
+Si el material no alcanza para decidir, decilo acá arriba y decí qué falta preguntar.
 
-Si el material no alcanza para decidir: decilo acá, arriba de todo, y decí exactamente qué falta
-preguntarle al cliente. No entregues un veredicto inventado.
+#### El país
 
-#### El país (va acá, es parte de la decisión)
+**Dónde se puede hacer la publicidad.** Cambia el CPM, el idioma, los ejemplos, los precios y hasta
+si el negocio es posible. Cruzá, en este orden:
 
-**Dónde se puede hacer la publicidad.** No es un detalle de segmentación: cambia el CPM, el
-idioma, los ejemplos, los precios y hasta si el negocio es posible. Sale de cruzar tres cosas, en
-este orden:
+1. **El país que pidió el cliente.** Si lo dijo, MANDA. Citalo.
+2. **Dónde la empresa puede entregar y operar** (dónde fabrica, dónde vende, a dónde envía). Es un
+   **límite duro**: no se anuncia donde no se puede entregar.
+3. **Dónde quien da la cara tiene red, historia y credibilidad.**
 
-1. **El país que pidió el cliente** en el onboarding. Si lo dijo, MANDA. Citalo.
-2. **Dónde la empresa puede entregar y operar** (research: dónde fabrica, dónde vende, a dónde
-   envía, en qué países está registrada). Esto es un **límite duro**: no se anuncia donde no se
-   puede entregar el producto ni inscribir a un distribuidor, por más que el avatar exista ahí.
-3. **Dónde el líder tiene red, historia y credibilidad.** Un líder mexicano en Estados Unidos y
-   una empresa que fabrica en México pueden apuntar a tres mercados distintos —México, LatAm, o
-   hispanos en Estados Unidos— y **no son lo mismo**: distinto poder adquisitivo, distinto CPM,
-   distinto español.
+País o países concretos, cuál primero, y de dónde lo sacaste. Si no lo nombró, proponelo con el
+razonamiento y marcalo A CONFIRMAR — pero proponelo. Un líder mexicano en Estados Unidos con una
+empresa que fabrica en México puede apuntar a tres mercados distintos, y no son lo mismo.
 
-Escribilo así: **país o países concretos**, cuál es el primero, y de dónde lo sacaste. Si el
-cliente no lo nombró, proponelo con el razonamiento y marcalo como A CONFIRMAR — pero proponelo,
-no lo dejes en blanco. Si los tres puntos se contradicen (la empresa entrega en X, el cliente
-quiere Y), esa contradicción es de las cosas más importantes del brief: ponela acá y mandala
-también a la sección 5.
+### 2. QUIÉN DA LA CARA Y SU HISTORIA
 
-### 2. AVATARES PARA ESTA ESTRATEGIA
+**Va acá, antes de los avatares, porque es lo que los decide.**
 
-De 3 a 5, **todos de la estrategia que gana en la sección 1**. Los del otro motor no van acá,
-aunque el cliente haya contratado los dos: Korex los segmenta siempre, y mezclarlos en una misma
-lista es exactamente el error que la segmentación evita. Si contrató los dos, cerrá la sección
-diciendo que el otro funnel tiene su propio brief y que se pide aparte.
+Arrancá diciendo **quién graba** y de dónde lo sacaste (la ficha, la llamada, o que lo preguntaste).
 
-Primero la tabla, ordenada por score:
+Después su historia, de 6 a 10 bullets, con cita literal donde la haya: de dónde salió, el quiebre,
+qué etapas vivió, qué escepticismo tuvo, qué logró, cómo es su equipo, quién está cerca suyo
+(pareja, hijos, casos top que usa como prueba social — esos son candidatos a espejo del entorno).
 
-| # | Avatar | Lo quiere el cliente /40 | Potencial /40 | Munición /20 | TOTAL | Origen |
-|---|---|---|---|---|---|---|
+Cerrá con:
+- **Los candidatos a espejo que salen de esta historia** — a quién se parece, en qué etapa. Esto es
+  lo que vas a usar en la sección 3.
+- **Dónde hay más** — documento y sección exacta, para no releer 50 páginas.
+- **Cuánto pesa** — si es reclutamiento y da la cara, su historia es material de copy. Si es
+  producto o no graba, es contexto para elegir el avatar. Decí cuál de los dos casos es este.
 
-En **Origen** va `LO DIJO EL CLIENTE` o `PROPUESTO`. El cliente casi siempre nombra un avatar en
-el onboarding, pero lo nombra en dos palabras y sin forma. Ese va primero y **lo detallás vos** con
-lo que se pueda sostener del material. Los demás los proponés vos, cruzando la empresa (research),
-las capacidades del cliente y lo que se habló en la llamada.
+### 3. AVATARES PARA ESTA ESTRATEGIA
 
-**Munición** = si hay historia y virtudes que le hablen a ESE avatar. Un avatar precioso sin
-munición no se puede vender: eso baja el score y hay que decirlo.
+De 3 a 5, **todos del motor que ganó en la sección 1**. Si contrató los dos, el otro funnel tiene
+su propio brief y se pide aparte: mezclarlos en una lista es el error que la segmentación evita.
 
-Después, la ficha de cada uno:
+| # | Avatar | Activos /30 | Rentab. /25 | Historia /25 | Meta /10 | Lead /10 | Espejo | TOTAL | Origen |
+|---|---|---|---|---|---|---|---|---|---|
 
-- **Quién es** — edad, situación, ocupación, **país e idioma** (de los de la sección 1)
-- **Qué dice que quiere** — en los términos en que lo diría él. Ojo: esto es el problema externo,
-  todavía no es el botón.
-- **EL BOTÓN CALIENTE** — lo que **realmente** le duele o desea, abajo de lo que dice. La regla de
-  oro de Korex: *el botón caliente NO es lo que el avatar dice que quiere*. "Quiero ingresos
-  extra" es lo que dice; "se está perdiendo a sus hijos crecer porque trabaja 10 horas" es el
-  botón. **Si escribís lo mismo en los dos renglones, no encontraste el botón: seguí buscando.**
-  Va con la evidencia de dónde lo sacás, y si lo estás infiriendo, decí que lo inferís.
-    - **Si el avatar es de RECLUTAMIENTO**: nombrá cuál de los 7 botones de Korex es —TIEMPO
-      EXTRA, INGRESO EXTRA, LIBERTAD FINANCIERA, VIAJAR POR EL MUNDO, DESARROLLO PERSONAL,
-      JUBILACIÓN TRANQUILA, CONTRIBUCIÓN AL MUNDO— y por qué ese y no otro. Usá el nombre
-      canónico: el paso 5 lo levanta de acá.
-    - **Si el avatar es de PRODUCTO**: los 7 NO aplican, son todos de oportunidad de negocio. Un
-      hombre con la glucosa alta no tiene un botón de "ingreso extra". Nombralo libre aplicando la
-      misma regla de oro (lo que de verdad le duele: el miedo, la vergüenza, lo que ya intentó y
-      falló), y **aclará que el canon de los 7 no cubre producto**. No lo fuerces adentro de un
-      botón de reclutamiento: sale una pavada y contamina el paso 5.
-- **Qué lo frena** — la objeción real que tiene para comprar, no una genérica
-- **Por qué este cliente le puede hablar** — la conexión concreta con su historia o una virtud
-- **Cómo se lo encuentra en Meta** — **país primero**, después intereses, comportamientos y edad.
-  Si el que compra no es el que consume (le compra la esposa, la hija), decilo acá: cambia a quién
-  le hablás y es de las cosas que más rompen una campaña.
+En **Espejo**: `Sí +10 (da la cara)`, `Sí +10 (entorno)`, `+5 (equipo)` o `No`.
+En **Origen**: `LO DIJO EL CLIENTE` o `PROPUESTO`.
 
-### 3. VIRTUDES — con qué munición vamos
+Si el bonus del espejo cambió el ranking, **un párrafo explicándolo** justo debajo de la tabla.
 
-Las más potentes **para la estrategia elegida**, no todas las que existan.
+Ficha de cada uno:
 
-**De la empresa** (3 a 5): qué es, la evidencia, y a qué avatar de la sección 2 le pega.
-**Del cliente** (3 a 5): igual.
+- **Quién es** — edad, situación, ocupación, **país e idioma**
+- **Qué dice que quiere** — en sus términos. Ojo: esto es el problema externo, todavía no es el
+  botón.
+- **EL BOTÓN CALIENTE** — lo que **realmente** le duele o desea, abajo de lo que dice. Regla de oro
+  de Korex: *el botón caliente NO es lo que el avatar dice que quiere*. "Quiero ingresos extra" es
+  lo que dice; "se está perdiendo a sus hijos crecer porque trabaja 10 horas" es el botón. **Si
+  escribís lo mismo en los dos renglones, no encontraste el botón: seguí buscando.** Con la
+  evidencia; si lo inferís, decilo.
+    - **RECLUTAMIENTO**: nombrá cuál de los 7 botones de Korex es —TIEMPO EXTRA, INGRESO EXTRA,
+      LIBERTAD FINANCIERA, VIAJAR POR EL MUNDO, DESARROLLO PERSONAL, JUBILACIÓN TRANQUILA,
+      CONTRIBUCIÓN AL MUNDO— y por qué ese. Usá el nombre canónico: el paso 5 lo levanta de acá.
+    - **PRODUCTO**: los 7 NO aplican, son todos de oportunidad de negocio. Un hombre con la glucosa
+      alta no tiene un botón de "ingreso extra". Nombralo libre con la misma regla de oro (el
+      miedo, la vergüenza, lo que ya intentó y falló) y **aclará que el canon no cubre producto**.
+      No lo fuerces adentro de un botón de reclutamiento.
+- **Por qué es (o no es) espejo** — cuál de las 5 preguntas contesta que sí. Qué parte de la
+  historia le resuena.
+- **Qué lo frena** — la objeción real, no una genérica
+- **Cómo se lo encuentra en Meta** — **país primero**, después intereses, comportamientos, edad. Si
+  el que compra no es el que consume (le compra la esposa, la hija), decilo: cambia a quién le
+  hablás y es de las cosas que más rompen una campaña.
 
-Marcá cada una CONFIRMADO o NO VERIFICADO. Una virtud NO VERIFICADA no se puede usar en copy hasta
-que el cliente la confirme — decilo cuando pase.
+### 4. VIRTUDES — con qué munición vamos
 
-### 4. LA HISTORIA DEL CLIENTE
+**Es de lo más importante del brief: acá está lo que se va a decir en los anuncios.** Tres bloques,
+como manda el método. Todo para el motor elegido, con evidencia, y marcando CONFIRMADO o NO
+VERIFICADO. Una virtud NO VERIFICADA no va a copy hasta que el cliente la confirme.
 
-De 5 a 8 bullets. **Solo lo clave**: de dónde salió, el quiebre, qué logró, cómo es su equipo. Con
-la cita literal donde la haya.
+**4.1 — El modelo y el producto** (3 a 5): qué tiene la empresa que la competencia no. Precio,
+fabricación, plan, exclusividad, resultados, evidencia. A qué avatar le pega cada una.
 
-Cerrá con dos cosas:
+**4.2 — El equipo y la comunidad** (3 a 5): qué recibe alguien que entra. Acompañamiento, sistema,
+formación, cultura, casos top del equipo, qué valor real hay adentro. **Esto se subestima siempre y
+es lo que más pesa en reclutamiento**: nadie se suma a un producto, se suma a una gente.
 
-- **Dónde hay más** — el documento y la sección exacta donde está el detalle. El equipo tiene que
-  poder ir a buscarlo sin releer 50 páginas.
-- **Cuánto pesa acá** — la historia es material de copy cuando el cliente da la cara y el foco es
-  reclutamiento. Si el foco es producto, o si el cliente no va a ser quien se grabe, la historia
-  es contexto para elegir el avatar, no material para el anuncio. **Decí cuál de los dos casos es
-  este**, con lo que sepas del onboarding.
+**4.3 — Quien da la cara** (3 a 5): su autoridad, su credibilidad, qué lo hace distinto de otro
+líder de la misma empresa, por qué se unirían con él y no con otro. Con sus citas.
 
 ### 5. LO QUE FALTA
 
-Lo que no se pudo determinar con el material, y de quién depende resolverlo. Preguntas concretas
-para hacerle al cliente, no generalidades.
-
-Si no falta nada, escribí "Nada bloqueante" y listo. No la infles.
+Lo que no se pudo determinar y de quién depende. Preguntas concretas, no generalidades. Si no falta
+nada, "Nada bloqueante".
 
 ## Errores que matan el brief
 
-- **Entregar 10 páginas.** El equipo no las lee y la decisión se pierde adentro.
-- **Un score sin sus sub-scores al lado.** Un 88 que no se puede auditar no se puede discutir.
-- **Un avatar sin país.** No se puede comprar el anuncio.
-- **Un botón caliente que repite lo que el avatar dice que quiere.** Ese es el problema externo:
-  el botón está abajo.
+- **Generar los avatares antes de analizar la historia.** Salen de manual y se pierde el espejo.
+- **Suponer quién graba.** Preguntalo.
+- **Un score sin sus dimensiones al lado.** Un 88 que no se puede auditar no se puede discutir.
+- **Un avatar sin país** — no se puede comprar el anuncio.
+- **Un botón caliente que repite lo que el avatar dice que quiere.** Ese es el problema externo.
 - **Forzar un avatar de producto adentro de los 7 botones de reclutamiento.**
-- **Mezclar avatares de los dos motores en la misma lista.** Korex segmenta siempre.
-- **Parafrasear al cliente.** Sus palabras son el activo; el resumen prolijo lo tira.
-- **Decidir el foco por lo que parece razonable** en vez de por lo que pidió en la llamada.
-- **Avatares de manual** ("emprendedor de 25-45 que busca libertad financiera"). Si el avatar no
-  sale del material de ESTE cliente, no sirve para segmentar nada.
+- **Mezclar avatares de los dos motores.** Korex segmenta siempre.
+- **Despachar las virtudes del equipo en una línea.** Es la mitad del argumento de reclutamiento.
+- **Parafrasear al cliente.** Sus palabras son el activo.
+- **Citar sin decir de qué documento sale**, cuando hay varias llamadas y varias personas.
 - **Rellenar un hueco** en vez de mandarlo a la sección 5.
