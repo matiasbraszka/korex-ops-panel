@@ -41,6 +41,17 @@ const PARTS = ["desc_blueprint", "desc_ficha", "desc_skill"];
 //
 // `tags` son las palabras con las que el equipo pide ese paso: es lo unico que mira el
 // scorer (hayOf() de agent-chat solo lee niche, title y niche_tags — nunca el content).
+// `ejecuta` es la pieza mas importante de esta tabla y la que evita el peor error posible.
+//
+//   "chat"  -> el agente PRODUCE el paso. Sus inputs ya estan en la base (client_brain_docs).
+//   "fuera" -> el agente NO puede producirlo: la metodologia necesita herramientas que el chat
+//              no tiene (buscar en Google, pegarle al Ad Library). Solo lo coordina.
+//
+// Sin esta distincion, el agente recibe la metodologia de research — que le dice "hace 15-20
+// busquedas en Google" — sin tener buscador, y el resultado esperable es que invente los datos
+// del lider. Es exactamente lo que el doc del agente prohibe: "Si una skill no esta disponible,
+// NO la simules: avisa que falta". Cuando research y competencia se construyan (fases 2 y 3,
+// como jobs a-pedido), estos dos pasan a "chat" o a "job" y se recarga el corpus.
 const SKILLS = [
   {
     slug: "research",
@@ -48,6 +59,8 @@ const SKILLS = [
     name: "Research del lider y su empresa",
     ord: 1,
     momento: "pre-llamada",
+    ejecuta: "fuera",
+    comoSeHace: "TODAVIA NO SE PUEDE HACER DESDE ESTE CHAT: la metodologia se apoya en 15-20 busquedas web y el chat no tiene buscador. Hoy lo hace una persona (o Claude Code con la skill). Vos NO lo produzcas ni lo aproximes de memoria: si falta, decilo y decí quién lo aporta.",
     cuando: "Antes de la llamada de onboarding, apenas entra un cliente nuevo.",
     prereq: "Ninguno. Solo el nombre del lider y su empresa MLM.",
     output: "2 documentos: uno del lider, uno de la empresa. Cada dato con fuente y nivel de confianza.",
@@ -60,6 +73,8 @@ const SKILLS = [
     name: "Research de la competencia (ad library)",
     ord: 2,
     momento: "pre-llamada",
+    ejecuta: "fuera",
+    comoSeHace: "TODAVIA NO SE PUEDE HACER DESDE ESTE CHAT: la metodologia necesita leer el Ad Library de Meta y el chat no tiene ese acceso. Vos NO inventes que anuncios corre la competencia — no los estas viendo. Si falta, decilo.",
     cuando: "En paralelo al research del lider. NO depende de el.",
     prereq: "Ninguno. Corre en paralelo al paso 1.",
     output: "Analisis de los ads de competidores: que mensajes, dolores y creatividades les estan funcionando.",
@@ -72,6 +87,8 @@ const SKILLS = [
     name: "Consolidacion del onboarding",
     ord: 3,
     momento: "post-llamada",
+    ejecuta: "chat",
+    comoSeHace: "Lo producís vos, acá, siguiendo la metodología. Sus fuentes (la transcripción y los apuntes) llegan en el contexto.",
     cuando: "Despues de la llamada de onboarding. Bisagra: omitir si el onboarding ya entro por otro flujo.",
     prereq: "Que exista la llamada de onboarding (transcripcion + apuntes del consultor).",
     output: "La ficha oficial de onboarding completa, separando lo CONFIRMADO por el cliente de lo NO VERIFICADO.",
@@ -84,6 +101,8 @@ const SKILLS = [
     name: "Analisis estrategico",
     ord: 4,
     momento: "post-llamada",
+    ejecuta: "chat",
+    comoSeHace: "Lo producís vos, acá, siguiendo la metodología. Sus fuentes (research + onboarding) llegan en el contexto.",
     cuando: "Con research y onboarding cerrados. ES LA BISAGRA: sin esto no hay avatar.",
     prereq: "Research (paso 1) + onboarding (paso 3).",
     output: "Documento estrategico: foco producto vs reclutamiento, valores, historia del lider y el top de avatares con los 2 prioritarios.",
@@ -96,6 +115,8 @@ const SKILLS = [
     name: "Avatar builder",
     ord: 5,
     momento: "post-llamada",
+    ejecuta: "chat",
+    comoSeHace: "Lo producís vos, acá, siguiendo la metodología. Su fuente (el DEL / análisis estratégico) llega en el contexto.",
     cuando: "Solo con el analisis estrategico hecho y el avatar ya ELEGIDO por el.",
     prereq: "Analisis estrategico (paso 4). Nunca correr el avatar sin la estrategia hecha.",
     output: "Hoja psicologica del avatar: boton caliente + problemas externos/internos/filosoficos + deseos y miedos ocultos.",
@@ -186,6 +207,9 @@ function buildRows() {
       `**Cuando corresponde:** ${s.cuando}`,
       `**Prerrequisito:** ${s.prereq}`,
       `**Output:** ${s.output}`,
+      // Va con ⚠️ y en mayúsculas para los "fuera": es la línea que evita que el agente
+      // intente producir un paso para el que no tiene herramientas, e invente.
+      `**${s.ejecuta === "fuera" ? "⚠️ QUIÉN LO HACE" : "Quién lo hace"}:** ${s.comoSeHace}`,
       ``,
       `**Alcance declarado por la skill:**`,
       fm.description || "(sin description en el frontmatter)",
@@ -193,7 +217,7 @@ function buildRows() {
 
     const base = {
       niche: null, avatar: null, client_id: null, status: "approved", position: s.ord,
-      metrics: { slug: s.slug, skill: fm.name, ord: s.ord, momento: s.momento, prereq: s.prereq },
+      metrics: { slug: s.slug, skill: fm.name, ord: s.ord, momento: s.momento, prereq: s.prereq, ejecuta: s.ejecuta },
     };
     rows.push({
       ...base,

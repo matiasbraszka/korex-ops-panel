@@ -319,6 +319,10 @@ Deno.serve(async (req) => {
   let fichasText = "";
   let skillActivaText = "";
   let pasoActivo = "";
+  // slug -> "chat" | "fuera": si el paso se produce en este chat o no. Sale del corpus
+  // (metrics.ejecuta de cada ficha), no hardcodeado acá: cuando research y competencia se
+  // construyan como jobs, cambia el corpus y esto sigue igual.
+  let ejecutaPorPaso: Record<string, string> = {};
   if (subagentKey === "descubrimiento") {
     try {
       const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
@@ -350,7 +354,11 @@ Deno.serve(async (req) => {
       const { data: fichas } = await supabase.from("marketing_ad_library")
         .select("content,metrics").eq("part", "desc_ficha").eq("status", "approved").order("position");
       fichasText = (Array.isArray(fichas) ? fichas : []).map((f) => str(f.content)).filter(Boolean).join("\n\n---\n\n");
-    } catch { fichasText = ""; pasoActivo = ""; }
+      for (const f of (Array.isArray(fichas) ? fichas : [])) {
+        const m = (f.metrics || {}) as Record<string, unknown>;
+        if (str(m.slug)) ejecutaPorPaso[str(m.slug)] = str(m.ejecuta) || "chat";
+      }
+    } catch { fichasText = ""; pasoActivo = ""; ejecutaPorPaso = {}; }
   }
 
   if (corpus && subagentKey !== "descubrimiento") {
@@ -520,15 +528,29 @@ Deno.serve(async (req) => {
       if (!pasoActivo) pasoActivo = str(descRows.find((r) => str(r.status) === "pendiente")?.stage);
       gate = descRows.find((r) => str(r.stage) === pasoActivo) || null;
 
-      // La metodología del paso activo, completa. NO se carga si el paso está bloqueado: no
-      // se va a producir, y son hasta 13 KB de prompt al pedo. Que le falte es justamente lo
-      // que evita que lo escriba igual "con lo que hay".
-      if (pasoActivo && str(gate?.status) !== "bloqueado") {
+      // La metodología del paso activo, completa. Se carga solo si el paso se puede producir
+      // ACÁ. Dos motivos para no cargarla, y los dos importan:
+      //
+      //   · bloqueado  → le falta un prerrequisito. Que no la tenga es lo que evita que lo
+      //                  escriba igual "con lo que hay".
+      //   · ejecuta="fuera" (research, competencia) → la metodología pide buscar en Google o
+      //                  leer el Ad Library, y este chat no tiene ninguna de las dos. Darle
+      //                  23 KB de "hacé 15-20 búsquedas" a alguien sin buscador no lo ayuda:
+      //                  lo empuja a inventar los datos del líder. Y un research inventado
+      //                  envenena la estrategia y el avatar que salen después.
+      //
+      // En los dos casos el agente igual sabe qué es ese paso (la ficha va siempre) y puede
+      // decir qué falta y quién lo aporta, que es su trabajo real.
+      const sePuedeAca = ejecutaPorPaso[pasoActivo] !== "fuera";
+      if (pasoActivo && str(gate?.status) !== "bloqueado" && sePuedeAca) {
         const { data: sk } = await supabase.from("marketing_ad_library")
           .select("content").eq("id", `mal_desc_skill_${pasoActivo}`).maybeSingle();
         skillActivaText = clip(str(sk?.content), 52000);  // la más pesada (avatar) son ~49 KB
       }
-      retrievalMeta = { ...retrievalMeta, paso: pasoActivo || "ninguno", momento, skill_chars: skillActivaText.length };
+      retrievalMeta = {
+        ...retrievalMeta, paso: pasoActivo || "ninguno", momento,
+        ejecuta: ejecutaPorPaso[pasoActivo] || "?", skill_chars: skillActivaText.length,
+      };
     } catch { gate = null; skillActivaText = ""; }
   } else {
     try {
@@ -618,9 +640,13 @@ Deno.serve(async (req) => {
     // La metodología del paso activo. Es lo único que cambia según lo que pidan.
     skillActivaText
       ? `\n===== METODOLOGÍA DEL PASO ACTIVO: ${pasoActivo.toUpperCase()} =====\nEs el estándar Korex para este paso. Seguila al pie de la letra: su estructura de salida, sus reglas y su formato mandan sobre cualquier instrucción general de formato.\n\n${skillActivaText}`
-      : (pasoActivo
-        ? `\n===== PASO ${pasoActivo.toUpperCase()}: BLOQUEADO =====\nNo recibís su metodología a propósito, porque este paso NO se puede hacer todavía. No la reconstruyas de memoria ni entregues un adelanto "provisional". Decí qué falta (está en el estado de arriba), quién lo aporta, y qué paso sí se puede hacer ahora.`
-        : `\n===== NO HAY UN PASO ACTIVO =====\nEl pedido no dejó claro qué paso querés (o nombró varios, o ya está todo hecho). NO adivines y NO mezcles dos pasos. Decí en qué momento está el cliente, qué paso corresponde según el estado de arriba, y pedí que te lo confirmen.`),
+      : (pasoActivo && ejecutaPorPaso[pasoActivo] === "fuera"
+        // El caso más delicado: el paso se puede hacer, pero NO acá. Si además está sin hacer,
+        // el agente es el que tiene que reclamarlo — no producirlo.
+        ? `\n===== PASO ${pasoActivo.toUpperCase()}: NO SE HACE DESDE ESTE CHAT =====\nNo recibís su metodología a propósito: necesita herramientas que no tenés (buscar en la web / leer el Ad Library de Meta).\n\nNO lo produzcas ni lo aproximes. No sabés quién es este líder ni qué anuncios corre su competencia: cualquier cosa que escribas sobre eso la estarías inventando, y de ahí salen después la estrategia y el avatar.\n\nLo que SÍ tenés que hacer: decir que ese paso falta, quién lo aporta (lo trae una persona y entra por el Doc de Drive del cliente), y ofrecer avanzar con lo que sí se puede hacer ahora.`
+        : (pasoActivo
+          ? `\n===== PASO ${pasoActivo.toUpperCase()}: BLOQUEADO =====\nNo recibís su metodología a propósito, porque este paso NO se puede hacer todavía. No la reconstruyas de memoria ni entregues un adelanto "provisional". Decí qué falta (está en el estado de arriba), quién lo aporta, y qué paso sí se puede hacer ahora.`
+          : `\n===== NO HAY UN PASO ACTIVO =====\nEl pedido no dejó claro qué paso querés (o nombró varios, o ya está todo hecho). NO adivines y NO mezcles dos pasos. Decí en qué momento está el cliente, qué paso corresponde según el estado de arriba, y pedí que te lo confirmen.`)),
 
     client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
   ].filter(Boolean).join("\n");
