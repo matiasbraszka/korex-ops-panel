@@ -325,14 +325,32 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const chatId = chatKey && !String(chatKey).startsWith('new:') ? String(chatKey) : null;
 
   async function callAgent(historyForApi, mode) {
-    const { data, error } = await supabase.functions.invoke('agent-chat', {
-      body: {
-        subagent_key: agentKey,
-        client_id: sel.clientId, strategy_id: sel.strategyId, funnel_id: sel.funnelId, avatar_id: sel.avatarId,
-        mode,
-        messages: historyForApi.filter((m) => m.kind !== 'ads' && m.kind !== 'vsl' && m.kind !== 'notice').map((m) => ({ role: m.role, content: m.content })),
-      },
-    });
+    const body = {
+      subagent_key: agentKey,
+      client_id: sel.clientId, strategy_id: sel.strategyId, funnel_id: sel.funnelId, avatar_id: sel.avatarId,
+      mode,
+      messages: historyForApi.filter((m) => m.kind !== 'ads' && m.kind !== 'vsl' && m.kind !== 'notice').map((m) => ({ role: m.role, content: m.content })),
+    };
+
+    // Escape hatch de desarrollo: probar un agente contra la edge fn corriendo LOCAL, sin
+    // deployar a producción (agent-chat es compartida — la usan los 4 agentes en vivo, y
+    // deployarla para probar arriesga los otros tres). Ver DESARROLLO-AGENTES.md.
+    //   apps/operations/.env.local →  VITE_AGENT_FN_URL=http://localhost:8000
+    // Sin esa variable (o sea, en producción y en cualquier build) el camino es el de siempre.
+    const localFn = import.meta.env.VITE_AGENT_FN_URL;
+    if (localFn) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(localFn, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!data) throw new Error(`La edge fn local (${localFn}) no respondió JSON. ¿Está levantada?`);
+      return data;
+    }
+
+    const { data, error } = await supabase.functions.invoke('agent-chat', { body });
     if (error) throw new Error(error.message || 'No se pudo contactar al agente.');
     return data;
   }

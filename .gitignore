@@ -2,6 +2,8 @@ node_modules
 dist
 .env
 .env.local
+# Lleva la service_role_key (saltea RLS) para correr las edge fns local. Nunca al repo.
+scripts/agent-fn-local.env
 *.log
 
 .vercel
