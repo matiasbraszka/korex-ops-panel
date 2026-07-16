@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { agentMeta } from './agentMeta';
 import AgentMarkdown, { accentOf } from './AgentMarkdown';
+import SlashMenu from './SlashMenu';
 
 const FEEDBACK_TAGS = ['Hook flojo', 'No va al avatar', 'Cliché', 'No alineado al VSL', 'Compliance', 'No se entiende', 'Perfecto'];
 const fbid = () => `afb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -424,6 +425,64 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const suggestions = useMemo(() => meta.suggestions || [], [meta]);
   const initials = currentUser?.initials || 'YO';
 
+  // ── Comandos del chat (el menú del "/") ──
+  // Solo para los agentes que declaran pasos (hoy, Descubrimiento). Para los otros tres la lista
+  // queda vacía, no se dispara el menú y el composer se comporta exactamente igual que siempre.
+  const [cmds, setCmds] = useState([]);
+  const [cmdIdx, setCmdIdx] = useState(0);
+  const [cmdOff, setCmdOff] = useState(false);   // lo cerró con Escape: no reabrir hasta borrar el "/"
+
+  useEffect(() => {
+    if (!meta.commandsPart) { setCmds([]); return undefined; }
+    let vivo = true;
+    // Los comandos viven en el corpus, no acá: son las fichas de los pasos. Si mañana se agrega
+    // un paso al corpus, aparece en el menú sin tocar este archivo ni deployar el panel.
+    supabase.from('marketing_ad_library')
+      .select('metrics').eq('part', meta.commandsPart).eq('status', 'approved').order('position')
+      .then(({ data }) => {
+        if (!vivo) return;
+        setCmds((data || [])
+          .map((r) => r.metrics || {})
+          .filter((m) => m.slug && m.menu)
+          .map((m) => ({ slug: m.slug, menu: m.menu, ord: m.ord, ejecuta: m.ejecuta })));
+      });
+    return () => { vivo = false; };
+  }, [meta.commandsPart]);
+
+  // El menú se abre mientras el mensaje ES un comando a medio escribir: "/", "/est"… En cuanto
+  // hay un espacio ya estás dictando el pedido, no eligiendo el paso, y se cierra.
+  const cmdQuery = useMemo(() => {
+    if (!cmds.length || cmdOff) return null;
+    const m = /^\/([a-z_]*)$/i.exec(input);
+    return m ? m[1].toLowerCase() : null;
+  }, [input, cmds.length, cmdOff]);
+
+  const cmdHits = useMemo(
+    () => (cmdQuery === null ? [] : cmds.filter((c) => c.slug.startsWith(cmdQuery) || c.menu.toLowerCase().includes(cmdQuery))),
+    [cmdQuery, cmds],
+  );
+  const cmdOpen = cmdHits.length > 0;
+
+  useEffect(() => { setCmdIdx(0); }, [cmdQuery]);
+  useEffect(() => { if (!input.startsWith('/')) setCmdOff(false); }, [input]);
+
+  function pickCmd(it) {
+    setInput(`/${it.slug} `);
+    setCmdOff(true);          // ya elegiste: que no se reabra con lo que sigas escribiendo
+    taRef.current?.focus();
+  }
+
+  // Teclas del menú. Solo interceptan cuando está abierto: si no, el textarea se comporta igual.
+  function onComposerKey(e) {
+    if (cmdOpen) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setCmdIdx((i) => (i + 1) % cmdHits.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setCmdIdx((i) => (i - 1 + cmdHits.length) % cmdHits.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickCmd(cmdHits[cmdIdx]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setCmdOff(true); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  }
+
   return (
     <>
       {/* Mensajes */}
@@ -534,14 +593,19 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
             </div>
           )}
 
-          <div className="border border-border rounded-[14px] bg-white py-3 px-3.5 pb-2.5 focus-within:border-blue transition-colors"
+          <div className="relative border border-border rounded-[14px] bg-white py-3 px-3.5 pb-2.5 focus-within:border-blue transition-colors"
             style={{ boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+            {cmdOpen && (
+              <SlashMenu items={cmdHits} active={cmdIdx} onPick={pickCmd} onHover={setCmdIdx} accent={accent} />
+            )}
             <textarea
               ref={taRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder={`Escribile a ${agentName}… (Enter para enviar, Shift+Enter salto de línea)`}
+              onKeyDown={onComposerKey}
+              placeholder={cmds.length
+                ? `Escribile a ${agentName}… o poné / para elegir el paso`
+                : `Escribile a ${agentName}… (Enter para enviar, Shift+Enter salto de línea)`}
               rows={1}
               className="w-full border-none outline-none resize-none text-[13.5px] leading-[1.55] text-text bg-transparent"
             />

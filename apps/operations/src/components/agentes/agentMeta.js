@@ -21,6 +21,11 @@ export const AGENT_META = {
     desc: 'La fase de arranque: research, competencia, onboarding, estrategia y avatar',
     live: true,
     nivelCliente: true,
+    // De dónde saca el chat los comandos del menú del "/": las fichas de los pasos, en el corpus.
+    // Los otros agentes no declaran esto, así que no les aparece el menú y su composer no cambia.
+    // Que sea el `part` y no una lista es a propósito: el menú lo define la configuración del
+    // agente, no este archivo — se agrega un paso al corpus y aparece solo.
+    commandsPart: 'desc_ficha',
     // Cada atajo nombra su paso a propósito: es lo que lee el ruteo de agent-chat (PASOS_DESC)
     // para saber qué metodología cargar. El primero no nombra ninguno — es el caso normal de
     // abrir el chat sin saber en qué punto está el cliente, y ahí manda el gate.

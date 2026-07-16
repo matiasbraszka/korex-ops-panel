@@ -285,6 +285,10 @@ Deno.serve(async (req) => {
   // está BLOQUEADA, y el agente contesta "falta el research" — que es la respuesta correcta.
   // El ruteo es una heurística; la autoridad es el estado real del cliente.
   let pasoActivo = "";
+  // Si el pedido vino por comando (`/estrategia ...`, elegido del menú del chat), NO se adivina
+  // nada: el paso lo eligió la persona. La heurística de abajo es el fallback para cuando
+  // escriben en prosa, que es la mitad de las veces.
+  let comandoPaso = "";
   if (subagentKey === "descubrimiento") {
     const PASOS_DESC: Array<{ slug: string; re: RegExp }> = [
       { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
@@ -293,8 +297,17 @@ Deno.serve(async (req) => {
       { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
       { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
     ];
-    const q = norm([...messages].reverse().find((m) => m.role === "user")?.content || "");
-    pasoActivo = PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
+    const crudo = str([...messages].reverse().find((m) => m.role === "user")?.content || "");
+
+    // El comando se valida contra estos mismos slugs y no contra el corpus, aunque el menú salga
+    // del corpus: tiene que resolverse ACÁ, antes de clipar los documentos, y un `/loquesea` no
+    // puede dejar al paso 4 leyendo los recortes del menú. Un comando invalido se ignora y decide
+    // la prosa, como si no lo hubieran escrito.
+    const cmd = /^\s*\/([a-z_]+)\b[ \t]*/i.exec(crudo);
+    const pedido = cmd?.[1].toLowerCase() || "";
+    if (pedido && PASOS_DESC.some((p) => p.slug === pedido)) comandoPaso = pedido;
+
+    pasoActivo = comandoPaso || PASOS_DESC.find((p) => p.re.test(norm(crudo)))?.slug || "";
   }
 
   // ── Documentos del cliente (solo descubrimiento) ──
@@ -419,19 +432,28 @@ Deno.serve(async (req) => {
   // (metrics.ejecuta de cada ficha), no hardcodeado acá: cuando research y competencia se
   // construyan como jobs, cambia el corpus y esto sigue igual.
   let ejecutaPorPaso: Record<string, string> = {};
+  // slug -> la instrucción canónica de ese paso (metrics.pedido). Es lo que se manda en lugar
+  // del comando cuando el pedido vino por `/slug`.
+  let pedidoPorPaso: Record<string, string> = {};
   if (subagentKey === "descubrimiento") {
     try {
-      // pasoActivo ya se resolvió arriba (los clips de los documentos dependen de él).
-      retrievalMeta = { pedido: pasoActivo || "sin_match", foco: focoDesc, estrategias: estrategiasDesc };
-
       const { data: fichas } = await supabase.from("marketing_ad_library")
         .select("content,metrics").eq("part", "desc_ficha").eq("status", "approved").order("position");
       fichasText = (Array.isArray(fichas) ? fichas : []).map((f) => str(f.content)).filter(Boolean).join("\n\n---\n\n");
       for (const f of (Array.isArray(fichas) ? fichas : [])) {
         const m = (f.metrics || {}) as Record<string, unknown>;
-        if (str(m.slug)) ejecutaPorPaso[str(m.slug)] = str(m.ejecuta) || "chat";
+        if (!str(m.slug)) continue;
+        ejecutaPorPaso[str(m.slug)] = str(m.ejecuta) || "chat";
+        if (str(m.pedido)) pedidoPorPaso[str(m.slug)] = str(m.pedido);
       }
-    } catch { fichasText = ""; pasoActivo = ""; ejecutaPorPaso = {}; }
+
+      retrievalMeta = {
+        pedido: pasoActivo || "sin_match", foco: focoDesc, estrategias: estrategiasDesc,
+        // Para el tablero: saber cuántos pedidos llegan por comando y cuántos en prosa dice si
+        // el menú del "/" sirve o si el ruteo por texto sigue cargando todo el peso.
+        via: comandoPaso ? "comando" : pasoActivo ? "prosa" : "gate",
+      };
+    } catch { fichasText = ""; pasoActivo = ""; ejecutaPorPaso = {}; pedidoPorPaso = {}; }
   }
 
   if (corpus && subagentKey !== "descubrimiento") {
@@ -863,6 +885,20 @@ Deno.serve(async (req) => {
     },
   };
 
+  // ── El comando `/slug` se traduce a su pedido antes de que lo vea el modelo ──
+  // El modelo no tiene por qué entender nuestra sintaxis: `/estrategia` se convierte en la
+  // instrucción canónica de ese paso, que vive en el corpus (metrics.pedido). Si además
+  // escribieron algo, va abajo — es la aclaración de la persona y manda sobre el pedido genérico.
+  const msgsApi = messages.map((m) => ({ role: m.role, content: m.content }));
+  if (comandoPaso && pedidoPorPaso[comandoPaso]) {
+    for (let i = msgsApi.length - 1; i >= 0; i--) {
+      if (msgsApi[i].role !== "user") continue;
+      const resto = str(msgsApi[i].content).replace(/^\s*\/[a-z_]+\b[ \t]*/i, "").trim();
+      msgsApi[i].content = pedidoPorPaso[comandoPaso] + (resto ? `\n\n${resto}` : "");
+      break;
+    }
+  }
+
   // ── Llamada a la API (una sola; a lo sumo 1 reintento ante 429/5xx). max_tokens acotado. ──
   const reqBody: Record<string, unknown> = {
     model,
@@ -875,7 +911,7 @@ Deno.serve(async (req) => {
       { type: "text", text: stableSystem, cache_control: { type: "ephemeral" } },
       { type: "text", text: volatileParts },
     ],
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: msgsApi,
   };
   // Un agente sin herramienta responde en markdown y el panel lo pinta (AgentMarkdown).
   // El de funnels es así a propósito: no guarda en el DEL, se copia del chat.

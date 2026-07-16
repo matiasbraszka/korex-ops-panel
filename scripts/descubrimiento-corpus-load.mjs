@@ -59,6 +59,8 @@ const PARTS = ["desc_blueprint", "desc_ficha", "desc_skill"];
 const SKILLS = [
   {
     slug: "research",
+    menu: "Investigar al lider y su empresa",
+    pedido: "Hace el research del lider y su empresa con fuentes publicas.",
     dir: "korex-preonboarding-research",
     name: "Research del lider y su empresa",
     ord: 1,
@@ -73,6 +75,8 @@ const SKILLS = [
   },
   {
     slug: "competencia",
+    menu: "Que anuncios corre la competencia",
+    pedido: "Analiza los ads de la competencia del Ad Library.",
     dir: "competitive-ads-extractor",
     name: "Research de la competencia (ad library)",
     ord: 2,
@@ -87,6 +91,8 @@ const SKILLS = [
   },
   {
     slug: "onboarding",
+    menu: "Armar la ficha con la voz del cliente",
+    pedido: "Consolida el onboarding separando lo CONFIRMADO por el cliente de lo que hay que validar.",
     dir: "korex-onboarding-filler",
     name: "Consolidacion del onboarding",
     ord: 3,
@@ -101,6 +107,8 @@ const SKILLS = [
   },
   {
     slug: "estrategia",
+    menu: "Que estrategia y que avatares van primero",
+    pedido: "Hace el analisis estrategico: que estrategia desarrollamos primero, a que avatares apuntamos con ella, y con que virtudes del cliente y de la empresa. Con scores y evidencia.",
     dir: "korex-strategy-analyzer",
     name: "Analisis estrategico",
     ord: 4,
@@ -118,6 +126,8 @@ const SKILLS = [
   },
   {
     slug: "avatar",
+    menu: "Hoja psicologica del avatar elegido",
+    pedido: "Profundiza el avatar prioritario en su hoja psicologica completa, con el boton caliente.",
     dir: "korex-avatar-builder",
     name: "Avatar builder",
     ord: 5,
@@ -239,7 +249,11 @@ function buildRows() {
 
     const base = {
       niche: null, avatar: null, client_id: null, status: "approved", position: s.ord,
-      metrics: { slug: s.slug, skill: fm.name, ord: s.ord, momento: s.momento, prereq: s.prereq, ejecuta: s.ejecuta },
+      metrics: { slug: s.slug, skill: fm.name, ord: s.ord, momento: s.momento, prereq: s.prereq, ejecuta: s.ejecuta,
+        // Lo que consume el menu del "/" del chat y el ruteo por comando de agent-chat.
+        // Vive en el corpus y no en el frontend: agregar un paso al corpus lo hace
+        // aparecer en el menu sin tocar codigo ni deployar.
+        name: s.name, menu: s.menu, pedido: s.pedido },
     };
     rows.push({
       ...base,

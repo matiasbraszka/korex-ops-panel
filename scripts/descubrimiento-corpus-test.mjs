@@ -57,8 +57,15 @@ const PASOS_DESC = [
   { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
 ];
 
-// El primer match gana: el orden del array ES la desambiguacion.
+// Los 5 slugs validos. En la fn salen del corpus (las fichas); aca se fijan para poder correr
+// el ruteo sin base. Si no coinciden, lo canta el bloque 2 del test.
+const SLUGS = new Set(["research", "competencia", "onboarding", "estrategia", "avatar"]);
+
+// El comando gana; si no hay, el primer match del array (su orden ES la desambiguacion).
+// Un comando que no existe se ignora y se cae al ruteo por prosa.
 function rutear(pedido) {
+  const cmd = /^\s*\/([a-z_]+)\b[ \t]*/i.exec(String(pedido ?? ""));
+  if (cmd && SLUGS.has(cmd[1].toLowerCase())) return cmd[1].toLowerCase();
   const q = norm(pedido);
   return PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
 }
@@ -105,6 +112,19 @@ const CASOS = [
   ["Hola, ¿en qué estamos con este cliente?", ""],
   ["¿Qué falta?", ""],
   ["Dale, seguí", ""],
+
+  // COMANDOS (el menu del "/"). Acá no se adivina nada: el paso lo eligio la persona.
+  ["/estrategia", "estrategia"],
+  ["/avatar", "avatar"],
+  ["/research", "research"],
+  // Con aclaracion propia: el comando manda igual y el texto de atras es el detalle.
+  ["/estrategia enfocate en reclutamiento", "estrategia"],
+  // El comando GANA sobre la prosa, aunque la prosa diga otra cosa. Es el punto de todo esto.
+  ["/estrategia hacé primero el research y el onboarding", "estrategia"],
+  ["/onboarding pero mirá también la investigación", "onboarding"],
+  // Un comando que no existe se ignora y decide la prosa (no rutea a un paso fantasma).
+  ["/loquesea armá el análisis estratégico", "estrategia"],
+  ["/xyz", ""],
 ];
 
 async function rpc(fn, body) {
