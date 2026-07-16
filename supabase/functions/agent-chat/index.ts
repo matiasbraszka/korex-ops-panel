@@ -257,26 +257,41 @@ Deno.serve(async (req) => {
   // Lo que sale del corpus y del gate —las fichas, quién ejecuta cada paso, si está bloqueado—
   // se resuelve más abajo, cuando ya hay con qué.
   //
-  // EL PRIMER MATCH GANA: los pedidos reales nombran varios pasos a la vez ("research de la
-  // competencia" trae los dos; "el avatar que eligió el análisis estratégico", también), así que
-  // contar matches solo produce empates. El orden de este array ES la desambiguación, y no es
-  // alfabético ni el del pipeline — es por especificidad, con dos choques que hay que respetar:
+  // EL PRIMER MATCH GANA: los pedidos reales nombran varios pasos a la vez, así que contar
+  // matches solo produce empates. El orden de este array ES la desambiguación.
   //
-  //   · `research` va ANTES que `onboarding` porque "pre-onboarding" contiene "onboarding".
+  // El orden NO es por especificidad: es por QUÉ TAN FUERTE es la palabra como señal de pedido.
+  // La distinción que importa es entre nombrar un paso porque lo pedís y nombrarlo porque es el
+  // INSUMO de lo que pedís:
+  //
+  //   · Señales fuertes — solo aparecen cuando pedís ESE paso: "avatar builder", "hoja de
+  //     avatar", "estrategia", "competencia". Nadie dice "estrategia" de pasada.
+  //   · Señales débiles — aparecen igual de seguido como insumo: "investigación", "onboarding".
+  //     "En base a la investigación y al onboarding, ¿qué estrategia hacemos?" es el pedido más
+  //     natural del paso 4 y nombra los pasos 1 y 3 sin pedirlos.
+  //
+  // Por eso `estrategia` va ANTES que `research` y `onboarding`, aunque sea la última del
+  // pipeline: sin eso, el pedido más común del paso 4 se rutea a research —que está bloqueado— y
+  // el agente contesta "no puedo hacer el research" a alguien que le pidió la estrategia.
+  //
+  // Los dos choques que quedan y hay que respetar:
+  //   · `avatar` va antes que `estrategia`: "profundizá el avatar que eligió el análisis
+  //     estratégico" es un pedido del paso 5 que nombra el 4.
+  //   · `research` va antes que `onboarding` porque "pre-onboarding" contiene "onboarding".
   //     Mismo choque que pre-landing/landing en el agente de funnels.
-  //   · `competencia` y `avatar` van primero porque son los que más se nombran de paso dentro de
-  //     un pedido que es de otra cosa.
   //
-  // Y si igual se equivoca, el gate corrige: un paso elegido pero bloqueado no se produce. El
-  // ruteo es una heurística; la autoridad es el estado real del cliente.
+  // Al revés casi no pasa (pedir un insumo nombrando la estrategia), y cuando pasa el gate lo
+  // arregla solo: "hacé el research para la estrategia" rutea a estrategia, que sin research
+  // está BLOQUEADA, y el agente contesta "falta el research" — que es la respuesta correcta.
+  // El ruteo es una heurística; la autoridad es el estado real del cliente.
   let pasoActivo = "";
   if (subagentKey === "descubrimiento") {
     const PASOS_DESC: Array<{ slug: string; re: RegExp }> = [
       { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
       { slug: "avatar", re: /(avatar builder|hoja de avatar|profundiza\w*|boton(es)? caliente|psicologic\w+|deseos ocultos|miedos ocultos)/ },
+      { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto|que funnel|cual funnel)/ },
       { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
       { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
-      { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto)/ },
     ];
     const q = norm([...messages].reverse().find((m) => m.role === "user")?.content || "");
     pasoActivo = PASOS_DESC.find((p) => p.re.test(q))?.slug || "";

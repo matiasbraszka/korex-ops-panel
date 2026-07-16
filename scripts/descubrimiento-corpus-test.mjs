@@ -52,9 +52,9 @@ const norm = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{M
 const PASOS_DESC = [
   { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
   { slug: "avatar", re: /(avatar builder|hoja de avatar|profundiza\w*|boton(es)? caliente|psicologic\w+|deseos ocultos|miedos ocultos)/ },
+  { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto|que funnel|cual funnel)/ },
   { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
   { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
-  { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto)/ },
 ];
 
 // El primer match gana: el orden del array ES la desambiguacion.
@@ -82,9 +82,23 @@ const CASOS = [
   // Los que se pisan. Cada uno es el motivo de una linea del orden de PASOS_DESC:
   ["Hacé el pre-onboarding research", "research"],                       // "pre-onboarding" ⊃ "onboarding"
   ["Hacé el research de la competencia", "competencia"],                 // nombra los dos pasos
-  ["Profundizá el avatar que eligió el análisis estratégico", "avatar"], // idem
+  ["Profundizá el avatar que eligió el análisis estratégico", "avatar"], // por eso avatar > estrategia
   ["Investigá qué ads corre la competencia", "competencia"],             // idem
-  ["Hacé el onboarding y después la estrategia", "onboarding"],          // pide dos: se hace el primero
+
+  // NOMBRAR EL INSUMO NO ES PEDIRLO. Estas tres son la forma mas natural de pedir el paso 4 y
+  // las tres nombran los pasos 1 y 3 sin pedirlos. Antes se ruteaban a research —que esta
+  // BLOQUEADO— y el agente contestaba "no puedo hacer el research" a alguien que le habia pedido
+  // la estrategia. Por eso `estrategia` va antes que `research` y `onboarding`.
+  ["En base a la investigación y al onboarding, ¿qué estrategia hacemos?", "estrategia"],
+  ["Analizá el onboarding y la investigación y decime la estrategia", "estrategia"],
+  ["¿Qué estrategia desarrollamos primero?", "estrategia"],
+  ["¿Qué funnel armamos primero para este cliente?", "estrategia"],
+
+  // El precio de lo de arriba, asumido a proposito: si nombras la estrategia, gana la estrategia
+  // aunque pidas otra cosa primero. Es mucho menos frecuente que el caso de arriba, y el gate lo
+  // amortigua: si el onboarding no esta cargado, estrategia da BLOQUEADO y el agente contesta
+  // "falta el onboarding" — que es justo lo que habia que hacer primero.
+  ["Hacé el onboarding y después la estrategia", "estrategia"],
 
   // Sin match: manda el gate. Es el caso NORMAL, no un fallo — el equipo abre el chat sin
   // nombrar ningun paso y el agente contesta con el estado real del cliente.
