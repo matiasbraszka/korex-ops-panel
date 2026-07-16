@@ -59,6 +59,74 @@ function formatInline(t, a) {
   return s;
 }
 
+// ── Maqueta de landing (agente de funnels) ───────────────────────────────────────────────
+// Ese agente entrega cada banda de la página como una tabla cuyo encabezado dice qué banda es
+// y cómo se reparte: `| BANDA 2 · HERO — Izquierda | Derecha |`.
+// Pintarla como tabla de datos no alcanzaba: decía "1 columna · centrado" y salía pegado a la
+// izquierda, y las 2 columnas no se veían. El copy de una landing se revisa MIRÁNDOLO, así que
+// la banda se dibuja como lo que es: una franja de la página, con sus columnas y su alineación.
+const esBanda = (rows) => rows.length > 1 && /^\s*BANDA\b/i.test(rows[0][0] || '');
+
+// [FOTO DEL MENTOR] → recuadro de imagen; [BOTÓN CTA: ...] → botón. Es lo que hace que la
+// banda se lea como un wireframe y no como texto con corchetes.
+const ELEMENTOS = [
+  { re: /^(foto|imagen|img|carrusel|logo|vsl|video|captura|screenshot|testimonio)/i, tipo: 'media' },
+  { re: /^(bot[oó]n|cta)\b/i, tipo: 'boton' },
+  { re: /^formulario/i, tipo: 'form' },
+  { re: /^falta\b/i, tipo: 'falta' },
+];
+
+function elemHtml(txt, a) {
+  const tipo = ELEMENTOS.find((e) => e.re.test(txt))?.tipo || 'chip';
+  if (tipo === 'media') {
+    return `<span style="display:block;margin:7px 0;padding:18px 8px;background:#F3F4F6;border:1px dashed #C4CBD6;border-radius:8px;color:#78808F;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:center;line-height:1.5">${txt}</span>`;
+  }
+  if (tipo === 'boton') {
+    const label = txt.replace(/^(bot[oó]n\s*)?(cta)?\s*:?\s*/i, '') || txt;
+    return `<span style="display:inline-block;margin:7px 0;padding:9px 18px;background:${a.c};color:#fff;border-radius:999px;font-size:11.5px;font-weight:700">${label}</span>`;
+  }
+  if (tipo === 'form') {
+    return `<span style="display:block;margin:7px 0;padding:10px;background:#FBFCFD;border:1px solid #DDE2EA;border-radius:8px;color:#98A0AE;font-size:11px">▭ ${txt.replace(/^formulario\s*:?\s*/i, '')}</span>`;
+  }
+  if (tipo === 'falta') {
+    return `<span style="display:inline-block;padding:2px 7px;background:#FEF3C7;color:#92400E;border-radius:6px;font-size:10.5px;font-weight:700">${txt}</span>`;
+  }
+  return `<span style="display:inline-block;padding:2px 7px;background:#EEF1F6;color:#5B6472;border-radius:6px;font-size:10.5px;font-weight:600">${txt}</span>`;
+}
+
+// corre sobre el HTML ya formateado; el [^\]<>] evita tocar lo que está dentro de una etiqueta
+const pintarElementos = (h, a) => h.replace(/\[([^\]<>]{2,90})\]/g, (_, t) => elemHtml(t.trim(), a));
+
+function wireframeHtml(rows, a) {
+  const head = rows[0];
+  const cuerpo = rows.slice(1);
+  const cols = head.length;
+  const nombre = (head[0] || '').split('—')[0].trim();
+  // la alineación viaja en el encabezado de cada columna ("… — 1 columna · centrado")
+  const alin = head.map((h) => (/centrad/i.test(h) ? 'center' : 'left'));
+  const meta = cols > 1 ? `${cols} columnas` : `1 columna${alin[0] === 'center' ? ' · centrado' : ''}`;
+
+  const celdas = Array.from({ length: cols }, (_, i) => {
+    const txt = cuerpo.map((f) => f[i] || '').filter(Boolean).join('<br>');
+    const ancho = cols === 2 ? (i === 0 ? 'flex:1 1 58%' : 'flex:1 1 42%') : 'flex:1 1 100%';
+    const borde = cols === 2 && i === 0 ? 'border-right:1px dashed #DFE4EC' : '';
+    return `<div style="${ancho};min-width:0;padding:13px 15px;text-align:${alin[i]};${borde}">${pintarElementos(formatInline(txt, a), a)}</div>`;
+  }).join('');
+
+  return `<div style="border:1px solid #D9DEE7;border-radius:10px;margin:9px 0;overflow:hidden;background:#fff">`
+    + `<div style="background:${a.bg2};border-bottom:1px solid #E6EAF1;padding:5px 10px;display:flex;justify-content:space-between;gap:10px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#8A93A3">`
+    + `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nombre)}</span><span style="flex:none;opacity:.8">${esc(meta)}</span></div>`
+    + `<div style="display:flex;align-items:stretch">${celdas}</div></div>`;
+}
+
+function tablaHtml(rows, a) {
+  const celda = (c, th) => `<${th ? 'th' : 'td'} style="padding:7px 10px;border-bottom:1px solid #EEF0F4;text-align:left;vertical-align:top;line-height:1.55;${th ? `background:${a.bg2};font-weight:700;color:#1A1D26;font-size:11px;text-transform:uppercase;letter-spacing:.04em` : 'color:#374151'}">${formatInline(c, a)}</${th ? 'th' : 'td'}>`;
+  let h = `<div style="overflow-x:auto;margin:10px 0"><table style="width:100%;border-collapse:collapse;font-size:12.5px;border:1px solid #E2E5EB;border-radius:10px;overflow:hidden">`;
+  h += `<thead><tr>${rows[0].map((c) => celda(c, true)).join('')}</tr></thead><tbody>`;
+  for (const f of rows.slice(1)) h += `<tr>${f.map((c) => celda(c, false)).join('')}</tr>`;
+  return h + '</tbody></table></div>';
+}
+
 // "Hook: texto" / "Texto base: ..." → chip + texto. Es lo que hace que un anuncio se lea
 // de un vistazo sin que el modelo tenga que emitir HTML.
 function chipLine(line, a) {
@@ -93,12 +161,18 @@ export function mdToHtml(text, agentKey = 'anuncios') {
   const lines = String(text || '').split('\n');
   let html = '';
   let list = null;        // 'ul' | 'ol' | null
-  let inTable = false;
-  let headDone = false;
+  // La tabla se junta entera antes de dibujarla: recién con el encabezado y las filas se sabe
+  // si es una banda de la landing (se dibuja como maqueta) o una tabla común.
+  let table = null;
   let inCode = false;
 
   const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
-  const closeTable = () => { if (inTable) { html += '</tbody></table></div>'; inTable = false; headDone = false; } };
+  const closeTable = () => {
+    if (!table) return;
+    const rows = table;
+    table = null;
+    html += esBanda(rows) ? wireframeHtml(rows, a) : tablaHtml(rows, a);
+  };
 
   for (const raw of lines) {
     const line = raw.replace(/\s+$/, '');
@@ -117,20 +191,12 @@ export function mdToHtml(text, agentKey = 'anuncios') {
     const isSep = /^\|[\s\-:|]+\|$/.test(line.trim());
     if (isRow && !isSep) {
       closeList();
-      if (!inTable) {
-        html += `<div style="overflow-x:auto;margin:10px 0"><table style="width:100%;border-collapse:collapse;font-size:12.5px;border:1px solid #E2E5EB;border-radius:10px;overflow:hidden"><thead>`;
-        inTable = true; headDone = false;
-      }
-      const cells = line.split('|').slice(1, -1);
-      const tag = headDone ? 'td' : 'th';
-      if (headDone && !html.includes('<tbody>')) html += '<tbody>';
-      // vertical-align arriba: una celda con varios renglones (una banda de la landing) se
-      // centraba vertical y las columnas quedaban desfasadas entre sí.
-      html += '<tr>' + cells.map((c) => `<${tag} style="padding:7px 10px;border-bottom:1px solid #EEF0F4;text-align:left;vertical-align:top;line-height:1.55;${headDone ? 'color:#374151' : `background:${a.bg2};font-weight:700;color:#1A1D26;font-size:11px;text-transform:uppercase;letter-spacing:.04em`}">${formatInline(c.trim(), a)}</${tag}>`).join('') + '</tr>';
+      if (!table) table = [];
+      table.push(line.trim().split('|').slice(1, -1).map((c) => c.trim()));
       continue;
     }
-    if (isSep && inTable) { headDone = true; html += '</thead>'; continue; }
-    if (inTable) closeTable();
+    if (isSep && table) continue; // el separador solo marca dónde termina el encabezado
+    if (table) closeTable();
 
     // separador
     if (/^(---+|\*\*\*+|___+)$/.test(line.trim())) {
