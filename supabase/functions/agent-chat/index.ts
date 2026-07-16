@@ -340,22 +340,28 @@ Deno.serve(async (req) => {
   // una advertencia —es la decisión de arriba— y marcarlo con ⚠ sería una alarma falsa. Las
   // alarmas falsas enseñan a ignorar la línea de fuentes, que es justo lo que no queremos.
   type Material = { tope: number; usa: "principal" | "contexto" };
+  // Los topes de "principal" están puestos ARRIBA del documento más grande que existe hoy, a
+  // propósito: el material que un paso necesita entra ENTERO, siempre, para todos los clientes.
+  // Dejan de ser un recorte de rutina y pasan a ser una red contra un documento patológico (que
+  // alguien suba un PDF de 2 MB al Drive), que es para lo único que sirve un tope.
+  //
+  // Se puede pagar, y ese es todo el argumento. Medido sobre los 36 clientes reales: mandar todo
+  // sin recortar son 56.149 tokens de documentos en el PEOR caso (Jose Luis Rodriguez, 224.596
+  // caracteres de onboarding) ≈ US$0,26 la corrida. El promedio real de hoy es US$0,133. Los
+  // clientes a los que esto les cambia algo son 4 de 36: los otros 32 ya entraban enteros.
   const MATERIAL_POR_PASO: Record<string, Record<string, Material>> = {
     onboarding: {
-      onboarding: { tope: 100000, usa: "principal" },
+      onboarding: { tope: 230000, usa: "principal" },   // el más grande hoy: 224.596
       investigacion: { tope: 14000, usa: "contexto" },
       del: { tope: 3000, usa: "contexto" },
     },
     estrategia: {
-      // 120.000 cubre entero al p90 de los onboardings reales (102.453) y a los clientes largos
-      // como Gabi Espino (113.173). Arriba de eso hay un solo caso de 224.596: ese se recorta y
-      // se avisa, que es la respuesta correcta — no existe tope razonable que lo cubra.
-      onboarding: { tope: 120000, usa: "principal" },   // decide con esto
-      investigacion: { tope: 50000, usa: "principal" }, // arma la munición con esto
+      onboarding: { tope: 230000, usa: "principal" },   // decide con esto
+      investigacion: { tope: 90000, usa: "principal" }, // arma la munición con esto (mayor: 84.337)
       del: { tope: 3000, usa: "contexto" },             // lo está produciendo él
     },
     avatar: {
-      del: { tope: 100000, usa: "principal" },          // su único input
+      del: { tope: 140000, usa: "principal" },          // su único input (mayor: 138.658)
       onboarding: { tope: 24000, usa: "contexto" },
       investigacion: { tope: 12000, usa: "contexto" },
     },
