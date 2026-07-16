@@ -13,6 +13,9 @@ import DOMPurify from 'dompurify';
 
 // Acento por agente: le da identidad visual a cada uno sin cambiar el layout.
 export const AGENT_ACCENT = {
+  // Ámbar: es el primero del pipeline (la fase de arranque), y el único que no produce una
+  // pieza de campaña. Se distingue a propósito de los tres azules/violetas de producción.
+  descubrimiento: { c: '#D97706', bg: '#FFFBEB', bg2: '#FFFDF5' },
   anuncios: { c: '#5B7CF6', bg: '#EEF2FF', bg2: '#F5F7FF' },
   vsl: { c: '#8B5CF6', bg: '#F5F3FF', bg2: '#FAF9FF' },
   landing: { c: '#06B6D4', bg: '#ECFEFF', bg2: '#F5FDFF' },

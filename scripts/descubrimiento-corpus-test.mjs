@@ -1,0 +1,160 @@
+/**
+ * descubrimiento-corpus-test.mjs — prueba el ruteo del Agente de Descubrimiento SIN deployar.
+ *
+ * agent-chat esta en produccion con 3 agentes vivos (anuncios, vsl, landing): deployar para
+ * ver si el ruteo acierta es caro y arriesgado. Este script replica la logica de PASOS_DESC
+ * (agent-chat/index.ts) y la corre contra el corpus real de la DB via marketing_corpus_meta.
+ *
+ * Que verifica:
+ *   1. Que cada pedido tipico enrute al paso correcto (y que los ambiguos NO adivinen).
+ *   2. Que exista mal_desc_skill_<slug> para los 5 slugs (si no, el paso activo entraria sin
+ *      metodologia y el agente la inventaria de memoria).
+ *   3. Que el gate y el corpus hablen de los mismos 5 pasos.
+ *
+ * OJO: si tocas PASOS_DESC en agent-chat, tenes que tocarlo aca. Es una copia, no un import:
+ * la edge fn corre en Deno y esto en Node. Igual que funnels-corpus-test.mjs con el scorer.
+ *
+ * Uso:
+ *   node scripts/descubrimiento-corpus-test.mjs
+ *
+ * Requiere en el entorno (o en voomly-export/.env):
+ *   SUPABASE_URL, SUPABASE_ANON_KEY, VSL_INGEST_SECRET
+ */
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+
+function loadEnv() {
+  const env = { ...process.env };
+  const candidates = [
+    process.env.VOOMLY_ENV,
+    join(process.cwd(), "..", "..", "..", "voomly-export", ".env"),
+    join(process.cwd(), "voomly-export", ".env"),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    for (const line of readFileSync(p, "utf8").split("\n")) {
+      const i = line.indexOf("=");
+      if (i <= 0) continue;
+      const k = line.slice(0, i).trim();
+      if (!/^[A-Z_]+$/.test(k) || env[k]) continue;
+      env[k] = line.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    }
+    break;
+  }
+  return env;
+}
+const env = loadEnv();
+const URL_ = env.SUPABASE_URL, ANON = env.SUPABASE_ANON_KEY, SECRET = env.VSL_INGEST_SECRET;
+
+// --- COPIA EXACTA de agent-chat/index.ts (norm + PASOS_DESC + la eleccion) ---
+const norm = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim();
+
+const PASOS_DESC = [
+  { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
+  { slug: "avatar", re: /(avatar builder|hoja de avatar|profundiza\w*|boton(es)? caliente|psicologic\w+|deseos ocultos|miedos ocultos)/ },
+  { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
+  { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
+  { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto)/ },
+];
+
+// El primer match gana: el orden del array ES la desambiguacion.
+function rutear(pedido) {
+  const q = norm(pedido);
+  return PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
+}
+
+// --- Casos. `esperado` "" = a proposito no rutea: manda el gate (elige el 1er pendiente). ---
+const CASOS = [
+  // Cada paso, como lo pediria el equipo
+  ["Investigá al líder y su empresa antes de la llamada", "research"],
+  ["Necesito el research previo de Fabiana", "research"],
+  ["¿Qué está haciendo la competencia?", "competencia"],
+  ["Traeme los ads de los competidores del ad library", "competencia"],
+  ["Rellená el onboarding con la transcripción de la llamada", "onboarding"],
+  ["Consolidá la plantilla de onboarding", "onboarding"],
+  ["Armá el análisis estratégico", "estrategia"],
+  ["Definí el top de avatares", "estrategia"],
+  ["Necesito la estrategia del cliente", "estrategia"],
+  ["Profundizá el avatar", "avatar"],
+  ["Hacé la hoja de avatar con el botón caliente", "avatar"],
+  ["Dame el análisis psicológico del avatar", "avatar"],
+
+  // Los que se pisan. Cada uno es el motivo de una linea del orden de PASOS_DESC:
+  ["Hacé el pre-onboarding research", "research"],                       // "pre-onboarding" ⊃ "onboarding"
+  ["Hacé el research de la competencia", "competencia"],                 // nombra los dos pasos
+  ["Profundizá el avatar que eligió el análisis estratégico", "avatar"], // idem
+  ["Investigá qué ads corre la competencia", "competencia"],             // idem
+  ["Hacé el onboarding y después la estrategia", "onboarding"],          // pide dos: se hace el primero
+
+  // Sin match: manda el gate. Es el caso NORMAL, no un fallo — el equipo abre el chat sin
+  // nombrar ningun paso y el agente contesta con el estado real del cliente.
+  ["Hola, ¿en qué estamos con este cliente?", ""],
+  ["¿Qué falta?", ""],
+  ["Dale, seguí", ""],
+];
+
+async function rpc(fn, body) {
+  const res = await fetch(`${URL_}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const txt = await res.text();
+  if (!res.ok) throw new Error(`${fn} -> HTTP ${res.status}: ${txt}`);
+  return txt ? JSON.parse(txt) : null;
+}
+
+async function main() {
+  if (!URL_ || !ANON || !SECRET) throw new Error("faltan SUPABASE_URL / SUPABASE_ANON_KEY / VSL_INGEST_SECRET");
+
+  console.log("1) RUTEO DEL PEDIDO -> PASO\n");
+  let malos = 0;
+  for (const [pedido, esperado] of CASOS) {
+    const got = rutear(pedido);
+    const ok = got === esperado;
+    if (!ok) malos++;
+    const muestra = got || "(manda el gate)";
+    console.log(`  ${ok ? "ok  " : "MAL "} ${String(muestra).padEnd(22)} ${JSON.stringify(pedido)}`);
+    if (!ok) console.log(`       esperaba: ${esperado || "(manda el gate)"}`);
+  }
+  console.log(`\n  ${CASOS.length - malos}/${CASOS.length} correctos`);
+
+  console.log("\n2) EL CORPUS TIENE LOS 5 PASOS\n");
+  // checksums y no meta: meta devuelve (id, part, niche, niche_tags, avatar, title, client_id,
+  // metrics) — sin char_count, que es justo lo que hace falta para pesar el prompt.
+  const PARTS = ["desc_ficha", "desc_skill", "desc_blueprint"];
+  const [checks, meta] = await Promise.all([
+    rpc("marketing_corpus_checksums", { p_secret: SECRET, p_parts: PARTS }),
+    rpc("marketing_corpus_meta", { p_secret: SECRET, p_parts: PARTS }),
+  ]);
+  const partOf = new Map((Array.isArray(meta) ? meta : []).map((r) => [r.id, r.part]));
+  const rows = (Array.isArray(checks) ? checks : []).map((r) => ({ ...r, part: partOf.get(r.id) }));
+  if (!rows.length) throw new Error("el corpus no devolvio filas: ¿se cargo? (descubrimiento-corpus-load.mjs)");
+  const slugs = [...new Set(PASOS_DESC.map((p) => p.slug))];
+  for (const slug of slugs) {
+    const ficha = rows.find((r) => r.id === `mal_desc_ficha_${slug}`);
+    const skill = rows.find((r) => r.id === `mal_desc_skill_${slug}`);
+    const ok = ficha && skill;
+    if (!ok) malos++;
+    console.log(`  ${ok ? "ok  " : "MAL "} ${slug.padEnd(13)} ficha ${ficha ? String(ficha.char_count).padStart(5) : "  —  "} · skill ${skill ? String(skill.char_count).padStart(6) : "   —  "} chars`);
+  }
+  const bp = rows.find((r) => r.id === "mal_desc_blueprint");
+  if (!bp) { malos++; console.log("  MAL  falta mal_desc_blueprint (el SOP)"); }
+  else console.log(`  ok   SOP           ${String(bp.char_count).padStart(5)} chars (va siempre, cacheado)`);
+
+  console.log("\n3) PESO DEL PROMPT POR PASO (lo que entra cuando ese paso esta activo)\n");
+  const fichas = rows.filter((r) => r.part === "desc_ficha").reduce((a, r) => a + r.char_count, 0);
+  const base = (bp?.char_count || 0) + fichas;
+  for (const slug of slugs) {
+    const skill = rows.find((r) => r.id === `mal_desc_skill_${slug}`);
+    const tot = base + (skill?.char_count || 0);
+    console.log(`  ${slug.padEnd(13)} ${String(tot).padStart(6)} chars  ~${Math.round(tot / 3.8 / 100) / 10}k tokens  (SOP+fichas ${base} + skill ${skill?.char_count || 0})`);
+  }
+  const todas = rows.filter((r) => r.part === "desc_skill").reduce((a, r) => a + r.char_count, 0);
+  console.log(`\n  vs. mandar las 5 siempre: ${(base + todas).toLocaleString()} chars (~${Math.round((base + todas) / 3.8 / 1000)}k tokens)`);
+
+  if (malos) { console.log(`\n${malos} PROBLEMA(S) — no deployar asi`); process.exit(1); }
+  console.log("\ntodo ok");
+}
+
+main().catch((e) => { console.error("\nERROR:", e.message); process.exit(1); });

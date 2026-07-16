@@ -4,7 +4,7 @@
 //
 // `live: true` = el backend (edge fn agent-chat) ya sabe responder por ese agente.
 // Los demás se muestran con el cartel "Pronto" y no se pueden abrir.
-import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot } from 'lucide-react';
+import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot, Compass } from 'lucide-react';
 
 // `general` no es un agente de chat: es la capa base (ADN Korex) que heredan
 // todos los demás. Se edita en Marketing → Configuración, no se chatea con él.
@@ -13,6 +13,26 @@ export const BASE_AGENT_KEY = 'general';
 // Cada atajo tiene un `label` corto (lo que se ve en el chip, para que entren en
 // una sola fila) y el `prompt` completo que realmente se le manda al agente.
 export const AGENT_META = {
+  // El único que trabaja a nivel CLIENTE: corre en la fase de arranque, antes de que existan
+  // funnels y avatares (el avatar es su SALIDA). De ahí que `nivelCliente` lo exceptúe del
+  // candado que exige elegir funnel+avatar para abrir el chat.
+  descubrimiento: {
+    Icon: Compass,
+    desc: 'La fase de arranque: research, competencia, onboarding, estrategia y avatar',
+    live: true,
+    nivelCliente: true,
+    // Cada atajo nombra su paso a propósito: es lo que lee el ruteo de agent-chat (PASOS_DESC)
+    // para saber qué metodología cargar. El primero no nombra ninguno — es el caso normal de
+    // abrir el chat sin saber en qué punto está el cliente, y ahí manda el gate.
+    suggestions: [
+      { label: '¿En qué paso estamos?', prompt: '¿En qué momento del descubrimiento está este cliente y qué paso corresponde ahora?' },
+      { label: 'Research del líder', prompt: 'Hacé el research del líder y su empresa con fuentes públicas' },
+      { label: 'Competencia', prompt: 'Analizá los ads de la competencia del ad library' },
+      { label: 'Consolidar onboarding', prompt: 'Consolidá el onboarding del cliente separando lo confirmado de lo que hay que validar' },
+      { label: 'Análisis estratégico', prompt: 'Hacé el análisis estratégico: foco, valores, historia del líder y el top de avatares' },
+      { label: 'Profundizar el avatar', prompt: 'Profundizá el avatar prioritario en su hoja psicológica completa, con el botón caliente' },
+    ],
+  },
   anuncios: {
     Icon: Megaphone,
     desc: 'Creativos y copy para Meta Ads',

@@ -67,7 +67,13 @@ Deno.serve(async (req) => {
   const avatarId = str(body.avatar_id);
   const mode = str(body.mode) === "generate" ? "generate" : "chat";
   const rawMsgs = Array.isArray(body.messages) ? (body.messages as Record<string, unknown>[]) : [];
-  if (!clientId || !funnelId) return j({ ok: false, error: "missing_params", detail: "Faltan client_id o funnel_id." }, 400);
+  // Descubrimiento trabaja a nivel CLIENTE: corre ANTES de que existan estrategias, funnels y
+  // avatares — el avatar es su SALIDA (paso 5), no su entrada. Exigirle un funnel seria pedirle
+  // el resultado del paso 5 para poder hacer el paso 1. El resto de los agentes no cambia.
+  const nivelCliente = subagentKey === "descubrimiento";
+  if (!clientId || (!funnelId && !nivelCliente)) {
+    return j({ ok: false, error: "missing_params", detail: "Faltan client_id o funnel_id." }, 400);
+  }
 
   // Sanear y recortar el historial (últimos ~12 turnos, roles válidos, contenido acotado).
   const messages: Msg[] = rawMsgs
@@ -127,6 +133,10 @@ Deno.serve(async (req) => {
     anuncios: { blueprintId: "mal_blueprint", rotulo: "BLUEPRINT MAESTRO DE ANUNCIOS", section: "blueprint_section", example: "example" },
     vsl: { blueprintId: "mal_vsl_blueprint", rotulo: "BLUEPRINT MAESTRO DE VSL (v4.0)", section: "vsl_section", example: "vsl_ficha" },
     landing: { blueprintId: "mal_cf_blueprint", rotulo: "BLUEPRINT MAESTRO DE FUNNELS (SOP + errores comunes)", section: "cf_section", example: "cf_ficha" },
+    // Descubrimiento tiene su propio retrieval (más abajo) y NO usa el scorer genérico: elige
+    // QUÉ SKILL entra, no qué párrafos. Por eso `section`/`example` quedan vacíos — si
+    // apuntaran a desc_skill, el scorer traería los 3 SKILL.md más parecidos (~100 KB).
+    descubrimiento: { blueprintId: "mal_desc_blueprint", rotulo: "SOP DEL DESCUBRIMIENTO KOREX", section: "", example: "" },
   };
   const corpus = CORPUS[subagentKey] || null;
 
@@ -185,6 +195,15 @@ Deno.serve(async (req) => {
       "- Lo que falta del cliente va marcado `[FALTA: ...]` bien visible. No lo inventes.",
       "- Si auditás en vez de escribir, usá una tabla con `Qué está mal | Por qué | Cómo queda`, y citá con `>` el copy actual que estás señalando. Si lo que falla es la ESTRUCTURA (un elemento fuera de lugar, una banda que no está, algo centrado que va al costado de la foto), decilo con el nombre de la banda.",
     ].join("\n"),
+    // El formato de CADA paso lo manda su metodología (cada skill trae su estructura de salida
+    // obligatoria). Acá va solo lo que es común a los 5 y lo que el panel necesita para pintar.
+    descubrimiento: [
+      "- **Arrancá siempre con una línea de estado**, antes de cualquier otra cosa: en qué momento está el cliente (pre/post-llamada) y qué paso estás por hacer. Ej: `> Post-llamada · Paso 4 (análisis estratégico) · listo para hacerse`. El equipo abre el chat sin saber en qué punto está.",
+      "- Si el paso que te piden tiene su metodología cargada acá abajo, **la estructura de salida la manda ella**, no este bloque: seguí sus secciones y sus títulos tal cual.",
+      "- Si el paso está BLOQUEADO: no lo produzcas. Respondé corto — qué falta, quién lo aporta, y qué paso se puede hacer en su lugar. Sin relleno ni un adelanto 'provisional'.",
+      "- `CONFIRMADO:` y `NO VERIFICADO:` al principio de renglón se pintan como etiqueta. Usalas cada vez que un dato venga de research público y no de la boca del cliente.",
+      "- Para el resumen de descubrimiento del final usá una tabla `Paso | Estado | Qué falta`.",
+    ].join("\n"),
   };
 
   const formatoBlock = [
@@ -232,6 +251,41 @@ Deno.serve(async (req) => {
   const briefDoc = (briefRows || []).find((d) => d.doc_kind === "briefing") || (briefRows || []).find((d) => d.doc_kind === "onboarding");
   const briefText = clip(str(briefDoc?.text), 3000);
 
+  // ── Documentos del cliente (solo descubrimiento) ──
+  // Son los INPUTS de las skills: el research alimenta la estrategia, la estrategia el avatar.
+  // Los otros agentes no los necesitan (trabajan con el DEL ya destilado en avatares y guión).
+  //
+  // Van clipados y no enteros porque son enormes de verdad (promedios reales: onboarding 52 KB,
+  // DEL 57 KB, investigación 26 KB). Los tres completos serían ~35k tokens en CADA turno, sin
+  // cachear. Los clips son asimétricos a propósito: el onboarding es la voz del cliente — de ahí
+  // salen las citas literales que la metodología exige — así que se lleva la porción más grande.
+  // El agente ve cuánto se recortó y avisa si le falta: no adivina.
+  const DOCS_DESC: Record<string, { label: string; clip: number }> = {
+    investigacion: { label: "RESEARCH DEL LÍDER Y LA EMPRESA (paso 1 · fuentes públicas ⇒ NO VERIFICADO)", clip: 14000 },
+    onboarding: { label: "ONBOARDING (la voz del cliente ⇒ CONFIRMADO; de acá salen las citas literales)", clip: 16000 },
+    del: { label: "DEL / ANÁLISIS ESTRATÉGICO (paso 4, ya hecho)", clip: 8000 },
+  };
+  let docsDescText = "";
+  if (subagentKey === "descubrimiento") {
+    const { data: docs } = await supabase.from("client_brain_docs")
+      .select("doc_kind,title,text,char_count").eq("client_id", clientId)
+      .in("doc_kind", Object.keys(DOCS_DESC)).order("char_count", { ascending: false });
+    const vistos = new Set<string>();
+    docsDescText = (Array.isArray(docs) ? docs : [])
+      .filter((d) => {  // si hay varios del mismo tipo, el más largo (ya vienen ordenados)
+        const k = str(d.doc_kind);
+        if (vistos.has(k) || !str(d.text)) return false;
+        vistos.add(k); return true;
+      })
+      .map((d) => {
+        const cfg = DOCS_DESC[str(d.doc_kind)];
+        const full = str(d.text);
+        const txt = clip(full, cfg.clip);
+        const nota = full.length > cfg.clip ? ` · SE MUESTRAN LOS PRIMEROS ${cfg.clip.toLocaleString()} DE ${full.length.toLocaleString()} CARACTERES` : "";
+        return `\n— ${cfg.label}${nota} —\n${txt}`;
+      }).join("\n");
+  }
+
   // Anuncios ganadores del cliente (piso creativo, no techo).
   const { data: winRows } = await supabase.from("meta_ad_insights")
     .select("ad_name,campaign_name,spend,cpl,ctr,hook_rate,hold_rate,transcript,score")
@@ -251,7 +305,55 @@ Deno.serve(async (req) => {
   let funnelPagesText = "";
   let faseCF = "";
   let retrievalMeta: Record<string, unknown> = {};
-  if (corpus) {
+
+  // ── DESCUBRIMIENTO: el retrieval elige QUÉ SKILL, no qué párrafos ──
+  // Las 5 skills son metodologías prescriptivas ("ESTRUCTURA DEL DOCUMENTO (OBLIGATORIA)"):
+  // trocearlas y mandar el top-3 de secciones no da "la parte relevante", da una metodología
+  // rota. Por eso el scorer genérico de abajo NO corre para esta key y la elección se hace un
+  // nivel más arriba: se elige el PASO, y su skill entra completa.
+  //
+  // Dos capas:
+  //   1. Las 5 fichas, siempre (~4 KB). Son el menú: con esto solo, el agente ya puede decir
+  //      "el que corresponde es el paso 4" sin tener cargado el paso 4.
+  //   2. La skill del paso activo, completa (2 KB a 13 KB según cuál).
+  let fichasText = "";
+  let skillActivaText = "";
+  let pasoActivo = "";
+  if (subagentKey === "descubrimiento") {
+    try {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+
+      // Qué paso pidieron. EL PRIMER MATCH GANA: los pedidos reales nombran varios pasos a la
+      // vez ("research de la competencia" trae los dos; "el avatar que eligió el análisis
+      // estratégico", también), así que contar matches solo produce empates. El orden de este
+      // array ES la desambiguación, y no es alfabético ni el del pipeline — es por
+      // especificidad, con dos choques que hay que respetar:
+      //
+      //   · `research` va ANTES que `onboarding` porque "pre-onboarding" contiene "onboarding".
+      //     Mismo choque que pre-landing/landing en el agente de funnels.
+      //   · `competencia` y `avatar` van primero porque son los que más se nombran de paso
+      //     dentro de un pedido que es de otra cosa.
+      //
+      // Y si igual se equivoca, el gate corrige: un paso elegido pero bloqueado no se produce.
+      // El ruteo es una heurística; la autoridad es el estado real del cliente.
+      const PASOS_DESC: Array<{ slug: string; re: RegExp }> = [
+        { slug: "competencia", re: /(competencia|competidor(es)?|ad library|biblioteca de anuncios|benchmark)/ },
+        { slug: "avatar", re: /(avatar builder|hoja de avatar|profundiza\w*|boton(es)? caliente|psicologic\w+|deseos ocultos|miedos ocultos)/ },
+        { slug: "research", re: /(research|investiga\w*|preonboarding|pre-?onboarding|fuentes publicas)/ },
+        { slug: "onboarding", re: /(onboarding|ficha del cliente|plantilla|transcripcion|apuntes)/ },
+        { slug: "estrategia", re: /(estrateg\w+|focalizacion|top de avatares|reclutamiento vs producto)/ },
+      ];
+      const q = norm(lastUser);
+      pasoActivo = PASOS_DESC.find((p) => p.re.test(q))?.slug || "";
+      retrievalMeta = { pedido: pasoActivo || "sin_match" };
+
+      const { data: fichas } = await supabase.from("marketing_ad_library")
+        .select("content,metrics").eq("part", "desc_ficha").eq("status", "approved").order("position");
+      fichasText = (Array.isArray(fichas) ? fichas : []).map((f) => str(f.content)).filter(Boolean).join("\n\n---\n\n");
+    } catch { fichasText = ""; pasoActivo = ""; }
+  }
+
+  if (corpus && subagentKey !== "descubrimiento") {
     try {
       const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
       const qTokens = norm(lastUser).split(" ").filter((w) => w.length > 3);
@@ -402,11 +504,39 @@ Deno.serve(async (req) => {
   const STAGE_BY_AGENT: Record<string, string> = { anuncios: "anuncios", vsl: "vsl", landing: "landing" };
   const myStage = STAGE_BY_AGENT[subagentKey] || "";
   let gate: Record<string, unknown> | null = null;
-  try {
-    const { data: pipe } = await supabase.rpc("cerebro_pipeline_status", { p_client_id: clientId });
-    const rows = Array.isArray(pipe) ? (pipe as Record<string, unknown>[]) : [];
-    gate = myStage ? (rows.find((r) => str(r.funnel_id) === funnelId && str(r.stage) === myStage) || null) : null;
-  } catch { gate = null; }
+  let descRows: Record<string, unknown>[] = [];
+  let momento = "";
+  if (subagentKey === "descubrimiento") {
+    // Otro gate y otro nivel: descubrimiento_status() es a nivel CLIENTE y va aguas arriba
+    // de cerebro_pipeline_status() — termina donde ese empieza (el paso 4 produce el DEL, el
+    // paso 5 los avatares). Ver migrations/descubrimiento_gate_v1.sql.
+    try {
+      const { data: pipe } = await supabase.rpc("descubrimiento_status", { p_client_id: clientId });
+      descRows = Array.isArray(pipe) ? (pipe as Record<string, unknown>[]) : [];
+      momento = str(descRows[0]?.momento);
+      // El pedido no nombró un paso (o nombró dos): manda el gate, no el modelo. El paso es
+      // el primero que se puede hacer. Si no hay ninguno pendiente, queda vacío y el agente
+      // responde con el estado en vez de producir.
+      if (!pasoActivo) pasoActivo = str(descRows.find((r) => str(r.status) === "pendiente")?.stage);
+      gate = descRows.find((r) => str(r.stage) === pasoActivo) || null;
+
+      // La metodología del paso activo, completa. NO se carga si el paso está bloqueado: no
+      // se va a producir, y son hasta 13 KB de prompt al pedo. Que le falte es justamente lo
+      // que evita que lo escriba igual "con lo que hay".
+      if (pasoActivo && str(gate?.status) !== "bloqueado") {
+        const { data: sk } = await supabase.from("marketing_ad_library")
+          .select("content").eq("id", `mal_desc_skill_${pasoActivo}`).maybeSingle();
+        skillActivaText = clip(str(sk?.content), 52000);  // la más pesada (avatar) son ~49 KB
+      }
+      retrievalMeta = { ...retrievalMeta, paso: pasoActivo || "ninguno", momento, skill_chars: skillActivaText.length };
+    } catch { gate = null; skillActivaText = ""; }
+  } else {
+    try {
+      const { data: pipe } = await supabase.rpc("cerebro_pipeline_status", { p_client_id: clientId });
+      const rows = Array.isArray(pipe) ? (pipe as Record<string, unknown>[]) : [];
+      gate = myStage ? (rows.find((r) => str(r.funnel_id) === funnelId && str(r.stage) === myStage) || null) : null;
+    } catch { gate = null; }
+  }
   // Bloquea SOLO si la etapa está bloqueada de verdad (le faltan los prerrequisitos).
   // Antes esto miraba también `can_generate === false`, pero can_generate = (not done and
   // prereq_ok): con la etapa ya 'listo' devolvía gate_blocked diciendo que faltaba el
@@ -467,7 +597,35 @@ Deno.serve(async (req) => {
   ].join("\n");
 
   const tipo = /producto/i.test(str(strat?.name)) ? "Producto" : (/reclut/i.test(str(strat?.name)) ? "Reclutamiento" : str(strat?.name) || "—");
-  const volatileParts = [
+
+  // El contexto de descubrimiento es OTRO: nivel cliente, no funnel. Casi todo el bloque de
+  // abajo (avatar, guión del VSL, páginas, ganadores) no existe todavía en esta fase — meterlo
+  // vacío sería enseñarle al agente que el cliente "no tiene" cosas que aún no le tocan tener.
+  const volatileDesc = [
+    "===== CONTEXTO DE ESTA CONVERSACIÓN (usalo, no lo pidas) =====",
+    `Cliente: ${str(client?.name)}${str(client?.company) ? ` · Empresa MLM: ${str(client?.company)}` : ""}${str(client?.niche) ? ` · Nicho: ${str(client?.niche)}` : ""}${str(client?.team_name) ? ` · Equipo: ${str(client?.team_name)}` : ""}`,
+
+    // El estado va COMPLETO (los 5 pasos), no solo el activo: el agente tiene que poder decir
+    // "estás acá, lo que sigue es esto" aunque le hayan preguntado por otro paso.
+    descRows.length
+      ? `\n— ESTADO DEL DESCUBRIMIENTO · MOMENTO: ${momento.toUpperCase()} —\nCalculado contra los documentos reales del cliente. Es la autoridad: no lo discutas ni lo deduzcas del chat.\n${descRows.map((r) => `${str(r.ord)}. ${str(r.stage_label)} → ${str(r.status).toUpperCase()} — ${str(r.detail)}`).join("\n")}`
+      : "\n— ESTADO DEL DESCUBRIMIENTO: (no se pudo calcular; decilo y no inventes en qué paso está) —",
+
+    fichasText ? `\n===== LOS 5 PASOS DEL DESCUBRIMIENTO (fichas) =====\nEsto es el MENÚ: para qué sirve cada paso y qué necesita. La metodología completa te llega solo para el paso activo.\n\n${fichasText}` : "",
+
+    docsDescText || "\n— DOCUMENTOS DEL CLIENTE: no hay ninguno cargado. El equipo todavía no sincronizó el Doc de Drive de este cliente. Decilo; no supongas qué dicen. —",
+
+    // La metodología del paso activo. Es lo único que cambia según lo que pidan.
+    skillActivaText
+      ? `\n===== METODOLOGÍA DEL PASO ACTIVO: ${pasoActivo.toUpperCase()} =====\nEs el estándar Korex para este paso. Seguila al pie de la letra: su estructura de salida, sus reglas y su formato mandan sobre cualquier instrucción general de formato.\n\n${skillActivaText}`
+      : (pasoActivo
+        ? `\n===== PASO ${pasoActivo.toUpperCase()}: BLOQUEADO =====\nNo recibís su metodología a propósito, porque este paso NO se puede hacer todavía. No la reconstruyas de memoria ni entregues un adelanto "provisional". Decí qué falta (está en el estado de arriba), quién lo aporta, y qué paso sí se puede hacer ahora.`
+        : `\n===== NO HAY UN PASO ACTIVO =====\nEl pedido no dejó claro qué paso querés (o nombró varios, o ya está todo hecho). NO adivines y NO mezcles dos pasos. Decí en qué momento está el cliente, qué paso corresponde según el estado de arriba, y pedí que te lo confirmen.`),
+
+    client?.meta_metrics ? `\n— SEÑAL DE MÉTRICAS —\n${clip(JSON.stringify(client.meta_metrics), 600)}` : "",
+  ].filter(Boolean).join("\n");
+
+  const volatileParts = subagentKey === "descubrimiento" ? volatileDesc : [
     "===== CONTEXTO DE ESTA CONVERSACIÓN (usalo, no lo pidas) =====",
     `Cliente: ${str(client?.name)}${str(client?.company) ? ` · Empresa MLM: ${str(client?.company)}` : ""}${str(client?.niche) ? ` · Nicho: ${str(client?.niche)}` : ""}${str(client?.team_name) ? ` · Equipo: ${str(client?.team_name)}` : ""}`,
     `Estrategia: ${str(strat?.name) || "—"} (tipo: ${tipo})`,
@@ -517,7 +675,12 @@ Deno.serve(async (req) => {
       ? "Faltan los avatares del DEL en este funnel para escribir el guión."
       : subagentKey === "landing"
         ? "Falta el guión del VSL de este funnel para escribir el copy de las páginas."
-        : "Falta el VSL de este funnel para generar anuncios.";
+        : subagentKey === "descubrimiento"
+          // No debería llegar acá (este agente no tiene tool, así que el panel nunca pide
+          // generate), pero el fallback de abajo hablaría de un VSL y un funnel que en esta
+          // fase no existen: mentiría sobre qué falta.
+          ? `El paso "${pasoActivo || "pedido"}" está bloqueado: le falta un prerrequisito.`
+          : "Falta el VSL de este funnel para generar anuncios.";
     return j({ ok: false, error: "gate_blocked", detail: str(gate?.detail) || falta, gate }, 200);
   }
 

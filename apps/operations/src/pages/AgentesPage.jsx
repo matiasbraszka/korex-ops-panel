@@ -11,7 +11,7 @@ import ContextBar from '../components/agentes/ContextBar';
 import AgentPicker from '../components/agentes/AgentPicker';
 import ChatHistoryMenu from '../components/agentes/ChatHistoryMenu';
 import AgentChat from '../components/agentes/AgentChat';
-import { chatAgents } from '../components/agentes/agentMeta';
+import { chatAgents, agentMeta } from '../components/agentes/agentMeta';
 
 const rid = () => `ach_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
@@ -62,6 +62,11 @@ export default function AgentesPage() {
 
   // Cada agente mira SU etapa: el de anuncios espera el VSL, el de VSL espera los avatares.
   // Tiene que coincidir con STAGE_BY_AGENT de la edge fn agent-chat (que es la autoridad).
+  //
+  // `descubrimiento` NO está acá a propósito: usa otro gate (descubrimiento_status, a nivel
+  // cliente) y no necesita el aviso preventivo de esta barra — su respuesta SIEMPRE arranca
+  // diciendo en qué paso está el cliente, así que el cartel sería decir dos veces lo mismo.
+  // Cae en el `return null` de abajo.
   const gate = useMemo(() => {
     const stage = { anuncios: 'anuncios', vsl: 'vsl', landing: 'landing' }[agentKey];
     if (!stage) return null;
@@ -154,8 +159,12 @@ export default function AgentesPage() {
     updateStrategyPage(sel.funnelId, { avatars: nextAvatars });
   }, [strategyPages, sel.funnelId, sel.avatarId, agentKey, updateStrategyPage]);
 
-  const ready = sel.clientId && sel.strategyId && sel.funnelId && sel.avatarId;
-  const chatKey = activeChatId || `new:${agentKey}:${sel.funnelId}:${sel.avatarId}`;
+  // Descubrimiento corre ANTES de que existan funnel y avatar (el avatar es su SALIDA, el
+  // paso 5): le alcanza con el cliente. Los demás siguen necesitando el avatar, que es de
+  // donde sacan el dolor. El flag vive en agentMeta.js y la edge fn lo replica server-side.
+  const soloCliente = !!agentMeta(agentKey).nivelCliente;
+  const ready = soloCliente ? !!sel.clientId : (sel.clientId && sel.strategyId && sel.funnelId && sel.avatarId);
+  const chatKey = activeChatId || `new:${agentKey}:${soloCliente ? sel.clientId : `${sel.funnelId}:${sel.avatarId}`}`;
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-white border border-border rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
@@ -184,8 +193,14 @@ export default function AgentesPage() {
       ) : (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-16 px-5 gap-2.5">
           <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-surface2 text-text3"><MousePointerClick size={24} /></span>
-          <div className="text-[13.5px] font-semibold text-[#4B5563]">Elegí cliente, estrategia, funnel y avatar</div>
-          <div className="text-[12px] text-text3 max-w-[420px]">En cuanto selecciones, el agente arranca con todo el contexto de ese avatar ya cargado. También podés abrir un chat anterior desde el historial.</div>
+          <div className="text-[13.5px] font-semibold text-[#4B5563]">
+            {soloCliente ? 'Elegí un cliente' : 'Elegí cliente, estrategia, funnel y avatar'}
+          </div>
+          <div className="text-[12px] text-text3 max-w-[420px]">
+            {soloCliente
+              ? 'Este agente trabaja sobre el cliente entero: con eso alcanza. Te va a decir en qué momento del descubrimiento está y qué paso corresponde.'
+              : 'En cuanto selecciones, el agente arranca con todo el contexto de ese avatar ya cargado. También podés abrir un chat anterior desde el historial.'}
+          </div>
         </div>
       )}
     </div>
