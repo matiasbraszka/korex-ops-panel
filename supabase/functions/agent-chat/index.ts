@@ -336,18 +336,48 @@ Deno.serve(async (req) => {
   // Los topes de acá son de caracteres. ~4 chars = 1 token, así que el peor caso (paso 4) son
   // ~37k tokens de documentos. Entra cómodo en Sonnet y el agente ve cuánto se recortó: avisa si
   // le falta en vez de adivinar.
-  const CLIPS_POR_PASO: Record<string, Record<string, number>> = {
-    onboarding: { investigacion: 14000, onboarding: 100000, del: 3000 },
-    estrategia: { investigacion: 50000, onboarding: 100000, del: 3000 },
-    avatar: { investigacion: 12000, onboarding: 24000, del: 90000 },
+  // `usa` no cambia lo que se manda: cambia cómo se REPORTA. Un doc "contexto" recortado no es
+  // una advertencia —es la decisión de arriba— y marcarlo con ⚠ sería una alarma falsa. Las
+  // alarmas falsas enseñan a ignorar la línea de fuentes, que es justo lo que no queremos.
+  type Material = { tope: number; usa: "principal" | "contexto" };
+  const MATERIAL_POR_PASO: Record<string, Record<string, Material>> = {
+    onboarding: {
+      onboarding: { tope: 100000, usa: "principal" },
+      investigacion: { tope: 14000, usa: "contexto" },
+      del: { tope: 3000, usa: "contexto" },
+    },
+    estrategia: {
+      // 120.000 cubre entero al p90 de los onboardings reales (102.453) y a los clientes largos
+      // como Gabi Espino (113.173). Arriba de eso hay un solo caso de 224.596: ese se recorta y
+      // se avisa, que es la respuesta correcta — no existe tope razonable que lo cubra.
+      onboarding: { tope: 120000, usa: "principal" },   // decide con esto
+      investigacion: { tope: 50000, usa: "principal" }, // arma la munición con esto
+      del: { tope: 3000, usa: "contexto" },             // lo está produciendo él
+    },
+    avatar: {
+      del: { tope: 100000, usa: "principal" },          // su único input
+      onboarding: { tope: 24000, usa: "contexto" },
+      investigacion: { tope: 12000, usa: "contexto" },
+    },
   };
-  const CLIPS_MENU = { investigacion: 6000, onboarding: 8000, del: 6000 };
+  // Sin paso activo nadie produce nada: alcanza con saber qué hay.
+  const MATERIAL_MENU: Record<string, Material> = {
+    onboarding: { tope: 8000, usa: "contexto" },
+    investigacion: { tope: 6000, usa: "contexto" },
+    del: { tope: 6000, usa: "contexto" },
+  };
+  const materialDe = (kind: string): Material =>
+    (MATERIAL_POR_PASO[pasoActivo] || MATERIAL_MENU)[kind] || { tope: 6000, usa: "contexto" };
   const DOCS_DESC: Record<string, { label: string }> = {
     investigacion: { label: "RESEARCH DEL LÍDER Y LA EMPRESA (paso 1 · fuentes públicas ⇒ NO VERIFICADO)" },
     onboarding: { label: "ONBOARDING (la voz del cliente ⇒ CONFIRMADO; de acá salen las citas literales)" },
     del: { label: "DEL / ANÁLISIS ESTRATÉGICO (paso 4, ya hecho)" },
   };
   let docsDescText = "";
+  // Qué material se cargó de verdad. Se junta ACÁ, en el único lugar que lo sabe, para poder
+  // ponerlo arriba de la respuesta. NO se lo pedimos al modelo: si le pedís que declare sus
+  // fuentes, declara las que cree que usó, y justo lo que hay que detectar es cuando NO leyó.
+  const fuentes: Array<{ kind: string; chars: number; leidos: number; usa: string }> = [];
   // ── El FOCO del cliente: reclutamiento o producto ──
   // Cambia qué hay que investigar y en qué se profundiza en toda la fase, no solo en un paso.
   // Se deduce del nombre de las estrategias del cliente, igual que hace el resto de la fn
@@ -383,9 +413,10 @@ Deno.serve(async (req) => {
       .map((d) => {
         const kind = str(d.doc_kind);
         const cfg = DOCS_DESC[kind];
-        const tope = (CLIPS_POR_PASO[pasoActivo] || CLIPS_MENU)[kind] ?? 6000;
+        const { tope, usa } = materialDe(kind);
         const full = str(d.text);
         const txt = clip(full, tope);
+        fuentes.push({ kind, chars: full.length, leidos: Math.min(full.length, tope), usa });
         // Cuando se recortó, el agente TIENE que saberlo: es la diferencia entre "no lo dijo" y
         // "no lo leí". Sin esta línea, un doc cortado se lee como un doc completo y lo que falta
         // lo completa de memoria.
@@ -961,6 +992,43 @@ Deno.serve(async (req) => {
   const cost = Number((inCost + (outTok / 1e6) * price.out).toFixed(6));
   const stopReason = str(data?.stop_reason);
 
+  // ── La línea de fuentes: qué material se leyó de verdad para esta respuesta ──
+  // Va arriba de todo y la calcula la fn, no el modelo. El objetivo es que de un vistazo se sepa
+  // si la respuesta está analizando el material o hablando de memoria — que es la falla que más
+  // caro sale acá, porque un análisis inventado se ve igual de prolijo que uno real.
+  //
+  // Se marca solo lo que cambia si confiás o no en lo que sigue:
+  //   ✓             lo leyó entero
+  //   ⚠ X de Y      es material PRINCIPAL de este paso y solo leyó una parte. Lo que no vio, no
+  //                 lo sabe: acá es donde la respuesta puede estar hablando de lo que no leyó.
+  //   ⚠ plantilla   el archivo está pero sin llenar (el caso del DEL, mismo umbral que el gate)
+  //   ✗ no hay      no existe. El más importante de todos.
+  //   (contexto)    no es material de este paso. Recortarlo es la decisión de arriba, no una
+  //                 falla — por eso no lleva ⚠.
+  //
+  // Va dentro del texto de la respuesta —y no como dato aparte para que lo pinte el panel— a
+  // propósito: el equipo copia el brief a mano al Doc del cliente, y así la procedencia viaja
+  // pegada al contenido en vez de perderse en el camino.
+  const ROTULO_FUENTE: Record<string, string> = {
+    onboarding: "Onboarding", investigacion: "Investigación", del: "DEL",
+  };
+  let lineaFuentes = "";
+  if (subagentKey === "descubrimiento") {
+    const n = (x: number) => x.toLocaleString("es-AR");
+    const partes = Object.keys(ROTULO_FUENTE).map((kind) => {
+      const rot = ROTULO_FUENTE[kind];
+      const f = fuentes.find((x) => x.kind === kind);
+      if (!f) return `${rot} ✗ no hay`;
+      // El DEL plantilla: mismo umbral que el gate. Decir "entero" de un archivo de 2.511
+      // caracteres con placeholders sería técnicamente cierto y completamente inútil.
+      if (kind === "del" && f.chars < 15000) return `${rot} ⚠ plantilla sin llenar (${n(f.chars)})`;
+      if (f.usa === "contexto") return `${rot} (contexto)`;
+      if (f.leidos < f.chars) return `${rot} ⚠ ${n(f.leidos)} de ${n(f.chars)}`;
+      return `${rot} ✓`;
+    });
+    lineaFuentes = `**Fuentes** · ${partes.join(" · ")}\n\n`;
+  }
+
   let reply = "";
   let adCopy: Record<string, unknown> | null = null;
   try {
@@ -978,6 +1046,10 @@ Deno.serve(async (req) => {
   if (!reply && !adCopy && stopReason === "max_tokens") {
     reply = "(La respuesta se cortó por el límite de longitud. Pedímelo en partes o más corto, o suban el tope de respuesta en Administración.)";
   }
+
+  // Las fuentes van también cuando la respuesta se cortó o vino vacía: ahí es cuando más importa
+  // saber sobre qué estaba trabajando.
+  if (reply && lineaFuentes) reply = lineaFuentes + reply;
 
   await supabase.from("api_usage").insert({
     fn: "agent_chat", model, input_tokens: inTok, output_tokens: outTok, cost_usd: cost,
