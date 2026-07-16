@@ -345,18 +345,21 @@ Deno.serve(async (req) => {
   // Dejan de ser un recorte de rutina y pasan a ser una red contra un documento patológico (que
   // alguien suba un PDF de 2 MB al Drive), que es para lo único que sirve un tope.
   //
+  // OJO: el tope es el presupuesto del TIPO, no de un documento — entran todos los de ese tipo y
+  // se descuenta hasta agotarlo. Por eso 340.000 y no 224.596: Jose Luis Rodriguez tiene DOS
+  // onboardings que suman 334.792.
+  //
   // Se puede pagar, y ese es todo el argumento. Medido sobre los 36 clientes reales: mandar todo
-  // sin recortar son 56.149 tokens de documentos en el PEOR caso (Jose Luis Rodriguez, 224.596
-  // caracteres de onboarding) ≈ US$0,26 la corrida. El promedio real de hoy es US$0,133. Los
-  // clientes a los que esto les cambia algo son 4 de 36: los otros 32 ya entraban enteros.
+  // sin recortar son ~90.000 tokens de documentos en el PEOR caso ≈ US$0,31 la corrida. El
+  // promedio real de hoy es US$0,133, y el peor caso son 3 clientes de 36.
   const MATERIAL_POR_PASO: Record<string, Record<string, Material>> = {
     onboarding: {
-      onboarding: { tope: 230000, usa: "principal" },   // el más grande hoy: 224.596
+      onboarding: { tope: 340000, usa: "principal" },   // TODOS los suyos: el mayor suma 334.792
       investigacion: { tope: 14000, usa: "contexto" },
       del: { tope: 3000, usa: "contexto" },
     },
     estrategia: {
-      onboarding: { tope: 230000, usa: "principal" },   // decide con esto
+      onboarding: { tope: 340000, usa: "principal" },   // decide con esto (todas sus llamadas)
       investigacion: { tope: 90000, usa: "principal" }, // arma la munición con esto (mayor: 84.337)
       del: { tope: 3000, usa: "contexto" },             // lo está produciendo él
     },
@@ -383,7 +386,7 @@ Deno.serve(async (req) => {
   // Qué material se cargó de verdad. Se junta ACÁ, en el único lugar que lo sabe, para poder
   // ponerlo arriba de la respuesta. NO se lo pedimos al modelo: si le pedís que declare sus
   // fuentes, declara las que cree que usó, y justo lo que hay que detectar es cuando NO leyó.
-  const fuentes: Array<{ kind: string; chars: number; leidos: number; usa: string }> = [];
+  const fuentes: Array<{ kind: string; chars: number; leidos: number; usa: string; titulo: string }> = [];
   // ── El FOCO del cliente: reclutamiento o producto ──
   // Cambia qué hay que investigar y en qué se profundiza en toda la fase, no solo en un paso.
   // Se deduce del nombre de las estrategias del cliente, igual que hace el resto de la fn
@@ -406,31 +409,52 @@ Deno.serve(async (req) => {
           : hayProd ? "producto"
             : "sin_tipo";
 
+    // ── ENTRAN TODOS LOS DOCUMENTOS DE CADA TIPO, NO "EL MÁS GRANDE" ──
+    // Antes se tomaba uno solo por doc_kind: el más largo. Los clientes reales tienen 2 a 4
+    // documentos de onboarding, y no son copias — son cosas distintas:
+    //
+    //   Alex Reynoso (2)     la transcripción cruda (61.589) + la ficha ya rellenada (8.160)
+    //   Jose Luis Rivas (4)  transcripción + ficha de RECLUTAMIENTO, y transcripción + ficha de
+    //                        PRODUCTO. Quedarse con una sola es decidir el motor por accidente.
+    //   Fabiana Carrasco (4) tres llamadas de personas distintas (Fabiana, Richie, Kathyuska).
+    //                        "El más grande" es la de KATHYUSKA: leíamos a otra persona.
+    //
+    // Con el tope por tipo arriba del documento más grande que existe, ya no hace falta elegir:
+    // entran todos y se gasta presupuesto hasta agotarlo. El orden (más grande primero) importa
+    // solo cuando no entran todos: que el troncal entre antes que un anexo.
     const { data: docs } = await supabase.from("client_brain_docs")
       .select("doc_kind,title,text,char_count").eq("client_id", clientId)
       .in("doc_kind", Object.keys(DOCS_DESC)).order("char_count", { ascending: false });
-    const vistos = new Set<string>();
-    docsDescText = (Array.isArray(docs) ? docs : [])
-      .filter((d) => {  // si hay varios del mismo tipo, el más largo (ya vienen ordenados)
-        const k = str(d.doc_kind);
-        if (vistos.has(k) || !str(d.text)) return false;
-        vistos.add(k); return true;
-      })
-      .map((d) => {
-        const kind = str(d.doc_kind);
-        const cfg = DOCS_DESC[kind];
-        const { tope, usa } = materialDe(kind);
-        const full = str(d.text);
-        const txt = clip(full, tope);
-        fuentes.push({ kind, chars: full.length, leidos: Math.min(full.length, tope), usa });
-        // Cuando se recortó, el agente TIENE que saberlo: es la diferencia entre "no lo dijo" y
-        // "no lo leí". Sin esta línea, un doc cortado se lee como un doc completo y lo que falta
-        // lo completa de memoria.
-        const nota = full.length > tope
-          ? ` · RECORTADO: LEÉS LOS PRIMEROS ${tope.toLocaleString()} DE ${full.length.toLocaleString()} CARACTERES. Si necesitás algo que puede estar en la parte que no ves, decilo en vez de suponerlo.`
-          : ` · COMPLETO (${full.length.toLocaleString()} caracteres)`;
-        return `\n— ${cfg.label}${nota} —\n${txt}`;
-      }).join("\n");
+
+    const restante: Record<string, number> = {};
+    const bloques: string[] = [];
+    for (const d of (Array.isArray(docs) ? docs : [])) {
+      const kind = str(d.doc_kind);
+      const full = str(d.text);
+      if (!full || !DOCS_DESC[kind]) continue;
+      const { tope, usa } = materialDe(kind);
+      if (restante[kind] === undefined) restante[kind] = tope;
+
+      // Sin presupuesto no se manda medio documento: se registra que quedó afuera. Un documento
+      // cortado al azar es peor que uno ausente — el ausente al menos se declara.
+      if (restante[kind] <= 0) {
+        fuentes.push({ kind, chars: full.length, leidos: 0, usa, titulo: str(d.title) });
+        continue;
+      }
+      const txt = clip(full, restante[kind]);
+      const leidos = Math.min(full.length, restante[kind]);
+      const nota = full.length > restante[kind]
+        ? ` · RECORTADO: LEÉS LOS PRIMEROS ${leidos.toLocaleString()} DE ${full.length.toLocaleString()} CARACTERES. Si necesitás algo que puede estar en la parte que no ves, decilo en vez de suponerlo.`
+        : ` · COMPLETO (${full.length.toLocaleString()} caracteres)`;
+      // El TÍTULO va al prompt: antes se consultaba y se tiraba, y el agente no sabía qué estaba
+      // leyendo. Sin él no puede decir "esto lo dijo en la llamada del 28-04" ni darse cuenta de
+      // que una llamada es de otra persona del equipo. Es lo que separa una cita con procedencia
+      // de una cita suelta.
+      bloques.push(`\n— ${DOCS_DESC[kind].label}\n  DOCUMENTO: "${str(d.title) || "(sin título)"}"${nota} —\n${txt}`);
+      fuentes.push({ kind, chars: full.length, leidos, usa, titulo: str(d.title) });
+      restante[kind] -= leidos;
+    }
+    docsDescText = bloques.join("\n");
   }
 
   // Anuncios ganadores del cliente (piso creativo, no techo).
@@ -1023,14 +1047,19 @@ Deno.serve(async (req) => {
     const n = (x: number) => x.toLocaleString("es-AR");
     const partes = Object.keys(ROTULO_FUENTE).map((kind) => {
       const rot = ROTULO_FUENTE[kind];
-      const f = fuentes.find((x) => x.kind === kind);
-      if (!f) return `${rot} ✗ no hay`;
+      const fs = fuentes.filter((x) => x.kind === kind);
+      if (!fs.length) return `${rot} ✗ no hay`;
+      // Los clientes tienen 2 a 4 documentos por tipo. Decir "✓" sin decir cuántos ocultaría
+      // justo lo que importa: si entraron las dos llamadas o una sola.
+      const cuantos = fs.length > 1 ? ` ×${fs.length}` : "";
+      const chars = fs.reduce((a, f) => a + f.chars, 0);
+      const leidos = fs.reduce((a, f) => a + f.leidos, 0);
       // El DEL plantilla: mismo umbral que el gate. Decir "entero" de un archivo de 2.511
       // caracteres con placeholders sería técnicamente cierto y completamente inútil.
-      if (kind === "del" && f.chars < 15000) return `${rot} ⚠ plantilla sin llenar (${n(f.chars)})`;
-      if (f.usa === "contexto") return `${rot} (contexto)`;
-      if (f.leidos < f.chars) return `${rot} ⚠ ${n(f.leidos)} de ${n(f.chars)}`;
-      return `${rot} ✓`;
+      if (kind === "del" && chars < 15000) return `${rot} ⚠ plantilla sin llenar (${n(chars)})`;
+      if (fs[0].usa === "contexto") return `${rot}${cuantos} (contexto)`;
+      if (leidos < chars) return `${rot}${cuantos} ⚠ ${n(leidos)} de ${n(chars)}`;
+      return `${rot}${cuantos} ✓`;
     });
     lineaFuentes = `**Fuentes** · ${partes.join(" · ")}\n\n`;
   }
