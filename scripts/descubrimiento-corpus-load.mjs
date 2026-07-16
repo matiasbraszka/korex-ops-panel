@@ -108,7 +108,7 @@ const SKILLS = [
   {
     slug: "estrategia",
     menu: "Que estrategia y que avatares van primero",
-    pedido: "Hace el analisis estrategico: que estrategia desarrollamos primero, a que avatares apuntamos con ella, y con que virtudes del cliente y de la empresa. Con scores y evidencia.",
+    pedido: "Hace el analisis estrategico: que estrategia desarrollamos primero y en que pais, a que avatares apuntamos con ella y cual es el boton caliente de cada uno, y con que virtudes del cliente y de la empresa. Con scores y evidencia.",
     dir: "korex-strategy-analyzer",
     name: "Analisis estrategico",
     ord: 4,
@@ -120,7 +120,7 @@ const SKILLS = [
     // OJO: esto ya NO es el DEL de 10 paginas. La version del chat produce un brief de decision
     // de 1.200-1.800 palabras (ver corpus-src/skill-estrategia-chat.md). El documento largo se
     // sigue haciendo en Claude Code con la skill original cuando hace falta.
-    output: "BRIEF de decision (1.200-1.800 palabras, no un documento): que estrategia se desarrolla PRIMERO con score y evidencia, 3-5 avatares scoreados para esa estrategia, las virtudes mas potentes de la empresa y del cliente, y la historia del cliente en bullets con puntero a donde esta el detalle.",
+    output: "BRIEF de decision (1.600-2.200 palabras, no un documento): que estrategia se desarrolla PRIMERO y EN QUE PAIS, con score y evidencia; 3-5 avatares scoreados de esa estrategia, cada uno con su BOTON CALIENTE y su pais; las virtudes mas potentes de la empresa y del cliente; y la historia del cliente en bullets con puntero a donde esta el detalle.",
     tags: ["estrategia", "estrategico", "strategy", "analisis", "analizar", "focalizacion",
       "foco", "producto", "reclutamiento", "valores", "top de avatares", "avatares", "consolidar"],
   },
