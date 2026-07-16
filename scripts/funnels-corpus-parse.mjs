@@ -180,8 +180,21 @@ function renderWireframe(tbl, titulo) {
     "El encabezado dice qué banda es y cómo se reparte; las columnas de la tabla SON las columnas de la página.",
     "",
   ];
+  // El agente aprende la jerarquia por imitacion, asi que la maqueta la ensena ya marcada:
+  // el titular con `# ` (H1), el subtitulo con `## ` (H2), y los elementos entre corchetes
+  // (asi el panel los dibuja como foto/boton/formulario). Sin esto todo saldria del mismo
+  // tamano y no se distinguiria que es cada cosa.
+  const ELEM_WORDS = /^(foto|imagen|logo|carrusel|vsl|video|bot[oó]n|formulario|captura|screenshot|testimonio)\b/i;
+  const marcar = (texto) => {
+    const t = (texto || "").trim();
+    if (!t || /^\[.*\]$/.test(t)) return t;                 // vacio o ya es elemento
+    if (/^titular\b/i.test(t)) return "# " + t;
+    if (/^subt[ií]tulo\b/i.test(t)) return "## " + t;
+    if (ELEM_WORDS.test(t)) return "[" + t + "]";
+    return t;
+  };
   const celdaMd = (ps) => ps
-    .map((p) => (p.bullet ? "• " : "") + (p.texto || (p.img ? "[IMAGEN]" : "")))
+    .map((p) => (p.img && !p.texto ? "[IMAGEN]" : p.bullet ? "• " + p.texto : marcar(p.texto)))
     .filter(Boolean)
     .join("<br>")
     .replace(/\|/g, "\\|");

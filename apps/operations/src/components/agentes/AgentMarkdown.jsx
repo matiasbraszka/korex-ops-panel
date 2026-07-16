@@ -97,6 +97,51 @@ function elemHtml(txt, a) {
 // corre sobre el HTML ya formateado; el [^\]<>] evita tocar lo que está dentro de una etiqueta
 const pintarElementos = (h, a) => h.replace(/\[([^\]<>]{2,90})\]/g, (_, t) => elemHtml(t.trim(), a));
 
+// Cada renglón de una banda se dibuja según su ROL, con tamaños bien distintos: el titular
+// grande, el subtítulo mediano, el cuerpo chico. Es lo que pide el ojo para diseñar después —
+// sin jerarquía de tamaño todo se ve igual y no se distingue qué es cada cosa.
+// El rol sale del marcador con que el agente abre la línea: `# ` titular, `## ` subtítulo,
+// `### ` etiqueta; o de labels (`Titular:`, `Subtítulo:`); o se infiere (bullets, elementos).
+function bandaSeg(seg, a) {
+  const s = seg.trim();
+  if (!s) return '';
+  const wrap = (txt, style) => `<div style="${style}">${pintarElementos(formatInline(txt, a), a)}</div>`;
+
+  // elemento en su propia línea → bloque (foto, botón, formulario…)
+  const soloElem = s.match(/^\[([^\]]+)\]$/);
+  if (soloElem) return `<div style="margin:5px 0">${elemHtml(soloElem[1].trim(), a)}</div>`;
+
+  let m;
+  // TITULAR — H1: lo más grande de la banda
+  if ((m = s.match(/^#\s+(.+)$/)) || (m = s.match(/^titular\s*:\s*(.+)$/i))) {
+    return wrap(m[1], 'font-size:20px;font-weight:800;line-height:1.2;letter-spacing:-.01em;color:#111827;margin:3px 0 5px');
+  }
+  // SUBTÍTULO — H2: mediano, más apagado
+  if ((m = s.match(/^##\s+(.+)$/)) || (m = s.match(/^(?:subt[ií]tulo|bajada|subtitulo)\s*:\s*(.+)$/i))) {
+    return wrap(m[1], 'font-size:14.5px;font-weight:600;line-height:1.4;color:#4B5563;margin:2px 0 6px');
+  }
+  // etiqueta de sección — H3: chica, en mayúsculas, con el acento
+  if ((m = s.match(/^###\s+(.+)$/))) {
+    return wrap(m[1], `font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:${a.c};margin:6px 0 3px`);
+  }
+  // "¡ATENCIÓN NETWORKER!" y afines → kicker chico sobre el titular
+  if (/^¡?\s*(atenci[oó]n|aviso|importante)\b/i.test(s)) {
+    return wrap(s, `font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:${a.c};margin:0 0 3px`);
+  }
+  // bullets de dolor/deseo
+  if (/^[✅❌•]/.test(s)) {
+    return wrap(s, 'font-size:12.5px;line-height:1.5;color:#3F4653;margin:3px 0');
+  }
+  // línea toda en negrita → sub-titular fuerte (así emite el agente sus titulares hoy)
+  if (/^\*\*[^*]+\*\*$/.test(s)) {
+    return wrap(s, 'font-size:15.5px;font-weight:700;line-height:1.3;color:#1A1D26;margin:3px 0');
+  }
+  // cuerpo
+  return wrap(s, 'font-size:12.5px;line-height:1.55;color:#3F4653;margin:3px 0');
+}
+
+const splitBr = (t) => t.split(/<br\s*\/?>/i);
+
 function wireframeHtml(rows, a) {
   const head = rows[0];
   const cuerpo = rows.slice(1);
@@ -108,9 +153,10 @@ function wireframeHtml(rows, a) {
 
   const celdas = Array.from({ length: cols }, (_, i) => {
     const txt = cuerpo.map((f) => f[i] || '').filter(Boolean).join('<br>');
+    const contenido = splitBr(txt).map((seg) => bandaSeg(seg, a)).filter(Boolean).join('');
     const ancho = cols === 2 ? (i === 0 ? 'flex:1 1 58%' : 'flex:1 1 42%') : 'flex:1 1 100%';
     const borde = cols === 2 && i === 0 ? 'border-right:1px dashed #DFE4EC' : '';
-    return `<div style="${ancho};min-width:0;padding:13px 15px;text-align:${alin[i]};${borde}">${pintarElementos(formatInline(txt, a), a)}</div>`;
+    return `<div style="${ancho};min-width:0;padding:14px 16px;text-align:${alin[i]};${borde}">${contenido}</div>`;
   }).join('');
 
   return `<div style="border:1px solid #D9DEE7;border-radius:10px;margin:9px 0;overflow:hidden;background:#fff">`
