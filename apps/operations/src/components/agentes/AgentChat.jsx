@@ -16,6 +16,36 @@ const fbid = () => `afb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
 const actionBtn = 'inline-flex items-center gap-1.5 bg-white border border-border text-text2 rounded-lg py-1.5 px-2.5 text-[11.5px] font-semibold cursor-pointer hover:bg-surface2 hover:text-text hover:border-border-light disabled:opacity-40 disabled:cursor-not-allowed';
 
+// Traduce el error de la edge fn a algo que se pueda leer y accionar. La pregunta que tiene que
+// contestar es siempre la misma: ¿esto lo arreglo yo, lo arregla un admin, o no es nuestro?
+// Va en texto plano (el aviso no renderiza markdown), con saltos de línea.
+function mensajeDeError(cuerpo, error) {
+  const detail = String(cuerpo?.detail || '');
+
+  // `api_error` trae la respuesta CRUDA de Anthropic. Es la más frecuente y la más confusa: si no
+  // se traduce, el equipo lee un JSON y asume que rompimos algo nuestro.
+  if (cuerpo?.error === 'api_error') {
+    let tipo = '';
+    try { tipo = JSON.parse(detail)?.error?.type || ''; } catch { /* no era JSON */ }
+    if (tipo === 'overloaded_error') {
+      return 'La API de Anthropic está saturada en este momento.\n\nNo es un problema del panel, ni de este cliente, ni de lo que pediste — y no se gastó nada. Probá de nuevo en unos minutos.\n\nSi sigue igual, fijate en status.claude.com: cuando hay un incidente abierto no hay nada que hacer de nuestro lado más que esperar.';
+    }
+    if (tipo === 'rate_limit_error') {
+      return 'Se pidieron demasiadas cosas seguidas y la API frenó el pedido.\n\nEsperá un minuto y probá de nuevo. No se gastó nada.';
+    }
+    if (/timeout|aborted/i.test(detail)) {
+      return 'La respuesta tardó más de 2 minutos y se cortó.\n\nPasa con los clientes que tienen mucho material. Probá pidiendo el paso en partes.';
+    }
+    return `La API contestó con un error y no se gastó nada.\n\nDetalle: ${detail.slice(0, 300)}`;
+  }
+
+  if (cuerpo?.error === 'daily_cap' || cuerpo?.error === 'monthly_cap') return detail;
+  if (cuerpo?.error === 'missing_api_key') return 'Falta cargar la API key de Anthropic en la configuración. Lo tiene que hacer un admin.';
+  if (cuerpo?.error === 'unauthorized') return 'Tu sesión venció. Recargá la página y volvé a entrar.';
+  if (detail) return detail;
+  return error?.message || 'No se pudo contactar al agente.';
+}
+
 // Acciones bajo cada respuesta del agente: copiar, rehacer y feedback (👍/👎).
 // El feedback se escribe en agent_feedback y NO toca al agente en vivo: se procesa
 // después, en lote, por el triage diario.
@@ -352,7 +382,16 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     }
 
     const { data, error } = await supabase.functions.invoke('agent-chat', { body });
-    if (error) throw new Error(error.message || 'No se pudo contactar al agente.');
+    // supabase-js devuelve un error genérico ante cualquier status que no sea 2xx —
+    // "Edge Function returned a non-2xx status code"— y deja el cuerpo de la respuesta en
+    // `error.context`. Ahí está lo que la fn se tomó el trabajo de explicar (qué falta, qué tope
+    // se alcanzó, qué contestó Anthropic). Sin leerlo, el equipo ve un mensaje que no le dice si
+    // rompió algo, si se quedó sin presupuesto o si el problema es de otro.
+    if (error) {
+      let cuerpo = null;
+      try { cuerpo = await error.context?.json?.(); } catch { /* no vino JSON */ }
+      throw new Error(mensajeDeError(cuerpo, error));
+    }
     return data;
   }
 
@@ -503,9 +542,12 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
           )}
 
           {messages.map((m, i) => {
+            // whitespace-pre-wrap: los avisos explican en 2-3 párrafos (qué pasó, si se gastó,
+            // qué hacer). Sin esto se leen como un chorizo de una línea.
             if (m.kind === 'notice') return (
-              <div key={i} className="flex items-start gap-2 py-2.5 px-3.5 rounded-xl bg-orange-bg border border-[#FBD9A8] text-[12.5px] text-[#9A3412] self-center max-w-[85%]">
-                <AlertTriangle size={15} className="shrink-0 mt-0.5" />{m.content}
+              <div key={i} className="flex items-start gap-2 py-2.5 px-3.5 rounded-xl bg-orange-bg border border-[#FBD9A8] text-[12.5px] leading-relaxed text-[#9A3412] self-center max-w-[85%] whitespace-pre-wrap">
+                <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                <span className="min-w-0">{m.content}</span>
               </div>
             );
 
