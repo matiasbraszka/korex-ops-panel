@@ -302,7 +302,10 @@ export function AppProvider({ children }) {
 
   const dbSaveTask = useCallback(async (t) => {
     const payload = {
-      id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
+      // funnel_id va acá Y en los dos mapeos de lectura (rawMappedTasks y mapPollTask).
+      // Los tres o ninguno: si un mapeo no lo trae, t.funnelId queda undefined, esta
+      // linea escribe null, y el funnel de la tarea se pierde en la base sin aviso.
+      id: t.id, title: t.title, client_id: t.clientId, funnel_id: t.funnelId || null, assignee: t.assignee,
       priority: t.priority, status: t.status, notes: t.notes,
       description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
       started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
@@ -427,7 +430,7 @@ export function AppProvider({ children }) {
         await sbFetch('clients', { method: 'POST', headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' }, body: JSON.stringify(batch) });
       }
       const taskRows = taskList.map(t => ({
-        id: t.id, title: t.title, client_id: t.clientId, assignee: t.assignee,
+        id: t.id, title: t.title, client_id: t.clientId, funnel_id: t.funnelId || null, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
         description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
@@ -2138,7 +2141,7 @@ export function AppProvider({ children }) {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
       const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,drive_folder_url,contract_signer_email,korex_code';
-      const TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,created_by';
+      const TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,created_by';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
         // order=created_at.DESC: si algún día se supera el límite, se descartan
@@ -2348,7 +2351,7 @@ export function AppProvider({ children }) {
           driveFolderUrl: c.drive_folder_url || '',
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({
-          id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
+          id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, assignee: t.assignee,
           priority: t.priority, status: t.status, notes: t.notes,
           description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
           startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
@@ -2470,14 +2473,14 @@ export function AppProvider({ children }) {
       // tareas nuevas detectadas por el poll lleguen completas (con phase,
       // depends_on, due_date, etc.). Si solo trajéramos un subset, una tarea
       // nueva se agregaría sin fase y caería en "Sin fase" en el roadmap.
-      const POLL_TASK_COLS = 'id,title,client_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,updated_at,created_by';
+      const POLL_TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,updated_at,created_by';
       const remoteTasks = await sbFetch('tasks?select=' + POLL_TASK_COLS + '&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
       // Refrescar sprints en el mismo poll (livianito: lista corta).
       loadSprints();
       if (!remoteTasks || !remoteTasks.length) return;
 
       const mapPollTask = (t) => ({
-        id: t.id, title: t.title, clientId: t.client_id, assignee: t.assignee,
+        id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
         description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
         startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,

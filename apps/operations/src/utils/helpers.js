@@ -642,6 +642,9 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     definitionOfDone: '', acceptanceCriteria: [], reviewer: null,
     validatedBy: null, validatedAt: null, sprintHistory: [], statusHistory: [],
     createdBy: null,
+    // El funnel se elige después, en el detalle de la tarea. Al crearla no se pide:
+    // el cliente ya la ata a algo, y obligar a elegir funnel frenaría el alta rápida.
+    funnelId: null,
   };
 }
 

@@ -12,6 +12,7 @@ import {
   FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard,
 } from 'lucide-react';
 import Modal from '../Modal';
+import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
 
@@ -969,6 +970,11 @@ Quedo a la espera de tu respuesta`;
 
       {open && (
         <div className="pt-1 px-4 pb-[18px]" style={{ background: '#FCFCFD' }}>
+          {/* Las tareas de este funnel, arriba de todo: el riel dice DONDE ESTA el
+              funnel y el tablero QUE HAY QUE HACER. Es el mismo tablero del Sprint,
+              filtrado — la tarea sigue viviendo en la pestaña Tareas. */}
+          <FunnelTasksBlock funnelId={f.id} />
+
           {/* Mensaje para el editor: arma el brief de edición (guiones + carpetas + piezas por avatar) */}
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#DCE7FB' }}>
             <div className="flex items-center gap-2.5 min-w-0">

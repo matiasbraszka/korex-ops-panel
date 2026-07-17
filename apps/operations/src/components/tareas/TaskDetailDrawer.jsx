@@ -42,9 +42,16 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const {
     tasks, clients, teamMembers, currentUser, updateTask, removeTaskFromSprint, deleteTask,
     taskComments, addTaskComment, sprints, activeSprint, moveTaskToSprint, createSprint,
+    strategyPages,
   } = useApp();
   const task = useMemo(() => (tasks || []).find(t => t.id === taskId) || null, [tasks, taskId]);
   const client = task ? (clients || []).find(c => c.id === task.clientId) : null;
+  // Solo los funnels del cliente de esta tarea. La base ademas tiene un guard que
+  // anula el funnel si no coinciden, pero el desplegable no deberia ni ofrecerlo.
+  const funnelOptions = useMemo(
+    () => (strategyPages || []).filter(p => p.client_id === task?.clientId),
+    [strategyPages, task?.clientId],
+  );
   // Invitado ("mover y marcar"): la ficha queda de SOLO LECTURA para metadatos y
   // estructura. Sí puede: marcar/validar (footer), tildar checklist y criterios
   // (marcar avance) y comentar. No puede: editar título, reasignar responsable/
@@ -247,6 +254,19 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               </span>
             </div>
             <div style={metaRow}><span style={metaLabel}>Cliente</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{client?.name || '—'}</span></div>
+            {/* El funnel SI se elige acá (el cliente no: se define al crear la tarea).
+                Es lo que hace que la tarea aparezca dentro del funnel, sin sacarla de Tareas. */}
+            {!!funnelOptions.length && (
+              <div style={metaRow}>
+                <span style={metaLabel}>Funnel</span>
+                <select value={task.funnelId || ''} disabled={!canEdit}
+                  onChange={(e) => updateTask(task.id, { funnelId: e.target.value || null })}
+                  style={{ ...selStyle, color: task.funnelId ? '#1A1D26' : '#9CA3AF' }}>
+                  <option value="">Sin funnel</option>
+                  {funnelOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{ ...metaRow, alignItems: 'flex-start' }}><span style={{ ...metaLabel, paddingTop: 1 }}>Objetivo / fase</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right', lineHeight: 1.35 }}>{phaseLabel}</span></div>
             <div style={metaRow}>
               <span style={metaLabel}>Fecha de entrega</span>
