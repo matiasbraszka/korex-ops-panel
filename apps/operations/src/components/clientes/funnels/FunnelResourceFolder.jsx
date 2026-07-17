@@ -6,21 +6,21 @@
 // cuántos elementos tiene, y adentro están los recursos subidos con su miniatura.
 import { useEffect, useRef, useState } from 'react';
 import { supabase, sbFetch } from '@korex/db';
-import { FolderOpen, ChevronRight, Plus, Trash2, ExternalLink, Image as ImageIcon, Loader2, Pencil } from 'lucide-react';
-import { openUrl } from '../recursosShared';
+import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil } from 'lucide-react';
+import ResourceLightbox from './ResourceLightbox';
 
 const BUCKET = 'funnel-recursos';
 const kindOf = (mime) => (mime || '').startsWith('image/') ? 'image' : (mime || '').startsWith('video/') ? 'video' : 'other';
 const safeName = (s) => String(s || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
 
-function Tile({ r, onDelete, onRename }) {
+function Tile({ r, onDelete, onRename, onOpen }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const isImg = r.kind === 'image';
   const isVid = r.kind === 'video';
   return (
     <div className="group relative flex flex-col rounded-lg border border-[#E7EAF0] bg-white overflow-hidden">
-      <button onClick={() => openUrl(r.public_url)} title={`Abrir: ${r.title}`} className="relative w-full aspect-[4/3] bg-[#F4F5F7] flex items-center justify-center overflow-hidden cursor-pointer border-none p-0">
+      <button onClick={() => onOpen(r)} title={isVid ? `Reproducir: ${r.title}` : `Ver: ${r.title}`} className="relative w-full aspect-[4/3] bg-[#F4F5F7] flex items-center justify-center overflow-hidden cursor-pointer border-none p-0">
         {isImg && r.public_url && !failed ? (
           <img src={r.public_url} alt={r.title} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
         ) : isVid && r.public_url && !failed ? (
@@ -31,10 +31,9 @@ function Tile({ r, onDelete, onRename }) {
         )}
         {isVid && (
           <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/55 text-white"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg></span>
+            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/55 text-white group-hover:bg-black/70 transition-colors"><Play size={13} fill="currentColor" /></span>
           </span>
         )}
-        <span className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-5 h-5 rounded bg-white/90 text-[#2E69E0] transition-opacity"><ExternalLink size={11} /></span>
       </button>
       <div className="flex items-center gap-1 px-1.5 py-1">
         {editing ? (
@@ -59,6 +58,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
   const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState(null);   // recurso abierto en el reproductor
   const fileRef = useRef(null);
 
   const cargar = async () => {
@@ -126,7 +126,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
           <div className={`rounded-lg transition-colors ${dragOver ? 'ring-2 ring-dashed' : ''}`} style={dragOver ? { outline: `2px dashed ${color}`, outlineOffset: 2 } : undefined}>
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.map(r => <Tile key={r.id} r={r} onDelete={borrar} onRename={renombrar} />)}
+                {items.map(r => <Tile key={r.id} r={r} onDelete={borrar} onRename={renombrar} onOpen={setPreview} />)}
               </div>
             )}
             {items !== null && n === 0 && !busy && (
@@ -146,6 +146,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
           </button>
         </div>
       )}
+      <ResourceLightbox r={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }
