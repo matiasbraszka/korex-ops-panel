@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
+import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
 
@@ -684,8 +685,6 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
-  const pOk = !!(f.pixel_code && f.pixel_code.trim());
-  const cOk = !!(f.clarity_id && f.clarity_id.trim());
 
   // El primer paso PENDIENTE: es lo unico del riel que la fila cerrada necesita mostrar.
   // Si no hay ninguno, el funnel esta terminado.
@@ -929,13 +928,9 @@ Quedo a la espera de tu respuesta`;
     finally { setVslBusy(false); }
   };
 
-  // Tracking: verde si esta cargado, gris si falta. Vive DENTRO del funnel (antes estaba
-  // en la fila cerrada, compitiendo con el nombre). Click = abre el editor.
-  const trk = [
-    { label: 'Pixel', ok: pOk },
-    { label: 'Clarity', ok: cOk },
-    { label: events.length === 1 ? '1 evento' : `${events.length} eventos`, ok: events.length > 0 },
-  ];
+  // Los chips de tracking (Pixel · Clarity · N eventos) se fueron: eran un semaforo
+  // que decia SI el dato estaba, sin decir cual. FunnelConfigBlock muestra el valor
+  // y el hueco, que es estrictamente mas informacion en el mismo lugar.
 
   return (
     <div style={{ borderLeft: `3px solid ${st.side}`, borderBottom: last ? 'none' : '1px solid #EDF0F5' }}>
@@ -991,44 +986,11 @@ Quedo a la espera de tu respuesta`;
             <button onClick={openEditorMsg} disabled={msgBusy} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0 disabled:opacity-60">{msgBusy ? <RefreshCw size={14} className="animate-spin" /> : <MessageSquare size={14} />}{msgBusy ? 'Armando…' : 'Armar mensaje'}</button>
           </div>
 
-          {/* Enlaces del funnel (editables) + acceso al tracking */}
-          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <CardHead Icon={Link2} iconBg="#EEF3FF" iconColor="#2E69E0" title="Enlaces del funnel" subtitle="Producción, testing, dominio y publicidad" />
-              <div className="flex items-center gap-1.5 pr-[14px] shrink-0">
-                {trk.map((t, i) => (
-                  <button key={i} onClick={(e) => { e.stopPropagation(); onTrack(f); }} title="Editar el tracking (Pixel · Clarity · eventos de conversión)"
-                    className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10px] font-semibold cursor-pointer font-sans"
-                    style={t.ok
-                      ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }
-                      : { background: '#F5F6F9', color: '#AEB4BF', border: '1px solid #EDF0F5' }}>
-                    {t.ok && <Check size={9} strokeWidth={3.5} />}{t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="p-[14px]">
-              <div className="grid gap-3 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
-                {[['prod_url', 'Producción', '#2E69E0'], ['testing_url', 'Testing', '#94A3B8'], ['official_domain', 'Dominio oficial', '#22C55E'], ['ads_url', 'Publicidad', '#8B5CF6']].map(([k, lbl, col]) => (
-                  <div key={k}>
-                    <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold" style={{ color: col }}>{k === 'official_domain' ? <span className="w-[7px] h-[7px] rounded-full" style={{ background: col }} /> : <span className="w-[7px] h-[7px] rounded-full" style={{ background: col }} />}{lbl}</div>
-                    <input defaultValue={f[k] || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f[k] || '')) onUpdate(f.id, { [k]: v || null }); }} placeholder={k === 'official_domain' ? 'tudominio.com' : 'https://…'} className="w-full py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-                  </div>
-                ))}
-              </div>
-              <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 200px' }}>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold" style={{ color: '#F97316' }}><Rocket size={12} />Boost</div>
-                  <input defaultValue={f.boost_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.boost_url || '')) onUpdate(f.id, { boost_url: v || null }); }} placeholder="Link para hacer el boost…" className="w-full py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-[#6B7280] mb-1.5">ID del Pipeline</div>
-                  <input defaultValue={f.pipeline_id || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.pipeline_id || '')) onUpdate(f.id, { pipeline_id: v || null }); }} placeholder="Ej. 9" className="w-full py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue font-mono" />
-                </div>
-              </div>
-              <div className="text-[10.5px] text-[#AEB4BF] mt-2.5">Pegá o editá y hacé clic afuera para guardar. En la tabla, un clic en el chip copia el enlace.</div>
-            </div>
-          </div>
+          {/* Configuracion de Meta y links: slots FIJOS, el hueco se ve. Reemplaza al
+              bloque viejo, que dibujaba solo lo que existia (cada funnel mostraba una
+              lista distinta y no habia con que compararlos). Incluye los 2 campos que
+              antes vivian escondidos en el modal de tracking (Pixel y Clarity). */}
+          <FunnelConfigBlock f={f} onUpdate={onUpdate} events={events} onTrack={onTrack} />
 
           {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
           <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
