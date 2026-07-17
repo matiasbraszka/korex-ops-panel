@@ -14,6 +14,7 @@ import {
 import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
+import DelReader from './funnels/DelReader';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
 
@@ -682,6 +683,7 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
   const [voomlyOpen, setVoomlyOpen] = useState(false);
   const [folderPick, setFolderPick] = useState(null); // { av, kind } — carpeta que se elige a mano
   const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
+  const [delOpen, setDelOpen] = useState(false);    // lector del DEL a pantalla completa
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
@@ -974,6 +976,21 @@ Quedo a la espera de tu respuesta`;
               filtrado — la tarea sigue viviendo en la pestaña Tareas. */}
           <FunnelTasksBlock funnelId={f.id} />
 
+          {/* El DEL, adentro del panel. Hasta ahora el unico modo de leerlo era abrir
+              el Google Doc. Es SOLO LECTURA a proposito: el Doc sigue siendo la
+              verdad hasta el cutover — dos fuentes escribibles a la vez es el
+              fracaso que la migracion viene a arreglar. */}
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#E4DCFB' }}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><FileText size={15} /></span>
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-bold text-[#1A1D26]">El DEL de este funnel</div>
+                <div className="text-[10.5px] text-[#9098A4]">Leelo por secciones acá, sin abrir el Drive</div>
+              </div>
+            </div>
+            <button onClick={() => setDelOpen(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#7C3AED] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95 shrink-0"><FileText size={14} />Abrir el DEL</button>
+          </div>
+
           {/* Mensaje para el editor: arma el brief de edición (guiones + carpetas + piezas por avatar) */}
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#DCE7FB' }}>
             <div className="flex items-center gap-2.5 min-w-0">
@@ -1172,6 +1189,14 @@ Quedo a la espera de tu respuesta`;
         <FolderPicker clientId={clientId} avatarName={folderPick.av?.name || ''} kind={folderPick.kind} current={folderPick.av?.[field] || ''} onPick={(url) => setAvatar(folderPick.av.id, { [field]: url || null })} onClose={() => setFolderPick(null)} />
       ); })()}
       {editorMsg !== null && <EditorMessageModal initial={editorMsg} onClose={() => setEditorMsg(null)} />}
+
+      {/* El lector va a pantalla completa: un DEL promedia 56.000 caracteres —
+          adentro del acordeon de la fila no se lee. */}
+      <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen
+        title={`DEL · ${f.name}`}
+        headerExtra={<span className="text-[11px] text-[#9098A4] mr-2">solo lectura</span>}>
+        <DelReader strategyId={f.strategy_id} docUrl={delDocUrl} />
+      </Modal>
     </div>
   );
 }

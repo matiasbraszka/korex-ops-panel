@@ -89,7 +89,11 @@ as $function$
     when p_title ~* 'anuncio|\mads\M'         then 'anuncios'
     when p_title ~* 'avatar'                  then 'avatares'
     when p_title ~* 'pre-?landing'            then 'pg_prelanding'
-    when p_title ~* 'thank|\mtyp\M|gracias'   then 'pg_thankyou'
+    -- OJO: NO agregar 'gracias' aca. Se probo contra los 548 y pescaba exactamente
+    -- una cosa, mal: "Gracias por el pitch, Rama" (una nota personal de 3.022 chars
+    -- adentro del DEL de Sergio Canovas). Las Thank You reales dicen todas "thank"
+    -- o "typ", asi que 'gracias' sumaba un error y cero aciertos.
+    when p_title ~* 'thank|\mtyp\M'           then 'pg_thankyou'
     when p_title ~* 'formulario'              then 'pg_formulario'
     when p_title ~* 'testimonio'              then 'pg_testimonios'
     when p_title ~* 'landing|\mbcl\M'         then 'pg_landing'
