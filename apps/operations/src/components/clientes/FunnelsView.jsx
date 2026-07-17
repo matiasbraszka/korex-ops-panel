@@ -6,7 +6,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
-  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, Megaphone,
+  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, ChevronLeft, Users, Megaphone,
   Check, Trash2, Activity, Zap, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
   FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard, Package, AlertCircle,
@@ -677,9 +677,15 @@ function EditorMessageModal({ initial, onClose }) {
   );
 }
 
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
+// Dos modos:
+//  · lista (navigate=true): la fila es un boton que ENTRA al funnel (onOpen). No hay
+//    desplegable — al clickear se va a la pantalla del funnel.
+//  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
+//    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, forcePage = false }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
+  const isOpen = forcePage || open; // en pantalla, el cuerpo siempre se ve
   const [voomlyOpen, setVoomlyOpen] = useState(false);
   const [folderPick, setFolderPick] = useState(null); // { av, kind } — carpeta que se elige a mano
   const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
@@ -936,7 +942,7 @@ Quedo a la espera de tu respuesta`;
 
   return (
     <div style={{ borderLeft: `3px solid ${st.side}`, borderBottom: last ? 'none' : '1px solid #EDF0F5' }}>
-      <div onClick={() => setOpen(o => !o)} className="grid items-center py-3 px-4 font-sans cursor-pointer text-left hover:bg-[#FCFCFD]" style={{ gridTemplateColumns: GRID, gap: 12, background: open ? '#FCFCFD' : '#fff' }}>
+      <div onClick={() => { if (forcePage) return; if (navigate) onOpen?.(); else setOpen(o => !o); }} className={`grid items-center py-3 px-4 font-sans text-left ${forcePage ? '' : 'cursor-pointer hover:bg-[#FCFCFD]'}`} style={{ gridTemplateColumns: GRID, gap: 12, background: (open && !forcePage) ? '#FCFCFD' : '#fff' }}>
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="text-[#94A3B8] shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg></span>
           <div className="min-w-0 flex-1">
@@ -962,14 +968,20 @@ Quedo a la espera de tu respuesta`;
               </div>
             : <span className="text-[11.5px] text-[#22C55E] font-semibold inline-flex items-center gap-1.5"><Check size={11} strokeWidth={3} />Todo listo</span>}
         </div>
-        <div className="flex justify-end"><ChevronDown size={16} className="transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#2E69E0' : '#C3C9D4' }} /></div>
+        <div className="flex justify-end">
+          {forcePage
+            ? null
+            : navigate
+              ? <ChevronRight size={16} className="text-[#C3C9D4]" />
+              : <ChevronDown size={16} className="transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#2E69E0' : '#C3C9D4' }} />}
+        </div>
       </div>
 
       {/* El riel completo solo al abrir: en la lista ocupaba media fila repitiendo
           lo que la columna "que falta" ya dice mejor. */}
-      {open && <div style={{ background: '#FCFCFD' }}><PipelineSemaforo stages={stages} /></div>}
+      {isOpen && <div style={{ background: '#FCFCFD' }}><PipelineSemaforo stages={stages} /></div>}
 
-      {open && (
+      {isOpen && (
         <div className="pt-1 px-4 pb-[18px]" style={{ background: '#FCFCFD' }}>
           {/* Las tareas de este funnel, arriba de todo: el riel dice DONDE ESTA el
               funnel y el tablero QUE HAY QUE HACER. Es el mismo tablero del Sprint,
@@ -1278,6 +1290,13 @@ export default function FunnelsView({ clientId }) {
     } catch { /* noop */ } finally { setSyncing(false); }
   };
 
+  // Contexto detras de un boton (ya no ocupa el arranque de la vista) + navegacion
+  // por funnel: al abrir uno se entra a SU pantalla, no un desplegable.
+  const [ctxOpen, setCtxOpen] = useState(false);
+  const [pageFunnelId, setPageFunnelId] = useState(null);
+  useEffect(() => { setPageFunnelId(null); }, [clientId]); // al cambiar de cliente, volver a la lista
+  const pageFunnel = useMemo(() => myFunnels.find(f => f.id === pageFunnelId) || null, [myFunnels, pageFunnelId]);
+
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
   const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
@@ -1358,10 +1377,30 @@ export default function FunnelsView({ clientId }) {
     finally { setStratBusy(false); }
   };
 
+  // ── PANTALLA de un funnel ── al entrar a un funnel se ve SU pantalla (tareas +
+  // DEL + config + avatares), no un desplegable. La navegacion es un return propio.
+  if (pageFunnel) {
+    const del = delOf(pageFunnel);
+    return (
+      <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
+        <button onClick={() => setPageFunnelId(null)} className="inline-flex items-center gap-1.5 mb-3 py-2 px-3 rounded-[10px] border border-[#E2E5EB] bg-white text-[12.5px] font-semibold text-[#4B5563] cursor-pointer hover:border-[#2E69E0] hover:text-[#2E69E0]">
+          <ChevronLeft size={15} />Volver a los funnels
+        </button>
+        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} forcePage last />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
-      {/* Contexto del cliente (alimenta todas las estrategias) */}
-      <div className="bg-white rounded-2xl overflow-hidden mb-6" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+      {/* Contexto del cliente: ya NO arranca la vista (la maqueta deja solo los
+          funnels). Sigue vivo porque alimenta a los agentes (onboarding, investigacion,
+          personalidad); vive detras del boton "Contexto" del header de Funnels. */}
+      {ctxOpen && (
+      <Modal open onClose={() => setCtxOpen(false)} title="Contexto del cliente" maxWidth={940}>
+      <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0' }}>
         <div className="flex items-start justify-between gap-4 flex-wrap py-[18px] px-5 border-b border-[#F1F3F7]" style={{ background: 'linear-gradient(180deg,#FDF2F8 0%,#fff 100%)' }}>
           <div className="flex gap-3 items-center">
             <span className="inline-flex items-center justify-center w-[38px] h-[38px] rounded-[11px] shrink-0" style={{ background: '#FCE7F3', color: '#DB2777' }}><Sparkles size={20} /></span>
@@ -1422,6 +1461,8 @@ export default function FunnelsView({ clientId }) {
           </div>
         </div>
       </div>
+      </Modal>
+      )}
 
       {/* Los funnels del cliente, planos: la unidad de trabajo es el FUNNEL. */}
       <div className="bg-white rounded-2xl overflow-hidden mb-5" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
@@ -1431,6 +1472,9 @@ export default function FunnelsView({ clientId }) {
             <div className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em]">Funnels</div>
             <div className="text-[11.5px] text-[#9098A4] mt-px">{myFunnels.length === 0 ? 'Todavía no hay ninguno' : `${myFunnels.length} funnel${myFunnels.length === 1 ? '' : 's'} de ${client.name || 'este cliente'}`}</div>
           </div>
+          {/* El contexto (onboarding, investigacion, personalidad) ya no ocupa la vista:
+              vive detras de este boton. Sigue alimentando a los agentes. */}
+          <button onClick={() => setCtxOpen(true)} title="Onboarding, investigación, personalidad y webs del cliente" className="inline-flex items-center gap-1.5 py-[9px] px-3 border rounded-[10px] text-[12px] font-semibold cursor-pointer shrink-0 hover:bg-[#FDF2F8]" style={{ color: '#DB2777', borderColor: '#F5C2DD', background: '#fff' }}><Sparkles size={14} />Contexto</button>
           {myFunnels.length > 0 && (
             <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[10px] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95 shrink-0" style={{ background: '#2E69E0', boxShadow: '0 1px 2px rgba(46,105,224,.35)' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>
           )}
@@ -1486,7 +1530,7 @@ export default function FunnelsView({ clientId }) {
                           </div>
                           {group.map((f, i) => {
                             const del = delOf(f);
-                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} />;
+                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} />;
                           })}
                         </div>
                       </div>
