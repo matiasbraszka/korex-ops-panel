@@ -351,6 +351,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                       value={s.html || plainToHtml(s.text)}
                       onChange={(html) => onEdit(s.id, html)}
                       sanitize={sanitizeDelHtml}
+                      delTools
                       minHeight={90}
                       placeholder="Escribí acá el contenido de la sección…"
                     />

@@ -12,10 +12,12 @@ const ALLOWED_TAGS = [
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'ul', 'ol', 'li', 'a',
   'table', 'thead', 'tbody', 'tr', 'td', 'th',
-  'figure', 'figcaption',
+  'figure', 'figcaption', 'img',
 ];
 // data-drive-image marca donde va una imagen del Doc (se aloja en la Etapa C).
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'style', 'color', 'colspan', 'rowspan', 'data-drive-image'];
+// img/src permite pegar imágenes por link (y, más adelante, desde la galería de Recursos).
+// DOMPurify ya bloquea javascript: y data: peligrosos en src.
+const ALLOWED_ATTR = ['href', 'target', 'rel', 'style', 'color', 'colspan', 'rowspan', 'data-drive-image', 'src', 'alt', 'width'];
 
 const enforceLinkSafety = (html) => {
   if (!html) return html;

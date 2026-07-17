@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser, Baseline } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -33,7 +33,10 @@ const headingLevel = (el) => Number(el.tagName[1]);
 
 // `sanitize` permite reusar este editor con una whitelist mas ancha (ej: el DEL,
 // que trae tablas). Default = el de las notas, que NO cambia.
-export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml }) {
+// `delTools` agrega los botones del DEL (tabla · tamaño de letra · imagen · avatar).
+// `onInsertImage`/`onNewAvatar` son ganchos opcionales: si vienen, mandan (ej. abrir la
+// galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
+export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar }) {
   const ref = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
@@ -96,6 +99,58 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     // removeFormat no quita headings/lists. Los limpiamos a mano envolviendo en <p>.
     document.execCommand('formatBlock', false, 'P');
     handleInput();
+  };
+
+  // ── Herramientas del DEL (solo con delTools) ─────────────────────────────────
+  const insertHTML = (html) => {
+    ref.current?.focus();
+    document.execCommand('insertHTML', false, html);
+    handleInput();
+  };
+
+  // Tabla con encabezado. Encaja con el blueprint: las maquetas de páginas son tablas.
+  const insertTable = () => {
+    const c = parseInt(window.prompt('¿Cuántas columnas?', '2') || '0', 10);
+    const r = parseInt(window.prompt('¿Cuántas filas? (sin contar el encabezado)', '2') || '0', 10);
+    if (!c || !r || c < 1 || r < 1 || c > 12 || r > 60) return;
+    let html = '<table><thead><tr>';
+    for (let j = 0; j < c; j++) html += '<th>Columna ' + (j + 1) + '</th>';
+    html += '</tr></thead><tbody>';
+    for (let i = 0; i < r; i++) { html += '<tr>'; for (let j = 0; j < c; j++) html += '<td></td>'; html += '</tr>'; }
+    html += '</tbody></table><p></p>';
+    insertHTML(html);
+  };
+
+  // Tamaño de letra: agranda/achica el texto seleccionado (relativo, con span+style).
+  const changeFontSize = (bigger) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { window.alert('Seleccioná primero el texto que querés ' + (bigger ? 'agrandar' : 'achicar') + '.'); return; }
+    const span = document.createElement('span');
+    span.style.fontSize = bigger ? 'larger' : 'smaller';
+    const range = sel.getRangeAt(0);
+    try { span.appendChild(range.extractContents()); range.insertNode(span); } catch { return; }
+    sel.removeAllRanges();
+    handleInput();
+    ref.current?.focus();
+  };
+
+  // Imagen: si hay gancho (galería de Recursos) lo usa; si no, pide el link.
+  const insertImage = () => {
+    if (onInsertImage) { onInsertImage(insertHTML); return; }
+    const url = window.prompt('Pegá el link de la imagen (http/https):');
+    if (!url) return;
+    const safe = url.trim();
+    if (!/^https?:\/\//i.test(safe)) { window.alert('El link debe empezar con http:// o https://'); return; }
+    insertHTML(`<img src="${safe.replace(/"/g, '&quot;')}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`);
+  };
+
+  // Avatar: inserta el bloque entero y en orden (nombre → Segmentación → Descripción).
+  const insertAvatar = () => {
+    if (onNewAvatar) { onNewAvatar(insertHTML); return; }
+    const nombre = (window.prompt('Nombre del avatar:', '') || '').trim();
+    if (!nombre) return;
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    insertHTML(`<h2>Avatar — ${esc(nombre)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
   };
 
   // --- Plegado de secciones por titulo (estilo Google Docs) ---
@@ -213,6 +268,14 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
             </>
           )}
         </div>
+        {delTools && (<>
+          <Divider />
+          <Btn label="A−" title="Achicar la letra seleccionada" onClick={() => changeFontSize(false)} />
+          <Btn label="A+" title="Agrandar la letra seleccionada" onClick={() => changeFontSize(true)} />
+          <Btn Icon={Table}     title="Insertar tabla" onClick={insertTable} />
+          <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={insertImage} />
+          <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={insertAvatar} />
+        </>)}
         <Divider />
         <Btn Icon={Link2}  title="Insertar link" onClick={addLink} />
         <Btn Icon={Eraser} title="Quitar formato"  onClick={clearFormat} />
@@ -248,6 +311,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
         .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
         .rte-content figure[data-drive-image] { margin: 8px 0; padding: 10px; border: 1px dashed #D0D5DD; border-radius: 8px; background: #F7F8FA; color: #9098A4; font-size: 11px; font-style: italic; text-align: center; }
+        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
         /* Flechita de plegado (estilo Google Docs) en la canaleta izquierda */
         .rte-content h1, .rte-content h2, .rte-content h3 { position: relative; }
         .rte-content h1::before, .rte-content h2::before, .rte-content h3::before {
