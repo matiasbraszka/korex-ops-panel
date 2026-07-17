@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -65,7 +65,7 @@ const DOC_KIND_LABEL = {
   briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
 };
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, configNode, recursosNode }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, configNode, recursosNode, onAvatarCreate }) {
   const { currentUser } = useApp();
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -115,19 +115,41 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Documentos del cliente (compartidos por todos sus funnels), para el grupo "DEL CLIENTE".
+  // Documentos del cliente (aparecen en todos sus DEL), para el grupo "DEL CLIENTE".
+  // Se pueden quitar/agregar: el que se quita se guarda como "excluido" (client_brain_pins
+  // slot='del_excl') para que no vuelva a aparecer; agregar = restaurar uno excluido.
+  const [excluded, setExcluded] = useState(new Set());
+  const [addDocOpen, setAddDocOpen] = useState(false);
+  const cid = clientId || resolvedClient;
   useEffect(() => {
-    const cid = clientId || resolvedClient;
     if (!cid) return;
     let alive = true;
     (async () => {
       try {
-        const rows = await sbFetch(`client_brain_docs?select=id,title,doc_kind,text,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`);
-        if (alive) setClientDocs(Array.isArray(rows) ? rows : []);
+        const [rows, hidden] = await Promise.all([
+          sbFetch(`client_brain_docs?select=id,node_id,title,doc_kind,text,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`),
+          sbFetch(`del_client_doc_hidden?select=node_id&client_id=eq.${encodeURIComponent(cid)}`),
+        ]);
+        if (!alive) return;
+        setClientDocs(Array.isArray(rows) ? rows : []);
+        setExcluded(new Set((Array.isArray(hidden) ? hidden : []).map(p => p.node_id)));
       } catch { if (alive) setClientDocs([]); }
     })();
     return () => { alive = false; };
-  }, [clientId, resolvedClient]);
+  }, [cid]);
+
+  const quitarClientDoc = async (d) => {
+    setExcluded((prev) => new Set(prev).add(d.node_id));
+    if (view === 'cliente:' + d.id) setView('del');
+    await supabase.from('del_client_doc_hidden').upsert({ client_id: cid, node_id: d.node_id }, { onConflict: 'client_id,node_id' });
+  };
+  const restaurarClientDoc = async (d) => {
+    setExcluded((prev) => { const n = new Set(prev); n.delete(d.node_id); return n; });
+    setAddDocOpen(false);
+    await supabase.from('del_client_doc_hidden').delete().eq('client_id', cid).eq('node_id', d.node_id);
+  };
+  const shownClientDocs = useMemo(() => clientDocs.filter(d => !excluded.has(d.node_id)), [clientDocs, excluded]);
+  const excludedDocs = useMemo(() => clientDocs.filter(d => excluded.has(d.node_id)), [clientDocs, excluded]);
 
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
@@ -363,24 +385,44 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
             <ImageIcon size={14} className="shrink-0" />Recursos
           </button>
 
-          {/* DEL CLIENTE: los documentos compartidos por todos los funnels del cliente. */}
-          {clientDocs.length > 0 && (
+          {/* DEL CLIENTE: los documentos que aparecen en todos los DEL de este cliente.
+              Se pueden quitar (×) y volver a agregar (+). */}
+          {(shownClientDocs.length > 0 || excludedDocs.length > 0) && (
             <>
               <div className="px-2 pt-3 pb-1.5">
                 <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Del cliente</span>
                 <div className="text-[9.5px] text-[#C3C9D4] font-medium mt-0.5 normal-case tracking-normal">Aparecen en todos los DEL de este cliente</div>
               </div>
-              {clientDocs.map(d => {
+              {shownClientDocs.map(d => {
                 const on = view === 'cliente:' + d.id;
                 return (
-                  <button key={d.id} onClick={() => setView('cliente:' + d.id)}
-                    className="flex items-center gap-2 w-full py-1.5 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
-                    style={{ background: on ? '#F1F3F7' : 'transparent', color: on ? '#1A1D26' : '#6B7280' }}>
-                    <Monitor size={13} className="shrink-0 text-[#9098A4]" />
-                    <span className="truncate flex-1 min-w-0">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
-                  </button>
+                  <div key={d.id} className="group/cd flex items-center gap-1 rounded-[9px]" style={{ background: on ? '#F1F3F7' : 'transparent' }}>
+                    <button onClick={() => setView('cliente:' + d.id)}
+                      className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pl-2.5 pr-1 text-left border-none cursor-pointer text-[12px] font-semibold bg-transparent"
+                      style={{ color: on ? '#1A1D26' : '#6B7280' }}>
+                      <Monitor size={13} className="shrink-0 text-[#9098A4]" />
+                      <span className="truncate flex-1 min-w-0">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
+                    </button>
+                    <button onClick={() => quitarClientDoc(d)} title="Quitar de este cliente" className="opacity-0 group-hover/cd:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>
+                  </div>
                 );
               })}
+              {/* Agregar: restaura un documento que se había quitado. */}
+              <div className="relative px-1 mt-0.5">
+                <button onClick={() => setAddDocOpen(o => !o)} disabled={excludedDocs.length === 0}
+                  className="flex items-center gap-1.5 w-full py-1.5 px-1.5 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent disabled:opacity-40 disabled:cursor-default disabled:hover:border-[#D0D5DD] disabled:hover:text-[#9098A4]">
+                  <Plus size={12} />{excludedDocs.length ? 'Agregar documento' : 'Todos agregados'}
+                </button>
+                {addDocOpen && excludedDocs.length > 0 && (
+                  <div className="absolute left-1 right-1 top-9 z-30 bg-white border border-[#E2E5EB] rounded-lg p-1 flex flex-col gap-0.5" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
+                    {excludedDocs.map(d => (
+                      <button key={d.id} onClick={() => restaurarClientDoc(d)} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-left text-[12px] font-semibold text-[#4B5563] hover:bg-[#F4F6F9] border-none bg-transparent cursor-pointer">
+                        <Plus size={12} className="text-[#7C3AED] shrink-0" /><span className="truncate">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </nav>
@@ -488,6 +530,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                       onChange={(html) => onEdit(s.id, html)}
                       sanitize={sanitizeDelHtml}
                       delTools
+                      onNewAvatar={(name, insertHTML) => {
+                        const e = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        insertHTML(`<h2>${e(name)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
+                        onAvatarCreate?.(name);
+                      }}
                       minHeight={90}
                       placeholder="Escribí acá el contenido de la sección…"
                     />

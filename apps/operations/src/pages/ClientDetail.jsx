@@ -180,7 +180,9 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Funnels', count: funnelsCount },
-          { key: 'drive', label: 'Carpetas' },
+          // La pestaña "Carpetas" se retiró: las carpetas que se usan viven ahora en
+          // "Recursos", dentro del DEL de cada funnel. (CarpetasView.jsx queda en el
+          // repo por si hay que traerla de nuevo; el sync de Drive sigue corriendo.)
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },

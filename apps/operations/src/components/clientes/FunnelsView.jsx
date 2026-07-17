@@ -1013,6 +1013,32 @@ Quedo a la espera de tu respuesta`;
   // que decia SI el dato estaba, sin decir cual. FunnelConfigBlock muestra el valor
   // y el hueco, que es estrictamente mas informacion en el mismo lugar.
 
+  // Crear un avatar DESDE el DEL: el título que insertás en el documento es el avatar.
+  // Al crearlo, se registra en el funnel (por orden) y se le crean AUTOMÁTICAMENTE las
+  // carpetas del Drive (anuncios grabación/edición + VSL grabación/edición), que es lo
+  // que hay que diferenciar bien. Después re-lee los links/conteos.
+  const onAvatarCreate = async (rawName) => {
+    const name = (rawName || '').trim();
+    if (!name) return;
+    // Si ya existe un avatar con ese nombre, no lo duplico.
+    if (avatars.some(a => (a.name || '').trim().toLowerCase() === name.toLowerCase())) return;
+    const next = [...avatars, { id: rid('av'), name, status: 'En grabación' }];
+    await onUpdate(f.id, { avatars: next }); // persiste primero (el edge fn lee de la base)
+    try {
+      await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'create', target: 'anuncios' } });
+      await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'create', target: 'vsl' } });
+      const { data } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'read' } });
+      if (data?.ok && data.byName) {
+        const merged = next.map(a => {
+          const info = data.byName[(a.name || '').trim()];
+          const vsl = info ? { vsl_rec_folder_url: info.vsl_rec_folder_url, vsl_edit_folder_url: info.vsl_edit_folder_url, vsl_rec_files: info.vsl_rec_files, vsl_edit_files: info.vsl_edit_files } : {};
+          return info ? { ...a, ...info, ...vsl } : a;
+        });
+        onUpdate(f.id, { avatars: merged });
+      }
+    } catch { /* si falla crear carpetas, el avatar igual quedó registrado */ }
+  };
+
   // ── Bloques que la maqueta movió del funnel al DEL ───────────────────────────
   // En PANTALLA (forcePage) el funnel muestra SOLO el riel + tareas; estos bloques
   // (config, VSL, copy, avatares) viven adentro del DEL, en sus pestañas. Se definen
@@ -1199,7 +1225,7 @@ Quedo a la espera de tu respuesta`;
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
         <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId}
-          configNode={funnelConfigNode} recursosNode={funnelRecursosNode} />
+          configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} />
       </Modal>
     </div>
   );

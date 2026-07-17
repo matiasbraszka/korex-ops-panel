@@ -74,6 +74,17 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     handleInput();
   };
 
+  // Deshacer / rehacer (Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z). El contentEditable tiene
+  // historial nativo; lo enganchamos explícito para que ande siempre y refresque el
+  // guardado. (El navegador ya maneja el stack por cada tecla, no de a bloque.)
+  const handleKeyDown = (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); document.execCommand('undo'); handleInput(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); document.execCommand('redo'); handleInput(); }
+  };
+
   const addLink = () => {
     const url = window.prompt('URL del link (http/https):');
     if (!url) return;
@@ -112,8 +123,20 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     savedRange.current = (sel && sel.rangeCount && ref.current?.contains(sel.anchorNode)) ? sel.getRangeAt(0).cloneRange() : null;
   };
   const insertHTML = (html) => {
-    ref.current?.focus();
-    if (savedRange.current) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(savedRange.current); }
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    if (savedRange.current) {
+      sel.addRange(savedRange.current);
+    } else {
+      // Sin selección previa (ej. no habías tocado el texto): inserta al final.
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(false);
+      sel.addRange(r);
+    }
     document.execCommand('insertHTML', false, html);
     savedRange.current = null;
     handleInput();
@@ -136,7 +159,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   // Abren los diálogos nativos (guardando la selección).
   const openTable = () => { saveSelection(); setDialog({ type: 'table', cols: '3', rows: '3' }); };
   const openImage = () => { saveSelection(); if (onInsertImage) { onInsertImage(insertHTML); return; } setDialog({ type: 'image', url: '' }); };
-  const openAvatar = () => { saveSelection(); if (onNewAvatar) { onNewAvatar(insertHTML); return; } setDialog({ type: 'avatar', name: '' }); };
+  const openAvatar = () => { saveSelection(); setDialog({ type: 'avatar', name: '' }); };
 
   // Confirmación de cada diálogo.
   const doTable = () => {
@@ -158,9 +181,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const doAvatar = () => {
     const nombre = (dialog.name || '').trim();
     if (!nombre) { setDialog({ ...dialog, err: 'Poné un nombre.' }); return; }
-    const e = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     setDialog(null);
-    insertHTML(`<h2>Avatar — ${e(nombre)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
+    // El título ES el avatar: se inserta como H2 (todo lo que siga, hasta el próximo
+    // título, es de este avatar). Si el padre quiere hacer algo más (registrar el
+    // avatar y crear sus carpetas), le pasamos el nombre y el insertor.
+    if (onNewAvatar) { onNewAvatar(nombre, insertHTML); return; }
+    const e = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    insertHTML(`<h2>${e(nombre)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
   };
 
   // --- Plegado de secciones por titulo (estilo Google Docs) ---
@@ -296,6 +323,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         suppressContentEditableWarning
         onInput={handleInput}
         onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
         onClick={handleClick}
         data-placeholder={placeholder}
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
