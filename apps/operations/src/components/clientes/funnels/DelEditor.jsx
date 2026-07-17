@@ -126,7 +126,7 @@ const DOC_KIND_LABEL = {
   briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
 };
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, configNode, recursosNode, onAvatarCreate }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate }) {
   const { currentUser } = useApp();
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -542,6 +542,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
             style={{ background: view === 'del' ? '#EFEBFF' : 'transparent', color: view === 'del' ? '#6D28D9' : '#4B5563' }}>
             <FileText size={14} className="shrink-0" />DEL
           </button>
+          {/* Estrategia: la primera sección, fija, siempre presente. */}
+          <button onClick={() => irA('estrategia')}
+            className="flex items-center gap-2 w-full py-1.5 pl-4 pr-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
+            style={{ background: view === 'del' && activa === 'estrategia' ? '#ECFEFF' : 'transparent', color: view === 'del' && activa === 'estrategia' ? '#0891B2' : '#6B7280' }}>
+            <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: '#0891B2' }} />
+            <span className="truncate flex-1 min-w-0">Estrategia</span>
+          </button>
           {/* Las secciones del documento, agrupadas por categoría con su color. */}
           {groups.map(gr => {
             const sc = secOf(gr.kind);
@@ -656,6 +663,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
           {editando && <DelToolbar api={activeApi} />}
           </div>
 
+
+          {/* La sección Estrategia FIJA, siempre primera: tipo · campaña · punto
+              diferencial · fecha · objetivo. De acá comen el riel y los agentes. */}
+          {estrategiaNode}
 
           {/* El documento, agrupado por categoría en orden canónico. Cada grupo abre con su
               franja de color; adentro van sus secciones. Así el DEL se lee estructurado

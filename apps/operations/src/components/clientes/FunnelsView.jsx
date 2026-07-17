@@ -15,6 +15,7 @@ import {
 import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
+import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
 import DelEditor from './funnels/DelEditor';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
@@ -1063,6 +1064,7 @@ Quedo a la espera de tu respuesta`;
   // (config, VSL, copy, avatares) viven adentro del DEL, en sus pestañas. Se definen
   // como nodos acá (con todos sus handlers en scope) y se pasan a DelWorkspace.
   const funnelConfigNode = <FunnelConfigBlock f={f} onUpdate={onUpdate} events={events} onTrack={onTrack} />;
+  const funnelEstrategiaNode = <FunnelEstrategiaBlock f={f} onUpdate={onUpdate} />;
 
   const funnelRecursosNode = (
     <div className="flex flex-col gap-3.5">
@@ -1259,7 +1261,7 @@ Quedo a la espera de tu respuesta`;
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
         <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId}
-          configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} />
+          estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} />
       </Modal>
     </div>
   );
