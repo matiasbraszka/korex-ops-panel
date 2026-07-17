@@ -1,9 +1,23 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
 import { sanitizeDelHtml } from './delSanitize';
+
+// Color estable por persona (para la presencia y los comentarios).
+const PRESENCE_COLORS = ['#2E69E0', '#DB2777', '#16A34A', '#B45309', '#7C3AED', '#0891B2', '#DC2626', '#0D9488'];
+const hashCode = (s) => { let h = 0; for (let i = 0; i < String(s).length; i++) h = (h * 31 + String(s).charCodeAt(i)) | 0; return Math.abs(h); };
+const colorFor = (seed) => PRESENCE_COLORS[hashCode(seed) % PRESENCE_COLORS.length];
+const initialOf = (s) => (String(s || '?').trim()[0] || '?').toUpperCase();
+// "hace 3 min", "ayer", etc. — corto, sin dependencias.
+const haceRato = (iso) => {
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (d < 60) return 'recién';
+  if (d < 3600) return `hace ${Math.floor(d / 60)} min`;
+  if (d < 86400) return `hace ${Math.floor(d / 3600)} h`;
+  return `hace ${Math.floor(d / 86400)} d`;
+};
 
 // El DEL, editable adentro del panel. Apalancado en la herramienta de notas de
 // accountability (RichTextEditor), pero por secciones y con tablas.
@@ -62,9 +76,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
   // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   const [view, setView] = useState('del');
   const [clientDocs, setClientDocs] = useState([]);
+  // Colaboración: comentarios por sección + presencia en vivo + candado de edición.
+  const [comments, setComments] = useState([]);      // todos los del DEL
+  const [threadFor, setThreadFor] = useState(null);  // id de sección con el hilo abierto
+  const [draft, setDraft] = useState('');            // texto del comentario nuevo
+  const [present, setPresent] = useState([]);        // quién está en el DEL ahora (Realtime)
+  const [myEditing, setMyEditing] = useState(null);  // qué sección estoy editando (para el candado)
   const scrollRef = useRef(null);
   const timers = useRef({}); // id -> timeout (debounce de guardado)
+  const channelRef = useRef(null);
+  const editStopTimer = useRef(null);
   const by = currentUser?.id || null;
+  const myName = currentUser?.name || currentUser?.email?.split('@')[0] || 'Alguien';
+  const myColor = colorFor(by || myName);
 
   // El doc_id lo necesitamos para agregar secciones. Si no vino, lo resolvemos del
   // primer del_section (todas comparten doc_id por estrategia).
@@ -105,6 +129,71 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     return () => { alive = false; };
   }, [clientId, resolvedClient]);
 
+  // ── Comentarios del DEL ──────────────────────────────────────────────────────
+  const cargarComments = useCallback(async () => {
+    try {
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,author_name,author_id,resolved,created_at&strategy_id=eq.${strategyId}&order=created_at.asc`);
+      setComments(Array.isArray(rows) ? rows : []);
+    } catch { /* si falla, sin comentarios */ }
+  }, [strategyId]);
+  useEffect(() => { cargarComments(); }, [cargarComments]);
+
+  const comentar = async (section) => {
+    const body = draft.trim();
+    if (!body) return;
+    setDraft('');
+    const { error } = await supabase.from('del_comments').insert({
+      section_id: section.id, doc_id: section.doc_id, strategy_id: strategyId,
+      author_id: by, author_name: myName, body,
+    });
+    if (error) { window.alert('No pude guardar el comentario: ' + error.message); return; }
+    cargarComments();
+  };
+  const resolverComment = async (c) => {
+    setComments((prev) => prev.map(x => x.id === c.id ? { ...x, resolved: !x.resolved } : x));
+    await supabase.from('del_comments').update({ resolved: !c.resolved }).eq('id', c.id);
+  };
+  const borrarComment = async (c) => {
+    setComments((prev) => prev.filter(x => x.id !== c.id));
+    await supabase.from('del_comments').delete().eq('id', c.id);
+  };
+  // Comentarios por sección (los sin resolver primero cuentan para el badge).
+  const commentsBySection = useMemo(() => {
+    const m = {};
+    for (const c of comments) (m[c.section_id] ||= []).push(c);
+    return m;
+  }, [comments]);
+
+  // ── Presencia en vivo (Supabase Realtime, efímero — sin base) ─────────────────
+  // Todos los que tienen el DEL abierto se ven entre sí; y si alguien está editando
+  // una sección, los demás ven el candado. Es la parte "colaborativa" sin CRDT.
+  useEffect(() => {
+    if (!strategyId) return;
+    const ch = supabase.channel(`del-presence-${strategyId}`, { config: { presence: { key: by || myName } } });
+    channelRef.current = ch;
+    ch.on('presence', { event: 'sync' }, () => {
+      const state = ch.presenceState();
+      setPresent(Object.values(state).flat());
+    });
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') await ch.track({ id: by, name: myName, color: myColor, editing: null });
+    });
+    return () => { channelRef.current = null; supabase.removeChannel(ch); };
+  }, [strategyId, by, myName, myColor]);
+
+  // Cuando cambia qué sección estoy editando, lo aviso por presencia (para el candado).
+  useEffect(() => {
+    channelRef.current?.track({ id: by, name: myName, color: myColor, editing: myEditing });
+  }, [myEditing, by, myName, myColor]);
+
+  // Los que están AHORA (sin contarme a mí) y qué sección edita cada uno.
+  const otros = useMemo(() => present.filter(u => u.id !== by), [present, by]);
+  const lockedBy = useMemo(() => {
+    const m = {};
+    for (const u of otros) if (u.editing) m[u.editing] = u;
+    return m;
+  }, [otros]);
+
   const resumen = useMemo(() => {
     if (!secs) return [];
     const m = new Map();
@@ -143,6 +232,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
 
   // Guardado con debounce por seccion (800ms tras la ultima tecla).
   const onEdit = (id, html) => {
+    // Aviso que estoy editando ESTA sección (candado para los demás). Se libera sola
+    // a los 4s de no tocar nada.
+    setMyEditing(id);
+    clearTimeout(editStopTimer.current);
+    editStopTimer.current = setTimeout(() => setMyEditing(null), 4000);
     setSaveState((s) => ({ ...s, [id]: 'saving' }));
     setSecs((prev) => prev.map(x => x.id === id ? { ...x, html, source: 'panel' } : x));
     clearTimeout(timers.current[id]);
@@ -292,7 +386,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
               <button onClick={() => setModo('editar')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
             </div>
             <span className="text-[11px] text-[#9098A4]">{editando ? 'Los cambios se guardan solos. Este DEL pasa a vivir en el panel.' : 'Copia de lectura · el documento vive en Drive'}</span>
-            {docUrl && <a href={docUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline"><ExternalLink size={11} />Abrir el Doc original</a>}
+            {/* Presencia: quién tiene el DEL abierto ahora mismo (en vivo). */}
+            {otros.length > 0 && (
+              <span className="ml-auto inline-flex items-center gap-1.5" title={`En el DEL ahora: ${[myName, ...otros.map(u => u.name)].join(', ')}`}>
+                <span className="flex items-center -space-x-1.5">
+                  <span className="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white border-2 border-white" style={{ background: myColor }}>{initialOf(myName)}</span>
+                  {otros.slice(0, 4).map((u, i) => (
+                    <span key={u.id || i} className="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white border-2 border-white" style={{ background: u.color || colorFor(u.name) }}>{initialOf(u.name)}</span>
+                  ))}
+                </span>
+                <span className="text-[11px] font-semibold text-[#16A34A] inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" style={{ animation: 'mkPulse 1.8s ease-in-out infinite' }} />{otros.length + 1} acá</span>
+              </span>
+            )}
+            {docUrl && <a href={docUrl} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline ${otros.length > 0 ? '' : 'ml-auto'}`}><ExternalLink size={11} />Abrir el Doc original</a>}
           </div>
 
           {!editando && (
@@ -319,6 +425,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                 {gr.items.map(s => {
             const sc = secOf(s.kind);
             const st = saveState[s.id];
+            const lock = lockedBy[s.id];                 // otra persona editando esta sección
+            const scomments = commentsBySection[s.id] || [];
+            const abiertos = scomments.filter(c => !c.resolved).length;
+            const threadOpen = threadFor === s.id;
             return (
               <section key={s.id} id={'sec-' + s.id} className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden" style={{ scrollMarginTop: 60 }}>
                 <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[#EDF0F5]" style={{ borderLeft: `4px solid ${sc.c}` }}>
@@ -334,6 +444,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                   {st === 'saving' && <span className="text-[10.5px] text-[#9098A4] inline-flex items-center gap-1 shrink-0"><Loader2 size={11} className="animate-spin" />Guardando…</span>}
                   {st === 'saved' && <span className="text-[10.5px] text-[#15803D] inline-flex items-center gap-1 shrink-0"><Check size={11} strokeWidth={3} />Guardado</span>}
                   {st === 'error' && <span className="text-[10.5px] text-[#B91C1C] shrink-0">No se guardó</span>}
+                  {lock && (
+                    <span className="text-[10.5px] font-semibold inline-flex items-center gap-1 shrink-0 py-0.5 px-2 rounded-full" title={`${lock.name} está editando esta sección`} style={{ background: (lock.color || '#B45309') + '1F', color: lock.color || '#B45309' }}>
+                      <Lock size={10} />{String(lock.name).split(' ')[0]}
+                    </span>
+                  )}
+                  {/* Comentarios de la sección: badge + abrir el hilo. */}
+                  <button onClick={() => { setThreadFor(threadOpen ? null : s.id); setDraft(''); }} title="Comentarios de esta sección"
+                    className="inline-flex items-center gap-1 shrink-0 h-7 px-2 rounded-md border-none cursor-pointer text-[11px] font-bold"
+                    style={threadOpen ? { background: '#EEF3FF', color: '#1D4FD8' } : { background: 'transparent', color: abiertos ? '#B45309' : '#9098A4' }}>
+                    <MessageSquare size={13} />{scomments.length > 0 && <span>{scomments.length}</span>}
+                  </button>
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
@@ -344,7 +465,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                   {!editando && <span className="text-[10.5px] text-[#C3C9D4] tabular-nums shrink-0">{(s.char_count || 0).toLocaleString('es-AR')}</span>}
                 </div>
 
-                {editando ? (
+                {/* Si OTRO está editando esta sección, no dejo editarla acá: se ve el
+                    candado y el contenido en lectura, para no pisarse. */}
+                {editando && lock && (
+                  <div className="flex items-center gap-2 py-2 px-4 text-[11.5px] font-semibold" style={{ background: (lock.color || '#B45309') + '14', color: lock.color || '#B45309', borderBottom: '1px solid #EDF0F5' }}>
+                    <Lock size={12} />{lock.name} está editando esta sección. Se libera sola cuando termine.
+                  </div>
+                )}
+                {editando && !lock ? (
                   <div className="p-3">
                     <RichTextEditor
                       key={s.id}
@@ -362,6 +490,35 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                 ) : (
                   <div className="py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '78ch' }}>
                     {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
+                  </div>
+                )}
+
+                {/* Hilo de comentarios de la sección. */}
+                {threadOpen && (
+                  <div className="border-t border-[#EDF0F5] bg-[#FBFCFE] p-3.5 flex flex-col gap-2.5">
+                    {scomments.length === 0 && <div className="text-[11.5px] text-[#9098A4] italic">Todavía no hay comentarios en esta sección.</div>}
+                    {scomments.map(c => (
+                      <div key={c.id} className="flex items-start gap-2.5" style={{ opacity: c.resolved ? 0.55 : 1 }}>
+                        <span className="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5" style={{ background: colorFor(c.author_id || c.author_name) }}>{initialOf(c.author_name)}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[12px] font-bold text-[#1A1D26]">{c.author_name || 'Alguien'}</span>
+                            <span className="text-[10.5px] text-[#AEB4BF]">{haceRato(c.created_at)}</span>
+                            {c.resolved && <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#ECFDF5', color: '#15803D' }}>resuelto</span>}
+                          </div>
+                          <div className="text-[12.5px] text-[#3F4653] leading-snug whitespace-pre-wrap break-words mt-0.5" style={{ textDecoration: c.resolved ? 'line-through' : 'none' }}>{c.body}</div>
+                        </div>
+                        <button onClick={() => resolverComment(c)} title={c.resolved ? 'Reabrir' : 'Marcar como resuelto'} className="w-6 h-6 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#ECFDF5] hover:text-[#15803D] border-none bg-transparent cursor-pointer shrink-0"><Check size={13} strokeWidth={2.6} /></button>
+                        {(c.author_id === by) && <button onClick={() => borrarComment(c)} title="Borrar" className="w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#B91C1C] border-none bg-transparent cursor-pointer shrink-0"><Trash2 size={12} /></button>}
+                      </div>
+                    ))}
+                    <div className="flex items-end gap-2 pt-1">
+                      <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={1}
+                        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); comentar(s); } }}
+                        placeholder="Escribí un comentario…  (Ctrl+Enter para enviar)"
+                        className="flex-1 min-w-0 py-2 px-3 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-snug" />
+                      <button onClick={() => comentar(s)} disabled={!draft.trim()} className="inline-flex items-center gap-1.5 py-2 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50 shrink-0"><Send size={13} />Comentar</button>
+                    </div>
                   </div>
                 )}
               </section>
