@@ -349,13 +349,23 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     return out;
   }, []);
 
-  // Ir a un comentario: destacarlo y llevar la frase a la vista.
+  // Ir a un comentario: llevar la frase exacta a la vista y hacerla parpadear
+  // fuerte (naranja) para que se distinga del resto de frases resaltadas.
   const irAComment = (c) => {
     setFlashCmt(c.id);
+    // Limpio cualquier frase que haya quedado resaltada de un click anterior.
+    document.querySelectorAll('mark.del-cmt.is-active').forEach(m => m.classList.remove('is-active'));
     const el = document.querySelector(`mark[data-cmt="${c.id}"]`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    else { const s = document.getElementById('sec-' + c.section_id); if (s && scrollRef.current) scrollRef.current.scrollTo({ top: s.offsetTop - 12, behavior: 'smooth' }); }
-    setTimeout(() => setFlashCmt(null), 1600);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('is-active');
+      setTimeout(() => el.classList.remove('is-active'), 1800);
+    } else {
+      // La sección está en modo edición (sin resaltado): al menos la llevo a la vista.
+      const s = document.getElementById('sec-' + c.section_id);
+      if (s && scrollRef.current) scrollRef.current.scrollTo({ top: s.offsetTop - 12, behavior: 'smooth' });
+    }
+    setTimeout(() => setFlashCmt(null), 1800);
   };
 
   // ── Presencia en vivo (Supabase Realtime, efímero — sin base) ─────────────────
@@ -512,7 +522,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }} onMouseDown={() => { if (selBtn) setSelBtn(null); }}>
-      <style>{`.del-rich mark.del-cmt{background:#FEF3C7;border-bottom:2px solid #EAB308;border-radius:2px;padding:0 1px;cursor:pointer}`}</style>
+      <style>{`
+        .del-rich mark.del-cmt{background:#FEF3C7;border-bottom:2px solid #EAB308;border-radius:2px;padding:0 1px;cursor:pointer;transition:background .2s,box-shadow .2s}
+        .del-rich mark.del-cmt.is-active{background:#FDBA74;box-shadow:0 0 0 3px rgba(249,115,22,.45);border-bottom-color:#EA580C;animation:delCmtPulse 1.8s ease-out}
+        @keyframes delCmtPulse{0%,55%{background:#FB923C}100%{background:#FDBA74}}
+      `}</style>
       <div className="grid gap-5 items-start mx-auto py-5 px-6" style={{ maxWidth: view === 'del' ? 1440 : 1180, gridTemplateColumns: view === 'del' ? 'minmax(0,185px) minmax(0,1fr) 290px' : 'minmax(0,215px) minmax(0,1fr)' }}>
 
         {/* El menú del DEL (maqueta): ESTE FUNNEL (las secciones del documento) · las dos
