@@ -16,6 +16,7 @@ import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
+import DriveMediaGallery from './funnels/DriveMediaGallery';
 import DelEditor from './funnels/DelEditor';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
@@ -1178,6 +1179,9 @@ Quedo a la espera de tu respuesta`;
           </div>
         );
       })}
+
+      {/* Galería de imágenes y videos del Drive (Etapa C, paso $0: antes de mover bytes). */}
+      <DriveMediaGallery clientId={clientId} strategyId={f.strategy_id} />
 
       {/* Branding e imágenes: son del CLIENTE (sirven para todos sus funnels). */}
       <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-[#FBFCFE] py-3 px-4 flex items-start gap-2.5 text-[11.5px] text-[#9098A4]">
