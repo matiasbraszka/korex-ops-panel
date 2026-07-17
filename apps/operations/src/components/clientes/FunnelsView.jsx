@@ -9,7 +9,7 @@ import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, ChevronLeft, Users, Megaphone,
   Check, Trash2, Activity, Zap, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
-  FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard, Package, AlertCircle,
+  FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard, Package, AlertCircle, LayoutGrid,
 } from 'lucide-react';
 import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
@@ -411,6 +411,70 @@ function PipelineSemaforo({ stages }) {
   );
 }
 
+// Color de cada paso — el MISMO que su sección en el DEL (STAGE_COLOR del handoff), para
+// que el riel, la tarjeta de la tarea y el documento se lean como una sola cosa.
+const STAGE_LINE_COLOR = {
+  estrategia: { c: '#0891B2', bg: '#ECFEFF' },
+  del:        { c: '#6B7280', bg: '#F0F2F5' },
+  avatares:   { c: '#F97316', bg: '#FFF7ED' },
+  vsl:        { c: '#16A34A', bg: '#ECFDF5' },
+  anuncios:   { c: '#5B7CF5', bg: '#EEF2FF' },
+  landing:    { c: '#8B5CF6', bg: '#F5F3FF' },
+};
+
+// El riel del funnel en UNA línea (maqueta): cada paso es punto + nombre; los listos se
+// apagan con tilde verde; el próximo pendiente late. A la derecha, "Próximo: X" y "N% listo".
+// El riel dice DÓNDE ESTÁ el funnel; el tablero de abajo dice QUÉ HACER. No filtra el tablero
+// porque la tarea todavía no tiene "paso" como campo (decisión pendiente de Matías).
+function FunnelRail({ stages }) {
+  if (!stages || !stages.length) return null;
+  const done = stages.filter(s => s.status === 'listo').length;
+  const pct = Math.round((done / stages.length) * 100);
+  const firstPend = stages.find(s => s.status === 'pendiente') || null;
+  return (
+    <div className="flex items-center gap-3 flex-wrap py-3 px-[18px] border-b border-[#EDF0F5] bg-white">
+      <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+        {stages.map((s, i) => {
+          const col = STAGE_LINE_COLOR[s.stage] || { c: '#9098A4', bg: '#F0F2F5' };
+          const isDone = s.status === 'listo';
+          const isBlocked = s.status === 'bloqueado';
+          const isNext = firstPend && s.stage === firstPend.stage;
+          const sub = s.substate ? SUBSTATE[s.substate]?.label : null;
+          return (
+            <span key={s.stage} className="inline-flex items-center gap-1">
+              {i > 0 && <ChevronRight size={12} className="text-[#DCE0E7] shrink-0" strokeWidth={2.4} />}
+              <span title={`${s.stage_label} — ${s.detail}`}
+                className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-lg text-[12px] font-semibold whitespace-nowrap cursor-default"
+                style={{
+                  background: isNext ? col.bg : isDone ? '#F7F8FA' : '#fff',
+                  color: isDone ? '#9CA3AF' : isBlocked ? '#AEB4BF' : col.c,
+                  border: `1px solid ${isNext ? col.c : '#EDF0F5'}`,
+                  boxShadow: isNext ? `0 0 0 2px ${col.bg}` : 'none',
+                }}>
+                {isDone
+                  ? <span className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full bg-[#22C55E] text-white shrink-0"><Check size={10} strokeWidth={3.5} /></span>
+                  : isBlocked
+                    ? <Lock size={11} strokeWidth={2.2} className="shrink-0" />
+                    : <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: col.c, animation: isNext ? 'mkPulse 1.8s ease-in-out infinite' : 'none' }} />}
+                {STAGE_SHORT[s.stage] || s.stage_label}
+                {!isDone && !isBlocked && sub && <span className="opacity-70 font-medium">· {sub}</span>}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {firstPend && (
+          <span className="text-[11.5px] text-[#6B7280]" title={firstPend.detail}>
+            <b className="text-[#3F4653] font-semibold">Próximo:</b> {STAGE_SHORT[firstPend.stage] || firstPend.stage_label}
+          </span>
+        )}
+        <span className="text-[12.5px] text-[#1A1D26]"><b className="font-extrabold">{pct}%</b> <span className="text-[#9098A4]">listo</span></span>
+      </div>
+    </div>
+  );
+}
+
 // Encabezado de tarjeta interna (icono en chip de color + título + subtítulo).
 function CardHead({ Icon, iconBg, iconColor, title, subtitle, children }) {
   return (
@@ -682,7 +746,7 @@ function EditorMessageModal({ initial, onClose }) {
 //    desplegable — al clickear se va a la pantalla del funnel.
 //  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
 //    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, forcePage = false }) {
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const isOpen = forcePage || open; // en pantalla, el cuerpo siempre se ve
@@ -941,8 +1005,31 @@ Quedo a la espera de tu respuesta`;
   // y el hueco, que es estrictamente mas informacion en el mismo lugar.
 
   return (
-    <div style={{ borderLeft: `3px solid ${st.side}`, borderBottom: last ? 'none' : '1px solid #EDF0F5' }}>
-      <div onClick={() => { if (forcePage) return; if (navigate) onOpen?.(); else setOpen(o => !o); }} className={`grid items-center py-3 px-4 font-sans text-left ${forcePage ? '' : 'cursor-pointer hover:bg-[#FCFCFD]'}`} style={{ gridTemplateColumns: GRID, gap: 12, background: (open && !forcePage) ? '#FCFCFD' : '#fff' }}>
+    <div style={{ borderLeft: forcePage ? 'none' : `3px solid ${st.side}`, borderBottom: last ? 'none' : '1px solid #EDF0F5' }}>
+      {/* En PANTALLA (forcePage) la cabecera es el topbar de la maqueta: Volver · título
+          grande · tipo + estado + dominio · y a la derecha los dos botones de acción
+          ("Abrir el DEL" y "Generar con IA"). En la LISTA sigue siendo la fila-grid. */}
+      {forcePage && (
+        <div className="flex items-center gap-3 flex-wrap py-3.5 px-[18px] border-b border-[#EDF0F5] bg-white">
+          <button onClick={() => onBack?.()} className="inline-flex items-center gap-1.5 py-2 px-3 rounded-[10px] border border-[#E2E5EB] bg-white text-[12.5px] font-semibold text-[#4B5563] cursor-pointer hover:border-[#2E69E0] hover:text-[#2E69E0] shrink-0"><ChevronLeft size={15} />Volver</button>
+          <div className="min-w-0 flex-1">
+            <input key={f.id + 'nametop'} defaultValue={f.name} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[19px] font-extrabold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none tracking-[-.015em]" style={{ color: '#1A1D26' }} />
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <TipoChip value={f.tipo} onChange={(v) => onUpdate(f.id, { tipo: v })} />
+              <StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} />
+              {f.official_domain
+                ? <span onClick={() => copyText(f.official_domain)} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2E69E0] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span>
+                : <span className="inline-flex items-center gap-1 text-[11px] text-[#AEB4BF]"><Globe size={11} />sin dominio</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setDelOpen(true)} className="inline-flex items-center gap-1.5 py-2.5 px-3.5 rounded-[10px] border bg-white text-[12.5px] font-semibold cursor-pointer hover:bg-[#F5F3FF]" style={{ color: '#7C3AED', borderColor: '#E4DCFB' }}><FileText size={15} />Abrir el DEL</button>
+            <button onClick={() => generateAvatars('append')} disabled={genActive} title="La IA lee el DEL y arma/actualiza los avatares con su segmentación y copys. Tarda 1-2 minutos." className="inline-flex items-center gap-1.5 py-2.5 px-3.5 rounded-[10px] border-none bg-[#2E69E0] text-white text-[12.5px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-60">{genActive ? <RefreshCw size={15} className="animate-spin" /> : <Sparkles size={15} />}{genActive ? 'Generando…' : 'Generar con IA'}</button>
+          </div>
+        </div>
+      )}
+      {!forcePage && (
+      <div onClick={() => { if (navigate) onOpen?.(); else setOpen(o => !o); }} className="grid items-center py-3 px-4 font-sans text-left cursor-pointer hover:bg-[#FCFCFD]" style={{ gridTemplateColumns: GRID, gap: 12, background: open ? '#FCFCFD' : '#fff' }}>
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="text-[#94A3B8] shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg></span>
           <div className="min-w-0 flex-1">
@@ -969,29 +1056,38 @@ Quedo a la espera de tu respuesta`;
             : <span className="text-[11.5px] text-[#22C55E] font-semibold inline-flex items-center gap-1.5"><Check size={11} strokeWidth={3} />Todo listo</span>}
         </div>
         <div className="flex justify-end">
-          {forcePage
-            ? null
-            : navigate
-              ? <ChevronRight size={16} className="text-[#C3C9D4]" />
-              : <ChevronDown size={16} className="transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#2E69E0' : '#C3C9D4' }} />}
+          {navigate
+            ? <ChevronRight size={16} className="text-[#C3C9D4]" />
+            : <ChevronDown size={16} className="transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#2E69E0' : '#C3C9D4' }} />}
         </div>
       </div>
+      )}
 
-      {/* El riel completo solo al abrir: en la lista ocupaba media fila repitiendo
-          lo que la columna "que falta" ya dice mejor. */}
-      {isOpen && <div style={{ background: '#FCFCFD' }}><PipelineSemaforo stages={stages} /></div>}
+      {/* El riel: en PANTALLA es la línea de la maqueta (dónde está + Próximo + % listo).
+          En la lista (acordeón viejo) queda el semáforo detallado. */}
+      {forcePage
+        ? <FunnelRail stages={stages} />
+        : isOpen && <div style={{ background: '#FCFCFD' }}><PipelineSemaforo stages={stages} /></div>}
 
       {isOpen && (
         <div className="pt-1 px-4 pb-[18px]" style={{ background: '#FCFCFD' }}>
           {/* Las tareas de este funnel, arriba de todo: el riel dice DONDE ESTA el
               funnel y el tablero QUE HAY QUE HACER. Es el mismo tablero del Sprint,
               filtrado — la tarea sigue viviendo en la pestaña Tareas. */}
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#EAF1FF', color: '#1D4FD8' }}><LayoutGrid size={16} /></span>
+            <div className="min-w-0">
+              <div className="text-[13.5px] font-bold text-[#1A1D26]">Tareas de este funnel</div>
+              <div className="text-[11px] text-[#9098A4]">El mismo tablero del Sprint, pero sólo lo de este funnel.</div>
+            </div>
+          </div>
           <FunnelTasksBlock funnelId={f.id} />
 
-          {/* El DEL, adentro del panel. Hasta ahora el unico modo de leerlo era abrir
-              el Google Doc. Es SOLO LECTURA a proposito: el Doc sigue siendo la
-              verdad hasta el cutover — dos fuentes escribibles a la vez es el
-              fracaso que la migracion viene a arreglar. */}
+          {/* El DEL, adentro del panel. En PANTALLA el botón ya está en el topbar, así que
+              esta caja solo aparece en el acordeón viejo (lista). Es SOLO LECTURA a
+              propósito hasta el cutover — dos fuentes escribibles a la vez es el fracaso
+              que la migración viene a arreglar. */}
+          {!forcePage && (
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#E4DCFB' }}>
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><FileText size={15} /></span>
@@ -1002,6 +1098,7 @@ Quedo a la espera de tu respuesta`;
             </div>
             <button onClick={() => setDelOpen(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#7C3AED] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95 shrink-0"><FileText size={14} />Abrir el DEL</button>
           </div>
+          )}
 
           {/* Mensaje para el editor: arma el brief de edición (guiones + carpetas + piezas por avatar) */}
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#DCE7FB' }}>
@@ -1383,11 +1480,8 @@ export default function FunnelsView({ clientId }) {
     const del = delOf(pageFunnel);
     return (
       <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
-        <button onClick={() => setPageFunnelId(null)} className="inline-flex items-center gap-1.5 mb-3 py-2 px-3 rounded-[10px] border border-[#E2E5EB] bg-white text-[12.5px] font-semibold text-[#4B5563] cursor-pointer hover:border-[#2E69E0] hover:text-[#2E69E0]">
-          <ChevronLeft size={15} />Volver a los funnels
-        </button>
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} forcePage last />
+          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onBack={() => setPageFunnelId(null)} forcePage last />
         </div>
       </div>
     );
