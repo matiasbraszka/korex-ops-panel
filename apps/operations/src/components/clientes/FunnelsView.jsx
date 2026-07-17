@@ -138,6 +138,49 @@ const FUNNEL_STATUS = {
   antiguo:  { label: 'Antiguo', bg: '#F1F3F7', color: '#6B7280', dot: '#94A3B8', border: '#E2E5EB', side: '#C3C9D4' },
 };
 const STATUS_ORDER = ['activa', 'borrador', 'pausada', 'antiguo'];
+// El TIPO del funnel. Antes se adivinaba con una regex sobre el nombre de la carpeta
+// del Drive ("Estrategia #2 | Reclutamiento | ..."), y se equivocaba: los funnels
+// "Producto sin pre-landing" y "Producto V2" de Jose Luis Rivas colgaban de una carpeta
+// llamada "Reclutamiento" y figuraban como reclutamiento. Ahora es un campo del funnel.
+const FUNNEL_TIPO = {
+  reclutamiento: { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF', border: '#C7DBFB' },
+  producto:      { label: 'Producto',      color: '#15803D', bg: '#E6F7EE', border: '#BBF0D0' },
+};
+const TIPO_ORDER = ['reclutamiento', 'producto'];
+
+// Chip de tipo, editable con un click. Sin tipo = hueco visible, no escondido:
+// es informacion que falta y hay que verla.
+function TipoChip({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const t = FUNNEL_TIPO[value];
+  return (
+    <span className="relative inline-flex" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={t ? `Tipo: ${t.label} — click para cambiar` : 'Falta definir el tipo — click para elegir'}
+        className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em] cursor-pointer font-sans"
+        style={t
+          ? { background: t.bg, color: t.color, border: `1px solid ${t.border}` }
+          : { background: 'transparent', color: '#AEB4BF', border: '1px dashed #D0D5DD' }}
+      >{t ? t.label : 'Sin tipo'}</button>
+      {open && (
+        <>
+          <span className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <span className="absolute top-[22px] left-0 z-20 flex flex-col gap-0.5 bg-white border border-[#E2E5EB] rounded-[9px] p-1 min-w-[130px]" style={{ boxShadow: '0 4px 14px rgba(26,29,38,.12)' }}>
+            {TIPO_ORDER.map(k => (
+              <button key={k} onClick={() => { onChange(k); setOpen(false); }}
+                className="inline-flex items-center gap-1.5 py-1.5 px-2 rounded-md text-[11.5px] font-semibold text-left font-sans cursor-pointer border-none bg-transparent hover:bg-[#F4F6F9]"
+                style={{ color: FUNNEL_TIPO[k].color }}>
+                <span className="w-[7px] h-[7px] rounded-full" style={{ background: FUNNEL_TIPO[k].color }} />{FUNNEL_TIPO[k].label}
+              </button>
+            ))}
+            {value && <button onClick={() => { onChange(null); setOpen(false); }} className="py-1.5 px-2 rounded-md text-[11px] text-left font-sans cursor-pointer border-none bg-transparent text-[#9098A4] hover:bg-[#F4F6F9]">Sin definir</button>}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
 const AVATAR_STATUS = {
   'En grabación': { short: 'Grabación', bg: '#FFF1E7', color: '#C2410C', dot: '#F97316' },
   'En edición':   { short: 'Edición',   bg: '#EEF3FF', color: '#2E69E0', dot: '#2E69E0' },
@@ -908,6 +951,8 @@ Quedo a la espera de tu respuesta`;
           <div className="min-w-0 flex-1">
             <input key={f.id + 'name'} defaultValue={f.name} onClick={e => e.stopPropagation()} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[15px] font-bold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none tracking-[-.01em]" style={{ color: '#1A1D26' }} />
             <div className="flex items-center gap-[7px] mt-0.5 flex-wrap">
+              <TipoChip value={f.tipo} onChange={(v) => onUpdate(f.id, { tipo: v })} />
+              <span className="text-[#C3C9D4]">·</span>
               {f.official_domain && <><span onClick={(e) => { e.stopPropagation(); copyText(f.official_domain); }} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#2E69E0] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span><span className="text-[#C3C9D4]">·</span></>}
               <span className="inline-flex items-center gap-1 text-[10.5px] text-[#9098A4]" onClick={e => e.stopPropagation()}>Creado
                 <input type="date" value={f.created_date || ''} onChange={e => onUpdate(f.id, { created_date: e.target.value || null })} title="Fecha de creación (editable)" className="text-[10.5px] text-[#9098A4] border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded px-1 py-0.5 bg-transparent cursor-pointer outline-none" />
@@ -1153,96 +1198,24 @@ Quedo a la espera de tu respuesta`;
   );
 }
 
-// Una estrategia "envuelve" sus documentos + sus funnels (con avatares).
-function StrategyGroup({ s, funnels, docs, pipeline, clientName, onUpdate, onDelete, onDeleteStrategy, onTrack, onNew, onRefreshPage }) {
-  const [open, setOpen] = useState(true);
-  const num = (s.position ?? 0) + 1;
-  const st = FUNNEL_STATUS[s.status] || FUNNEL_STATUS.borrador;
-  const cleanName = (s.name || '').replace(/^estrategia\s*#?\s*\d+\s*\|?\s*/i, '').trim();
-  // Etiqueta de tipo (Reclutamiento vs Producto) para diferenciar de un vistazo.
-  const stratType = /\bproducto\b/i.test(s.name || '') ? { label: 'Producto', color: '#15803D', bg: '#E6F7EE', border: '#BBF0D0' }
-    : /\breclutamiento\b/i.test(s.name || '') ? { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF', border: '#C7DBFB' }
-    : null;
-  const delDoc = docs.find(d => d.doc_kind === 'del');
-  const delText = (delDoc?.text) || '';
-  const delDocUrl = delDoc?.web_url || '';
-  const masterDocs = docs.filter(d => d.doc_kind !== 'extra');
-  // Nota: los Recursos (branding/testimonios/imágenes) ya NO viven acá: son del CLIENTE
-  // (bloque "Recursos del cliente" en el Contexto de arriba), compartidos por todas las estrategias.
-
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden mb-5" style={{ border: '1px solid #E7EAF0', borderLeft: '3px solid #EC4899', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-      <div onClick={() => setOpen(o => !o)} className="flex items-center gap-3 py-4 px-5 cursor-pointer border-b border-[#F1F3F7]" style={{ background: 'linear-gradient(180deg,#FDF2F8 0%,#fff 100%)' }}>
-        <span className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-[10px] shrink-0" style={{ background: '#FCE7F3', color: '#DB2777' }}><Layers size={18} /></span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-[15px] font-bold text-[#1A1D26]">Estrategia #{num}</span>
-            {cleanName && <><span className="text-[#C3C9D4]">·</span><span className="text-[14px] font-semibold text-[#3F4653]">{cleanName}</span></>}
-            {stratType && <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em]" style={{ background: stratType.bg, color: stratType.color, border: `1px solid ${stratType.border}` }}>{stratType.label}</span>}
-            <span className="inline-flex items-center gap-1.5 py-0.5 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em]" style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}><span className="w-[6px] h-[6px] rounded-full" style={{ background: st.dot }} />{st.label}</span>
-          </div>
-        </div>
-        <span className="text-[11.5px] text-[#9098A4] font-medium shrink-0">{funnels.length} funnel{funnels.length === 1 ? '' : 's'}</span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (window.confirm(`¿Borrar la "Estrategia #${num}${cleanName ? ' · ' + cleanName : ''}" y sus ${funnels.length} funnel(s) del panel?\n\nOJO: si la carpeta "Estrategia #${num}…" TODAVÍA está en el Drive, la próxima sincronización la vuelve a crear. Borrala o renombrala en el Drive primero (que no empiece con "Estrategia #").`)) {
-              onDeleteStrategy?.(s.id);
-            }
-          }}
-          title="Borrar estrategia del panel"
-          className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-transparent border-none cursor-pointer text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#DC2626] shrink-0"
-        ><Trash2 size={15} /></button>
-        <ChevronDown size={18} className="text-[#C3C9D4] shrink-0 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
-      </div>
-
-      {open && (
-        <div className="py-[18px] px-5">
-          {/* Documento maestro (DEL) de esta estrategia. Los Recursos ya no van acá (son del cliente). */}
-          <div className="mb-4">
-            <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Documento de la estrategia (DEL)</div>
-            <div className="flex gap-2.5 flex-wrap">
-              {masterDocs.length === 0
-                ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">Sin DEL vinculado en esta estrategia. Asignalo desde la pestaña Carpetas o generá avatares del DEL.</div>
-                : masterDocs.map(d => {
-                    const meta = DOC_META[d.doc_kind] || DOC_META.extra;
-                    return (
-                      <div key={d.id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={{ borderColor: '#C9F0D8', background: '#F4FDF7' }} title={`${meta.label} · ${(d.char_count || 0).toLocaleString()} caracteres`}>
-                        <span className="w-[19px] h-[19px] rounded-md bg-[#22C55E] text-white inline-flex items-center justify-center shrink-0"><Check size={12} strokeWidth={3.5} /></span>
-                        <span className="text-[9px] font-extrabold tracking-[0.06em] text-[#15803D] bg-[#DCFCE7] py-0.5 px-1.5 rounded-[5px]">{meta.label.toUpperCase()}</span>
-                        <span className="font-semibold text-[12.5px] text-[#1A1D26] max-w-[160px] truncate">{d.title || meta.label}</span>
-                        <span className="text-[10.5px] text-[#9098A4] whitespace-nowrap">{(d.char_count || 0).toLocaleString()} car.</span>
-                        {d.web_url && <button onClick={() => openUrl(d.web_url)} title="Abrir en Drive" className="text-[#9098A4] hover:text-[#2E69E0] inline-flex"><ExternalLink size={13} /></button>}
-                      </div>
-                    );
-                  })}
-            </div>
-          </div>
-
-          {/* Tabla de funnels (scroll horizontal si no entra) */}
-          <div className="border border-[#EDF0F5] rounded-xl overflow-x-auto">
-            <div style={{ minWidth: 820 }}>
-              <div className="grid items-center py-[9px] px-4 border-b border-[#EDF0F5]" style={{ gridTemplateColumns: GRID, gap: 12, background: '#FAFBFD' }}>
-                {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
-              </div>
-              {funnels.length === 0
-                ? <div className="text-[12px] text-[#9098A4] py-7 text-center">Sin funnels en esta estrategia.</div>
-                : funnels.map((f, i) => <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={delText} delDocUrl={delDocUrl} clientId={s.client_id} clientName={clientName} onUpdate={onUpdate} onDelete={onDelete} onTrack={onTrack} onRefreshPage={onRefreshPage} last={i === funnels.length - 1} />)}
-            </div>
-          </div>
-
-          <button onClick={() => onNew(s.id)} className="flex items-center justify-center gap-2.5 w-full mt-3.5 border-[1.5px] border-dashed border-[#B9CCFB] rounded-xl bg-[#F5F9FF] text-[#2E69E0] text-[13px] font-semibold py-3.5 px-4 cursor-pointer hover:bg-[#EAF1FF] hover:border-[#2E69E0] transition-colors"><span className="w-[22px] h-[22px] rounded-full bg-[#2E69E0] text-white inline-flex items-center justify-center shrink-0"><Plus size={13} strokeWidth={2.6} /></span>Nuevo funnel en esta estrategia</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
+// La pestaña Funnels del cliente: contexto arriba, y despues los FUNNELS planos.
+//
+// Ya NO se muestra la "estrategia". Se jubilo el concepto, no la tabla: `strategy_id`
+// sobrevive porque nunca fue una estrategia -- es el puntero a la CARPETA DEL DRIVE
+// (drive-sync la deriva del nombre "Estrategia #N | Tipo | fecha" y de ella cuelga el DEL).
+// Tampoco existe mas el boton "Borrar estrategia": era un gatillo de ON DELETE CASCADE
+// que se llevaba puestos los funnels con sus avatares y guiones adentro, y encima
+// drive-sync recreaba la carpeta vacia en el sync de las 06:00.
 export default function FunnelsView({ clientId }) {
-  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage, deleteStrategy, refreshStrategyPage } = useApp();
+  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
+  // Los FUNNELS del cliente, PLANOS. La "estrategia" dejo de ser una capa de navegacion:
+  // de 40 estrategias, 26 de 33 clientes tenian una sola -> no agrupaba nada, y su nombre
+  // solo guardaba el tipo (que ahora es un campo del funnel).
+  const myFunnels = useMemo(() => (strategyPages || []).filter(p => p.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategyPages, clientId]);
+  // Las carpetas de Drive del cliente. NO se muestran, pero se siguen necesitando:
+  // strategy_id es NOT NULL (un funnel vive en una carpeta) y de ahi cuelga su DEL.
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
-  const funnelsOf = (sid) => (strategyPages || []).filter(p => p.strategy_id === sid);
 
   // Contexto (client_brain_docs ingerido) + Drive docs (para asignar) + casilleros.
   const [docs, setDocs] = useState([]);
@@ -1288,7 +1261,10 @@ export default function FunnelsView({ clientId }) {
   useEffect(() => { loadRecursos(); }, [loadRecursos]);
 
   const docsByNode = useMemo(() => { const m = {}; for (const d of docs) m[d.node_id] = d; return m; }, [docs]);
-  const docsOf = (sid) => docs.filter(d => d.strategy_id === sid);
+  // El DEL sigue viviendo en la CARPETA del Drive (strategy_id), no en el funnel: por eso
+  // dos funnels de la misma carpeta comparten DEL. Ya era asi; el aplanado solo lo deja a la
+  // vista. Reanclarlo al funnel es la Fase 3 (del_documents con FK propia).
+  const delOf = useCallback((f) => docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del') || null, [docs]);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
   // Sincronizar contexto = relee documentos (client-brain-sync) Y el árbol de Drive (drive-sync,
   // para traer carpetas nuevas de Recursos), y recarga todo.
@@ -1304,14 +1280,16 @@ export default function FunnelsView({ clientId }) {
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
   const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
-  const blankForm = (sid) => ({ name: '', strategy_id: sid || myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
+  // strategy_id = la carpeta del Drive donde vive el funnel. Es NOT NULL, asi que hay que
+  // elegir una; pero el 90% de los clientes tiene UNA sola, y ahi no se pregunta nada.
+  const blankForm = (sid) => ({ name: '', tipo: null, strategy_id: sid || myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
   const [form, setForm] = useState(blankForm);
   const openNew = (sid) => { setForm(blankForm(sid)); setModal(true); };
 
   const create = () => {
     if (!form.name.trim() || !form.strategy_id) return;
     addStrategyPage({
-      strategy_id: form.strategy_id, name: form.name.trim(), status: form.status,
+      strategy_id: form.strategy_id, client_id: clientId, name: form.name.trim(), status: form.status, tipo: form.tipo,
       prod_url: form.prod_url || null, testing_url: form.testing_url || null, ads_url: form.ads_url || null,
       pixel_code: form.pixel_code || null, clarity_id: form.clarity_id || null,
       conversion_events: form.events, avatars: form.avatars,
@@ -1441,16 +1419,54 @@ export default function FunnelsView({ clientId }) {
         </div>
       </div>
 
-      {/* Estrategias, cada una envolviendo sus documentos y funnels */}
-      {myStrategies.length === 0
-        ? <div className="bg-white rounded-2xl flex flex-col items-center justify-center text-center py-12 px-5 gap-2.5" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}><Zap size={26} className="text-[#C7CCD6]" /><div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay estrategias</div><div className="text-[11.5px] text-text2 max-w-[430px]">Creala acá (arma sola las carpetas en el Drive con su DEL) o sincronizá una carpeta "Estrategia #N" existente desde la pestaña Carpetas.</div><button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#DB2777' }}><FolderPlus size={14} />Agregar estrategia</button></div>
-        : myStrategies.map(s => <StrategyGroup key={s.id} s={s} funnels={funnelsOf(s.id)} docs={docsOf(s.id)} pipeline={pipeline} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onDeleteStrategy={deleteStrategy} onTrack={openTrack} onNew={openNew} onRefreshPage={refreshStrategyPage} />)}
+      {/* Los funnels del cliente, planos: la unidad de trabajo es el FUNNEL. */}
+      <div className="bg-white rounded-2xl overflow-hidden mb-5" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
+        <div className="flex items-center gap-3 py-4 px-5 border-b border-[#F1F3F7]">
+          <span className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-[10px] shrink-0" style={{ background: '#EAF1FF', color: '#2E69E0' }}><Zap size={18} /></span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em]">Funnels</div>
+            <div className="text-[11.5px] text-[#9098A4] mt-px">{myFunnels.length === 0 ? 'Todavía no hay ninguno' : `${myFunnels.length} funnel${myFunnels.length === 1 ? '' : 's'} de ${client.name || 'este cliente'}`}</div>
+          </div>
+          {myFunnels.length > 0 && (
+            <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[10px] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95 shrink-0" style={{ background: '#2E69E0', boxShadow: '0 1px 2px rgba(46,105,224,.35)' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>
+          )}
+        </div>
 
-      {/* Agregar estrategia: crea la carpeta de Drive "Estrategia #N" con su estructura + DEL en blanco */}
-      {myStrategies.length > 0 && (
-        <div className="flex flex-col items-center gap-1.5 mt-2">
-          <button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[10px] border border-dashed text-[12px] font-semibold cursor-pointer hover:bg-[#FFF5FA] bg-white" style={{ color: '#DB2777', borderColor: '#F5C2DD' }}><FolderPlus size={14} />Agregar estrategia</button>
-          <div className="flex items-center gap-1.5 text-[11px] text-[#9098A4]"><Layers size={12} />Crea la carpeta "Estrategia #N" en el Drive con su estructura. Una carpeta ya existente se trae sincronizando (pestaña Carpetas).</div>
+        <div className="py-[18px] px-5">
+          {myFunnels.length === 0 ? (
+            <div className="flex flex-col items-center justify-center text-center py-10 px-5 gap-2.5">
+              <Zap size={26} className="text-[#C7CCD6]" />
+              <div className="text-[13px] font-semibold text-[#4B5563]">Este cliente todavía no tiene funnels</div>
+              <div className="text-[11.5px] text-text2 max-w-[430px]">
+                {myStrategies.length === 0
+                  ? 'Primero hay que crearle la carpeta en el Drive: arma sola su estructura y un DEL en blanco.'
+                  : 'Crealo acá. Va a la carpeta del Drive que ya tiene.'}
+              </div>
+              {myStrategies.length === 0
+                ? <button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#DB2777' }}><FolderPlus size={14} />Crear la carpeta del Drive</button>
+                : <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#2E69E0' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>}
+            </div>
+          ) : (
+            <div className="border border-[#EDF0F5] rounded-xl overflow-x-auto">
+              <div style={{ minWidth: 820 }}>
+                <div className="grid items-center py-[9px] px-4 border-b border-[#EDF0F5]" style={{ gridTemplateColumns: GRID, gap: 12, background: '#FAFBFD' }}>
+                  {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
+                </div>
+                {myFunnels.map((f, i) => {
+                  const del = delOf(f);
+                  return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === myFunnels.length - 1} />;
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* La carpeta del Drive: se sigue pudiendo crear, pero es plomeria, no una capa de trabajo.
+          Va discreto abajo, no como una decision que haya que tomar antes de empezar. */}
+      {myFunnels.length > 0 && (
+        <div className="flex justify-center">
+          <button onClick={() => setStratModal(true)} title="Crea en el Drive una carpeta nueva con su estructura y un DEL en blanco" className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-transparent text-[11px] font-medium cursor-pointer text-[#AEB4BF] hover:text-[#DB2777]"><FolderPlus size={12} />Crear otra carpeta en el Drive</button>
         </div>
       )}
 
@@ -1461,8 +1477,23 @@ export default function FunnelsView({ clientId }) {
           <div className="flex flex-col gap-[18px] p-1">
             <div className="grid gap-3.5" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Nombre del funnel</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ej. Profesionales V1" className={inputCls} autoFocus /></div>
-              <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Estrategia</label><select value={form.strategy_id} onChange={e => setForm({ ...form, strategy_id: e.target.value })} className={inputCls + ' cursor-pointer'}>{myStrategies.map(s => <option key={s.id} value={s.id}>Estrategia #{(s.position ?? 0) + 1}{s.name ? ' · ' + s.name : ''}</option>)}</select></div>
+              <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Tipo</label>
+                <div className="inline-flex items-center gap-1 p-1 border border-[#E2E5EB] rounded-[10px] bg-[#F7F8FA]">
+                  {TIPO_ORDER.map(k => { const v = FUNNEL_TIPO[k]; const sel = form.tipo === k; return <button key={k} onClick={() => setForm({ ...form, tipo: sel ? null : k })} className="inline-flex items-center gap-1.5 py-[7px] px-3 border-none rounded-[7px] text-[12.5px] font-semibold font-sans cursor-pointer" style={{ background: sel ? '#fff' : 'transparent', color: sel ? v.color : '#6B7280', boxShadow: sel ? '0 1px 2px rgba(10,22,40,.12)' : 'none' }}><span className="w-[7px] h-[7px] rounded-full" style={{ background: sel ? v.color : '#C3C9D4' }} />{v.label}</button>; })}
+                </div>
+              </div>
             </div>
+
+            {/* La carpeta del Drive solo se pregunta si hay mas de una: si no, es ruido. */}
+            {myStrategies.length > 1 && (
+              <div>
+                <label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Carpeta del Drive</label>
+                <select value={form.strategy_id} onChange={e => setForm({ ...form, strategy_id: e.target.value })} className={inputCls + ' cursor-pointer'}>
+                  {myStrategies.map(s => <option key={s.id} value={s.id}>{s.name || `Carpeta #${(s.position ?? 0) + 1}`}</option>)}
+                </select>
+                <div className="text-[11px] text-[#9098A4] mt-1.5">Dónde vive el funnel en el Drive. De ahí sale su DEL.</div>
+              </div>
+            )}
             <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Estado</label>
               <div className="inline-flex items-center gap-1 p-1 border border-[#E2E5EB] rounded-[10px] bg-[#F7F8FA]">
                 {STATUS_ORDER.map(k => { const v = FUNNEL_STATUS[k]; const sel = form.status === k; return <button key={k} onClick={() => setForm({ ...form, status: k })} className="inline-flex items-center gap-1.5 py-[7px] px-3.5 border-none rounded-[7px] text-[12.5px] font-semibold font-sans cursor-pointer" style={{ background: sel ? '#fff' : 'transparent', color: sel ? '#1A1D26' : '#6B7280', boxShadow: sel ? '0 1px 2px rgba(10,22,40,.12)' : 'none' }}><span className="w-[7px] h-[7px] rounded-full" style={{ background: v.dot }} />{v.label}</button>; })}

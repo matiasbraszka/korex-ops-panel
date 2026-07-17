@@ -1486,6 +1486,11 @@ export function AppProvider({ children }) {
     const row = {
       id,
       strategy_id: data.strategy_id,
+      // client_id: lo recalcula igual el trigger strategy_pages_fill_client_id (BEFORE INSERT),
+      // asi que mandarlo no puede divergir. Va para que la fila OPTIMISTA lo tenga: la lista de
+      // funnels filtra por client_id, y sin esto el funnel recien creado no aparecia hasta recargar.
+      client_id: data.client_id || null,
+      tipo: data.tipo || null,
       position: data.position || 0,
       name: String(data.name || 'Nueva página').trim(),
       testing_url: data.testing_url || null,
