@@ -32,6 +32,13 @@ const SEC = {
 };
 const secOf = (k) => SEC[k] || SEC.otros;
 
+// El orden CANÓNICO del DEL (el de la maqueta): la estrategia arriba, después los avatares,
+// la VSL, los anuncios, el recorrido de páginas, y al final los mensajes / lo viejo / lo suelto.
+// El Doc real viene desordenado; con esto las secciones se leen como el documento estructurado
+// que pidió Matías, agrupadas por categoría, sin tocar el texto.
+const KIND_ORDER = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'pipeline_viejo', 'otros'];
+const kindRank = (k) => { const i = KIND_ORDER.indexOf(k); return i === -1 ? 99 : i; };
+
 // Las 4 secciones sin html (pestañas-puntero que ya no estan en el Doc) se editan
 // igual: el texto plano se envuelve en parrafos para arrancar.
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -79,6 +86,25 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [secs]);
 
+  // Secciones en el orden canónico del DEL (por categoría y, dentro de cada una, por su
+  // posición real en el Doc). Es lo que estructura el documento sin reescribirlo.
+  const sorted = useMemo(
+    () => (secs ? [...secs].sort((a, b) => kindRank(a.kind) - kindRank(b.kind) || (a.ord - b.ord)) : []),
+    [secs],
+  );
+
+  // Las secciones agrupadas por categoría, en orden canónico. De acá salen los grupos de
+  // color del índice y las franjas del documento.
+  const groups = useMemo(() => {
+    const g = [];
+    for (const s of sorted) {
+      const last = g[g.length - 1];
+      if (last && last.kind === s.kind) last.items.push(s);
+      else g.push({ kind: s.kind, items: [s] });
+    }
+    return g;
+  }, [sorted]);
+
   const irA = (id) => {
     setActiva(id);
     const el = document.getElementById('sec-' + id);
@@ -97,10 +123,10 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
     }, 800);
   };
 
-  const agregar = async (afterOrd) => {
+  const agregar = async (afterOrd, kind = 'otros') => {
     if (!resolvedDoc) return;
     const { data, error } = await supabase.rpc('del_section_add', {
-      p_doc_id: resolvedDoc, p_title: 'Sección nueva', p_kind: 'otros', p_after_ord: afterOrd ?? null, p_by: by,
+      p_doc_id: resolvedDoc, p_title: 'Sección nueva', p_kind: kind || 'otros', p_after_ord: afterOrd ?? null, p_by: by,
     });
     if (error) { window.alert('No pude agregar la sección: ' + error.message); return; }
     await cargar();
@@ -155,16 +181,29 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
           <div className="flex items-center justify-between px-2 pt-1 pb-2">
             <span className="text-[9.5px] font-extrabold tracking-[0.1em] uppercase text-[#AEB4BF]">{secs.length} secciones</span>
           </div>
-          {secs.map(s => {
-            const sc = secOf(s.kind);
-            const on = activa === s.id;
+          {/* Índice agrupado por categoría (Estrategia → Avatares → VSL → Anuncios → Páginas
+              → Mensajes → …): cada grupo con su color, para que la estructura del DEL se vea
+              de un vistazo aunque el Doc venga desordenado. */}
+          {groups.map(gr => {
+            const sc = secOf(gr.kind);
             return (
-              <button key={s.id} onClick={() => irA(s.id)}
-                className="group/idx flex items-center gap-2 py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
-                style={{ background: on ? sc.bg : 'transparent', color: on ? sc.c : '#6B7280' }}>
-                <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: sc.c, opacity: on ? 1 : .45 }} />
-                <span className="truncate flex-1 min-w-0">{s.title}</span>
-              </button>
+              <div key={gr.kind} className="mb-0.5">
+                <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
+                  <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: sc.c }} />
+                  <span className="text-[9.5px] font-extrabold tracking-[0.07em] uppercase" style={{ color: sc.c }}>{sc.label}</span>
+                  <span className="text-[9.5px] font-bold text-[#C3C9D4]">{gr.items.length}</span>
+                </div>
+                {gr.items.map(s => {
+                  const on = activa === s.id;
+                  return (
+                    <button key={s.id} onClick={() => irA(s.id)}
+                      className="flex items-center gap-2 w-full py-1.5 pl-4 pr-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
+                      style={{ background: on ? sc.bg : 'transparent', color: on ? sc.c : '#6B7280' }}>
+                      <span className="truncate flex-1 min-w-0">{s.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
           {editando && resolvedDoc && (
@@ -193,7 +232,20 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
             </div>
           )}
 
-          {secs.map(s => {
+          {/* El documento, agrupado por categoría en orden canónico. Cada grupo abre con su
+              franja de color; adentro van sus secciones. Así el DEL se lee estructurado
+              (la "S" de Estrategia arriba, después Avatares, VSL, Anuncios, Páginas…). */}
+          {groups.map(gr => {
+            const gc = secOf(gr.kind);
+            return (
+              <div key={gr.kind} className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[11px] font-extrabold uppercase tracking-[0.06em]" style={{ background: gc.bg, color: gc.c }}>
+                    <span className="w-[7px] h-[7px] rounded-full" style={{ background: gc.c }} />{gc.label}
+                  </span>
+                  <span className="h-px flex-1" style={{ background: '#EDF0F5' }} />
+                </div>
+                {gr.items.map(s => {
             const sc = secOf(s.kind);
             const st = saveState[s.id];
             return (
@@ -214,7 +266,7 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
-                      <button onClick={() => agregar(s.ord)} title="Agregar sección debajo" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
+                      <button onClick={() => agregar(s.ord, s.kind)} title="Agregar sección debajo (misma categoría)" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
                       <button onClick={() => borrar(s)} title="Borrar sección" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#B91C1C] border-none bg-transparent cursor-pointer"><Trash2 size={13} /></button>
                     </div>
                   )}
@@ -241,6 +293,9 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
                   </div>
                 )}
               </section>
+            );
+                })}
+              </div>
             );
           })}
         </div>
