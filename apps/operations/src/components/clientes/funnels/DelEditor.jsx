@@ -189,7 +189,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     (async () => {
       try {
         const [rows, hidden] = await Promise.all([
-          sbFetch(`client_brain_docs?select=id,node_id,title,doc_kind,text,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`),
+          sbFetch(`client_brain_docs?select=id,node_id,title,doc_kind,text,panel_html,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`),
           sbFetch(`del_client_doc_hidden?select=node_id&client_id=eq.${encodeURIComponent(cid)}`),
         ]);
         if (!alive) return;
@@ -212,6 +212,22 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
   };
   const shownClientDocs = useMemo(() => clientDocs.filter(d => !excluded.has(d.node_id)), [clientDocs, excluded]);
   const excludedDocs = useMemo(() => clientDocs.filter(d => excluded.has(d.node_id)), [clientDocs, excluded]);
+
+  // Editar los documentos del cliente (guarda panel_html + text, con debounce).
+  const [docEditing, setDocEditing] = useState(false);
+  const docTimer = useRef(null);
+  useEffect(() => { setDocEditing(false); }, [view]);
+  const htmlToText = (h) => String(h || '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<li[^>]*>/gi, '• ').replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n').trim();
+  const saveClientDoc = (doc, html) => {
+    setClientDocs((prev) => prev.map(d => d.id === doc.id ? { ...d, panel_html: html } : d));
+    clearTimeout(docTimer.current);
+    docTimer.current = setTimeout(() => {
+      supabase.from('client_brain_docs').update({ panel_html: html, text: htmlToText(html), panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
+    }, 900);
+  };
 
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
@@ -701,10 +717,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
             </div>
           )}
 
-          {/* Un documento DEL CLIENTE (personalidad / onboarding / investigación), solo lectura. */}
+          {/* Un documento DEL CLIENTE (personalidad / onboarding / investigación): editable. */}
           {view.startsWith('cliente:') && (() => {
             const doc = clientDocs.find(d => 'cliente:' + d.id === view);
             if (!doc) return null;
+            const docHtml = doc.panel_html || plainToHtml(doc.text);
             return (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-2 py-2 px-1 flex-wrap">
@@ -712,14 +729,34 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
                     <div className="min-w-0">
                       <div className="text-[14px] font-bold text-[#1A1D26] truncate">{DOC_KIND_LABEL[doc.doc_kind] || doc.title}</div>
-                      <div className="text-[11px] text-[#9098A4]">Aparece en todos los DEL de este cliente · solo lectura.</div>
+                      <div className="text-[11px] text-[#9098A4]">Aparece en todos los DEL de este cliente.{docEditing ? ' Se guarda solo.' : ''}</div>
                     </div>
                   </div>
-                  {doc.web_url && <a href={doc.web_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline shrink-0"><ExternalLink size={11} />Abrir en Drive</a>}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
+                      <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
+                      <button onClick={() => setDocEditing(true)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
+                    </div>
+                    {doc.web_url && <a href={doc.web_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline"><ExternalLink size={11} />Drive</a>}
+                  </div>
                 </div>
-                <div className="rounded-xl border border-[#E7EAF0] bg-white py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '80ch' }}>
-                  {(doc.text || '').trim() || <span className="italic text-[#C3C9D4]">Este documento está vacío o todavía no se sincronizó.</span>}
-                </div>
+                {docEditing ? (
+                  <RichTextEditor
+                    key={doc.id}
+                    value={docHtml}
+                    onChange={(html) => saveClientDoc(doc, html)}
+                    sanitize={sanitizeDelHtml}
+                    delTools
+                    minHeight={320}
+                    placeholder="Escribí acá…"
+                  />
+                ) : (
+                  <div className="del-rich rounded-xl border border-[#E7EAF0] bg-white py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '80ch' }}>
+                    {(doc.panel_html || (doc.text || '').trim())
+                      ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(docHtml) }} />
+                      : <span className="italic text-[#C3C9D4]">Este documento está vacío o todavía no se sincronizó.</span>}
+                  </div>
+                )}
               </div>
             );
           })()}
