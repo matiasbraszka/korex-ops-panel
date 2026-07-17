@@ -40,6 +40,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const ref = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
+  const [dialog, setDialog] = useState(null); // diálogo nativo (tabla/imagen/avatar/aviso)
 
   useEffect(() => {
     if (!ref.current) return;
@@ -102,29 +103,27 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   };
 
   // ── Herramientas del DEL (solo con delTools) ─────────────────────────────────
+  // Los diálogos son NATIVOS de la plataforma (no window.prompt del navegador). Al
+  // abrir uno, el foco sale del editor y se pierde el cursor: por eso guardamos el
+  // rango de selección y lo restauramos justo antes de insertar.
+  const savedRange = useRef(null);
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    savedRange.current = (sel && sel.rangeCount && ref.current?.contains(sel.anchorNode)) ? sel.getRangeAt(0).cloneRange() : null;
+  };
   const insertHTML = (html) => {
     ref.current?.focus();
+    if (savedRange.current) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(savedRange.current); }
     document.execCommand('insertHTML', false, html);
+    savedRange.current = null;
     handleInput();
   };
 
-  // Tabla con encabezado. Encaja con el blueprint: las maquetas de páginas son tablas.
-  const insertTable = () => {
-    const c = parseInt(window.prompt('¿Cuántas columnas?', '2') || '0', 10);
-    const r = parseInt(window.prompt('¿Cuántas filas? (sin contar el encabezado)', '2') || '0', 10);
-    if (!c || !r || c < 1 || r < 1 || c > 12 || r > 60) return;
-    let html = '<table><thead><tr>';
-    for (let j = 0; j < c; j++) html += '<th>Columna ' + (j + 1) + '</th>';
-    html += '</tr></thead><tbody>';
-    for (let i = 0; i < r; i++) { html += '<tr>'; for (let j = 0; j < c; j++) html += '<td></td>'; html += '</tr>'; }
-    html += '</tbody></table><p></p>';
-    insertHTML(html);
-  };
-
   // Tamaño de letra: agranda/achica el texto seleccionado (relativo, con span+style).
+  // No abre diálogo: opera directo sobre la selección.
   const changeFontSize = (bigger) => {
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { window.alert('Seleccioná primero el texto que querés ' + (bigger ? 'agrandar' : 'achicar') + '.'); return; }
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setDialog({ type: 'aviso', msg: 'Seleccioná primero el texto que querés ' + (bigger ? 'agrandar' : 'achicar') + '.' }); return; }
     const span = document.createElement('span');
     span.style.fontSize = bigger ? 'larger' : 'smaller';
     const range = sel.getRangeAt(0);
@@ -134,23 +133,34 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     ref.current?.focus();
   };
 
-  // Imagen: si hay gancho (galería de Recursos) lo usa; si no, pide el link.
-  const insertImage = () => {
-    if (onInsertImage) { onInsertImage(insertHTML); return; }
-    const url = window.prompt('Pegá el link de la imagen (http/https):');
-    if (!url) return;
-    const safe = url.trim();
-    if (!/^https?:\/\//i.test(safe)) { window.alert('El link debe empezar con http:// o https://'); return; }
+  // Abren los diálogos nativos (guardando la selección).
+  const openTable = () => { saveSelection(); setDialog({ type: 'table', cols: '3', rows: '3' }); };
+  const openImage = () => { saveSelection(); if (onInsertImage) { onInsertImage(insertHTML); return; } setDialog({ type: 'image', url: '' }); };
+  const openAvatar = () => { saveSelection(); if (onNewAvatar) { onNewAvatar(insertHTML); return; } setDialog({ type: 'avatar', name: '' }); };
+
+  // Confirmación de cada diálogo.
+  const doTable = () => {
+    const c = Math.min(12, Math.max(1, parseInt(dialog.cols, 10) || 0));
+    const r = Math.min(60, Math.max(1, parseInt(dialog.rows, 10) || 0));
+    let html = '<table><thead><tr>';
+    for (let j = 0; j < c; j++) html += '<th>Columna ' + (j + 1) + '</th>';
+    html += '</tr></thead><tbody>';
+    for (let i = 0; i < r; i++) { html += '<tr>'; for (let j = 0; j < c; j++) html += '<td></td>'; html += '</tr>'; }
+    html += '</tbody></table><p></p>';
+    setDialog(null); insertHTML(html);
+  };
+  const doImage = () => {
+    const safe = (dialog.url || '').trim();
+    if (!/^https?:\/\//i.test(safe)) { setDialog({ ...dialog, err: 'El link debe empezar con http:// o https://' }); return; }
+    setDialog(null);
     insertHTML(`<img src="${safe.replace(/"/g, '&quot;')}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`);
   };
-
-  // Avatar: inserta el bloque entero y en orden (nombre → Segmentación → Descripción).
-  const insertAvatar = () => {
-    if (onNewAvatar) { onNewAvatar(insertHTML); return; }
-    const nombre = (window.prompt('Nombre del avatar:', '') || '').trim();
-    if (!nombre) return;
-    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    insertHTML(`<h2>Avatar — ${esc(nombre)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
+  const doAvatar = () => {
+    const nombre = (dialog.name || '').trim();
+    if (!nombre) { setDialog({ ...dialog, err: 'Poné un nombre.' }); return; }
+    const e = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    setDialog(null);
+    insertHTML(`<h2>Avatar — ${e(nombre)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
   };
 
   // --- Plegado de secciones por titulo (estilo Google Docs) ---
@@ -272,9 +282,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
           <Divider />
           <Btn label="A−" title="Achicar la letra seleccionada" onClick={() => changeFontSize(false)} />
           <Btn label="A+" title="Agrandar la letra seleccionada" onClick={() => changeFontSize(true)} />
-          <Btn Icon={Table}     title="Insertar tabla" onClick={insertTable} />
-          <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={insertImage} />
-          <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={insertAvatar} />
+          <Btn Icon={Table}     title="Insertar tabla" onClick={openTable} />
+          <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={openImage} />
+          <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={openAvatar} />
         </>)}
         <Divider />
         <Btn Icon={Link2}  title="Insertar link" onClick={addLink} />
@@ -291,6 +301,59 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
         style={{ minHeight }}
       />
+
+      {/* Diálogo NATIVO de la plataforma (nada de window.prompt del navegador). */}
+      {dialog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDialog(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[380px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }} onMouseDown={(e) => e.stopPropagation()}>
+            {dialog.type === 'aviso' && (<>
+              <div className="text-[14px] font-bold text-[#1A1D26] mb-1.5">Un momento</div>
+              <div className="text-[13px] text-[#4B5563] leading-snug">{dialog.msg}</div>
+              <div className="flex justify-end mt-4"><button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Entendido</button></div>
+            </>)}
+
+            {dialog.type === 'table' && (<>
+              <div className="text-[15px] font-bold text-[#1A1D26] mb-3.5">Insertar tabla</div>
+              <div className="flex items-center gap-3">
+                <label className="flex-1 text-[12px] font-semibold text-[#6B7280]">Columnas
+                  <input type="number" min="1" max="12" value={dialog.cols} autoFocus onChange={(e) => setDialog({ ...dialog, cols: e.target.value })} className="mt-1 w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[14px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+                </label>
+                <label className="flex-1 text-[12px] font-semibold text-[#6B7280]">Filas
+                  <input type="number" min="1" max="60" value={dialog.rows} onChange={(e) => setDialog({ ...dialog, rows: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') doTable(); }} className="mt-1 w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[14px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+                </label>
+              </div>
+              <div className="text-[11px] text-[#9098A4] mt-2">La primera fila queda como encabezado.</div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+                <button onClick={doTable} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Insertar</button>
+              </div>
+            </>)}
+
+            {dialog.type === 'image' && (<>
+              <div className="text-[15px] font-bold text-[#1A1D26] mb-3.5">Insertar imagen</div>
+              <input type="url" value={dialog.url} autoFocus placeholder="https://…" onChange={(e) => setDialog({ ...dialog, url: e.target.value, err: null })} onKeyDown={(e) => { if (e.key === 'Enter') doImage(); }} className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+              <div className="text-[11px] text-[#9098A4] mt-2">Pegá el link de la imagen. (La galería de Recursos viene después.)</div>
+              {dialog.err && <div className="text-[11.5px] text-[#DC2626] mt-1.5">{dialog.err}</div>}
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+                <button onClick={doImage} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Insertar</button>
+              </div>
+            </>)}
+
+            {dialog.type === 'avatar' && (<>
+              <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Insertar avatar</div>
+              <div className="text-[11.5px] text-[#9098A4] mb-3">Inserta el bloque en orden: nombre → Segmentación → Descripción.</div>
+              <input type="text" value={dialog.name} autoFocus placeholder="Nombre del avatar" onChange={(e) => setDialog({ ...dialog, name: e.target.value, err: null })} onKeyDown={(e) => { if (e.key === 'Enter') doAvatar(); }} className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+              {dialog.err && <div className="text-[11.5px] text-[#DC2626] mt-1.5">{dialog.err}</div>}
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+                <button onClick={doAvatar} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Insertar</button>
+              </div>
+            </>)}
+          </div>
+        </div>
+      )}
       <style>{`
         .rte-content:empty:before {
           content: attr(data-placeholder);

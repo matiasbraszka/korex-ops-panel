@@ -142,12 +142,20 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     const body = draft.trim();
     if (!body) return;
     setDraft('');
-    const { error } = await supabase.from('del_comments').insert({
+    // Optimista: el comentario aparece al instante. Si el guardado falla de verdad,
+    // se revierte y se muestra el error (así nunca "no pasa nada" en silencio).
+    const tempId = 'tmp_' + Date.now();
+    setComments((prev) => [...prev, { id: tempId, section_id: section.id, body, author_name: myName, author_id: by, resolved: false, created_at: new Date().toISOString() }]);
+    const { data, error } = await supabase.from('del_comments').insert({
       section_id: section.id, doc_id: section.doc_id, strategy_id: strategyId,
       author_id: by, author_name: myName, body,
-    });
-    if (error) { window.alert('No pude guardar el comentario: ' + error.message); return; }
-    cargarComments();
+    }).select().single();
+    if (error) {
+      setComments((prev) => prev.filter(c => c.id !== tempId));
+      window.alert('No pude guardar el comentario: ' + (error.message || error.code || 'error desconocido'));
+      return;
+    }
+    setComments((prev) => prev.map(c => c.id === tempId ? data : c));
   };
   const resolverComment = async (c) => {
     setComments((prev) => prev.map(x => x.id === c.id ? { ...x, resolved: !x.resolved } : x));
@@ -358,9 +366,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
           {/* DEL CLIENTE: los documentos compartidos por todos los funnels del cliente. */}
           {clientDocs.length > 0 && (
             <>
-              <div className="px-2 pt-3 pb-1.5 flex items-center gap-1.5">
+              <div className="px-2 pt-3 pb-1.5">
                 <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Del cliente</span>
-                <span className="text-[9px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FEF3C7', color: '#B45309' }}>compartidos</span>
+                <div className="text-[9.5px] text-[#C3C9D4] font-medium mt-0.5 normal-case tracking-normal">Aparecen en todos los DEL de este cliente</div>
               </div>
               {clientDocs.map(d => {
                 const on = view === 'cliente:' + d.id;
@@ -569,7 +577,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
                     <div className="min-w-0">
                       <div className="text-[14px] font-bold text-[#1A1D26] truncate">{DOC_KIND_LABEL[doc.doc_kind] || doc.title}</div>
-                      <div className="text-[11px] text-[#9098A4]">Compartido por todos los funnels del cliente · solo lectura.</div>
+                      <div className="text-[11px] text-[#9098A4]">Aparece en todos los DEL de este cliente · solo lectura.</div>
                     </div>
                   </div>
                   {doc.web_url && <a href={doc.web_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline shrink-0"><ExternalLink size={11} />Abrir en Drive</a>}
