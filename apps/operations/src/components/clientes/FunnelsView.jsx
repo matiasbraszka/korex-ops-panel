@@ -1088,12 +1088,19 @@ Quedo a la espera de tu respuesta`;
               {VID_BUCKETS.map(b => {
                 const url = av[b.url]; const n = av[b.files] || 0; const has = n > 0;
                 return (
-                  <div key={b.key} className="flex items-center gap-2.5 py-2 px-2.5 rounded-lg border flex-wrap" style={{ borderColor: has ? b.border : '#EDF0F5', background: has ? b.bg : '#FBFCFE' }}>
-                    <FolderOpen size={15} className="shrink-0" style={{ color: has ? b.c : '#C3C9D4' }} />
-                    <span className="text-[12px] font-semibold shrink-0" style={{ color: has ? b.c : '#6B7280' }}>{b.label}</span>
-                    {b.voomly && <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span>}
-                    <span className="ml-auto text-[10.5px] font-bold py-0.5 px-2 rounded-full whitespace-nowrap shrink-0" style={has ? { background: b.bg, color: b.c, border: `1px solid ${b.border}` } : { background: '#F1F3F7', color: '#AEB4BF' }}>{url ? (has ? `${n} archivo${n === 1 ? '' : 's'}` : 'vacía') : 'sin carpeta'}</span>
-                    {url && <button onClick={() => openUrl(url)} title="Abrir la carpeta en el Drive" className="inline-flex items-center gap-1 text-[11px] font-semibold py-1 px-2 rounded-md cursor-pointer border-none shrink-0" style={{ background: has ? b.c : '#E7EAF0', color: has ? '#fff' : '#6B7280' }}><ExternalLink size={11} />Abrir</button>}
+                  <div key={b.key} className="rounded-lg border py-2 px-2.5" style={{ borderColor: has ? b.border : '#EDF0F5', background: has ? b.bg : '#FBFCFE' }}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <FolderOpen size={15} className="shrink-0" style={{ color: has ? b.c : '#C3C9D4' }} />
+                      <span className="text-[12px] font-semibold shrink-0" style={{ color: has ? b.c : '#6B7280' }}>{b.label}</span>
+                      {b.voomly && <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span>}
+                      <span className="ml-auto text-[10.5px] font-bold py-0.5 px-2 rounded-full whitespace-nowrap shrink-0" style={has ? { background: b.bg, color: b.c, border: `1px solid ${b.border}` } : { background: '#F1F3F7', color: '#AEB4BF' }}>{url ? (has ? `${n} archivo${n === 1 ? '' : 's'}` : 'vacía') : 'sin carpeta'}</span>
+                    </div>
+                    {/* Pegar / editar el link de la carpeta del Drive a mano. */}
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <input key={av.id + b.key} defaultValue={url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (url || '')) setAvatar(av.id, { [b.url]: v || null }); }} placeholder="Pegá el link de la carpeta del Drive…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#3F4653] bg-white outline-none focus:border-blue" />
+                      {url && <><button onClick={() => openUrl(url)} title="Abrir en el Drive" className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-md cursor-pointer border-none shrink-0" style={{ background: has ? b.c : '#E7EAF0', color: has ? '#fff' : '#6B7280' }}><ExternalLink size={11} />Abrir</button>
+                        <button onClick={() => copyText(url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-7 rounded-md cursor-pointer border shrink-0" style={{ borderColor: b.border, background: '#fff', color: b.c }}><Copy size={12} /></button></>}
+                    </div>
                   </div>
                 );
               })}

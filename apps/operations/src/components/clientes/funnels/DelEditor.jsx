@@ -288,6 +288,26 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     if (data) { setActiva(data); setEditTitle(data); }
   };
 
+  // Crear un avatar = crear una SECCIÓN de la categoría Avatares (así aparece en el
+  // menú "Avatares", no enterrado dentro de otra sección). El título de la sección ES
+  // el nombre del avatar. Además avisa al funnel para registrarlo + crear sus carpetas.
+  const crearAvatarSection = async (name) => {
+    const nom = (name || '').trim();
+    if (!nom) return;
+    if (resolvedDoc) {
+      const { data: newId, error } = await supabase.rpc('del_section_add', {
+        p_doc_id: resolvedDoc, p_title: nom, p_kind: 'avatares', p_after_ord: null, p_by: by,
+      });
+      if (!error && newId) {
+        await supabase.rpc('del_section_save', { p_id: newId, p_html: '<h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>', p_by: by });
+        await cargar();
+        setModo('editar'); setView('del'); setActiva(newId);
+        setTimeout(() => { const el = document.getElementById('sec-' + newId); if (el && scrollRef.current) scrollRef.current.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' }); }, 80);
+      }
+    }
+    onAvatarCreate?.(nom); // registra el avatar en el funnel + crea las carpetas del Drive
+  };
+
   const borrar = async (s) => {
     if (!window.confirm(`¿Borrar la sección "${s.title}"? No se puede deshacer.`)) return;
     const { error } = await supabase.rpc('del_section_delete', { p_id: s.id, p_by: by });
@@ -515,43 +535,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                   {!editando && <span className="text-[10.5px] text-[#C3C9D4] tabular-nums shrink-0">{(s.char_count || 0).toLocaleString('es-AR')}</span>}
                 </div>
 
-                {/* Si OTRO está editando esta sección, no dejo editarla acá: se ve el
-                    candado y el contenido en lectura, para no pisarse. */}
-                {editando && lock && (
-                  <div className="flex items-center gap-2 py-2 px-4 text-[11.5px] font-semibold" style={{ background: (lock.color || '#B45309') + '14', color: lock.color || '#B45309', borderBottom: '1px solid #EDF0F5' }}>
-                    <Lock size={12} />{lock.name} está editando esta sección. Se libera sola cuando termine.
-                  </div>
-                )}
-                {editando && !lock ? (
-                  <div className="p-3">
-                    <RichTextEditor
-                      key={s.id}
-                      value={s.html || plainToHtml(s.text)}
-                      onChange={(html) => onEdit(s.id, html)}
-                      sanitize={sanitizeDelHtml}
-                      delTools
-                      onNewAvatar={(name, insertHTML) => {
-                        const e = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        insertHTML(`<h2>${e(name)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
-                        onAvatarCreate?.(name);
-                      }}
-                      minHeight={90}
-                      placeholder="Escribí acá el contenido de la sección…"
-                    />
-                  </div>
-                ) : s.html ? (
-                  <div className="del-rich py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '78ch' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(s.html) }} />
-                ) : (
-                  <div className="py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '78ch' }}>
-                    {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
-                  </div>
-                )}
-
-                {/* Hilo de comentarios de la sección. */}
+                {/* Hilo de comentarios: JUSTO debajo del encabezado (al lado del botón),
+                    para que se vea al instante aunque la sección sea larga. */}
                 {threadOpen && (
-                  <div className="border-t border-[#EDF0F5] bg-[#FBFCFE] p-3.5 flex flex-col gap-2.5">
-                    {scomments.length === 0 && <div className="text-[11.5px] text-[#9098A4] italic">Todavía no hay comentarios en esta sección.</div>}
+                  <div className="border-b border-[#EDF0F5] bg-[#FBFCFE] p-3.5 flex flex-col gap-2.5">
+                    {scomments.length === 0 && <div className="text-[11.5px] text-[#9098A4] italic">Todavía no hay comentarios en esta sección. Escribí el primero abajo.</div>}
                     {scomments.map(c => (
                       <div key={c.id} className="flex items-start gap-2.5" style={{ opacity: c.resolved ? 0.55 : 1 }}>
                         <span className="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5" style={{ background: colorFor(c.author_id || c.author_name) }}>{initialOf(c.author_name)}</span>
@@ -568,7 +556,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                       </div>
                     ))}
                     <div className="flex items-end gap-2 pt-1">
-                      <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={1}
+                      <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={1} autoFocus
                         onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); comentar(s); } }}
                         placeholder="Escribí un comentario…  (Ctrl+Enter para enviar)"
                         className="flex-1 min-w-0 py-2 px-3 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-snug" />
@@ -576,6 +564,36 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                     </div>
                   </div>
                 )}
+
+                {/* Si OTRO está editando esta sección, no dejo editarla acá: se ve el
+                    candado y el contenido en lectura, para no pisarse. */}
+                {editando && lock && (
+                  <div className="flex items-center gap-2 py-2 px-4 text-[11.5px] font-semibold" style={{ background: (lock.color || '#B45309') + '14', color: lock.color || '#B45309', borderBottom: '1px solid #EDF0F5' }}>
+                    <Lock size={12} />{lock.name} está editando esta sección. Se libera sola cuando termine.
+                  </div>
+                )}
+                {editando && !lock ? (
+                  <div className="p-3">
+                    <RichTextEditor
+                      key={s.id}
+                      value={s.html || plainToHtml(s.text)}
+                      onChange={(html) => onEdit(s.id, html)}
+                      sanitize={sanitizeDelHtml}
+                      delTools
+                      onNewAvatar={(name) => crearAvatarSection(name)}
+                      minHeight={90}
+                      placeholder="Escribí acá el contenido de la sección…"
+                    />
+                  </div>
+                ) : s.html ? (
+                  <div className="del-rich py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '78ch' }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(s.html) }} />
+                ) : (
+                  <div className="py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '78ch' }}>
+                    {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
+                  </div>
+                )}
+
               </section>
             );
                 })}
