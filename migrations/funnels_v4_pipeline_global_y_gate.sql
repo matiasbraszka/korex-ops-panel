@@ -133,13 +133,27 @@ $function$;
 -- 2. NO SE ROMPIO EL LLAMADO DE A UN CLIENTE (lo que usan FunnelsView y AgentesPage):
 --    select count(*) from cerebro_pipeline_status('c_1775304975528_pzu8sk');  -- 18 (3 funnels x 6)
 --
--- 3. EL RIEL DEJO DE MENTIR: los 2 funnels de plantilla ahora dicen que falta el DEL.
+-- 3. EL RIEL DEJO DE MENTIR (verificado 2026-07-17 al aplicar):
 --    select funnel, status, detail from cerebro_pipeline_status()
 --     where stage='del' and funnel in ('AI TECH','Liliana Vega');
---    -- esperado: pendiente / 'Falta cargar/sincronizar el DEL' en los dos
+--    -- ANTES: listo / 'OK'  (en verde, sobre una plantilla vacia)
+--    -- AHORA: bloqueado / 'Bloqueado: falta definir el tipo de funnel'
 --
--- 4. Nadie mas cambio de estado por el piso nuevo (solo esos 2):
---    select count(*) from cerebro_pipeline_status() where stage='del' and status='pendiente';
+--    OJO, el mensaje NO es "Falta cargar/sincronizar el DEL" como se esperaba, y
+--    esta bien que no lo sea: estos 2 funnels son TAMBIEN los 2 unicos sin tipo, y
+--    el tipo es el prerequisito del paso del DEL. El riel ahora senala lo PRIMERO
+--    que hay que arreglar, no lo segundo.
+--
+--    Por que antes decia 'listo' aunque les faltara el tipo: el case evalua
+--    `done` ANTES que `prereq_ok` -- con has_del_eff=true ganaba 'listo' y se
+--    comia el bloqueo. Al bajar has_del_eff a false, el prereq vuelve a mandar.
+--
+--    Los 2 son justo los de mas trabajo encima: 27 tareas abiertas (AI TECH) y
+--    22 (Liliana Vega). El panel les decia que el DEL estaba listo.
+--
+-- 4. Solo esos 2 cambiaron (40 listo / 5 pendiente / 2 bloqueado = 47):
+--    select status, count(*) from cerebro_pipeline_status()
+--     where stage='del' group by status;
 --
 -- ── Rollback ────────────────────────────────────────────────────────────────
 -- Volver a aplicar funnels_v2_pipeline_tipo.sql tal cual: restaura char_count>0 y
