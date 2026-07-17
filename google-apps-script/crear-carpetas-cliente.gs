@@ -48,6 +48,7 @@ function doPost(e) {
     if (b.action === 'rename_node') return renameNode(b);                // renombra un archivo/carpeta (ej. tipo de estrategia)
 
     if (b.action === 'read_doc') return readDoc(b);                       // texto de un documento (todas las pestañas)
+    if (b.action === 'read_doc_rich') return readDocRich(b);              // idem PERO con formato (títulos, negritas, colores, tablas, links)
     if (b.action === 'write_brief') return writeBrief(b);                 // crea/actualiza el brief del cliente
     if (b.action === 'ensure_avatar_folders') return ensureAvatarFolders(b); // subcarpetas por avatar en Anuncios
 
@@ -314,6 +315,211 @@ function readDoc(b) {
     }
     if (text.length > 400000) text = text.slice(0, 400000);
     return json({ ok: true, text: text, title: title });
+  } catch (err) {
+    return json({ ok: false, error: String(err) });
+  }
+}
+
+// ---------- Lectura CON FORMATO de un documento (acción 'read_doc_rich') ----------
+//
+// read_doc usa dt.getBody().getText(), que devuelve TEXTO PELADO: los títulos, las
+// negritas, los colores, las tablas y los links se pierden ahí, antes de que nada
+// llegue al panel. Un título como "CONCLUSIONES DE LA ESTRATEGIA" llegaba como
+// texto en mayúsculas — las mayúsculas eran lo único que sobrevivía del énfasis.
+//
+// Esta función recorre las MISMAS pestañas que read_doc (mismo walk, incluidas las
+// anidadas: es el que arregló el bug de "solo leía la primera pestaña") pero
+// serializa la estructura en vez del texto.
+//
+// ES UNA ACCIÓN NUEVA, NO REEMPLAZA A read_doc. No se toca read_doc a propósito:
+// de su formato "===== Título =====" comen parseDelTabs, resolverVsl, LANDING_RE y
+// el copy de páginas. Cambiarlo rompería todo eso de una.
+//
+// Devuelve: { ok, title, tabs: [{ title, html }] }
+//
+// LO QUE NO TRAE (a conciencia):
+//   · Las imágenes. Un Doc las guarda adentro suyo; para mostrarlas en el panel hay
+//     que bajarlas y alojarlas nosotros, y eso es la Etapa C (Recursos). Por ahora
+//     deja una marca <figure data-drive-image> en su lugar, para que se vea que ahí
+//     va una imagen y no parezca que el documento está incompleto.
+//   · El formato ADENTRO de las celdas de una tabla (se toma el texto de la celda).
+
+function rtEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Un link de un Doc puede ser cualquier cosa, incluido "javascript:...". Escapar el
+// texto no alcanza: el navegador ejecutaría igual el href. Solo pasan http, https y
+// mailto; el resto se cae y queda el texto sin link.
+function rtHref(u) {
+  var s = String(u || '').trim();
+  if (!/^(https?:|mailto:)/i.test(s)) return null;
+  return s;
+}
+
+// Un color de Google viene como "#rrggbb". Si viene otra cosa, no se pone: iría
+// crudo adentro de un style="".
+function rtColor(c) {
+  var s = String(c || '').trim();
+  return /^#[0-9a-fA-F]{3,8}$/.test(s) ? s : null;
+}
+
+// Un "run" es un tramo con el mismo formato. Google los marca con índices de corte.
+function rtRun(t, from, to) {
+  var raw = t.getText().substring(from, to);
+  if (!raw) return '';
+  var html = rtEsc(raw);
+  var bold = false, ital = false, und = false, color = null, link = null;
+  try { bold = t.isBold(from); } catch (e) {}
+  try { ital = t.isItalic(from); } catch (e) {}
+  try { und = t.isUnderline(from); } catch (e) {}
+  try { color = rtColor(t.getForegroundColor(from)); } catch (e) {}
+  try { link = rtHref(t.getLinkUrl(from)); } catch (e) {}
+
+  if (bold) html = '<strong>' + html + '</strong>';
+  if (ital) html = '<em>' + html + '</em>';
+  // El subrayado de un link lo pone el link: no hace falta doblarlo.
+  if (und && !link) html = '<u>' + html + '</u>';
+  // El negro por defecto no se marca: ensuciaría el html con un color en cada run.
+  if (color && color !== '#000000') html = '<span style="color:' + color + '">' + html + '</span>';
+  if (link) html = '<a href="' + rtEsc(link) + '" target="_blank" rel="noreferrer">' + html + '</a>';
+  return html;
+}
+
+function rtText(el) {
+  var t;
+  try { t = el.editAsText(); } catch (e) { return rtEsc(el.getText ? el.getText() : ''); }
+  var s = t.getText();
+  if (!s) return '';
+  var idx;
+  try { idx = t.getTextAttributeIndices(); } catch (e) { idx = []; }
+  if (!idx.length || idx[0] !== 0) idx = [0].concat(idx || []);
+  var out = [];
+  for (var i = 0; i < idx.length; i++) {
+    var to = (i + 1 < idx.length) ? idx[i + 1] : s.length;
+    if (to > idx[i]) out.push(rtRun(t, idx[i], to));
+  }
+  return out.join('');
+}
+
+// El nivel de título del párrafo: es lo que hace que el documento se lea de un vistazo.
+function rtTag(p) {
+  var h;
+  try { h = p.getHeading(); } catch (e) { return 'p'; }
+  var PH = DocumentApp.ParagraphHeading;
+  if (h === PH.TITLE || h === PH.HEADING1) return 'h1';
+  if (h === PH.SUBTITLE || h === PH.HEADING2) return 'h2';
+  if (h === PH.HEADING3) return 'h3';
+  if (h === PH.HEADING4) return 'h4';
+  if (h === PH.HEADING5) return 'h5';
+  if (h === PH.HEADING6) return 'h6';
+  return 'p';
+}
+
+function rtTable(tb) {
+  var rows = [];
+  for (var r = 0; r < tb.getNumRows(); r++) {
+    var row = tb.getRow(r), cells = [];
+    for (var c = 0; c < row.getNumCells(); c++) {
+      cells.push('<td>' + rtEsc(row.getCell(c).getText()) + '</td>');
+    }
+    rows.push('<tr>' + cells.join('') + '</tr>');
+  }
+  return rows.length ? ('<table>' + rows.join('') + '</table>') : '';
+}
+
+// Serializa el cuerpo de UNA pestaña. Los ítems de lista consecutivos se agrupan en
+// una sola <ul>/<ol>: en el Doc cada ítem es un elemento suelto, y sin agrupar
+// quedarían N listas de un ítem cada una.
+function rtBody(body) {
+  var ET = DocumentApp.ElementType;
+  var out = [], lista = null;
+  var cerrarLista = function () { if (lista) { out.push('</' + lista + '>'); lista = null; } };
+
+  for (var i = 0; i < body.getNumChildren(); i++) {
+    var el = body.getChild(i), tipo;
+    try { tipo = el.getType(); } catch (e) { continue; }
+
+    if (tipo === ET.LIST_ITEM) {
+      var li = el.asListItem(), orden = 'ul';
+      try {
+        var g = li.getGlyphType(), GT = DocumentApp.GlyphType;
+        if (g === GT.NUMBER || g === GT.LATIN_LOWER || g === GT.LATIN_UPPER || g === GT.ROMAN_LOWER || g === GT.ROMAN_UPPER) orden = 'ol';
+      } catch (e) {}
+      if (lista && lista !== orden) cerrarLista();
+      if (!lista) { out.push('<' + orden + '>'); lista = orden; }
+      out.push('<li>' + rtText(li) + '</li>');
+      continue;
+    }
+    cerrarLista();
+
+    if (tipo === ET.PARAGRAPH) {
+      var p = el.asParagraph();
+      // Una imagen suelta viene envuelta en un párrafo vacío.
+      var img = '';
+      try {
+        for (var k = 0; k < p.getNumChildren(); k++) {
+          if (p.getChild(k).getType() === ET.INLINE_IMAGE) {
+            img += '<figure data-drive-image="1">[imagen del documento]</figure>';
+          }
+        }
+      } catch (e) {}
+      var inner = rtText(p);
+      if (img) { out.push(img); if (inner.replace(/<[^>]*>/g, '').trim()) out.push('<p>' + inner + '</p>'); continue; }
+      // Los párrafos vacíos del Doc son espaciado, no contenido: no viajan.
+      if (!inner.replace(/<[^>]*>/g, '').trim()) continue;
+      var tag = rtTag(p);
+      out.push('<' + tag + '>' + inner + '</' + tag + '>');
+      continue;
+    }
+
+    if (tipo === ET.TABLE) { out.push(rtTable(el.asTable())); continue; }
+    if (tipo === ET.INLINE_IMAGE) { out.push('<figure data-drive-image="1">[imagen del documento]</figure>'); continue; }
+  }
+  cerrarLista();
+  return out.join('\n');
+}
+
+function readDocRich(b) {
+  var docId = String(b.docId || '').trim();
+  if (!docId) return json({ ok: false, error: 'missing_docId' });
+  var mime = String(b.mimeType || '');
+  if (mime !== 'application/vnd.google-apps.document') {
+    return json({ ok: false, error: 'not_a_google_doc' });
+  }
+  try {
+    var doc = DocumentApp.openById(docId);
+    var tabs = doc.getTabs ? doc.getTabs() : null;
+    var res = [];
+
+    var leerTab = function (tab) {
+      try {
+        var dt = tab.asDocumentTab();
+        var html = rtBody(dt.getBody());
+        if (html && html.replace(/<[^>]*>/g, '').replace(/\s/g, '') !== '') {
+          res.push({ title: (tab.getTitle ? tab.getTitle() : ''), html: html });
+        }
+      } catch (err) {}
+      var kids = tab.getChildTabs ? tab.getChildTabs() : [];
+      for (var i = 0; i < kids.length; i++) leerTab(kids[i]);
+    };
+
+    if (tabs && tabs.length) {
+      for (var t = 0; t < tabs.length; t++) leerTab(tabs[t]);
+    } else {
+      // Doc viejo, sin pestañas.
+      res.push({ title: '', html: rtBody(doc.getBody()) });
+    }
+
+    // Tope de seguridad: el html pesa ~2,5x el texto. El DEL más grande son 138.658
+    // caracteres de texto, así que el tope no debería tocarse nunca — está para que
+    // un Doc raro no tire la función.
+    var total = 0;
+    for (var r = 0; r < res.length; r++) total += res[r].html.length;
+    if (total > 900000) return json({ ok: false, error: 'doc_demasiado_grande', chars: total });
+
+    return json({ ok: true, title: doc.getName(), tabs: res });
   } catch (err) {
     return json({ ok: false, error: String(err) });
   }

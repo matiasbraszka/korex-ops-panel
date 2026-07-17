@@ -31,6 +31,21 @@ const SEC = {
 };
 const secOf = (k) => SEC[k] || SEC.otros;
 
+// El html lo genera read_doc_rich, que ya escapa el texto y filtra los href a
+// http/https/mailto. Esto es la SEGUNDA barrera, del lado del panel: si algun dia
+// esa columna se llena por otro camino, el lector no ejecuta lo que le manden.
+// No se agrega una libreria de sanitizado por 4 reglas: el html que esperamos es
+// chico y conocido (titulos, negritas, color, links, listas, tablas).
+function limpiar(html) {
+  return String(html || '')
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*\/?>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/(href|src)\s*=\s*"\s*(?!https?:|mailto:)[^"]*"/gi, '$1="#"');
+}
+
 export default function DelReader({ strategyId, docUrl }) {
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -45,7 +60,7 @@ export default function DelReader({ strategyId, docUrl }) {
         // dos funnels de la misma carpeta ven el mismo DEL. Es asi hoy y esta bien —
         // el DEL es el maestro de la campaña. Se resuelve (o no) en el cutover.
         const rows = await sbFetch(
-          `del_sections?select=id,ord,title,kind,text,char_count&strategy_id=eq.${strategyId}&order=ord.asc`,
+          `del_sections?select=id,ord,title,kind,text,html,char_count&strategy_id=eq.${strategyId}&order=ord.asc`,
           { headers: { Prefer: 'return=representation' } },
         );
         if (!vivo) return;
@@ -153,11 +168,17 @@ export default function DelReader({ strategyId, docUrl }) {
                   <span className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em] flex-1 min-w-0 truncate">{s.title}</span>
                   <span className="text-[10.5px] text-[#C3C9D4] tabular-nums shrink-0">{s.char_count.toLocaleString('es-AR')}</span>
                 </div>
-                {/* pre-wrap: el texto viene plano del Doc, con sus saltos de linea.
-                    max-w en ch para que la lectura no se haga una linea larguisima. */}
-                <div className="py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '78ch' }}>
-                  {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
-                </div>
+                {/* Con formato si ya se sincronizo (read_doc_rich); si no, el texto
+                    plano de siempre. Asi el lector anda ANTES y DESPUES de deployar
+                    el Apps Script, sin ventana rota en el medio. */}
+                {s.html ? (
+                  <div className="del-rich py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '78ch' }}
+                    dangerouslySetInnerHTML={{ __html: limpiar(s.html) }} />
+                ) : (
+                  <div className="py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '78ch' }}>
+                    {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
+                  </div>
+                )}
               </section>
             );
           })}

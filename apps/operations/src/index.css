@@ -39,6 +39,42 @@ html, body {
   max-width: 100vw;
 }
 
+/* ── El DEL con su formato (DelReader) ──
+   Tailwind resetea h1..h6, ul, ol y table a texto pelado, asi que el html que
+   trae read_doc_rich necesita que le devolvamos la jerarquia: sin esto un <h2>
+   se ve igual que un parrafo y el documento pierde justo lo que fuimos a buscar.
+   Va scopeado a .del-rich para no tocar el resto del panel. */
+.del-rich h1, .del-rich h2, .del-rich h3,
+.del-rich h4, .del-rich h5, .del-rich h6 { color: #111827; text-wrap: balance; }
+.del-rich h1 { font-size: 21px; font-weight: 800; letter-spacing: -.015em; line-height: 1.25; margin: 26px 0 10px; }
+.del-rich h2 { font-size: 17px; font-weight: 700; line-height: 1.3; margin: 22px 0 8px; }
+.del-rich h3 { font-size: 14px; font-weight: 700; margin: 16px 0 6px; }
+.del-rich h4, .del-rich h5, .del-rich h6 {
+  font-size: 11.5px; font-weight: 800; color: #9098A4;
+  text-transform: uppercase; letter-spacing: .07em; margin: 14px 0 4px;
+}
+.del-rich > :first-child { margin-top: 0; }
+.del-rich p { margin: 7px 0; }
+.del-rich strong { font-weight: 700; color: #1A1D26; }
+.del-rich em { font-style: italic; }
+.del-rich a { color: #2E69E0; text-decoration: underline; }
+.del-rich a:hover { color: #1D4FD8; }
+.del-rich ul { list-style: disc; padding-left: 22px; margin: 7px 0; }
+.del-rich ol { list-style: decimal; padding-left: 22px; margin: 7px 0; }
+.del-rich li { display: list-item; margin: 3px 0; }
+/* Una tabla ancha scrollea DENTRO de su seccion; la pagina nunca se va al costado. */
+.del-rich table {
+  display: block; overflow-x: auto; max-width: 100%;
+  border-collapse: collapse; margin: 12px 0; font-size: 12.5px;
+}
+.del-rich td { border: 1px solid #E2E5EB; padding: 7px 10px; vertical-align: top; min-width: 90px; }
+/* La imagen todavia vive adentro del Doc: alojarla es la Etapa C (Recursos). Se
+   marca el hueco para que no parezca que al documento le falta un pedazo. */
+.del-rich figure[data-drive-image] {
+  margin: 12px 0; padding: 14px; border: 1px dashed #D0D5DD; border-radius: 9px;
+  background: #F7F8FA; color: #9098A4; font-size: 11.5px; font-style: italic; text-align: center;
+}
+
 body {
   font-family: 'Inter', -apple-system, sans-serif;
   background: var(--color-bg);
