@@ -284,19 +284,6 @@ function StatusPill({ status, onChange }) {
   );
 }
 
-// Chip de enlace: al clickear COPIA la URL (no abre la página).
-function CopyLinkChip({ short, url, bg, color, border }) {
-  const [done, setDone] = useState(false);
-  return (
-    <span onClick={(e) => { e.stopPropagation(); copyText(url); setDone(true); setTimeout(() => setDone(false), 1200); }}
-      title={`Copiar ${short}: ${url}`}
-      className="inline-flex items-center gap-1 py-1 px-2.5 rounded-[7px] text-[10.5px] font-semibold cursor-pointer"
-      style={{ background: bg, color, border: `1px solid ${border}` }}>
-      {short}{done ? <Check size={10} strokeWidth={3} /> : <Copy size={10} />}
-    </span>
-  );
-}
-
 // Estado del avatar: pill compacto con menú (position:fixed para no cortarse).
 function AvatarStatusPill({ status, onChange }) {
   const [open, setOpen] = useState(false);
@@ -325,7 +312,12 @@ function AvatarStatusPill({ status, onChange }) {
 }
 
 // Grid de la tabla de funnels (mismo layout que el mockup; scroll horizontal si no entra).
-const GRID = 'minmax(230px,1.6fr) 120px 150px 210px 100px 34px';
+// La fila cerrada responde UNA pregunta: que es y que le falta. Todo lo demas
+// (enlaces, tracking, avatares) vive adentro, al abrirla.
+// Antes eran 6 columnas: Funnel / Estado / Enlaces / Tracking / Modificado / v.
+// Los chips de enlaces y tracking se fueron: los mismos campos ya se editan
+// adentro, asi que en la fila solo eran ruido que competia con el nombre.
+const GRID = 'minmax(280px,2fr) 118px minmax(170px,1.3fr) 34px';
 
 // Nota: la extracción del DEL (descripción, copys y guión de VSL por avatar/funnel) la hace
 // ahora la edge function `cerebro-generate-avatars` (IA + corte verbatim). El panel solo MUESTRA
@@ -690,12 +682,9 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientNa
   const pOk = !!(f.pixel_code && f.pixel_code.trim());
   const cOk = !!(f.clarity_id && f.clarity_id.trim());
 
-  const links = [];
-  if (f.prod_url) links.push({ short: 'Prod', bg: '#EEF3FF', color: '#2E69E0', border: '#DBE6FF', url: f.prod_url });
-  if (f.testing_url) links.push({ short: 'Test', bg: '#F1F3F7', color: '#6B7280', border: '#E2E5EB', url: f.testing_url });
-  if (f.ads_url) links.push({ short: 'Pub', bg: '#F5F3FF', color: '#7C3AED', border: '#E4DBFF', url: f.ads_url });
-  const missingLinks = [];
-  if (!f.prod_url) missingLinks.push('Prod'); if (!f.testing_url) missingLinks.push('Test');
+  // El primer paso PENDIENTE: es lo unico del riel que la fila cerrada necesita mostrar.
+  // Si no hay ninguno, el funnel esta terminado.
+  const nextStage = (stages || []).find(s => s.status === 'pendiente') || null;
 
   const setAvatar = (id, patch) => onUpdate(f.id, { avatars: avatars.map(a => a.id === id ? { ...a, ...patch } : a) });
 
@@ -935,12 +924,12 @@ Quedo a la espera de tu respuesta`;
     finally { setVslBusy(false); }
   };
 
+  // Tracking: verde si esta cargado, gris si falta. Vive DENTRO del funnel (antes estaba
+  // en la fila cerrada, compitiendo con el nombre). Click = abre el editor.
   const trk = [
-    pOk ? { label: 'Pixel', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
-        : { label: 'Pixel', bg: '#F5F6F9', color: '#AEB4BF', border: '#EDF0F5', solid: true, ok: false },
-    cOk ? { label: 'Clarity', bg: '#ECFDF3', color: '#15803D', border: '#C9F0D8', solid: true, ok: true }
-        : { label: 'Clarity', bg: '#F5F6F9', color: '#AEB4BF', border: '#EDF0F5', solid: true, ok: false },
-    { label: events.length + ' eventos', bg: events.length ? '#F5F3FF' : '#F5F6F9', color: events.length ? '#7C3AED' : '#AEB4BF', border: events.length ? '#E4DBFF' : '#EDF0F5', solid: true, ok: false },
+    { label: 'Pixel', ok: pOk },
+    { label: 'Clarity', ok: cOk },
+    { label: events.length === 1 ? '1 evento' : `${events.length} eventos`, ok: events.length > 0 },
   ];
 
   return (
@@ -961,18 +950,22 @@ Quedo a la espera de tu respuesta`;
           </div>
         </div>
         <div><StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} /></div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {links.map((l, i) => <CopyLinkChip key={i} {...l} />)}
-          {missingLinks.map((m, i) => <span key={'m' + i} className="inline-flex items-center py-1 px-2.5 rounded-[7px] bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold">{m}</span>)}
+        {/* Que lo frena. Sale del motor de pasos (cerebro_pipeline_status), no de un
+            texto a mano: es el primer paso pendiente y su motivo en castellano. */}
+        <div className="min-w-0">
+          {nextStage
+            ? <div className="flex items-center gap-1.5 min-w-0" title={`${nextStage.stage_label} — ${nextStage.detail}`}>
+                <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: '#EAB308' }} />
+                <span className="text-[11.5px] text-[#6B7280] truncate"><b className="font-semibold text-[#3F4653]">{STAGE_SHORT[nextStage.stage] || nextStage.stage_label}</b> · {nextStage.detail}</span>
+              </div>
+            : <span className="text-[11.5px] text-[#22C55E] font-semibold inline-flex items-center gap-1.5"><Check size={11} strokeWidth={3} />Todo listo</span>}
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {trk.map((t, i) => <span key={i} onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10px] font-semibold cursor-pointer" style={{ background: t.bg, color: t.color, border: `1px solid ${t.border}` }}>{t.ok && <Check size={9} strokeWidth={3.5} />}{t.label}</span>)}
-        </div>
-        <div className="text-[11px] text-[#9098A4]">{f.updated_at ? new Date(f.updated_at).toLocaleDateString('es-AR') : '—'}</div>
         <div className="flex justify-end"><ChevronDown size={16} className="transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#2E69E0' : '#C3C9D4' }} /></div>
       </div>
 
-      <div style={{ background: open ? '#FCFCFD' : '#fff' }}><PipelineSemaforo stages={stages} /></div>
+      {/* El riel completo solo al abrir: en la lista ocupaba media fila repitiendo
+          lo que la columna "que falta" ya dice mejor. */}
+      {open && <div style={{ background: '#FCFCFD' }}><PipelineSemaforo stages={stages} /></div>}
 
       {open && (
         <div className="pt-1 px-4 pb-[18px]" style={{ background: '#FCFCFD' }}>
@@ -988,9 +981,22 @@ Quedo a la espera de tu respuesta`;
             <button onClick={openEditorMsg} disabled={msgBusy} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0 disabled:opacity-60">{msgBusy ? <RefreshCw size={14} className="animate-spin" /> : <MessageSquare size={14} />}{msgBusy ? 'Armando…' : 'Armar mensaje'}</button>
           </div>
 
-          {/* Enlaces del funnel (editables) */}
+          {/* Enlaces del funnel (editables) + acceso al tracking */}
           <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
-            <CardHead Icon={Link2} iconBg="#EEF3FF" iconColor="#2E69E0" title="Enlaces del funnel" subtitle="Producción, testing, dominio y publicidad" />
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <CardHead Icon={Link2} iconBg="#EEF3FF" iconColor="#2E69E0" title="Enlaces del funnel" subtitle="Producción, testing, dominio y publicidad" />
+              <div className="flex items-center gap-1.5 pr-[14px] shrink-0">
+                {trk.map((t, i) => (
+                  <button key={i} onClick={(e) => { e.stopPropagation(); onTrack(f); }} title="Editar el tracking (Pixel · Clarity · eventos de conversión)"
+                    className="inline-flex items-center gap-1 py-[3px] px-2 rounded-md text-[10px] font-semibold cursor-pointer font-sans"
+                    style={t.ok
+                      ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }
+                      : { background: '#F5F6F9', color: '#AEB4BF', border: '1px solid #EDF0F5' }}>
+                    {t.ok && <Check size={9} strokeWidth={3.5} />}{t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="p-[14px]">
               <div className="grid gap-3 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
                 {[['prod_url', 'Producción', '#2E69E0'], ['testing_url', 'Testing', '#94A3B8'], ['official_domain', 'Dominio oficial', '#22C55E'], ['ads_url', 'Publicidad', '#8B5CF6']].map(([k, lbl, col]) => (
@@ -1450,7 +1456,7 @@ export default function FunnelsView({ clientId }) {
             <div className="border border-[#EDF0F5] rounded-xl overflow-x-auto">
               <div style={{ minWidth: 820 }}>
                 <div className="grid items-center py-[9px] px-4 border-b border-[#EDF0F5]" style={{ gridTemplateColumns: GRID, gap: 12, background: '#FAFBFD' }}>
-                  {['Funnel · página', 'Estado', 'Enlaces', 'Tracking', 'Modificado', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
+                  {['Funnel', 'Estado', 'Qué falta', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
                 </div>
                 {myFunnels.map((f, i) => {
                   const del = delOf(f);
