@@ -31,7 +31,9 @@ const TEXT_COLORS = [
 const isHeading = (el) => !!el && /^H[1-6]$/.test(el.tagName);
 const headingLevel = (el) => Number(el.tagName[1]);
 
-export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180 }) {
+// `sanitize` permite reusar este editor con una whitelist mas ancha (ej: el DEL,
+// que trae tablas). Default = el de las notas, que NO cambia.
+export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml }) {
   const ref = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
@@ -55,7 +57,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const handleInput = () => {
     if (!ref.current) return;
     const raw = ref.current.innerHTML;
-    const clean = sanitizeNoteHtml(raw);
+    const clean = sanitize(raw);
     lastInjected.current = clean;
     onChange?.(clean);
   };
@@ -241,6 +243,11 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         .rte-content li { margin: 2px 0; display: list-item; }
         .rte-content li::marker { color: #111827; }
         .rte-content a  { color: #3B82F6; text-decoration: underline; }
+        /* Tablas y h4-h6: solo aparecen en el DEL (las notas no los generan). */
+        .rte-content h4, .rte-content h5, .rte-content h6 { font-size: 12px; font-weight: 800; margin: 8px 0 3px; color: #6B7280; text-transform: uppercase; letter-spacing: .05em; }
+        .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+        .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
+        .rte-content figure[data-drive-image] { margin: 8px 0; padding: 10px; border: 1px dashed #D0D5DD; border-radius: 8px; background: #F7F8FA; color: #9098A4; font-size: 11px; font-style: italic; text-align: center; }
         /* Flechita de plegado (estilo Google Docs) en la canaleta izquierda */
         .rte-content h1, .rte-content h2, .rte-content h3 { position: relative; }
         .rte-content h1::before, .rte-content h2::before, .rte-content h3::before {

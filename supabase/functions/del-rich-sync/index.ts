@@ -173,9 +173,14 @@ Deno.serve(async (req) => {
     // Las secciones que ya importó del_sections_import() desde el texto plano.
     const { data: secs } = await supabase
       .from("del_sections")
-      .select("id,title")
+      .select("id,title,source")
       .eq("doc_id", d.id);
     if (!secs?.length) continue;
+
+    // Si el DEL ya lo adoptó el panel (alguna sección source='panel'), no se toca:
+    // el equipo lo está editando y el formato del Doc ya no manda. Es el mismo cutover
+    // que respeta del_sections_import().
+    if (secs.some((s) => s.source === "panel")) continue;
 
     const porTitulo = new Map<string, string>();
     for (const s of secs) porTitulo.set(norm(s.title), s.id);

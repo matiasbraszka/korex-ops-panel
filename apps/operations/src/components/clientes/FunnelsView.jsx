@@ -14,7 +14,7 @@ import {
 import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
-import DelReader from './funnels/DelReader';
+import DelEditor from './funnels/DelEditor';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
 
@@ -677,7 +677,7 @@ function EditorMessageModal({ initial, onClose }) {
   );
 }
 
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last }) {
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const [voomlyOpen, setVoomlyOpen] = useState(false);
@@ -1192,10 +1192,8 @@ Quedo a la espera de tu respuesta`;
 
       {/* El lector va a pantalla completa: un DEL promedia 56.000 caracteres —
           adentro del acordeon de la fila no se lee. */}
-      <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen
-        title={`DEL · ${f.name}`}
-        headerExtra={<span className="text-[11px] text-[#9098A4] mr-2">solo lectura</span>}>
-        <DelReader strategyId={f.strategy_id} docUrl={delDocUrl} />
+      <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
+        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} />
       </Modal>
     </div>
   );
@@ -1488,7 +1486,7 @@ export default function FunnelsView({ clientId }) {
                           </div>
                           {group.map((f, i) => {
                             const del = delOf(f);
-                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} />;
+                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} />;
                           })}
                         </div>
                       </div>
