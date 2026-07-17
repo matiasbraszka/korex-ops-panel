@@ -7,10 +7,14 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@korex/db';
 import {
   Brain, Save, Plus, Trash2, FileText, Link2, Upload, Trophy,
-  BookOpen, Lightbulb, ShieldCheck, FolderOpen, Loader2,
+  BookOpen, Lightbulb, ShieldCheck, FolderOpen, Loader2, GraduationCap, Gauge, MessageSquareHeart,
 } from 'lucide-react';
+import ContextStatus from '../components/cerebro/ContextStatus';
+import BlueprintEditor from '../components/cerebro/BlueprintEditor';
+import WinnerCandidates from '../components/cerebro/WinnerCandidates';
+import FeedbackInbox from '../components/cerebro/FeedbackInbox';
 
-const PINK = '#EC4899';
+const BLUE = '#5B7CF5';
 const rid = () => `mtm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 const KIND_META = {
@@ -119,7 +123,7 @@ function AddMaterial({ scope, onAdded }) {
         {tabs.map(t => {
           const active = tab === t.key;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[12px] font-semibold cursor-pointer border" style={active ? { background: PINK, color: '#fff', borderColor: PINK } : { background: '#fff', color: '#6B7280', borderColor: '#E2E5EB' }}>
+            <button key={t.key} onClick={() => setTab(t.key)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[12px] font-semibold cursor-pointer border" style={active ? { background: BLUE, color: '#fff', borderColor: BLUE } : { background: '#fff', color: '#6B7280', borderColor: '#E2E5EB' }}>
               <t.Icon size={13} /> {t.label}
             </button>
           );
@@ -135,7 +139,7 @@ function AddMaterial({ scope, onAdded }) {
           </div>
           <input className={input} placeholder="Título (opcional)" value={title} onChange={e => setTitle(e.target.value)} />
           <textarea className={input + ' resize-y min-h-[90px] leading-relaxed'} placeholder="Escribí la guía, el ejemplo o la regla…" value={content} onChange={e => setContent(e.target.value)} />
-          <div><button onClick={addText} disabled={busy} className={btnPrimary} style={{ background: PINK }}><Plus size={14} /> Agregar</button></div>
+          <div><button onClick={addText} disabled={busy} className={btnPrimary} style={{ background: BLUE }}><Plus size={14} /> Agregar</button></div>
         </div>
       )}
 
@@ -143,14 +147,14 @@ function AddMaterial({ scope, onAdded }) {
         <div className="grid gap-2">
           <input className={input} placeholder="Título (opcional)" value={title} onChange={e => setTitle(e.target.value)} />
           <input className={input} placeholder="https://… (link o Doc de Drive)" value={url} onChange={e => setUrl(e.target.value)} />
-          <div><button onClick={addLink} disabled={busy} className={btnPrimary} style={{ background: PINK }}><Plus size={14} /> Agregar</button></div>
+          <div><button onClick={addLink} disabled={busy} className={btnPrimary} style={{ background: BLUE }}><Plus size={14} /> Agregar</button></div>
         </div>
       )}
 
       {tab === 'archivo' && (
         <div className="grid gap-2">
-          <label className="flex flex-col items-center justify-center gap-2 py-6 px-4 border-2 border-dashed border-[#E2E5EB] rounded-xl cursor-pointer hover:border-[#EC4899] bg-white text-center">
-            {busy ? <Loader2 size={20} className="animate-spin text-[#EC4899]" /> : <Upload size={20} className="text-[#9CA3AF]" />}
+          <label className="flex flex-col items-center justify-center gap-2 py-6 px-4 border-2 border-dashed border-[#E2E5EB] rounded-xl cursor-pointer hover:border-[#5B7CF5] bg-white text-center">
+            {busy ? <Loader2 size={20} className="animate-spin text-[#5B7CF5]" /> : <Upload size={20} className="text-[#9CA3AF]" />}
             <span className="text-[12.5px] font-semibold text-[#6B7280]">{busy ? 'Subiendo…' : 'Subir PDF, imagen o archivo'}</span>
             <span className="text-[11px] text-[#9CA3AF]">Ej: anuncios ganadores, capturas, guías en PDF</span>
             <input type="file" className="hidden" disabled={busy} onChange={e => addFile(e.target.files?.[0])} />
@@ -161,7 +165,16 @@ function AddMaterial({ scope, onAdded }) {
   );
 }
 
+const TABS = [
+  { key: 'capacitacion', label: 'Capacitación', Icon: GraduationCap },
+  { key: 'estado', label: 'Estado del agente', Icon: Gauge },
+  { key: 'blueprint', label: 'Blueprint y Compliance', Icon: BookOpen },
+  { key: 'ganadores', label: 'Candidatos a ganador', Icon: Trophy },
+  { key: 'feedback', label: 'Feedback y mejoras', Icon: MessageSquareHeart },
+];
+
 export default function CerebroPage() {
+  const [tab, setTab] = useState('capacitacion');
   const [subagents, setSubagents] = useState([]);
   const [selected, setSelected] = useState('general');
   const [material, setMaterial] = useState([]);
@@ -206,21 +219,38 @@ export default function CerebroPage() {
   return (
     <div className="max-w-[1180px] mx-auto px-4 py-6">
       <div className="flex items-center gap-2 mb-1">
-        <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg" style={{ background: '#FDF2F8', color: PINK }}><Brain size={18} /></div>
-        <h1 className="text-[22px] font-extrabold text-text">Cerebro · Capacitación</h1>
+        <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg" style={{ background: '#EEF2FF', color: BLUE }}><Brain size={18} /></div>
+        <h1 className="text-[22px] font-extrabold text-text">Configuración de agentes</h1>
       </div>
-      <p className="text-[13px] text-text3 mb-5">Entrená a cada subagente de marketing: sus instrucciones y su material. El cerebro lo usa para crear anuncios, VSL y landings.</p>
+      <p className="text-[13px] text-text3 mb-4">Entrená a cada agente, mirá qué tiene cargado, editá el blueprint con el compliance de Meta y aprobá los anuncios ganadores.</p>
 
-      {loading ? <div className="text-text3 text-center py-20">Cargando…</div> : (
+      {/* Barra de pestañas */}
+      <div className="flex gap-1.5 mb-5 border-b border-[#EEF0F4] flex-wrap">
+        {TABS.map(t => {
+          const active = tab === t.key;
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)} className="inline-flex items-center gap-1.5 py-2 px-3 text-[12.5px] font-semibold cursor-pointer border-b-2 -mb-px transition-colors" style={active ? { color: BLUE, borderColor: BLUE } : { color: '#6B7280', borderColor: 'transparent' }}>
+              <t.Icon size={14} /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'estado' && <ContextStatus subagentKey="anuncios" />}
+      {tab === 'blueprint' && <BlueprintEditor />}
+      {tab === 'ganadores' && <WinnerCandidates />}
+      {tab === 'feedback' && <FeedbackInbox />}
+
+      {tab === 'capacitacion' && (loading ? <div className="text-text3 text-center py-20">Cargando…</div> : (
         <div className="grid gap-4" style={{ gridTemplateColumns: '220px 1fr' }}>
           {/* Panel izquierdo: subagentes */}
           <div className="flex flex-col gap-1.5">
             {subagents.map(sa => {
               const active = selected === sa.key;
               return (
-                <button key={sa.key} onClick={() => { setDirty(false); setSelected(sa.key); }} className="flex items-center gap-2 py-2.5 px-3 rounded-xl text-left cursor-pointer border transition-colors" style={active ? { background: '#FDF2F8', borderColor: PINK, color: '#1A1D26' } : { background: '#fff', borderColor: '#E2E5EB', color: '#4B5563' }}>
+                <button key={sa.key} onClick={() => { setDirty(false); setSelected(sa.key); }} className="flex items-center gap-2 py-2.5 px-3 rounded-xl text-left cursor-pointer border transition-colors" style={active ? { background: '#EEF2FF', borderColor: BLUE, color: '#1A1D26' } : { background: '#fff', borderColor: '#E2E5EB', color: '#4B5563' }}>
                   <span className="text-[13px] font-semibold flex-1">{sa.name}</span>
-                  {sa.key === 'general' && <span className="text-[9px] font-bold uppercase tracking-wider py-0.5 px-1.5 rounded-full text-[#EC4899] bg-white border" style={{ borderColor: '#FBCFE8' }}>Base</span>}
+                  {sa.key === 'general' && <span className="text-[9px] font-bold uppercase tracking-wider py-0.5 px-1.5 rounded-full text-[#5B7CF5] bg-white border" style={{ borderColor: '#C7D3FE' }}>Base</span>}
                 </button>
               );
             })}
@@ -235,7 +265,7 @@ export default function CerebroPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="text-[13px] font-bold text-[#1A1D26]">Instrucciones {current ? `· ${current.name}` : ''}</div>
-                <button onClick={saveInstructions} disabled={saving || !dirty} className={btnPrimary} style={{ background: dirty ? PINK : '#C4C9D2' }}>
+                <button onClick={saveInstructions} disabled={saving || !dirty} className={btnPrimary} style={{ background: dirty ? BLUE : '#C4C9D2' }}>
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {saving ? 'Guardando…' : 'Guardar'}
                 </button>
               </div>
@@ -267,7 +297,7 @@ export default function CerebroPage() {
             )}
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

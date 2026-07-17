@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import { ChevronDown, ChevronUp, ChevronRight, FlaskConical, ArrowLeft, ExternalLink } from 'lucide-react';
 
-const GREEN = '#22C55E';
+const BLUE = '#5B7CF5';          // marca (controles: filtros, botones)
+const GREEN = '#22C55E';         // semáforo de métricas: verde = bien (ver leyenda al pie)
 const DARK = '#15803D';
 
 const RANGES = [
@@ -173,7 +174,7 @@ export default function VslPage() {
         <div className="flex gap-1 bg-[#F3F4F6] p-1 rounded-xl">
           {RANGES.map((r) => (
             <button key={r.key} onClick={() => setRange(r.key)} className="text-[12px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
-              style={range === r.key ? { background: GREEN, color: '#fff', boxShadow: '0 1px 3px rgba(34,197,94,0.45)' } : { color: '#6B7280' }}>{r.label}</button>
+              style={range === r.key ? { background: BLUE, color: '#fff', boxShadow: '0 1px 3px rgba(91,124,245,0.45)' } : { color: '#6B7280' }}>{r.label}</button>
           ))}
         </div>
       </div>
@@ -232,7 +233,7 @@ function VslDetail({ m, rangeLabel }) {
         {ret?.duration && <span className="text-[13px] text-text3">Duración {fmtTime(ret.duration)}</span>}
         {r.embed_id && (
           <a href={`https://embed.voomly.com/b/${r.embed_id}`} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border hover:bg-[#FAFBFC] transition-colors" style={{ color: '#EC4899' }}>
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border hover:bg-[#FAFBFC] transition-colors" style={{ color: '#5B7CF5' }}>
             <ExternalLink size={13} /> Ver en Voomly
           </a>
         )}
@@ -266,7 +267,7 @@ function VslDetail({ m, rangeLabel }) {
                       <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}% del total)</span>
                     </div>
                     {phrase
-                      ? <div className="text-[13px] text-text2 italic mt-0.5 pl-2 border-l-2 border-[#FBCFE8]">“{phrase}”</div>
+                      ? <div className="text-[13px] text-text2 italic mt-0.5 pl-2 border-l-2 border-[#C7D3FE]">“{phrase}”</div>
                       : <div className="text-[11px] text-text3 mt-0.5 pl-2">— transcripción pendiente (se completa con Whisper) —</div>}
                   </div>
                 );
@@ -310,7 +311,7 @@ function VslDetail({ m, rangeLabel }) {
         <div className="flex items-end gap-2 flex-wrap">
           <label className="text-[11px] text-text3">Desde<input type="date" value={cStart} onChange={(e) => setCStart(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-blue" /></label>
           <label className="text-[11px] text-text3">Hasta<input type="date" value={cEnd} onChange={(e) => setCEnd(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-blue" /></label>
-          <button onClick={analyzeCustom} className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: GREEN }}>Analizar</button>
+          <button onClick={analyzeCustom} className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: BLUE }}>Analizar</button>
         </div>
         {cMsg && <div className="text-[12px] text-text3 mt-2">{cMsg}</div>}
         {cData && (
@@ -331,7 +332,7 @@ function VslDetail({ m, rangeLabel }) {
                     return (
                       <div key={k} className="text-[13px]">
                         <b className="tabular-nums">{fmtTime(d.sec)}</b> <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}% del total)</span>
-                        {ph && <div className="text-text2 italic text-[12px] pl-2 border-l-2 border-[#FBCFE8]">“{ph}”</div>}
+                        {ph && <div className="text-text2 italic text-[12px] pl-2 border-l-2 border-[#C7D3FE]">“{ph}”</div>}
                       </div>
                     );
                   })}

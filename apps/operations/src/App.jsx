@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, Brain } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, Brain, SlidersHorizontal } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset, signOut } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -19,6 +19,7 @@ const DmePage = lazy(() => import('./pages/DmePage'));
 const EquipoPage = lazy(() => import('./pages/EquipoPage'));
 const VslPage = lazy(() => import('./pages/VslPage'));
 const AgentesPage = lazy(() => import('./pages/AgentesPage'));
+const CerebroPage = lazy(() => import('./pages/CerebroPage'));
 const CuentasPage = lazy(() => import('./pages/CuentasPage'));
 import SearchBar from './components/SearchBar';
 import useSoporteUnread from './hooks/useSoporteUnread';
@@ -381,6 +382,7 @@ function MainLayout() {
   // Marketing — área aparte (métricas de VSL de Voomly). Visible para quien ve Operaciones.
   const marketingItems = [
     { id: 'agentes', label: 'Agentes', Icon: Brain, path: '/marketing/agentes' },
+    { id: 'config', label: 'Configuración', Icon: SlidersHorizontal, path: '/marketing/config' },
     { id: 'vsl', label: 'VSL', Icon: BarChart3, path: '/marketing/vsl' },
   ];
   // Contactos solo visible para admins. Si no es admin, ocultar del nav.
@@ -499,6 +501,7 @@ function MainLayout() {
       {/* Marketing (área aparte). Compat: la ruta vieja /operations/vsl redirige. */}
       <Route path="/marketing" element={<Navigate to="/marketing/agentes" replace />} />
       <Route path="/marketing/agentes" element={marketingGuarded(<AgentesPage />)} />
+      <Route path="/marketing/config" element={marketingGuarded(<CerebroPage />)} />
       <Route path="/marketing/vsl" element={marketingGuarded(<VslPage />)} />
       <Route path="/operations/vsl" element={<Navigate to="/marketing/vsl" replace />} />
       <Route path="/operations/publicidad" element={guestBlock(<PublicidadPage />)} />

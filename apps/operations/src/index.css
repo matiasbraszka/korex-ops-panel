@@ -295,3 +295,12 @@ body {
     word-break: break-word;
   }
 }
+/* Popovers del panel Agentes (selector de agente, historial y contexto) */
+@keyframes agentPop {
+  from { opacity: 0; transform: translateY(-6px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Fila de chips con scroll horizontal, sin barra visible (composer de Agentes) */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { height: 0; width: 0; display: none; }

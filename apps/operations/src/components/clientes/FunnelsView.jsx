@@ -385,15 +385,32 @@ function CardHead({ Icon, iconBg, iconColor, title, subtitle, children }) {
   );
 }
 
+// Las páginas del funnel (strategy_pages.pages_copy). Salen del DEL igual que el guión de VSL:
+// candado, solo lectura. Es el RECORRIDO DE LA PERSONA después del anuncio, y lo que leen los
+// agentes de marketing para alinear el copy.
+// La pre-landing va primera y a lo ancho: es la más importante (la primera pantalla que ve el
+// lead apenas hace clic, así que su titular es el que tiene que pegar con el anuncio).
+// No está el feedback a propósito: es lo que el EQUIPO anota sobre las páginas, no algo que la
+// persona vea. No es parte del recorrido.
+const PAGE_SLOTS = [
+  { slug: 'prelanding', label: 'Pre-landing', wide: true },
+  { slug: 'landing', label: 'Landing VSL' },
+  { slug: 'formulario', label: 'Formulario' },
+  { slug: 'thankyou', label: 'Thank You Page' },
+  { slug: 'testimonios', label: 'Testimonios' },
+];
+
 // Preview de guión/descripción con botón "Ampliar". Si `locked`, es solo-lectura (sale del DEL):
 // muestra un candadito y abre un visor, no un editor.
-function ScriptPreview({ Icon, color, label, text, onOpen, emptyHint, locked }) {
+// `lockHint` = de dónde sale y con qué botón se actualiza. Por defecto, el generador de
+// avatares (que es de donde salen la spec y los copys); las páginas tienen su propio botón.
+function ScriptPreview({ Icon, color, label, text, onOpen, emptyHint, locked, lockHint }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em]" style={{ color }}>
           <Icon size={12} />{label}
-          {locked && <span className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-full text-[9px] font-bold normal-case tracking-normal" style={{ background: '#F1F3F7', color: '#9098A4', border: '1px solid #E7EAF0' }} title="Sale del DEL. Se actualiza con “Generar avatares del DEL”."><Lock size={9} strokeWidth={2.6} />del DEL</span>}
+          {locked && <span className="inline-flex items-center gap-1 py-0.5 px-1.5 rounded-full text-[9px] font-bold normal-case tracking-normal" style={{ background: '#F1F3F7', color: '#9098A4', border: '1px solid #E7EAF0' }} title={lockHint || 'Sale del DEL. Se actualiza con “Generar avatares del DEL”.'}><Lock size={9} strokeWidth={2.6} />del DEL</span>}
         </span>
         <button onClick={onOpen} className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:underline" style={{ color }}><Maximize2 size={12} />{locked ? 'Ampliar / ver' : 'Ampliar / editar'}</button>
       </div>
@@ -774,6 +791,52 @@ Quedo a la espera de tu respuesta`;
     title: `Guión del VSL · ${f.name || 'Funnel'}`, initial: f.vsl_script || '', readOnly: true,
   });
 
+  // ── Copy de las páginas del funnel (sale del DEL, solo lectura) ──
+  // Colapsado por defecto: el contador del header ya dice todo sin comerse alto. Se muestran
+  // las 6 aunque falten: ver el hueco es la señal de que hay que arreglar el DEL.
+  const [copyOpen, setCopyOpen] = useState(false);
+  const pagesCopy = (f.pages_copy && typeof f.pages_copy === 'object' && !Array.isArray(f.pages_copy)) ? f.pages_copy : {};
+  const pagesFound = PAGE_SLOTS.filter(p => pagesCopy[p.slug]?.text).length;
+  // En el título del visor va la pestaña real del DEL: si la extracción se equivocó de sección,
+  // acá se ve de dónde salió.
+  const openPageCopy = (slot) => setNote({
+    title: `${slot.label} · ${f.name || 'Funnel'}${pagesCopy[slot.slug]?.title ? ` — «${pagesCopy[slot.slug].title}» del DEL` : ''}`,
+    initial: pagesCopy[slot.slug]?.text || '', readOnly: true,
+  });
+
+  // Traer el copy de las páginas del DEL. Pasada dedicada: la IA ve un vistazo de cada pestaña
+  // y deduce cuál es cada página (los nombres varían y el copy puede estar repartido). Si una
+  // está vacía o dice "en construcción", la deja afuera en vez de forzarla.
+  const [pagesBusy, setPagesBusy] = useState(false);
+  const syncPages = async (e) => {
+    e?.stopPropagation?.(); // el header togglea el acordeón; el botón no debe hacerlo
+    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero.'); return; }
+    if (pagesFound && !window.confirm('La IA va a releer el DEL y REEMPLAZAR el copy de las páginas por lo que encuentre ahora. ¿Seguir?')) return;
+    setPagesBusy(true);
+    // Red de seguridad: guardamos lo que hay antes de que la IA lo pise (lo restaura "Deshacer").
+    try { await onUpdate(f.id, { pages_copy_backup: f.pages_copy || null, backup_at: new Date().toISOString() }); } catch { /* noop */ }
+    try {
+      const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
+        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode: 'pages' },
+      });
+      let payload = data;
+      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
+      if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude traer el copy de las páginas.'); return; }
+      await onRefreshPage?.(f.id);
+      setCopyOpen(true); // que se vea el resultado sin tener que abrirlo a mano
+    } catch (e2) { window.alert(String(e2?.message || e2)); }
+    finally { setPagesBusy(false); }
+  };
+  // La pasada de páginas PISA todo (si la IA dice que una no está, tiene que desaparecer),
+  // así que necesita su propia vuelta atrás.
+  const canUndoPages = !!f.pages_copy_backup;
+  const undoPages = (e) => {
+    e?.stopPropagation?.();
+    if (!canUndoPages) return;
+    if (!window.confirm('¿Restaurar el copy de las páginas que había ANTES de la última lectura del DEL?')) return;
+    onUpdate(f.id, { pages_copy: f.pages_copy_backup });
+  };
+
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
 
@@ -803,7 +866,8 @@ Quedo a la espera de tu respuesta`;
     } catch (e) { setGen({ status: 'error', msg: String(e?.message || e) }); }
   };
   const genActive = gen.status === 'running';
-  // Deshacer: restaura los avatares + VSL que había ANTES de la última generación (red de seguridad).
+  // Deshacer: restaura los avatares + VSL que había ANTES de la última generación (red de
+  // seguridad). El copy de las páginas tiene su propio deshacer: lo genera otro botón.
   const canUndo = Array.isArray(f.avatars_backup);
   const undoGenerate = () => {
     if (!canUndo) return;
@@ -923,6 +987,41 @@ Quedo a la espera de tu respuesta`;
               </div>
               <ScriptPreview Icon={FileText} color="#16A34A" label="Guión del VSL" text={f.vsl_script} onOpen={openVslScript} locked emptyHint="Sin guión. Sale del DEL: tocá “Generar avatares del DEL”." />
             </div>
+          </div>
+
+          {/* Copy de las páginas — a dónde llega la gente después del anuncio. Sale del DEL,
+              solo lectura (igual que el guión de VSL). Lo leen los agentes de marketing. */}
+          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
+            <div onClick={() => setCopyOpen(o => !o)} className="cursor-pointer">
+              <CardHead Icon={Layers} iconBg="#F5F3FF" iconColor="#7C3AED" title="Copy de las páginas" subtitle="A dónde llega la gente después del anuncio · sale del DEL">
+                <button onClick={syncPages} disabled={pagesBusy}
+                  title="La IA lee el DEL, deduce qué pestaña es cada página (los nombres varían y el copy puede estar repartido) y copia el texto tal cual. Si una está vacía o en construcción, la deja afuera."
+                  className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                  style={{ background: pagesBusy ? '#F5F3FF' : '#7C3AED', color: pagesBusy ? '#7C3AED' : '#fff', border: 'none' }}>
+                  {pagesBusy ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {pagesBusy ? 'Leyendo el DEL…' : 'Traer copys del DEL'}
+                </button>
+                {canUndoPages && <button onClick={undoPages} title="Restaurar el copy de las páginas que había antes de la última lectura del DEL." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
+                <span className="text-[10.5px] font-bold py-[3px] px-2 rounded-md" style={pagesFound
+                  ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' }
+                  : { background: '#F5F6F9', color: '#AEB4BF', border: '1px solid #EDF0F5' }}>
+                  {pagesFound} de {PAGE_SLOTS.length} páginas
+                </span>
+                <ChevronDown size={16} className="transition-transform" style={{ transform: copyOpen ? 'rotate(180deg)' : 'none', color: copyOpen ? '#7C3AED' : '#C3C9D4' }} />
+              </CardHead>
+            </div>
+            {copyOpen && (
+              <div className="p-[14px] grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))' }}>
+                {PAGE_SLOTS.map(slot => (
+                  <div key={slot.slug} style={slot.wide ? { gridColumn: '1/-1' } : undefined}>
+                    <ScriptPreview Icon={FileText} color="#7C3AED" label={slot.label} text={pagesCopy[slot.slug]?.text}
+                      onOpen={() => openPageCopy(slot)} locked
+                      lockHint="Sale del DEL. Se actualiza con “Traer copys del DEL”."
+                      emptyHint="Sin copy. Sale del DEL: tocá “Traer copys del DEL”. Si en el DEL está vacía o en construcción, queda así a propósito." />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Variantes de avatar */}

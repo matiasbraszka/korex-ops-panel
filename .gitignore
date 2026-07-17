@@ -7,3 +7,9 @@ scripts/agent-fn-local.env
 *.log
 
 .vercel
+
+# Estado local del CLI de Supabase / Deno. Es de la maquina, no del proyecto:
+# .temp/linked-project.json guarda a que proyecto linkeaste, y deno.lock lo
+# regenera el CLI al deployar. El repo nunca los tuvo.
+supabase/.temp/
+deno.lock
