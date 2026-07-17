@@ -17,6 +17,7 @@ import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
 import DriveMediaGallery from './funnels/DriveMediaGallery';
+import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
 import { openUrl, copyText } from './recursosShared';
 import { fmtDateTime } from '../../utils/helpers';
@@ -798,6 +799,8 @@ function EditorMessageModal({ initial, onClose }) {
 //  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
 //    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
 function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false }) {
+  const { currentUser } = useApp();
+  const meId = currentUser?.id || null;
   const [note, setNote] = useState(null);
   const [open, setOpen] = useState(false);
   const isOpen = forcePage || open; // en pantalla, el cuerpo siempre se ve
@@ -1117,7 +1120,7 @@ Quedo a la espera de tu respuesta`;
           <button onClick={createFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive las carpetas de anuncios por avatar." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-2 px-3 text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folderBusy === 'create' ? <RefreshCw size={13} className="animate-spin" /> : <FolderPlus size={13} />}Crear carpetas</button>
           <button onClick={createVslFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive las carpetas de VSL por avatar." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#EFF6FF] border border-[#C7DBFB] rounded-lg py-2 px-3 text-[#2E69E0] cursor-pointer hover:bg-[#E0ECFF] disabled:opacity-50">{folderBusy === 'vsl' ? <RefreshCw size={13} className="animate-spin" /> : <FolderPlus size={13} />}Crear carpetas VSL</button>
         </>}
-        <span className="ml-auto text-[11px] text-[#9098A4]">Un clic abre la carpeta en el Drive. La galería de videos llega con la etapa de video.</span>
+        <span className="ml-auto text-[11px] text-[#9098A4]">Cada avatar tiene sus carpetas: abrí una y subí los archivos ahí mismo (quedan alojados en la plataforma).</span>
       </div>
 
       {genActive && (
@@ -1155,26 +1158,14 @@ Quedo a la espera de tu respuesta`;
               <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
               <button onClick={() => removeAvatarUndoable(av)} title="Borrar este avatar (se puede deshacer)" className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
             </div>
+            {/* Las 4 carpetas del avatar, alojadas en la plataforma: se suben los archivos
+                acá mismo (no más link de Drive). Un clic abre la carpeta y ahí se ven. */}
             <div className="p-2.5 flex flex-col gap-1.5">
-              {VID_BUCKETS.map(b => {
-                const url = av[b.url]; const n = av[b.files] || 0; const has = n > 0;
-                return (
-                  <div key={b.key} className="rounded-lg border py-2 px-2.5" style={{ borderColor: has ? b.border : '#EDF0F5', background: has ? b.bg : '#FBFCFE' }}>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <FolderOpen size={15} className="shrink-0" style={{ color: has ? b.c : '#C3C9D4' }} />
-                      <span className="text-[12px] font-semibold shrink-0" style={{ color: has ? b.c : '#6B7280' }}>{b.label}</span>
-                      {b.voomly && <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span>}
-                      <span className="ml-auto text-[10.5px] font-bold py-0.5 px-2 rounded-full whitespace-nowrap shrink-0" style={has ? { background: b.bg, color: b.c, border: `1px solid ${b.border}` } : { background: '#F1F3F7', color: '#AEB4BF' }}>{url ? (has ? `${n} archivo${n === 1 ? '' : 's'}` : 'vacía') : 'sin carpeta'}</span>
-                    </div>
-                    {/* Pegar / editar el link de la carpeta del Drive a mano. */}
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <input key={av.id + b.key} defaultValue={url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (url || '')) setAvatar(av.id, { [b.url]: v || null }); }} placeholder="Pegá el link de la carpeta del Drive…" className="flex-1 min-w-0 py-1.5 px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#3F4653] bg-white outline-none focus:border-blue" />
-                      {url && <><button onClick={() => openUrl(url)} title="Abrir en el Drive" className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-md cursor-pointer border-none shrink-0" style={{ background: has ? b.c : '#E7EAF0', color: has ? '#fff' : '#6B7280' }}><ExternalLink size={11} />Abrir</button>
-                        <button onClick={() => copyText(url)} title="Copiar" className="inline-flex items-center justify-center w-7 h-7 rounded-md cursor-pointer border shrink-0" style={{ borderColor: b.border, background: '#fff', color: b.c }}><Copy size={12} /></button></>}
-                    </div>
-                  </div>
-                );
-              })}
+              {VID_BUCKETS.map(b => (
+                <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
+                  bucketKey={b.key} label={b.label} color={b.c} bg={b.bg} by={meId}
+                  extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+              ))}
             </div>
           </div>
         );
@@ -1186,7 +1177,7 @@ Quedo a la espera de tu respuesta`;
       {/* Branding e imágenes: son del CLIENTE (sirven para todos sus funnels). */}
       <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-[#FBFCFE] py-3 px-4 flex items-start gap-2.5 text-[11.5px] text-[#9098A4]">
         <ImageIcon size={15} className="shrink-0 mt-px" />
-        <span>Branding e imágenes del cliente (logo, colores, fotos) sirven para todos sus funnels: viven en el <b>Contexto</b> del cliente. La galería de videos llega con la etapa de video.</span>
+        <span>Branding e imágenes del cliente (logo, colores, fotos) sirven para todos sus funnels: viven en el <b>Contexto</b> del cliente. Abajo, la galería trae lo que ya está en el Drive del cliente.</span>
       </div>
     </div>
   );
