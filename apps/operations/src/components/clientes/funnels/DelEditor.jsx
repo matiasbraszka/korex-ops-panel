@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -44,7 +44,14 @@ const kindRank = (k) => { const i = KIND_ORDER.indexOf(k); return i === -1 ? 99 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const plainToHtml = (t) => String(t || '').split(/\n{2,}/).map(b => `<p>${esc(b.trim()).replace(/\n/g, '<br>')}</p>`).join('') || '<p></p>';
 
-export default function DelEditor({ strategyId, docId, docUrl }) {
+// Los documentos del cliente que se comparten entre TODOS sus funnels (personalidad,
+// onboarding, investigación). En la maqueta van al fondo del menú del DEL, bajo
+// "DEL CLIENTE · compartidos". Son de solo lectura acá; se editan sincronizando el Drive.
+const DOC_KIND_LABEL = {
+  briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
+};
+
+export default function DelEditor({ strategyId, docId, docUrl, clientId, configNode, recursosNode }) {
   const { currentUser } = useApp();
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -52,6 +59,9 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
   const [modo, setModo] = useState('leer'); // 'leer' | 'editar'
   const [saveState, setSaveState] = useState({}); // id -> 'saving'|'saved'|'error'
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
+  // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
+  const [view, setView] = useState('del');
+  const [clientDocs, setClientDocs] = useState([]);
   const scrollRef = useRef(null);
   const timers = useRef({}); // id -> timeout (debounce de guardado)
   const by = currentUser?.id || null;
@@ -59,11 +69,12 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
   // El doc_id lo necesitamos para agregar secciones. Si no vino, lo resolvemos del
   // primer del_section (todas comparten doc_id por estrategia).
   const [resolvedDoc, setResolvedDoc] = useState(docId || null);
+  const [resolvedClient, setResolvedClient] = useState(clientId || null);
 
   const cargar = useCallback(async () => {
     try {
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,ord,title,kind,text,html,char_count,source&strategy_id=eq.${strategyId}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source&strategy_id=eq.${strategyId}&order=ord.asc`,
         { headers: { Prefer: 'return=representation' } },
       );
       const list = Array.isArray(rows) ? rows : [];
@@ -71,6 +82,7 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
       if (list.length) {
         setActiva((a) => a || list[0].id);
         setResolvedDoc((d) => d || list[0].doc_id);
+        setResolvedClient((c) => c || list[0].client_id);
       }
     } catch (e) {
       setErr(String(e?.message || e));
@@ -78,6 +90,20 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
   }, [strategyId]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Documentos del cliente (compartidos por todos sus funnels), para el grupo "DEL CLIENTE".
+  useEffect(() => {
+    const cid = clientId || resolvedClient;
+    if (!cid) return;
+    let alive = true;
+    (async () => {
+      try {
+        const rows = await sbFetch(`client_brain_docs?select=id,title,doc_kind,text,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`);
+        if (alive) setClientDocs(Array.isArray(rows) ? rows : []);
+      } catch { if (alive) setClientDocs([]); }
+    })();
+    return () => { alive = false; };
+  }, [clientId, resolvedClient]);
 
   const resumen = useMemo(() => {
     if (!secs) return [];
@@ -107,8 +133,12 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
 
   const irA = (id) => {
     setActiva(id);
-    const el = document.getElementById('sec-' + id);
-    if (el && scrollRef.current) scrollRef.current.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' });
+    setView('del');
+    // Si veníamos de otra vista, el documento recién se monta: esperamos un tick.
+    setTimeout(() => {
+      const el = document.getElementById('sec-' + id);
+      if (el && scrollRef.current) scrollRef.current.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' });
+    }, view === 'del' ? 0 : 60);
   };
 
   // Guardado con debounce por seccion (800ms tras la ultima tecla).
@@ -176,14 +206,20 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
     <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }}>
       <div className="grid gap-5 items-start mx-auto max-w-[1180px] py-5 px-6" style={{ gridTemplateColumns: 'minmax(0,215px) minmax(0,1fr)' }}>
 
-        {/* Índice fijo (anda gracias a overflow-x: clip en index.css). */}
-        <nav className="sticky top-0 flex flex-col gap-0.5 p-2 rounded-xl border border-[#E7EAF0] bg-white max-h-[calc(100vh-140px)] overflow-y-auto" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>
-          <div className="flex items-center justify-between px-2 pt-1 pb-2">
-            <span className="text-[9.5px] font-extrabold tracking-[0.1em] uppercase text-[#AEB4BF]">{secs.length} secciones</span>
+        {/* El menú del DEL (maqueta): ESTE FUNNEL (las secciones del documento) · las dos
+            pestañas Configuración/Recursos · y abajo los documentos DEL CLIENTE, que
+            comparten todos sus funnels. */}
+        <nav className="sticky top-0 flex flex-col gap-0.5 p-2 rounded-xl border border-[#E7EAF0] bg-white max-h-[calc(100vh-120px)] overflow-y-auto" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>
+          <div className="px-2 pt-1 pb-1.5">
+            <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Este funnel</span>
           </div>
-          {/* Índice agrupado por categoría (Estrategia → Avatares → VSL → Anuncios → Páginas
-              → Mensajes → …): cada grupo con su color, para que la estructura del DEL se vea
-              de un vistazo aunque el Doc venga desordenado. */}
+          {/* "DEL" arriba de todo = el documento entero */}
+          <button onClick={() => { setView('del'); scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-bold transition-colors"
+            style={{ background: view === 'del' ? '#EFEBFF' : 'transparent', color: view === 'del' ? '#6D28D9' : '#4B5563' }}>
+            <FileText size={14} className="shrink-0" />DEL
+          </button>
+          {/* Las secciones del documento, agrupadas por categoría con su color. */}
           {groups.map(gr => {
             const sc = secOf(gr.kind);
             return (
@@ -194,7 +230,7 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
                   <span className="text-[9.5px] font-bold text-[#C3C9D4]">{gr.items.length}</span>
                 </div>
                 {gr.items.map(s => {
-                  const on = activa === s.id;
+                  const on = view === 'del' && activa === s.id;
                   return (
                     <button key={s.id} onClick={() => irA(s.id)}
                       className="flex items-center gap-2 w-full py-1.5 pl-4 pr-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
@@ -206,14 +242,49 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
               </div>
             );
           })}
-          {editando && resolvedDoc && (
+          {editando && view === 'del' && resolvedDoc && (
             <button onClick={() => agregar(null)} className="flex items-center gap-2 py-2 px-2.5 mt-1 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11.5px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent">
               <Plus size={13} />Agregar sección
             </button>
           )}
+
+          {/* Las dos pestañas de la maqueta, debajo de las secciones. */}
+          <div className="h-px my-2 mx-1" style={{ background: '#EDF0F5' }} />
+          <button onClick={() => setView('config')}
+            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-semibold transition-colors"
+            style={{ background: view === 'config' ? '#EEF3FF' : 'transparent', color: view === 'config' ? '#1D4FD8' : '#4B5563' }}>
+            <Link2 size={14} className="shrink-0" />Configuración Meta y Links
+          </button>
+          <button onClick={() => setView('recursos')}
+            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-semibold transition-colors"
+            style={{ background: view === 'recursos' ? '#FFF7ED' : 'transparent', color: view === 'recursos' ? '#B45309' : '#4B5563' }}>
+            <ImageIcon size={14} className="shrink-0" />Recursos
+          </button>
+
+          {/* DEL CLIENTE: los documentos compartidos por todos los funnels del cliente. */}
+          {clientDocs.length > 0 && (
+            <>
+              <div className="px-2 pt-3 pb-1.5 flex items-center gap-1.5">
+                <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Del cliente</span>
+                <span className="text-[9px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FEF3C7', color: '#B45309' }}>compartidos</span>
+              </div>
+              {clientDocs.map(d => {
+                const on = view === 'cliente:' + d.id;
+                return (
+                  <button key={d.id} onClick={() => setView('cliente:' + d.id)}
+                    className="flex items-center gap-2 w-full py-1.5 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
+                    style={{ background: on ? '#F1F3F7' : 'transparent', color: on ? '#1A1D26' : '#6B7280' }}>
+                    <Monitor size={13} className="shrink-0 text-[#9098A4]" />
+                    <span className="truncate flex-1 min-w-0">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         <div className="min-w-0 flex flex-col gap-3">
+          {view === 'del' && (<>
           {/* Barra: leer vs editar + de dónde salió + link al Doc */}
           <div className="flex items-center gap-2.5 flex-wrap py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white sticky top-0 z-10">
             <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
@@ -298,6 +369,59 @@ export default function DelEditor({ strategyId, docId, docUrl }) {
               </div>
             );
           })}
+          </>)}
+
+          {/* Configuración Meta y Links — la config del funnel, movida acá desde la pantalla. */}
+          {view === 'config' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 py-2 px-1">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#EEF3FF', color: '#1D4FD8' }}><Link2 size={16} /></span>
+                <div>
+                  <div className="text-[14px] font-bold text-[#1A1D26]">Configuración Meta y Links</div>
+                  <div className="text-[11px] text-[#9098A4]">Enlaces, Pixel, Clarity y eventos de conversión de este funnel.</div>
+                </div>
+              </div>
+              {configNode || <div className="text-[12px] text-[#9098A4] p-4">Sin configuración.</div>}
+            </div>
+          )}
+
+          {/* Recursos — el material del funnel (avatares, VSL, copy). La galería de videos
+              por avatar de la maqueta viene después; por ahora vive acá el material real. */}
+          {view === 'recursos' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 py-2 px-1">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#FFF7ED', color: '#B45309' }}><ImageIcon size={16} /></span>
+                <div>
+                  <div className="text-[14px] font-bold text-[#1A1D26]">Recursos</div>
+                  <div className="text-[11px] text-[#9098A4]">Avatares, VSL y copys de las páginas de este funnel.</div>
+                </div>
+              </div>
+              {recursosNode || <div className="text-[12px] text-[#9098A4] p-4">Sin recursos.</div>}
+            </div>
+          )}
+
+          {/* Un documento DEL CLIENTE (personalidad / onboarding / investigación), solo lectura. */}
+          {view.startsWith('cliente:') && (() => {
+            const doc = clientDocs.find(d => 'cliente:' + d.id === view);
+            if (!doc) return null;
+            return (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2 py-2 px-1 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{DOC_KIND_LABEL[doc.doc_kind] || doc.title}</div>
+                      <div className="text-[11px] text-[#9098A4]">Compartido por todos los funnels del cliente · solo lectura.</div>
+                    </div>
+                  </div>
+                  {doc.web_url && <a href={doc.web_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline shrink-0"><ExternalLink size={11} />Abrir en Drive</a>}
+                </div>
+                <div className="rounded-xl border border-[#E7EAF0] bg-white py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '80ch' }}>
+                  {(doc.text || '').trim() || <span className="italic text-[#C3C9D4]">Este documento está vacío o todavía no se sincronizó.</span>}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

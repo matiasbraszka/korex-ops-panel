@@ -1004,6 +1004,190 @@ Quedo a la espera de tu respuesta`;
   // que decia SI el dato estaba, sin decir cual. FunnelConfigBlock muestra el valor
   // y el hueco, que es estrictamente mas informacion en el mismo lugar.
 
+  // ── Bloques que la maqueta movió del funnel al DEL ───────────────────────────
+  // En PANTALLA (forcePage) el funnel muestra SOLO el riel + tareas; estos bloques
+  // (config, VSL, copy, avatares) viven adentro del DEL, en sus pestañas. Se definen
+  // como nodos acá (con todos sus handlers en scope) y se pasan a DelWorkspace.
+  const funnelConfigNode = <FunnelConfigBlock f={f} onUpdate={onUpdate} events={events} onTrack={onTrack} />;
+
+  const funnelRecursosNode = (
+    <div className="flex flex-col gap-3.5">
+      {/* Mensaje para el editor: arma el brief de edición (guiones + carpetas + piezas por avatar) */}
+      <div className="flex items-center justify-between gap-3 flex-wrap border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#DCE7FB' }}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#EEF3FF', color: '#2E69E0' }}><MessageSquare size={15} /></span>
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-bold text-[#1A1D26]">Mensaje para el editor</div>
+            <div className="text-[10.5px] text-[#9098A4]">Guiones + carpetas de subida + piezas por avatar, listo para pegar</div>
+          </div>
+        </div>
+        <button onClick={openEditorMsg} disabled={msgBusy} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0 disabled:opacity-60">{msgBusy ? <RefreshCw size={14} className="animate-spin" /> : <MessageSquare size={14} />}{msgBusy ? 'Armando…' : 'Armar mensaje'}</button>
+      </div>
+
+      {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
+      <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
+        <CardHead Icon={Clapperboard} iconBg="#ECFDF3" iconColor="#16A34A" title="VSL del funnel" subtitle="1 video por funnel · con su guión">
+          <button onClick={syncVsl} disabled={vslBusy} title="Trae SOLO el guión del VSL desde el DEL (por código, sin IA, gratis). Si el DEL tiene varias VSL y no puede decidir cuál, usá “Generar avatares del DEL”." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F0FDF4] disabled:opacity-50" style={{ color: '#16A34A', borderColor: '#C9F0D8' }}>{vslBusy ? <RefreshCw size={12} className="animate-spin" /> : <FileText size={12} />}{vslBusy ? 'Trayendo…' : 'Traer guión del DEL'}</button>
+        </CardHead>
+        <div className="p-[14px] flex flex-col gap-3.5">
+          <div>
+            <div className="text-[10.5px] font-bold text-[#16A34A] uppercase tracking-[0.06em] mb-1.5">Link del VSL</div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <input key={f.id + 'vslurl'} defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
+              <button onClick={() => setVoomlyOpen(true)} title="Buscar el VSL en la tabla de Voomly y traer su link automáticamente." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#DB2777', borderColor: '#FBCFE8' }}><SearchIcon size={12} />Traer de Voomly</button>
+              {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
+                <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Copy size={12} /></button></>}
+            </div>
+          </div>
+          <ScriptPreview Icon={FileText} color="#16A34A" label="Guión del VSL" text={f.vsl_script} onOpen={openVslScript} locked emptyHint="Sin guión. Sale del DEL: tocá “Generar avatares del DEL”." />
+        </div>
+      </div>
+
+      {/* Copy de las páginas — a dónde llega la gente después del anuncio. Sale del DEL. */}
+      <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
+        <div onClick={() => setCopyOpen(o => !o)} className="cursor-pointer">
+          <CardHead Icon={Layers} iconBg="#F5F3FF" iconColor="#7C3AED" title="Copy de las páginas" subtitle="A dónde llega la gente después del anuncio · sale del DEL">
+            <button onClick={syncPages} disabled={pagesBusy}
+              title="La IA lee el DEL, deduce qué pestaña es cada página (los nombres varían y el copy puede estar repartido) y copia el texto tal cual. Si una está vacía o en construcción, la deja afuera."
+              className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default"
+              style={{ background: pagesBusy ? '#F5F3FF' : '#7C3AED', color: pagesBusy ? '#7C3AED' : '#fff', border: 'none' }}>
+              {pagesBusy ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {pagesBusy ? 'Leyendo el DEL…' : 'Traer copys del DEL'}
+            </button>
+            {canUndoPages && <button onClick={undoPages} title="Restaurar el copy de las páginas que había antes de la última lectura del DEL." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
+            <span className="text-[10.5px] font-bold py-[3px] px-2 rounded-md" style={pagesFound
+              ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' }
+              : { background: '#F5F6F9', color: '#AEB4BF', border: '1px solid #EDF0F5' }}>
+              {pagesFound} de {PAGE_SLOTS.length} páginas
+            </span>
+            <ChevronDown size={16} className="transition-transform" style={{ transform: copyOpen ? 'rotate(180deg)' : 'none', color: copyOpen ? '#7C3AED' : '#C3C9D4' }} />
+          </CardHead>
+        </div>
+        {copyOpen && (
+          <div className="p-[14px] grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))' }}>
+            {PAGE_SLOTS.map(slot => (
+              <div key={slot.slug} style={slot.wide ? { gridColumn: '1/-1' } : undefined}>
+                <ScriptPreview Icon={FileText} color="#7C3AED" label={slot.label} text={pagesCopy[slot.slug]?.text}
+                  onOpen={() => openPageCopy(slot)} locked
+                  lockHint="Sale del DEL. Se actualiza con “Traer copys del DEL”."
+                  emptyHint="Sin copy. Sale del DEL: tocá “Traer copys del DEL”. Si en el DEL está vacía o en construcción, queda así a propósito." />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Variantes de avatar */}
+      <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
+        <CardHead Icon={Users} iconBg="#FCE7F3" iconColor="#DB2777" title="Variantes de avatar" subtitle="A quién se le publicita · un anuncio por avatar">
+          <button onClick={() => generateAvatars('append')} disabled={genActive} title="La IA lee el DEL (aunque esté desordenado), identifica los avatares con su segmentación y les engancha los copys de anuncios por significado. Tarda 1-2 minutos." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default" style={{ background: genActive ? '#FCE7F3' : '#DB2777', color: genActive ? '#DB2777' : '#fff', border: 'none' }}>{genActive ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}{genActive ? 'Generando…' : 'Generar avatares del DEL'}</button>
+          {namedAvatars.length > 0 && <>
+            <button onClick={fetchFolders} disabled={folderBusy !== 'idle'} title="Vincula las carpetas por avatar que YA existen en el Drive y lee su estado (grabado/editado). No crea nada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50" style={foldersReady ? { color: '#15803D', borderColor: '#C9F0D8' } : { color: '#3F4653', borderColor: '#D8DDE6' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : foldersReady ? <Check size={12} strokeWidth={3} /> : <FolderOpen size={12} />}{folderBusy === 'read' ? 'Trayendo…' : 'Traer carpeta'}</button>
+            <button onClick={createFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive lo que falte: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar. Acción aparte de traer." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folderBusy === 'create' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'create' ? 'Creando…' : 'Crear carpetas'}</button>
+            <button onClick={createVslFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive: VSL › Grabaciones|Ediciones › una subcarpeta por avatar. Si la de grabaciones tiene archivos = grabó la VSL; si la de ediciones = VSL editada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#EFF6FF] border border-[#C7DBFB] rounded-lg py-[7px] px-[11px] text-[#2E69E0] cursor-pointer hover:bg-[#E0ECFF] disabled:opacity-50">{folderBusy === 'vsl' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'vsl' ? 'Creando VSL…' : 'Crear carpetas VSL'}</button>
+          </>}
+          {canUndo && <button onClick={undoGenerate} title="Restaurar los avatares y la VSL que había antes de la última generación de la IA." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
+          <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
+        </CardHead>
+        {genActive && (
+          <div className="mx-[14px] mt-[14px] -mb-1 flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#FDF2F8', color: '#BE185D', border: '1px solid #FBCFE8' }}>
+            <RefreshCw size={13} className="animate-spin shrink-0" />
+            La IA está leyendo el DEL y armando los avatares… unos segundos.
+          </div>
+        )}
+        {gen.status === 'done' && (
+          <div className="mx-[14px] mt-[14px] -mb-1 flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }}>
+            <Check size={13} className="shrink-0" strokeWidth={3} />
+            Listo — {gen.n} avatar{gen.n === 1 ? '' : 'es'} del DEL{typeof gen.cost === 'number' ? ` · costo US$${gen.cost.toFixed(4)}` : ''}. Revisalos y ajustá lo que quieras.
+          </div>
+        )}
+        {gen.status === 'error' && (
+          <div className="mx-[14px] mt-[14px] -mb-1 flex items-start gap-2 text-[11.5px] py-2.5 px-3 rounded-lg" style={{ background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
+            <X size={13} className="shrink-0 mt-px" />
+            <span>{gen.msg || 'No pude generar los avatares.'} <button onClick={() => generateAvatars('append')} className="underline font-semibold cursor-pointer bg-transparent border-none p-0 text-[#B91C1C]">Reintentar</button></span>
+          </div>
+        )}
+        <div className="p-[14px] flex flex-col gap-3">
+          {avatars.map((av, i) => {
+            const acfg = AVATAR_STATUS[av.status] || AVATAR_STATUS['En grabación'];
+            return (
+              <div key={av.id} className="border border-[#EDF0F5] rounded-[11px] p-[14px] bg-white" style={{ borderLeft: '3px solid #EC4899' }}>
+                <div className="flex items-start gap-2.5 mb-2.5">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-[7px] bg-[#FCE7F3] text-[#DB2777] text-[12px] font-bold shrink-0">{i + 1}</span>
+                  <input key={av.id + 'n'} defaultValue={av.name} onBlur={e => { if (e.target.value !== (av.name || '')) setAvatar(av.id, { name: e.target.value }); }} placeholder="Nombre del avatar" className="flex-1 min-w-0 text-[13.5px] font-semibold text-[#1A1D26] leading-snug border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none" />
+                  <span className="inline-flex items-center gap-1.5 py-[3px] px-2.5 rounded-full text-[10.5px] font-bold shrink-0 whitespace-nowrap" style={{ background: acfg.bg, color: acfg.color }}><span className="w-[6px] h-[6px] rounded-full" style={{ background: acfg.dot }} /></span>
+                  <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
+                  <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {/* Segmentación */}
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#DB2777] mb-1.5"><Target size={12} />Segmentación</div>
+                    <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="¿A quién se le publicita? (edad, sexo, ubicación, intereses…)" className="w-full py-2 px-[11px] border border-[#EDF0F5] rounded-lg text-[11.5px] text-[#3F4653] bg-[#FAFBFD] outline-none focus:border-blue focus:bg-white" />
+                  </div>
+                  {/* Descripción */}
+                  <ScriptPreview Icon={FileText} color="#DB2777" label="Descripción" text={av.spec_text} onOpen={() => openDesc(av)} locked emptyHint="Sin descripción. Sale del DEL: tocá “Generar avatares del DEL”." />
+                  {/* Grabaciones (grabado): la CARPETA donde va lo que grabó el cliente, por avatar. */}
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#16A34A] mb-1.5"><Film size={12} />Grabaciones <span className="text-[#86C7A2] normal-case tracking-normal">(grabado)</span></div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input key={av.id + 'rec'} defaultValue={av.rec_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.rec_folder_url || '')) setAvatar(av.id, { rec_folder_url: v || null }); }} placeholder="Carpeta de grabaciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
+                      <button onClick={() => bringFolder(av, 'rec')} disabled={folderBusy !== 'idle'} title="Trae la carpeta de grabaciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
+                      {av.rec_folder_url
+                        ? <><button onClick={() => openUrl(av.rec_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><FolderOpen size={12} />Abrir</button>
+                           <button onClick={() => copyText(av.rec_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Copy size={12} /></button></>
+                        : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
+                    </div>
+                    {av.rec_folder_url && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.rec_files > 0 ? <><Check size={9} strokeWidth={3.5} />grabado · {av.rec_files} arch.</> : 'carpeta vacía'}</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Anuncios (editado): la CARPETA de ediciones de este avatar (ahí viven los anuncios editados). */}
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#7C3AED] mb-1.5"><Megaphone size={12} />Anuncios <span className="text-[#A78BFA] normal-case tracking-normal">(editado)</span></div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input key={av.id + 'edit'} defaultValue={av.edit_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.edit_folder_url || '')) setAvatar(av.id, { edit_folder_url: v || null }); }} placeholder="Carpeta de ediciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
+                      <button onClick={() => bringFolder(av, 'edit')} disabled={folderBusy !== 'idle'} title="Trae la carpeta de ediciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
+                      {av.edit_folder_url
+                        ? <><button onClick={() => openUrl(av.edit_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><FolderOpen size={12} />Abrir</button>
+                           <button onClick={() => copyText(av.edit_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E4DBFF] rounded-lg cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Copy size={12} /></button></>
+                        : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
+                    </div>
+                    {av.edit_folder_url && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.edit_files > 0 ? <><Check size={9} strokeWidth={3.5} />editado · {av.edit_files} arch.</> : 'carpeta vacía'}</span>
+                      </div>
+                    )}
+                    {(av.vsl_edit_folder_url || av.vsl_rec_folder_url) && (
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#B4BAC6] shrink-0">VSL</span>
+                        {av.vsl_rec_folder_url && (
+                          <button onClick={() => openUrl(av.vsl_rec_folder_url)} title="Carpeta de grabaciones de la VSL de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.vsl_rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                            <Film size={11} />Grabación{av.vsl_rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabada</span> : <span className="text-[#C3C9D4]">vacía</span>}
+                          </button>
+                        )}
+                        {av.vsl_edit_folder_url && (
+                          <button onClick={() => openUrl(av.vsl_edit_folder_url)} title="Carpeta de la VSL editada de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.vsl_edit_files > 0 ? { background: '#EFF6FF', color: '#2E69E0', borderColor: '#C7DBFB' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                            <Clapperboard size={11} />Editada{av.vsl_edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />lista · {av.vsl_edit_files}</span> : <span className="text-[#C3C9D4]">vacía</span>}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* Copys de anuncios */}
+                  <ScriptPreview Icon={FileText} color="#2E69E0" label="Copys de anuncios" text={av.ad_script} onOpen={() => openAdScript(av, i)} locked emptyHint="Sin copys. Salen del DEL: tocá “Generar avatares del DEL”." />
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={addAvatar} className="flex items-center justify-center gap-2.5 w-full border-[1.5px] border-dashed border-[#F0C4DD] rounded-[11px] bg-[#FDF5FA] text-[#DB2777] text-[12.5px] font-semibold py-3 px-3.5 cursor-pointer hover:bg-[#FCEBF4] hover:border-[#DB2777] transition-colors"><span className="w-5 h-5 rounded-full bg-[#DB2777] text-white inline-flex items-center justify-center shrink-0"><Plus size={12} strokeWidth={2.6} /></span>Agregar variante de avatar</button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ borderLeft: forcePage ? 'none' : `3px solid ${st.side}`, borderBottom: last ? 'none' : '1px solid #EDF0F5' }}>
       {/* En PANTALLA (forcePage) la cabecera es el topbar de la maqueta: Volver · título
@@ -1100,193 +1284,9 @@ Quedo a la espera de tu respuesta`;
           </div>
           )}
 
-          {/* Mensaje para el editor: arma el brief de edición (guiones + carpetas + piezas por avatar) */}
-          <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5 border rounded-xl py-2.5 px-3.5 bg-white" style={{ borderColor: '#DCE7FB' }}>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: '#EEF3FF', color: '#2E69E0' }}><MessageSquare size={15} /></span>
-              <div className="min-w-0">
-                <div className="text-[12.5px] font-bold text-[#1A1D26]">Mensaje para el editor</div>
-                <div className="text-[10.5px] text-[#9098A4]">Guiones + carpetas de subida + piezas por avatar, listo para pegar</div>
-              </div>
-            </div>
-            <button onClick={openEditorMsg} disabled={msgBusy} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-[9px] border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] shrink-0 disabled:opacity-60">{msgBusy ? <RefreshCw size={14} className="animate-spin" /> : <MessageSquare size={14} />}{msgBusy ? 'Armando…' : 'Armar mensaje'}</button>
-          </div>
-
-          {/* Configuracion de Meta y links: slots FIJOS, el hueco se ve. Reemplaza al
-              bloque viejo, que dibujaba solo lo que existia (cada funnel mostraba una
-              lista distinta y no habia con que compararlos). Incluye los 2 campos que
-              antes vivian escondidos en el modal de tracking (Pixel y Clarity). */}
-          <FunnelConfigBlock f={f} onUpdate={onUpdate} events={events} onTrack={onTrack} />
-
-          {/* VSL del funnel — 1 por funnel (el corazón: de acá salen los anuncios) */}
-          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
-            <CardHead Icon={Clapperboard} iconBg="#ECFDF3" iconColor="#16A34A" title="VSL del funnel" subtitle="1 video por funnel · con su guión">
-              <button onClick={syncVsl} disabled={vslBusy} title="Trae SOLO el guión del VSL desde el DEL (por código, sin IA, gratis). Si el DEL tiene varias VSL y no puede decidir cuál, usá “Generar avatares del DEL”." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F0FDF4] disabled:opacity-50" style={{ color: '#16A34A', borderColor: '#C9F0D8' }}>{vslBusy ? <RefreshCw size={12} className="animate-spin" /> : <FileText size={12} />}{vslBusy ? 'Trayendo…' : 'Traer guión del DEL'}</button>
-            </CardHead>
-
-            <div className="p-[14px] flex flex-col gap-3.5">
-              <div>
-                <div className="text-[10.5px] font-bold text-[#16A34A] uppercase tracking-[0.06em] mb-1.5">Link del VSL</div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <input key={f.id + 'vslurl'} defaultValue={f.vsl_url || ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (f.vsl_url || '')) onUpdate(f.id, { vsl_url: v || null }); }} placeholder="Link del VSL de este funnel…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-                  <button onClick={() => setVoomlyOpen(true)} title="Buscar el VSL en la tabla de Voomly y traer su link automáticamente." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#FDF2F8', color: '#DB2777', borderColor: '#FBCFE8' }}><SearchIcon size={12} />Traer de Voomly</button>
-                  {f.vsl_url && <><button onClick={() => openUrl(f.vsl_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Clapperboard size={12} />Ver</button>
-                    <button onClick={() => copyText(f.vsl_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#16A34A' }}><Copy size={12} /></button></>}
-                </div>
-              </div>
-              <ScriptPreview Icon={FileText} color="#16A34A" label="Guión del VSL" text={f.vsl_script} onOpen={openVslScript} locked emptyHint="Sin guión. Sale del DEL: tocá “Generar avatares del DEL”." />
-            </div>
-          </div>
-
-          {/* Copy de las páginas — a dónde llega la gente después del anuncio. Sale del DEL,
-              solo lectura (igual que el guión de VSL). Lo leen los agentes de marketing. */}
-          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
-            <div onClick={() => setCopyOpen(o => !o)} className="cursor-pointer">
-              <CardHead Icon={Layers} iconBg="#F5F3FF" iconColor="#7C3AED" title="Copy de las páginas" subtitle="A dónde llega la gente después del anuncio · sale del DEL">
-                <button onClick={syncPages} disabled={pagesBusy}
-                  title="La IA lee el DEL, deduce qué pestaña es cada página (los nombres varían y el copy puede estar repartido) y copia el texto tal cual. Si una está vacía o en construcción, la deja afuera."
-                  className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default"
-                  style={{ background: pagesBusy ? '#F5F3FF' : '#7C3AED', color: pagesBusy ? '#7C3AED' : '#fff', border: 'none' }}>
-                  {pagesBusy ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                  {pagesBusy ? 'Leyendo el DEL…' : 'Traer copys del DEL'}
-                </button>
-                {canUndoPages && <button onClick={undoPages} title="Restaurar el copy de las páginas que había antes de la última lectura del DEL." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
-                <span className="text-[10.5px] font-bold py-[3px] px-2 rounded-md" style={pagesFound
-                  ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' }
-                  : { background: '#F5F6F9', color: '#AEB4BF', border: '1px solid #EDF0F5' }}>
-                  {pagesFound} de {PAGE_SLOTS.length} páginas
-                </span>
-                <ChevronDown size={16} className="transition-transform" style={{ transform: copyOpen ? 'rotate(180deg)' : 'none', color: copyOpen ? '#7C3AED' : '#C3C9D4' }} />
-              </CardHead>
-            </div>
-            {copyOpen && (
-              <div className="p-[14px] grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))' }}>
-                {PAGE_SLOTS.map(slot => (
-                  <div key={slot.slug} style={slot.wide ? { gridColumn: '1/-1' } : undefined}>
-                    <ScriptPreview Icon={FileText} color="#7C3AED" label={slot.label} text={pagesCopy[slot.slug]?.text}
-                      onOpen={() => openPageCopy(slot)} locked
-                      lockHint="Sale del DEL. Se actualiza con “Traer copys del DEL”."
-                      emptyHint="Sin copy. Sale del DEL: tocá “Traer copys del DEL”. Si en el DEL está vacía o en construcción, queda así a propósito." />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Variantes de avatar */}
-          <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden">
-            <CardHead Icon={Users} iconBg="#FCE7F3" iconColor="#DB2777" title="Variantes de avatar" subtitle="A quién se le publicita · un anuncio por avatar">
-              <button onClick={() => generateAvatars('append')} disabled={genActive} title="La IA lee el DEL (aunque esté desordenado), identifica los avatares con su segmentación y les engancha los copys de anuncios por significado. Tarda 1-2 minutos." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-[7px] px-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-default" style={{ background: genActive ? '#FCE7F3' : '#DB2777', color: genActive ? '#DB2777' : '#fff', border: 'none' }}>{genActive ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}{genActive ? 'Generando…' : 'Generar avatares del DEL'}</button>
-              {namedAvatars.length > 0 && <>
-                <button onClick={fetchFolders} disabled={folderBusy !== 'idle'} title="Vincula las carpetas por avatar que YA existen en el Drive y lee su estado (grabado/editado). No crea nada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-[7px] px-[11px] cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50" style={foldersReady ? { color: '#15803D', borderColor: '#C9F0D8' } : { color: '#3F4653', borderColor: '#D8DDE6' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : foldersReady ? <Check size={12} strokeWidth={3} /> : <FolderOpen size={12} />}{folderBusy === 'read' ? 'Trayendo…' : 'Traer carpeta'}</button>
-                <button onClick={createFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive lo que falte: Anuncios › Grabaciones|Ediciones › una subcarpeta por avatar. Acción aparte de traer." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-[7px] px-[11px] text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folderBusy === 'create' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'create' ? 'Creando…' : 'Crear carpetas'}</button>
-                <button onClick={createVslFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive: VSL › Grabaciones|Ediciones › una subcarpeta por avatar. Si la de grabaciones tiene archivos = grabó la VSL; si la de ediciones = VSL editada." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#EFF6FF] border border-[#C7DBFB] rounded-lg py-[7px] px-[11px] text-[#2E69E0] cursor-pointer hover:bg-[#E0ECFF] disabled:opacity-50">{folderBusy === 'vsl' ? <RefreshCw size={12} className="animate-spin" /> : <FolderPlus size={12} />}{folderBusy === 'vsl' ? 'Creando VSL…' : 'Crear carpetas VSL'}</button>
-              </>}
-              {canUndo && <button onClick={undoGenerate} title="Restaurar los avatares y la VSL que había antes de la última generación de la IA." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border border-[#D8DDE6] rounded-lg py-[7px] px-[11px] text-[#B45309] cursor-pointer hover:bg-[#FFFBEB]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>}
-              <span className="text-[10.5px] font-bold text-[#6B7280] bg-[#F1F3F7] border border-[#E7EAF0] w-[22px] h-[22px] rounded-full inline-flex items-center justify-center">{avatars.length}</span>
-            </CardHead>
-            {genActive && (
-              <div className="mx-[14px] mt-[14px] -mb-1 flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#FDF2F8', color: '#BE185D', border: '1px solid #FBCFE8' }}>
-                <RefreshCw size={13} className="animate-spin shrink-0" />
-                La IA está leyendo el DEL y armando los avatares… unos segundos.
-              </div>
-            )}
-            {gen.status === 'done' && (
-              <div className="mx-[14px] mt-[14px] -mb-1 flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }}>
-                <Check size={13} className="shrink-0" strokeWidth={3} />
-                Listo — {gen.n} avatar{gen.n === 1 ? '' : 'es'} del DEL{typeof gen.cost === 'number' ? ` · costo US$${gen.cost.toFixed(4)}` : ''}. Revisalos y ajustá lo que quieras.
-              </div>
-            )}
-            {gen.status === 'error' && (
-              <div className="mx-[14px] mt-[14px] -mb-1 flex items-start gap-2 text-[11.5px] py-2.5 px-3 rounded-lg" style={{ background: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
-                <X size={13} className="shrink-0 mt-px" />
-                <span>{gen.msg || 'No pude generar los avatares.'} <button onClick={() => generateAvatars('append')} className="underline font-semibold cursor-pointer bg-transparent border-none p-0 text-[#B91C1C]">Reintentar</button></span>
-              </div>
-            )}
-            <div className="p-[14px] flex flex-col gap-3">
-              {avatars.map((av, i) => {
-                const acfg = AVATAR_STATUS[av.status] || AVATAR_STATUS['En grabación'];
-                return (
-                  <div key={av.id} className="border border-[#EDF0F5] rounded-[11px] p-[14px] bg-white" style={{ borderLeft: '3px solid #EC4899' }}>
-                    <div className="flex items-start gap-2.5 mb-2.5">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-[7px] bg-[#FCE7F3] text-[#DB2777] text-[12px] font-bold shrink-0">{i + 1}</span>
-                      <input key={av.id + 'n'} defaultValue={av.name} onBlur={e => { if (e.target.value !== (av.name || '')) setAvatar(av.id, { name: e.target.value }); }} placeholder="Nombre del avatar" className="flex-1 min-w-0 text-[13.5px] font-semibold text-[#1A1D26] leading-snug border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none" />
-                      <span className="inline-flex items-center gap-1.5 py-[3px] px-2.5 rounded-full text-[10.5px] font-bold shrink-0 whitespace-nowrap" style={{ background: acfg.bg, color: acfg.color }}><span className="w-[6px] h-[6px] rounded-full" style={{ background: acfg.dot }} /></span>
-                      <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
-                      <button onClick={() => removeAvatar(av.id)} className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
-                    </div>
-
-                    <div className="flex flex-col gap-3">
-                      {/* Segmentación */}
-                      <div>
-                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#DB2777] mb-1.5"><Target size={12} />Segmentación</div>
-                        <input key={av.id + 'a'} defaultValue={av.audience} onBlur={e => { if (e.target.value !== (av.audience || '')) setAvatar(av.id, { audience: e.target.value }); }} placeholder="¿A quién se le publicita? (edad, sexo, ubicación, intereses…)" className="w-full py-2 px-[11px] border border-[#EDF0F5] rounded-lg text-[11.5px] text-[#3F4653] bg-[#FAFBFD] outline-none focus:border-blue focus:bg-white" />
-                      </div>
-
-                      {/* Descripción */}
-                      <ScriptPreview Icon={FileText} color="#DB2777" label="Descripción" text={av.spec_text} onOpen={() => openDesc(av)} locked emptyHint="Sin descripción. Sale del DEL: tocá “Generar avatares del DEL”." />
-
-                      {/* Grabaciones (grabado): la CARPETA donde va lo que grabó el cliente, por avatar. */}
-                      <div>
-                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#16A34A] mb-1.5"><Film size={12} />Grabaciones <span className="text-[#86C7A2] normal-case tracking-normal">(grabado)</span></div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <input key={av.id + 'rec'} defaultValue={av.rec_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.rec_folder_url || '')) setAvatar(av.id, { rec_folder_url: v || null }); }} placeholder="Carpeta de grabaciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
-                          <button onClick={() => bringFolder(av, 'rec')} disabled={folderBusy !== 'idle'} title="Trae la carpeta de grabaciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
-                          {av.rec_folder_url
-                            ? <><button onClick={() => openUrl(av.rec_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><FolderOpen size={12} />Abrir</button>
-                               <button onClick={() => copyText(av.rec_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#C9F0D8] rounded-lg cursor-pointer shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Copy size={12} /></button></>
-                            : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
-                        </div>
-                        {av.rec_folder_url && (
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.rec_files > 0 ? <><Check size={9} strokeWidth={3.5} />grabado · {av.rec_files} arch.</> : 'carpeta vacía'}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Anuncios (editado): la CARPETA de ediciones de este avatar (ahí viven los anuncios editados). */}
-                      <div>
-                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#7C3AED] mb-1.5"><Megaphone size={12} />Anuncios <span className="text-[#A78BFA] normal-case tracking-normal">(editado)</span></div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <input key={av.id + 'edit'} defaultValue={av.edit_folder_url || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (av.edit_folder_url || '')) setAvatar(av.id, { edit_folder_url: v || null }); }} placeholder="Carpeta de ediciones de este avatar…" className="flex-1 min-w-[180px] py-2 px-[11px] border border-[#E2E5EB] rounded-lg text-[12px] text-[#3F4653] bg-white outline-none focus:border-blue" />
-                          <button onClick={() => bringFolder(av, 'edit')} disabled={folderBusy !== 'idle'} title="Trae la carpeta de ediciones de este avatar. Si no la encuentra sola, la elegís vos (sin ir al Drive)." className="inline-flex items-center gap-1.5 py-2 px-2.5 border rounded-lg text-[11px] font-semibold cursor-pointer shrink-0 disabled:opacity-50" style={{ background: '#F5F3FF', color: '#7C3AED', borderColor: '#E4DBFF' }}>{folderBusy === 'read' ? <RefreshCw size={12} className="animate-spin" /> : <FolderOpen size={12} />}Traer carpeta</button>
-                          {av.edit_folder_url
-                            ? <><button onClick={() => openUrl(av.edit_folder_url)} className="inline-flex items-center gap-1.5 py-2 px-2.5 border-none rounded-lg text-[11px] font-semibold cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><FolderOpen size={12} />Abrir</button>
-                               <button onClick={() => copyText(av.edit_folder_url)} title="Copiar" className="inline-flex items-center justify-center w-8 h-8 border border-[#E4DBFF] rounded-lg cursor-pointer shrink-0" style={{ background: '#F5F3FF', color: '#7C3AED' }}><Copy size={12} /></button></>
-                            : <span className="inline-flex items-center py-2 px-2.5 rounded-lg bg-[#F5F6F9] border border-[#EDF0F5] text-[#AEB4BF] text-[10.5px] font-semibold shrink-0 whitespace-nowrap">Sin carpeta</span>}
-                        </div>
-                        {av.edit_folder_url && (
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <span className="inline-flex items-center gap-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold" style={av.edit_files > 0 ? { background: '#F5F3FF', color: '#7C3AED', border: '1px solid #E4DBFF' } : { background: '#fff', color: '#9098A4', border: '1px solid #E7EAF0' }}>{av.edit_files > 0 ? <><Check size={9} strokeWidth={3.5} />editado · {av.edit_files} arch.</> : 'carpeta vacía'}</span>
-                          </div>
-                        )}
-                        {(av.vsl_edit_folder_url || av.vsl_rec_folder_url) && (
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#B4BAC6] shrink-0">VSL</span>
-                            {av.vsl_rec_folder_url && (
-                              <button onClick={() => openUrl(av.vsl_rec_folder_url)} title="Carpeta de grabaciones de la VSL de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.vsl_rec_files > 0 ? { background: '#ECFDF3', color: '#15803D', borderColor: '#C9F0D8' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
-                                <Film size={11} />Grabación{av.vsl_rec_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />grabada</span> : <span className="text-[#C3C9D4]">vacía</span>}
-                              </button>
-                            )}
-                            {av.vsl_edit_folder_url && (
-                              <button onClick={() => openUrl(av.vsl_edit_folder_url)} title="Carpeta de la VSL editada de este avatar" className="inline-flex items-center gap-1.5 py-1 px-2 border rounded-lg text-[10.5px] font-semibold cursor-pointer shrink-0" style={av.vsl_edit_files > 0 ? { background: '#EFF6FF', color: '#2E69E0', borderColor: '#C7DBFB' } : { background: '#fff', color: '#9098A4', borderColor: '#E7EAF0' }}>
-                                <Clapperboard size={11} />Editada{av.vsl_edit_files > 0 ? <span className="inline-flex items-center gap-0.5"><Check size={9} strokeWidth={3.5} />lista · {av.vsl_edit_files}</span> : <span className="text-[#C3C9D4]">vacía</span>}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Copys de anuncios */}
-                      <ScriptPreview Icon={FileText} color="#2E69E0" label="Copys de anuncios" text={av.ad_script} onOpen={() => openAdScript(av, i)} locked emptyHint="Sin copys. Salen del DEL: tocá “Generar avatares del DEL”." />
-                    </div>
-                  </div>
-                );
-              })}
-              <button onClick={addAvatar} className="flex items-center justify-center gap-2.5 w-full border-[1.5px] border-dashed border-[#F0C4DD] rounded-[11px] bg-[#FDF5FA] text-[#DB2777] text-[12.5px] font-semibold py-3 px-3.5 cursor-pointer hover:bg-[#FCEBF4] hover:border-[#DB2777] transition-colors"><span className="w-5 h-5 rounded-full bg-[#DB2777] text-white inline-flex items-center justify-center shrink-0"><Plus size={12} strokeWidth={2.6} /></span>Agregar variante de avatar</button>
-            </div>
-          </div>
-
+          {/* Estos bloques ahora viven dentro del DEL (pestañas Configuración y Recursos).
+              En el acordeón viejo (lista) se siguen mostrando; en la pantalla no. */}
+          {!forcePage && (<>{funnelConfigNode}{funnelRecursosNode}</>)}
           <div className="flex justify-end mt-3">
             <button onClick={() => { if (window.confirm(`¿Borrar el funnel "${f.name}"?`)) onDelete(f.id); }} className="inline-flex items-center gap-1.5 py-[7px] px-3 rounded-lg bg-white border border-[#F5C2C2] text-[#DC2626] text-[11.5px] font-semibold cursor-pointer hover:bg-[#FEF2F2]"><Trash2 size={13} />Borrar funnel</button>
           </div>
@@ -1302,7 +1302,8 @@ Quedo a la espera de tu respuesta`;
       {/* El lector va a pantalla completa: un DEL promedia 56.000 caracteres —
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
-        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} />
+        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId}
+          configNode={funnelConfigNode} recursosNode={funnelRecursosNode} />
       </Modal>
     </div>
   );
