@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
+  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -46,6 +47,66 @@ const SEC = {
 };
 const secOf = (k) => SEC[k] || SEC.otros;
 
+// ── Barra ÚNICA fija (tipo Google Docs) ──────────────────────────────────────
+// Aparece una sola vez arriba del documento y opera sobre la sección que tenés
+// enfocada (cada sección avisa con onActive(api) al RichTextEditor). Si no hay
+// ninguna enfocada, los botones quedan atenuados.
+const TB_COLORS = ['#1F2937', '#6B7280', '#DC2626', '#EA580C', '#CA8A04', '#16A34A', '#2563EB', '#7C3AED', '#DB2777'];
+function TbBtn({ Icon, label, title, onClick, disabled }) {
+  return (
+    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick} disabled={disabled} title={title}
+      className="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 bg-transparent border-none cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent">
+      {Icon ? <Icon size={15} /> : <span className="text-[12px] font-bold">{label}</span>}
+    </button>
+  );
+}
+function TbDiv() { return <div className="w-px h-5 bg-gray-200 mx-0.5" />; }
+function DelToolbar({ api }) {
+  const [colorOpen, setColorOpen] = useState(false);
+  const off = !api;
+  const call = (fn, ...a) => { if (api && typeof api[fn] === 'function') api[fn](...a); };
+  return (
+    <div className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg border border-[#E7EAF0] bg-white flex-wrap" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>
+      <TbBtn Icon={Bold} title="Negrita" disabled={off} onClick={() => call('exec', 'bold')} />
+      <TbBtn Icon={Italic} title="Cursiva" disabled={off} onClick={() => call('exec', 'italic')} />
+      <TbBtn Icon={UnderlineIcon} title="Subrayado" disabled={off} onClick={() => call('exec', 'underline')} />
+      <TbDiv />
+      <TbBtn Icon={Heading1} title="Título principal (H1)" disabled={off} onClick={() => call('exec', 'formatBlock', 'H1')} />
+      <TbBtn Icon={Heading2} title="Título grande (H2)" disabled={off} onClick={() => call('exec', 'formatBlock', 'H2')} />
+      <TbBtn Icon={Heading3} title="Título chico (H3)" disabled={off} onClick={() => call('exec', 'formatBlock', 'H3')} />
+      <TbDiv />
+      <TbBtn Icon={List} title="Lista con viñetas" disabled={off} onClick={() => call('exec', 'insertUnorderedList')} />
+      <TbBtn Icon={ListOrdered} title="Lista numerada" disabled={off} onClick={() => call('exec', 'insertOrderedList')} />
+      <TbDiv />
+      <div className="relative">
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setColorOpen(v => !v)} disabled={off} title="Color de letra"
+          className={`w-8 h-8 flex items-center justify-center rounded-md bg-transparent border-none cursor-pointer transition-colors disabled:opacity-40 ${colorOpen ? 'bg-gray-200 text-gray-800' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
+          <Baseline size={15} />
+        </button>
+        {colorOpen && !off && (<>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setColorOpen(false)} className="fixed inset-0 z-30 bg-transparent border-none cursor-default" aria-label="Cerrar" />
+          <div className="absolute left-0 top-9 z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-5 gap-1.5 w-[176px]">
+            {TB_COLORS.map(c => (
+              <button key={c} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { call('applyColor', c); setColorOpen(false); }} title={c}
+                className="w-6 h-6 rounded-full border border-gray-200 cursor-pointer hover:scale-110 transition-transform" style={{ background: c }} />
+            ))}
+          </div>
+        </>)}
+      </div>
+      <TbDiv />
+      <TbBtn label="A−" title="Achicar la letra seleccionada" disabled={off} onClick={() => call('changeFontSize', false)} />
+      <TbBtn label="A+" title="Agrandar la letra seleccionada" disabled={off} onClick={() => call('changeFontSize', true)} />
+      <TbBtn Icon={Table} title="Insertar tabla" disabled={off} onClick={() => call('openTable')} />
+      <TbBtn Icon={ImageIcon} title="Insertar imagen" disabled={off} onClick={() => call('openImage')} />
+      <TbBtn Icon={UserPlus} title="Insertar un avatar" disabled={off} onClick={() => call('openAvatar')} />
+      <TbDiv />
+      <TbBtn Icon={Link2} title="Insertar link" disabled={off} onClick={() => call('addLink')} />
+      <TbBtn Icon={Eraser} title="Quitar formato" disabled={off} onClick={() => call('clearFormat')} />
+      <span className="ml-auto text-[10.5px] text-[#AEB4BF] pr-1">{off ? 'Tocá una sección para editar' : 'Editando'}</span>
+    </div>
+  );
+}
+
 // El orden CANÓNICO del DEL (el de la maqueta): la estrategia arriba, después los avatares,
 // la VSL, los anuncios, el recorrido de páginas, y al final los mensajes / lo viejo / lo suelto.
 // El Doc real viene desordenado; con esto las secciones se leen como el documento estructurado
@@ -82,6 +143,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
   const [draft, setDraft] = useState('');            // texto del comentario nuevo
   const [present, setPresent] = useState([]);        // quién está en el DEL ahora (Realtime)
   const [myEditing, setMyEditing] = useState(null);  // qué sección estoy editando (para el candado)
+  const [activeApi, setActiveApi] = useState(null);  // API de la sección enfocada (barra única)
   const scrollRef = useRef(null);
   const timers = useRef({}); // id -> timeout (debounce de guardado)
   const channelRef = useRef(null);
@@ -449,8 +511,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
 
         <div className="min-w-0 flex flex-col gap-3">
           {view === 'del' && (<>
+          {/* Barra Leer/Editar + (en editar) la BARRA ÚNICA de herramientas, ambas fijas
+              arriba tipo Google Docs: la barra opera sobre la sección que tengas enfocada. */}
+          <div className="sticky top-0 z-10 flex flex-col gap-2 pb-1" style={{ background: '#FBFCFD' }}>
           {/* Barra: leer vs editar + de dónde salió + link al Doc */}
-          <div className="flex items-center gap-2.5 flex-wrap py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white sticky top-0 z-10">
+          <div className="flex items-center gap-2.5 flex-wrap py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white">
             <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
               <button onClick={() => setModo('leer')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
               <button onClick={() => setModo('editar')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
@@ -469,6 +534,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
               </span>
             )}
             {docUrl && <a href={docUrl} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline ${otros.length > 0 ? '' : 'ml-auto'}`}><ExternalLink size={11} />Abrir el Doc original</a>}
+          </div>
+          {/* La barra única: una sola, fija arriba, opera sobre la sección enfocada. */}
+          {editando && <DelToolbar api={activeApi} />}
           </div>
 
           {!editando && (
@@ -580,6 +648,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                       onChange={(html) => onEdit(s.id, html)}
                       sanitize={sanitizeDelHtml}
                       delTools
+                      noToolbar
+                      onActive={setActiveApi}
                       onNewAvatar={(name) => crearAvatarSection(name)}
                       minHeight={90}
                       placeholder="Escribí acá el contenido de la sección…"

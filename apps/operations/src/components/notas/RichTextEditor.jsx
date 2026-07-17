@@ -36,7 +36,7 @@ const headingLevel = (el) => Number(el.tagName[1]);
 // `delTools` agrega los botones del DEL (tabla · tamaño de letra · imagen · avatar).
 // `onInsertImage`/`onNewAvatar` son ganchos opcionales: si vienen, mandan (ej. abrir la
 // galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
-export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar }) {
+export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar, noToolbar = false, onActive }) {
   const ref = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
@@ -240,6 +240,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     }
   };
 
+  // API para una barra EXTERNA compartida (una sola arriba, tipo Google Docs): cuando
+  // este editor toma el foco, avisa con onActive(api) y la barra opera sobre ÉL. Así la
+  // barra no se repite en cada sección. Ver DelToolbar en DelEditor.
+  const apiRef = useRef({});
+  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, clearFormat };
+  const handleFocus = () => onActive?.(apiRef.current);
+
   const Btn = ({ Icon, title, onClick, label }) => (
     <button
       type="button"
@@ -256,6 +263,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   return (
     <div className="border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
+      {!noToolbar && (
       <div className="sticky top-0 z-20 flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg flex-wrap">
         <Btn Icon={Bold}          title="Negrita (Ctrl+B)"   onClick={() => exec('bold')} />
         <Btn Icon={Italic}        title="Cursiva (Ctrl+I)"   onClick={() => exec('italic')} />
@@ -317,6 +325,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         <Btn Icon={Link2}  title="Insertar link" onClick={addLink} />
         <Btn Icon={Eraser} title="Quitar formato"  onClick={clearFormat} />
       </div>
+      )}
       <div
         ref={ref}
         contentEditable
@@ -325,6 +334,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
         onClick={handleClick}
+        onFocus={handleFocus}
         data-placeholder={placeholder}
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
         style={{ minHeight }}
