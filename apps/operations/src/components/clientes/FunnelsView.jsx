@@ -196,6 +196,16 @@ const AVATAR_STATUS = {
   'Editados':     { short: 'Editados',  bg: '#ECFDF3', color: '#15803D', dot: '#22C55E' },
 };
 const AVATAR_OPTS = ['En grabación', 'En edición', 'Editados'];
+// Temperatura del avatar (decisión de Matías, 2026-07-15): la otra mitad del "punto
+// diferencial". Qué tan preparado viene el público antes de entrar al funnel — cambia
+// el tono de todo el mensaje. Es del AVATAR (no de la estrategia). Guardado en el JSON
+// del avatar (av.temp), sin migración. Opcional: vacío = sin definir.
+const AVATAR_TEMP = {
+  frio:     { short: 'Frío',     label: 'Frío · no te conoce',        bg: '#EFF6FF', color: '#2563EB', dot: '#3B82F6' },
+  tibio:    { short: 'Tibio',    label: 'Tibio · ya te vio',          bg: '#FFF7ED', color: '#C2410C', dot: '#F97316' },
+  caliente: { short: 'Caliente', label: 'Caliente · listo para comprar', bg: '#FEF2F2', color: '#DC2626', dot: '#EF4444' },
+};
+const AVATAR_TEMP_OPTS = ['frio', 'tibio', 'caliente'];
 // Las 4 carpetas por avatar de la pestaña Recursos (como la maqueta). Cada una apunta a
 // una carpeta del Drive y sabe cuántos archivos tiene (verde si hay, gris si vacía).
 const VID_BUCKETS = [
@@ -321,6 +331,36 @@ function AvatarStatusPill({ status, onChange }) {
         <div className="fixed bg-white border border-[#E2E5EB] rounded-lg shadow-lg z-[61] min-w-[120px] overflow-hidden py-0.5" style={{ left: pos.left, top: pos.top }}>
           {AVATAR_OPTS.map(o => { const c = AVATAR_STATUS[o]; return (
             <button key={o} onClick={() => { onChange(o); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer font-medium" style={{ color: c.color }}><span className="w-2 h-2 rounded-full" style={{ background: c.dot }} />{c.short}</button>
+          ); })}
+        </div>
+      </>)}
+    </span>
+  );
+}
+
+// Temperatura del avatar: pill compacto con menú. Vacío = "Temperatura" en hueco, para
+// que se vea que falta definirla (como el resto de los campos de la maqueta).
+function AvatarTempPill({ temp, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const cfg = AVATAR_TEMP[temp];
+  const toggle = () => {
+    if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ left: r.left, top: r.bottom + 4 }); }
+    setOpen(o => !o);
+  };
+  return (
+    <span className="inline-block shrink-0" onClick={e => e.stopPropagation()}>
+      <button ref={btnRef} onClick={toggle} title={cfg ? cfg.label : 'Definí la temperatura del avatar'}
+        className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[10.5px] font-bold cursor-pointer whitespace-nowrap"
+        style={cfg ? { background: cfg.bg, color: cfg.color, border: 'none' } : { background: 'transparent', color: '#AEB4BF', border: '1px dashed #D0D5DD' }}>
+        {cfg && <span className="w-[6px] h-[6px] rounded-full" style={{ background: cfg.dot }} />}{cfg ? cfg.short : 'Temperatura'}<ChevronDown size={9} />
+      </button>
+      {open && pos && (<>
+        <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+        <div className="fixed bg-white border border-[#E2E5EB] rounded-lg shadow-lg z-[61] min-w-[190px] overflow-hidden py-0.5" style={{ left: pos.left, top: pos.top }}>
+          {AVATAR_TEMP_OPTS.map(o => { const c = AVATAR_TEMP[o]; return (
+            <button key={o} onClick={() => { onChange(temp === o ? null : o); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer font-medium" style={{ color: c.color }}><span className="w-2 h-2 rounded-full" style={{ background: c.dot }} />{c.label}</button>
           ); })}
         </div>
       </>)}
@@ -1110,6 +1150,7 @@ Quedo a la espera de tu respuesta`;
             <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#FCE7F3] text-[#DB2777] text-[12px] font-bold shrink-0">{i + 1}</span>
               <span className="text-[13.5px] font-bold truncate flex-1 min-w-0" style={{ color: nombre ? '#1A1D26' : '#DC2626' }}>{nombre || 'Falta el nombre del avatar'}</span>
+              <AvatarTempPill temp={av.temp} onChange={t => setAvatar(av.id, { temp: t })} />
               <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
               <button onClick={() => removeAvatarUndoable(av)} title="Borrar este avatar (se puede deshacer)" className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
             </div>
@@ -1141,7 +1182,7 @@ Quedo a la espera de tu respuesta`;
       {/* Branding e imágenes: son del CLIENTE (sirven para todos sus funnels). */}
       <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-[#FBFCFE] py-3 px-4 flex items-start gap-2.5 text-[11.5px] text-[#9098A4]">
         <ImageIcon size={15} className="shrink-0 mt-px" />
-        <span>Branding e imágenes del cliente (logo, colores, fotos) sirven para todos sus funnels: viven en la pestaña <b>Carpetas</b> y en el <b>Contexto</b> del cliente.</span>
+        <span>Branding e imágenes del cliente (logo, colores, fotos) sirven para todos sus funnels: viven en el <b>Contexto</b> del cliente. La galería de videos llega con la etapa de video.</span>
       </div>
     </div>
   );
