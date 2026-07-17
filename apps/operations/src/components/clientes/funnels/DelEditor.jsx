@@ -542,13 +542,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             style={{ background: view === 'del' ? '#EFEBFF' : 'transparent', color: view === 'del' ? '#6D28D9' : '#4B5563' }}>
             <FileText size={14} className="shrink-0" />DEL
           </button>
-          {/* Estrategia: la primera sección, fija, siempre presente. */}
-          <button onClick={() => irA('estrategia')}
-            className="flex items-center gap-2 w-full py-1.5 pl-4 pr-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12px] font-semibold transition-colors"
-            style={{ background: view === 'del' && activa === 'estrategia' ? '#ECFEFF' : 'transparent', color: view === 'del' && activa === 'estrategia' ? '#0891B2' : '#6B7280' }}>
-            <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: '#0891B2' }} />
-            <span className="truncate flex-1 min-w-0">Estrategia</span>
-          </button>
           {/* Las secciones del documento, agrupadas por categoría con su color. */}
           {groups.map(gr => {
             const sc = secOf(gr.kind);
@@ -578,8 +571,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             </button>
           )}
 
-          {/* Las dos pestañas de la maqueta, debajo de las secciones. */}
+          {/* Las páginas del funnel de la maqueta, debajo de las secciones. */}
           <div className="h-px my-2 mx-1" style={{ background: '#EDF0F5' }} />
+          <button onClick={() => setView('estrategia')}
+            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-semibold transition-colors"
+            style={{ background: view === 'estrategia' ? '#ECFEFF' : 'transparent', color: view === 'estrategia' ? '#0891B2' : '#4B5563' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></svg>Estrategia
+          </button>
           <button onClick={() => setView('config')}
             className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-semibold transition-colors"
             style={{ background: view === 'config' ? '#EEF3FF' : 'transparent', color: view === 'config' ? '#1D4FD8' : '#4B5563' }}>
@@ -663,10 +661,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           {editando && <DelToolbar api={activeApi} />}
           </div>
 
-
-          {/* La sección Estrategia FIJA, siempre primera: tipo · campaña · punto
-              diferencial · fecha · objetivo. De acá comen el riel y los agentes. */}
-          {estrategiaNode}
 
           {/* El documento, agrupado por categoría en orden canónico. Cada grupo abre con su
               franja de color; adentro van sus secciones. Así el DEL se lee estructurado
@@ -761,6 +755,23 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             );
           })}
           </>)}
+
+          {/* Estrategia — página propia (como Configuración y Recursos): tipo · punto
+              diferencial · fecha. De acá comen el riel del funnel y los agentes. */}
+          {view === 'estrategia' && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 py-2 px-1">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#ECFEFF', color: '#0891B2' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></svg>
+                </span>
+                <div>
+                  <div className="text-[14px] font-bold text-[#1A1D26]">Estrategia</div>
+                  <div className="text-[11px] text-[#9098A4]">De qué va este funnel: tipo, punto diferencial y fecha de inicio.</div>
+                </div>
+              </div>
+              {estrategiaNode || <div className="text-[12px] text-[#9098A4] p-4">Sin estrategia.</div>}
+            </div>
+          )}
 
           {/* Configuración Meta y Links — la config del funnel, movida acá desde la pantalla. */}
           {view === 'config' && (
