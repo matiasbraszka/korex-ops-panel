@@ -22,7 +22,7 @@ const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, llamadas, teamMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, teamMembers, strategyPages, contracts, satByClient } = useApp();
   const TEAM = teamMembers || [];
   const [editModal, setEditModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -170,21 +170,12 @@ export default function ClientDetail({ client: c }) {
         // Las consultorias/entrenamientos que hicimos PARA su equipo se vinculan al
         // cliente en DB (queda el rastro), pero no aparecen acá para no ensuciar el
         // historial 1-a-1 con el cliente.
-        const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id && l.categoria === 'cliente');
         const hasAds = c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna');
         const adsActive = c.metaMetrics?.adsActive;
-        // Publicidad oculta temporalmente — descomentar la linea de abajo
-        // cuando se decida volver a usar el modulo.
-        const myStrategies = (strategies || []).filter(s => s.client_id === c.id);
-        const strategiesCount = myStrategies.length;
-        const stratIdSet = new Set(myStrategies.map(s => s.id));
-        const funnelsCount = (strategyPages || []).filter(p => stratIdSet.has(p.strategy_id)).length;
-        // Recursos visuales: suma de todas las estrategias del cliente
-        const visualesArr = myStrategies.flatMap(s => Array.isArray(s.visual_resources) ? s.visual_resources : []);
-        const visualesDone = visualesArr.filter(v => v.ok).length;
-        const visualesTotal = visualesArr.length;
-        const clientInvoices = (invoices || []).filter(i => i.client_id === c.id);
-        const invoicesCount = clientInvoices.length;
+        // Los funnels del cliente, directo. Antes habia que dar la vuelta por las
+        // estrategias (armar el set de sus ids y filtrar strategy_pages por ahi);
+        // ahora el funnel sabe de que cliente es.
+        const funnelsCount = (strategyPages || []).filter(p => p.client_id === c.id).length;
         const contractsCount = (contracts || []).filter(ct => ct.client_id === c.id).length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
@@ -224,52 +215,6 @@ export default function ClientDetail({ client: c }) {
               })}
             </div>
 
-            {activeTab === 'resumen' && (() => {
-              const m = c.metaMetrics || {};
-              const curr = m.currency || 'USD';
-              const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
-              const billCurr = ({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR'];
-              const billLabel = { al_dia: { fg: '#16A34A', t: 'Al día' }, pendiente: { fg: '#CA8A04', t: 'Pendiente' }, impago: { fg: '#EF4444', t: 'Impago' } }[c.billingStatus || 'al_dia'];
-              const pendingCount = totalRoadmap - doneRoadmap;
-              // Páginas activas (con URL en testing o prod) entre todas las estrategias del cliente
-              const myPages = myStrategies.flatMap(s => (strategyPages || []).filter(p => p.strategy_id === s.id));
-              const pagesActive = myPages.filter(p => p.testing_url || p.prod_url).length;
-              // Tareas vencidas
-              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today() && (!restricted || userOwnsTask(t, currentUser, TEAM))).length;
-              const tiles = [
-                { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${roadmapPct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
-                { icon: Layers, label: 'Estrategias', value: strategiesCount, sub: pagesActive ? `${pagesActive} página(s) activa(s)` : 'sin páginas activas', color: '#1A1D26', tab: 'trabajo' },
-                { icon: CreditCard, label: 'Importe / ciclo', value: c.billingAmount != null ? `${billCurr}${Number(c.billingAmount).toLocaleString()}` : '—', sub: billLabel.t, color: billLabel.fg, tab: 'facturacion' },
-                { icon: FileText, label: 'Facturas', value: invoicesCount, sub: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin próximo cobro', color: '#1A1D26', tab: 'facturacion' },
-                { icon: Megaphone, label: 'Inversión 7d', value: m.totalSpend7d ? `${cs}${m.totalSpend7d.toFixed(0)}` : '—', sub: m.totalConversions7d ? `${m.totalConversions7d} leads` : (m.pauseReason || 'sin actividad'), color: '#1A1D26', tab: 'publicidad' },
-                { icon: Megaphone, label: 'CPL 7d', value: m.avgCpl7d ? `${cs}${m.avgCpl7d.toFixed(2)}` : '—', sub: m.ctr7d ? `CTR ${m.ctr7d.toFixed(2)}%` : '—', color: m.avgCpl7d && m.avgCpl7d > 15 ? '#EF4444' : '#16A34A', tab: 'publicidad' },
-                { icon: Clock, label: 'Días con Korex', value: days, sub: c.startDate ? `desde ${fmtDate(c.startDate)}` : '—', color: '#1A1D26' },
-                { icon: User, label: 'Llamadas', value: clientLlamadas.length, sub: clientLlamadas.length ? `última: ${clientLlamadas[0]?.fecha ? fmtDate(clientLlamadas[0].fecha.split('T')[0]) : '—'}` : 'sin registros', color: '#1A1D26', tab: 'llamadas' },
-              ].filter(t => !(restricted && t.tab === 'facturacion'));
-              return (
-                <div className="mb-4">
-                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-                    {tiles.map((t, i) => {
-                      const Icon = t.icon;
-                      const clickable = !!t.tab;
-                      return (
-                        <div key={i}
-                          className={`bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-4 flex flex-col transition-all ${clickable ? 'cursor-pointer hover:border-[#D0D5DD] hover:shadow-md' : ''}`}
-                          onClick={clickable ? () => setActiveTab(t.tab) : undefined}
-                        >
-                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
-                            <Icon size={12} /> {t.label}
-                          </div>
-                          <div className="text-[26px] font-bold leading-none mb-1.5" style={{ color: t.color }}>{t.value}</div>
-                          <div className="text-[11px] mt-auto" style={{ color: '#6B7280' }}>{t.sub}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
             {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
 
             {activeTab === 'drive' && <CarpetasView client={c} />}
@@ -296,32 +241,6 @@ export default function ClientDetail({ client: c }) {
                   </div>
                 </div>
                 <ObjetivosView clientId={c.id} />
-              </div>
-            )}
-
-            {activeTab === 'llamadas' && (
-              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
-                {clientLlamadas.length === 0 ? (
-                  <div className="text-center text-text3 text-xs py-12">Sin llamadas registradas</div>
-                ) : (
-                  <div className="py-1">
-                    {clientLlamadas.map(l => (
-                      <div key={l.id} className="px-4 py-3 border-b border-border last:border-b-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-semibold text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
-                          {l.fecha && <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
-                          {l.recording_url && (
-                            <a href={l.recording_url} target="_blank" rel="noreferrer"
-                              className="text-[11px] text-blue no-underline shrink-0 hover:underline">{'🎬'} Ver</a>
-                          )}
-                        </div>
-                        {l.resumen && (
-                          <div className="text-[12px] text-text3 mt-1 leading-snug line-clamp-2">{l.resumen}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
