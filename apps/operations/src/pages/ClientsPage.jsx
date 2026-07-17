@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical, LayoutGrid } from 'lucide-react';
+import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical, LayoutGrid, Filter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, clientPill } from '../utils/helpers';
@@ -10,10 +10,11 @@ import PublicidadPage from './PublicidadPage';
 import FeedbackPage from './FeedbackPage';
 import InformePage from './InformePage';
 import PanoramaRecursos from '../components/clientes/PanoramaRecursos';
+import FunnelsKanban from '../components/clientes/funnels/FunnelsKanban';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
 // 'informe' queda oculto del menu pero la ruta interna sigue funcionando.
-const VALID_TABS = ['lista', 'publicidad', 'panorama'];
+const VALID_TABS = ['lista', 'funnels', 'publicidad', 'panorama'];
 
 // Pildora de estado de publicidad. Lee metaMetrics.adsActive + pauseStatus.
 // Estados de Meta differenciados:
@@ -259,6 +260,7 @@ export default function ClientsPage() {
       <div className="inline-flex items-center p-1 bg-gray-100 rounded-lg gap-0.5 mb-4 max-md:w-full">
         {[
           { id: 'lista',      label: 'Lista',      Icon: Users },
+          { id: 'funnels',    label: 'Funnels',    Icon: Filter },
           { id: 'panorama',   label: 'Panorama',   Icon: LayoutGrid },
           { id: 'publicidad', label: 'Publicidad', Icon: Megaphone },
         ].map(t => (
@@ -274,6 +276,11 @@ export default function ClientsPage() {
           </button>
         ))}
       </div>
+
+      {/* Funnels tab — los 47 funnels de todos los clientes, por estado.
+          Columnas = el estado que marca el equipo. Tarjeta = lo que el sistema
+          calcula solo (cuánto le falta y qué lo frena). */}
+      {tab === 'funnels' && <FunnelsKanban onOpenClient={setSelectedId} />}
 
       {/* Panorama tab — qué tenemos / qué falta de cada cliente */}
       {tab === 'panorama' && <PanoramaRecursos />}
