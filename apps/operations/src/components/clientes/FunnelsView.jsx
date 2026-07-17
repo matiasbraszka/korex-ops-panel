@@ -9,7 +9,7 @@ import {
   Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, Users, Megaphone,
   Check, Trash2, Activity, Zap, Globe, Rocket, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
-  FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard,
+  FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard, Package, AlertCircle,
 } from 'lucide-react';
 import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
@@ -144,10 +144,14 @@ const STATUS_ORDER = ['activa', 'borrador', 'pausada', 'antiguo'];
 // "Producto sin pre-landing" y "Producto V2" de Jose Luis Rivas colgaban de una carpeta
 // llamada "Reclutamiento" y figuraban como reclutamiento. Ahora es un campo del funnel.
 const FUNNEL_TIPO = {
-  reclutamiento: { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF', border: '#C7DBFB' },
-  producto:      { label: 'Producto',      color: '#15803D', bg: '#E6F7EE', border: '#BBF0D0' },
+  reclutamiento: { label: 'Reclutamiento', color: '#2E69E0', bg: '#E9F1FF', border: '#C7DBFB', Icon: Users },
+  producto:      { label: 'Producto',      color: '#15803D', bg: '#E6F7EE', border: '#BBF0D0', Icon: Package },
 };
 const TIPO_ORDER = ['reclutamiento', 'producto'];
+// Los funnels se agrupan por TIPO: es la unica division que quedo despues de jubilar
+// las estrategias. El grupo "Sin tipo" va ULTIMO y solo aparece si hay alguno — es un
+// hueco a la vista, no un cajon permanente.
+const TIPO_GROUPS = [...TIPO_ORDER, null];
 
 // Chip de tipo, editable con un click. Sin tipo = hueco visible, no escondido:
 // es informacion que falta y hay que verla.
@@ -1294,9 +1298,12 @@ export default function FunnelsView({ clientId }) {
   const openTrack = (f) => setTrackFunnel({ ...f, _edit: { pixel_code: f.pixel_code || '', clarity_id: f.clarity_id || '', events: normEvents(f.conversion_events) } });
   // strategy_id = la carpeta del Drive donde vive el funnel. Es NOT NULL, asi que hay que
   // elegir una; pero el 90% de los clientes tiene UNA sola, y ahi no se pregunta nada.
-  const blankForm = (sid) => ({ name: '', tipo: null, strategy_id: sid || myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
+  // El alta arranca con el TIPO ya puesto cuando se entra por el boton de un grupo
+  // ("Funnel de reclutamiento"): el dato que el grupo ya dice no se vuelve a preguntar.
+  // La carpeta del Drive sigue siendo la primera del cliente; no se elige acá.
+  const blankForm = (tipo) => ({ name: '', tipo: tipo || null, strategy_id: myStrategies[0]?.id || '', status: 'borrador', prod_url: '', testing_url: '', ads_url: '', avatars: [], pixel_code: '', clarity_id: '', events: stdEvents() });
   const [form, setForm] = useState(blankForm);
-  const openNew = (sid) => { setForm(blankForm(sid)); setModal(true); };
+  const openNew = (tipo) => { setForm(blankForm(tipo)); setModal(true); };
 
   const create = () => {
     if (!form.name.trim() || !form.strategy_id) return;
@@ -1459,16 +1466,49 @@ export default function FunnelsView({ clientId }) {
                 : <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#2E69E0' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>}
             </div>
           ) : (
-            <div className="border border-[#EDF0F5] rounded-xl overflow-x-auto">
-              <div style={{ minWidth: 820 }}>
-                <div className="grid items-center py-[9px] px-4 border-b border-[#EDF0F5]" style={{ gridTemplateColumns: GRID, gap: 12, background: '#FAFBFD' }}>
-                  {['Funnel', 'Estado', 'Qué falta', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
-                </div>
-                {myFunnels.map((f, i) => {
-                  const del = delOf(f);
-                  return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === myFunnels.length - 1} />;
-                })}
-              </div>
+            /* Agrupados por TIPO: es la unica division que sobrevive a las estrategias.
+               Un grupo vacio no se dibuja, salvo los dos tipos reales (que muestran su
+               hueco con el boton de alta). "Sin tipo" solo aparece si hay alguno. */
+            <div className="flex flex-col gap-4">
+              {TIPO_GROUPS.map(tipo => {
+                const group = myFunnels.filter(f => (f.tipo || null) === tipo);
+                if (tipo === null && !group.length) return null;
+                const meta = tipo ? FUNNEL_TIPO[tipo] : null;
+                const Icon = meta ? meta.Icon : AlertCircle;
+                return (
+                  <div key={tipo || 'sin-tipo'}>
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0"
+                        style={meta ? { background: meta.bg, color: meta.color } : { background: '#F4F5F7', color: '#AEB4BF' }}>
+                        <Icon size={15} />
+                      </span>
+                      <span className="text-[14px] font-extrabold tracking-[-.01em]" style={{ color: meta ? '#1A1D26' : '#9098A4' }}>
+                        {meta ? meta.label : 'Sin tipo definido'}
+                      </span>
+                      <span className="text-[11px] font-bold rounded-full py-0.5 px-2" style={{ background: '#F0F2F5', color: '#6B7280' }}>{group.length}</span>
+                      {tipo === null && <span className="text-[11px] text-[#AEB4BF]">— elegí el tipo en el chip de cada funnel</span>}
+                      {meta && <button onClick={() => openNew(tipo)} className="ml-auto inline-flex items-center gap-1 py-1 px-2.5 rounded-lg border border-[#E2E5EB] bg-white text-[11px] font-semibold cursor-pointer text-[#6B7280] hover:border-[#2E69E0] hover:text-[#2E69E0] shrink-0"><Plus size={11} strokeWidth={2.6} />Funnel de {meta.label.toLowerCase()}</button>}
+                    </div>
+                    {!group.length ? (
+                      <div className="rounded-xl py-4 px-4 text-center text-[12px] text-[#AEB4BF]" style={{ border: '1.5px dashed #E2E5EB', background: '#fff' }}>
+                        Todavía no hay funnels de {meta.label.toLowerCase()}
+                      </div>
+                    ) : (
+                      <div className="border border-[#EDF0F5] rounded-xl overflow-x-auto">
+                        <div style={{ minWidth: 820 }}>
+                          <div className="grid items-center py-[9px] px-4 border-b border-[#EDF0F5]" style={{ gridTemplateColumns: GRID, gap: 12, background: '#FAFBFD' }}>
+                            {['Funnel', 'Estado', 'Qué falta', ''].map((h, i) => <div key={i} className="text-[9.5px] font-bold tracking-[0.09em] uppercase text-[#AEB4BF]">{h}</div>)}
+                          </div>
+                          {group.map((f, i) => {
+                            const del = delOf(f);
+                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} />;
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
