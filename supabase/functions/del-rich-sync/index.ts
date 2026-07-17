@@ -110,14 +110,32 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { /* sin body = todos */ }
   const soloDoc = str(body.doc_id);
+  // Cada Doc de Google tarda ~4s (abrir + serializar + reintentos). En 150s de
+  // límite entran ~6 antes del timeout. Por eso se procesa de a TANDAS:
+  //   · pending_only: solo los que todavía no tienen html (para reanudar sin repetir)
+  //   · limit: cuántos hacer en esta corrida (default 6, que entra cómodo en 150s)
+  const pendingOnly = body.pending_only === true;
+  const limit = Math.max(1, Math.min(Number(body.limit) || 6, 36));
 
   // Los DEL a sincronizar. Solo Google Docs: un .txt o un PDF no tienen formato.
   let q = supabase
     .from("client_brain_docs")
     .select("id,node_id,title,client_id")
-    .eq("doc_kind", "del");
+    .eq("doc_kind", "del")
+    .order("id", { ascending: true });
   if (soloDoc) q = q.eq("id", soloDoc);
-  const { data: docs, error: qErr } = await q;
+  let { data: docs, error: qErr } = await q;
+
+  // pending_only: descarta los DEL que ya tienen alguna sección con html. Se filtra
+  // acá (y no en el query) porque el html vive en del_sections, no en el doc.
+  if (docs && pendingOnly && !soloDoc) {
+    const { data: hechos } = await supabase
+      .from("del_sections").select("doc_id").not("html", "is", null);
+    const ya = new Set((hechos ?? []).map((r) => r.doc_id));
+    docs = docs.filter((d) => !ya.has(d.id));
+  }
+  // Recorta a la tanda de esta corrida.
+  if (docs && !soloDoc) docs = docs.slice(0, limit);
   // OJO: supabase-js NO lanza excepción, devuelve el error como valor.
   if (qErr) return json({ ok: false, error: qErr.message }, 500);
   if (!docs?.length) return json({ ok: true, docs: 0, secciones: 0, nota: "no hay DEL para sincronizar" });
@@ -179,12 +197,23 @@ Deno.serve(async (req) => {
     okDocs++;
   }
 
+  // Cuántos DEL quedan sin html después de esta tanda (para saber si hace falta otra).
+  const { data: faltan } = await supabase
+    .from("client_brain_docs").select("id").eq("doc_kind", "del");
+  const { data: listos } = await supabase
+    .from("del_sections").select("doc_id").not("html", "is", null);
+  const yaListos = new Set((listos ?? []).map((r) => r.doc_id));
+  const pendientes = (faltan ?? []).filter((d) => !yaListos.has(d.id)).length;
+
   return json({
     ok: true,
     docs: okDocs,
     secciones_con_formato: okSecs,
     pestanas_sin_match: sinMatch,
+    dels_pendientes: pendientes,
     fallos: fallos.slice(0, 10),
-    nota: sinMatch > 0 ? "Hay pestañas del Doc que no están en del_sections: correr client-brain-sync y después del_sections_import()." : undefined,
+    nota: pendientes > 0
+      ? `Faltan ${pendientes} DEL. Volvé a llamar con {"pending_only":true} hasta que dels_pendientes sea 0.`
+      : "Listo: todos los DEL tienen formato.",
   });
 });
