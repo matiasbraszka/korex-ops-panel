@@ -100,7 +100,7 @@ as $function$
                then 'Listo. El analisis estrategico ya esta hecho: profundiza el avatar que eligio (si te piden otro, hacelo igual y decilo).'
              -- El caso normal hoy: el equipo sabe que avatar quiere y todavia no escribio el DEL.
              when m.has_onboarding
-               then 'Listo, y NO hace falta el DEL: la psicologia sale del onboarding y de la investigacion, que estan cargados. Lo unico que aporta el DEL es CUAL avatar, y eso te lo dice la persona. Si no te lo dijo, preguntalo — no lo elijas vos ni lo supongas. Si ademas te lo describen (segmentacion, dolor), tomalo como el perfil base y profundizalo; no lo trates como un veredicto de rubrica ni digas que gano una comparacion que nadie corrio.'
+               then 'Listo. NO hace falta el DEL: la psicologia sale del onboarding y de la investigacion, que estan cargados. Lo unico que aporta el DEL es CUAL avatar. Si te lo nombraron, ESE es el insumo y alcanza: escribi la hoja completa. Si el paso 4 no esta hecho, decilo en UNA linea al final y segui. Si NO te lo nombraron, preguntá cual — no lo elijas vos.'
              else 'Bloqueado: falta el onboarding. Sin la voz del cliente no hay boton caliente, ni deseos ocultos, ni miedos: habria que inventarlos.' end)
     ) v(stage, ord, label, done, prereq_ok, detail)
   )

@@ -5,8 +5,6 @@ corresponde. Esto es el estándar, no cambia según el cliente ni según lo que 
 
 ## La cadena y sus dependencias
 
-Cada paso depende del anterior. Nunca saltees un prerrequisito.
-
 ```
 1. Research del líder y su empresa  ──┐
    (solo fuentes públicas)            │  pre-llamada · corren EN PARALELO
@@ -15,11 +13,38 @@ Cada paso depende del anterior. Nunca saltees un prerrequisito.
 3. Consolidación del onboarding  ← necesita la llamada de onboarding
                  ↓
 4. Análisis estratégico  ← necesita research (1) + onboarding (3)
-   LA BISAGRA: sin esto no hay avatar
+   Define el foco y ELIGE el avatar prioritario con la rúbrica
                  ↓
-5. Avatar builder  ← necesita el análisis estratégico (4)
-   Profundiza el avatar que ELIGIÓ el paso 4, no uno nuevo
+5. Avatar builder  ← necesita onboarding (3) + research (1) + saber CUÁL avatar
+   El "cuál" lo elige el paso 4 — o te lo dice la persona. Las dos valen.
 ```
+
+### Un prerrequisito es MATERIA PRIMA, no un documento
+
+La distinción que más se malinterpreta, y la que hay que tener clara antes de negarse a hacer
+algo: el prerrequisito de un paso es **lo que ese paso necesita LEER para producir**, no un
+archivo que exista aguas arriba.
+
+El paso 5 saca la psicología del avatar de tres señales, y su propia metodología las nombra:
+el **onboarding** (qué mencionó más el cliente sobre su público), la **historia del líder**
+(el research), y el perfil base del avatar. Dos de las tres son documentos que ya tenés. La
+tercera es una elección: **cuál** de los avatares posibles.
+
+Esa elección la produce el paso 4 con la rúbrica. Pero una elección no es materia prima: es
+una decisión, y una decisión la puede tomar una persona. Si el equipo te dice "profundizá
+este avatar", **eso es el insumo, y alcanza**. No es una opinión que tengas que auditar ni un
+veredicto que tengas que validar contra la rúbrica: es la entrada del paso.
+
+Entonces:
+
+- **Te nombran el avatar** → tenés todo. Producí la hoja completa. Si el paso 4 no está hecho,
+  decilo en UNA línea al final y seguí. No lo conviertas en el tema de la respuesta.
+- **No te nombran el avatar y el paso 4 no está hecho** → ahí sí falta el insumo. Preguntá
+  cuál, o proponé correr el paso 4. Nunca lo elijas vos.
+- **El paso 4 está hecho** → profundizá el que eligió. Si te piden otro, hacelo igual y aclaralo.
+
+Lo que NO hacés nunca: negarte a producir el paso 5 porque "nadie corrió la rúbrica". Nadie te
+pidió que certifiques que ese avatar ganó una comparación. Te pidieron la hoja de ESE avatar.
 
 Después del paso 5 el descubrimiento termina y arranca la producción (Oferta Irresistible,
 VSL, anuncios, landing). Eso ya no es tuyo: son otros agentes.
@@ -53,11 +78,24 @@ research tirado a la basura, y al revés igual. Es la primera pregunta de la fas
 
 ## Regla de oro
 
-**Un artefacto no arranca hasta que su prerrequisito está congelado.**
+**Un artefacto no arranca hasta que tiene su materia prima.**
 
-Antes de producir cualquier paso, su input tiene que existir. Si falta, DETENÉ el flujo,
-decí exactamente qué falta y quién lo aporta. No lo produzcas "provisional" ni "con lo que
-hay": un paso hecho sobre un prerrequisito incompleto contamina todo lo que sigue.
+Antes de producir cualquier paso, lo que ese paso necesita LEER tiene que existir. Si falta,
+DETENÉ el flujo, decí exactamente qué falta y quién lo aporta. No lo produzcas "provisional"
+ni "con lo que hay": un paso hecho sin su material se inventa, y lo inventado contamina todo
+lo que sigue.
+
+La regla protege contra **inventar**, no contra avanzar. Antes de frenar, preguntate qué es
+lo que te falta de verdad:
+
+- ¿Me falta **material** que tendría que leer y no tengo? → Frená. Es la regla.
+- ¿Me falta una **decisión** que alguien ya tomó y me la están diciendo? → No frenes. La
+  decisión es el insumo; ya la tenés.
+- ¿Me falta un **documento** que registraría algo que igual ya sé por otro lado? → No frenes.
+  Producí, y decí en una línea que ese registro todavía no está escrito.
+
+Frenar cuando tenés todo lo que necesitás no es rigor: es no hacer el trabajo. Y ofrecer "dos
+caminos, elegí uno" cuando ya te dijeron qué querían es lo mismo con otra cara.
 
 ## El estado no se adivina: te lo dice el gate
 
