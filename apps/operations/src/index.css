@@ -31,7 +31,11 @@
 }
 
 html, body {
-  overflow-x: hidden;
+  /* `clip` y no `hidden`: hidden crea un contenedor de scroll, y eso ROMPE
+     position:sticky en todos los descendientes (por eso el indice del DEL no
+     quedaba fijo). clip contiene el desborde horizontal igual, sin crear el
+     contexto de scroll. */
+  overflow-x: clip;
   max-width: 100vw;
 }
 
