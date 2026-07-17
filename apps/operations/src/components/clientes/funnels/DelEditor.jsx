@@ -149,6 +149,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [selBtn, setSelBtn] = useState(null);        // botón flotante: {top,left,quote,sectionId}
   const [composer, setComposer] = useState(null);    // caja de escribir: {quote,sectionId}
   const [flashCmt, setFlashCmt] = useState(null);     // id del comentario a destacar
+  const [imgPicker, setImgPicker] = useState(null);   // selector de imagen de Recursos: {insert}
+  const [imgList, setImgList] = useState(null);        // imágenes de Recursos del funnel
   const scrollRef = useRef(null);
   const timers = useRef({}); // id -> timeout (debounce de guardado)
   const channelRef = useRef(null);
@@ -370,6 +372,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       if (s && scrollRef.current) scrollRef.current.scrollTo({ top: s.offsetTop - 12, behavior: 'smooth' });
     }
     setTimeout(() => setFlashCmt(null), 1800);
+  };
+
+  // El botón de imagen del DEL abre las imágenes de Recursos del funnel (en vez de
+  // pedir un link a mano) y la elegida se inserta en el texto. Conecta Recursos ↔ DEL.
+  const abrirSelectorImagen = useCallback((insertHTML) => {
+    setImgPicker({ insert: insertHTML });
+    setImgList(null);
+    (async () => {
+      try {
+        const rows = await sbFetch(`funnel_resources?select=id,title,public_url&strategy_id=eq.${encodeURIComponent(strategyId)}&kind=eq.image&order=created_at.desc`);
+        setImgList(Array.isArray(rows) ? rows : []);
+      } catch { setImgList([]); }
+    })();
+  }, [strategyId]);
+
+  const elegirImagen = (r) => {
+    imgPicker?.insert?.(`<img src="${(r.public_url || '').replace(/"/g, '&quot;')}" alt="${(r.title || '').replace(/"/g, '&quot;')}" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`);
+    setImgPicker(null);
   };
 
   // ── Presencia en vivo (Supabase Realtime, efímero — sin base) ─────────────────
@@ -772,6 +792,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                       delTools
                       noToolbar
                       onActive={setActiveApi}
+                      onInsertImage={abrirSelectorImagen}
                       onNewAvatar={(name) => crearAvatarSection(name)}
                       minHeight={90}
                       placeholder="Escribí acá el contenido de la sección…"
@@ -947,6 +968,40 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setNewDocOpen(false)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
               <button onClick={crearDocNuevo} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selector de imagen desde Recursos: el botón de imagen del DEL muestra las
+          imágenes ya subidas al funnel y la elegida se inserta en el texto. */}
+      {imgPicker && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setImgPicker(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[560px] max-h-[80vh] flex flex-col overflow-hidden" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="flex items-center gap-2 py-3 px-4 border-b border-[#EDF0F5]">
+              <ImageIcon size={16} className="text-[#B45309]" />
+              <div className="text-[14px] font-bold text-[#1A1D26] flex-1">Elegí una imagen de Recursos</div>
+              <button onClick={() => setImgPicker(null)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[#9098A4] hover:bg-[#F4F5F7] border-none bg-transparent cursor-pointer"><X size={16} /></button>
+            </div>
+            <div className="p-4 overflow-y-auto">
+              {imgList === null ? (
+                <div className="py-10 text-center text-[12px] text-[#9098A4] flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin" />Cargando imágenes…</div>
+              ) : imgList.length === 0 ? (
+                <div className="py-10 text-center">
+                  <ImageIcon size={26} className="text-[#D0D5DD] mx-auto mb-2" />
+                  <div className="text-[12.5px] text-[#6B7280] font-semibold">Todavía no hay imágenes en Recursos</div>
+                  <div className="text-[11px] text-[#9098A4] mt-1">Subí imágenes en la pestaña Recursos y acá te aparecen para insertar.</div>
+                </div>
+              ) : (
+                <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(120px,1fr))' }}>
+                  {imgList.map(r => (
+                    <button key={r.id} onClick={() => elegirImagen(r)} title={`Insertar: ${r.title}`} className="group flex flex-col rounded-lg border border-[#E7EAF0] bg-white overflow-hidden cursor-pointer hover:border-[#2E69E0] p-0">
+                      <span className="w-full aspect-[4/3] bg-[#F4F5F7] overflow-hidden"><img src={r.public_url} alt={r.title} loading="lazy" className="w-full h-full object-cover" /></span>
+                      <span className="text-[10.5px] font-semibold text-[#3F4653] truncate px-1.5 py-1">{r.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
