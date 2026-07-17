@@ -153,6 +153,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const timers = useRef({}); // id -> timeout (debounce de guardado)
   const channelRef = useRef(null);
   const editStopTimer = useRef(null);
+  const myEditingRef = useRef(null); // espejo de myEditing para los handlers de broadcast
   const by = currentUser?.id || null;
   const myName = currentUser?.name || currentUser?.email?.split('@')[0] || 'Alguien';
   const myColor = colorFor(by || myName);
@@ -264,7 +265,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
     try {
-      const rows = await sbFetch(`del_comments?select=id,section_id,body,author_name,author_id,resolved,created_at&strategy_id=eq.${strategyId}&order=created_at.asc`);
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&strategy_id=eq.${strategyId}&order=created_at.asc`);
       setComments(Array.isArray(rows) ? rows : []);
     } catch { /* si falla, sin comentarios */ }
   }, [strategyId]);
@@ -292,10 +293,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const resolverComment = async (c) => {
     setComments((prev) => prev.map(x => x.id === c.id ? { ...x, resolved: !x.resolved } : x));
     await supabase.from('del_comments').update({ resolved: !c.resolved }).eq('id', c.id);
+    emitir('comment', { action: 'upsert', row: { id: c.id, resolved: !c.resolved } });
   };
   const borrarComment = async (c) => {
     setComments((prev) => prev.filter(x => x.id !== c.id));
     await supabase.from('del_comments').delete().eq('id', c.id);
+    emitir('comment', { action: 'delete', id: c.id });
   };
   // Comentarios por sección.
   const commentsBySection = useMemo(() => {
@@ -332,6 +335,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     }).select().single();
     if (error) { setComments(prev => prev.filter(c => c.id !== tempId)); window.alert('No pude guardar el comentario: ' + (error.message || error.code || '')); return; }
     setComments(prev => prev.map(c => c.id === tempId ? data : c));
+    emitir('comment', { action: 'upsert', row: data });
   };
 
   // Resalta en el html las frases comentadas (primer match de texto plano, fuera de tags).
@@ -379,16 +383,43 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       const state = ch.presenceState();
       setPresent(Object.values(state).flat());
     });
+    // ── Sincronización en vivo (broadcast sobre el mismo canal) ──────────────────
+    // Cuando alguien comenta o guarda una sección, avisa por el canal y a los demás
+    // les aparece solo, sin recargar. Sin CRDT, sin tocar la base: un mensajito.
+    ch.on('broadcast', { event: 'comment' }, ({ payload }) => {
+      if (!payload) return;
+      if (payload.action === 'delete') { setComments(prev => prev.filter(c => c.id !== payload.id)); return; }
+      // upsert (nuevo o cambio de estado resuelto)
+      setComments(prev => prev.some(c => c.id === payload.row?.id)
+        ? prev.map(c => (c.id === payload.row.id ? { ...c, ...payload.row } : c))
+        : [...prev, payload.row]);
+    });
+    ch.on('broadcast', { event: 'section' }, ({ payload }) => {
+      if (!payload?.row) return;
+      // No piso una sección que YO esté editando en este momento.
+      if (payload.row.id === myEditingRef.current) return;
+      setSecs(prev => prev ? prev.map(s => (s.id === payload.row.id ? { ...s, ...payload.row } : s)) : prev);
+    });
+    ch.on('broadcast', { event: 'section-add' }, () => { cargar(); });
+    ch.on('broadcast', { event: 'section-del' }, ({ payload }) => {
+      if (payload?.id) setSecs(prev => prev ? prev.filter(s => s.id !== payload.id) : prev);
+    });
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') await ch.track({ id: by, name: myName, color: myColor, editing: null });
     });
     return () => { channelRef.current = null; supabase.removeChannel(ch); };
-  }, [strategyId, by, myName, myColor]);
+  }, [strategyId, by, myName, myColor, cargar]);
 
   // Cuando cambia qué sección estoy editando, lo aviso por presencia (para el candado).
   useEffect(() => {
+    myEditingRef.current = myEditing;
     channelRef.current?.track({ id: by, name: myName, color: myColor, editing: myEditing });
   }, [myEditing, by, myName, myColor]);
+
+  // Avisar por el canal (broadcast). No falla si el canal aún no está listo.
+  const emitir = useCallback((event, payload) => {
+    channelRef.current?.send({ type: 'broadcast', event, payload });
+  }, []);
 
   // Los que están AHORA (sin contarme a mí) y qué sección edita cada uno.
   const otros = useMemo(() => present.filter(u => u.id !== by), [present, by]);
@@ -447,7 +478,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     timers.current[id] = setTimeout(async () => {
       const { error } = await supabase.rpc('del_section_save', { p_id: id, p_html: html, p_by: by });
       setSaveState((s) => ({ ...s, [id]: error ? 'error' : 'saved' }));
-      if (!error) setTimeout(() => setSaveState((s) => { const n = { ...s }; if (n[id] === 'saved') delete n[id]; return n; }), 1800);
+      if (!error) {
+        emitir('section', { row: { id, html, source: 'panel' } }); // a los demás les aparece el cambio
+        setTimeout(() => setSaveState((s) => { const n = { ...s }; if (n[id] === 'saved') delete n[id]; return n; }), 1800);
+      }
     }, 800);
   };
 
@@ -458,6 +492,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     });
     if (error) { window.alert('No pude agregar la sección: ' + error.message); return; }
     await cargar();
+    emitir('section-add', {});
     setModo('editar');
     if (data) { setActiva(data); setEditTitle(data); }
   };
@@ -475,6 +510,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       if (!error && newId) {
         await supabase.rpc('del_section_save', { p_id: newId, p_html: '<h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>', p_by: by });
         await cargar();
+        emitir('section-add', {});
         setModo('editar'); setView('del'); setActiva(newId);
         setTimeout(() => { const el = document.getElementById('sec-' + newId); if (el && scrollRef.current) scrollRef.current.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' }); }, 80);
       }
@@ -487,6 +523,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     const { error } = await supabase.rpc('del_section_delete', { p_id: s.id, p_by: by });
     if (error) { window.alert('No pude borrar: ' + error.message); return; }
     setSecs((prev) => prev.filter(x => x.id !== s.id));
+    emitir('section-del', { id: s.id });
   };
 
   const renombrar = async (id, title) => {
@@ -496,6 +533,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     setSecs((prev) => prev.map(x => x.id === id ? { ...x, title: title.trim(), source: 'panel' } : x));
     const { error } = await supabase.rpc('del_section_rename', { p_id: id, p_title: title.trim(), p_by: by });
     if (error) window.alert('No pude renombrar: ' + error.message);
+    else emitir('section', { row: { id, title: title.trim() } });
   };
 
   if (err) {
