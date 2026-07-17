@@ -956,6 +956,25 @@ Quedo a la espera de tu respuesta`;
 
   const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
   const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
+  // Borrar avatar CON DESHACER (Ctrl+Z de datos): guarda el avatar borrado unos segundos
+  // y lo puede restaurar en su lugar. Las carpetas del Drive NO se borran solas a
+  // propósito (podrían tener grabaciones); sus links se van con el avatar.
+  const [deletedAv, setDeletedAv] = useState(null); // { av, idx }
+  const delAvTimer = useRef(null);
+  const removeAvatarUndoable = (av) => {
+    const idx = avatars.findIndex(a => a.id === av.id);
+    onUpdate(f.id, { avatars: avatars.filter(a => a.id !== av.id) });
+    setDeletedAv({ av, idx });
+    clearTimeout(delAvTimer.current);
+    delAvTimer.current = setTimeout(() => setDeletedAv(null), 12000);
+  };
+  const undoRemoveAvatar = () => {
+    if (!deletedAv) return;
+    const next = [...avatars];
+    next.splice(Math.min(deletedAv.idx, next.length), 0, deletedAv.av);
+    onUpdate(f.id, { avatars: next });
+    setDeletedAv(null);
+  };
 
   // ── Generador de avatares del DEL (API de Anthropic · a pedido, instantáneo) ──
   // Toca una edge function que lee el DEL, la IA identifica los avatares y señala
@@ -1069,6 +1088,13 @@ Quedo a la espera de tu respuesta`;
         </div>
       )}
 
+      {deletedAv && (
+        <div className="flex items-center justify-between gap-3 flex-wrap py-2.5 px-3.5 rounded-xl border" style={{ background: '#FFFBEB', borderColor: '#FBE6BE' }}>
+          <span className="text-[12px] font-medium text-[#78350F]">Borraste el avatar <b>{(deletedAv.av.name || 's/nombre')}</b>. Sus carpetas del Drive no se tocaron.</span>
+          <button onClick={undoRemoveAvatar} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-[#E7C98A] bg-white text-[#B45309] text-[12px] font-semibold cursor-pointer hover:bg-[#FEF9E7]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>
+        </div>
+      )}
+
       {avatars.length === 0 && !genActive && (
         <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-white py-8 px-4 text-center text-[12.5px] text-[#9098A4]">Este funnel todavía no tiene avatares. Generalos del DEL con el botón de arriba.</div>
       )}
@@ -1083,6 +1109,7 @@ Quedo a la espera de tu respuesta`;
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#FCE7F3] text-[#DB2777] text-[12px] font-bold shrink-0">{i + 1}</span>
               <span className="text-[13.5px] font-bold truncate flex-1 min-w-0" style={{ color: nombre ? '#1A1D26' : '#DC2626' }}>{nombre || 'Falta el nombre del avatar'}</span>
               <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
+              <button onClick={() => removeAvatarUndoable(av)} title="Borrar este avatar (se puede deshacer)" className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
             </div>
             <div className="p-2.5 flex flex-col gap-1.5">
               {VID_BUCKETS.map(b => {

@@ -144,6 +144,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
   const [present, setPresent] = useState([]);        // quién está en el DEL ahora (Realtime)
   const [myEditing, setMyEditing] = useState(null);  // qué sección estoy editando (para el candado)
   const [activeApi, setActiveApi] = useState(null);  // API de la sección enfocada (barra única)
+  // Comentarios estilo Google Docs: marcás una frase → botón flotante → se guarda con
+  // la frase (quote) y aparece en el margen derecho, con la frase resaltada en el texto.
+  const [selBtn, setSelBtn] = useState(null);        // botón flotante: {top,left,quote,sectionId}
+  const [composer, setComposer] = useState(null);    // caja de escribir: {quote,sectionId}
+  const [flashCmt, setFlashCmt] = useState(null);     // id del comentario a destacar
   const scrollRef = useRef(null);
   const timers = useRef({}); // id -> timeout (debounce de guardado)
   const channelRef = useRef(null);
@@ -188,12 +193,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     let alive = true;
     (async () => {
       try {
-        const [rows, hidden] = await Promise.all([
+        const [rows, hidden, extras] = await Promise.all([
           sbFetch(`client_brain_docs?select=id,node_id,title,doc_kind,text,panel_html,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`),
           sbFetch(`del_client_doc_hidden?select=node_id&client_id=eq.${encodeURIComponent(cid)}`),
+          sbFetch(`del_client_extra_docs?select=id,title,html,updated_at&client_id=eq.${encodeURIComponent(cid)}&order=created_at.asc`),
         ]);
         if (!alive) return;
-        setClientDocs(Array.isArray(rows) ? rows : []);
+        // Unifico los del Drive (brain) con los propios del panel (extra) en una sola lista.
+        const brain = (Array.isArray(rows) ? rows : []).map(d => ({ ...d, _kind: 'brain', key: 'b_' + d.id }));
+        const extra = (Array.isArray(extras) ? extras : []).map(d => ({ id: d.id, title: d.title, panel_html: d.html, doc_kind: 'extra', _kind: 'extra', key: 'x_' + d.id }));
+        setClientDocs([...brain, ...extra]);
         setExcluded(new Set((Array.isArray(hidden) ? hidden : []).map(p => p.node_id)));
       } catch { if (alive) setClientDocs([]); }
     })();
@@ -201,6 +210,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
   }, [cid]);
 
   const quitarClientDoc = async (d) => {
+    if (d._kind === 'extra') { borrarExtraDoc(d); return; } // los propios del panel se borran
     setExcluded((prev) => new Set(prev).add(d.node_id));
     if (view === 'cliente:' + d.id) setView('del');
     await supabase.from('del_client_doc_hidden').upsert({ client_id: cid, node_id: d.node_id }, { onConflict: 'client_id,node_id' });
@@ -225,8 +235,30 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     setClientDocs((prev) => prev.map(d => d.id === doc.id ? { ...d, panel_html: html } : d));
     clearTimeout(docTimer.current);
     docTimer.current = setTimeout(() => {
-      supabase.from('client_brain_docs').update({ panel_html: html, text: htmlToText(html), panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
+      if (doc._kind === 'extra') {
+        supabase.from('del_client_extra_docs').update({ html, updated_at: new Date().toISOString() }).eq('id', doc.id);
+      } else {
+        supabase.from('client_brain_docs').update({ panel_html: html, text: htmlToText(html), panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
+      }
     }, 900);
+  };
+
+  // Crear un documento propio del panel (aparece en todos los DEL de este cliente).
+  const [newDocOpen, setNewDocOpen] = useState(false);
+  const [newDocTitle, setNewDocTitle] = useState('');
+  const crearDocNuevo = async () => {
+    const title = newDocTitle.trim() || 'Documento nuevo';
+    setNewDocOpen(false); setNewDocTitle('');
+    const { data, error } = await supabase.from('del_client_extra_docs').insert({ client_id: cid, title, html: '', created_by: by }).select().single();
+    if (error) { window.alert('No pude crear el documento: ' + (error.message || '')); return; }
+    setClientDocs((prev) => [...prev, { id: data.id, title: data.title, panel_html: '', doc_kind: 'extra', _kind: 'extra', key: 'x_' + data.id }]);
+    setView('cliente:' + data.id); setDocEditing(true);
+  };
+  const borrarExtraDoc = async (doc) => {
+    if (!window.confirm(`¿Borrar el documento "${doc.title}"? No se puede deshacer.`)) return;
+    setClientDocs((prev) => prev.filter(d => d.id !== doc.id));
+    if (view === 'cliente:' + doc.id) setView('del');
+    await supabase.from('del_client_extra_docs').delete().eq('id', doc.id);
   };
 
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
@@ -265,12 +297,66 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
     setComments((prev) => prev.filter(x => x.id !== c.id));
     await supabase.from('del_comments').delete().eq('id', c.id);
   };
-  // Comentarios por sección (los sin resolver primero cuentan para el badge).
+  // Comentarios por sección.
   const commentsBySection = useMemo(() => {
     const m = {};
     for (const c of comments) (m[c.section_id] ||= []).push(c);
     return m;
   }, [comments]);
+
+  // Al soltar el mouse sobre el texto: si hay una frase marcada, muestro el botón flotante.
+  const onDocMouseUp = () => {
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim() : '';
+    if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
+    let node = sel.anchorNode;
+    while (node && node.nodeType !== 1) node = node.parentNode;
+    const secEl = node?.closest?.('[data-secid]');
+    if (!secEl) { setSelBtn(null); return; }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    setSelBtn({ top: rect.top, left: rect.left + rect.width / 2, quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
+  };
+
+  // Guardar el comentario anclado a la frase (optimista, con reversión).
+  const comentarQuote = async () => {
+    const body = draft.trim();
+    if (!body || !composer) return;
+    const comp = composer;
+    const sec = secs?.find(x => x.id === comp.sectionId);
+    setDraft(''); setComposer(null); setSelBtn(null);
+    const tempId = 'tmp_' + Date.now();
+    setComments(prev => [...prev, { id: tempId, section_id: comp.sectionId, quote: comp.quote, body, author_name: myName, author_id: by, resolved: false, created_at: new Date().toISOString() }]);
+    const { data, error } = await supabase.from('del_comments').insert({
+      section_id: comp.sectionId, doc_id: sec?.doc_id, strategy_id: strategyId,
+      author_id: by, author_name: myName, body, quote: comp.quote,
+    }).select().single();
+    if (error) { setComments(prev => prev.filter(c => c.id !== tempId)); window.alert('No pude guardar el comentario: ' + (error.message || error.code || '')); return; }
+    setComments(prev => prev.map(c => c.id === tempId ? data : c));
+  };
+
+  // Resalta en el html las frases comentadas (primer match de texto plano, fuera de tags).
+  const highlightHtml = useCallback((html, cmts) => {
+    let out = html || '';
+    for (const c of cmts) {
+      const q = (c.quote || '').trim();
+      if (q.length < 2 || c.resolved) continue;
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      try {
+        const re = new RegExp('(?![^<]*>)(' + esc + ')');
+        out = out.replace(re, `<mark data-cmt="${c.id}" class="del-cmt">$1</mark>`);
+      } catch { /* frase con caracteres raros: sin resaltar */ }
+    }
+    return out;
+  }, []);
+
+  // Ir a un comentario: destacarlo y llevar la frase a la vista.
+  const irAComment = (c) => {
+    setFlashCmt(c.id);
+    const el = document.querySelector(`mark[data-cmt="${c.id}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    else { const s = document.getElementById('sec-' + c.section_id); if (s && scrollRef.current) scrollRef.current.scrollTo({ top: s.offsetTop - 12, behavior: 'smooth' }); }
+    setTimeout(() => setFlashCmt(null), 1600);
+  };
 
   // ── Presencia en vivo (Supabase Realtime, efímero — sin base) ─────────────────
   // Todos los que tienen el DEL abierto se ven entre sí; y si alguien está editando
@@ -425,8 +511,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
   const editando = modo === 'editar';
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }}>
-      <div className="grid gap-5 items-start mx-auto max-w-[1180px] py-5 px-6" style={{ gridTemplateColumns: 'minmax(0,215px) minmax(0,1fr)' }}>
+    <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }} onMouseDown={() => { if (selBtn) setSelBtn(null); }}>
+      <style>{`.del-rich mark.del-cmt{background:#FEF3C7;border-bottom:2px solid #EAB308;border-radius:2px;padding:0 1px;cursor:pointer}`}</style>
+      <div className="grid gap-5 items-start mx-auto py-5 px-6" style={{ maxWidth: view === 'del' ? 1440 : 1180, gridTemplateColumns: view === 'del' ? 'minmax(0,185px) minmax(0,1fr) 290px' : 'minmax(0,215px) minmax(0,1fr)' }}>
 
         {/* El menú del DEL (maqueta): ESTE FUNNEL (las secciones del documento) · las dos
             pestañas Configuración/Recursos · y abajo los documentos DEL CLIENTE, que
@@ -484,48 +571,48 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
           </button>
 
           {/* DEL CLIENTE: los documentos que aparecen en todos los DEL de este cliente.
-              Se pueden quitar (×) y volver a agregar (+). */}
-          {(shownClientDocs.length > 0 || excludedDocs.length > 0) && (
-            <>
-              <div className="px-2 pt-3 pb-1.5">
-                <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Del cliente</span>
-                <div className="text-[9.5px] text-[#C3C9D4] font-medium mt-0.5 normal-case tracking-normal">Aparecen en todos los DEL de este cliente</div>
-              </div>
-              {shownClientDocs.map(d => {
-                const on = view === 'cliente:' + d.id;
-                return (
-                  <div key={d.id} className="group/cd flex items-center gap-1 rounded-[9px]" style={{ background: on ? '#F1F3F7' : 'transparent' }}>
-                    <button onClick={() => setView('cliente:' + d.id)}
-                      className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pl-2.5 pr-1 text-left border-none cursor-pointer text-[12px] font-semibold bg-transparent"
-                      style={{ color: on ? '#1A1D26' : '#6B7280' }}>
-                      <Monitor size={13} className="shrink-0 text-[#9098A4]" />
-                      <span className="truncate flex-1 min-w-0">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
-                    </button>
-                    <button onClick={() => quitarClientDoc(d)} title="Quitar de este cliente" className="opacity-0 group-hover/cd:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>
-                  </div>
-                );
-              })}
-              {/* Agregar: restaura un documento que se había quitado. */}
-              <div className="relative px-1 mt-0.5">
-                <button onClick={() => setAddDocOpen(o => !o)} disabled={excludedDocs.length === 0}
-                  className="flex items-center gap-1.5 w-full py-1.5 px-1.5 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent disabled:opacity-40 disabled:cursor-default disabled:hover:border-[#D0D5DD] disabled:hover:text-[#9098A4]">
-                  <Plus size={12} />{excludedDocs.length ? 'Agregar documento' : 'Todos agregados'}
+              Se pueden crear nuevos, quitar (×) y volver a agregar. */}
+          <div className="px-2 pt-3 pb-1.5">
+            <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Del cliente</span>
+            <div className="text-[9.5px] text-[#C3C9D4] font-medium mt-0.5 normal-case tracking-normal">Aparecen en todos los DEL de este cliente</div>
+          </div>
+          {shownClientDocs.map(d => {
+            const on = view === 'cliente:' + d.id;
+            return (
+              <div key={d.key || d.id} className="group/cd flex items-center gap-1 rounded-[9px]" style={{ background: on ? '#F1F3F7' : 'transparent' }}>
+                <button onClick={() => setView('cliente:' + d.id)}
+                  className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pl-2.5 pr-1 text-left border-none cursor-pointer text-[12px] font-semibold bg-transparent"
+                  style={{ color: on ? '#1A1D26' : '#6B7280' }}>
+                  {d._kind === 'extra' ? <FileText size={13} className="shrink-0 text-[#7C3AED]" /> : <Monitor size={13} className="shrink-0 text-[#9098A4]" />}
+                  <span className="truncate flex-1 min-w-0">{d._kind === 'extra' ? d.title : (DOC_KIND_LABEL[d.doc_kind] || d.title)}</span>
                 </button>
-                {addDocOpen && excludedDocs.length > 0 && (
-                  <div className="absolute left-1 right-1 top-9 z-30 bg-white border border-[#E2E5EB] rounded-lg p-1 flex flex-col gap-0.5" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
-                    {excludedDocs.map(d => (
-                      <button key={d.id} onClick={() => restaurarClientDoc(d)} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-left text-[12px] font-semibold text-[#4B5563] hover:bg-[#F4F6F9] border-none bg-transparent cursor-pointer">
-                        <Plus size={12} className="text-[#7C3AED] shrink-0" /><span className="truncate">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <button onClick={() => quitarClientDoc(d)} title={d._kind === 'extra' ? 'Borrar documento' : 'Quitar de este cliente'} className="opacity-0 group-hover/cd:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>
               </div>
-            </>
-          )}
+            );
+          })}
+          {/* Agregar: crear un documento nuevo o restaurar uno que se había quitado. */}
+          <div className="relative px-1 mt-0.5">
+            <button onClick={() => setAddDocOpen(o => !o)}
+              className="flex items-center gap-1.5 w-full py-1.5 px-1.5 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent">
+              <Plus size={12} />Agregar documento
+            </button>
+            {addDocOpen && (
+              <div className="absolute left-1 right-1 top-9 z-30 bg-white border border-[#E2E5EB] rounded-lg p-1 flex flex-col gap-0.5" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
+                <button onClick={() => { setAddDocOpen(false); setNewDocOpen(true); setNewDocTitle(''); }} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-left text-[12px] font-bold text-[#7C3AED] hover:bg-[#F5F3FF] border-none bg-transparent cursor-pointer">
+                  <Plus size={13} className="shrink-0" />Crear documento nuevo
+                </button>
+                {excludedDocs.length > 0 && <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1.5 pb-0.5">Restaurar quitados</div>}
+                {excludedDocs.map(d => (
+                  <button key={d.key || d.id} onClick={() => restaurarClientDoc(d)} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-left text-[12px] font-semibold text-[#4B5563] hover:bg-[#F4F6F9] border-none bg-transparent cursor-pointer">
+                    <Monitor size={12} className="text-[#9098A4] shrink-0" /><span className="truncate">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
 
-        <div className="min-w-0 flex flex-col gap-3">
+        <div className="min-w-0 flex flex-col gap-3" onMouseUp={view === 'del' ? onDocMouseUp : undefined}>
           {view === 'del' && (<>
           {/* Barra Leer/Editar + (en editar) la BARRA ÚNICA de herramientas, ambas fijas
               arriba tipo Google Docs: la barra opera sobre la sección que tengas enfocada. */}
@@ -555,13 +642,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
           {editando && <DelToolbar api={activeApi} />}
           </div>
 
-          {!editando && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {resumen.map(([k, n]) => { const sc = secOf(k); return (
-                <span key={k} className="inline-flex items-center gap-1.5 py-[3px] px-2 rounded-md text-[10.5px] font-bold" style={{ background: sc.bg, color: sc.c }}>{sc.label}<span className="opacity-60">{n}</span></span>
-              ); })}
-            </div>
-          )}
 
           {/* El documento, agrupado por categoría en orden canónico. Cada grupo abre con su
               franja de color; adentro van sus secciones. Así el DEL se lee estructurado
@@ -584,7 +664,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
             const abiertos = scomments.filter(c => !c.resolved).length;
             const threadOpen = threadFor === s.id;
             return (
-              <section key={s.id} id={'sec-' + s.id} className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden" style={{ scrollMarginTop: 60 }}>
+              <section key={s.id} id={'sec-' + s.id} data-secid={s.id} className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden" style={{ scrollMarginTop: 60 }}>
                 <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[#EDF0F5]" style={{ borderLeft: `4px solid ${sc.c}` }}>
                   <span className="text-[9.5px] font-extrabold tracking-[0.09em] uppercase shrink-0" style={{ color: sc.c }}>{sc.label}</span>
                   {editTitle === s.id ? (
@@ -603,12 +683,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                       <Lock size={10} />{String(lock.name).split(' ')[0]}
                     </span>
                   )}
-                  {/* Comentarios de la sección: badge + abrir el hilo. */}
-                  <button onClick={() => { setThreadFor(threadOpen ? null : s.id); setDraft(''); }} title="Comentarios de esta sección"
-                    className="inline-flex items-center gap-1 shrink-0 h-7 px-2 rounded-md border-none cursor-pointer text-[11px] font-bold"
-                    style={threadOpen ? { background: '#EEF3FF', color: '#1D4FD8' } : { background: 'transparent', color: abiertos ? '#B45309' : '#9098A4' }}>
-                    <MessageSquare size={13} />{scomments.length > 0 && <span>{scomments.length}</span>}
-                  </button>
+                  {scomments.length > 0 && (
+                    <span title="Comentarios en esta sección" className="inline-flex items-center gap-1 shrink-0 text-[11px] font-bold" style={{ color: abiertos ? '#B45309' : '#9098A4' }}>
+                      <MessageSquare size={13} />{scomments.length}
+                    </span>
+                  )}
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
@@ -618,36 +697,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                   )}
                   {!editando && <span className="text-[10.5px] text-[#C3C9D4] tabular-nums shrink-0">{(s.char_count || 0).toLocaleString('es-AR')}</span>}
                 </div>
-
-                {/* Hilo de comentarios: JUSTO debajo del encabezado (al lado del botón),
-                    para que se vea al instante aunque la sección sea larga. */}
-                {threadOpen && (
-                  <div className="border-b border-[#EDF0F5] bg-[#FBFCFE] p-3.5 flex flex-col gap-2.5">
-                    {scomments.length === 0 && <div className="text-[11.5px] text-[#9098A4] italic">Todavía no hay comentarios en esta sección. Escribí el primero abajo.</div>}
-                    {scomments.map(c => (
-                      <div key={c.id} className="flex items-start gap-2.5" style={{ opacity: c.resolved ? 0.55 : 1 }}>
-                        <span className="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5" style={{ background: colorFor(c.author_id || c.author_name) }}>{initialOf(c.author_name)}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[12px] font-bold text-[#1A1D26]">{c.author_name || 'Alguien'}</span>
-                            <span className="text-[10.5px] text-[#AEB4BF]">{haceRato(c.created_at)}</span>
-                            {c.resolved && <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#ECFDF5', color: '#15803D' }}>resuelto</span>}
-                          </div>
-                          <div className="text-[12.5px] text-[#3F4653] leading-snug whitespace-pre-wrap break-words mt-0.5" style={{ textDecoration: c.resolved ? 'line-through' : 'none' }}>{c.body}</div>
-                        </div>
-                        <button onClick={() => resolverComment(c)} title={c.resolved ? 'Reabrir' : 'Marcar como resuelto'} className="w-6 h-6 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#ECFDF5] hover:text-[#15803D] border-none bg-transparent cursor-pointer shrink-0"><Check size={13} strokeWidth={2.6} /></button>
-                        {(c.author_id === by) && <button onClick={() => borrarComment(c)} title="Borrar" className="w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#B91C1C] border-none bg-transparent cursor-pointer shrink-0"><Trash2 size={12} /></button>}
-                      </div>
-                    ))}
-                    <div className="flex items-end gap-2 pt-1">
-                      <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={1} autoFocus
-                        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); comentar(s); } }}
-                        placeholder="Escribí un comentario…  (Ctrl+Enter para enviar)"
-                        className="flex-1 min-w-0 py-2 px-3 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-snug" />
-                      <button onClick={() => comentar(s)} disabled={!draft.trim()} className="inline-flex items-center gap-1.5 py-2 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50 shrink-0"><Send size={13} />Comentar</button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Si OTRO está editando esta sección, no dejo editarla acá: se ve el
                     candado y el contenido en lectura, para no pisarse. */}
@@ -673,7 +722,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                   </div>
                 ) : s.html ? (
                   <div className="del-rich py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '78ch' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(s.html) }} />
+                    dangerouslySetInnerHTML={{ __html: highlightHtml(sanitizeDelHtml(s.html), scomments) }} />
                 ) : (
                   <div className="py-4 px-5 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '78ch' }}>
                     {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
@@ -728,7 +777,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
                     <div className="min-w-0">
-                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{DOC_KIND_LABEL[doc.doc_kind] || doc.title}</div>
+                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{doc._kind === 'extra' ? doc.title : (DOC_KIND_LABEL[doc.doc_kind] || doc.title)}</div>
                       <div className="text-[11px] text-[#9098A4]">Aparece en todos los DEL de este cliente.{docEditing ? ' Se guarda solo.' : ''}</div>
                     </div>
                   </div>
@@ -738,6 +787,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
                       <button onClick={() => setDocEditing(true)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
                     </div>
                     {doc.web_url && <a href={doc.web_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#2E69E0] hover:underline"><ExternalLink size={11} />Drive</a>}
+                    {doc._kind === 'extra' && <button onClick={() => borrarExtraDoc(doc)} title="Borrar este documento" className="inline-flex items-center justify-center w-8 h-8 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>}
                   </div>
                 </div>
                 {docEditing ? (
@@ -761,7 +811,72 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, configN
             );
           })()}
         </div>
+
+        {/* Margen de comentarios (como Google Docs): las notas ancladas a frases. */}
+        {view === 'del' && (
+          <aside className="sticky top-0 flex flex-col gap-2 max-h-[calc(100vh-120px)] overflow-y-auto pb-6">
+            <div className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF] px-1 pt-1">Comentarios</div>
+            {comments.length === 0 && (
+              <div className="text-[11px] text-[#AEB4BF] px-1 leading-snug">Marcá una frase en el texto y tocá <b>Comentar</b> para dejar una nota acá.</div>
+            )}
+            {[...comments].sort((a, b) => (a.resolved ? 1 : 0) - (b.resolved ? 1 : 0) || (new Date(a.created_at) - new Date(b.created_at))).map(c => (
+              <div key={c.id} onClick={() => irAComment(c)}
+                className="rounded-lg border bg-white p-2.5 cursor-pointer transition-colors"
+                style={{ borderColor: flashCmt === c.id ? '#2E69E0' : '#E7EAF0', boxShadow: flashCmt === c.id ? '0 0 0 2px #DBEAFE' : 'none', opacity: c.resolved ? 0.6 : 1 }}>
+                {c.quote && <div className="text-[10.5px] text-[#8A6D2B] border-l-2 border-[#EAB308] pl-1.5 mb-1 italic line-clamp-2">“{c.quote}”</div>}
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ background: colorFor(c.author_id || c.author_name) }}>{initialOf(c.author_name)}</span>
+                  <span className="text-[11.5px] font-bold text-[#1A1D26] truncate">{c.author_name || 'Alguien'}</span>
+                  <span className="text-[10px] text-[#AEB4BF] ml-auto shrink-0">{haceRato(c.created_at)}</span>
+                </div>
+                <div className="text-[12px] text-[#3F4653] leading-snug whitespace-pre-wrap break-words" style={{ textDecoration: c.resolved ? 'line-through' : 'none' }}>{c.body}</div>
+                <div className="flex items-center gap-1 mt-1.5">
+                  <button onClick={(e) => { e.stopPropagation(); resolverComment(c); }} className="inline-flex items-center gap-1 text-[10.5px] font-semibold py-0.5 px-1.5 rounded border-none cursor-pointer" style={c.resolved ? { background: '#F1F3F7', color: '#6B7280' } : { background: '#ECFDF5', color: '#15803D' }}><Check size={11} strokeWidth={3} />{c.resolved ? 'Reabrir' : 'Resolver'}</button>
+                  {c.author_id === by && <button onClick={(e) => { e.stopPropagation(); borrarComment(c); }} title="Borrar" className="inline-flex items-center justify-center w-6 h-6 rounded text-[#C3C9D4] hover:text-[#B91C1C] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer"><Trash2 size={11} /></button>}
+                </div>
+              </div>
+            ))}
+          </aside>
+        )}
       </div>
+
+      {/* Botón flotante al marcar texto + caja para escribir el comentario. */}
+      {selBtn && !composer && (
+        <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={() => { setComposer({ quote: selBtn.quote, sectionId: selBtn.sectionId, top: selBtn.top, left: selBtn.left }); setDraft(''); setSelBtn(null); }}
+          className="fixed z-[70] inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-[#1A1D26] text-white text-[12px] font-semibold cursor-pointer shadow-lg"
+          style={{ top: selBtn.top, left: selBtn.left, transform: 'translate(-50%,-130%)' }}>
+          <MessageSquare size={13} />Comentar
+        </button>
+      )}
+      {composer && (
+        <div onMouseDown={(e) => e.stopPropagation()} className="fixed z-[71] bg-white rounded-xl border border-[#E2E5EB] p-3 w-[300px]"
+          style={{ top: Math.min(composer.top, (typeof window !== 'undefined' ? window.innerHeight : 800) - 200), left: Math.min(composer.left, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 320), transform: 'translate(-50%, 10px)', boxShadow: '0 12px 40px rgba(10,22,40,.22)' }}>
+          <div className="text-[10.5px] text-[#8A6D2B] border-l-2 border-[#EAB308] pl-1.5 mb-2 italic line-clamp-3">“{composer.quote}”</div>
+          <textarea value={draft} autoFocus onChange={e => setDraft(e.target.value)} rows={3}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); comentarQuote(); } if (e.key === 'Escape') { setComposer(null); setDraft(''); } }}
+            placeholder="Escribí tu comentario…  (Ctrl+Enter)"
+            className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-snug" />
+          <div className="flex justify-end gap-2 mt-2">
+            <button onClick={() => { setComposer(null); setDraft(''); }} className="py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[12px] font-semibold cursor-pointer">Cancelar</button>
+            <button onClick={comentarQuote} disabled={!draft.trim()} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50"><Send size={12} />Comentar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: crear un documento nuevo del cliente. */}
+      {newDocOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setNewDocOpen(false); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[380px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Nuevo documento del cliente</div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3">Aparece en todos los DEL de este cliente. Lo podés editar como cualquier documento.</div>
+            <input type="text" value={newDocTitle} autoFocus onChange={e => setNewDocTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') crearDocNuevo(); if (e.key === 'Escape') setNewDocOpen(false); }} placeholder="Nombre del documento" className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#7C3AED]" />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setNewDocOpen(false)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+              <button onClick={crearDocNuevo} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer">Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
