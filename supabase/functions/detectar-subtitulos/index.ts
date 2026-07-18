@@ -21,6 +21,9 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const DETECT_TOKEN = Deno.env.get("DETECT_TOKEN") ?? "";
 const BUNNY_HOST = Deno.env.get("BUNNY_HOSTNAME") ?? "";
+// Clave de "Token Authentication" del pull zone de Bunny (Bunny → Pull Zone → Security).
+// El CDN está protegido: sin firmar, cada URL devuelve 403. NO es la API key de Stream.
+const BUNNY_TOKEN_KEY = Deno.env.get("BUNNY_TOKEN_KEY") ?? "";
 const API_URL = "https://api.anthropic.com/v1/messages";
 
 const cors = {
@@ -31,19 +34,31 @@ const cors = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
 
+// Firma una ruta del CDN con el token de Bunny (Token Authentication):
+//   token = base64url( sha256( security_key + path + expires ) ) ; url = path?token=…&expires=…
+// Sin esto el CDN devuelve 403.
+async function firmar(path: string): Promise<string> {
+  const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hora
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(BUNNY_TOKEN_KEY + path + expires));
+  let bin = ""; const b = new Uint8Array(buf);
+  for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+  const token = btoa(bin).replace(/\n/g, "").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${path}?token=${token}&expires=${expires}`;
+}
+
 // Baja la grilla de previsualización del CDN de Bunny y la devuelve en base64.
 // Bunny arma /{guid}/seek/_0.jpg (grilla 6x6, hasta 36 cuadros a lo largo del video).
 // _0 cubre los primeros ~72s: si hay subtítulos, casi siempre ya se ven ahí.
-async function bajarGrilla(guid: string): Promise<string | null> {
-  const url = `https://${BUNNY_HOST}/${guid}/seek/_0.jpg`;
+// Devuelve { b64 } | { status } (para distinguir 403 de token de 404 de path).
+async function bajarGrilla(guid: string): Promise<{ b64?: string; status?: number }> {
+  const url = `https://${BUNNY_HOST}${await firmar(`/${guid}/seek/_0.jpg`)}`;
   const res = await fetch(url);
-  if (!res.ok) return null;
+  if (!res.ok) return { status: res.status };
   const buf = new Uint8Array(await res.arrayBuffer());
-  if (!buf.length) return null;
-  // base64 sin newlines (lo que pide la API de Anthropic).
+  if (!buf.length) return { status: 204 };
   let bin = "";
   for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-  return btoa(bin);
+  return { b64: btoa(bin) };
 }
 
 Deno.serve(async (req) => {
@@ -53,13 +68,18 @@ Deno.serve(async (req) => {
     const authed = (DETECT_TOKEN && auth === DETECT_TOKEN) || (SERVICE_ROLE && auth === SERVICE_ROLE);
     if (!authed) return json({ ok: false, error: "no autorizado" }, 401);
     if (!BUNNY_HOST) return json({ ok: false, error: "falta BUNNY_HOSTNAME" }, 500);
+    if (!BUNNY_TOKEN_KEY) return json({ ok: false, error: "falta BUNNY_TOKEN_KEY (clave de token del pull zone)" }, 500);
 
     const { bunny_id } = await req.json();
     if (!bunny_id) return json({ ok: false, error: "falta bunny_id" }, 400);
 
-    // 1) grilla de fotogramas del CDN de Bunny
-    const b64 = await bajarGrilla(String(bunny_id));
-    if (!b64) return json({ ok: false, error: "sin_grilla" }); // aún procesando / sin seek — reintentar luego
+    // 1) grilla de fotogramas del CDN de Bunny (URL firmada)
+    const grilla = await bajarGrilla(String(bunny_id));
+    if (!grilla.b64) {
+      // 403 = token mal (revisar BUNNY_TOKEN_KEY) · 404 = esa ruta/seek no existe (video corto o path distinto)
+      return json({ ok: false, error: grilla.status === 403 ? "cdn_403_token" : grilla.status === 404 ? "sin_grilla_404" : "sin_grilla", status: grilla.status });
+    }
+    const b64 = grilla.b64;
 
     // 2) API key de Anthropic desde secure_config (mismo patrón que detectar-avatar)
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
