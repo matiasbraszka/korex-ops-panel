@@ -26,7 +26,12 @@ export default function ResourceLightbox({ r, onClose }) {
           <button onClick={onClose} title="Cerrar (Esc)" className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10 border-none bg-transparent cursor-pointer"><X size={17} /></button>
         </div>
         <div className="rounded-xl overflow-hidden bg-black flex items-center justify-center" style={{ minWidth: 280 }}>
-          {isVid ? (
+          {isVid && r.provider === 'bunny' ? (
+            // Player de Bunny (streaming adaptativo, reproduce en cualquier navegador).
+            <div style={{ width: 'min(92vw, 1100px)', aspectRatio: '16 / 9' }}>
+              <iframe src={`${r.public_url}?autoplay=true&preload=true`} loading="lazy" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen title={r.title} className="w-full h-full block border-none" />
+            </div>
+          ) : isVid ? (
             <video src={r.public_url} controls autoPlay playsInline className="max-w-[92vw] max-h-[80vh] block" />
           ) : isImg ? (
             <img src={r.public_url} alt={r.title} className="max-w-[92vw] max-h-[80vh] block object-contain" />

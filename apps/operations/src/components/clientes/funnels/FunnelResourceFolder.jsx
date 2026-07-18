@@ -5,6 +5,7 @@
 // Cada carpeta es (avatar_id + bucket_key). Se abre/cierra como en el Drive, dice
 // cuántos elementos tiene, y adentro están los recursos subidos con su miniatura.
 import { useEffect, useRef, useState } from 'react';
+import * as tus from 'tus-js-client';
 import { supabase, sbFetch } from '@korex/db';
 import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil } from 'lucide-react';
 import ResourceLightbox from './ResourceLightbox';
@@ -12,6 +13,27 @@ import ResourceLightbox from './ResourceLightbox';
 const BUCKET = 'funnel-recursos';
 const kindOf = (mime) => (mime || '').startsWith('image/') ? 'image' : (mime || '').startsWith('video/') ? 'video' : 'other';
 const safeName = (s) => String(s || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+
+// Sube un video directo a Bunny (aguanta cualquier tamaño, sin pasar por Supabase).
+// El servidor crea el video y firma la subida; el navegador la manda por TUS.
+async function subirABunny(file, title, onProgress) {
+  const { data, error } = await supabase.functions.invoke('bunny-video', { body: { action: 'create', title } });
+  if (error || !data?.ok) throw new Error(data?.error || error?.message || 'No pude preparar la subida a Bunny');
+  const { videoId, libraryId, signature, expiration, tusEndpoint, embedUrl, hostname } = data;
+  await new Promise((resolve, reject) => {
+    const up = new tus.Upload(file, {
+      endpoint: tusEndpoint,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: { AuthorizationSignature: signature, AuthorizationExpire: String(expiration), VideoId: videoId, LibraryId: String(libraryId) },
+      metadata: { filetype: file.type, title },
+      onError: reject,
+      onProgress: (sent, total) => onProgress?.(total ? sent / total : 0),
+      onSuccess: resolve,
+    });
+    up.start();
+  });
+  return { videoId, embedUrl, thumbUrl: `https://${hostname}/${videoId}/thumbnail.jpg` };
+}
 
 function Tile({ r, onDelete, onRename, onOpen }) {
   const [failed, setFailed] = useState(false);
@@ -23,6 +45,9 @@ function Tile({ r, onDelete, onRename, onOpen }) {
       <button onClick={() => onOpen(r)} title={isVid ? `Reproducir: ${r.title}` : `Ver: ${r.title}`} className="relative w-full aspect-[4/3] bg-[#F4F5F7] flex items-center justify-center overflow-hidden cursor-pointer border-none p-0">
         {isImg && r.public_url && !failed ? (
           <img src={r.public_url} alt={r.title} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
+        ) : isVid && r.provider === 'bunny' && r.storage_path && !failed ? (
+          // Bunny genera la miniatura del video (puede tardar unos segundos tras subir).
+          <img src={r.storage_path} alt={r.title} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
         ) : isVid && r.public_url && !failed ? (
           // El #t=0.5 hace que el navegador muestre el cuadro a los 0,5s como miniatura.
           <video src={r.public_url + '#t=0.5'} muted preload="metadata" onError={() => setFailed(true)} className="w-full h-full object-cover pointer-events-none" />
@@ -63,7 +88,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at&strategy_id=eq.${encodeURIComponent(strategyId)}&bucket_key=eq.${encodeURIComponent(bucketKey)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id&strategy_id=eq.${encodeURIComponent(strategyId)}&bucket_key=eq.${encodeURIComponent(bucketKey)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&order=created_at.desc`;
       const rows = await sbFetch(q);
       setItems(Array.isArray(rows) ? rows : []);
     } catch { setItems([]); }
@@ -74,22 +99,39 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     const files = Array.from(fileList || []);
     if (!files.length || !strategyId) return;
     setOpen(true);
-    let done = 0; setBusy({ done, total: files.length });
+    let done = 0; setBusy({ done, total: files.length, pct: 0 });
     for (const file of files) {
+      const titulo = file.name.replace(/\.[^.]+$/, '');
+      const esVideo = (file.type || '').startsWith('video/');
       try {
-        const path = `${strategyId}/${avatarId || 'cliente'}/${bucketKey}/${Date.now()}_${safeName(file.name)}`;
-        const up = await supabase.storage.from(BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
-        if (up.error) { window.alert('No pude subir "' + file.name + '": ' + up.error.message); continue; }
-        const pub = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-        const { data, error } = await supabase.from('funnel_resources').insert({
-          strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: bucketKey,
-          title: file.name.replace(/\.[^.]+$/, ''), storage_path: path, public_url: pub,
-          mime_type: file.type || null, kind: kindOf(file.type), size_bytes: file.size || null, created_by: by || null,
-        }).select().single();
-        if (error) { window.alert('Subí el archivo pero no pude guardarlo: ' + error.message); continue; }
-        setItems((prev) => [data, ...(prev || [])]);
-      } catch (e) { window.alert('Error subiendo: ' + (e?.message || e)); }
-      done += 1; setBusy({ done, total: files.length });
+        let row;
+        if (esVideo) {
+          // Video → Bunny (convierte y reproduce en cualquier lado, cualquier tamaño).
+          const { videoId, embedUrl, thumbUrl } = await subirABunny(file, titulo, (frac) => setBusy({ done, total: files.length, pct: Math.round(frac * 100) }));
+          const { data, error } = await supabase.from('funnel_resources').insert({
+            strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: bucketKey,
+            title: titulo, provider: 'bunny', bunny_id: videoId, storage_path: thumbUrl, public_url: embedUrl,
+            mime_type: file.type || null, kind: 'video', size_bytes: file.size || null, created_by: by || null,
+          }).select().single();
+          if (error) { window.alert('Subí el video a Bunny pero no pude guardarlo: ' + error.message); continue; }
+          row = data;
+        } else {
+          // Imagen (u otro) → Supabase Storage.
+          const path = `${strategyId}/${avatarId || 'cliente'}/${bucketKey}/${Date.now()}_${safeName(file.name)}`;
+          const up = await supabase.storage.from(BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
+          if (up.error) { window.alert('No pude subir "' + file.name + '": ' + up.error.message); continue; }
+          const pub = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+          const { data, error } = await supabase.from('funnel_resources').insert({
+            strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: bucketKey,
+            title: titulo, provider: 'supabase', storage_path: path, public_url: pub,
+            mime_type: file.type || null, kind: kindOf(file.type), size_bytes: file.size || null, created_by: by || null,
+          }).select().single();
+          if (error) { window.alert('Subí el archivo pero no pude guardarlo: ' + error.message); continue; }
+          row = data;
+        }
+        setItems((prev) => [row, ...(prev || [])]);
+      } catch (e) { window.alert('Error subiendo "' + file.name + '": ' + (e?.message || e)); }
+      done += 1; setBusy({ done, total: files.length, pct: 0 });
     }
     setBusy(null);
     if (fileRef.current) fileRef.current.value = '';
@@ -98,7 +140,11 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const borrar = async (r) => {
     if (!window.confirm(`¿Borrar "${r.title}"? No se puede deshacer.`)) return;
     setItems((prev) => (prev || []).filter(x => x.id !== r.id));
-    await supabase.storage.from(BUCKET).remove([r.storage_path]).catch(() => {});
+    if (r.provider === 'bunny') {
+      await supabase.functions.invoke('bunny-video', { body: { action: 'delete', videoId: r.bunny_id } }).catch(() => {});
+    } else {
+      await supabase.storage.from(BUCKET).remove([r.storage_path]).catch(() => {});
+    }
     await supabase.from('funnel_resources').delete().eq('id', r.id);
   };
 
@@ -134,8 +180,13 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             )}
           </div>
           {busy && (
-            <div className="flex items-center gap-2 text-[11px] font-semibold py-1.5 mb-1" style={{ color }}>
-              <Loader2 size={13} className="animate-spin" />Subiendo {busy.done + 1} de {busy.total}…
+            <div className="py-1.5 mb-1">
+              <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color }}>
+                <Loader2 size={13} className="animate-spin" />Subiendo {busy.done + 1} de {busy.total}{busy.pct ? ` · ${busy.pct}%` : '…'}
+              </div>
+              {busy.pct > 0 && (
+                <div className="h-1 rounded-full bg-[#EDF0F5] mt-1 overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${busy.pct}%`, background: color }} /></div>
+              )}
             </div>
           )}
           <input ref={fileRef} type="file" accept={accept} multiple className="hidden" onChange={e => subir(e.target.files)} />
