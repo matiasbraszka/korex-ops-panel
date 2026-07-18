@@ -216,6 +216,18 @@ const VID_BUCKETS = [
   { key: 'vsl_rec', label: 'VSL · grabación',      url: 'vsl_rec_folder_url',  files: 'vsl_rec_files',  c: '#16A34A', bg: '#ECFDF3', border: '#C9F0D8' },
   { key: 'vsl_edit', label: 'VSL · edición',       url: 'vsl_edit_folder_url', files: 'vsl_edit_files', c: '#2E69E0', bg: '#EFF6FF', border: '#C7DBFB', voomly: true },
 ];
+// Las 6 categorías estándar de recursos del CLIENTE (Matías 2026-07-18): sirven para
+// todos sus funnels, pueden ser foto o video. La migración del Drive ordena el material
+// en estas carpetas. "Sin clasificar" recibe lo que no se pudo ubicar solo.
+const CLIENT_CATS = [
+  { key: 'autoridad',   label: 'Fotos de Autoridad',   c: '#2E69E0', bg: '#EAF1FF' },
+  { key: 'estilo_vida', label: 'Fotos Estilo de vida', c: '#0E7490', bg: '#E7FBFE' },
+  { key: 'branding',    label: 'Branding (colores, logo)', c: '#7C3AED', bg: '#F3EFFF' },
+  { key: 'productos',   label: 'Foto de productos',    c: '#15803D', bg: '#E8F7EE' },
+  { key: 'empresa',     label: 'Material de la empresa', c: '#B45309', bg: '#FFF7ED' },
+  { key: 'testimonios', label: 'Testimonios',          c: '#DB2777', bg: '#FDF2F8' },
+  { key: 'sin_clasif',  label: 'Sin clasificar',       c: '#6B7280', bg: '#F1F3F7' },
+];
 // Eventos de conversión estándar: se pre-cargan en cada funnel nuevo; los demás son personalizados.
 const STD_EVENTS = ['Visitas', 'Registro lead', 'Thank you page'];
 const stdEvents = () => STD_EVENTS.map(n => ({ id: rid('ev'), name: n, purpose: '', code: '' }));
@@ -1171,7 +1183,25 @@ Quedo a la espera de tu respuesta`;
         );
       })}
 
-      {/* Galería de imágenes y videos del Drive (Etapa C, paso $0: antes de mover bytes). */}
+      {/* Recursos del CLIENTE: las 6 categorías estándar (fotos + videos), compartidas por
+          todos sus funnels. Acá ordena la migración del Drive. */}
+      <div className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
+        <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EEF2FF] text-[#4F46E5] shrink-0"><ImageIcon size={15} /></span>
+          <div className="min-w-0">
+            <div className="text-[13px] font-bold text-[#1A1D26]">Recursos del cliente</div>
+            <div className="text-[11px] text-[#9098A4]">Branding, autoridad, productos y testimonios (fotos o videos). Sirven para todos los funnels de {clientName || 'este cliente'}.</div>
+          </div>
+        </div>
+        <div className="p-2.5 flex flex-col gap-1.5">
+          {CLIENT_CATS.map(cat => (
+            <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
+              label={cat.label} color={cat.c} bg={cat.bg} by={meId} />
+          ))}
+        </div>
+      </div>
+
+      {/* Galería de imágenes y videos del Drive (referencia de lo que todavía está en Drive). */}
       <DriveMediaGallery clientId={clientId} strategyId={f.strategy_id} />
 
       {/* Branding e imágenes: son del CLIENTE (sirven para todos sus funnels). */}

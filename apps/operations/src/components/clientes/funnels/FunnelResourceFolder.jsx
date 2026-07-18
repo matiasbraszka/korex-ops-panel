@@ -78,27 +78,37 @@ function Tile({ r, onDelete, onRename, onOpen }) {
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*' }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState(null);   // recurso abierto en el reproductor
   const fileRef = useRef(null);
+  // Ámbito: 'funnel' (por avatar, dentro de una estrategia) o 'client' (categorías del
+  // cliente, compartidas por todos sus funnels — strategy_id null).
+  const scopeFilter = clientScope
+    ? `client_id=eq.${encodeURIComponent(clientId)}&strategy_id=is.null&avatar_id=is.null`
+    : `strategy_id=eq.${encodeURIComponent(strategyId)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}`;
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id&strategy_id=eq.${encodeURIComponent(strategyId)}&bucket_key=eq.${encodeURIComponent(bucketKey)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
       setItems(Array.isArray(rows) ? rows : []);
     } catch { setItems([]); }
   };
-  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, avatarId, bucketKey]);
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope]);
 
   const subir = async (fileList) => {
     const files = Array.from(fileList || []);
-    if (!files.length || !strategyId) return;
+    if (!files.length || (!clientScope && !strategyId) || (clientScope && !clientId)) return;
     setOpen(true);
+    // Campos comunes de dónde vive el recurso (funnel o cliente).
+    const base = clientScope
+      ? { strategy_id: null, client_id: clientId, avatar_id: null }
+      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null };
+    const pathBase = clientScope ? `cliente/${clientId}` : `${strategyId}/${avatarId || 'cliente'}`;
     let done = 0; setBusy({ done, total: files.length, pct: 0 });
     for (const file of files) {
       const titulo = file.name.replace(/\.[^.]+$/, '');
@@ -109,7 +119,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
           // Video → Bunny (convierte y reproduce en cualquier lado, cualquier tamaño).
           const { videoId, embedUrl, thumbUrl } = await subirABunny(file, titulo, (frac) => setBusy({ done, total: files.length, pct: Math.round(frac * 100) }));
           const { data, error } = await supabase.from('funnel_resources').insert({
-            strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: bucketKey,
+            ...base, bucket_key: bucketKey,
             title: titulo, provider: 'bunny', bunny_id: videoId, storage_path: thumbUrl, public_url: embedUrl,
             mime_type: file.type || null, kind: 'video', size_bytes: file.size || null, created_by: by || null,
           }).select().single();
@@ -117,12 +127,12 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
           row = data;
         } else {
           // Imagen (u otro) → Supabase Storage.
-          const path = `${strategyId}/${avatarId || 'cliente'}/${bucketKey}/${Date.now()}_${safeName(file.name)}`;
+          const path = `${pathBase}/${bucketKey}/${Date.now()}_${safeName(file.name)}`;
           const up = await supabase.storage.from(BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
           if (up.error) { window.alert('No pude subir "' + file.name + '": ' + up.error.message); continue; }
           const pub = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
           const { data, error } = await supabase.from('funnel_resources').insert({
-            strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: bucketKey,
+            ...base, bucket_key: bucketKey,
             title: titulo, provider: 'supabase', storage_path: path, public_url: pub,
             mime_type: file.type || null, kind: kindOf(file.type), size_bytes: file.size || null, created_by: by || null,
           }).select().single();
