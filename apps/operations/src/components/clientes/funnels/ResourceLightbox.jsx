@@ -15,6 +15,11 @@ export default function ResourceLightbox({ r, onClose }) {
   if (!r) return null;
   const isImg = r.kind === 'image';
   const isVid = r.kind === 'video';
+  // Para los videos de Bunny, la descarga es el ARCHIVO ORIGINAL (4K si el original lo
+  // es, sin re-comprimir). Se sirve en /original (derivado de la miniatura /thumbnail.jpg).
+  const downloadUrl = r.provider === 'bunny'
+    ? (r.storage_path || '').replace('/thumbnail.jpg', '/original')
+    : r.public_url;
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 md:p-8" style={{ background: 'rgba(8,12,20,.82)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -22,7 +27,7 @@ export default function ResourceLightbox({ r, onClose }) {
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[13px] font-semibold text-white/90 truncate flex-1 min-w-0">{r.title}</span>
           <a href={r.public_url} target="_blank" rel="noreferrer" title="Abrir en pestaña nueva" className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10"><ExternalLink size={15} /></a>
-          <a href={r.public_url} download title="Descargar" className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10"><Download size={15} /></a>
+          <a href={downloadUrl} download target="_blank" rel="noreferrer" title={r.provider === 'bunny' ? 'Descargar el original (máxima calidad)' : 'Descargar'} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10"><Download size={15} /></a>
           <button onClick={onClose} title="Cerrar (Esc)" className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10 border-none bg-transparent cursor-pointer"><X size={17} /></button>
         </div>
         <div className="rounded-xl overflow-hidden bg-black flex items-center justify-center" style={{ minWidth: 280 }}>
