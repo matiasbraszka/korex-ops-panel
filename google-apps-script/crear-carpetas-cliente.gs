@@ -51,6 +51,7 @@ function doPost(e) {
     if (b.action === 'read_doc_rich') return readDocRich(b);              // idem PERO con formato (títulos, negritas, colores, tablas, links)
     if (b.action === 'write_brief') return writeBrief(b);                 // crea/actualiza el brief del cliente
     if (b.action === 'ensure_avatar_folders') return ensureAvatarFolders(b); // subcarpetas por avatar en Anuncios
+    if (b.action === 'get_drive_token') return driveToken(b);            // permiso temporal de lectura del Drive (para migrar recursos a Bunny/Supabase)
 
     const name = String(b.name || '').trim();
     if (!name) return json({ ok: false, error: 'missing_name' });
@@ -250,6 +251,14 @@ function moveNode(b) {
 }
 
 // Manda a la papelera un archivo o carpeta (ej. una carpeta de estrategia que quedó vacía).
+// Permiso temporal de lectura del Drive (OAuth token, ~1h) para migrar los recursos:
+// el motor de migración lo usa del lado servidor para que Bunny/Supabase bajen cada
+// archivo directo de la API de Drive (files.get?alt=media), sin importar el tamaño y sin
+// hacer públicos los archivos. Protegido por el SHARED_SECRET (ya validado en doPost).
+function driveToken() {
+  return json({ ok: true, token: ScriptApp.getOAuthToken() });
+}
+
 // No borra definitivo (queda recuperable en la papelera). { nodeId }
 function trashNode(b) {
   var nodeId = String(b.nodeId || '').trim();
