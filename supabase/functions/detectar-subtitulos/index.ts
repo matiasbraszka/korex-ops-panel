@@ -23,7 +23,8 @@ const DETECT_TOKEN = Deno.env.get("DETECT_TOKEN") ?? "";
 const BUNNY_HOST = Deno.env.get("BUNNY_HOSTNAME") ?? "";
 // Clave de "Token Authentication" del pull zone de Bunny (Bunny → Pull Zone → Security).
 // El CDN está protegido: sin firmar, cada URL devuelve 403. NO es la API key de Stream.
-const BUNNY_TOKEN_KEY = Deno.env.get("BUNNY_TOKEN_KEY") ?? "";
+// Matías la cargó como secret `bonny_token`; dejamos fallback al nombre anterior.
+const BUNNY_TOKEN_KEY = Deno.env.get("bonny_token") ?? Deno.env.get("BUNNY_TOKEN_KEY") ?? "";
 const API_URL = "https://api.anthropic.com/v1/messages";
 
 const cors = {
