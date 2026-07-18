@@ -16,7 +16,6 @@ import Modal from '../Modal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
-import DriveMediaGallery from './funnels/DriveMediaGallery';
 import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
 import { openUrl, copyText } from './recursosShared';
@@ -225,7 +224,11 @@ const CLIENT_CATS = [
   { key: 'branding',    label: 'Branding (colores, logo)', c: '#7C3AED', bg: '#F3EFFF' },
   { key: 'productos',   label: 'Foto de productos',    c: '#15803D', bg: '#E8F7EE' },
   { key: 'empresa',     label: 'Material de la empresa', c: '#B45309', bg: '#FFF7ED' },
-  { key: 'testimonios', label: 'Testimonios',          c: '#DB2777', bg: '#FDF2F8' },
+  // Material de anuncios y VSL a nivel cliente (cuando no se pudo asignar avatar).
+  { key: 'ad_rec',      label: 'Anuncios · grabaciones', c: '#C2410C', bg: '#FFF3EC' },
+  { key: 'ad_edit',     label: 'Anuncios · ediciones',   c: '#EA580C', bg: '#FFF3EC' },
+  { key: 'vsl_rec',     label: 'VSL · grabaciones',      c: '#4338CA', bg: '#EEF0FF' },
+  { key: 'vsl_edit',    label: 'VSL · ediciones',        c: '#6D28D9', bg: '#F3EFFF' },
   { key: 'sin_clasif',  label: 'Sin clasificar',       c: '#6B7280', bg: '#F1F3F7' },
 ];
 // Eventos de conversión estándar: se pre-cargan en cada funnel nuevo; los demás son personalizados.
@@ -820,6 +823,7 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   const [folderPick, setFolderPick] = useState(null); // { av, kind } — carpeta que se elige a mano
   const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
   const [delOpen, setDelOpen] = useState(false);    // lector del DEL a pantalla completa
+  const [clientResTick, setClientResTick] = useState(0); // sube al mover un recurso → recarga todas las carpetas
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
@@ -1183,31 +1187,43 @@ Quedo a la espera de tu respuesta`;
         );
       })}
 
-      {/* Recursos del CLIENTE: las 6 categorías estándar (fotos + videos), compartidas por
+      {/* Testimonios: van POR FUNNEL (no al apartado general del cliente). Una carpeta por
+          este funnel, compartida por todos sus avatares. */}
+      <div className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
+        <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#FCE7F3] text-[#DB2777] shrink-0"><ImageIcon size={15} /></span>
+          <div className="min-w-0">
+            <div className="text-[13px] font-bold text-[#1A1D26]">Testimonios de este funnel</div>
+            <div className="text-[11px] text-[#9098A4]">Fotos o videos de testimonios, propios de este funnel.</div>
+          </div>
+        </div>
+        <div className="p-2.5">
+          <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} bucketKey="testimonios"
+            label="Testimonios" color="#DB2777" bg="#FDF2F8" by={meId} />
+        </div>
+      </div>
+
+      {/* Recursos del CLIENTE: las categorías estándar (fotos + videos), compartidas por
           todos sus funnels. Acá ordena la migración del Drive. */}
       <div className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
         <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
           <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EEF2FF] text-[#4F46E5] shrink-0"><ImageIcon size={15} /></span>
           <div className="min-w-0">
             <div className="text-[13px] font-bold text-[#1A1D26]">Recursos del cliente</div>
-            <div className="text-[11px] text-[#9098A4]">Branding, autoridad, productos y testimonios (fotos o videos). Sirven para todos los funnels de {clientName || 'este cliente'}.</div>
+            <div className="text-[11px] text-[#9098A4]">Branding, autoridad, productos, anuncios y VSL (fotos o videos). Sirven para todos los funnels de {clientName || 'este cliente'}.</div>
           </div>
         </div>
         <div className="p-2.5 flex flex-col gap-1.5">
           {CLIENT_CATS.map(cat => (
             <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
-              label={cat.label} color={cat.c} bg={cat.bg} by={meId} />
+              label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={CLIENT_CATS}
+              reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
           ))}
         </div>
-      </div>
-
-      {/* Galería de imágenes y videos del Drive (referencia de lo que todavía está en Drive). */}
-      <DriveMediaGallery clientId={clientId} strategyId={f.strategy_id} />
-
-      {/* Branding e imágenes: son del CLIENTE (sirven para todos sus funnels). */}
-      <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-[#FBFCFE] py-3 px-4 flex items-start gap-2.5 text-[11.5px] text-[#9098A4]">
-        <ImageIcon size={15} className="shrink-0 mt-px" />
-        <span>Branding e imágenes del cliente (logo, colores, fotos) sirven para todos sus funnels: viven en el <b>Contexto</b> del cliente. Abajo, la galería trae lo que ya está en el Drive del cliente.</span>
+        <div className="px-4 pb-3 -mt-1 text-[11px] text-[#AEB4BF] flex items-center gap-1.5">
+          <ImageIcon size={13} className="shrink-0" />
+          <span>Tip: arrastrá un recurso de una carpeta a otra para reordenarlo.</span>
+        </div>
       </div>
     </div>
   );

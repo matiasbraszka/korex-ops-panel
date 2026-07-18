@@ -35,13 +35,31 @@ async function subirABunny(file, title, onProgress) {
   return { videoId, embedUrl, thumbUrl: `https://${hostname}/${videoId}/thumbnail.jpg` };
 }
 
-function Tile({ r, onDelete, onRename, onOpen }) {
+function Tile({ r, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const isImg = r.kind === 'image';
   const isVid = r.kind === 'video';
   return (
-    <div className="group relative flex flex-col rounded-lg border border-[#E7EAF0] bg-white overflow-hidden">
+    <div draggable
+      onDragStart={(e) => { const ids = resolveDragIds(r.id); e.dataTransfer.setData('application/x-korex-resource', JSON.stringify({ ids })); e.dataTransfer.effectAllowed = 'move'; }}
+      title="Arrastrá para mover de carpeta"
+      className={`group relative flex flex-col rounded-lg border bg-white overflow-hidden cursor-grab active:cursor-grabbing ${selected ? 'border-[#2E69E0] ring-2 ring-[#2E69E0]/40' : 'border-[#E7EAF0]'}`}>
+      {/* Título ARRIBA */}
+      <div className="flex items-center gap-1 px-1.5 pt-1.5 pb-1">
+        {editing ? (
+          <input autoFocus defaultValue={r.title}
+            onBlur={(e) => { const v = e.target.value.trim(); setEditing(false); if (v && v !== r.title) onRename(r, v); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditing(false); }}
+            className="flex-1 min-w-0 text-[10.5px] font-semibold text-[#1A1D26] border border-[#2E69E0] rounded px-1 py-0.5 outline-none" />
+        ) : (
+          <button onClick={() => setEditing(true)} title="Cambiar el título" className="flex items-center gap-1 flex-1 min-w-0 text-left border-none bg-transparent cursor-pointer p-0">
+            <span className="text-[10.5px] font-semibold text-[#3F4653] truncate">{r.title}</span>
+            <Pencil size={9} className="opacity-0 group-hover:opacity-100 text-[#C3C9D4] shrink-0 transition-opacity" />
+          </button>
+        )}
+      </div>
+      {/* Miniatura (clic = abrir/reproducir) */}
       <button onClick={() => onOpen(r)} title={isVid ? `Reproducir: ${r.title}` : `Ver: ${r.title}`} className="relative w-full aspect-[4/3] bg-[#F4F5F7] flex items-center justify-center overflow-hidden cursor-pointer border-none p-0">
         {isImg && r.public_url && !failed ? (
           <img src={r.public_url} alt={r.title} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
@@ -60,31 +78,30 @@ function Tile({ r, onDelete, onRename, onOpen }) {
           </span>
         )}
       </button>
-      <div className="flex items-center gap-1 px-1.5 py-1">
-        {editing ? (
-          <input autoFocus defaultValue={r.title}
-            onBlur={(e) => { const v = e.target.value.trim(); setEditing(false); if (v && v !== r.title) onRename(r, v); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditing(false); }}
-            className="flex-1 min-w-0 text-[10.5px] font-semibold text-[#1A1D26] border border-[#2E69E0] rounded px-1 py-0.5 outline-none" />
-        ) : (
-          <button onClick={() => setEditing(true)} title="Cambiar el título" className="flex items-center gap-1 flex-1 min-w-0 text-left border-none bg-transparent cursor-pointer p-0">
-            <span className="text-[10.5px] font-semibold text-[#3F4653] truncate">{r.title}</span>
-            <Pencil size={9} className="opacity-0 group-hover:opacity-100 text-[#C3C9D4] shrink-0 transition-opacity" />
-          </button>
-        )}
-        <button onClick={() => onDelete(r)} title="Borrar recurso" className="opacity-0 group-hover:opacity-100 w-5 h-5 inline-flex items-center justify-center rounded text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 transition-opacity"><Trash2 size={11} /></button>
+      {/* Acciones ABAJO: elegir (para mover en masa) + borrar */}
+      <div className="flex items-center gap-1 px-1.5 py-1.5 border-t border-[#F1F3F7]">
+        <label onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 cursor-pointer select-none" title="Tildá para seleccionar y mover varias juntas">
+          <input type="checkbox" checked={selected} onChange={() => onToggleSelect(r.id)} className="w-3.5 h-3.5 accent-[#2E69E0] cursor-pointer" />
+          <span className={`text-[9.5px] font-semibold ${selected ? 'text-[#2E69E0]' : 'text-[#9098A4]'}`}>Elegir</span>
+        </label>
+        <button onClick={() => onDelete(r)} title="Borrar recurso" className="ml-auto w-5 h-5 inline-flex items-center justify-center rounded text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 transition-colors"><Trash2 size={12} /></button>
       </div>
     </div>
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, reloadTick = 0, onMoved, moveTargets }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
-  const [dragOver, setDragOver] = useState(false);
+  const [dragOver, setDragOver] = useState(false);   // arrastrando un ARCHIVO nuevo encima
+  const [resOver, setResOver] = useState(false);     // arrastrando un RECURSO de otra carpeta
+  const [selected, setSelected] = useState(() => new Set()); // ids tildados para mover en masa
   const [preview, setPreview] = useState(null);   // recurso abierto en el reproductor
   const fileRef = useRef(null);
+  const toggleSel = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Al arrastrar: si el recurso está tildado y hay varios, se lleva TODA la selección.
+  const resolveDragIds = (id) => (selected.has(id) && selected.size > 1) ? Array.from(selected) : [id];
   // Ámbito: 'funnel' (por avatar, dentro de una estrategia) o 'client' (categorías del
   // cliente, compartidas por todos sus funnels — strategy_id null).
   const scopeFilter = clientScope
@@ -93,12 +110,13 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
       setItems(Array.isArray(rows) ? rows : []);
     } catch { setItems([]); }
+    setSelected(new Set());
   };
-  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope]);
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope, reloadTick]);
 
   const subir = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -163,11 +181,46 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     await supabase.from('funnel_resources').update({ title }).eq('id', r.id);
   };
 
-  const onDrop = (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer?.files?.length) subir(e.dataTransfer.files); };
+  // Mueve uno o varios recursos a la carpeta destino (targetKey). Para categorías del
+  // cliente cambia sólo el bucket_key; en funnels, además, re-ubica en este avatar/estrategia.
+  const moverIds = async (ids, targetKey) => {
+    if (!ids?.length || !targetKey) return;
+    const patch = clientScope
+      ? { strategy_id: null, client_id: clientId, avatar_id: null, bucket_key: targetKey }
+      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: targetKey };
+    const { error } = await supabase.from('funnel_resources').update(patch).in('id', ids);
+    if (error) { window.alert('No pude mover: ' + error.message); return; }
+    setSelected(new Set());
+    onMoved?.();   // avisa al padre para que TODAS las carpetas se refresquen
+  };
+
+  const tieneRecurso = (e) => Array.from(e.dataTransfer?.types || []).includes('application/x-korex-resource');
+  const onDragOver = (e) => {
+    e.preventDefault();
+    if (tieneRecurso(e)) { setResOver(true); e.dataTransfer.dropEffect = 'move'; }
+    else setDragOver(true);
+  };
+  const onDragLeave = (e) => {
+    // Sólo apaga el resaltado si el cursor salió de la carpeta entera (no al pasar por un hijo).
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDragOver(false); setResOver(false);
+  };
+  const onDrop = (e) => {
+    e.preventDefault(); setDragOver(false); setResOver(false);
+    const raw = e.dataTransfer.getData('application/x-korex-resource');
+    if (raw) { try { const { ids } = JSON.parse(raw); if (ids?.length) { setOpen(true); moverIds(ids, bucketKey); } } catch {} return; }
+    if (e.dataTransfer?.files?.length) { setOpen(true); subir(e.dataTransfer.files); }
+  };
 
   const n = items?.length ?? 0;
   return (
-    <div className="rounded-lg border" style={{ borderColor: open ? (color + '55') : '#EDF0F5', background: open ? bg : '#FBFCFE' }}>
+    <div className="rounded-lg border relative" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      style={{ borderColor: resOver ? color : (open ? (color + '55') : '#EDF0F5'), background: open ? bg : '#FBFCFE' }}>
+      {resOver && (
+        <div className="absolute inset-0 z-20 rounded-lg border-2 border-dashed flex items-center justify-center pointer-events-none" style={{ borderColor: color, background: bg + 'ee' }}>
+          <span className="text-[11.5px] font-bold" style={{ color }}>Soltá para mover a “{label}”</span>
+        </div>
+      )}
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 w-full py-2 px-2.5 border-none bg-transparent cursor-pointer text-left">
         <FolderOpen size={15} className="shrink-0" style={{ color: n ? color : '#C3C9D4' }} />
         <span className="text-[12px] font-semibold shrink-0" style={{ color: n ? color : '#6B7280' }}>{label}</span>
@@ -178,15 +231,30 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
         <ChevronRight size={14} className="shrink-0 transition-transform text-[#C3C9D4]" style={{ transform: open ? 'rotate(90deg)' : 'none' }} />
       </button>
       {open && (
-        <div className="px-2.5 pb-2.5" onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop}>
+        <div className="px-2.5 pb-2.5">
+          {/* Barra de acción en masa: aparece cuando hay recursos tildados. */}
+          {selected.size > 0 && (
+            <div className="flex items-center gap-2 flex-wrap mb-2 py-1.5 px-2 rounded-lg" style={{ background: '#fff', border: `1px solid ${color}44` }}>
+              <span className="text-[11px] font-bold" style={{ color }}>{selected.size} seleccionada{selected.size === 1 ? '' : 's'}</span>
+              {moveTargets?.length > 0 && (
+                <select value="" onChange={(e) => { if (e.target.value) moverIds(Array.from(selected), e.target.value); }}
+                  className="text-[11px] font-bold rounded-md border-none px-2.5 py-1.5 cursor-pointer outline-none appearance-none" style={{ background: color, color: '#fff' }}>
+                  <option value="" style={{ color: '#1A1D26' }}>📁 Mover a…</option>
+                  {moveTargets.filter(t => t.key !== bucketKey).map(t => <option key={t.key} value={t.key} style={{ color: '#1A1D26' }}>{t.label}</option>)}
+                </select>
+              )}
+              <button onClick={() => setSelected(new Set())} className="text-[11px] font-semibold text-[#9098A4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer">Quitar selección</button>
+              <span className="text-[10.5px] text-[#AEB4BF] ml-auto hidden sm:inline">…o arrastralas a otra carpeta</span>
+            </div>
+          )}
           <div className={`rounded-lg transition-colors ${dragOver ? 'ring-2 ring-dashed' : ''}`} style={dragOver ? { outline: `2px dashed ${color}`, outlineOffset: 2 } : undefined}>
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.map(r => <Tile key={r.id} r={r} onDelete={borrar} onRename={renombrar} onOpen={setPreview} />)}
+                {items.map(r => <Tile key={r.id} r={r} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} resolveDragIds={resolveDragIds} />)}
               </div>
             )}
             {items !== null && n === 0 && !busy && (
-              <div className="text-[11px] text-[#AEB4BF] py-3 text-center">Carpeta vacía · subí archivos o arrastralos acá.</div>
+              <div className="text-[11px] text-[#AEB4BF] py-3 text-center">Carpeta vacía · subí archivos, arrastralos acá, o arrastrá un recurso de otra carpeta.</div>
             )}
           </div>
           {busy && (
