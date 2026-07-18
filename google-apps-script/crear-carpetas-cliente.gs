@@ -211,7 +211,8 @@ function listFolderTree(b) {
     while (files.hasNext()) {
       if (nodes.length >= maxNodes) { truncated = true; break; }
       var file = files.next();
-      nodes.push({ id: file.getId(), name: file.getName(), parentId: parentId, mimeType: file.getMimeType(), url: file.getUrl(), modified: dateIso(file.getLastUpdated()), depth: cur.depth + 1, isRoot: false });
+      var fsize = null; try { fsize = file.getSize(); } catch (e) { fsize = null; } // peso en bytes (para planificar la migración de Recursos)
+      nodes.push({ id: file.getId(), name: file.getName(), parentId: parentId, mimeType: file.getMimeType(), url: file.getUrl(), modified: dateIso(file.getLastUpdated()), depth: cur.depth + 1, isRoot: false, size: fsize });
     }
     if (truncated) break;
   }

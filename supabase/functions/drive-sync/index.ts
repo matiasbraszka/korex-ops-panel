@@ -144,7 +144,7 @@ async function postSlack(token: string, channelId: string, text: string): Promis
 }
 
 // ── Apps Script: árbol de una carpeta ─────────────────────────────────────────────
-interface RawNode { id: string; name: string; parentId: string | null; mimeType: string; url: string; modified: string | null; depth: number; isRoot: boolean; }
+interface RawNode { id: string; name: string; parentId: string | null; mimeType: string; url: string; modified: string | null; depth: number; isRoot: boolean; size?: number | null; }
 // Puente resiliente a Apps Script: reintenta ante blips (timeout/5xx/cold start/no-JSON).
 // Lanza "appscript_unreachable: <motivo>" si sigue caído tras los intentos.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -300,6 +300,7 @@ async function syncClient(
     name: n.name || "", node_type: n.node_type, mime_type: n.mimeType || null,
     web_url: n.url || null, modified_time: n.modified || null, depth: n.depth ?? 0,
     is_root: !!n.isRoot, strategy_id: strategyOf.get(n.id) || null, last_seen_at: runStart,
+    size_bytes: (typeof n.size === "number" && n.size >= 0) ? n.size : null,
   }));
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await supabase.from("client_drive_nodes").upsert(rows.slice(i, i + 500), { onConflict: "id" });
