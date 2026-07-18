@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical, LayoutGrid, Filter } from 'lucide-react';
+import { Users, Megaphone, MessageSquare, FileText, Pencil, Check, Loader2, GripVertical, LayoutGrid, Filter, Wand2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PHASES } from '../utils/constants';
 import { initials, progress, currentTask, getAllPhases, daysAgo, clientPill } from '../utils/helpers';
@@ -10,11 +10,12 @@ import PublicidadPage from './PublicidadPage';
 import FeedbackPage from './FeedbackPage';
 import InformePage from './InformePage';
 import PanoramaRecursos from '../components/clientes/PanoramaRecursos';
+import OrganizarVideosPanel from '../components/clientes/OrganizarVideosPanel';
 import FunnelsKanban from '../components/clientes/funnels/FunnelsKanban';
 
 const CLIENTS_TAB_KEY = 'clientes_current_tab';
 // 'informe' queda oculto del menu pero la ruta interna sigue funcionando.
-const VALID_TABS = ['lista', 'funnels', 'publicidad', 'panorama'];
+const VALID_TABS = ['lista', 'funnels', 'publicidad', 'panorama', 'organizar'];
 
 // Pildora de estado de publicidad. Lee metaMetrics.adsActive + pauseStatus.
 // Estados de Meta differenciados:
@@ -262,6 +263,7 @@ export default function ClientsPage() {
           { id: 'lista',      label: 'Lista',      Icon: Users },
           { id: 'funnels',    label: 'Funnels',    Icon: Filter },
           { id: 'panorama',   label: 'Panorama',   Icon: LayoutGrid },
+          { id: 'organizar',  label: 'Organizar',  Icon: Wand2 },
           { id: 'publicidad', label: 'Publicidad', Icon: Megaphone },
         ].map(t => (
           <button
@@ -284,6 +286,9 @@ export default function ClientsPage() {
 
       {/* Panorama tab — qué tenemos / qué falta de cada cliente */}
       {tab === 'panorama' && <PanoramaRecursos />}
+
+      {/* Organizar tab — preview local de avatar + título de los videos de Bunny */}
+      {tab === 'organizar' && <OrganizarVideosPanel />}
 
       {/* Publicidad tab — embed full PublicidadPage */}
       {tab === 'publicidad' && <PublicidadPage />}
