@@ -165,10 +165,15 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [resolvedDoc, setResolvedDoc] = useState(docId || null);
   const [resolvedClient, setResolvedClient] = useState(clientId || null);
 
+  // Carga las secciones del DEL de ESTE funnel. Si el funnel tiene su DEL propio
+  // (docId, viene de del_doc_id), filtra por doc_id → ve SOLO su documento, aunque
+  // comparta carpeta con otro funnel. Si no, fallback por strategy_id (la carpeta),
+  // como antes. Esto además aísla el caso de dos "del" bajo la misma carpeta.
   const cargar = useCallback(async () => {
     try {
+      const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source&strategy_id=eq.${strategyId}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source&${filtro}&order=ord.asc`,
         { headers: { Prefer: 'return=representation' } },
       );
       const list = Array.isArray(rows) ? rows : [];
@@ -181,7 +186,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     } catch (e) {
       setErr(String(e?.message || e));
     }
-  }, [strategyId]);
+  }, [strategyId, docId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -267,10 +272,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
     try {
-      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&strategy_id=eq.${strategyId}&order=created_at.asc`);
+      // Mismo criterio que las secciones: por doc_id si el funnel tiene DEL propio,
+      // si no por strategy_id (la carpeta). Así los comentarios no se cruzan entre funnels.
+      const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&${filtro}&order=created_at.asc`);
       setComments(Array.isArray(rows) ? rows : []);
     } catch { /* si falla, sin comentarios */ }
-  }, [strategyId]);
+  }, [strategyId, docId]);
   useEffect(() => { cargarComments(); }, [cargarComments]);
 
   const comentar = async (section) => {

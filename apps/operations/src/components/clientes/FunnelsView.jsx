@@ -995,7 +995,7 @@ Quedo a la espera de tu respuesta`;
     try { await onUpdate(f.id, { pages_copy_backup: f.pages_copy || null, backup_at: new Date().toISOString() }); } catch { /* noop */ }
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode: 'pages' },
+        body: { client_id: clientId, strategy_id: f.strategy_id, del_doc_id: f.del_doc_id || null, funnel_id: f.id, funnel_name: f.name || '', mode: 'pages' },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
@@ -1052,7 +1052,7 @@ Quedo a la espera de tu respuesta`;
     try { await onUpdate(f.id, { avatars_backup: avatars, vsl_script_backup: f.vsl_script || null, backup_at: new Date().toISOString() }); } catch { /* noop */ }
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode },
+        body: { client_id: clientId, strategy_id: f.strategy_id, del_doc_id: f.del_doc_id || null, funnel_id: f.id, funnel_name: f.name || '', mode },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
@@ -1079,7 +1079,7 @@ Quedo a la espera de tu respuesta`;
     setVslBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode: 'vsl' },
+        body: { client_id: clientId, strategy_id: f.strategy_id, del_doc_id: f.del_doc_id || null, funnel_id: f.id, funnel_name: f.name || '', mode: 'vsl' },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
@@ -1405,7 +1405,14 @@ export default function FunnelsView({ clientId }) {
   // El DEL sigue viviendo en la CARPETA del Drive (strategy_id), no en el funnel: por eso
   // dos funnels de la misma carpeta comparten DEL. Ya era asi; el aplanado solo lo deja a la
   // vista. Reanclarlo al funnel es la Fase 3 (del_documents con FK propia).
-  const delOf = useCallback((f) => docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del') || null, [docs]);
+  // El DEL de un funnel: primero SU DEL propio (del_doc_id → la "Fase 3"), y si no
+  // tiene uno asignado, fallback por strategy_id (la carpeta), que es como resolvía
+  // antes. Así los funnels 1:1 no cambian y los multi-funnel se separan cuando se les
+  // asigna/parte el DEL. Sin del_doc_id, el comportamiento es idéntico al de hoy.
+  const delOf = useCallback((f) =>
+    (f.del_doc_id && docs.find(d => d.id === f.del_doc_id && d.doc_kind === 'del'))
+    || docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del')
+    || null, [docs]);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
   // Sincronizar contexto = relee documentos (client-brain-sync) Y el árbol de Drive (drive-sync,
   // para traer carpetas nuevas de Recursos), y recarga todo.
