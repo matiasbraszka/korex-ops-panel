@@ -71,6 +71,47 @@ function fila(v, avatars, ctx) {
   return { id: v.id, tituloActual: v.title || '', avName: avName || '(sin avatar)', cambia, pct: Math.round(pct * 100), carpeta: esEdicion ? 'Edición' : 'Grabación', titulo, revisar, dupSobrante };
 }
 
+// Para un video SIN funnel (huérfano): lo matchea contra el DEL de CADA funnel del cliente
+// y propone al que más se parece (funnel + avatar). Es la idea de Matías: la estrategia vieja
+// mezclaba funnels, así que se resuelve por el guion de cada uno.
+function filaOrfano(v, stratMap, ctx) {
+  const tw = v.transcript && v.transcript.length > 120 ? palabras(v.transcript) : new Set();
+  let best = null; // { sid, name, avatar, pct }
+  if (tw.size) {
+    for (const [sid, info] of Object.entries(stratMap)) {
+      for (const a of (info.avatars || [])) {
+        const c = containment(a.words, tw);
+        if (!best || c > best.pct) best = { sid, name: info.name, avatar: a, pct: c };
+      }
+    }
+  }
+  const ok = !!(best && best.pct >= UMBRAL_AVATAR);
+  const esEdicion = String(v.bucket_key || '').endsWith('_edit');
+  const kt = (v.title || '').trim().toLowerCase();
+  const dup = !!(kt && ctx.cuenta[kt] > 1);
+  if (dup) ctx.vistos[kt] = (ctx.vistos[kt] || 0) + 1;
+  const dupSobrante = dup && ctx.vistos[kt] > 1;
+  let titulo = null;
+  const avName = ok ? best.avatar.name : '';
+  if (ok) {
+    if (esEdicion) { const k = best.avatar.id; ctx.adCount[k] = (ctx.adCount[k] || 0) + 1; titulo = `${avName} · AD ${ctx.adCount[k]}`; }
+    else {
+      const pn = parseNombre(v.title); const partes = [];
+      if (pn.angulo) partes.push(`Ángulo ${pn.angulo}`);
+      if (pn.hook) partes.push(`Hook ${pn.hook}`);
+      if (partes.length) titulo = `${avName} · ${partes.join(' · ')}`;
+      else { const presentes = (best.avatar.hooks || []).filter(h => containment(h.words, tw) >= UMBRAL_HOOK).map(h => h.n); if (presentes.length) titulo = `${avName} · ${presentes.length === 1 ? `Hook ${presentes[0]}` : `Hooks ${rango(presentes)}`}`; }
+    }
+  }
+  const revisar = !titulo;
+  if (revisar) titulo = '(para revisar)';
+  return {
+    id: v.id, tituloActual: v.title || '', carpeta: esEdicion ? 'Edición' : 'Grabación',
+    funnelPropuesto: ok ? best.name : null, avName: ok ? avName : '(sin match)',
+    pct: best ? Math.round(best.pct * 100) : 0, titulo, revisar, dupSobrante, resuelto: ok,
+  };
+}
+
 export default function OrganizarVideosPanel() {
   const [clients, setClients] = useState(null);
   const [cid, setCid] = useState('');
@@ -124,16 +165,20 @@ export default function OrganizarVideosPanel() {
       const info = data.stratMap[sid];
       const avatars = info?.avatars || [];
       const ctx = { cuenta, vistos: {}, adCount: {} };
-      const filas = porSid[sid].map(v => fila(v, avatars, ctx));
+      const sinFunnel = sid === '__none__';
+      const filas = sinFunnel
+        ? porSid[sid].map(v => filaOrfano(v, data.stratMap, ctx))
+        : porSid[sid].map(v => fila(v, avatars, ctx));
       return {
-        sid, sinFunnel: sid === '__none__',
-        name: sid === '__none__' ? 'Sin funnel asignado' : (info?.name || sid),
+        sid, sinFunnel,
+        name: sinFunnel ? 'Sin funnel asignado' : (info?.name || sid),
         filas,
         resumen: {
           total: filas.length,
           cambia: filas.filter(f => f.cambia).length,
           revisar: filas.filter(f => f.revisar).length,
           dup: filas.filter(f => f.dupSobrante).length,
+          resueltos: filas.filter(f => f.resuelto).length,
         },
       };
     });
@@ -174,6 +219,7 @@ export default function OrganizarVideosPanel() {
             <div className="ml-auto flex flex-wrap gap-1.5">
               <Chip label="Videos" value={g.resumen.total} />
               {!g.sinFunnel && <Chip label="Corrige" value={g.resumen.cambia} color="#2563EB" />}
+              {g.sinFunnel && <Chip label="Resueltos" value={g.resumen.resueltos} color="#15803D" />}
               <Chip label="Revisar" value={g.resumen.revisar} color="#B45309" />
               <Chip label="Dup" value={g.resumen.dup} color="#9333EA" />
             </div>
@@ -188,6 +234,7 @@ export default function OrganizarVideosPanel() {
               <thead className="sticky top-0 bg-[#F7F8FA] text-[#6B7280] text-left">
                 <tr>
                   <th className="py-2 px-3 font-semibold">Carpeta</th>
+                  {g.sinFunnel && <th className="py-2 px-3 font-semibold">Funnel propuesto</th>}
                   <th className="py-2 px-3 font-semibold">Avatar</th>
                   <th className="py-2 px-3 font-semibold">Coinc.</th>
                   <th className="py-2 px-3 font-semibold">Nombre actual</th>
@@ -202,6 +249,13 @@ export default function OrganizarVideosPanel() {
                         <Film size={11} />{f.carpeta}
                       </span>
                     </td>
+                    {g.sinFunnel && (
+                      <td className="py-1.5 px-3">
+                        {f.funnelPropuesto
+                          ? <span className="text-[#4F46E5] font-semibold">{f.funnelPropuesto}</span>
+                          : <span className="text-[#B45309]">— sin match —</span>}
+                      </td>
+                    )}
                     <td className="py-1.5 px-3">
                       <span className="text-[#3F4653] font-medium">{f.avName}</span>
                       {f.cambia && <span className="ml-1.5 text-[10px] font-bold text-[#2563EB]">corrige</span>}
