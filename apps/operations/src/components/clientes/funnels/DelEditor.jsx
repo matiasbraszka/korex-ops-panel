@@ -174,7 +174,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
         `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source&${filtro}&order=ord.asc`,
-        { headers: { Prefer: 'return=representation' } },
+        // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
+        // servía una versión vieja cacheada del documento tras reorganizarlo.
+        { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
       );
       const list = Array.isArray(rows) ? rows : [];
       setSecs(list);
@@ -275,7 +277,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       // Mismo criterio que las secciones: por doc_id si el funnel tiene DEL propio,
       // si no por strategy_id (la carpeta). Así los comentarios no se cruzan entre funnels.
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
-      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&${filtro}&order=created_at.asc`);
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&${filtro}&order=created_at.asc`, { cache: 'no-store' });
       setComments(Array.isArray(rows) ? rows : []);
     } catch { /* si falla, sin comentarios */ }
   }, [strategyId, docId]);
