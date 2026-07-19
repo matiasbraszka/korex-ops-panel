@@ -1128,17 +1128,7 @@ Quedo a la espera de tu respuesta`;
 
   const funnelRecursosNode = (
     <div className="flex flex-col gap-3.5">
-      {/* Acciones: generar avatares del DEL + vincular/crear las carpetas del Drive. */}
-      <div className="flex items-center gap-2 flex-wrap py-2.5 px-3 rounded-xl border border-[#E7EAF0] bg-white">
-        <button onClick={() => generateAvatars('append')} disabled={genActive} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg py-2 px-3 cursor-pointer disabled:opacity-60 border-none" style={{ background: genActive ? '#FCE7F3' : '#DB2777', color: genActive ? '#DB2777' : '#fff' }}>{genActive ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}{genActive ? 'Generando…' : 'Generar avatares del DEL'}</button>
-        {namedAvatars.length > 0 && <>
-          <button onClick={fetchFolders} disabled={folderBusy !== 'idle'} title="Vincula las carpetas por avatar que ya existen en el Drive y lee su estado." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-white border rounded-lg py-2 px-3 cursor-pointer hover:bg-[#F7F8FA] disabled:opacity-50" style={foldersReady ? { color: '#15803D', borderColor: '#C9F0D8' } : { color: '#3F4653', borderColor: '#D8DDE6' }}>{folderBusy === 'read' ? <RefreshCw size={13} className="animate-spin" /> : foldersReady ? <Check size={13} strokeWidth={3} /> : <FolderOpen size={13} />}Traer carpetas</button>
-          <button onClick={createFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive las carpetas de anuncios por avatar." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#F5F3FF] border border-[#E4DBFF] rounded-lg py-2 px-3 text-[#7C3AED] cursor-pointer hover:bg-[#EEE9FE] disabled:opacity-50">{folderBusy === 'create' ? <RefreshCw size={13} className="animate-spin" /> : <FolderPlus size={13} />}Crear carpetas</button>
-          <button onClick={createVslFolders} disabled={folderBusy !== 'idle'} title="Crea en el Drive las carpetas de VSL por avatar." className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-[#EFF6FF] border border-[#C7DBFB] rounded-lg py-2 px-3 text-[#2E69E0] cursor-pointer hover:bg-[#E0ECFF] disabled:opacity-50">{folderBusy === 'vsl' ? <RefreshCw size={13} className="animate-spin" /> : <FolderPlus size={13} />}Crear carpetas VSL</button>
-        </>}
-        <span className="ml-auto text-[11px] text-[#9098A4]">Cada avatar tiene sus carpetas: abrí una y subí los archivos ahí mismo (quedan alojados en la plataforma).</span>
-      </div>
-
+      {/* Barra de acciones de carpetas del Drive quitada a pedido (no aportaba). */}
       {genActive && (
         <div className="flex items-center gap-2 text-[11.5px] font-semibold py-2.5 px-3 rounded-lg" style={{ background: '#FDF2F8', color: '#BE185D', border: '1px solid #FBCFE8' }}>
           <RefreshCw size={13} className="animate-spin shrink-0" />La IA está leyendo el DEL y armando los avatares… unos segundos.
