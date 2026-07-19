@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
-  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline } from 'lucide-react';
+  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline, FolderInput, ChevronDown } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -113,6 +113,11 @@ function DelToolbar({ api }) {
 // que pidió Matías, agrupadas por categoría, sin tocar el texto.
 const KIND_ORDER = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'pipeline_viejo', 'otros'];
 const kindRank = (k) => { const i = KIND_ORDER.indexOf(k); return i === -1 ? 99 : i; };
+// Categorías que SIEMPRE existen en TODO DEL, aunque estén vacías: así el casillero
+// está listo para cuando se vaya a escribir (pedido de Matías — ej. Samantha sin páginas).
+const STANDARD_KINDS = ['avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
+// Categorías a las que se puede MOVER una sección.
+const MOVE_KINDS = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'otros'];
 
 // Las 4 secciones sin html (pestañas-puntero que ya no estan en el Doc) se editan
 // igual: el texto plano se envuelve en parrafos para arrancar.
@@ -134,6 +139,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [modo, setModo] = useState('leer'); // 'leer' | 'editar'
   const [saveState, setSaveState] = useState({}); // id -> 'saving'|'saved'|'error'
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
+  const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
   // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   const [view, setView] = useState('del');
   const [clientDocs, setClientDocs] = useState([]);
@@ -475,14 +481,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
 
   // Las secciones agrupadas por categoría, en orden canónico. De acá salen los grupos de
   // color del índice y las franjas del documento.
+  // Además de las categorías con secciones, incluimos SIEMPRE las estándar (aunque vacías),
+  // para que el casillero exista listo para escribir. Ordenado por el orden canónico.
   const groups = useMemo(() => {
-    const g = [];
-    for (const s of sorted) {
-      const last = g[g.length - 1];
-      if (last && last.kind === s.kind) last.items.push(s);
-      else g.push({ kind: s.kind, items: [s] });
-    }
-    return g;
+    const byKind = {};
+    for (const s of sorted) (byKind[s.kind] || (byKind[s.kind] = [])).push(s);
+    const kinds = Array.from(new Set([...STANDARD_KINDS, ...sorted.map(s => s.kind)]));
+    kinds.sort((a, b) => kindRank(a) - kindRank(b));
+    return kinds.map(k => ({ kind: k, items: byKind[k] || [] }));
   }, [sorted]);
 
   const irA = (id) => {
@@ -566,6 +572,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     else emitir('section', { row: { id, title: title.trim() } });
   };
 
+  // Mover una sección a otra categoría (cambia su `kind` → aparece en otro grupo).
+  const moverACategoria = async (id, kind) => {
+    setMoveMenu(null);
+    const s = secs.find(x => x.id === id);
+    if (!s || s.kind === kind) return;
+    setSecs((prev) => prev.map(x => x.id === id ? { ...x, kind, source: 'panel' } : x));
+    const { error } = await supabase.rpc('del_section_set_kind', { p_id: id, p_kind: kind, p_by: by });
+    if (error) { window.alert('No pude mover: ' + error.message); await cargar(); return; }
+    emitir('section', { row: { id, kind } });
+  };
+
   if (err) {
     return (
       <div className="p-6"><div className="rounded-xl border p-4 text-[13px]" style={{ background: '#FEF2F2', borderColor: '#F5C2C2', color: '#B91C1C' }}>
@@ -613,8 +630,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           {/* Las secciones del documento, agrupadas por categoría con su color. */}
           {groups.map(gr => {
             const sc = secOf(gr.kind);
+            const emptyCat = gr.items.length === 0;
             return (
-              <div key={gr.kind} className="mb-0.5">
+              <div key={gr.kind} className="mb-0.5" style={emptyCat ? { opacity: 0.6 } : undefined}>
                 <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
                   <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: sc.c }} />
                   <span className="text-[9.5px] font-extrabold tracking-[0.07em] uppercase" style={{ color: sc.c }}>{sc.label}</span>
@@ -630,6 +648,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     </button>
                   );
                 })}
+                {emptyCat && (
+                  <button onClick={() => editando ? agregar(null, gr.kind) : setModo('editar')}
+                    className="flex items-center gap-1.5 w-full py-1 pl-4 pr-2.5 rounded-[9px] text-left border-none cursor-pointer text-[11px] font-medium italic text-[#AEB4BF] hover:text-[#7C3AED] bg-transparent">
+                    — falta escribir —
+                  </button>
+                )}
               </div>
             );
           })}
@@ -743,6 +767,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   </span>
                   <span className="h-px flex-1" style={{ background: '#EDF0F5' }} />
                 </div>
+                {gr.items.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-white/60 py-5 px-5 text-center">
+                    <div className="text-[12.5px] text-[#9098A4] font-medium">Todavía no está escrita la sección de <b style={{ color: gc.c }}>{gc.label}</b>.</div>
+                    {editando
+                      ? <button onClick={() => agregar(null, gr.kind)} className="inline-flex items-center gap-1.5 mt-2.5 py-1.5 px-3 rounded-[9px] border-none bg-[#7C3AED] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95"><Plus size={13} />Escribir {gc.label}</button>
+                      : <div className="text-[11px] text-[#C3C9D4] mt-1">Tocá “Editar” para empezar a escribirla.</div>}
+                  </div>
+                )}
                 {gr.items.map(s => {
             const sc = secOf(s.kind);
             const st = saveState[s.id];
@@ -779,6 +811,22 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
                       <button onClick={() => agregar(s.ord, s.kind)} title="Agregar sección debajo (misma categoría)" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
+                      <span className="relative inline-flex">
+                        <button onClick={() => setMoveMenu(moveMenu === s.id ? null : s.id)} title="Mover a otra categoría" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
+                        {moveMenu === s.id && (<>
+                          <span className="fixed inset-0 z-30" onClick={() => setMoveMenu(null)} />
+                          <div className="absolute right-0 top-8 z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[172px] max-h-[320px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
+                            <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a…</div>
+                            {MOVE_KINDS.map(k => { const mc = secOf(k); const cur = k === s.kind; return (
+                              <button key={k} onClick={() => moverACategoria(s.id, k)} disabled={cur}
+                                className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:bg-[#F4F6F9]"
+                                style={{ color: mc.c }}>
+                                <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}{cur && <Check size={12} className="ml-auto" />}
+                              </button>
+                            ); })}
+                          </div>
+                        </>)}
+                      </span>
                       <button onClick={() => borrar(s)} title="Borrar sección" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#B91C1C] border-none bg-transparent cursor-pointer"><Trash2 size={13} /></button>
                     </div>
                   )}
