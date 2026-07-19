@@ -8,7 +8,7 @@
 // numera las ediciones con IA del lado del servidor).
 import { useEffect, useMemo, useState } from 'react';
 import { sbFetch } from '@korex/db';
-import { RefreshCw, Film, Wand2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Film, Wand2, AlertTriangle, Copy } from 'lucide-react';
 
 const UMBRAL_AVATAR = 0.70; // coincidencia mínima para confiar el avatar
 const UMBRAL_HOOK = 0.60;   // un hook está "presente" si el video lo dice en ≥60%
@@ -28,6 +28,14 @@ function rango(nums) {
   const out = []; let i = 0;
   while (i < s.length) { let j = i; while (j + 1 < s.length && s[j + 1] === s[j] + 1) j++; out.push(i === j ? `${s[i]}` : `${s[i]}-${s[j]}`); i = j + 1; }
   return out.join(', ');
+}
+// Del nombre del archivo (convención del editor: "h2-c1-cta2" = Hook 2, ángulo 1) saca
+// hook y ángulo si están. Señal fuerte, sin IA — se usa cuando el nombre lo dice claro.
+function parseNombre(title) {
+  const t = String(title || '').toLowerCase();
+  const h = t.match(/\bh(\d{1,2})\b/);
+  const c = t.match(/\bc(\d{1,2})\b/);
+  return { hook: h ? Number(h[1]) : null, angulo: c ? Number(c[1]) : null };
 }
 
 export default function OrganizarVideosPanel() {
@@ -73,7 +81,10 @@ export default function OrganizarVideosPanel() {
 
   const filas = useMemo(() => {
     if (!data) return [];
-    const adCount = {};
+    // conteo por título → marcar duplicados (2do+ con el mismo nombre)
+    const cuenta = {};
+    for (const v of data.videos) { const k = (v.title || '').trim().toLowerCase(); if (k) cuenta[k] = (cuenta[k] || 0) + 1; }
+    const vistos = {}, adCount = {};
     return data.videos.map(v => {
       const tw = v.transcript && v.transcript.length > 120 ? palabras(v.transcript) : new Set();
       // avatar por texto
@@ -84,17 +95,29 @@ export default function OrganizarVideosPanel() {
       const avName = mejor?.name || avActualName;
       const cambia = !!(mejor && mejor.id !== v.avatar_id);
       const esEdicion = String(v.bucket_key || '').endsWith('_edit');
+      // duplicado: la 2da+ copia con el mismo título es la sobrante
+      const kt = (v.title || '').trim().toLowerCase();
+      const dup = !!(kt && cuenta[kt] > 1);
+      if (dup) vistos[kt] = (vistos[kt] || 0) + 1;
+      const dupSobrante = dup && vistos[kt] > 1;
       // título
       let titulo = null;
       if (esEdicion && avName) { const k = mejor?.id || v.avatar_id || avName; adCount[k] = (adCount[k] || 0) + 1; titulo = `${avName} · AD ${adCount[k]}`; }
-      else if (tw.size && (mejor || avActualName)) {
-        const av = mejor || data.avatars.find(a => a.id === v.avatar_id);
-        const presentes = (av?.hooks || []).filter(h => containment(h.words, tw) >= UMBRAL_HOOK).map(h => h.n);
-        if (presentes.length) titulo = `${avName} · ${presentes.length === 1 ? `Hook ${presentes[0]}` : `Hooks ${rango(presentes)}`}`;
+      else {
+        const pn = parseNombre(v.title); // 1) señal fuerte del nombre (h#/c#)
+        const partes = [];
+        if (pn.angulo) partes.push(`Ángulo ${pn.angulo}`);
+        if (pn.hook) partes.push(`Hook ${pn.hook}`);
+        if (partes.length && avName) titulo = `${avName} · ${partes.join(' · ')}`;
+        else if (tw.size && (mejor || avActualName)) { // 2) match de la transcripción
+          const av = mejor || data.avatars.find(a => a.id === v.avatar_id);
+          const presentes = (av?.hooks || []).filter(h => containment(h.words, tw) >= UMBRAL_HOOK).map(h => h.n);
+          if (presentes.length) titulo = `${avName} · ${presentes.length === 1 ? `Hook ${presentes[0]}` : `Hooks ${rango(presentes)}`}`;
+        }
       }
       const revisar = !titulo;
       if (revisar) titulo = '(para revisar)';
-      return { id: v.id, avName: avName || '(sin avatar)', cambia, pct: Math.round(pct * 100), carpeta: esEdicion ? 'Edición' : 'Grabación', titulo, revisar };
+      return { id: v.id, tituloActual: v.title || '', avName: avName || '(sin avatar)', cambia, pct: Math.round(pct * 100), carpeta: esEdicion ? 'Edición' : 'Grabación', titulo, revisar, dupSobrante };
     });
   }, [data]);
 
@@ -102,6 +125,7 @@ export default function OrganizarVideosPanel() {
     total: filas.length,
     cambia: filas.filter(f => f.cambia).length,
     revisar: filas.filter(f => f.revisar).length,
+    dup: filas.filter(f => f.dupSobrante).length,
   }), [filas]);
 
   return (
@@ -131,6 +155,7 @@ export default function OrganizarVideosPanel() {
             <Chip label="Videos" value={resumen.total} />
             <Chip label="Corrige avatar" value={resumen.cambia} color="#2563EB" />
             <Chip label="Para revisar" value={resumen.revisar} color="#B45309" />
+            <Chip label="Duplicados" value={resumen.dup} color="#9333EA" />
           </div>
           {filas.length === 0 ? (
             <div className="py-10 text-center text-[12px] text-[#9098A4]">Este cliente no tiene videos en Bunny todavía.</div>
@@ -142,6 +167,7 @@ export default function OrganizarVideosPanel() {
                     <th className="py-2 px-3 font-semibold">Carpeta</th>
                     <th className="py-2 px-3 font-semibold">Avatar</th>
                     <th className="py-2 px-3 font-semibold">Coinc.</th>
+                    <th className="py-2 px-3 font-semibold">Nombre actual</th>
                     <th className="py-2 px-3 font-semibold">Título propuesto</th>
                   </tr>
                 </thead>
@@ -158,6 +184,10 @@ export default function OrganizarVideosPanel() {
                         {f.cambia && <span className="ml-1.5 text-[10px] font-bold text-[#2563EB]">corrige</span>}
                       </td>
                       <td className="py-1.5 px-3 text-[#6B7280]">{f.pct ? `${f.pct}%` : '—'}</td>
+                      <td className="py-1.5 px-3 max-w-[220px]">
+                        <span className="text-[#9098A4] truncate inline-block max-w-[160px] align-middle" title={f.tituloActual}>{f.tituloActual || '—'}</span>
+                        {f.dupSobrante && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold text-[#9333EA] align-middle"><Copy size={10} />duplicado</span>}
+                      </td>
                       <td className="py-1.5 px-3">
                         {f.revisar
                           ? <span className="inline-flex items-center gap-1 text-[#B45309] font-semibold"><AlertTriangle size={11} />{f.titulo}</span>
