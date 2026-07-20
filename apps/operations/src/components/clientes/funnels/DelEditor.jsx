@@ -119,9 +119,10 @@ const STANDARD_KINDS = ['avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_land
 // Categorías a las que se puede MOVER una sección.
 const MOVE_KINDS = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'otros'];
 // Categorías que VERSIONAN (tienen V1, V2, V3…). El funnel se ve por versión: cambiás
-// de "Este funnel V1" a "V2" y ves solo esa. Regla de Matías: el AVATAR y la ESTRATEGIA
-// NO versionan (son iguales en todas las versiones), así que se ven siempre.
-const VERSIONABLE_KINDS = ['vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
+// de "Este funnel V1" a "V2" y ves solo esa. Regla de Matías: el AVATAR NO versiona
+// (es el mismo en todas las versiones, se ve siempre). La ESTRATEGIA sí puede cambiar
+// entre versiones, así que también versiona.
+const VERSIONABLE_KINDS = ['estrategia', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
 
 // Las 4 secciones sin html (pestañas-puntero que ya no estan en el Doc) se editan
 // igual: el texto plano se envuelve en parrafos para arrancar.
