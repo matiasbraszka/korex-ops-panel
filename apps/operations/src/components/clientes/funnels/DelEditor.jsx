@@ -136,7 +136,7 @@ const DOC_KIND_LABEL = {
   briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
 };
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete }) {
   const { currentUser } = useApp();
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -631,12 +631,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   };
   const confirmarVersion = async () => {
     const scope = verModal?.scope || 'paginas';
+    const chosen = [...(verModal?.avatars || [])];
     setVerModal(null);
     const { data, error } = await supabase.rpc('del_version_add', { p_doc_id: resolvedDoc, p_by: by, p_scope: scope });
     if (error) { window.alert('No pude agregar la versión: ' + error.message); return; }
     await cargar();
     emitir('section-add', {});
-    if (data) { setActiveVersion(data); setModo('editar'); setView('del'); }
+    if (data) {
+      setActiveVersion(data); setModo('editar'); setView('del');
+      // Relanzamiento completo → los avatares elegidos suman la versión (carpetas grabación/edición V2).
+      if (scope === 'completa') onVersionComplete?.(data, chosen.length ? chosen : nombresAvatar);
+    }
   };
 
   if (err) {
