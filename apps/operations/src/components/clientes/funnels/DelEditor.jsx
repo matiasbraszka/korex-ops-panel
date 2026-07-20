@@ -136,7 +136,7 @@ const DOC_KIND_LABEL = {
   briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
 };
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
   const { currentUser } = useApp();
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -147,6 +147,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
+  const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
   // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   const [view, setView] = useState('del');
   const [clientDocs, setClientDocs] = useState([]);
@@ -644,6 +645,28 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     }
   };
 
+  // Borrar una versión ENTERA: sus secciones del DEL + las grabaciones (videos crudos).
+  // Las ediciones / videos editados NO se borran (el trabajo terminado se conserva).
+  const confirmarBorrarVersion = async () => {
+    const v = delVerModal?.v;
+    setDelVerModal(null);
+    if (!v || v <= 1) return;
+    // ¿Quedan ediciones de esta versión? Si sí, la versión sigue existiendo en Recursos para ellas.
+    let tieneEdiciones = false;
+    try {
+      const ed = await sbFetch(`funnel_resources?select=id&strategy_id=eq.${encodeURIComponent(strategyId)}&version=eq.${v}&bucket_key=in.(ad_edit,vsl_edit)&limit=1`);
+      tieneEdiciones = Array.isArray(ed) && ed.length > 0;
+    } catch { /* si falla el chequeo, seguimos */ }
+    const { error } = await supabase.rpc('del_version_delete', { p_doc_id: resolvedDoc, p_version: v, p_by: by });
+    if (error) { window.alert('No pude borrar la versión: ' + error.message); return; }
+    // Borrar SOLO las grabaciones (videos crudos) de esa versión; las ediciones quedan intactas.
+    await supabase.from('funnel_resources').delete().eq('strategy_id', strategyId).eq('version', v).in('bucket_key', ['ad_rec', 'vsl_rec']);
+    setActiveVersion(null);
+    await cargar();
+    emitir('section-add', {});
+    onVersionDelete?.(v, tieneEdiciones);
+  };
+
   if (err) {
     return (
       <div className="p-6"><div className="rounded-xl border p-4 text-[13px]" style={{ background: '#FEF2F2', borderColor: '#F5C2C2', color: '#B91C1C' }}>
@@ -701,6 +724,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                 className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-[#D0D5DD] text-[#9098A4] hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent cursor-pointer">
                 <Plus size={13} />
               </button>
+              {verActiva > 1 && (
+                <button onClick={() => setDelVerModal({ v: verActiva, texto: '' })} title={`Borrar la Versión ${verActiva} entera`}
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#F3D0D0] text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] hover:border-[#FECACA] bg-transparent cursor-pointer">
+                  <Trash2 size={12} />
+                </button>
+              )}
             </div>
           </div>
           {/* "DEL" arriba de todo = el documento entero */}
@@ -1095,6 +1124,29 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           <div className="flex justify-end gap-2 mt-2">
             <button onClick={() => { setComposer(null); setDraft(''); }} className="py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[12px] font-semibold cursor-pointer">Cancelar</button>
             <button onClick={comentarQuote} disabled={!draft.trim()} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50"><Send size={12} />Comentar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: borrar una versión entera (doble confirmación: hay que escribir BORRAR). */}
+      {delVerModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setDelVerModal(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[430px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#B91C1C] mb-1.5 flex items-center gap-1.5"><AlertCircle size={16} />Borrar la Versión {delVerModal.v} entera</div>
+            <div className="text-[12px] text-[#4B5563] mb-3 leading-snug">
+              Se van a borrar <b>todas las secciones del DEL de la Versión {delVerModal.v}</b> (estrategia, VSL, anuncios y páginas de esa versión) y sus <b>grabaciones (videos crudos)</b>.<br />
+              <span className="text-[#15803D] font-semibold">Las ediciones / videos ya editados NO se borran.</span><br />
+              <span className="text-[#B91C1C]">Esto no se puede deshacer.</span>
+            </div>
+            <div className="text-[11px] font-semibold text-[#6B7280] mb-1.5">Escribí <b>BORRAR</b> para confirmar:</div>
+            <input value={delVerModal.texto} autoFocus onChange={e => setDelVerModal(m => ({ ...m, texto: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Escape') setDelVerModal(null); if (e.key === 'Enter' && delVerModal.texto.trim().toUpperCase() === 'BORRAR') confirmarBorrarVersion(); }}
+              placeholder="BORRAR" className="w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#DC2626]" />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setDelVerModal(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+              <button onClick={confirmarBorrarVersion} disabled={delVerModal.texto.trim().toUpperCase() !== 'BORRAR'}
+                className="py-2 px-4 rounded-lg border-none bg-[#DC2626] text-white text-[13px] font-semibold cursor-pointer hover:brightness-95 disabled:opacity-40 disabled:cursor-default">Borrar versión</button>
+            </div>
           </div>
         </div>
       )}

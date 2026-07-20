@@ -1132,6 +1132,18 @@ Quedo a la espera de tu respuesta`;
     }) });
   };
 
+  // Borraron una versión del DEL. Se saca de los avatares para que no muestre sus carpetas;
+  // salvo que queden ediciones de esa versión (keep=true), que se conservan y siguen visibles.
+  const onVersionDelete = (v, keep) => {
+    if (keep) return;
+    onUpdate(f.id, { avatars: avatars.map(a => {
+      const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
+      if (!rv.includes(v)) return a;
+      const nrv = rv.filter(x => x !== v);
+      return { ...a, rec_versions: nrv.length ? nrv : [1] };
+    }) });
+  };
+
   // ── Bloques que la maqueta movió del funnel al DEL ───────────────────────────
   // En PANTALLA (forcePage) el funnel muestra SOLO el riel + tareas; estos bloques
   // (config, VSL, copy, avatares) viven adentro del DEL, en sus pestañas. Se definen
@@ -1355,7 +1367,7 @@ Quedo a la espera de tu respuesta`;
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
         <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId}
-          estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} onVersionComplete={onVersionComplete} />
+          estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} onVersionComplete={onVersionComplete} onVersionDelete={onVersionDelete} />
       </Modal>
     </div>
   );
