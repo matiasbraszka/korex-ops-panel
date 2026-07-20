@@ -146,6 +146,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
   const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
+  const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   const [view, setView] = useState('del');
   const [clientDocs, setClientDocs] = useState([]);
@@ -496,20 +497,32 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // Si la versión elegida deja de existir (se borró), volvés a la última.
   useEffect(() => { if (activeVersion && !versions.includes(activeVersion)) setActiveVersion(null); }, [versions, activeVersion]);
 
+  // Para cada categoría que versiona: en qué versiones tiene secciones propias.
+  const kindVersionsMap = useMemo(() => {
+    const m = {};
+    for (const s of (secs || [])) if (VERSIONABLE_KINDS.includes(s.kind)) (m[s.kind] || (m[s.kind] = new Set())).add(s.version || 1);
+    return m;
+  }, [secs]);
+
   // Las secciones agrupadas por categoría, en orden canónico. De acá salen los grupos de
   // color del índice y las franjas del documento.
-  // Las categorías que versionan muestran SOLO la versión activa; el avatar y la estrategia
-  // se ven siempre. Además incluimos SIEMPRE las estándar (aunque vacías), listas para escribir.
+  // Una categoría que versiona muestra la versión activa SI la cambió; si no, cae a la V1
+  // (compartida). Así una V2 de "solo landing" muestra el VSL/anuncios de la V1 sin duplicarlos.
+  // El avatar y la estrategia se ven siempre. Se incluyen SIEMPRE las estándar (aunque vacías).
   const groups = useMemo(() => {
     const byKind = {};
     for (const s of sorted) {
-      if (VERSIONABLE_KINDS.includes(s.kind) && (s.version || 1) !== verActiva) continue;
+      if (VERSIONABLE_KINDS.includes(s.kind)) {
+        const has = kindVersionsMap[s.kind];
+        const target = (has && has.has(verActiva)) ? verActiva : 1;
+        if ((s.version || 1) !== target) continue;
+      }
       (byKind[s.kind] || (byKind[s.kind] = [])).push(s);
     }
     const kinds = Array.from(new Set([...STANDARD_KINDS, ...sorted.map(s => s.kind)]));
     kinds.sort((a, b) => kindRank(a) - kindRank(b));
     return kinds.map(k => ({ kind: k, items: byKind[k] || [] }));
-  }, [sorted, verActiva]);
+  }, [sorted, verActiva, kindVersionsMap]);
 
   const irA = (id) => {
     setActiva(id);
@@ -608,12 +621,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   };
 
   // ── Versionado a nivel funnel ─────────────────────────────────────────────────
-  // "+" agrega la versión siguiente del funnel: crea un juego vacío de VSL / Anuncios /
-  // Landings (V+1) listo para configurar, y te lleva a esa versión. El avatar y la
-  // estrategia no se tocan (se ven en todas las versiones).
-  const agregarVersion = async () => {
+  // "+" abre un modal que pregunta qué cambia en la versión nueva: solo las páginas
+  // (VSL/anuncios se comparten, sin carpetas nuevas) o un relanzamiento completo
+  // (VSL/anuncios nuevos → se preparan las carpetas de grabación de los avatares elegidos).
+  const nombresAvatar = useMemo(() => (secs || []).filter(s => s.kind === 'avatares').map(s => s.title), [secs]);
+  const agregarVersion = () => {
     if (!resolvedDoc) { window.alert('Este funnel todavía no tiene un DEL propio donde crear versiones.'); return; }
-    const { data, error } = await supabase.rpc('del_version_add', { p_doc_id: resolvedDoc, p_by: by });
+    setVerModal({ scope: 'paginas', avatars: new Set() });
+  };
+  const confirmarVersion = async () => {
+    const scope = verModal?.scope || 'paginas';
+    setVerModal(null);
+    const { data, error } = await supabase.rpc('del_version_add', { p_doc_id: resolvedDoc, p_by: by, p_scope: scope });
     if (error) { window.alert('No pude agregar la versión: ' + error.message); return; }
     await cargar();
     emitir('section-add', {});
@@ -1071,6 +1090,43 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           <div className="flex justify-end gap-2 mt-2">
             <button onClick={() => { setComposer(null); setDraft(''); }} className="py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[12px] font-semibold cursor-pointer">Cancelar</button>
             <button onClick={comentarQuote} disabled={!draft.trim()} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50"><Send size={12} />Comentar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: nueva versión del funnel (solo páginas vs relanzamiento completo). */}
+      {verModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setVerModal(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[460px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Nueva versión del funnel</div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3">¿Qué cambia en esta versión nueva?</div>
+            <div className="flex flex-col gap-2 mb-1">
+              <label className="flex gap-2.5 items-start p-2.5 rounded-lg border cursor-pointer transition-colors" style={{ borderColor: verModal.scope === 'paginas' ? '#7C3AED' : '#E2E5EB', background: verModal.scope === 'paginas' ? '#F5F3FF' : '#fff' }}>
+                <input type="radio" checked={verModal.scope === 'paginas'} onChange={() => setVerModal(v => ({ ...v, scope: 'paginas' }))} className="mt-0.5 shrink-0" />
+                <span><b className="text-[12.5px] text-[#1A1D26]">Solo las páginas</b><br /><span className="text-[11px] text-[#6B7280] leading-snug">Cambian la landing / pre-landing / formulario / thank you. El <b>VSL y los anuncios se comparten</b> con la versión actual. <b>No</b> se crean carpetas de grabación nuevas.</span></span>
+              </label>
+              <label className="flex gap-2.5 items-start p-2.5 rounded-lg border cursor-pointer transition-colors" style={{ borderColor: verModal.scope === 'completa' ? '#7C3AED' : '#E2E5EB', background: verModal.scope === 'completa' ? '#F5F3FF' : '#fff' }}>
+                <input type="radio" checked={verModal.scope === 'completa'} onChange={() => setVerModal(v => ({ ...v, scope: 'completa' }))} className="mt-0.5 shrink-0" />
+                <span><b className="text-[12.5px] text-[#1A1D26]">Relanzamiento completo</b><br /><span className="text-[11px] text-[#6B7280] leading-snug">También cambian el <b>VSL y/o los anuncios</b> (hay que grabar de nuevo). Se preparan las carpetas de grabaciones/ediciones de los avatares elegidos.</span></span>
+              </label>
+            </div>
+            {verModal.scope === 'completa' && nombresAvatar.length > 1 && (
+              <div className="mt-2 mb-1 pl-1">
+                <div className="text-[11px] font-bold text-[#6B7280] mb-1.5">¿Para qué avatares? (se prepararán sus carpetas)</div>
+                <div className="flex flex-col gap-1">
+                  {nombresAvatar.map(n => (
+                    <label key={n} className="flex gap-2 items-center text-[12px] text-[#3F4653] cursor-pointer">
+                      <input type="checkbox" checked={verModal.avatars.has(n)} onChange={(e) => setVerModal(v => { const s = new Set(v.avatars); if (e.target.checked) s.add(n); else s.delete(n); return { ...v, avatars: s }; })} />
+                      {n}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setVerModal(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+              <button onClick={confirmarVersion} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer hover:brightness-95">Crear versión</button>
+            </div>
           </div>
         </div>
       )}
