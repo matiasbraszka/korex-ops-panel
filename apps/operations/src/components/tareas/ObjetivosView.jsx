@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isKorexClient, userOwnsTask, userSeesTask, isReviewerOf, getAllPhases, blockingTasks, assigneeMatches } from '../../utils/helpers';
+import { isKorexClient, taskVisibleToNonAdmin, isReviewerOf, getAllPhases, blockingTasks, assigneeMatches } from '../../utils/helpers';
 import { TASK_PRIORITY } from '../../utils/constants';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
@@ -36,7 +36,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
   const {
     clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
-    taskComments, unreadCommentTaskIds, addTaskToSprint,
+    taskComments, unreadCommentTaskIds, addTaskToSprint, adminMembers,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
   // Invitado ("mover y marcar"): puede tocar el punto de completar y arrastrar,
@@ -152,7 +152,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
   // El revisor ve la tarea cuando entra "en-revisión" (además del responsable).
   const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee) || isReviewerOf(t, taskAssignee);
   const visibleTask = (t) => {
-    if (restricted && !userSeesTask(t, currentUser, teamMembers)) return false;
+    if (restricted && !taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers)) return false;
     if (!matchesAssignee(t)) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
     if (onlySprint && (!activeSprint || t.sprintId !== activeSprint.id)) return false;

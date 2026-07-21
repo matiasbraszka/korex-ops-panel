@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, TASK_STATUS } from '../utils/constants';
-import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange, userOwnsTask } from '../utils/helpers';
+import { getStepName, today, fmtDate, getAllPhases, getElapsedDays, getEstimatedDays, isInDueRange, taskVisibleToNonAdmin } from '../utils/helpers';
 import { GripVertical, MessageSquare, Link2, Calendar, AlertTriangle } from 'lucide-react';
 import Dropdown from '../components/Dropdown';
 import Modal from '../components/Modal';
@@ -9,7 +9,7 @@ import TeamAvatar from '../components/TeamAvatar';
 import AddToWeeklyButton from '../components/tareas/AddToWeeklyButton';
 
 export default function TasksPage({ embedded = false }) {
-  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds, taskUserPositions, reorderTaskForUser, clientUserPositions, reorderClientForUser } = useApp();
+  const { clients, tasks, taskFilter, setTaskFilter, taskAssignee, setTaskAssignee, taskClientFilter, setTaskClientFilter, taskPriority, taskDueFilter, hideCompletedTasks, setHideCompletedTasks, hideBlockedTasks, setHideBlockedTasks, collapsedGroups, setCollapsedGroups, currentUser, createTask, updateTask, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds, taskUserPositions, reorderTaskForUser, clientUserPositions, reorderClientForUser, adminMembers } = useApp();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
   const commentCountsByTask = useMemo(() => {
     const map = {};
@@ -165,10 +165,11 @@ export default function TasksPage({ embedded = false }) {
     });
   }
 
-  // Usuarios de operaciones que NO son admin solo ven SUS tareas (todos los clientes).
+  // Usuarios de operaciones que NO son admin ven las tareas de todos MENOS las
+  // que tienen a un administrador como encargado (taskVisibleToNonAdmin).
   const restricted = !!currentUser && !currentUser.isAdmin;
   if (restricted) {
-    filteredTasks = filteredTasks.filter(t => userOwnsTask(t, currentUser, TEAM));
+    filteredTasks = filteredTasks.filter(t => taskVisibleToNonAdmin(t, currentUser, TEAM, adminMembers));
   }
 
   // Client filter
