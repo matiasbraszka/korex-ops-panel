@@ -993,7 +993,7 @@ Quedo a la espera de tu respuesta`;
     try { await onUpdate(f.id, { pages_copy_backup: f.pages_copy || null, backup_at: new Date().toISOString() }); } catch { /* noop */ }
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode: 'pages' },
+        body: { client_id: clientId, strategy_id: f.strategy_id, del_doc_id: f.del_doc_id || null, funnel_id: f.id, funnel_name: f.name || '', mode: 'pages' },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
@@ -1050,7 +1050,7 @@ Quedo a la espera de tu respuesta`;
     try { await onUpdate(f.id, { avatars_backup: avatars, vsl_script_backup: f.vsl_script || null, backup_at: new Date().toISOString() }); } catch { /* noop */ }
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode },
+        body: { client_id: clientId, strategy_id: f.strategy_id, del_doc_id: f.del_doc_id || null, funnel_id: f.id, funnel_name: f.name || '', mode },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
@@ -1077,7 +1077,7 @@ Quedo a la espera de tu respuesta`;
     setVslBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
-        body: { client_id: clientId, strategy_id: f.strategy_id, funnel_id: f.id, funnel_name: f.name || '', mode: 'vsl' },
+        body: { client_id: clientId, strategy_id: f.strategy_id, del_doc_id: f.del_doc_id || null, funnel_id: f.id, funnel_name: f.name || '', mode: 'vsl' },
       });
       let payload = data;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
@@ -1117,6 +1117,31 @@ Quedo a la espera de tu respuesta`;
     } catch { /* si falla crear carpetas, el avatar igual quedó registrado */ }
   };
 
+  // Cuando el DEL crea una versión "completa" (VSL/anuncios nuevos), los avatares elegidos
+  // suman esa versión → en Recursos les aparece un juego de carpetas grabación/edición V2.
+  // Si no se eligió ninguno (funnel de un solo avatar), se aplica a todos.
+  const onVersionComplete = (newVersion, avatarNames) => {
+    const names = new Set((avatarNames || []).map(n => String(n).trim()).filter(Boolean));
+    onUpdate(f.id, { avatars: avatars.map(a => {
+      const match = !names.size || names.has((a.name || '').trim());
+      if (!match) return a;
+      const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
+      return rv.includes(newVersion) ? a : { ...a, rec_versions: [...rv, newVersion] };
+    }) });
+  };
+
+  // Borraron una versión del DEL. Se saca de los avatares para que no muestre sus carpetas;
+  // salvo que queden ediciones de esa versión (keep=true), que se conservan y siguen visibles.
+  const onVersionDelete = (v, keep) => {
+    if (keep) return;
+    onUpdate(f.id, { avatars: avatars.map(a => {
+      const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
+      if (!rv.includes(v)) return a;
+      const nrv = rv.filter(x => x !== v);
+      return { ...a, rec_versions: nrv.length ? nrv : [1] };
+    }) });
+  };
+
   // ── Bloques que la maqueta movió del funnel al DEL ───────────────────────────
   // En PANTALLA (forcePage) el funnel muestra SOLO el riel + tareas; estos bloques
   // (config, VSL, copy, avatares) viven adentro del DEL, en sus pestañas. Se definen
@@ -1153,6 +1178,10 @@ Quedo a la espera de tu respuesta`;
           archivos, gris si está vacía; un clic abre la carpeta en el Drive. */}
       {avatars.map((av, i) => {
         const nombre = (av.name || '').trim();
+        // Versiones de grabación/edición del avatar. Una V2 "completa" del funnel (VSL/anuncios
+        // nuevos) agrega su número acá → aparece un juego de carpetas por versión. Default: solo V1.
+        const recVers = Array.isArray(av.rec_versions) && av.rec_versions.length ? [...new Set(av.rec_versions)].sort((a, b) => a - b) : [1];
+        const multiV = recVers.length > 1;
         return (
           <div key={av.id} className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
             <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
@@ -1162,13 +1191,18 @@ Quedo a la espera de tu respuesta`;
               <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
               <button onClick={() => removeAvatarUndoable(av)} title="Borrar este avatar (se puede deshacer)" className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
             </div>
-            {/* Las 4 carpetas del avatar, alojadas en la plataforma: se suben los archivos
-                acá mismo (no más link de Drive). Un clic abre la carpeta y ahí se ven. */}
-            <div className="p-2.5 flex flex-col gap-1.5">
-              {VID_BUCKETS.map(b => (
-                <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
-                  bucketKey={b.key} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
-                  extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+            {/* Las 4 carpetas del avatar por VERSIÓN: se suben los archivos acá mismo (no más
+                link de Drive). Con una sola versión no se muestra rótulo; con V2+ se separan. */}
+            <div className="p-2.5 flex flex-col gap-2.5">
+              {recVers.map(v => (
+                <div key={v} className="flex flex-col gap-1.5">
+                  {multiV && <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4] px-1 pt-0.5">Versión {v}</div>}
+                  {VID_BUCKETS.map(b => (
+                    <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
+                      bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
+                      extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+                  ))}
+                </div>
               ))}
             </div>
           </div>
@@ -1331,7 +1365,7 @@ Quedo a la espera de tu respuesta`;
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
         <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId}
-          estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} />
+          estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} onVersionComplete={onVersionComplete} onVersionDelete={onVersionDelete} />
       </Modal>
     </div>
   );
@@ -1403,7 +1437,14 @@ export default function FunnelsView({ clientId }) {
   // El DEL sigue viviendo en la CARPETA del Drive (strategy_id), no en el funnel: por eso
   // dos funnels de la misma carpeta comparten DEL. Ya era asi; el aplanado solo lo deja a la
   // vista. Reanclarlo al funnel es la Fase 3 (del_documents con FK propia).
-  const delOf = useCallback((f) => docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del') || null, [docs]);
+  // El DEL de un funnel: primero SU DEL propio (del_doc_id → la "Fase 3"), y si no
+  // tiene uno asignado, fallback por strategy_id (la carpeta), que es como resolvía
+  // antes. Así los funnels 1:1 no cambian y los multi-funnel se separan cuando se les
+  // asigna/parte el DEL. Sin del_doc_id, el comportamiento es idéntico al de hoy.
+  const delOf = useCallback((f) =>
+    (f.del_doc_id && docs.find(d => d.id === f.del_doc_id && d.doc_kind === 'del'))
+    || docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del')
+    || null, [docs]);
   const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
   // Sincronizar contexto = relee documentos (client-brain-sync) Y el árbol de Drive (drive-sync,
   // para traer carpetas nuevas de Recursos), y recarga todo.

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
-  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline } from 'lucide-react';
+  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline, FolderInput } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -113,6 +113,16 @@ function DelToolbar({ api }) {
 // que pidió Matías, agrupadas por categoría, sin tocar el texto.
 const KIND_ORDER = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'pipeline_viejo', 'otros'];
 const kindRank = (k) => { const i = KIND_ORDER.indexOf(k); return i === -1 ? 99 : i; };
+// Categorías que SIEMPRE existen en TODO DEL, aunque estén vacías: así el casillero
+// está listo para cuando se vaya a escribir (pedido de Matías — ej. Samantha sin páginas).
+const STANDARD_KINDS = ['avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
+// Categorías a las que se puede MOVER una sección.
+const MOVE_KINDS = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'otros'];
+// Categorías que VERSIONAN (tienen V1, V2, V3…). El funnel se ve por versión: cambiás
+// de "Este funnel V1" a "V2" y ves solo esa. Regla de Matías: el AVATAR NO versiona
+// (es el mismo en todas las versiones, se ve siempre). La ESTRATEGIA sí puede cambiar
+// entre versiones, así que también versiona.
+const VERSIONABLE_KINDS = ['estrategia', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
 
 // Las 4 secciones sin html (pestañas-puntero que ya no estan en el Doc) se editan
 // igual: el texto plano se envuelve en parrafos para arrancar.
@@ -126,7 +136,7 @@ const DOC_KIND_LABEL = {
   briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
 };
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
   const { currentUser } = useApp();
   const [secs, setSecs] = useState(null);
   const [err, setErr] = useState(null);
@@ -134,6 +144,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [modo, setModo] = useState('leer'); // 'leer' | 'editar'
   const [saveState, setSaveState] = useState({}); // id -> 'saving'|'saved'|'error'
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
+  const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
+  const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
+  const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
+  const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
   // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   const [view, setView] = useState('del');
   const [clientDocs, setClientDocs] = useState([]);
@@ -165,11 +179,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [resolvedDoc, setResolvedDoc] = useState(docId || null);
   const [resolvedClient, setResolvedClient] = useState(clientId || null);
 
+  // Carga las secciones del DEL de ESTE funnel. Si el funnel tiene su DEL propio
+  // (docId, viene de del_doc_id), filtra por doc_id → ve SOLO su documento, aunque
+  // comparta carpeta con otro funnel. Si no, fallback por strategy_id (la carpeta),
+  // como antes. Esto además aísla el caso de dos "del" bajo la misma carpeta.
   const cargar = useCallback(async () => {
     try {
+      const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source&strategy_id=eq.${strategyId}&order=ord.asc`,
-        { headers: { Prefer: 'return=representation' } },
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status&${filtro}&order=ord.asc`,
+        // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
+        // servía una versión vieja cacheada del documento tras reorganizarlo.
+        { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
       );
       const list = Array.isArray(rows) ? rows : [];
       setSecs(list);
@@ -181,7 +202,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     } catch (e) {
       setErr(String(e?.message || e));
     }
-  }, [strategyId]);
+  }, [strategyId, docId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -267,10 +288,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
     try {
-      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&strategy_id=eq.${strategyId}&order=created_at.asc`);
+      // Mismo criterio que las secciones: por doc_id si el funnel tiene DEL propio,
+      // si no por strategy_id (la carpeta). Así los comentarios no se cruzan entre funnels.
+      const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&${filtro}&order=created_at.asc`, { cache: 'no-store' });
       setComments(Array.isArray(rows) ? rows : []);
     } catch { /* si falla, sin comentarios */ }
-  }, [strategyId]);
+  }, [strategyId, docId]);
   useEffect(() => { cargarComments(); }, [cargarComments]);
 
   const comentar = async (section) => {
@@ -463,17 +487,43 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     [secs],
   );
 
+  // Versiones del funnel presentes (según las secciones que versionan). Siempre al menos V1.
+  const versions = useMemo(() => {
+    const set = new Set([1]);
+    for (const s of (secs || [])) if (VERSIONABLE_KINDS.includes(s.kind)) set.add(s.version || 1);
+    return [...set].sort((a, b) => a - b);
+  }, [secs]);
+  // Versión que se está viendo: la elegida, o la última disponible por defecto.
+  const verActiva = (activeVersion && versions.includes(activeVersion)) ? activeVersion : versions[versions.length - 1];
+  // Si la versión elegida deja de existir (se borró), volvés a la última.
+  useEffect(() => { if (activeVersion && !versions.includes(activeVersion)) setActiveVersion(null); }, [versions, activeVersion]);
+
+  // Para cada categoría que versiona: en qué versiones tiene secciones propias.
+  const kindVersionsMap = useMemo(() => {
+    const m = {};
+    for (const s of (secs || [])) if (VERSIONABLE_KINDS.includes(s.kind)) (m[s.kind] || (m[s.kind] = new Set())).add(s.version || 1);
+    return m;
+  }, [secs]);
+
   // Las secciones agrupadas por categoría, en orden canónico. De acá salen los grupos de
   // color del índice y las franjas del documento.
+  // Una categoría que versiona muestra la versión activa SI la cambió; si no, cae a la V1
+  // (compartida). Así una V2 de "solo landing" muestra el VSL/anuncios de la V1 sin duplicarlos.
+  // El avatar y la estrategia se ven siempre. Se incluyen SIEMPRE las estándar (aunque vacías).
   const groups = useMemo(() => {
-    const g = [];
+    const byKind = {};
     for (const s of sorted) {
-      const last = g[g.length - 1];
-      if (last && last.kind === s.kind) last.items.push(s);
-      else g.push({ kind: s.kind, items: [s] });
+      if (VERSIONABLE_KINDS.includes(s.kind)) {
+        const has = kindVersionsMap[s.kind];
+        const target = (has && has.has(verActiva)) ? verActiva : 1;
+        if ((s.version || 1) !== target) continue;
+      }
+      (byKind[s.kind] || (byKind[s.kind] = [])).push(s);
     }
-    return g;
-  }, [sorted]);
+    const kinds = Array.from(new Set([...STANDARD_KINDS, ...sorted.map(s => s.kind)]));
+    kinds.sort((a, b) => kindRank(a) - kindRank(b));
+    return kinds.map(k => ({ kind: k, items: byKind[k] || [] }));
+  }, [sorted, verActiva, kindVersionsMap]);
 
   const irA = (id) => {
     setActiva(id);
@@ -511,6 +561,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       p_doc_id: resolvedDoc, p_title: 'Sección nueva', p_kind: kind || 'otros', p_after_ord: afterOrd ?? null, p_by: by,
     });
     if (error) { window.alert('No pude agregar la sección: ' + error.message); return; }
+    // Si la categoría versiona, la sección nueva nace en la versión que estás viendo (V2, V3…).
+    if (data && VERSIONABLE_KINDS.includes(kind) && verActiva > 1) {
+      await supabase.rpc('del_section_set_version', { p_id: data, p_version: verActiva, p_by: by });
+    }
     await cargar();
     emitir('section-add', {});
     setModo('editar');
@@ -556,6 +610,63 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     else emitir('section', { row: { id, title: title.trim() } });
   };
 
+  // Mover una sección a otra categoría (cambia su `kind` → aparece en otro grupo).
+  const moverACategoria = async (id, kind) => {
+    setMoveMenu(null);
+    const s = secs.find(x => x.id === id);
+    if (!s || s.kind === kind) return;
+    setSecs((prev) => prev.map(x => x.id === id ? { ...x, kind, source: 'panel' } : x));
+    const { error } = await supabase.rpc('del_section_set_kind', { p_id: id, p_kind: kind, p_by: by });
+    if (error) { window.alert('No pude mover: ' + error.message); await cargar(); return; }
+    emitir('section', { row: { id, kind } });
+  };
+
+  // ── Versionado a nivel funnel ─────────────────────────────────────────────────
+  // "+" abre un modal que pregunta qué cambia en la versión nueva: solo las páginas
+  // (VSL/anuncios se comparten, sin carpetas nuevas) o un relanzamiento completo
+  // (VSL/anuncios nuevos → se preparan las carpetas de grabación de los avatares elegidos).
+  const nombresAvatar = useMemo(() => (secs || []).filter(s => s.kind === 'avatares').map(s => s.title), [secs]);
+  const agregarVersion = () => {
+    if (!resolvedDoc) { window.alert('Este funnel todavía no tiene un DEL propio donde crear versiones.'); return; }
+    setVerModal({ scope: 'paginas', avatars: new Set() });
+  };
+  const confirmarVersion = async () => {
+    const scope = verModal?.scope || 'paginas';
+    const chosen = [...(verModal?.avatars || [])];
+    setVerModal(null);
+    const { data, error } = await supabase.rpc('del_version_add', { p_doc_id: resolvedDoc, p_by: by, p_scope: scope });
+    if (error) { window.alert('No pude agregar la versión: ' + error.message); return; }
+    await cargar();
+    emitir('section-add', {});
+    if (data) {
+      setActiveVersion(data); setModo('editar'); setView('del');
+      // Relanzamiento completo → los avatares elegidos suman la versión (carpetas grabación/edición V2).
+      if (scope === 'completa') onVersionComplete?.(data, chosen.length ? chosen : nombresAvatar);
+    }
+  };
+
+  // Borrar una versión ENTERA: sus secciones del DEL + las grabaciones (videos crudos).
+  // Las ediciones / videos editados NO se borran (el trabajo terminado se conserva).
+  const confirmarBorrarVersion = async () => {
+    const v = delVerModal?.v;
+    setDelVerModal(null);
+    if (!v || v <= 1) return;
+    // ¿Quedan ediciones de esta versión? Si sí, la versión sigue existiendo en Recursos para ellas.
+    let tieneEdiciones = false;
+    try {
+      const ed = await sbFetch(`funnel_resources?select=id&strategy_id=eq.${encodeURIComponent(strategyId)}&version=eq.${v}&bucket_key=in.(ad_edit,vsl_edit)&limit=1`);
+      tieneEdiciones = Array.isArray(ed) && ed.length > 0;
+    } catch { /* si falla el chequeo, seguimos */ }
+    const { error } = await supabase.rpc('del_version_delete', { p_doc_id: resolvedDoc, p_version: v, p_by: by });
+    if (error) { window.alert('No pude borrar la versión: ' + error.message); return; }
+    // Borrar SOLO las grabaciones (videos crudos) de esa versión; las ediciones quedan intactas.
+    await supabase.from('funnel_resources').delete().eq('strategy_id', strategyId).eq('version', v).in('bucket_key', ['ad_rec', 'vsl_rec']);
+    setActiveVersion(null);
+    await cargar();
+    emitir('section-add', {});
+    onVersionDelete?.(v, tieneEdiciones);
+  };
+
   if (err) {
     return (
       <div className="p-6"><div className="rounded-xl border p-4 text-[13px]" style={{ background: '#FEF2F2', borderColor: '#F5C2C2', color: '#B91C1C' }}>
@@ -593,6 +704,33 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
         <nav className="sticky top-0 flex flex-col gap-0.5 p-2 rounded-xl border border-[#E7EAF0] bg-white max-h-[calc(100vh-120px)] overflow-y-auto" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>
           <div className="px-2 pt-1 pb-1.5">
             <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Este funnel</span>
+            {/* Selector de versión del funnel: V1 por defecto; el + agrega V2, V3… con su
+                propio juego de VSL / Anuncios / Landings. El avatar y la estrategia se ven
+                en todas. Cambiás de versión con un clic y ves solo esa. */}
+            <div className="flex items-center gap-1 flex-wrap mt-1.5">
+              {versions.map(v => {
+                const on = verActiva === v;
+                return (
+                  <button key={v} onClick={() => setActiveVersion(v)} title={`Ver la versión ${v} de este funnel`}
+                    className="inline-flex items-center py-1 px-2.5 rounded-md text-[11px] font-bold border cursor-pointer transition-colors"
+                    style={on
+                      ? { background: '#EFEBFF', color: '#6D28D9', borderColor: '#DDD3FF' }
+                      : { background: 'transparent', color: '#9098A4', borderColor: '#E7EAF0' }}>
+                    V{v}
+                  </button>
+                );
+              })}
+              <button onClick={agregarVersion} title="Agregar una versión nueva del funnel (V2, V3…) con VSL, anuncios y landings propios"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-[#D0D5DD] text-[#9098A4] hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent cursor-pointer">
+                <Plus size={13} />
+              </button>
+              {verActiva > 1 && (
+                <button onClick={() => setDelVerModal({ v: verActiva, texto: '' })} title={`Borrar la Versión ${verActiva} entera`}
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#F3D0D0] text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] hover:border-[#FECACA] bg-transparent cursor-pointer">
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
           </div>
           {/* "DEL" arriba de todo = el documento entero */}
           <button onClick={() => { setView('del'); scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
@@ -603,8 +741,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           {/* Las secciones del documento, agrupadas por categoría con su color. */}
           {groups.map(gr => {
             const sc = secOf(gr.kind);
+            const emptyCat = gr.items.length === 0;
             return (
-              <div key={gr.kind} className="mb-0.5">
+              <div key={gr.kind} className="mb-0.5" style={emptyCat ? { opacity: 0.6 } : undefined}>
                 <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
                   <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: sc.c }} />
                   <span className="text-[9.5px] font-extrabold tracking-[0.07em] uppercase" style={{ color: sc.c }}>{sc.label}</span>
@@ -620,6 +759,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     </button>
                   );
                 })}
+                {emptyCat && (
+                  <button onClick={() => editando ? agregar(null, gr.kind) : setModo('editar')}
+                    className="flex items-center gap-1.5 w-full py-1 pl-4 pr-2.5 rounded-[9px] text-left border-none cursor-pointer text-[11px] font-medium italic text-[#AEB4BF] hover:text-[#7C3AED] bg-transparent">
+                    — falta escribir —
+                  </button>
+                )}
               </div>
             );
           })}
@@ -700,6 +845,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               <button onClick={() => setModo('leer')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
               <button onClick={() => setModo('editar')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
             </div>
+            <span className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[11px] font-bold shrink-0" style={{ background: '#EFEBFF', color: '#6D28D9' }} title="Estás viendo esta versión del funnel. Cambiá de versión en el menú de la izquierda.">Este funnel · V{verActiva}</span>
             <span className="text-[11px] text-[#9098A4]">{editando ? 'Los cambios se guardan solos. Este DEL pasa a vivir en el panel.' : 'Copia de lectura · el documento vive en Drive'}</span>
             {/* Presencia: quién tiene el DEL abierto ahora mismo (en vivo). */}
             {otros.length > 0 && (
@@ -733,6 +879,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   </span>
                   <span className="h-px flex-1" style={{ background: '#EDF0F5' }} />
                 </div>
+                {gr.items.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-white/60 py-5 px-5 text-center">
+                    <div className="text-[12.5px] text-[#9098A4] font-medium">Todavía no está escrita la sección de <b style={{ color: gc.c }}>{gc.label}</b>.</div>
+                    {editando
+                      ? <button onClick={() => agregar(null, gr.kind)} className="inline-flex items-center gap-1.5 mt-2.5 py-1.5 px-3 rounded-[9px] border-none bg-[#7C3AED] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95"><Plus size={13} />Escribir {gc.label}</button>
+                      : <div className="text-[11px] text-[#C3C9D4] mt-1">Tocá “Editar” para empezar a escribirla.</div>}
+                  </div>
+                )}
                 {gr.items.map(s => {
             const sc = secOf(s.kind);
             const st = saveState[s.id];
@@ -769,6 +923,22 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
                       <button onClick={() => agregar(s.ord, s.kind)} title="Agregar sección debajo (misma categoría)" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
+                      <span className="relative inline-flex">
+                        <button onClick={() => setMoveMenu(moveMenu === s.id ? null : s.id)} title="Mover a otra categoría" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
+                        {moveMenu === s.id && (<>
+                          <span className="fixed inset-0 z-30" onClick={() => setMoveMenu(null)} />
+                          <div className="absolute right-0 top-8 z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[172px] max-h-[320px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
+                            <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a…</div>
+                            {MOVE_KINDS.map(k => { const mc = secOf(k); const cur = k === s.kind; return (
+                              <button key={k} onClick={() => moverACategoria(s.id, k)} disabled={cur}
+                                className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:bg-[#F4F6F9]"
+                                style={{ color: mc.c }}>
+                                <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}{cur && <Check size={12} className="ml-auto" />}
+                              </button>
+                            ); })}
+                          </div>
+                        </>)}
+                      </span>
                       <button onClick={() => borrar(s)} title="Borrar sección" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:bg-[#FEF2F2] hover:text-[#B91C1C] border-none bg-transparent cursor-pointer"><Trash2 size={13} /></button>
                     </div>
                   )}
@@ -954,6 +1124,66 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           <div className="flex justify-end gap-2 mt-2">
             <button onClick={() => { setComposer(null); setDraft(''); }} className="py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[12px] font-semibold cursor-pointer">Cancelar</button>
             <button onClick={comentarQuote} disabled={!draft.trim()} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50"><Send size={12} />Comentar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: borrar una versión entera (doble confirmación: hay que escribir BORRAR). */}
+      {delVerModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setDelVerModal(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[430px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#B91C1C] mb-1.5 flex items-center gap-1.5"><AlertCircle size={16} />Borrar la Versión {delVerModal.v} entera</div>
+            <div className="text-[12px] text-[#4B5563] mb-3 leading-snug">
+              Se van a borrar <b>todas las secciones del DEL de la Versión {delVerModal.v}</b> (estrategia, VSL, anuncios y páginas de esa versión) y sus <b>grabaciones (videos crudos)</b>.<br />
+              <span className="text-[#15803D] font-semibold">Las ediciones / videos ya editados NO se borran.</span><br />
+              <span className="text-[#B91C1C]">Esto no se puede deshacer.</span>
+            </div>
+            <div className="text-[11px] font-semibold text-[#6B7280] mb-1.5">Escribí <b>BORRAR</b> para confirmar:</div>
+            <input value={delVerModal.texto} autoFocus onChange={e => setDelVerModal(m => ({ ...m, texto: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Escape') setDelVerModal(null); if (e.key === 'Enter' && delVerModal.texto.trim().toUpperCase() === 'BORRAR') confirmarBorrarVersion(); }}
+              placeholder="BORRAR" className="w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#DC2626]" />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setDelVerModal(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+              <button onClick={confirmarBorrarVersion} disabled={delVerModal.texto.trim().toUpperCase() !== 'BORRAR'}
+                className="py-2 px-4 rounded-lg border-none bg-[#DC2626] text-white text-[13px] font-semibold cursor-pointer hover:brightness-95 disabled:opacity-40 disabled:cursor-default">Borrar versión</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: nueva versión del funnel (solo páginas vs relanzamiento completo). */}
+      {verModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setVerModal(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[460px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Nueva versión del funnel</div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3">¿Qué cambia en esta versión nueva?</div>
+            <div className="flex flex-col gap-2 mb-1">
+              <label className="flex gap-2.5 items-start p-2.5 rounded-lg border cursor-pointer transition-colors" style={{ borderColor: verModal.scope === 'paginas' ? '#7C3AED' : '#E2E5EB', background: verModal.scope === 'paginas' ? '#F5F3FF' : '#fff' }}>
+                <input type="radio" checked={verModal.scope === 'paginas'} onChange={() => setVerModal(v => ({ ...v, scope: 'paginas' }))} className="mt-0.5 shrink-0" />
+                <span><b className="text-[12.5px] text-[#1A1D26]">Solo las páginas</b><br /><span className="text-[11px] text-[#6B7280] leading-snug">Cambian la landing / pre-landing / formulario / thank you. El <b>VSL y los anuncios se comparten</b> con la versión actual. <b>No</b> se crean carpetas de grabación nuevas.</span></span>
+              </label>
+              <label className="flex gap-2.5 items-start p-2.5 rounded-lg border cursor-pointer transition-colors" style={{ borderColor: verModal.scope === 'completa' ? '#7C3AED' : '#E2E5EB', background: verModal.scope === 'completa' ? '#F5F3FF' : '#fff' }}>
+                <input type="radio" checked={verModal.scope === 'completa'} onChange={() => setVerModal(v => ({ ...v, scope: 'completa' }))} className="mt-0.5 shrink-0" />
+                <span><b className="text-[12.5px] text-[#1A1D26]">Relanzamiento completo</b><br /><span className="text-[11px] text-[#6B7280] leading-snug">También cambian el <b>VSL y/o los anuncios</b> (hay que grabar de nuevo). Se preparan las carpetas de grabaciones/ediciones de los avatares elegidos.</span></span>
+              </label>
+            </div>
+            {verModal.scope === 'completa' && nombresAvatar.length > 1 && (
+              <div className="mt-2 mb-1 pl-1">
+                <div className="text-[11px] font-bold text-[#6B7280] mb-1.5">¿Para qué avatares? (se prepararán sus carpetas)</div>
+                <div className="flex flex-col gap-1">
+                  {nombresAvatar.map(n => (
+                    <label key={n} className="flex gap-2 items-center text-[12px] text-[#3F4653] cursor-pointer">
+                      <input type="checkbox" checked={verModal.avatars.has(n)} onChange={(e) => setVerModal(v => { const s = new Set(v.avatars); if (e.target.checked) s.add(n); else s.delete(n); return { ...v, avatars: s }; })} />
+                      {n}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setVerModal(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+              <button onClick={confirmarVersion} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer hover:brightness-95">Crear versión</button>
+            </div>
           </div>
         </div>
       )}

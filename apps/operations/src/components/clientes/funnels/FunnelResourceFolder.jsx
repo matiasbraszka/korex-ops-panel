@@ -116,7 +116,7 @@ function Tile({ r, voomly = false, onVoomly, selected, onToggleSelect, onDelete,
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, reloadTick = 0, onMoved, moveTargets, voomly = false }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, voomly = false }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -133,7 +133,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   // cliente, compartidas por todos sus funnels — strategy_id null).
   const scopeFilter = clientScope
     ? `client_id=eq.${encodeURIComponent(clientId)}&strategy_id=is.null&avatar_id=is.null`
-    : `strategy_id=eq.${encodeURIComponent(strategyId)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}`;
+    : `strategy_id=eq.${encodeURIComponent(strategyId)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&version=eq.${version}`;
 
   const cargar = async () => {
     try {
@@ -148,7 +148,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     setSelected(new Set());
     setVisible(10);   // al recargar la carpeta, volvemos a mostrar los primeros 10
   };
-  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope, reloadTick]);
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope, version, reloadTick]);
 
   const subir = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -157,7 +157,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     // Campos comunes de dónde vive el recurso (funnel o cliente).
     const base = clientScope
       ? { strategy_id: null, client_id: clientId, avatar_id: null }
-      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null };
+      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, version };
     const pathBase = clientScope ? `cliente/${clientId}` : `${strategyId}/${avatarId || 'cliente'}`;
     let done = 0; setBusy({ done, total: files.length, pct: 0 });
     for (const file of files) {
@@ -226,7 +226,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     if (!ids?.length || !targetKey) return;
     const patch = clientScope
       ? { strategy_id: null, client_id: clientId, avatar_id: null, bucket_key: targetKey }
-      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: targetKey };
+      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: targetKey, version };
     const { error } = await supabase.from('funnel_resources').update(patch).in('id', ids);
     if (error) { window.alert('No pude mover: ' + error.message); return; }
     setSelected(new Set());

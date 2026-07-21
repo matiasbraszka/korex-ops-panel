@@ -416,11 +416,15 @@ Deno.serve(async (req) => {
     }
   } catch { /* si falla el chequeo, seguimos (el max_tokens acota igual) */ }
 
-  // DEL de la estrategia. Si hay varios "del" (ej. un falso positivo del detector por nombre,
-  // como "Copia de HISTORIA Y LINK DEL VIDEO"), gana el MÁS GRANDE: el DEL real es enorme y el
-  // falso positivo suele ser un doc corto. Robusto sin borrar nada.
+  // DEL del funnel. Prioridad: `del_doc_id` (el DEL PROPIO del funnel, la "Fase 3") →
+  // si no vino, fallback por `strategy_id` (la carpeta), como antes. Con del_doc_id se
+  // lee EXACTAMENTE ese doc, así dos funnels de la misma carpeta ya no comparten DEL.
+  // Sin del_doc_id, se mantiene el criterio de siempre: si hay varios "del" bajo la
+  // carpeta (ej. un falso positivo del detector por nombre), gana el MÁS GRANDE.
+  const delDocId = str(body.del_doc_id);
   let delQ = supabase.from("client_brain_docs").select("text,char_count").eq("client_id", clientId).eq("doc_kind", "del");
-  if (strategyId) delQ = delQ.eq("strategy_id", strategyId);
+  if (delDocId) delQ = delQ.eq("id", delDocId);
+  else if (strategyId) delQ = delQ.eq("strategy_id", strategyId);
   const { data: delRows } = await delQ.order("char_count", { ascending: false }).limit(1);
   const delText = str((delRows && delRows[0]?.text) || "").slice(0, 200000); // cota de seguridad
   if (!delText) return j({ ok: false, error: "no_del", detail: "No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero." }, 400);

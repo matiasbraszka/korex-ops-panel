@@ -59,6 +59,9 @@ html, body {
 .del-rich em { font-style: italic; }
 .del-rich a { color: #2E69E0; text-decoration: underline; }
 .del-rich a:hover { color: #1D4FD8; }
+/* El DEL y los documentos del cliente en solo lectura DEBEN poder marcarse y copiarse.
+   Sin esto, en algunos navegadores el texto de solo lectura no se dejaba seleccionar. */
+.del-rich, .del-rich * { user-select: text !important; -webkit-user-select: text !important; cursor: auto; }
 .del-rich ul { list-style: disc; padding-left: 22px; margin: 7px 0; }
 .del-rich ol { list-style: decimal; padding-left: 22px; margin: 7px 0; }
 .del-rich li { display: list-item; margin: 3px 0; }
