@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS } from '../utils/constants';
-import { initials, progress, getAllPhases, getRoadmapTasks, daysAgo, fmtDate, clientPill, today, userOwnsTask } from '../utils/helpers';
+import { initials, progress, getAllPhases, getRoadmapTasks, daysAgo, fmtDate, clientPill, today, taskVisibleToNonAdmin } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
@@ -22,7 +22,7 @@ const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, llamadas, teamMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, llamadas, teamMembers, adminMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
   const TEAM = teamMembers || [];
   const [editModal, setEditModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -43,11 +43,12 @@ export default function ClientDetail({ client: c }) {
   const restricted = !!currentUser && !currentUser.isAdmin;
 
   const clientTasks = tasks.filter(t => t.clientId === c.id);
-  // Los usuarios que no son admin solo ven SUS tareas (igual que la lista de la
-  // pestaña Tareas): por eso el conteo del tab y el resumen también se filtran.
+  // Los no-admin ven las tareas de todos menos las de encargado admin (igual que
+  // la lista de la pestaña Tareas): por eso el conteo del tab y el resumen también
+  // se filtran.
   const roadmapTasks = (() => {
     const all = getRoadmapTasks(c.id, tasks);
-    return restricted ? all.filter(t => userOwnsTask(t, currentUser, TEAM)) : all;
+    return restricted ? all.filter(t => taskVisibleToNonAdmin(t, currentUser, TEAM, adminMembers)) : all;
   })();
   // Use new system if client has ANY tasks (not just roadmap-flagged ones)
   const useNewSystem = clientTasks.length > 0;
@@ -235,7 +236,7 @@ export default function ClientDetail({ client: c }) {
               const myPages = myStrategies.flatMap(s => (strategyPages || []).filter(p => p.strategy_id === s.id));
               const pagesActive = myPages.filter(p => p.testing_url || p.prod_url).length;
               // Tareas vencidas
-              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today() && (!restricted || userOwnsTask(t, currentUser, TEAM))).length;
+              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today() && (!restricted || taskVisibleToNonAdmin(t, currentUser, TEAM, adminMembers))).length;
               const tiles = [
                 { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${roadmapPct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
                 { icon: Layers, label: 'Estrategias', value: strategiesCount, sub: pagesActive ? `${pagesActive} página(s) activa(s)` : 'sin páginas activas', color: '#1A1D26', tab: 'trabajo' },

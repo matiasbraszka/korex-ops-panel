@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sbFetch, supabase } from '@korex/db';
 import { useCurrentUser, signOut } from '@korex/auth';
 import { CLIENT_ADS_DATA, PRIO_CLIENT, TAREAS_LAYOUT } from '../utils/constants';
-import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, addDaysStr, sprintStubForMonday, upcomingSprintStubs, buildSprintSummary, userOwnsTask, userSeesTask, isReviewerOf, assigneeMatches, departmentForAssignee } from '../utils/helpers';
+import { mkClient, mkTask, createDefaultTasks, today, isTimerRunning, daysBetween, migrateClientToRoadmap, hasRoadmapTasks, recomputeStartedDates, isTaskEnabled, ensureBulletIds, getActiveSprint, mondayOf, addDaysStr, sprintStubForMonday, upcomingSprintStubs, buildSprintSummary, taskVisibleToNonAdmin, isReviewerOf, assigneeMatches, departmentForAssignee } from '../utils/helpers';
 import { extractMentions } from '../utils/mentions';
 import { diffBulletsByTaskLink, bulletsToComplete } from '../utils/taskActivity';
 
@@ -100,6 +100,11 @@ export function AppProvider({ children }) {
   // Settings panel state (cargado desde Supabase)
   const [appSettings, setAppSettings] = useState(null); // { roadmap_template, services, priority_labels }
   const [teamMembers, setTeamMembers] = useState([]); // [{ id, name, role, ... }]
+  // Ids de team_members que son administradores (rol admin). Vienen del RPC
+  // korex_admin_member_ids (SECURITY DEFINER), porque la RLS de user_roles no
+  // deja a un no-admin leer los roles ajenos. Sirve para ocultar a los no-admin
+  // las tareas cuyo ENCARGADO es admin (ver taskVisibleToNonAdmin).
+  const [adminMemberIds, setAdminMemberIds] = useState([]);
   // Weekly to-do list (personal por usuario)
   const [weeklyTodos, setWeeklyTodos] = useState([]); // [{ id, userId, taskId, date, position }]
   // Sprints (Kanban ágil) — semana de trabajo del equipo
@@ -179,6 +184,15 @@ export function AppProvider({ children }) {
   const startedDateBackfilledRef = useRef(false);
   const teamMembersRef = useRef([]);
   teamMembersRef.current = teamMembers;
+  // Miembros administradores (id + nombre), resolviendo los ids del RPC contra
+  // teamMembers. Se pasa a taskVisibleToNonAdmin en cada vista de tareas.
+  const adminMembers = useMemo(() => {
+    if (!adminMemberIds.length) return [];
+    const set = new Set(adminMemberIds.map(String));
+    return teamMembers.filter(m => set.has(String(m.id)));
+  }, [teamMembers, adminMemberIds]);
+  const adminMembersRef = useRef([]);
+  adminMembersRef.current = adminMembers;
   // Refs de usuario/filtro actuales para leerlos dentro de callbacks memoizados
   // (updateTask) sin recrearlos ni sumarlos a sus deps.
   const currentUserRef = useRef(null);
@@ -856,7 +870,7 @@ export function AppProvider({ children }) {
       const merged = { ...prevForHistory, ...cleanOuter };
       const cu = currentUserRef.current;
       const restricted = !!cu && !cu.isAdmin;
-      const stillMine = !restricted || userSeesTask(merged, cu, teamMembersRef.current);
+      const stillMine = !restricted || taskVisibleToNonAdmin(merged, cu, teamMembersRef.current, adminMembersRef.current);
       const stillInFilter = assigneeMatches(merged.assignee, taskAssigneeRef.current) || isReviewerOf(merged, taskAssigneeRef.current);
       if (!stillMine || !stillInFilter) {
         const who = (merged.assignee || '').trim();
@@ -2171,6 +2185,17 @@ export function AppProvider({ children }) {
       if (sbSettings && sbSettings.length > 0) setAppSettings(sbSettings[0].value || null);
       if (sbTeam && sbTeam.length > 0) setTeamMembers(sbTeam.map(m => ({ ...m, avatar: m.avatar_url || m.avatar || null })));
 
+      // Ids de administradores (para ocultar a los no-admin las tareas cuyo
+      // encargado es admin). RPC SECURITY DEFINER: funciona aunque el usuario no
+      // pueda leer user_roles ajenos. Si falla, adminMemberIds queda [] y los
+      // no-admin verían todo (fallback seguro: preferimos no romper la vista).
+      try {
+        const ids = await sbFetch('rpc/korex_admin_member_ids', {
+          method: 'POST', body: '{}', headers: { 'Prefer': 'return=representation' },
+        });
+        if (Array.isArray(ids)) setAdminMemberIds(ids.map(String));
+      } catch { /* silent */ }
+
       // Cargar loom videos
       try {
         const vids = await sbFetch('loom_videos?select=*&order=position.asc', { headers: { 'Prefer': 'return=representation' } });
@@ -2802,6 +2827,7 @@ export function AppProvider({ children }) {
     // Settings panel
     appSettings,
     teamMembers,
+    adminMembers,
     updateAppSettings,
     addTeamMember,
     updateTeamMember,
@@ -2928,7 +2954,7 @@ export function AppProvider({ children }) {
     taskAssignee, taskClientFilter, taskPriority, taskDueFilter, taskDepartment,
     currentUser, authUser, isAdmin, briefing, satByClient, reportFeedbacks, taskProposals,
     dashboardAlerts, hideCompleted, hideCompletedTasks, hideBlockedTasks,
-    collapsedGroups, syncStatus, saveError, flashMessage, appSettings, teamMembers, weeklyTodos,
+    collapsedGroups, syncStatus, saveError, flashMessage, appSettings, teamMembers, adminMembers, weeklyTodos,
     sprints, activeSprint,
     loomVideos, llamadas, pendingCallsCount, teamReports, teamBlockers,
     ideas, notas, taskComments, bulletComments, ideaComments, blockerComments,

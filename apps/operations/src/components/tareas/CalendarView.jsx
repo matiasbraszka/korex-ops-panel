@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DEPARTMENTS, TASK_STATUS } from '../../utils/constants';
-import { today, daysAgo, daysBetween, assigneeMatches, userSeesTask } from '../../utils/helpers';
+import { today, daysAgo, daysBetween, assigneeMatches, taskVisibleToNonAdmin } from '../../utils/helpers';
 import PersonAvatar from './PersonAvatar';
 import TaskDetailDrawer from './TaskDetailDrawer';
 
@@ -19,7 +19,7 @@ const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
 export default function CalendarView({ onlySprint = false }) {
   const {
     tasks, clients, teamMembers, updateTask, currentUser, activeSprint,
-    taskAssignee, taskClientFilter, hideCompletedTasks,
+    taskAssignee, taskClientFilter, hideCompletedTasks, adminMembers,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
   // Invitado: ve el calendario (solo sus entregables) pero no puede REPROGRAMAR
@@ -37,7 +37,7 @@ export default function CalendarView({ onlySprint = false }) {
 
   const visible = (t) => {
     if (!t.dueDate) return false;
-    if (restricted && !userSeesTask(t, currentUser, teamMembers)) return false;
+    if (restricted && !taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers)) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
     if (onlySprint && (!activeSprint || t.sprintId !== activeSprint.id)) return false;
     if (!assigneeMatches(t.assignee, taskAssignee)) return false;

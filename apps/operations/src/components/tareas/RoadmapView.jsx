@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { isInDueRange, userOwnsTask } from '../../utils/helpers';
+import { isInDueRange, taskVisibleToNonAdmin } from '../../utils/helpers';
 import ClientRoadmapPanel from './ClientRoadmapPanel';
 
 const EXPANDED_KEY = 'tareas_roadmap_expanded';
@@ -21,6 +21,7 @@ export default function RoadmapView() {
     isPriorityHidden,
     currentUser,
     teamMembers,
+    adminMembers,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
 
@@ -75,7 +76,7 @@ export default function RoadmapView() {
       filteredClients = filteredClients.filter(c => {
         const clientTasks = tasks.filter(t => t.clientId === c.id);
         return clientTasks.some(t => {
-          if (restricted && !userOwnsTask(t, currentUser, teamMembers)) return false;
+          if (restricted && !taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers)) return false;
           if (!matchesAssignee(t)) return false;
           if (hideCompletedTasks && t.status === 'done') return false;
           if (hideBlockedTasks && isBlocked(t)) return false;
