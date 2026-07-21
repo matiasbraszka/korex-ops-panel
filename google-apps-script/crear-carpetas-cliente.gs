@@ -352,7 +352,13 @@ function readDoc(b) {
 //     que bajarlas y alojarlas nosotros, y eso es la Etapa C (Recursos). Por ahora
 //     deja una marca <figure data-drive-image> en su lugar, para que se vea que ahí
 //     va una imagen y no parezca que el documento está incompleto.
-//   · El formato ADENTRO de las celdas de una tabla (se toma el texto de la celda).
+//
+// TABLAS: las landings, pre-landings, PCL y formularios venían armadas DENTRO de tablas
+// en el Doc, y antes rtTable() sacaba solo el getText() de cada celda: se conservaba la
+// grilla pero se aplanaba TODO el formato de adentro (negritas, títulos, colores). Ahora
+// la tabla se DESARMA: el contenido de cada celda pasa por el mismo serializador que el
+// resto del documento (rtBlocks) y se vuelca como bloques normales, sin grilla. Así esas
+// secciones quedan con el mismo formato que el resto del DEL.
 
 function rtEsc(s) {
   return String(s == null ? '' : s)
@@ -427,28 +433,37 @@ function rtTag(p) {
   return 'p';
 }
 
+// Una tabla del Doc NO se serializa como <table>: se DESARMA. El contenido de cada
+// celda pasa por rtBlocks() (el mismo serializador que el cuerpo de la pestaña), así que
+// conserva negritas, títulos, colores, links y listas, y se vuelca como bloques normales
+// en orden de lectura (fila por fila, celda por celda). Motivo: las landings/formularios
+// estaban maquetadas en tablas y esa grilla no se necesita en el panel — lo que importa
+// es el formato de adentro, que antes se perdía con getText().
 function rtTable(tb) {
-  var rows = [];
+  var out = [];
   for (var r = 0; r < tb.getNumRows(); r++) {
-    var row = tb.getRow(r), cells = [];
+    var row = tb.getRow(r);
     for (var c = 0; c < row.getNumCells(); c++) {
-      cells.push('<td>' + rtEsc(row.getCell(c).getText()) + '</td>');
+      var blocks = rtBlocks(row.getCell(c));
+      // Celda sin texto real (solo tags o espacios) = espaciado, no viaja.
+      if (blocks.replace(/<[^>]*>/g, '').trim()) out.push(blocks);
     }
-    rows.push('<tr>' + cells.join('') + '</tr>');
   }
-  return rows.length ? ('<table>' + rows.join('') + '</table>') : '';
+  return out.join('\n');
 }
 
-// Serializa el cuerpo de UNA pestaña. Los ítems de lista consecutivos se agrupan en
-// una sola <ul>/<ol>: en el Doc cada ítem es un elemento suelto, y sin agrupar
-// quedarían N listas de un ítem cada una.
-function rtBody(body) {
+// Serializa los bloques hijos de un contenedor. Sirve tanto para el cuerpo de una
+// pestaña (Body) como para una celda de tabla (TableCell): las dos exponen la misma API
+// getNumChildren()/getChild(i) con párrafos, listas y tablas anidadas. Los ítems de lista
+// consecutivos se agrupan en una sola <ul>/<ol>: en el Doc cada ítem es un elemento
+// suelto, y sin agrupar quedarían N listas de un ítem cada una.
+function rtBlocks(container) {
   var ET = DocumentApp.ElementType;
   var out = [], lista = null;
   var cerrarLista = function () { if (lista) { out.push('</' + lista + '>'); lista = null; } };
 
-  for (var i = 0; i < body.getNumChildren(); i++) {
-    var el = body.getChild(i), tipo;
+  for (var i = 0; i < container.getNumChildren(); i++) {
+    var el = container.getChild(i), tipo;
     try { tipo = el.getType(); } catch (e) { continue; }
 
     if (tipo === ET.LIST_ITEM) {
@@ -489,6 +504,12 @@ function rtBody(body) {
   }
   cerrarLista();
   return out.join('\n');
+}
+
+// Cuerpo de una pestaña. Es rtBlocks() sobre el Body; existe aparte para dejar claro el
+// punto de entrada que usa readDocRich.
+function rtBody(body) {
+  return rtBlocks(body);
 }
 
 function readDocRich(b) {

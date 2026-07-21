@@ -35,9 +35,11 @@ async function subirABunny(file, title, onProgress) {
   return { videoId, embedUrl, thumbUrl: `https://${hostname}/${videoId}/thumbnail.jpg` };
 }
 
-function Tile({ r, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds }) {
+const VOOMLY_URL = 'https://app.voomly.com/';   // dashboard de Voombly (buscar el VSL y copiar su link)
+function Tile({ r, voomly = false, onVoomly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [voomEdit, setVoomEdit] = useState(false);
   const isImg = r.kind === 'image';
   const isVid = r.kind === 'video';
   return (
@@ -86,11 +88,35 @@ function Tile({ r, selected, onToggleSelect, onDelete, onRename, onOpen, resolve
         </label>
         <button onClick={() => onDelete(r)} title="Borrar recurso" className="ml-auto w-5 h-5 inline-flex items-center justify-center rounded text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 transition-colors"><Trash2 size={12} /></button>
       </div>
+      {/* VSL edición: además del video en el sistema, el link de Voombly (campo manual + buscar). */}
+      {voomly && (
+        <div className="px-1.5 pb-1.5 pt-0 flex flex-col gap-1">
+          {r.voomly_url && !voomEdit ? (
+            <div className="flex items-center gap-1">
+              <a href={r.voomly_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 inline-flex items-center gap-1 text-[9.5px] font-bold text-[#2E69E0] truncate no-underline" title={r.voomly_url}>
+                <Play size={9} fill="currentColor" /> Abrir en Voombly
+              </a>
+              <button onClick={() => setVoomEdit(true)} title="Editar link" className="w-4 h-4 inline-flex items-center justify-center text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><Pencil size={9} /></button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <input autoFocus={voomEdit} defaultValue={r.voomly_url || ''} placeholder="Pegá el link de Voombly"
+                onBlur={(e) => { const v = e.target.value.trim(); setVoomEdit(false); if (v !== (r.voomly_url || '')) onVoomly?.(r, v); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setVoomEdit(false); }}
+                className="flex-1 min-w-0 text-[9.5px] border border-[#E2E5EB] rounded px-1 py-0.5 outline-none focus:border-[#2E69E0]" />
+            </div>
+          )}
+          <a href={VOOMLY_URL} target="_blank" rel="noreferrer" title="Abrir Voombly para buscar el VSL y copiar su link"
+            className="inline-flex items-center justify-center gap-1 py-0.5 rounded border border-dashed border-[#C7DBFB] text-[9px] font-bold text-[#2E69E0] no-underline hover:bg-[#EFF6FF]">
+            🔍 Buscar en Voombly
+          </a>
+        </div>
+      )}
     </div>
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, reloadTick = 0, onMoved, moveTargets }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, reloadTick = 0, onMoved, moveTargets, voomly = false }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -98,6 +124,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const [resOver, setResOver] = useState(false);     // arrastrando un RECURSO de otra carpeta
   const [selected, setSelected] = useState(() => new Set()); // ids tildados para mover en masa
   const [preview, setPreview] = useState(null);   // recurso abierto en el reproductor
+  const [visible, setVisible] = useState(10);     // paginado: cuántos se muestran (de a 10)
   const fileRef = useRef(null);
   const toggleSel = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   // Al arrastrar: si el recurso está tildado y hay varios, se lleva TODA la selección.
@@ -110,11 +137,16 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
-      setItems(Array.isArray(rows) ? rows : []);
+      // Orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10" quedan en secuencia
+      // (localeCompare con numeric respeta los números dentro del texto).
+      const arr = Array.isArray(rows) ? [...rows] : [];
+      arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'es', { numeric: true, sensitivity: 'base' }));
+      setItems(arr);
     } catch { setItems([]); }
     setSelected(new Set());
+    setVisible(10);   // al recargar la carpeta, volvemos a mostrar los primeros 10
   };
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope, reloadTick]);
 
@@ -179,6 +211,13 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const renombrar = async (r, title) => {
     setItems((prev) => (prev || []).map(x => x.id === r.id ? { ...x, title } : x));
     await supabase.from('funnel_resources').update({ title }).eq('id', r.id);
+  };
+
+  // Guarda el link de Voombly del VSL (además del video normal alojado en Bunny).
+  const guardarVoomly = async (r, url) => {
+    const v = (url || '').trim() || null;
+    setItems((prev) => (prev || []).map(x => x.id === r.id ? { ...x, voomly_url: v } : x));
+    await supabase.from('funnel_resources').update({ voomly_url: v }).eq('id', r.id);
   };
 
   // Mueve uno o varios recursos a la carpeta destino (targetKey). Para categorías del
@@ -250,7 +289,20 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
           <div className={`rounded-lg transition-colors ${dragOver ? 'ring-2 ring-dashed' : ''}`} style={dragOver ? { outline: `2px dashed ${color}`, outlineOffset: 2 } : undefined}>
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.map(r => <Tile key={r.id} r={r} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} resolveDragIds={resolveDragIds} />)}
+                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} />)}
+              </div>
+            )}
+            {/* Paginado: mostramos de a 10 para que la carpeta abra fluida aunque tenga cientos. */}
+            {n > visible && (
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <button onClick={() => setVisible(v => v + 10)}
+                  className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white hover:bg-[#F7F9FC]"
+                  style={{ borderColor: color + '55', color }}>
+                  Cargar más <span className="opacity-70">({Math.min(10, n - visible)} de {n - visible} restantes)</span>
+                </button>
+                {n - visible > 10 && (
+                  <button onClick={() => setVisible(n)} className="text-[11px] font-semibold text-[#9098A4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer">Ver todos</button>
+                )}
               </div>
             )}
             {items !== null && n === 0 && !busy && (

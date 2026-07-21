@@ -224,11 +224,9 @@ const CLIENT_CATS = [
   { key: 'branding',    label: 'Branding (colores, logo)', c: '#7C3AED', bg: '#F3EFFF' },
   { key: 'productos',   label: 'Foto de productos',    c: '#15803D', bg: '#E8F7EE' },
   { key: 'empresa',     label: 'Material de la empresa', c: '#B45309', bg: '#FFF7ED' },
-  // Material de anuncios y VSL a nivel cliente (cuando no se pudo asignar avatar).
-  { key: 'ad_rec',      label: 'Anuncios · grabaciones', c: '#C2410C', bg: '#FFF3EC' },
-  { key: 'ad_edit',     label: 'Anuncios · ediciones',   c: '#EA580C', bg: '#FFF3EC' },
-  { key: 'vsl_rec',     label: 'VSL · grabaciones',      c: '#4338CA', bg: '#EEF0FF' },
-  { key: 'vsl_edit',    label: 'VSL · ediciones',        c: '#6D28D9', bg: '#F3EFFF' },
+  { key: 'stock',       label: 'Stock / B-Roll',       c: '#0891B2', bg: '#E7FBFE' },
+  // Anuncios/VSL NO van en Recursos del cliente (son de cada funnel). Lo que caiga suelto a
+  // nivel cliente se manda a "Sin clasificar".
   { key: 'sin_clasif',  label: 'Sin clasificar',       c: '#6B7280', bg: '#F1F3F7' },
 ];
 // Eventos de conversión estándar: se pre-cargan en cada funnel nuevo; los demás son personalizados.
@@ -1169,7 +1167,7 @@ Quedo a la espera de tu respuesta`;
             <div className="p-2.5 flex flex-col gap-1.5">
               {VID_BUCKETS.map(b => (
                 <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
-                  bucketKey={b.key} label={b.label} color={b.c} bg={b.bg} by={meId}
+                  bucketKey={b.key} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
                   extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
               ))}
             </div>
