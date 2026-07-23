@@ -200,7 +200,9 @@ async function syncClient(
   }
 
   // Borrar lo que ya no corresponde (docs viejos o pins removidos).
-  const toDelete = (existing ?? []).map((e) => e.node_id).filter((id) => !desired.has(id));
+  // OJO: NO tocar los docs NATIVOS (node_id 'native_…'), que son del sistema (ej. el DEL
+  // propio de cada funnel) y no viven en Drive — si no, el sync nocturno los borraría.
+  const toDelete = (existing ?? []).map((e) => e.node_id).filter((id) => !desired.has(id) && !String(id).startsWith("native_"));
   if (toDelete.length) {
     await supabase.from("client_brain_docs").delete().eq("client_id", clientId).in("node_id", toDelete);
   }

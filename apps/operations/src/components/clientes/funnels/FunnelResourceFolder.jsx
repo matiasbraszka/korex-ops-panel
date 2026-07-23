@@ -7,8 +7,10 @@
 import { useEffect, useRef, useState } from 'react';
 import * as tus from 'tus-js-client';
 import { supabase, sbFetch } from '@korex/db';
-import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil } from 'lucide-react';
+import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil, ClipboardList, Check, Share2, Copy, X } from 'lucide-react';
 import ResourceLightbox from './ResourceLightbox';
+import { copyText } from '../recursosShared';
+import { publicOrigin } from '../../../utils/helpers';
 
 const BUCKET = 'funnel-recursos';
 const kindOf = (mime) => (mime || '').startsWith('image/') ? 'image' : (mime || '').startsWith('video/') ? 'video' : 'other';
@@ -116,7 +118,7 @@ function Tile({ r, voomly = false, onVoomly, selected, onToggleSelect, onDelete,
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, voomly = false }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -125,8 +127,59 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const [selected, setSelected] = useState(() => new Set()); // ids tildados para mover en masa
   const [preview, setPreview] = useState(null);   // recurso abierto en el reproductor
   const [visible, setVisible] = useState(10);     // paginado: cuántos se muestran (de a 10)
+  const [copied, setCopied] = useState(false);    // feedback del botón "Copiar transcripciones"
+  const [shareOpen, setShareOpen] = useState(false);   // popover de compartir carpeta
+  const [shareLinks, setShareLinks] = useState(null);  // links activos de esta carpeta
+  const [shareBusy, setShareBusy] = useState(false);
+  const [copiedTok, setCopiedTok] = useState(null);
   const fileRef = useRef(null);
+
+  // ── Compartir carpeta con externos (link público de subida) ──
+  const shareScope = () => (clientScope
+    ? { kind: 'folder', client_id: clientId, strategy_id: null, avatar_id: null, bucket_key: bucketKey, version: null }
+    : { kind: 'folder', client_id: clientId, strategy_id: strategyId, avatar_id: avatarId || null, bucket_key: bucketKey, version });
+  const cargarShares = async () => {
+    try {
+      const rows = await sbFetch(`share_links?select=id,token,revoked,created_at,strategy_id,avatar_id&kind=eq.folder&client_id=eq.${encodeURIComponent(clientId)}&bucket_key=eq.${encodeURIComponent(bucketKey)}&revoked=eq.false&order=created_at.desc`);
+      const list = (Array.isArray(rows) ? rows : []).filter(r => (r.strategy_id || null) === (clientScope ? null : strategyId) && (r.avatar_id || null) === (clientScope ? null : (avatarId || null)));
+      setShareLinks(list);
+    } catch { setShareLinks([]); }
+  };
+  const abrirShare = () => { setShareOpen(o => !o); if (!shareOpen) { setShareLinks(null); cargarShares(); } };
+  const urlDe = (tok) => `${publicOrigin()}/compartir/${tok}`;
+  const crearShare = async () => {
+    setShareBusy(true);
+    try {
+      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ ...shareScope(), label, created_by: by || null }) });
+      const created = Array.isArray(res) ? res[0] : res;
+      if (created?.token) { copyText(urlDe(created.token)); setCopiedTok(created.token); setTimeout(() => setCopiedTok(null), 1800); }
+      await cargarShares();
+    } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
+    setShareBusy(false);
+  };
+  const copiarShare = (tok) => { copyText(urlDe(tok)); setCopiedTok(tok); setTimeout(() => setCopiedTok(null), 1500); };
+  const revocarShare = async (id) => {
+    try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ }
+    cargarShares();
+  };
+
   const toggleSel = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // Copia las transcripciones de los videos seleccionados a un solo bloque de texto,
+  // EN EL ORDEN en que están las miniaturas (P01→PNN, ya ordenado en `items`).
+  const copiarTranscripts = async () => {
+    const elegidos = (items || []).filter(r => selected.has(r.id));   // conserva el orden natural
+    const conTexto = elegidos.filter(r => r.transcript && String(r.transcript).trim());
+    if (!conTexto.length) { window.alert('Ninguno de los videos seleccionados tiene transcripción todavía.'); return; }
+    const bloque = conTexto
+      .map(r => `### ${r.title || 'Sin título'}\n\n${String(r.transcript).trim()}`)
+      .join('\n\n---\n\n') + '\n';
+    await copyText(bloque);
+    const faltan = elegidos.length - conTexto.length;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2200);
+    if (faltan > 0) window.alert(`Copié ${conTexto.length} transcripción${conTexto.length === 1 ? '' : 'es'}. ${faltan} video${faltan === 1 ? '' : 's'} no tenía${faltan === 1 ? '' : 'n'} transcripción y quedó${faltan === 1 ? '' : 'aron'} afuera.`);
+  };
   // Al arrastrar: si el recurso está tildado y hay varios, se lleva TODA la selección.
   const resolveDragIds = (id) => (selected.has(id) && selected.size > 1) ? Array.from(selected) : [id];
   // Ámbito: 'funnel' (por avatar, dentro de una estrategia) o 'client' (categorías del
@@ -220,13 +273,22 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     await supabase.from('funnel_resources').update({ voomly_url: v }).eq('id', r.id);
   };
 
-  // Mueve uno o varios recursos a la carpeta destino (targetKey). Para categorías del
-  // cliente cambia sólo el bucket_key; en funnels, además, re-ubica en este avatar/estrategia.
-  const moverIds = async (ids, targetKey) => {
-    if (!ids?.length || !targetKey) return;
-    const patch = clientScope
-      ? { strategy_id: null, client_id: clientId, avatar_id: null, bucket_key: targetKey }
-      : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: targetKey, version };
+  // Mueve uno o varios recursos a la carpeta destino. El destino puede venir como:
+  //  - un OBJETO {key, scope, strategyId, avatarId, version} (dropdown "Mover a…"): se aplica
+  //    el scope del DESTINO, así se puede mover entre CUALQUIER carpeta del funnel o del cliente.
+  //  - un string bucket_key (drop sobre ESTA carpeta): se aplica el scope de esta carpeta.
+  const moverIds = async (ids, target) => {
+    if (!ids?.length || !target) return;
+    let patch;
+    if (typeof target === 'object') {
+      patch = target.scope === 'client'
+        ? { strategy_id: null, client_id: clientId, avatar_id: null, bucket_key: target.key, version: 1 }
+        : { strategy_id: target.strategyId || strategyId, client_id: clientId || null, avatar_id: target.avatarId || null, bucket_key: target.key, version: target.version || 1 };
+    } else {
+      patch = clientScope
+        ? { strategy_id: null, client_id: clientId, avatar_id: null, bucket_key: target }
+        : { strategy_id: strategyId, client_id: clientId || null, avatar_id: avatarId || null, bucket_key: target, version };
+    }
     const { error } = await supabase.from('funnel_resources').update(patch).in('id', ids);
     if (error) { window.alert('No pude mover: ' + error.message); return; }
     setSelected(new Set());
@@ -260,33 +322,102 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
           <span className="text-[11.5px] font-bold" style={{ color }}>Soltá para mover a “{label}”</span>
         </div>
       )}
-      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 w-full py-2 px-2.5 border-none bg-transparent cursor-pointer text-left">
-        <FolderOpen size={15} className="shrink-0" style={{ color: n ? color : '#C3C9D4' }} />
-        <span className="text-[12px] font-semibold shrink-0" style={{ color: n ? color : '#6B7280' }}>{label}</span>
-        {extra}
-        <span className="ml-auto text-[10.5px] font-bold py-0.5 px-2 rounded-full whitespace-nowrap shrink-0" style={n ? { background: bg, color, border: `1px solid ${color}33` } : { background: '#F1F3F7', color: '#AEB4BF' }}>
-          {items === null ? '…' : `${n} elemento${n === 1 ? '' : 's'}`}
-        </span>
-        <ChevronRight size={14} className="shrink-0 transition-transform text-[#C3C9D4]" style={{ transform: open ? 'rotate(90deg)' : 'none' }} />
-      </button>
+      <div className="flex items-center gap-2 w-full py-2 px-2.5">
+        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 flex-1 min-w-0 border-none bg-transparent cursor-pointer text-left p-0">
+          <FolderOpen size={15} className="shrink-0" style={{ color: n ? color : '#C3C9D4' }} />
+          <span className="text-[12px] font-semibold truncate" style={{ color: n ? color : '#6B7280' }}>{label}</span>
+          {extra}
+          <span className="text-[10.5px] font-bold py-0.5 px-2 rounded-full whitespace-nowrap shrink-0" style={n ? { background: bg, color, border: `1px solid ${color}33` } : { background: '#F1F3F7', color: '#AEB4BF' }}>
+            {items === null ? '…' : `${n} elemento${n === 1 ? '' : 's'}`}
+          </span>
+        </button>
+        {/* Compartir carpeta: SIEMPRE visible en la cabecera (como en el DEL). */}
+        <div className="relative shrink-0">
+          <button onClick={abrirShare} title="Compartir esta carpeta con un externo (link para subir archivos)"
+            className="inline-flex items-center gap-1 py-1 px-2 rounded-md border text-[11px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
+            <Share2 size={12} />Compartir
+          </button>
+          {shareOpen && (
+            <div className="absolute z-30 mt-1 right-0 w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Link para subir a “{label}”</span>
+                <button onClick={() => setShareOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
+              </div>
+              <div className="text-[11px] text-[#9098A4] mb-2 leading-snug">Cualquiera con el link puede subir videos/imágenes a esta carpeta (sin cuenta). Se registran con su nombre.</div>
+              {shareLinks === null ? (
+                <div className="py-3 text-center text-[11.5px] text-[#AEB4BF] flex items-center justify-center gap-1.5"><Loader2 size={13} className="animate-spin" />Cargando…</div>
+              ) : (
+                <div className="flex flex-col gap-1.5 mb-2">
+                  {shareLinks.length === 0 && <div className="text-[11.5px] text-[#AEB4BF] py-1">Todavía no hay ningún link.</div>}
+                  {shareLinks.map(l => (
+                    <div key={l.id} className="flex items-center gap-1.5 rounded-lg border border-[#EEF0F3] bg-[#FBFCFE] px-2 py-1.5">
+                      <span className="flex-1 min-w-0 truncate text-[11px] font-mono text-[#3F4653]">/compartir/{l.token}</span>
+                      <button onClick={() => copiarShare(l.token)} title="Copiar" className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E2E8FA] bg-white cursor-pointer" style={{ color: copiedTok === l.token ? '#16A34A' : '#9CA3AF' }}>{copiedTok === l.token ? <Check size={11} strokeWidth={3} /> : <Copy size={11} />}</button>
+                      <button onClick={() => revocarShare(l.id)} title="Revocar (desactivar el link)" className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA]"><Trash2 size={11} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={crearShare} disabled={shareBusy}
+                className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border-none text-white text-[12px] font-semibold cursor-pointer disabled:opacity-60" style={{ background: '#2E69E0' }}>
+                {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}Crear link y copiar
+              </button>
+            </div>
+          )}
+        </div>
+        <button onClick={() => setOpen(o => !o)} className="border-none bg-transparent cursor-pointer p-0 shrink-0">
+          <ChevronRight size={14} className="transition-transform text-[#C3C9D4]" style={{ transform: open ? 'rotate(90deg)' : 'none' }} />
+        </button>
+      </div>
       {open && (
         <div className="px-2.5 pb-2.5">
           {/* Barra de acción en masa: aparece cuando hay recursos tildados. */}
           {selected.size > 0 && (
             <div className="flex items-center gap-2 flex-wrap mb-2 py-1.5 px-2 rounded-lg" style={{ background: '#fff', border: `1px solid ${color}44` }}>
               <span className="text-[11px] font-bold" style={{ color }}>{selected.size} seleccionada{selected.size === 1 ? '' : 's'}</span>
-              {moveTargets?.length > 0 && (
-                <select value="" onChange={(e) => { if (e.target.value) moverIds(Array.from(selected), e.target.value); }}
-                  className="text-[11px] font-bold rounded-md border-none px-2.5 py-1.5 cursor-pointer outline-none appearance-none" style={{ background: color, color: '#fff' }}>
-                  <option value="" style={{ color: '#1A1D26' }}>📁 Mover a…</option>
-                  {moveTargets.filter(t => t.key !== bucketKey).map(t => <option key={t.key} value={t.key} style={{ color: '#1A1D26' }}>{t.label}</option>)}
-                </select>
+              {moveTargets?.length > 0 && (() => {
+                // Excluye la carpeta actual por identidad (id); si no viene id, cae al bucket_key.
+                const opts = moveTargets.filter(t => (t.id ? t.id !== selfId : t.key !== bucketKey));
+                const funnelOpts = opts.filter(t => t.scope === 'funnel');
+                const clientOpts = opts.filter(t => t.scope !== 'funnel');
+                const optEl = (t) => <option key={t.id || t.key} value={t.id || t.key} style={{ color: '#1A1D26' }}>{t.label}</option>;
+                return (
+                  <select value="" onChange={(e) => { const v = e.target.value; if (!v) return; const t = moveTargets.find(x => (x.id || x.key) === v); moverIds(Array.from(selected), t || v); }}
+                    className="text-[11px] font-bold rounded-md border-none px-2.5 py-1.5 cursor-pointer outline-none appearance-none" style={{ background: color, color: '#fff' }}>
+                    <option value="" style={{ color: '#1A1D26' }}>📁 Mover a…</option>
+                    {funnelOpts.length > 0 && <optgroup label="Este funnel">{funnelOpts.map(optEl)}</optgroup>}
+                    {clientOpts.length > 0 && <optgroup label="Recursos del cliente">{clientOpts.map(optEl)}</optgroup>}
+                  </select>
+                );
+              })()}
+              {(items || []).some(r => selected.has(r.id) && r.transcript && String(r.transcript).trim()) && (
+                <button onClick={copiarTranscripts}
+                  className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border"
+                  style={copied ? { background: '#ECFDF5', color: '#16A34A', borderColor: '#A7F3D0' } : { background: '#fff', color, borderColor: `${color}55` }}>
+                  {copied ? <Check size={13} /> : <ClipboardList size={13} />}
+                  {copied ? 'Copiado' : 'Copiar transcripciones'}
+                </button>
               )}
               <button onClick={() => setSelected(new Set())} className="text-[11px] font-semibold text-[#9098A4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer">Quitar selección</button>
               <span className="text-[10.5px] text-[#AEB4BF] ml-auto hidden sm:inline">…o arrastralas a otra carpeta</span>
             </div>
           )}
           <div className={`rounded-lg transition-colors ${dragOver ? 'ring-2 ring-dashed' : ''}`} style={dragOver ? { outline: `2px dashed ${color}`, outlineOffset: 2 } : undefined}>
+            {n > 0 && (
+              <div className="flex items-center justify-between mb-1.5">
+                <button
+                  onClick={() => setSelected(prev => (prev.size >= n ? new Set() : new Set(items.map(r => r.id))))}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer border-none bg-transparent"
+                  style={{ color: selected.size >= n ? color : '#9098A4' }}>
+                  <span className="w-3.5 h-3.5 rounded-[4px] border inline-flex items-center justify-center shrink-0"
+                    style={{ borderColor: selected.size >= n ? color : '#C3C9D4', background: selected.size >= n ? color : '#fff' }}>
+                    {selected.size >= n && <Check size={10} strokeWidth={3} color="#fff" />}
+                  </span>
+                  {selected.size >= n ? 'Quitar selección' : 'Seleccionar todo'}
+                </button>
+                {selected.size > 0 && selected.size < n && <span className="text-[10.5px] text-[#AEB4BF]">{selected.size} de {n}</span>}
+              </div>
+            )}
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
                 {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} />)}

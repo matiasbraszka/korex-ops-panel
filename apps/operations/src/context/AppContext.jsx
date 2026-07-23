@@ -143,6 +143,7 @@ export function AppProvider({ children }) {
   // vez que el usuario abrió los comentarios de esa tarea. Sirve para mostrar el
   // chip de comentarios como leído (gris) o no leído (azul). Solo localStorage.
   const [commentReads, setCommentReads] = useState({});
+  const [taskViews, setTaskViews] = useState({});   // {taskId: ISO} última vez que ABRÍ la tarea (P2)
 
   const dbReady = useRef(false);
   const saveTimer = useRef(null);
@@ -265,7 +266,6 @@ export function AppProvider({ children }) {
         payment_receipt_url: c.paymentReceiptUrl || null,
         commission_split: c.commissionSplit || {},
         client_type: c.clientType || null,
-        drive_folder_url: c.driveFolderUrl || null,
       })
     });
   }, []);
@@ -325,6 +325,7 @@ export function AppProvider({ children }) {
       definition_of_done: t.definitionOfDone || null,
       acceptance_criteria: Array.isArray(t.acceptanceCriteria) ? t.acceptanceCriteria : [],
       reviewer: t.reviewer || null,
+      review_reason: t.reviewReason || null,
       validated_by: t.validatedBy || null,
       validated_at: t.validatedAt || null,
       sprint_history: Array.isArray(t.sprintHistory) ? t.sprintHistory : [],
@@ -462,7 +463,6 @@ export function AppProvider({ children }) {
         const batch = taskRows.slice(i, i + 20);
         await sbFetch('tasks', { method: 'POST', headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' }, body: JSON.stringify(batch) });
       }
-      console.log('\u2713 Full sync to Supabase done');
     } catch (e) {
       console.warn('Full sync error:', e);
     }
@@ -1486,6 +1486,21 @@ export function AppProvider({ children }) {
 
   const addStrategyPage = useCallback(async (data) => {
     const id = 'spg_' + Math.floor(Date.now() / 1000) + '_' + Math.random().toString(36).slice(2, 8);
+    // DEL PROPIO por funnel (P3): cada funnel nace con su documento DEL NATIVO (en blanco).
+    // Lo crea el RPC del_doc_create (SECURITY DEFINER; client_brain_docs no acepta INSERT del
+    // panel por RLS). Si por lo que sea el RPC falla, delDocId queda null y el funnel IGUAL se
+    // crea (cae al DEL de la carpeta como antes) — nunca se rompe el alta por esto.
+    let delDocId = data.del_doc_id || null;
+    if (!delDocId) {
+      try {
+        const { data: newDoc, error } = await supabase.rpc('del_doc_create', {
+          p_client_id: data.client_id || null,
+          p_strategy_id: data.strategy_id || null,
+          p_title: (String(data.name || 'Funnel').trim()) + ' — DEL',
+        });
+        if (!error && newDoc) delDocId = newDoc;
+      } catch { /* red de seguridad: seguimos sin del_doc_id */ }
+    }
     const row = {
       id,
       strategy_id: data.strategy_id,
@@ -1507,6 +1522,8 @@ export function AppProvider({ children }) {
       clarity_id: data.clarity_id || null,
       avatars: Array.isArray(data.avatars) ? data.avatars : [],
       visual_resources: Array.isArray(data.visual_resources) ? data.visual_resources : [],
+      // del_doc_id apunta al documento nativo creado arriba (o null si el RPC falló → fallback).
+      del_doc_id: delDocId,
       created_date: data.created_date || new Date().toISOString().slice(0, 10),
       updated_at: new Date().toISOString(),
     };
@@ -2140,8 +2157,8 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,drive_folder_url,contract_signer_email,korex_code';
-      const TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,created_by';
+      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,contract_signer_email,korex_code';
+      const TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,review_reason,updated_at,created_by';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
         // order=created_at.DESC: si algún día se supera el límite, se descartan
@@ -2348,7 +2365,6 @@ export function AppProvider({ children }) {
           paymentReceiptUrl: c.payment_receipt_url || '',
           commissionSplit: c.commission_split || {},
           clientType: c.client_type || null,
-          driveFolderUrl: c.drive_folder_url || '',
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({
           id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, assignee: t.assignee,
@@ -2376,6 +2392,8 @@ export function AppProvider({ children }) {
           sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : [],
           sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : [],
           statusHistory: Array.isArray(t.status_history) ? t.status_history : [],
+          reviewReason: t.review_reason || '',
+          updatedAt: t.updated_at || null,
           createdBy: t.created_by || null,
         }));
 
@@ -2429,7 +2447,6 @@ export function AppProvider({ children }) {
             }
           });
         }
-        console.log('\u2713 Loaded from Supabase:', injected.length, 'clients,', mappedTasks.length, 'tasks');
         return true;
       }
     } catch (e) {
@@ -2473,7 +2490,7 @@ export function AppProvider({ children }) {
       // tareas nuevas detectadas por el poll lleguen completas (con phase,
       // depends_on, due_date, etc.). Si solo trajéramos un subset, una tarea
       // nueva se agregaría sin fase y caería en "Sin fase" en el roadmap.
-      const POLL_TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,updated_at,created_by';
+      const POLL_TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,review_reason,updated_at,created_by';
       const remoteTasks = await sbFetch('tasks?select=' + POLL_TASK_COLS + '&order=updated_at.desc&limit=50', { headers: { 'Prefer': 'return=representation' } });
       // Refrescar sprints en el mismo poll (livianito: lista corta).
       loadSprints();
@@ -2505,6 +2522,8 @@ export function AppProvider({ children }) {
         sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : [],
         sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : [],
         statusHistory: Array.isArray(t.status_history) ? t.status_history : [],
+        reviewReason: t.review_reason || '',
+        updatedAt: t.updated_at || null,
         createdBy: t.created_by || null,
       });
 
@@ -2556,6 +2575,8 @@ export function AppProvider({ children }) {
                 sprintHistory: Array.isArray(t.sprint_history) ? t.sprint_history : (existing.sprintHistory || []),
                 sprintEvents: Array.isArray(t.sprint_events) ? t.sprint_events : (existing.sprintEvents || []),
                 statusHistory: Array.isArray(t.status_history) ? t.status_history : (existing.statusHistory || []),
+                reviewReason: t.review_reason || '',
+                updatedAt: t.updated_at || existing.updatedAt || null,
               };
               changed = true;
             }
@@ -2566,7 +2587,6 @@ export function AppProvider({ children }) {
         });
         if (changed) {
           localStorage.setItem('korex_v6', JSON.stringify({ clients: clientsRef.current, tasks: newTasks }));
-          console.log('\u2713 Pulled updates from Supabase');
           return newTasks;
         }
         return prev;
@@ -2592,7 +2612,6 @@ export function AppProvider({ children }) {
         const result = recalculateTimers(c.id, newTasks);
         newTasks = result.tasks;
         migrated = true;
-        console.log('\u2713 Migrated client:', c.name, '— created', roadmapTasks.length, 'roadmap tasks');
       }
     });
 
@@ -2637,7 +2656,6 @@ export function AppProvider({ children }) {
       if (!loaded && localClients.length > 0) {
         // No data in Supabase yet -- push local data up
         dbSyncAll(injected, localTasks).then(() => {
-          console.log('\u2713 Initial data pushed to Supabase');
           setSyncStatus('ok');
         });
       } else if (loaded) {
@@ -2688,6 +2706,40 @@ export function AppProvider({ children }) {
     });
     return set;
   }, [taskComments, commentReads, currentUser?.id]);
+
+  // ── Tareas cambiadas desde la última vez que las abrí (P2) ──
+  // Espeja el patrón de lectura de comentarios: guarda por usuario cuándo abrí cada
+  // tarea y marca las que cambiaron después (updated_at más nuevo que ese "visto").
+  useEffect(() => {
+    const uid = currentUser?.id;
+    if (!uid) return;
+    try {
+      const raw = localStorage.getItem('korex_task_views_' + uid);
+      setTaskViews(raw ? JSON.parse(raw) : {});
+    } catch { setTaskViews({}); }
+  }, [currentUser?.id]);
+
+  const markTaskViewed = useCallback((taskId) => {
+    const uid = currentUserIdRef.current;
+    if (!uid || !taskId) return;
+    setTaskViews(prev => {
+      const next = { ...prev, [taskId]: new Date().toISOString() };
+      try { localStorage.setItem('korex_task_views_' + uid, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Set de taskIds que CAMBIARON (updated_at) después de mi última apertura. Una
+  // tarea que nunca abrí NO se marca (evita pintar todo el tablero de arranque);
+  // se resalta recién cuando cambia tras haberla visto al menos una vez.
+  const changedTaskIds = useMemo(() => {
+    const set = new Set();
+    (tasks || []).forEach(t => {
+      const seen = taskViews[t.id];
+      if (seen && t.updatedAt && t.updatedAt > seen) set.add(t.id);
+    });
+    return set;
+  }, [tasks, taskViews]);
 
   // ── Closures estables para el value memoizado ──
   // Antes vivian inline dentro del objeto value: cada render del provider
@@ -2891,6 +2943,9 @@ export function AppProvider({ children }) {
     // Chip de comentarios leído/no leído
     unreadCommentTaskIds,
     markTaskCommentsRead,
+    // Tareas cambiadas desde la última apertura (P2)
+    changedTaskIds,
+    markTaskViewed,
     openBulletComments,
     openIdeaComments,
     openBlockerComments,
@@ -2941,6 +2996,7 @@ export function AppProvider({ children }) {
     loomVideos, llamadas, pendingCallsCount, teamReports, teamBlockers,
     ideas, notas, taskComments, bulletComments, ideaComments, blockerComments,
     taskUserPositions, clientUserPositions, commentsTarget, unreadCommentTaskIds,
+    changedTaskIds, markTaskViewed,
     notifications, unreadNotifCount, notifPanelOpen, notifToast,
     strategies, strategyPages, invoices, contracts,
     // Acciones (todas useCallback)

@@ -169,7 +169,7 @@ function MemberCard({ member, hr, payments, contracts, onOpen }) {
 // Botón para copiar el link del formulario público de onboarding.
 function CopyOnboardingLink() {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}/onboarding`;
+  const url = `${publicOrigin()}/onboarding`;
   const copy = () => {
     navigator.clipboard?.writeText(url);
     setCopied(true);

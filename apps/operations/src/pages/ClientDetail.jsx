@@ -10,7 +10,6 @@ import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock, Building2, Users, Tag } from 'lucide-react';
 import FunnelsView from '../components/clientes/FunnelsView';
-import CarpetasView from '../components/clientes/CarpetasView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
@@ -180,9 +179,8 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Funnels', count: funnelsCount },
-          // La pestaña "Carpetas" se retiró: las carpetas que se usan viven ahora en
-          // "Recursos", dentro del DEL de cada funnel. (CarpetasView.jsx queda en el
-          // repo por si hay que traerla de nuevo; el sync de Drive sigue corriendo.)
+          // La pestaña "Carpetas" (espejo de Drive) se eliminó: todo vive ahora en el
+          // sistema propio — los recursos en "Recursos" dentro del DEL de cada funnel.
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
@@ -218,8 +216,6 @@ export default function ClientDetail({ client: c }) {
             </div>
 
             {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
-
-            {activeTab === 'drive' && <CarpetasView client={c} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 

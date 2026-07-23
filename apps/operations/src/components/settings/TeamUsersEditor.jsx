@@ -4,6 +4,7 @@ import { useAuth } from '@korex/auth';
 import { useApp } from '../../context/AppContext';
 import { DEPARTMENTS } from '../../utils/constants';
 import { guestEmailForCode, generateGuestCode, normalizeGuestCode } from '../../utils/guest';
+import { publicOrigin } from '../../utils/helpers';
 import { UserPlus, Trash2, ImagePlus, Zap, KeyRound, Copy, Check } from 'lucide-react';
 
 // Editor unico de equipo + cuentas + roles del sistema.
@@ -733,7 +734,7 @@ function NewGuestModal({ member = null, onClose, onDone }) {
   const [created, setCreated] = useState(null); // { name, code, link }
   const [copied, setCopied] = useState('');
 
-  const loginLink = (() => { try { return window.location.origin + '/invitado'; } catch { return '/invitado'; } })();
+  const loginLink = (() => { try { return publicOrigin() + '/invitado'; } catch { return '/invitado'; } })();
   const guestName = member ? member.name : name;
 
   const copy = (text, which) => {

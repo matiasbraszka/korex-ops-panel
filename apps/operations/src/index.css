@@ -71,6 +71,7 @@ html, body {
   border-collapse: collapse; margin: 12px 0; font-size: 12.5px;
 }
 .del-rich td { border: 1px solid #E2E5EB; padding: 7px 10px; vertical-align: top; min-width: 90px; }
+.del-rich th { border: 1px solid #E2E5EB; padding: 7px 10px; vertical-align: top; }
 /* La imagen todavia vive adentro del Doc: alojarla es la Etapa C (Recursos). Se
    marca el hueco para que no parezca que al documento le falta un pedazo. */
 .del-rich figure[data-drive-image] {

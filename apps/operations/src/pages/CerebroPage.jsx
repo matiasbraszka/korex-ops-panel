@@ -89,10 +89,9 @@ function AddMaterial({ scope, onAdded }) {
   };
   const addLink = async () => {
     if (!url.trim()) return;
-    const isDrive = /drive\.google\.com|docs\.google\.com/i.test(url);
     setBusy(true);
     await supabase.from('marketing_training_material').insert({
-      id: rid(), scope, kind: isDrive ? 'doc_drive' : 'link', title: title.trim() || url.trim(), url: url.trim(), source: 'manual',
+      id: rid(), scope, kind: 'link', title: title.trim() || url.trim(), url: url.trim(), source: 'manual',
     });
     setBusy(false); reset(); onAdded();
   };
@@ -146,7 +145,7 @@ function AddMaterial({ scope, onAdded }) {
       {tab === 'link' && (
         <div className="grid gap-2">
           <input className={input} placeholder="Título (opcional)" value={title} onChange={e => setTitle(e.target.value)} />
-          <input className={input} placeholder="https://… (link o Doc de Drive)" value={url} onChange={e => setUrl(e.target.value)} />
+          <input className={input} placeholder="https://… (link)" value={url} onChange={e => setUrl(e.target.value)} />
           <div><button onClick={addLink} disabled={busy} className={btnPrimary} style={{ background: BLUE }}><Plus size={14} /> Agregar</button></div>
         </div>
       )}

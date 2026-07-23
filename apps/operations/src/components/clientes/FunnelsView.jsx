@@ -6,20 +6,20 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { sbFetch, supabase } from '@korex/db';
 import {
-  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, ChevronLeft, Users, Megaphone,
-  Check, Trash2, Activity, Zap, Globe, Rocket, Clapperboard,
-  Brain, Sparkles, FileText, RefreshCw, Target, Search as SearchIcon, Layers, Maximize2, Lock,
-  FolderOpen, Film, FolderPlus, Link2, MessageSquare, Clipboard, Package, AlertCircle, LayoutGrid,
-  Image as ImageIcon,
+  Plus, X, ExternalLink, Copy, ChevronDown, ChevronRight, ChevronLeft, Users,
+  Check, Trash2, Zap, Globe, Clapperboard,
+  Brain, Sparkles, FileText, RefreshCw, Search as SearchIcon, Maximize2, Lock,
+  FolderOpen, FolderPlus, Clipboard, Package, AlertCircle, LayoutGrid,
+  Image as ImageIcon, KeyRound,
 } from 'lucide-react';
 import Modal from '../Modal';
+import ClientAccessModal from './ClientAccessModal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
 import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
 import { openUrl, copyText } from './recursosShared';
-import { fmtDateTime } from '../../utils/helpers';
 
 // Metadatos por tipo de documento de contexto.
 const DOC_META = {
@@ -29,113 +29,6 @@ const DOC_META = {
   briefing:      { label: 'Briefing', Icon: Brain, color: '#EC4899', bg: '#FDF2F8' },
   extra:         { label: 'Contexto', Icon: Brain, color: '#EC4899', bg: '#FDF2F8' },
 };
-
-// Casilleros de contexto de CLIENTE (nivel: todas las estrategias). Reemplazan el
-// "adivino por nombre": el equipo asigna cada documento a su casillero (removible).
-const CLIENT_SLOTS = [
-  { key: 'investigacion', label: 'Investigaciones', desc: 'Del cliente y/o de la empresa (MLM). Podés asignar varias.', match: /investigaci|empresa|mlm|multinivel/i },
-  { key: 'onboarding', label: 'Onboarding', desc: 'Viejo o nuevo (podés quitarlo).', match: /onboarding/i },
-  { key: 'briefing', label: 'Briefing · Personalidad · Tono', desc: 'Brief, tono y contexto actual.', match: /brief|personalidad|tono|contexto/i },
-];
-
-function SlotCard({ slot, assigned, driveDocs, docsByNode, onAssign, onRemove }) {
-  const assignedIds = new Set(assigned.map(a => a.node_id));
-  const options = driveDocs.filter(d => !assignedIds.has(d.id));
-  const suggested = options.filter(d => slot.match.test(d.name || ''));
-  const rest = options.filter(d => !slot.match.test(d.name || ''));
-  const complete = assigned.length > 0;
-  return (
-    <div className="rounded-xl p-3.5 bg-white border border-[#EDF0F5] flex flex-col">
-      <div className="flex items-center justify-between gap-2 mb-0.5">
-        <span className="text-[13px] font-semibold text-[#1A1D26] min-w-0">{slot.label}</span>
-        {complete
-          ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: '#ECFDF3', color: '#15803D', border: '1px solid #C9F0D8' }}><Check size={10} strokeWidth={3.5} />Listo</span>
-          : <span className="inline-flex items-center py-0.5 px-2 rounded-full text-[10px] font-bold shrink-0" style={{ background: '#FEF3C7', color: '#B45309', border: '1px solid #FBE6BE' }}>Falta</span>}
-      </div>
-      <div className="text-[11px] text-[#9098A4] mb-3">{slot.desc}</div>
-      {assigned.length === 0
-        ? <div className="border-[1.5px] border-dashed border-[#D8DDE6] rounded-[9px] p-4 text-center text-[#AEB4BF] text-[12px] mb-2.5 flex-1 flex flex-col items-center justify-center gap-1">
-            <FileText size={18} />Sin documentos asignados
-          </div>
-        : <div className="flex flex-col gap-2 mb-2.5">
-            {assigned.map(a => {
-              const doc = docsByNode[a.node_id];
-              return (
-                <div key={a.node_id} className="flex items-center gap-2.5 border border-[#EDF0F5] rounded-[9px] py-2 px-2.5 bg-[#FBFCFE]">
-                  <FileText size={15} className="text-[#6B7280] shrink-0" />
-                  <span className="flex-1 min-w-0 text-[12px] font-medium text-[#1A1D26] truncate" title={a.label || doc?.title}>{a.label || doc?.title || 'Documento'}</span>
-                  {doc ? <span className="text-[10.5px] text-[#16A34A] font-semibold shrink-0 whitespace-nowrap">{(doc.char_count || 0).toLocaleString()} car.</span> : <span className="text-[10.5px] text-[#B45309] font-semibold shrink-0">sincronizá</span>}
-                  {doc?.web_url && <button onClick={() => openUrl(doc.web_url)} title="Abrir en Drive" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#9098A4] hover:text-[#2E69E0] shrink-0"><ExternalLink size={13} /></button>}
-                  <button onClick={() => onRemove(slot.key, a.node_id)} title="Quitar" className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-[#C3C9D4] hover:text-[#DC2626] shrink-0"><Trash2 size={13} /></button>
-                </div>
-              );
-            })}
-          </div>}
-      <div className="relative mt-auto">
-        <select value="" onChange={e => { if (e.target.value) { const nd = driveDocs.find(d => d.id === e.target.value); onAssign(slot.key, nd); } }}
-          className="w-full appearance-none border border-[#DBE6FF] rounded-[9px] py-[9px] pl-9 pr-8 bg-[#F7FAFF] text-[#2E69E0] font-semibold text-[12px] outline-none cursor-pointer hover:bg-[#EFF5FF]">
-          <option value="">Asignar documento…</option>
-          {suggested.length > 0 && <optgroup label="Sugeridos">{suggested.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
-          {rest.length > 0 && <optgroup label="Todos los documentos">{rest.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>}
-        </select>
-        <Plus size={14} strokeWidth={2.4} className="text-[#2E69E0] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <ChevronDown size={14} className="text-[#2E69E0] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-      </div>
-    </div>
-  );
-}
-
-function ClientContextSlots({ clientId, driveDocs, docsByNode, slotPins, onChanged }) {
-  const bySlot = (key) => slotPins.filter(p => p.slot === key);
-  const assign = async (slotKey, nd) => {
-    if (!nd) return;
-    await supabase.from('client_brain_pins').upsert({ client_id: clientId, node_id: nd.id, slot: slotKey, label: nd.name || null }, { onConflict: 'client_id,node_id' });
-    onChanged();
-  };
-  const remove = async (slotKey, nodeId) => {
-    await supabase.from('client_brain_pins').delete().eq('client_id', clientId).eq('node_id', nodeId);
-    onChanged();
-  };
-  return (
-    <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-      {CLIENT_SLOTS.map(slot => (
-        <SlotCard key={slot.key} slot={slot} assigned={bySlot(slot.key)} driveDocs={driveDocs} docsByNode={docsByNode} onAssign={assign} onRemove={remove} />
-      ))}
-    </div>
-  );
-}
-
-// Links de webs de contexto (sitio del cliente, web de la empresa MLM, etc.).
-function WebLinks({ clientId, webs, onChanged }) {
-  const [url, setUrl] = useState('');
-  const [label, setLabel] = useState('');
-  const add = async () => {
-    const u = url.trim(); if (!u) return;
-    await supabase.from('client_brain_webs').insert({ id: rid('web'), client_id: clientId, url: /^https?:\/\//i.test(u) ? u : 'https://' + u, label: label.trim() || null });
-    setUrl(''); setLabel(''); onChanged();
-  };
-  const remove = async (id) => { await supabase.from('client_brain_webs').delete().eq('id', id); onChanged(); };
-  return (
-    <div>
-      {webs.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2.5">
-          {webs.map(w => (
-            <span key={w.id} className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-[#F0F7FF] border border-[#DCE7FB] text-[11.5px]">
-              <Globe size={11} className="text-[#2E69E0]" />
-              <button onClick={() => openUrl(w.url)} className="bg-transparent border-none p-0 cursor-pointer text-[#2E69E0] font-semibold hover:underline max-w-[220px] truncate" title={w.url}>{w.label || w.url}</button>
-              <button onClick={() => remove(w.id)} title="Quitar" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-transparent border-none cursor-pointer text-[#9098A4] hover:text-[#DC2626]"><X size={11} /></button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center gap-2.5 flex-wrap">
-        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Nombre (opcional)" className="w-[180px] py-[9px] px-3 border border-[#E2E5EB] rounded-[9px] text-[12.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-        <input value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="https://sitio.com" className="flex-1 min-w-[200px] py-[9px] px-3 border border-[#E2E5EB] rounded-[9px] text-[12.5px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-        <button onClick={add} disabled={!url.trim()} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[9px] bg-[#2E69E0] text-white text-[12.5px] font-semibold cursor-pointer disabled:opacity-50 hover:bg-[#1D4FD8]"><Plus size={14} strokeWidth={2.4} />Agregar web</button>
-      </div>
-    </div>
-  );
-}
 
 const FUNNEL_STATUS = {
   activa:   { label: 'Activo', bg: '#ECFDF3', color: '#15803D', dot: '#22C55E', border: '#C9F0D8', side: '#22C55E' },
@@ -191,22 +84,6 @@ function TipoChip({ value, onChange }) {
     </span>
   );
 }
-const AVATAR_STATUS = {
-  'En grabación': { short: 'Grabación', bg: '#FFF1E7', color: '#C2410C', dot: '#F97316' },
-  'En edición':   { short: 'Edición',   bg: '#EEF3FF', color: '#2E69E0', dot: '#2E69E0' },
-  'Editados':     { short: 'Editados',  bg: '#ECFDF3', color: '#15803D', dot: '#22C55E' },
-};
-const AVATAR_OPTS = ['En grabación', 'En edición', 'Editados'];
-// Temperatura del avatar (decisión de Matías, 2026-07-15): la otra mitad del "punto
-// diferencial". Qué tan preparado viene el público antes de entrar al funnel — cambia
-// el tono de todo el mensaje. Es del AVATAR (no de la estrategia). Guardado en el JSON
-// del avatar (av.temp), sin migración. Opcional: vacío = sin definir.
-const AVATAR_TEMP = {
-  frio:     { short: 'Frío',     label: 'Frío · no te conoce',        bg: '#EFF6FF', color: '#2563EB', dot: '#3B82F6' },
-  tibio:    { short: 'Tibio',    label: 'Tibio · ya te vio',          bg: '#FFF7ED', color: '#C2410C', dot: '#F97316' },
-  caliente: { short: 'Caliente', label: 'Caliente · listo para comprar', bg: '#FEF2F2', color: '#DC2626', dot: '#EF4444' },
-};
-const AVATAR_TEMP_OPTS = ['frio', 'tibio', 'caliente'];
 // Las 4 carpetas por avatar de la pestaña Recursos (como la maqueta). Cada una apunta a
 // una carpeta del Drive y sabe cuántos archivos tiene (verde si hay, gris si vacía).
 const VID_BUCKETS = [
@@ -225,6 +102,7 @@ const CLIENT_CATS = [
   { key: 'productos',   label: 'Foto de productos',    c: '#15803D', bg: '#E8F7EE' },
   { key: 'empresa',     label: 'Material de la empresa', c: '#B45309', bg: '#FFF7ED' },
   { key: 'stock',       label: 'Stock / B-Roll',       c: '#0891B2', bg: '#E7FBFE' },
+  { key: 'imagenes_diseno', label: 'Imagenes para diseño', c: '#DB2777', bg: '#FDF2F8' },
   // Anuncios/VSL NO van en Recursos del cliente (son de cada funnel). Lo que caiga suelto a
   // nivel cliente se manda a "Sin clasificar".
   { key: 'sin_clasif',  label: 'Sin clasificar',       c: '#6B7280', bg: '#F1F3F7' },
@@ -327,61 +205,6 @@ function StatusPill({ status, onChange }) {
 }
 
 // Estado del avatar: pill compacto con menú (position:fixed para no cortarse).
-function AvatarStatusPill({ status, onChange }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const btnRef = useRef(null);
-  const cfg = AVATAR_STATUS[status] || AVATAR_STATUS['En grabación'];
-  const toggle = () => {
-    if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ left: r.left, top: r.bottom + 4 }); }
-    setOpen(o => !o);
-  };
-  return (
-    <span className="inline-block shrink-0" onClick={e => e.stopPropagation()}>
-      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[10.5px] font-bold border-none cursor-pointer whitespace-nowrap" style={{ background: cfg.bg, color: cfg.color }}>
-        <span className="w-[6px] h-[6px] rounded-full" style={{ background: cfg.dot }} />{cfg.short}<ChevronDown size={9} />
-      </button>
-      {open && pos && (<>
-        <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
-        <div className="fixed bg-white border border-[#E2E5EB] rounded-lg shadow-lg z-[61] min-w-[120px] overflow-hidden py-0.5" style={{ left: pos.left, top: pos.top }}>
-          {AVATAR_OPTS.map(o => { const c = AVATAR_STATUS[o]; return (
-            <button key={o} onClick={() => { onChange(o); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer font-medium" style={{ color: c.color }}><span className="w-2 h-2 rounded-full" style={{ background: c.dot }} />{c.short}</button>
-          ); })}
-        </div>
-      </>)}
-    </span>
-  );
-}
-
-// Temperatura del avatar: pill compacto con menú. Vacío = "Temperatura" en hueco, para
-// que se vea que falta definirla (como el resto de los campos de la maqueta).
-function AvatarTempPill({ temp, onChange }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const btnRef = useRef(null);
-  const cfg = AVATAR_TEMP[temp];
-  const toggle = () => {
-    if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ left: r.left, top: r.bottom + 4 }); }
-    setOpen(o => !o);
-  };
-  return (
-    <span className="inline-block shrink-0" onClick={e => e.stopPropagation()}>
-      <button ref={btnRef} onClick={toggle} title={cfg ? cfg.label : 'Definí la temperatura del avatar'}
-        className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[10.5px] font-bold cursor-pointer whitespace-nowrap"
-        style={cfg ? { background: cfg.bg, color: cfg.color, border: 'none' } : { background: 'transparent', color: '#AEB4BF', border: '1px dashed #D0D5DD' }}>
-        {cfg && <span className="w-[6px] h-[6px] rounded-full" style={{ background: cfg.dot }} />}{cfg ? cfg.short : 'Temperatura'}<ChevronDown size={9} />
-      </button>
-      {open && pos && (<>
-        <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
-        <div className="fixed bg-white border border-[#E2E5EB] rounded-lg shadow-lg z-[61] min-w-[190px] overflow-hidden py-0.5" style={{ left: pos.left, top: pos.top }}>
-          {AVATAR_TEMP_OPTS.map(o => { const c = AVATAR_TEMP[o]; return (
-            <button key={o} onClick={() => { onChange(temp === o ? null : o); setOpen(false); }} className="flex items-center gap-2 w-full text-left text-[11.5px] py-1.5 px-2.5 hover:bg-[#F5F7FF] bg-transparent border-none cursor-pointer font-medium" style={{ color: c.color }}><span className="w-2 h-2 rounded-full" style={{ background: c.dot }} />{c.label}</button>
-          ); })}
-        </div>
-      </>)}
-    </span>
-  );
-}
 
 // Grid de la tabla de funnels (mismo layout que el mockup; scroll horizontal si no entra).
 // La fila cerrada responde UNA pregunta: que es y que le falta. Todo lo demas
@@ -541,20 +364,6 @@ function FunnelRail({ stages }) {
 }
 
 // Encabezado de tarjeta interna (icono en chip de color + título + subtítulo).
-function CardHead({ Icon, iconBg, iconColor, title, subtitle, children }) {
-  return (
-    <div className="flex items-center justify-between gap-3 flex-wrap py-3 px-[15px] border-b border-[#EDF0F5]" style={{ background: '#FBFCFE' }}>
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: iconBg, color: iconColor }}><Icon size={15} /></span>
-        <div className="min-w-0">
-          <div className="text-[12.5px] font-bold text-[#1A1D26] truncate">{title}</div>
-          {subtitle && <div className="text-[10.5px] text-[#9098A4]">{subtitle}</div>}
-        </div>
-      </div>
-      {children && <div className="flex items-center gap-2 flex-wrap">{children}</div>}
-    </div>
-  );
-}
 
 // Las páginas del funnel (strategy_pages.pages_copy). Salen del DEL igual que el guión de VSL:
 // candado, solo lectura. Es el RECORRIDO DE LA PERSONA después del anuncio, y lo que leen los
@@ -681,97 +490,6 @@ function VoomlyPicker({ clientName, funnelName, current, onPick, onClose }) {
 // Muestra SOLO lo que cuelga de una carpeta "Anuncios" (dentro de Anuncios › Grabaciones/Ediciones/
 // Terminados…), con la RUTA completa (Estrategia 2 › Anuncios › Editados) y la fecha, prioriza las de
 // "ediciones/editado" que matcheen el avatar, y deja buscar. Así el equipo no tiene que ir al Drive.
-function FolderPicker({ clientId, avatarName, current, onPick, onClose, kind = 'edit' }) {
-  const isRec = kind === 'rec';
-  // Bucket que se prioriza según qué carpeta se busca (grabaciones vs ediciones).
-  const buckRe = isRec ? /grabaci|grabado|record|crudo|raw/i : /edici|editad|termina|final|listo/i;
-  const [rows, setRows] = useState(null);
-  const [q, setQ] = useState('');
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const data = await sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=eq.folder&select=id,name,web_url,parent_id,is_root,modified_time&order=name`);
-        if (alive) setRows(Array.isArray(data) ? data : []);
-      } catch { if (alive) setRows([]); }
-    })();
-    return () => { alive = false; };
-  }, [clientId]);
-  const byId = useMemo(() => { const m = {}; for (const r of (rows || [])) m[r.id] = r; return m; }, [rows]);
-  // Cadena de ancestros (de arriba hacia la carpeta), sin la raíz del cliente.
-  const chainOf = useCallback((r) => {
-    const segs = []; let cur = r, g = 0;
-    while (cur && g++ < 25) { if (!cur.is_root) segs.unshift(cur); cur = cur.parent_id ? byId[cur.parent_id] : null; }
-    return segs;
-  }, [byId]);
-  const insideAnuncios = useCallback((r) => chainOf(r).slice(0, -1).some(n => /anuncios/i.test(n.name)), [chainOf]);
-  const aTokens = useMemo(() => new Set(normVoomly(avatarName || '').split(' ').filter(t => t.length > 2)), [avatarName]);
-  const scored = useMemo(() => {
-    const all = rows || [];
-    // Solo lo que cuelga de "Anuncios"; si no hay nada (naming raro), caemos a todas para no dejar vacío.
-    let pool = all.filter(insideAnuncios);
-    const scoped = pool.length > 0;
-    if (!scoped) pool = all;
-    const list = pool.map(r => {
-      const chain = chainOf(r);
-      const ancestors = chain.slice(0, -1);
-      const inEdit = ancestors.some(n => buckRe.test(n.name));
-      const n = normVoomly(r.name);
-      let score = 0;
-      if (inEdit || buckRe.test(n)) score += 3;
-      for (const t of aTokens) if (n.includes(t)) score += 2;
-      const path = ancestors.map(a => a.name);
-      return { r, n, score, path };
-    });
-    const ql = normVoomly(q);
-    const filtered = ql ? list.filter(x => x.n.includes(ql) || normVoomly(x.path.join(' ')).includes(ql)) : list;
-    filtered.sort((a, b) => b.score - a.score || a.n.localeCompare(b.n));
-    return { list: filtered, scoped };
-  }, [rows, aTokens, q, chainOf, insideAnuncios, isRec]);
-  const fmtDay = (d) => { if (!d) return ''; try { return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return ''; } };
-  return (
-    <Modal open onClose={onClose} title={`Elegir la carpeta de ${isRec ? 'grabaciones' : 'ediciones'} · ${avatarName || 'avatar'}`} maxWidth={660}
-      footer={<div className="flex justify-between items-center gap-2 w-full">
-        <span className="text-[11px] text-[#9098A4]">{scored.scoped ? 'Carpetas dentro de “Anuncios”.' : 'No encontré “Anuncios”: muestro todas.'} Elegí dónde están los anuncios {isRec ? 'grabados' : 'editados'}.</span>
-        <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cerrar</button>
-      </div>}>
-      <div className="p-1">
-        <div className="relative mb-3">
-          <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9098A4] pointer-events-none" />
-          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Buscar carpeta por nombre o ruta…" className="w-full py-2.5 pl-9 pr-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-blue" />
-        </div>
-        {rows === null
-          ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">Cargando carpetas del Drive…</div>
-          : scored.list.length === 0
-            ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">No hay carpetas{q ? ' para esa búsqueda' : ''}. Sincronizá la pestaña Carpetas.</div>
-            : <div className="flex flex-col gap-2 max-h-[52vh] overflow-auto pr-1">
-                {scored.list.slice(0, 80).map(({ r, score, path }) => {
-                  const isCur = r.web_url && r.web_url === current;
-                  const suggested = score >= 3;
-                  const crumb = path.slice(-3).join(' › ');
-                  const day = fmtDay(r.modified_time);
-                  return (
-                    <div key={r.id} className="flex items-center gap-2.5 border rounded-[10px] py-2.5 px-3" style={{ borderColor: isCur ? '#C9F0D8' : suggested ? '#E4DBFF' : '#EDF0F5', background: isCur ? '#F4FDF7' : suggested ? '#F7F3FF' : '#fff' }}>
-                      <FolderOpen size={15} className="shrink-0" style={{ color: suggested ? '#7C3AED' : '#9098A4' }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate" title={r.name}>{r.name}</div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {crumb && <span className="text-[10.5px] text-[#9098A4] truncate max-w-[320px]" title={path.join(' › ')}>{crumb}</span>}
-                          {day && <span className="text-[10px] text-[#B0B6C0]">· {day}</span>}
-                        </div>
-                      </div>
-                      {suggested && !isCur && <span className="text-[10px] font-bold text-[#7C3AED] shrink-0">sugerida</span>}
-                      {isCur
-                        ? <span className="inline-flex items-center gap-1 py-1.5 px-3 rounded-lg text-[11px] font-bold shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Check size={12} strokeWidth={3} />Actual</span>
-                        : <button onClick={() => { onPick(r.web_url); onClose(); }} disabled={!r.web_url} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[11.5px] font-semibold cursor-pointer shrink-0 disabled:opacity-40" style={{ background: '#7C3AED', color: '#fff', border: 'none' }}>Usar esta</button>}
-                    </div>
-                  );
-                })}
-              </div>}
-      </div>
-    </Modal>
-  );
-}
 
 // Cuenta HOOKS y TEXTOS BASE dentro de los copys de anuncios (av.ad_script) que salen del DEL.
 // Convención Korex: cada cuerpo va como "Texto base 1)" y cada gancho como "Hook 1)". Si el DEL
@@ -818,7 +536,6 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   const [open, setOpen] = useState(false);
   const isOpen = forcePage || open; // en pantalla, el cuerpo siempre se ve
   const [voomlyOpen, setVoomlyOpen] = useState(false);
-  const [folderPick, setFolderPick] = useState(null); // { av, kind } — carpeta que se elige a mano
   const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
   const [delOpen, setDelOpen] = useState(false);    // lector del DEL a pantalla completa
   const [clientResTick, setClientResTick] = useState(0); // sube al mover un recurso → recarga todas las carpetas
@@ -830,56 +547,8 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   // Si no hay ninguno, el funnel esta terminado.
   const nextStage = (stages || []).find(s => s.status === 'pendiente') || null;
 
-  const setAvatar = (id, patch) => onUpdate(f.id, { avatars: avatars.map(a => a.id === id ? { ...a, ...patch } : a) });
 
-  // Carpetas por avatar (Anuncios › Grabaciones|Ediciones › <avatar>). SON DOS COSAS DISTINTAS:
-  //  · TRAER (mode 'read'): solo VINCULA las carpetas que ya existen en el Drive sincronizado y lee
-  //    su estado (grabado/editado). No crea nada → cero riesgo.
-  //  · CREAR (mode 'create'): arma la estructura que falte (vía Apps Script). Acción explícita, aparte.
-  // En ambos casos mergeamos los links/conteos en cada avatar.
-  const [folderBusy, setFolderBusy] = useState('idle'); // idle | read | create
-  const runFolders = async (mode, target = 'anuncios') => {
-    const named = avatars.filter(a => (a.name || '').trim());
-    if (!named.length) { window.alert('Poné el nombre de al menos un avatar primero.'); return; }
-    setFolderBusy(target === 'vsl' ? 'vsl' : mode);
-    try {
-      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode, target } });
-      if (error || !data?.ok) { window.alert(data?.hint || `No se pudieron ${mode === 'read' ? 'traer' : 'crear'} las carpetas` + (data?.error ? ` (${data.error})` : '')); return; }
-      if (mode === 'read' && data.found === false) { window.alert('No encontré las carpetas por avatar en el Drive. Sincronizá la pestaña Carpetas, o usá "Crear carpetas" para armarlas.'); return; }
-      const merged = avatars.map(a => {
-        const info = data.byName?.[(a.name || '').trim()];
-        if (!info) return a;
-        return target === 'vsl'
-          ? { ...a, vsl_rec_folder_url: info.rec_folder_url, vsl_edit_folder_url: info.edit_folder_url, vsl_rec_files: info.rec_files, vsl_edit_files: info.edit_files }
-          : { ...a, ...info };
-      });
-      onUpdate(f.id, { avatars: merged });
-    } catch { window.alert(`Error al ${mode === 'read' ? 'traer' : 'crear'} las carpetas.`); }
-    finally { setFolderBusy('idle'); }
-  };
-  const fetchFolders = () => runFolders('read', 'anuncios');
-  const createFolders = () => runFolders('create', 'anuncios');
-  const createVslFolders = () => runFolders('create', 'vsl');
-  // Trae la carpeta de GRABACIONES ('rec') o EDICIONES ('edit') de UN avatar: intenta encontrarla
-  // sola (mode read); si no la encuentra, abre el selector manual para elegirla sin ir al Drive.
-  const bringFolder = async (av, kind) => {
-    const name = (av.name || '').trim();
-    if (!name) { window.alert('Poné el nombre del avatar primero.'); return; }
-    const field = kind === 'rec' ? 'rec_folder_url' : 'edit_folder_url';
-    setFolderBusy('read');
-    try {
-      const { data, error } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'read' } });
-      if (!error && data?.ok) {
-        const merged = avatars.map(a => { const info = data.byName?.[(a.name || '').trim()]; return info ? { ...a, ...info } : a; });
-        onUpdate(f.id, { avatars: merged });
-        if (data.byName?.[name]?.[field]) { setFolderBusy('idle'); return; } // la encontró sola ✓
-      }
-    } catch { /* cae al selector manual */ }
-    setFolderBusy('idle');
-    setFolderPick({ av, kind }); // no la encontró → elegir a mano
-  };
   const namedAvatars = avatars.filter(a => (a.name || '').trim());
-  const foldersReady = namedAvatars.length > 0 && namedAvatars.every(a => a.rec_folder_url && a.edit_folder_url);
 
   // ── Mensaje para el editor ──────────────────────────────────────────────────
   // Arma el mensaje que se le manda al editor para editar los anuncios + VSL. Rellena TODO lo que
@@ -970,7 +639,6 @@ Quedo a la espera de tu respuesta`;
   // ── Copy de las páginas del funnel (sale del DEL, solo lectura) ──
   // Colapsado por defecto: el contador del header ya dice todo sin comerse alto. Se muestran
   // las 6 aunque falten: ver el hueco es la señal de que hay que arreglar el DEL.
-  const [copyOpen, setCopyOpen] = useState(false);
   const pagesCopy = (f.pages_copy && typeof f.pages_copy === 'object' && !Array.isArray(f.pages_copy)) ? f.pages_copy : {};
   const pagesFound = PAGE_SLOTS.filter(p => pagesCopy[p.slug]?.text).length;
   // En el título del visor va la pestaña real del DEL: si la extracción se equivocó de sección,
@@ -986,7 +654,7 @@ Quedo a la espera de tu respuesta`;
   const [pagesBusy, setPagesBusy] = useState(false);
   const syncPages = async (e) => {
     e?.stopPropagation?.(); // el header togglea el acordeón; el botón no debe hacerlo
-    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero.'); return; }
+    if (!delText) { window.alert('Este funnel todavía no tiene contenido cargado en el DEL.'); return; }
     if (pagesFound && !window.confirm('La IA va a releer el DEL y REEMPLAZAR el copy de las páginas por lo que encuentre ahora. ¿Seguir?')) return;
     setPagesBusy(true);
     // Red de seguridad: guardamos lo que hay antes de que la IA lo pise (lo restaura "Deshacer").
@@ -999,7 +667,6 @@ Quedo a la espera de tu respuesta`;
       if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
       if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude traer el copy de las páginas.'); return; }
       await onRefreshPage?.(f.id);
-      setCopyOpen(true); // que se vea el resultado sin tener que abrirlo a mano
     } catch (e2) { window.alert(String(e2?.message || e2)); }
     finally { setPagesBusy(false); }
   };
@@ -1013,8 +680,6 @@ Quedo a la espera de tu respuesta`;
     onUpdate(f.id, { pages_copy: f.pages_copy_backup });
   };
 
-  const addAvatar = () => onUpdate(f.id, { avatars: [...avatars, { id: rid('av'), name: '', audience: '', status: 'En grabación', ad_url: '' }] });
-  const removeAvatar = (id) => onUpdate(f.id, { avatars: avatars.filter(a => a.id !== id) });
   // Borrar avatar CON DESHACER (Ctrl+Z de datos): guarda el avatar borrado unos segundos
   // y lo puede restaurar en su lugar. Las carpetas del Drive NO se borran solas a
   // propósito (podrían tener grabaciones); sus links se van con el avatar.
@@ -1041,7 +706,7 @@ Quedo a la espera de tu respuesta`;
   // cual del DEL. Sincrónico: en unos segundos aparecen. Nada corre en segundo plano.
   const [gen, setGen] = useState({ status: 'idle' }); // idle | running | done | error
   const generateAvatars = async (mode = 'append') => {
-    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero.'); return; }
+    if (!delText) { window.alert('Este funnel todavía no tiene contenido cargado en el DEL.'); return; }
     if (avatars.length && !window.confirm(mode === 'replace'
       ? 'La IA va a leer el DEL y REEMPLAZAR los avatares actuales. ¿Seguir?'
       : 'La IA va a leer el DEL y AGREGAR los avatares nuevos que encuentre (sin borrar los actuales). ¿Seguir?')) return;
@@ -1073,7 +738,7 @@ Quedo a la espera de tu respuesta`;
   // Traer SOLO el guión del VSL de este funnel desde el DEL (por código, SIN IA → gratis).
   const [vslBusy, setVslBusy] = useState(false);
   const syncVsl = async () => {
-    if (!delText) { window.alert('No hay DEL sincronizado para esta estrategia. Tocá “Sincronizar contexto” primero.'); return; }
+    if (!delText) { window.alert('Este funnel todavía no tiene contenido cargado en el DEL.'); return; }
     setVslBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('cerebro-generate-avatars', {
@@ -1092,29 +757,14 @@ Quedo a la espera de tu respuesta`;
   // y el hueco, que es estrictamente mas informacion en el mismo lugar.
 
   // Crear un avatar DESDE el DEL: el título que insertás en el documento es el avatar.
-  // Al crearlo, se registra en el funnel (por orden) y se le crean AUTOMÁTICAMENTE las
-  // carpetas del Drive (anuncios grabación/edición + VSL grabación/edición), que es lo
-  // que hay que diferenciar bien. Después re-lee los links/conteos.
+  // Al crearlo, se registra en el funnel (por orden).
   const onAvatarCreate = async (rawName) => {
     const name = (rawName || '').trim();
     if (!name) return;
     // Si ya existe un avatar con ese nombre, no lo duplico.
     if (avatars.some(a => (a.name || '').trim().toLowerCase() === name.toLowerCase())) return;
     const next = [...avatars, { id: rid('av'), name, status: 'En grabación' }];
-    await onUpdate(f.id, { avatars: next }); // persiste primero (el edge fn lee de la base)
-    try {
-      await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'create', target: 'anuncios' } });
-      await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'create', target: 'vsl' } });
-      const { data } = await supabase.functions.invoke('avatar-folders', { body: { funnel_id: f.id, mode: 'read' } });
-      if (data?.ok && data.byName) {
-        const merged = next.map(a => {
-          const info = data.byName[(a.name || '').trim()];
-          const vsl = info ? { vsl_rec_folder_url: info.vsl_rec_folder_url, vsl_edit_folder_url: info.vsl_edit_folder_url, vsl_rec_files: info.vsl_rec_files, vsl_edit_files: info.vsl_edit_files } : {};
-          return info ? { ...a, ...info, ...vsl } : a;
-        });
-        onUpdate(f.id, { avatars: merged });
-      }
-    } catch { /* si falla crear carpetas, el avatar igual quedó registrado */ }
+    await onUpdate(f.id, { avatars: next });
   };
 
   // Cuando el DEL crea una versión "completa" (VSL/anuncios nuevos), los avatares elegidos
@@ -1149,6 +799,23 @@ Quedo a la espera de tu respuesta`;
   const funnelConfigNode = <FunnelConfigBlock f={f} onUpdate={onUpdate} events={events} onTrack={onTrack} />;
   const funnelEstrategiaNode = <FunnelEstrategiaBlock f={f} onUpdate={onUpdate} />;
 
+  // P8 — destinos de "Mover a…": TODAS las carpetas de ESTE funnel (por avatar/versión) +
+  // las del cliente. Cada destino carga su scope para reubicar el recurso donde sea.
+  const moveTargets = useMemo(() => {
+    const out = [];
+    for (const av of avatars) {
+      const nombre = (av.name || '').trim() || 'Avatar s/nombre';
+      const recVers = Array.isArray(av.rec_versions) && av.rec_versions.length ? [...new Set(av.rec_versions)].sort((a, b) => a - b) : [1];
+      const multiV = recVers.length > 1;
+      for (const v of recVers) for (const b of VID_BUCKETS) {
+        out.push({ id: `f:${av.id}:${v}:${b.key}`, key: b.key, label: `${nombre} · ${b.label}${multiV ? ' · V' + v : ''}`, scope: 'funnel', strategyId: f.strategy_id, avatarId: av.id, version: v });
+      }
+    }
+    out.push({ id: 'f:testimonios', key: 'testimonios', label: 'Testimonios del funnel', scope: 'funnel', strategyId: f.strategy_id, avatarId: null, version: 1 });
+    for (const cat of CLIENT_CATS) out.push({ id: `c:${cat.key}`, key: cat.key, label: cat.label, scope: 'client' });
+    return out;
+  }, [avatars, f.strategy_id]);
+
   const funnelRecursosNode = (
     <div className="flex flex-col gap-3.5">
       {/* Barra de acciones de carpetas del Drive quitada a pedido (no aportaba). */}
@@ -1165,7 +832,7 @@ Quedo a la espera de tu respuesta`;
 
       {deletedAv && (
         <div className="flex items-center justify-between gap-3 flex-wrap py-2.5 px-3.5 rounded-xl border" style={{ background: '#FFFBEB', borderColor: '#FBE6BE' }}>
-          <span className="text-[12px] font-medium text-[#78350F]">Borraste el avatar <b>{(deletedAv.av.name || 's/nombre')}</b>. Sus carpetas del Drive no se tocaron.</span>
+          <span className="text-[12px] font-medium text-[#78350F]">Borraste el avatar <b>{(deletedAv.av.name || 's/nombre')}</b>. Lo podés restaurar acá.</span>
           <button onClick={undoRemoveAvatar} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-[#E7C98A] bg-white text-[#B45309] text-[12px] font-semibold cursor-pointer hover:bg-[#FEF9E7]"><RefreshCw size={12} style={{ transform: 'scaleX(-1)' }} />Deshacer</button>
         </div>
       )}
@@ -1187,8 +854,6 @@ Quedo a la espera de tu respuesta`;
             <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#FCE7F3] text-[#DB2777] text-[12px] font-bold shrink-0">{i + 1}</span>
               <span className="text-[13.5px] font-bold truncate flex-1 min-w-0" style={{ color: nombre ? '#1A1D26' : '#DC2626' }}>{nombre || 'Falta el nombre del avatar'}</span>
-              <AvatarTempPill temp={av.temp} onChange={t => setAvatar(av.id, { temp: t })} />
-              <AvatarStatusPill status={av.status} onChange={s => setAvatar(av.id, { status: s })} />
               <button onClick={() => removeAvatarUndoable(av)} title="Borrar este avatar (se puede deshacer)" className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
             </div>
             {/* Las 4 carpetas del avatar por VERSIÓN: se suben los archivos acá mismo (no más
@@ -1200,6 +865,7 @@ Quedo a la espera de tu respuesta`;
                   {VID_BUCKETS.map(b => (
                     <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
                       bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
+                      moveTargets={moveTargets} selfId={`f:${av.id}:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
                       extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
                   ))}
                 </div>
@@ -1221,7 +887,8 @@ Quedo a la espera de tu respuesta`;
         </div>
         <div className="p-2.5">
           <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} bucketKey="testimonios"
-            label="Testimonios" color="#DB2777" bg="#FDF2F8" by={meId} />
+            label="Testimonios" color="#DB2777" bg="#FDF2F8" by={meId}
+            moveTargets={moveTargets} selfId="f:testimonios" reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
         </div>
       </div>
 
@@ -1238,7 +905,7 @@ Quedo a la espera de tu respuesta`;
         <div className="p-2.5 flex flex-col gap-1.5">
           {CLIENT_CATS.map(cat => (
             <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
-              label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={CLIENT_CATS}
+              label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
               reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
           ))}
         </div>
@@ -1350,15 +1017,18 @@ Quedo a la espera de tu respuesta`;
               En el acordeón viejo (lista) se siguen mostrando; en la pantalla no. */}
           {!forcePage && (<>{funnelConfigNode}{funnelRecursosNode}</>)}
           <div className="flex justify-end mt-3">
-            <button onClick={() => { if (window.confirm(`¿Borrar el funnel "${f.name}"?`)) onDelete(f.id); }} className="inline-flex items-center gap-1.5 py-[7px] px-3 rounded-lg bg-white border border-[#F5C2C2] text-[#DC2626] text-[11.5px] font-semibold cursor-pointer hover:bg-[#FEF2F2]"><Trash2 size={13} />Borrar funnel</button>
+            <button onClick={() => {
+              // Doble confirmación: borrar un funnel se lleva su DEL, avatares y material.
+              // No puede pasar por un clic accidental → preguntamos DOS veces.
+              if (!window.confirm(`¿Borrar el funnel "${f.name}"?\n\nSe elimina el funnel con todo lo suyo. No se puede deshacer.`)) return;
+              if (!window.confirm(`Confirmá de nuevo: se BORRA definitivamente el funnel "${f.name}".\n\n¿Seguro?`)) return;
+              onDelete(f.id);
+            }} className="inline-flex items-center gap-1.5 py-[7px] px-3 rounded-lg bg-white border border-[#F5C2C2] text-[#DC2626] text-[11.5px] font-semibold cursor-pointer hover:bg-[#FEF2F2]"><Trash2 size={13} />Borrar funnel</button>
           </div>
         </div>
       )}
       {note && <NoteModal {...note} onClose={() => setNote(null)} />}
       {voomlyOpen && <VoomlyPicker clientName={clientName} funnelName={f.name || ''} current={f.vsl_url || ''} onPick={(url) => onUpdate(f.id, { vsl_url: url || null })} onClose={() => setVoomlyOpen(false)} />}
-      {folderPick && (() => { const field = folderPick.kind === 'rec' ? 'rec_folder_url' : 'edit_folder_url'; return (
-        <FolderPicker clientId={clientId} avatarName={folderPick.av?.name || ''} kind={folderPick.kind} current={folderPick.av?.[field] || ''} onPick={(url) => setAvatar(folderPick.av.id, { [field]: url || null })} onClose={() => setFolderPick(null)} />
-      ); })()}
       {editorMsg !== null && <EditorMessageModal initial={editorMsg} onClose={() => setEditorMsg(null)} />}
 
       {/* El lector va a pantalla completa: un DEL promedia 56.000 caracteres —
@@ -1380,7 +1050,8 @@ Quedo a la espera de tu respuesta`;
 // que se llevaba puestos los funnels con sus avatares y guiones adentro, y encima
 // drive-sync recreaba la carpeta vacia en el sync de las 06:00.
 export default function FunnelsView({ clientId }) {
-  const { clients, strategies, strategyPages, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage } = useApp();
+  const { clients, strategies, strategyPages, addStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage, updateClient } = useApp();
+  const [accessOpen, setAccessOpen] = useState(false);   // panel de accesos del cliente
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   // Los FUNNELS del cliente, PLANOS. La "estrategia" dejo de ser una capa de navegacion:
   // de 40 estrategias, 26 de 33 clientes tenian una sola -> no agrupaba nada, y su nombre
@@ -1390,23 +1061,16 @@ export default function FunnelsView({ clientId }) {
   // strategy_id es NOT NULL (un funnel vive en una carpeta) y de ahi cuelga su DEL.
   const myStrategies = useMemo(() => (strategies || []).filter(s => s.client_id === clientId).sort((a, b) => (a.position || 0) - (b.position || 0)), [strategies, clientId]);
 
-  // Contexto (client_brain_docs ingerido) + Drive docs (para asignar) + casilleros.
+  // Contexto del cliente (client_brain_docs ingerido) + webs.
   const [docs, setDocs] = useState([]);
-  const [driveDocs, setDriveDocs] = useState([]);
-  const [slotPins, setSlotPins] = useState([]);
   const [webs, setWebs] = useState([]);
-  const [syncing, setSyncing] = useState(false);
   const fetchContext = useCallback(async () => {
     try {
-      const [d, nodes, pins, webRows] = await Promise.all([
+      const [d, webRows] = await Promise.all([
         sbFetch(`client_brain_docs?client_id=eq.${encodeURIComponent(clientId)}&select=*`),
-        sbFetch(`client_drive_nodes?client_id=eq.${encodeURIComponent(clientId)}&node_type=in.(document,sheet,slides,pdf)&select=id,name,node_type,web_url`),
-        sbFetch(`client_brain_pins?client_id=eq.${encodeURIComponent(clientId)}&slot=not.is.null&select=node_id,slot,label`),
         sbFetch(`client_brain_webs?client_id=eq.${encodeURIComponent(clientId)}&select=*&order=created_at`),
       ]);
       setDocs(Array.isArray(d) ? d : []);
-      setDriveDocs(Array.isArray(nodes) ? nodes : []);
-      setSlotPins(Array.isArray(pins) ? pins : []);
       setWebs(Array.isArray(webRows) ? webRows : []);
     } catch { /* noop */ }
   }, [clientId]);
@@ -1441,25 +1105,20 @@ export default function FunnelsView({ clientId }) {
   // tiene uno asignado, fallback por strategy_id (la carpeta), que es como resolvía
   // antes. Así los funnels 1:1 no cambian y los multi-funnel se separan cuando se les
   // asigna/parte el DEL. Sin del_doc_id, el comportamiento es idéntico al de hoy.
-  const delOf = useCallback((f) =>
-    (f.del_doc_id && docs.find(d => d.id === f.del_doc_id && d.doc_kind === 'del'))
-    || docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del')
-    || null, [docs]);
-  const lastSync = useMemo(() => { let m = null; for (const d of docs) if (d.synced_at && (!m || d.synced_at > m)) m = d.synced_at; return m; }, [docs]);
-  // Sincronizar contexto = relee documentos (client-brain-sync) Y el árbol de Drive (drive-sync,
-  // para traer carpetas nuevas de Recursos), y recarga todo.
-  const sync = async () => {
-    setSyncing(true);
-    try {
-      await supabase.functions.invoke('client-brain-sync', { body: { client_id: clientId } });
-      await supabase.functions.invoke('drive-sync', { body: { client_id: clientId } });
-      await Promise.all([fetchContext(), loadRecursos()]);
-    } catch { /* noop */ } finally { setSyncing(false); }
-  };
+  const delOf = useCallback((f) => {
+    // Funnel con DEL propio (del_doc_id, P3): usa SU documento. Si todavía no hay filas
+    // (Doc real de Drive), devuelve un doc sintético con ese id → el DEL abre en blanco
+    // (solo las pestañas estándar) y las secciones nuevas se crean bajo ese doc_id, sin
+    // pisar ni copiar el DEL de otro funnel de la misma carpeta.
+    if (f.del_doc_id) {
+      return docs.find(d => d.id === f.del_doc_id && d.doc_kind === 'del')
+        || { id: f.del_doc_id, doc_kind: 'del', strategy_id: f.strategy_id, text: '', web_url: '' };
+    }
+    // Funnels viejos (sin del_doc_id): comportamiento de antes, fallback por carpeta.
+    return docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del') || null;
+  }, [docs]);
 
-  // Contexto detras de un boton (ya no ocupa el arranque de la vista) + navegacion
-  // por funnel: al abrir uno se entra a SU pantalla, no un desplegable.
-  const [ctxOpen, setCtxOpen] = useState(false);
+  // Navegacion por funnel: al abrir uno se entra a SU pantalla, no un desplegable.
   const [pageFunnelId, setPageFunnelId] = useState(null);
   useEffect(() => { setPageFunnelId(null); }, [clientId]); // al cambiar de cliente, volver a la lista
   const pageFunnel = useMemo(() => myFunnels.find(f => f.id === pageFunnelId) || null, [myFunnels, pageFunnelId]);
@@ -1476,10 +1135,20 @@ export default function FunnelsView({ clientId }) {
   const [form, setForm] = useState(blankForm);
   const openNew = (tipo) => { setForm(blankForm(tipo)); setModal(true); };
 
-  const create = () => {
-    if (!form.name.trim() || !form.strategy_id) return;
-    addStrategyPage({
-      strategy_id: form.strategy_id, client_id: clientId, name: form.name.trim(), status: form.status, tipo: form.tipo,
+  const create = async () => {
+    if (!form.name.trim()) return;
+    // strategy_id es NOT NULL (el funnel cuelga de una "carpeta"). Si el cliente todavía no
+    // tiene ninguna, creamos una mínima EN NUESTRO SISTEMA (sin Drive) para poder crear el
+    // funnel — así ya no hace falta "crear la carpeta del Drive" antes.
+    let strategyId = form.strategy_id;
+    if (!strategyId) {
+      strategyId = 'str_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      try {
+        await sbFetch('strategies', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ id: strategyId, client_id: clientId, name: 'Principal' }), throwOnError: true });
+      } catch (e) { window.alert('No pude preparar el funnel: ' + (e?.message || e)); return; }
+    }
+    await addStrategyPage({
+      strategy_id: strategyId, client_id: clientId, name: form.name.trim(), status: form.status, tipo: form.tipo,
       prod_url: form.prod_url || null, testing_url: form.testing_url || null, ads_url: form.ads_url || null,
       pixel_code: form.pixel_code || null, clarity_id: form.clarity_id || null,
       conversion_events: form.events, avatars: form.avatars,
@@ -1522,8 +1191,8 @@ export default function FunnelsView({ clientId }) {
     finally { setBriefGenBusy(false); }
   };
 
-  // ── Agregar estrategia: crea en el Drive la carpeta "Estrategia #N | Tipo | fecha" con el
-  //    esqueleto estándar (Anuncios/VSL/Recursos/…) + un DEL en blanco, y la trae al panel.
+  // ── Agregar estrategia: crea la "carpeta" (fila strategies) EN NUESTRO SISTEMA, sin Drive.
+  //    Cada funnel que se cree adentro trae su propio DEL nativo.
   const [stratModal, setStratModal] = useState(false);
   const [stratTipo, setStratTipo] = useState('Reclutamiento');
   const [stratOtro, setStratOtro] = useState('');
@@ -1533,14 +1202,11 @@ export default function FunnelsView({ clientId }) {
   const createStrategy = async () => {
     setStratBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-strategy', { body: { client_id: clientId, tipo: stratTipoFinal } });
-      let payload = data;
-      if (error?.context && typeof error.context.json === 'function') { try { payload = await error.context.json(); } catch { /* noop */ } }
-      if (!payload?.ok) { window.alert(payload?.detail || error?.message || 'No pude crear la estrategia.'); return; }
+      const name = `Estrategia #${nextStratN} | ${stratTipoFinal}`;
+      await addStrategy({ client_id: clientId, name, position: myStrategies.length });
       setStratModal(false); setStratOtro('');
-      await fetchContext();
-      window.alert(`Estrategia creada en el Drive: “${payload.strategyName}”, con sus carpetas y un DEL en blanco.\n\nRecargá el panel para verla en la lista.`);
-    } catch (e) { window.alert(String(e?.message || e)); }
+      window.alert(`Estrategia creada: “${name}”.`);
+    } catch (e) { window.alert('No pude crear la estrategia: ' + (e?.message || e)); }
     finally { setStratBusy(false); }
   };
 
@@ -1559,75 +1225,6 @@ export default function FunnelsView({ clientId }) {
 
   return (
     <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
-      {/* Contexto del cliente: ya NO arranca la vista (la maqueta deja solo los
-          funnels). Sigue vivo porque alimenta a los agentes (onboarding, investigacion,
-          personalidad); vive detras del boton "Contexto" del header de Funnels. */}
-      {ctxOpen && (
-      <Modal open onClose={() => setCtxOpen(false)} title="Contexto del cliente" maxWidth={940}>
-      <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0' }}>
-        <div className="flex items-start justify-between gap-4 flex-wrap py-[18px] px-5 border-b border-[#F1F3F7]" style={{ background: 'linear-gradient(180deg,#FDF2F8 0%,#fff 100%)' }}>
-          <div className="flex gap-3 items-center">
-            <span className="inline-flex items-center justify-center w-[38px] h-[38px] rounded-[11px] shrink-0" style={{ background: '#FCE7F3', color: '#DB2777' }}><Sparkles size={20} /></span>
-            <div>
-              <div className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em]">Contexto del cliente</div>
-              <div className="text-[11.5px] text-[#9098A4] mt-px">Alimenta a todas las estrategias{lastSync ? ` · sincronizado ${fmtDateTime(lastSync)}` : ''}</div>
-            </div>
-          </div>
-          <button onClick={sync} disabled={syncing} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[10px] text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50 hover:brightness-95" style={{ background: '#EC4899', boxShadow: '0 1px 2px rgba(236,72,153,.35)' }}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />{syncing ? 'Sincronizando…' : 'Sincronizar contexto'}</button>
-        </div>
-
-        <div className="py-[18px] px-5">
-          {/* Nicho + cuello */}
-          <div className="grid gap-3.5 mb-5" style={{ gridTemplateColumns: 'minmax(200px,1fr) minmax(280px,1.6fr)' }}>
-            <div className="border border-[#EDF0F5] rounded-xl py-[13px] px-[15px] bg-[#FBFCFE]">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[#9098A4] mb-2"><Target size={13} />Nicho</div>
-              <div className="text-[13px] font-semibold leading-snug" style={{ color: client.niche ? '#EC4899' : '#C3C9D4' }}>{client.niche || '—'}</div>
-            </div>
-            <div className="border rounded-xl py-[13px] px-[15px]" style={{ borderColor: '#FBE6BE', background: '#FFFBEB' }}>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] mb-2" style={{ color: '#B45309' }}><Activity size={13} />Cuello de botella</div>
-              <div className="text-[13px] leading-snug font-medium" style={{ color: client.bottleneck ? '#78350F' : '#C3C9D4' }}>{client.bottleneck || '—'}</div>
-            </div>
-          </div>
-
-          {/* Documentos */}
-          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
-            <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4]">Documentos del cliente</span>
-            <button onClick={openBrief} title="Escribir/actualizar el briefing y la personalidad del cliente; se fija solo en su casillero" className="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg border text-[11.5px] font-semibold cursor-pointer hover:bg-[#FDF2F8]" style={{ color: '#DB2777', borderColor: '#F5C2DD', background: '#fff' }}><Brain size={13} />Escribir briefing / personalidad</button>
-          </div>
-          <ClientContextSlots clientId={clientId} driveDocs={driveDocs} docsByNode={docsByNode} slotPins={slotPins} onChanged={fetchContext} />
-          <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-3.5"><RefreshCw size={13} />Asigná el documento de cada casillero; después tocá "Sincronizar contexto" para que el cerebro lo lea.</div>
-
-          {/* Recursos del cliente (branding, testimonios, imágenes, info empresa) — compartidos por TODAS las estrategias */}
-          <div className="mt-5 pt-[18px] border-t border-[#F1F3F7]">
-            <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Recursos del cliente <span className="text-[#C3C9D4] normal-case font-medium tracking-normal">· los comparten todas las estrategias</span></div>
-            {recursos === null
-              ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">Cargando recursos…</div>
-              : recursos.length === 0
-                ? <div className="text-[11.5px] text-[#AEB4BF] py-1.5">No encontré subcarpetas dentro de “Recursos”. Tocá “Sincronizar contexto” o revisá la pestaña Carpetas.</div>
-                : <div className="flex gap-2.5 flex-wrap">
-                    {recursos.map(r => { const has = r.files > 0; return (
-                      <div key={r.folder_id} className="inline-flex items-center gap-2.5 border rounded-[10px] py-2 px-3" style={has ? { borderColor: '#C9F0D8', background: '#F4FDF7' } : { border: '1.5px dashed #D8DDE6', background: '#FBFCFE' }}>
-                        <FolderOpen size={15} className="shrink-0" style={{ color: has ? '#16A34A' : '#C3C9D4' }} />
-                        <span className="font-semibold text-[12.5px] max-w-[170px] truncate" style={{ color: has ? '#1A1D26' : '#6B7280' }} title={r.name}>{r.name}</span>
-                        <span className="text-[10.5px] font-bold py-0.5 px-1.5 rounded-full whitespace-nowrap" title={`${r.files} archivo${r.files === 1 ? '' : 's'} en la carpeta`} style={has ? { background: '#DCFCE7', color: '#15803D' } : { background: '#F1F3F7', color: '#AEB4BF' }}>{r.files}</span>
-                        {r.url && <button onClick={() => openUrl(r.url)} title="Abrir carpeta" className="hover:text-[#2E69E0] inline-flex" style={{ color: has ? '#9098A4' : '#C3C9D4' }}><ExternalLink size={13} /></button>}
-                      </div>
-                    ); })}
-                  </div>}
-            <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-2.5"><FolderOpen size={13} className="shrink-0" />Logo, colores, fotos/imágenes y testimonios del cliente. El número es lo que hay en cada carpeta del Drive.</div>
-          </div>
-
-          {/* Webs de contexto */}
-          <div className="mt-5 pt-[18px] border-t border-[#F1F3F7]">
-            <div className="text-[10px] font-bold tracking-[0.12em] uppercase text-[#9098A4] mb-3">Webs de contexto</div>
-            <WebLinks clientId={clientId} webs={webs} onChanged={fetchContext} />
-            <div className="flex items-center gap-2 text-[11.5px] text-[#9098A4] mt-2.5 leading-snug"><Globe size={13} className="shrink-0" />Sumá el sitio del cliente o de la empresa MLM. Los dominios de tus funnels también nutren el contexto (el funnel es donde llega el prospecto tras el anuncio).</div>
-          </div>
-        </div>
-      </div>
-      </Modal>
-      )}
-
       {/* Los funnels del cliente, planos: la unidad de trabajo es el FUNNEL. */}
       <div className="bg-white rounded-2xl overflow-hidden mb-5" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
         <div className="flex items-center gap-3 py-4 px-5 border-b border-[#F1F3F7]">
@@ -1636,9 +1233,7 @@ export default function FunnelsView({ clientId }) {
             <div className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em]">Funnels</div>
             <div className="text-[11.5px] text-[#9098A4] mt-px">{myFunnels.length === 0 ? 'Todavía no hay ninguno' : `${myFunnels.length} funnel${myFunnels.length === 1 ? '' : 's'} de ${client.name || 'este cliente'}`}</div>
           </div>
-          {/* El contexto (onboarding, investigacion, personalidad) ya no ocupa la vista:
-              vive detras de este boton. Sigue alimentando a los agentes. */}
-          <button onClick={() => setCtxOpen(true)} title="Onboarding, investigación, personalidad y webs del cliente" className="inline-flex items-center gap-1.5 py-[9px] px-3 border rounded-[10px] text-[12px] font-semibold cursor-pointer shrink-0 hover:bg-[#FDF2F8]" style={{ color: '#DB2777', borderColor: '#F5C2DD', background: '#fff' }}><Sparkles size={14} />Contexto</button>
+          <button onClick={() => setAccessOpen(true)} title="Accesos del cliente (CRM, plataformas, webs)" className="inline-flex items-center justify-center w-[38px] h-[38px] border rounded-[10px] cursor-pointer shrink-0 hover:bg-[#FFF7ED]" style={{ color: '#B45309', borderColor: '#F1DDBA', background: '#fff' }}><KeyRound size={16} /></button>
           {myFunnels.length > 0 && (
             <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[10px] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95 shrink-0" style={{ background: '#2E69E0', boxShadow: '0 1px 2px rgba(46,105,224,.35)' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>
           )}
@@ -1649,14 +1244,8 @@ export default function FunnelsView({ clientId }) {
             <div className="flex flex-col items-center justify-center text-center py-10 px-5 gap-2.5">
               <Zap size={26} className="text-[#C7CCD6]" />
               <div className="text-[13px] font-semibold text-[#4B5563]">Este cliente todavía no tiene funnels</div>
-              <div className="text-[11.5px] text-text2 max-w-[430px]">
-                {myStrategies.length === 0
-                  ? 'Primero hay que crearle la carpeta en el Drive: arma sola su estructura y un DEL en blanco.'
-                  : 'Crealo acá. Va a la carpeta del Drive que ya tiene.'}
-              </div>
-              {myStrategies.length === 0
-                ? <button onClick={() => setStratModal(true)} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#DB2777' }}><FolderPlus size={14} />Crear la carpeta del Drive</button>
-                : <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#2E69E0' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>}
+              <div className="text-[11.5px] text-text2 max-w-[430px]">Creá el primero acá. Arranca con su DEL propio en blanco.</div>
+              <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 mt-1.5 py-2.5 px-4 rounded-[10px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95" style={{ background: '#2E69E0' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>
             </div>
           ) : (
             /* Agrupados por TIPO: es la unica division que sobrevive a las estrategias.
@@ -1707,18 +1296,12 @@ export default function FunnelsView({ clientId }) {
         </div>
       </div>
 
-      {/* La carpeta del Drive: se sigue pudiendo crear, pero es plomeria, no una capa de trabajo.
-          Va discreto abajo, no como una decision que haya que tomar antes de empezar. */}
-      {myFunnels.length > 0 && (
-        <div className="flex justify-center">
-          <button onClick={() => setStratModal(true)} title="Crea en el Drive una carpeta nueva con su estructura y un DEL en blanco" className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-transparent text-[11px] font-medium cursor-pointer text-[#AEB4BF] hover:text-[#DB2777]"><FolderPlus size={12} />Crear otra carpeta en el Drive</button>
-        </div>
-      )}
+      {accessOpen && <ClientAccessModal client={client} onClose={() => setAccessOpen(false)} />}
 
       {/* Modal nuevo funnel */}
       {modal && (
         <Modal open={modal} onClose={() => setModal(false)} title="Nuevo funnel" maxWidth={560}
-          footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={() => setModal(false)}>Cancelar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.name.trim() || !form.strategy_id} onClick={create}>Crear funnel</button></div>}>
+          footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={() => setModal(false)}>Cancelar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={!form.name.trim()} onClick={create}>Crear funnel</button></div>}>
           <div className="flex flex-col gap-[18px] p-1">
             <div className="grid gap-3.5" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Nombre del funnel</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ej. Profesionales V1" className={inputCls} autoFocus /></div>
@@ -1729,16 +1312,9 @@ export default function FunnelsView({ clientId }) {
               </div>
             </div>
 
-            {/* La carpeta del Drive solo se pregunta si hay mas de una: si no, es ruido. */}
-            {myStrategies.length > 1 && (
-              <div>
-                <label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Carpeta del Drive</label>
-                <select value={form.strategy_id} onChange={e => setForm({ ...form, strategy_id: e.target.value })} className={inputCls + ' cursor-pointer'}>
-                  {myStrategies.map(s => <option key={s.id} value={s.id}>{s.name || `Carpeta #${(s.position ?? 0) + 1}`}</option>)}
-                </select>
-                <div className="text-[11px] text-[#9098A4] mt-1.5">Dónde vive el funnel en el Drive. De ahí sale su DEL.</div>
-              </div>
-            )}
+            {/* La carpeta del Drive ya no se elige al crear (pedido de Matías): cada funnel
+                nace con su DEL propio en blanco (del_doc_id), no depende de la carpeta.
+                Se auto-asigna la primera carpeta del cliente para el almacenamiento. */}
             <div><label className="block text-[11px] font-bold tracking-[0.04em] uppercase text-[#6B7280] mb-1.5">Estado</label>
               <div className="inline-flex items-center gap-1 p-1 border border-[#E2E5EB] rounded-[10px] bg-[#F7F8FA]">
                 {STATUS_ORDER.map(k => { const v = FUNNEL_STATUS[k]; const sel = form.status === k; return <button key={k} onClick={() => setForm({ ...form, status: k })} className="inline-flex items-center gap-1.5 py-[7px] px-3.5 border-none rounded-[7px] text-[12.5px] font-semibold font-sans cursor-pointer" style={{ background: sel ? '#fff' : 'transparent', color: sel ? '#1A1D26' : '#6B7280', boxShadow: sel ? '0 1px 2px rgba(10,22,40,.12)' : 'none' }}><span className="w-[7px] h-[7px] rounded-full" style={{ background: v.dot }} />{v.label}</button>; })}
@@ -1781,9 +1357,9 @@ export default function FunnelsView({ clientId }) {
               {stratTipo === 'Otro' && <input value={stratOtro} onChange={e => setStratOtro(e.target.value)} placeholder="Nombre del tipo (ej. Evento, Webinar…)" autoFocus className="w-full mt-2.5 py-2 px-3 border border-[#E2E5EB] rounded-[9px] text-[13px] bg-white outline-none focus:border-blue" />}
             </div>
             <div className="border border-[#EDF0F5] rounded-xl bg-[#FBFCFE] p-3.5">
-              <div className="text-[11px] text-[#6B7280]">Se creará en el Drive del cliente la carpeta:</div>
-              <div className="text-[13px] font-bold text-[#1A1D26] mt-1">Estrategia #{nextStratN} | {stratTipoFinal} | (hoy)</div>
-              <div className="text-[11px] text-[#9098A4] mt-1.5 leading-relaxed">…con las subcarpetas estándar (Anuncios, Estrategia, VSL, Mural, Auditorías, Otros) y una copia del DEL en blanco. Los Recursos (branding, testimonios, imágenes) son del cliente y se comparten con todas las estrategias.</div>
+              <div className="text-[11px] text-[#6B7280]">Se creará la estrategia:</div>
+              <div className="text-[13px] font-bold text-[#1A1D26] mt-1">Estrategia #{nextStratN} | {stratTipoFinal}</div>
+              <div className="text-[11px] text-[#9098A4] mt-1.5 leading-relaxed">Después, cada funnel que crees adentro trae su propio DEL. Los Recursos (branding, testimonios, imágenes) son del cliente y se comparten con todas las estrategias.</div>
             </div>
           </div>
         </Modal>
@@ -1793,7 +1369,7 @@ export default function FunnelsView({ clientId }) {
       {briefModal && (
         <Modal open={briefModal} onClose={() => setBriefModal(false)} title="Briefing y personalidad del cliente" maxWidth={720}
           footer={<div className="flex justify-between items-center gap-2 w-full">
-            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[#9098A4] font-medium"><Brain size={13} />Se guarda como Google Doc, lo lee el cerebro y se fija solo en el casillero de personalidad.</span>
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[#9098A4] font-medium"><Brain size={13} />Lo lee el cerebro y se fija solo en el casillero de personalidad.</span>
             <div className="flex gap-2">
               <button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2 disabled:opacity-50" onClick={() => setBriefModal(false)} disabled={briefBusy}>Cancelar</button>
               <button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none text-white font-semibold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5" style={{ background: '#DB2777' }} disabled={briefBusy || !briefText.trim()} onClick={saveBrief}>{briefBusy ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}{briefBusy ? 'Guardando…' : 'Guardar briefing'}</button>

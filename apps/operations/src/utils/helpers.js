@@ -16,6 +16,17 @@ export function initials(n) {
   return n.split(' ').map(x => x[0]).join('').toUpperCase().substr(0, 2);
 }
 
+// Dominio para armar links PUBLICOS (compartir carpetas/DEL, onboarding, invitado).
+// Si se genera un link desde un deploy de PREVIEW (dominio efimero de Vercel), el
+// link quedaria atado a ese dominio y se rompe. Con VITE_PUBLIC_ORIGIN fijado al
+// dominio de produccion, los links siempre apuntan a prod. Sin la env var (dev),
+// cae a window.location.origin (localhost), que es lo correcto en local.
+export function publicOrigin() {
+  const env = import.meta.env.VITE_PUBLIC_ORIGIN;
+  if (env && /^https?:\/\//.test(env)) return env.replace(/\/+$/, '');
+  return (typeof window !== 'undefined' && window.location?.origin) || '';
+}
+
 export function daysBetween(a, b) {
   if (!a || !b) return null;
   return Math.round((new Date(b) - new Date(a)) / 864e5);
@@ -538,7 +549,7 @@ export function buildInitialPendingResources(template) {
   }));
 }
 
-export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier, conector, closer, contractData, niche, email, country, priority, status, notes, billingAmount, billingCurrency, billingCycle, billingInstallments, nextChargeDate, paymentMethod, billingStatus, driveFolderUrl, teamName } = {}) {
+export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier, conector, closer, contractData, niche, email, country, priority, status, notes, billingAmount, billingCurrency, billingCycle, billingInstallments, nextChargeDate, paymentMethod, billingStatus, teamName } = {}) {
   return {
     id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     name, company, service, startDate: start, pm,
@@ -555,7 +566,6 @@ export function mkClient(name, company, service, start, pm, clientCount = 0, { p
     paymentMethod: paymentMethod || '',
     billingStatus: billingStatus || 'al_dia',
     phone: phone || '', avatarUrl: avatarUrl || '',
-    driveFolderUrl: driveFolderUrl || '',
     slackChannel: slackChannel || '', slackChannelId: '', metaAds: [], metaMetrics: null,
     customSteps: [], customPhases: [], clientFeedbacks: [],
     stepNameOverrides: {}, phaseNameOverrides: {},
@@ -639,7 +649,7 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     stepIdx: stepIdx !== undefined && stepIdx !== null && stepIdx !== '' ? parseInt(stepIdx) : null,
     status: status || 'backlog', notes: notes || '', description: '', createdDate: today(),
     startedDate: null, completedDate: null, blockedSince: null, dueDate: null,
-    definitionOfDone: '', acceptanceCriteria: [], reviewer: null,
+    definitionOfDone: '', acceptanceCriteria: [], reviewer: null, reviewReason: '',
     validatedBy: null, validatedAt: null, sprintHistory: [], statusHistory: [],
     createdBy: null,
     // El funnel se elige después, en el detalle de la tarea. Al crearla no se pide:

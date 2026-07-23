@@ -35,7 +35,7 @@ function Chip({ on, onClick, children, n }) {
 }
 
 export default function FunnelTasksBlock({ funnelId }) {
-  const { tasks, sprints, currentUser, teamMembers } = useApp();
+  const { tasks, sprints, currentUser, teamMembers, changedTaskIds, unreadCommentTaskIds } = useApp();
   const [openTaskId, setOpenTaskId] = useState(null);
   const [asignee, setAsignee] = useState('all');
   const [soloSprint, setSoloSprint] = useState(false);
@@ -110,11 +110,13 @@ export default function FunnelTasksBlock({ funnelId }) {
                   const dep = t.department ? DEPARTMENTS[t.department] : null;
                   const pri = t.priority ? TASK_PRIORITY[t.priority] : null;
                   const inSprint = activeSprint && t.sprintId === activeSprint.id;
+                  const needsReview = !!changedTaskIds?.has(t.id) || !!unreadCommentTaskIds?.has(t.id);
                   return (
                     <div
                       key={t.id}
                       onClick={() => setOpenTaskId(t.id)}
-                      className="bg-white border border-[#E7EAF0] rounded-lg py-2 px-2.5 cursor-pointer hover:border-[#2E69E0] hover:shadow-sm transition-all"
+                      className="bg-white rounded-lg py-2 px-2.5 cursor-pointer hover:border-[#2E69E0] hover:shadow-sm transition-all"
+                      style={needsReview ? { border: '1px solid #F5C86B', background: '#FFFCF5', boxShadow: '0 0 0 3px rgba(245,158,11,0.18)' } : { border: '1px solid #E7EAF0' }}
                     >
                       <div className="text-[11.5px] font-semibold text-[#1A1D26] leading-[1.35] mb-1.5">{t.title}</div>
                       <div className="flex items-center gap-1 flex-wrap">

@@ -106,6 +106,15 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     ref.current?.focus();
   };
 
+  // Marcador / resaltado: pinta el FONDO del texto seleccionado. 'transparent' lo quita.
+  const applyHighlight = (color) => {
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('hiliteColor', false, color);
+    document.execCommand('styleWithCSS', false, false);
+    handleInput();
+    ref.current?.focus();
+  };
+
   const clearFormat = () => {
     exec('removeFormat');
     // removeFormat no quita headings/lists. Los limpiamos a mano envolviendo en <p>.
@@ -160,6 +169,8 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const openTable = () => { saveSelection(); setDialog({ type: 'table', cols: '3', rows: '3' }); };
   const openImage = () => { saveSelection(); if (onInsertImage) { onInsertImage(insertHTML); return; } setDialog({ type: 'image', url: '' }); };
   const openAvatar = () => { saveSelection(); setDialog({ type: 'avatar', name: '' }); };
+  // Inserta una estructura de landing pre-armada (blueprint) en la posición del cursor.
+  const insertBlueprint = (html) => { saveSelection(); insertHTML(html); };
 
   // Confirmación de cada diálogo.
   const doTable = () => {
@@ -244,7 +255,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   // este editor toma el foco, avisa con onActive(api) y la barra opera sobre ÉL. Así la
   // barra no se repite en cada sección. Ver DelToolbar en DelEditor.
   const apiRef = useRef({});
-  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, clearFormat };
+  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint };
   const handleFocus = () => onActive?.(apiRef.current);
 
   const Btn = ({ Icon, title, onClick, label }) => (

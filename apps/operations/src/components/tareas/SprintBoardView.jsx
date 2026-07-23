@@ -24,7 +24,7 @@ function insertIndexAt(colEl, clientY, draggedId) {
 export default function SprintBoardView() {
   const {
     activeSprint, sprints, tasks, updateTask, reorderTask, moveTaskToSprint, teamMembers, clients, currentUser,
-    taskAssignee, taskClientFilter, taskComments,
+    taskAssignee, taskClientFilter, taskComments, changedTaskIds, unreadCommentTaskIds, openTaskComments,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
   // Invitado ("mover y marcar"): arrastra tarjetas entre columnas, pero no cambia
@@ -230,12 +230,17 @@ export default function SprintBoardView() {
                   ? (isDone && doneDate ? Math.max(0, daysBetween(t.createdDate, doneDate) ?? 0) : daysAgo(t.createdDate))
                   : null;
                 const nSprints = sprintCount(t);
+                // P2/P6 — la tarjeta "pide revisión" si cambió desde que la abrí o tiene
+                // comentarios sin leer. Se apaga al abrir la tarea (markTaskViewed / read).
+                const hasUnreadCmt = !!unreadCommentTaskIds?.has(t.id);
+                const needsReview = !!changedTaskIds?.has(t.id) || hasUnreadCmt;
+                const flashing = flashCardId === t.id;
                 return (
                   <div key={t.id} data-card-id={t.id} draggable={!locked}
                     onDragStart={() => { if (locked) return; setDraggedId(t.id); startDragScroll(); }}
                     onDragEnd={() => { setDraggedId(null); setOverCol(null); stopDragScroll(); }}
                     onClick={() => setOpenTaskId(t.id)}
-                    style={{ background: blocked ? '#FFFBFB' : '#fff', border: flashCardId === t.id ? '1px solid #5B7CF5' : (blocked ? '1px solid #FECACA' : '1px solid #E2E5EB'), borderRadius: 11, padding: '11px 12px', boxShadow: flashCardId === t.id ? '0 0 0 3px rgba(91,124,245,0.28)' : '0 1px 2px rgba(10,22,40,.04)', cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1, transition: 'box-shadow .3s ease, border-color .3s ease' }}>
+                    style={{ background: blocked ? '#FFFBFB' : (needsReview ? '#FFFCF5' : '#fff'), border: flashing ? '1px solid #5B7CF5' : (needsReview ? '1px solid #F5C86B' : (blocked ? '1px solid #FECACA' : '1px solid #E2E5EB')), borderRadius: 11, padding: '11px 12px', boxShadow: flashing ? '0 0 0 3px rgba(91,124,245,0.28)' : (needsReview ? '0 0 0 3px rgba(245,158,11,0.20)' : '0 1px 2px rgba(10,22,40,.04)'), cursor: 'pointer', opacity: draggedId === t.id ? 0.4 : 1, transition: 'box-shadow .3s ease, border-color .3s ease' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       {c
                         ? <span title={c.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 10.5, fontWeight: 600, color: c.color || '#6B7280', background: (c.color || '#9CA3AF') + '1A', borderRadius: 6, padding: '2px 8px' }}>
@@ -288,7 +293,14 @@ export default function SprintBoardView() {
                         {ageDays != null && <span title={isDone ? 'Cuánto tardó: de creada a completada' : 'Días desde que se creó la tarea'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#9CA3AF' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>{isDone ? ageDays + 'd' : (ageDays === 0 ? 'hoy' : ageDays + 'd')}</span>}
                         {nSprints > 1 && <span title={`Lleva ${nSprints} sprints`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: '#B45309', background: '#FFF7ED', borderRadius: 5, padding: '1px 6px' }}>{nSprints} sprints</span>}
                         {subTotal > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#6B7280' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>{subDone}/{subTotal}</span>}
-                        {cCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9CA3AF' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" /></svg>{cCount}</span>}
+                        {cCount > 0 && (
+                          <button onClick={(e) => { e.stopPropagation(); openTaskComments?.(t.id); }}
+                            title={hasUnreadCmt ? 'Comentarios nuevos sin leer' : 'Ver comentarios'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: hasUnreadCmt ? 700 : 400, color: hasUnreadCmt ? '#5B7CF5' : '#9CA3AF', border: 'none', background: hasUnreadCmt ? '#EEF2FF' : 'transparent', borderRadius: 6, padding: hasUnreadCmt ? '1px 6px' : '1px 2px', cursor: 'pointer' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" /></svg>{cCount}
+                            {hasUnreadCmt && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B7CF5' }} />}
+                          </button>
+                        )}
                       </div>
                     </div>
                     {locked && activeSprint && viewSprint?.id !== activeSprint.id && (
