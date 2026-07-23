@@ -304,6 +304,52 @@ function buildSlackSummary(args: {
   return L.join("\n");
 }
 
+// Resumen de la venta en HTML → se guarda como documento privado del cliente (del_client_extra_docs)
+// y aparece en el grupo "DEL CLIENTE" de todos los DEL de ese cliente. Mismo contenido que el
+// resumen de Slack, sin los links de Drive.
+function buildSummaryHtml(args: {
+  body: Record<string, unknown>;
+  billingAmount: number | null;
+  currency: string;
+  cashCollect: number | null;
+  remaining: number | null;
+  installments: number;
+  nextCharge: string | null;
+  commission: Record<string, number>;
+  receiptUrl: string | null;
+}): string {
+  const b = args.body;
+  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const row = (label: string, value: string) => `<p><strong>${label}:</strong> ${value && value.trim() ? esc(value) : "—"}</p>`;
+  const H: string[] = [];
+  H.push("<h2>👤 Cliente</h2>");
+  H.push(row("Fecha", str(b.start_date)));
+  H.push(row("Nombre", str(b.name)));
+  H.push(row("Correo Lead", str(b.email)));
+  H.push(row("Teléfono", str(b.phone)));
+  H.push(row("País", str(b.country)));
+  if (str(b.client_type)) H.push(row("Empresa o Líder", str(b.client_type)));
+  if (str(b.niche)) H.push(row("Empresa MLM", str(b.niche)));
+  H.push("<h2>💰 Venta</h2>");
+  H.push(row("Valor del servicio cerrado", fmtMoney(args.billingAmount, args.currency)));
+  H.push(row("CashCollect (cobrado)", fmtMoney(args.cashCollect, args.currency)));
+  H.push(row("Restante por cobrar", fmtMoney(args.remaining, args.currency)));
+  const pm = str(b.payment_method);
+  H.push(row("Medio de pago", PAYMENT_LABELS[pm.toLowerCase()] ?? pm));
+  H.push(row("Cuotas", String(args.installments)));
+  if (args.installments > 1) H.push(row("Próximo cobro", args.nextCharge ?? "—"));
+  H.push("<h2>📑 Contrato y soporte</h2>");
+  H.push(row("Datos del contrato", str(b.contract_data)));
+  const rec = str(b.call_recording_url);
+  H.push(`<p><strong>Grabación de llamada:</strong> ${rec ? `<a href="${esc(rec)}">ver grabación</a>` : "—"}</p>`);
+  H.push(`<p><strong>Comprobante de pago:</strong> ${args.receiptUrl ? `<a href="${esc(args.receiptUrl)}">ver comprobante</a>` : "—"}</p>`);
+  const comLines = COMMISSION_KEYS.filter((k) => (args.commission[k] ?? 0) > 0).map((k) => `<li>${esc(COMMISSION_LABELS[k] ?? k)}: ${args.commission[k]}%</li>`);
+  if (comLines.length) { H.push("<h2>📊 Reparto de comisiones</h2>"); H.push(`<ul>${comLines.join("")}</ul>`); }
+  const notes = str(b.notes);
+  if (notes) { H.push("<h2>📝 Notas internas</h2>"); H.push(`<p>${esc(notes).replace(/\n/g, "<br>")}</p>`); }
+  return H.join("\n");
+}
+
 // Convierte una fecha YYYY-MM-DD a DD-MM-AAAA para el nombre de la carpeta.
 function toDDMMYYYY(isoDate: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
@@ -687,58 +733,44 @@ Deno.serve(async (req: Request) => {
   let driveFolderUrl: string | null = null;
   let onboardingUrl: string | null = null;
   let delDocUrl: string | null = null;
-  if (appscriptUrl) {
-    const drive = await createDriveStructure({
-      url: appscriptUrl,
-      secret: appscriptSecret,
-      name: displayName,
-      empresa: str(body.niche),
-      emails: accessEmails,
-      fecha: toDDMMYYYY(startDate),
-      structure: {
-        subfolders: onboardingCfg.subfolders,
-        nested: onboardingCfg.nested,
-        strategy_folder: onboardingCfg.strategy_folder,
-        doc_title: onboardingCfg.doc_title,
-        del_doc_title: onboardingCfg.del_doc_title,
-      },
-    });
-    if (drive) {
-      driveFolderUrl = drive.folderUrl;
-      onboardingUrl = drive.docUrl;
-      delDocUrl = drive.delDocUrl;
-      const { error: dErr } = await supabase
-        .from("clients")
-        .update({ drive_folder_url: driveFolderUrl })
-        .eq("id", clientId);
-      if (dErr) console.error("crear-venta: error guardando drive_folder_url", dErr);
-
-      // Estrategia del cliente en el panel (pestaña Estrategias) con el nombre de la
-      // carpeta de estrategia y los links de las carpetas principales del Drive, para
-      // que el equipo acceda directo. El onboarding se suma como documento.
-      const archivos: { label: string; url: string; category: string }[] = Object.entries(
-        drive.subfolders,
-      ).map(([label, url]) => ({ label, url, category: "folder" }));
-      if (onboardingUrl) archivos.push({ label: "Onboarding", url: onboardingUrl, category: "doc" });
-      if (drive.delDocUrl) archivos.push({ label: "DEL", url: drive.delDocUrl, category: "doc" });
-      if (archivos.length) {
-        const { error: sErr } = await supabase.from("strategies").insert({
-          id: `strat_${Math.floor(Date.now() / 1000)}_${rnd(6)}`,
-          client_id: clientId,
-          name: drive.strategyName || "Estrategia #1 | [A DEFINIR]",
-          status: "borrador",
-          version: "v1",
-          position: 0,
-          start_date: startDate,
-          archivos,
-          folders: [],
-          docs: [],
-          drive_url: null,
-          accesos: [],
-        });
-        if (sErr) console.error("crear-venta: error creando estrategia", sErr);
-      }
+  // Alta NATIVA (sin Drive): estrategia + un funnel inicial con su DEL nativo, para que el
+  // equipo arranque directo en el panel. crear-venta corre con service-role, así que puede
+  // insertar en strategies/strategy_pages e invocar del_doc_create (que crea el DEL nativo;
+  // client_brain_docs es RLS solo-lectura, por eso va por RPC).
+  const strategyId = `strat_${Math.floor(Date.now() / 1000)}_${rnd(6)}`;
+  const { error: sErr } = await supabase.from("strategies").insert({
+    id: strategyId,
+    client_id: clientId,
+    name: "Estrategia #1",
+    status: "borrador",
+    version: "v1",
+    position: 0,
+    start_date: startDate,
+  });
+  if (sErr) {
+    console.error("crear-venta: error creando estrategia", sErr);
+  } else {
+    let delDocId: string | null = null;
+    try {
+      const { data: dd, error: ddErr } = await supabase.rpc("del_doc_create", {
+        p_client_id: clientId,
+        p_strategy_id: strategyId,
+        p_title: "Funnel inicial — DEL",
+      });
+      if (ddErr) console.error("crear-venta: del_doc_create", ddErr);
+      else delDocId = typeof dd === "string" ? dd : ((dd as { id?: string } | null)?.id ?? null);
+    } catch (e) {
+      console.error("crear-venta: del_doc_create", e);
     }
+    const { error: pErr } = await supabase.from("strategy_pages").insert({
+      id: `spg_${Math.floor(Date.now() / 1000)}_${rnd(6)}`,
+      strategy_id: strategyId,
+      client_id: clientId,
+      name: "Funnel inicial",
+      status: "borrador",
+      del_doc_id: delDocId,
+    });
+    if (pErr) console.error("crear-venta: error creando funnel", pErr);
   }
 
   // Alta en la planilla de finanzas (Base de datos + Acuerdos + Ingresos) via Apps
@@ -854,6 +886,33 @@ Deno.serve(async (req: Request) => {
     slackChannel: slackChannelName,
   });
   await postSlack(slackWebhook, slackText);
+
+  // Documento privado "Resumen de la venta": queda en del_client_extra_docs (por cliente), así
+  // aparece en el grupo "DEL CLIENTE" de TODOS los DEL de ESTE cliente. system=true → no se borra
+  // por error desde el panel.
+  try {
+    const resumenHtml = buildSummaryHtml({
+      body,
+      billingAmount,
+      currency: str(body.billing_currency) || "USD",
+      cashCollect,
+      remaining,
+      installments,
+      nextCharge,
+      commission: commission_split,
+      receiptUrl,
+    });
+    const { error: rErr } = await supabase.from("del_client_extra_docs").insert({
+      client_id: clientId,
+      title: "Resumen de la venta",
+      html: resumenHtml,
+      created_by: "sistema",
+      system: true,
+    });
+    if (rErr) console.error("crear-venta: error creando doc resumen de venta", rErr);
+  } catch (e) {
+    console.error("crear-venta: buildSummaryHtml", e);
+  }
 
   return json(200, {
     ok: true,

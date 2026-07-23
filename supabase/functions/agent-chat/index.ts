@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
   const [{ data: client }, { data: strat }, { data: page }] = await Promise.all([
     supabase.from("clients").select("name,niche,company,team_name,service,meta_metrics").eq("id", clientId).maybeSingle(),
     strategyId ? supabase.from("strategies").select("name").eq("id", strategyId).maybeSingle() : Promise.resolve({ data: null }),
-    supabase.from("strategy_pages").select("name,avatars,vsl_script,prod_url,official_domain,pages_copy").eq("id", funnelId).maybeSingle(),
+    supabase.from("strategy_pages").select("name,tipo,avatars,vsl_script,prod_url,official_domain,pages_copy").eq("id", funnelId).maybeSingle(),
   ]);
 
   const avatars = Array.isArray(page?.avatars) ? (page!.avatars as Record<string, unknown>[]) : [];
@@ -448,20 +448,33 @@ Deno.serve(async (req) => {
   const fuentes: Array<{ kind: string; chars: number; leidos: number; usa: string; titulo: string }> = [];
   // ── El FOCO del cliente: reclutamiento o producto ──
   // Cambia qué hay que investigar y en qué se profundiza en toda la fase, no solo en un paso.
-  // Se deduce del nombre de las estrategias del cliente, igual que hace el resto de la fn
-  // (`tipo`, más abajo) — pero a nivel CLIENTE, porque acá todavía puede no haber strategy_id.
+  // Va a nivel CLIENTE (no de funnel), porque acá todavía puede no haber funnel elegido.
   //
   // El caso que importa: los clientes en pre-llamada —justo los que necesitan el research—
-  // TODAVÍA NO TIENEN ESTRATEGIA CREADA. Ahí el foco no existe en ningún lado y el agente
+  // TODAVÍA NO TIENEN NADA CREADO. Ahí el foco no existe en ningún lado y el agente
   // tiene que preguntarlo, no suponerlo: investigar para reclutamiento cuando el cliente
   // viene por producto es research tirado.
+  //
+  // Manda `strategy_pages.tipo` (el campo). El nombre de la carpeta de Drive quedó SOLO como
+  // fallback para los funnels a los que nadie les puso el tipo todavía: era una regex sobre el
+  // nombre de una carpeta, y se equivocaba (los funnels "Producto…" de Jose Luis Rivas cuelgan
+  // de una carpeta llamada "Reclutamiento").
   let focoDesc = "";
   let estrategiasDesc: string[] = [];
   if (subagentKey === "descubrimiento") {
-    const { data: estrats } = await supabase.from("strategies").select("name").eq("client_id", clientId);
-    estrategiasDesc = (Array.isArray(estrats) ? estrats : []).map((e) => str(e.name)).filter(Boolean);
-    const hayReclut = estrategiasDesc.some((n) => /reclut/i.test(n));
-    const hayProd = estrategiasDesc.some((n) => /producto/i.test(n));
+    const [{ data: funnels }, { data: estrats }] = await Promise.all([
+      supabase.from("strategy_pages").select("name,tipo").eq("client_id", clientId),
+      supabase.from("strategies").select("name").eq("client_id", clientId),
+    ]);
+    const tipos = (Array.isArray(funnels) ? funnels : []).map((p) => str(p.tipo)).filter(Boolean);
+    const nombresCarpeta = (Array.isArray(estrats) ? estrats : []).map((e) => str(e.name)).filter(Boolean);
+    // Lo que se le muestra al agente: los funnels con su tipo (o las carpetas, si no hay funnels).
+    estrategiasDesc = (Array.isArray(funnels) ? funnels : []).length
+      ? (funnels as Record<string, unknown>[]).map((p) => `${str(p.name)}${str(p.tipo) ? ` (${str(p.tipo)})` : " (sin tipo)"}`)
+      : nombresCarpeta;
+
+    const hayReclut = tipos.includes("reclutamiento") || (!tipos.length && nombresCarpeta.some((n) => /reclut/i.test(n)));
+    const hayProd = tipos.includes("producto") || (!tipos.length && nombresCarpeta.some((n) => /producto/i.test(n)));
     focoDesc = !estrategiasDesc.length ? "sin_estrategia"
       : (hayReclut && hayProd) ? "mixto"
         : hayReclut ? "reclutamiento"
@@ -856,7 +869,14 @@ Deno.serve(async (req) => {
     ...seccionesPag,
   ].join("\n");
 
-  const tipo = /producto/i.test(str(strat?.name)) ? "Producto" : (/reclut/i.test(str(strat?.name)) ? "Reclutamiento" : str(strat?.name) || "—");
+  // El tipo del funnel. Ahora es un CAMPO (strategy_pages.tipo), no una adivinanza sobre el
+  // nombre de la carpeta de Drive. Importa: los funnels "Producto sin pre-landing" y
+  // "Producto V2" de Jose Luis Rivas cuelgan de una carpeta llamada "Reclutamiento", asi que
+  // la regex le decia RECLUTAMIENTO al agente y le hacia escribir el anuncio equivocado.
+  // El fallback a la regex se queda para los funnels a los que todavia nadie les puso el tipo.
+  const TIPO_LBL: Record<string, string> = { reclutamiento: "Reclutamiento", producto: "Producto" };
+  const tipo = TIPO_LBL[str(page?.tipo)]
+    || (/producto/i.test(str(strat?.name)) ? "Producto" : (/reclut/i.test(str(strat?.name)) ? "Reclutamiento" : "—"));
 
   // El contexto de descubrimiento es OTRO: nivel cliente, no funnel. Casi todo el bloque de
   // abajo (avatar, guión del VSL, páginas, ganadores) no existe todavía en esta fase — meterlo
@@ -867,8 +887,8 @@ Deno.serve(async (req) => {
     reclutamiento: "RECLUTAMIENTO. Lo que se vende es la OPORTUNIDAD, y lo que la sostiene es el líder: su autoridad, su historia, su credibilidad, sus resultados y su equipo. Ahí es donde tenés que profundizar en todos los pasos.",
     producto: "PRODUCTO. Lo que se vende es el PRODUCTO, así que el centro son los productos GANADORES de la empresa: cuáles funcionan, qué resultados dan, qué los diferencia y qué evidencia hay. El líder igual importa (es quien lo vende y da la cara), pero es soporte del producto, no el eje.",
     mixto: "MIXTO: este cliente tiene estrategias de Reclutamiento Y de Producto. NO las mezcles en un mismo entregable — el método Korex las segmenta siempre. Preguntá para cuál de las dos es lo que te están pidiendo antes de producir.",
-    sin_tipo: "NO SE PUEDE DEDUCIR: el cliente tiene estrategias, pero sus nombres no dicen si son de Reclutamiento o de Producto. Preguntá cuál es el foco antes de producir.",
-    sin_estrategia: "TODAVÍA NO EXISTE: este cliente no tiene ninguna estrategia creada, así que el foco no está definido en ningún lado. PREGUNTALO antes de producir o de coordinar el research — investigar la autoridad del líder cuando el cliente viene por producto es research tirado a la basura, y al revés igual. No lo supongas por el nicho ni por la empresa.",
+    sin_tipo: "NO ESTÁ DEFINIDO: el cliente tiene funnels, pero ninguno tiene el tipo cargado (Reclutamiento o Producto). Preguntá cuál es el foco antes de producir.",
+    sin_estrategia: "TODAVÍA NO EXISTE: este cliente no tiene ningún funnel creado, así que el foco no está definido en ningún lado. PREGUNTALO antes de producir o de coordinar el research — investigar la autoridad del líder cuando el cliente viene por producto es research tirado a la basura, y al revés igual. No lo supongas por el nicho ni por la empresa.",
   };
 
   const volatileDesc = [
@@ -926,8 +946,8 @@ Deno.serve(async (req) => {
   const contextoEstable = subagentKey === "descubrimiento" ? volatileDesc : [
     "===== CONTEXTO DE ESTA CONVERSACIÓN (usalo, no lo pidas) =====",
     `Cliente: ${str(client?.name)}${str(client?.company) ? ` · Empresa MLM: ${str(client?.company)}` : ""}${str(client?.niche) ? ` · Nicho: ${str(client?.niche)}` : ""}${str(client?.team_name) ? ` · Equipo: ${str(client?.team_name)}` : ""}`,
-    `Estrategia: ${str(strat?.name) || "—"} (tipo: ${tipo})`,
-    `Funnel: ${str(page?.name) || "—"}`,
+    // El FUNNEL es la unidad: el tipo es suyo, no de la carpeta que lo contiene.
+    `Funnel: ${str(page?.name) || "—"} (tipo: ${tipo})`,
     avatar ? `\n— AVATAR SELECCIONADO —\nNombre: ${str(avatar.name)}\nSegmentación: ${str(avatar.audience) || "—"}\nDescripción (del DEL): ${clip(str(avatar.spec_text), 4000) || "—"}${str(avatar.ad_script) ? `\nCopys de anuncios ya existentes (del DEL, para partir de acá y no repetir): ${clip(str(avatar.ad_script), 4000)}` : ""}` : "\n— AVATAR: (ninguno seleccionado o cargado) —",
     subagentKey === "vsl"
       ? `\n— GUIÓN VSL QUE YA TIENE EL FUNNEL (del DEL; es lo que hay hoy) —\n${vslScript ? clip(vslScript, 6000) : "(sin guión de VSL cargado: se escribe desde cero)"}`

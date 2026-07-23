@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TASK_STATUS } from '../../utils/constants';
@@ -41,10 +41,24 @@ function SectionHead({ icon, title, sub, color = ACC, bg = '#EEF2FF', right }) {
 export default function TaskDetailDrawer({ taskId, onClose }) {
   const {
     tasks, clients, teamMembers, currentUser, updateTask, removeTaskFromSprint, deleteTask,
-    taskComments, addTaskComment, sprints, activeSprint, moveTaskToSprint, createSprint,
+    taskComments, addTaskComment, deleteTaskComment, sprints, activeSprint, moveTaskToSprint, createSprint,
+    strategyPages, markTaskViewed, markTaskCommentsRead,
   } = useApp();
+  const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
+  // Al abrir la tarea: apagar el aviso de "cambió" (P2) y el chip de comentarios sin leer (P6).
+  useEffect(() => {
+    if (!taskId) return;
+    markTaskViewed?.(taskId);
+    markTaskCommentsRead?.(taskId);
+  }, [taskId, markTaskViewed, markTaskCommentsRead]);
   const task = useMemo(() => (tasks || []).find(t => t.id === taskId) || null, [tasks, taskId]);
   const client = task ? (clients || []).find(c => c.id === task.clientId) : null;
+  // Solo los funnels del cliente de esta tarea. La base ademas tiene un guard que
+  // anula el funnel si no coinciden, pero el desplegable no deberia ni ofrecerlo.
+  const funnelOptions = useMemo(
+    () => (strategyPages || []).filter(p => p.client_id === task?.clientId),
+    [strategyPages, task?.clientId],
+  );
   // Invitado ("mover y marcar"): la ficha queda de SOLO LECTURA para metadatos y
   // estructura. Sí puede: marcar/validar (footer), tildar checklist y criterios
   // (marcar avance) y comentar. No puede: editar título, reasignar responsable/
@@ -57,6 +71,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const [newAc, setNewAc] = useState('');
   const [gateMsg, setGateMsg] = useState('');
   const [newComment, setNewComment] = useState('');
+  const [delCmt, setDelCmt] = useState(null);   // id del comentario a confirmar borrado
   if (!task) return null;
 
   const st = TASK_STATUS[task.status] || TASK_STATUS.backlog;
@@ -247,6 +262,19 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               </span>
             </div>
             <div style={metaRow}><span style={metaLabel}>Cliente</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{client?.name || '—'}</span></div>
+            {/* El funnel SI se elige acá (el cliente no: se define al crear la tarea).
+                Es lo que hace que la tarea aparezca dentro del funnel, sin sacarla de Tareas. */}
+            {!!funnelOptions.length && (
+              <div style={metaRow}>
+                <span style={metaLabel}>Funnel</span>
+                <select value={task.funnelId || ''} disabled={!canEdit}
+                  onChange={(e) => updateTask(task.id, { funnelId: e.target.value || null })}
+                  style={{ ...selStyle, color: task.funnelId ? '#1A1D26' : '#9CA3AF' }}>
+                  <option value="">Sin funnel</option>
+                  {funnelOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{ ...metaRow, alignItems: 'flex-start' }}><span style={{ ...metaLabel, paddingTop: 1 }}>Objetivo / fase</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right', lineHeight: 1.35 }}>{phaseLabel}</span></div>
             <div style={metaRow}>
               <span style={metaLabel}>Fecha de entrega</span>
@@ -340,6 +368,15 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 <textarea defaultValue={task.definitionOfDone || ''} placeholder="Definí cuándo se considera terminada…" readOnly={!canEdit}
                   onBlur={(e) => { if (!canEdit) return; const v = e.target.value; if (v !== (task.definitionOfDone || '')) updateTask(task.id, { definitionOfDone: v }); }}
                   style={{ width: '100%', minHeight: 86, border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
+              </div>
+
+              {/* Motivo de revisión (P4): por qué la tarea quedó en revisión. Se resalta
+                  cuando está justamente "En revisión". */}
+              <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
+                <SectionHead icon={<MessageSquare size={15} />} title="Motivo de revisión" sub="Por qué está en revisión / qué falta" color="#D97706" bg="#FEF3C7" />
+                <textarea key={task.id} defaultValue={task.reviewReason || ''} placeholder="Anotá por qué esta tarea está en revisión…" readOnly={!canEdit}
+                  onBlur={(e) => { if (!canEdit) return; const v = e.target.value; if (v !== (task.reviewReason || '')) updateTask(task.id, { reviewReason: v }); }}
+                  style={{ width: '100%', minHeight: 72, border: `1px solid ${task.status === 'en-revision' ? '#FCD34D' : '#E2E5EB'}`, background: task.status === 'en-revision' ? '#FFFBEB' : '#fff', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
               </div>
 
               <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
@@ -460,11 +497,26 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                       const author = (teamMembers || []).find(m => m.id === c.author_id);
                       const name = author?.name || 'Alguien';
                       const initials = (author?.initials || name.slice(0, 2)).toUpperCase();
+                      const canDelete = !!deleteTaskComment && (c.author_id === currentUser?.id || isAdmin);
                       return (
-                        <div key={c.id} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                        <div key={c.id} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }} className="group">
                           <span style={{ width: 26, height: 26, borderRadius: '50%', background: (author?.color || ACC) + '20', color: author?.color || ACC, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{initials}</span>
                           <div style={{ flex: 1, minWidth: 0, background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 10, padding: '9px 11px' }}>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>{name}</span><span style={{ fontSize: 10.5, color: '#9CA3AF' }}>{relTime(c.created_at)}</span></div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600 }}>{name}</span>
+                              <span style={{ fontSize: 10.5, color: '#9CA3AF' }}>{relTime(c.created_at)}</span>
+                              {canDelete && (
+                                delCmt === c.id ? (
+                                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontSize: 10.5, color: '#9CA3AF' }}>¿Borrar?</span>
+                                    <button onClick={() => { deleteTaskComment(c.id).catch(() => {}); setDelCmt(null); }} style={{ fontSize: 10.5, fontWeight: 700, color: '#DC2626', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>Sí</button>
+                                    <button onClick={() => setDelCmt(null)} style={{ fontSize: 10.5, fontWeight: 600, color: '#9CA3AF', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>No</button>
+                                  </span>
+                                ) : (
+                                  <button onClick={() => setDelCmt(c.id)} title="Borrar comentario" className="opacity-0 group-hover:opacity-100 transition-opacity" style={{ marginLeft: 'auto', color: '#C3C9D4', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex' }}><Trash2 size={13} /></button>
+                                )
+                              )}
+                            </div>
                             <div style={{ fontSize: 12.5, lineHeight: 1.5, color: '#374151', whiteSpace: 'pre-wrap' }}>{c.body}</div>
                           </div>
                         </div>

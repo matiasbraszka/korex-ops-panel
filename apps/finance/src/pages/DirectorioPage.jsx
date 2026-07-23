@@ -7,7 +7,7 @@ import { money, fdate, ini, avatarColor, roleChip } from '../lib/format.js';
 
 // Directorio (diseño Claude Design): roster de personas con avatar, qué pagó/cobró/trajo,
 // contrato e ingreso. Click en la fila abre el perfil 360°.
-const ROLE_FILTERS = [['', 'Todos'], ['Cliente', 'Clientes'], ['Usuario', 'Afiliados'], ['Conector', 'Conectores'], ['Consultor', 'Consultores'], ['Marketing', 'Marketing']];
+const ROLE_FILTERS = [['', 'Todos'], ['Cliente', 'Clientes'], ['Usuario', 'Afiliados'], ['Conector', 'Conectores'], ['Consultor', 'Consultores'], ['Marketing', 'Marketing'], ['CSM', 'CSM']];
 const isSigned = (s) => /^(true|si|sí|x|1)$/i.test(String(s || '').trim());
 
 export default function DirectorioPage() {
@@ -215,13 +215,13 @@ function EditPersonModal({ id, onClose, onSaved }) {
           <>
             <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Nombre <span style={{ color: '#e11d48' }}>*</span> {!isNew && <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· al cambiarlo se re-vinculan sus pagos</span>}</label><input value={data.nombre || ''} onChange={(e) => set('nombre', e.target.value)} placeholder="Nombre y apellido" style={inp} /></div>
-              <div><label style={lab}>Rol principal</label><select value={data.tipo || ''} onChange={(e) => setData((s) => ({ ...s, tipo: e.target.value, roles: (s.roles || []).filter((r) => r !== e.target.value) }))} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
+              <div><label style={lab}>Rol principal</label><select value={data.tipo || ''} onChange={(e) => setData((s) => ({ ...s, tipo: e.target.value, roles: (s.roles || []).filter((r) => r !== e.target.value) }))} style={inp}>{['', 'Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing', 'CSM'].map((t) => <option key={t} value={t}>{t || '—'}</option>)}</select></div>
               {data.tipo === 'Usuario' && <div><label style={lab}>Cliente (al que pertenece)</label><Combo value={data.cliente_padre} onChange={(v) => set('cliente_padre', v)} options={clientOpts} placeholder="elegir cliente…" empty="Ese cliente no está en la base. Agregalo primero." /></div>}
               <div><label style={lab}>{esCliente ? 'Conector' : 'Afiliado'} <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· {esCliente ? 'quién trajo al cliente' : 'quién lo refirió (se sugiere al cargar su ingreso)'}</span></label><Combo value={data.conector_e} onChange={(v) => set('conector_e', v)} options={personOpts} placeholder={esCliente ? 'elegir conector…' : 'elegir afiliado…'} empty="No está en la base. Agregalo primero como persona." /></div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={lab}>También es <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· roles adicionales (solo lo clasifica, NO cambia las comisiones)</span></label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {['Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing'].filter((r) => r !== data.tipo).map((r) => {
+                  {['Cliente', 'Usuario', 'Conector', 'Consultor', 'Marketing', 'CSM'].filter((r) => r !== data.tipo).map((r) => {
                     const on = (data.roles || []).includes(r);
                     return <button key={r} type="button" onClick={() => toggleRole(r)} style={{ border: `1px solid ${on ? '#0EA5A4' : '#E2E5EB'}`, background: on ? '#0EA5A4' : '#fff', color: on ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer' }}>{r}</button>;
                   })}

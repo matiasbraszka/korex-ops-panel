@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell, Cpu } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell, Cpu, Columns3 } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -14,6 +14,7 @@ import DmeConfigEditor from '../components/settings/DmeConfigEditor';
 import ReunionesConfigEditor from '../components/settings/ReunionesConfigEditor';
 import NotificationsAlertsEditor from '../components/settings/NotificationsAlertsEditor';
 import ApiUsageEditor from '../components/settings/ApiUsageEditor';
+import DelTabsConfigEditor from '../components/settings/DelTabsConfigEditor';
 
 const TABS = [
   { id: 'team',          label: 'Equipo y usuarios',     Icon: Users },
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'onboarding',    label: 'Onboarding',            Icon: Workflow },
   { id: 'reuniones',     label: 'Reuniones de equipo',   Icon: Phone },
   { id: 'template',      label: 'Plantilla de Roadmap',  Icon: LayoutGrid },
+  { id: 'del-tabs',      label: 'Pestañas del DEL',      Icon: Columns3 },
   { id: 'pending-res',   label: 'Recursos pendientes',   Icon: CheckSquare },
   { id: 'services',      label: 'Servicios',             Icon: Briefcase },
   { id: 'priorities',    label: 'Prioridades',           Icon: Tag },
@@ -69,6 +71,7 @@ export default function SettingsPage() {
         {tab === 'onboarding'  && <OnboardingConfigEditor />}
         {tab === 'reuniones'   && <ReunionesConfigEditor />}
         {tab === 'template'    && <TemplateEditor />}
+        {tab === 'del-tabs'    && <DelTabsConfigEditor />}
         {tab === 'pending-res' && <PendingResourcesTemplateEditor />}
         {tab === 'services'    && <ServicesEditor />}
         {tab === 'priorities'  && <PrioritiesEditor />}

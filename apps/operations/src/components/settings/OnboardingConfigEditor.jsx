@@ -87,7 +87,7 @@ export default function OnboardingConfigEditor() {
       <div>
         <h2 className="text-[14px] font-bold text-gray-800">Onboarding de clientes</h2>
         <p className="text-[11px] text-gray-400 mt-0.5">
-          Todo lo que se genera al cargar una venta: mensajes, carpetas de Drive, links y canal de Slack. Los cambios se aplican sin tocar código.
+          Todo lo que se genera al cargar una venta: mensajes, links y canal de Slack. Los cambios se aplican sin tocar código.
         </p>
       </div>
 
@@ -108,38 +108,6 @@ export default function OnboardingConfigEditor() {
         </Field>
       </Section>
 
-      {/* Carpetas de Drive */}
-      <Section title="Carpetas de Drive">
-        <Field label="Nombre de la carpeta de estrategia" hint="{FECHA} se reemplaza por la fecha de la venta (DD-MM-AAAA).">
-          <input value={draft.strategy_folder} onChange={(e) => update({ strategy_folder: e.target.value })} className={input} />
-        </Field>
-        <Field label="Título del documento de onboarding" hint="{LABEL} = Nombre | Empresa del cliente.">
-          <input value={draft.doc_title} onChange={(e) => update({ doc_title: e.target.value })} className={input} />
-        </Field>
-
-        <div>
-          <div className="text-[11px] font-semibold text-gray-700 mb-1">Subcarpetas de la estrategia</div>
-          <div className="space-y-2">
-            {draft.subfolders.map((sf, i) => (
-              <div key={i} className="border border-gray-200 rounded-md p-2.5 bg-gray-50">
-                <div className="flex gap-2 items-center">
-                  <input value={sf} onChange={(e) => setSubfolder(i, e.target.value)} className={input + ' bg-white'} placeholder="Nombre de la subcarpeta" />
-                  <button type="button" onClick={() => moveSubfolder(i, -1)} className="px-2 py-1 text-[12px] text-gray-400 hover:text-gray-700 border border-gray-200 rounded bg-white">↑</button>
-                  <button type="button" onClick={() => moveSubfolder(i, 1)} className="px-2 py-1 text-[12px] text-gray-400 hover:text-gray-700 border border-gray-200 rounded bg-white">↓</button>
-                  <button type="button" onClick={() => removeSubfolder(i)} className="px-2 py-1 text-[12px] text-red-400 hover:text-red-600 border border-gray-200 rounded bg-white">✕</button>
-                </div>
-                <input
-                  value={(draft.nested[sf] || []).join(', ')}
-                  onChange={(e) => setNested(sf, e.target.value)}
-                  className={input + ' bg-white mt-2 text-[12px]'}
-                  placeholder="Subcarpetas internas separadas por coma (opcional). Ej: Grabaciones, Terminados"
-                />
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addSubfolder} className="mt-2 text-[12.5px] text-blue-600 font-medium hover:underline">+ Agregar subcarpeta</button>
-        </div>
-      </Section>
 
       {/* Diagrama del proceso */}
       <Section title="Pasos del proceso (diagrama)">

@@ -1,7 +1,6 @@
 export const DEFAULT_TASKS_TEMPLATE = [
   { id: 'registro',      name: 'Registro en finanzas',             phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Zil Oliveros' },
   { id: 'investigacion', name: 'Investigación Pre-onboarding',     phase: 'pre-onboarding',  days: 0.3, client: false, dependsOn: [],                                        assignee: 'Jose Martin' },
-  { id: 'carpetas',      name: 'Armado de carpetas Drive',         phase: 'pre-onboarding',  days: 1,   client: false, dependsOn: [],                                        assignee: 'Zil Oliveros' },
   { id: 'onboarding',    name: 'Onboarding + Config Meta',         phase: 'onboarding',      days: 2,   client: true,  dependsOn: [],                                        assignee: 'Matias' },
   { id: 'estrategia',    name: 'Estrategia, Avatar, Puntos clave', phase: 'primera-entrega', days: 2,   client: false, dependsOn: ['onboarding'],                             assignee: 'Jose Martin' },
   { id: 'guiones-ads',   name: 'Guiones de anuncios',              phase: 'primera-entrega', days: 1,   client: false, dependsOn: ['estrategia'],                             assignee: 'Jose Martin' },

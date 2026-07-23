@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser, Baseline } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -31,10 +31,16 @@ const TEXT_COLORS = [
 const isHeading = (el) => !!el && /^H[1-6]$/.test(el.tagName);
 const headingLevel = (el) => Number(el.tagName[1]);
 
-export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180 }) {
+// `sanitize` permite reusar este editor con una whitelist mas ancha (ej: el DEL,
+// que trae tablas). Default = el de las notas, que NO cambia.
+// `delTools` agrega los botones del DEL (tabla · tamaño de letra · imagen · avatar).
+// `onInsertImage`/`onNewAvatar` son ganchos opcionales: si vienen, mandan (ej. abrir la
+// galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
+export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar, noToolbar = false, onActive }) {
   const ref = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
+  const [dialog, setDialog] = useState(null); // diálogo nativo (tabla/imagen/avatar/aviso)
 
   useEffect(() => {
     if (!ref.current) return;
@@ -55,7 +61,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const handleInput = () => {
     if (!ref.current) return;
     const raw = ref.current.innerHTML;
-    const clean = sanitizeNoteHtml(raw);
+    const clean = sanitize(raw);
     lastInjected.current = clean;
     onChange?.(clean);
   };
@@ -66,6 +72,17 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     const text = (e.clipboardData || window.clipboardData).getData('text');
     document.execCommand('insertText', false, text);
     handleInput();
+  };
+
+  // Deshacer / rehacer (Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z). El contentEditable tiene
+  // historial nativo; lo enganchamos explícito para que ande siempre y refresque el
+  // guardado. (El navegador ya maneja el stack por cada tecla, no de a bloque.)
+  const handleKeyDown = (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); document.execCommand('undo'); handleInput(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); document.execCommand('redo'); handleInput(); }
   };
 
   const addLink = () => {
@@ -89,11 +106,99 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     ref.current?.focus();
   };
 
+  // Marcador / resaltado: pinta el FONDO del texto seleccionado. 'transparent' lo quita.
+  const applyHighlight = (color) => {
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('hiliteColor', false, color);
+    document.execCommand('styleWithCSS', false, false);
+    handleInput();
+    ref.current?.focus();
+  };
+
   const clearFormat = () => {
     exec('removeFormat');
     // removeFormat no quita headings/lists. Los limpiamos a mano envolviendo en <p>.
     document.execCommand('formatBlock', false, 'P');
     handleInput();
+  };
+
+  // ── Herramientas del DEL (solo con delTools) ─────────────────────────────────
+  // Los diálogos son NATIVOS de la plataforma (no window.prompt del navegador). Al
+  // abrir uno, el foco sale del editor y se pierde el cursor: por eso guardamos el
+  // rango de selección y lo restauramos justo antes de insertar.
+  const savedRange = useRef(null);
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    savedRange.current = (sel && sel.rangeCount && ref.current?.contains(sel.anchorNode)) ? sel.getRangeAt(0).cloneRange() : null;
+  };
+  const insertHTML = (html) => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    if (savedRange.current) {
+      sel.addRange(savedRange.current);
+    } else {
+      // Sin selección previa (ej. no habías tocado el texto): inserta al final.
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(false);
+      sel.addRange(r);
+    }
+    document.execCommand('insertHTML', false, html);
+    savedRange.current = null;
+    handleInput();
+  };
+
+  // Tamaño de letra: agranda/achica el texto seleccionado (relativo, con span+style).
+  // No abre diálogo: opera directo sobre la selección.
+  const changeFontSize = (bigger) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setDialog({ type: 'aviso', msg: 'Seleccioná primero el texto que querés ' + (bigger ? 'agrandar' : 'achicar') + '.' }); return; }
+    const span = document.createElement('span');
+    span.style.fontSize = bigger ? 'larger' : 'smaller';
+    const range = sel.getRangeAt(0);
+    try { span.appendChild(range.extractContents()); range.insertNode(span); } catch { return; }
+    sel.removeAllRanges();
+    handleInput();
+    ref.current?.focus();
+  };
+
+  // Abren los diálogos nativos (guardando la selección).
+  const openTable = () => { saveSelection(); setDialog({ type: 'table', cols: '3', rows: '3' }); };
+  const openImage = () => { saveSelection(); if (onInsertImage) { onInsertImage(insertHTML); return; } setDialog({ type: 'image', url: '' }); };
+  const openAvatar = () => { saveSelection(); setDialog({ type: 'avatar', name: '' }); };
+  // Inserta una estructura de landing pre-armada (blueprint) en la posición del cursor.
+  const insertBlueprint = (html) => { saveSelection(); insertHTML(html); };
+
+  // Confirmación de cada diálogo.
+  const doTable = () => {
+    const c = Math.min(12, Math.max(1, parseInt(dialog.cols, 10) || 0));
+    const r = Math.min(60, Math.max(1, parseInt(dialog.rows, 10) || 0));
+    let html = '<table><thead><tr>';
+    for (let j = 0; j < c; j++) html += '<th>Columna ' + (j + 1) + '</th>';
+    html += '</tr></thead><tbody>';
+    for (let i = 0; i < r; i++) { html += '<tr>'; for (let j = 0; j < c; j++) html += '<td></td>'; html += '</tr>'; }
+    html += '</tbody></table><p></p>';
+    setDialog(null); insertHTML(html);
+  };
+  const doImage = () => {
+    const safe = (dialog.url || '').trim();
+    if (!/^https?:\/\//i.test(safe)) { setDialog({ ...dialog, err: 'El link debe empezar con http:// o https://' }); return; }
+    setDialog(null);
+    insertHTML(`<img src="${safe.replace(/"/g, '&quot;')}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`);
+  };
+  const doAvatar = () => {
+    const nombre = (dialog.name || '').trim();
+    if (!nombre) { setDialog({ ...dialog, err: 'Poné un nombre.' }); return; }
+    setDialog(null);
+    // El título ES el avatar: se inserta como H2 (todo lo que siga, hasta el próximo
+    // título, es de este avatar). Si el padre quiere hacer algo más (registrar el
+    // avatar y crear sus carpetas), le pasamos el nombre y el insertor.
+    if (onNewAvatar) { onNewAvatar(nombre, insertHTML); return; }
+    const e = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    insertHTML(`<h2>${e(nombre)}</h2><h3>Segmentación</h3><p></p><h3>Descripción</h3><p></p>`);
   };
 
   // --- Plegado de secciones por titulo (estilo Google Docs) ---
@@ -146,6 +251,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     }
   };
 
+  // API para una barra EXTERNA compartida (una sola arriba, tipo Google Docs): cuando
+  // este editor toma el foco, avisa con onActive(api) y la barra opera sobre ÉL. Así la
+  // barra no se repite en cada sección. Ver DelToolbar en DelEditor.
+  const apiRef = useRef({});
+  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint };
+  const handleFocus = () => onActive?.(apiRef.current);
+
   const Btn = ({ Icon, title, onClick, label }) => (
     <button
       type="button"
@@ -162,6 +274,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   return (
     <div className="border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
+      {!noToolbar && (
       <div className="sticky top-0 z-20 flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg flex-wrap">
         <Btn Icon={Bold}          title="Negrita (Ctrl+B)"   onClick={() => exec('bold')} />
         <Btn Icon={Italic}        title="Cursiva (Ctrl+I)"   onClick={() => exec('italic')} />
@@ -211,21 +324,85 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
             </>
           )}
         </div>
+        {delTools && (<>
+          <Divider />
+          <Btn label="A−" title="Achicar la letra seleccionada" onClick={() => changeFontSize(false)} />
+          <Btn label="A+" title="Agrandar la letra seleccionada" onClick={() => changeFontSize(true)} />
+          <Btn Icon={Table}     title="Insertar tabla" onClick={openTable} />
+          <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={openImage} />
+          <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={openAvatar} />
+        </>)}
         <Divider />
         <Btn Icon={Link2}  title="Insertar link" onClick={addLink} />
         <Btn Icon={Eraser} title="Quitar formato"  onClick={clearFormat} />
       </div>
+      )}
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
         onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
         onClick={handleClick}
+        onFocus={handleFocus}
         data-placeholder={placeholder}
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
         style={{ minHeight }}
       />
+
+      {/* Diálogo NATIVO de la plataforma (nada de window.prompt del navegador). */}
+      {dialog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDialog(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[380px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }} onMouseDown={(e) => e.stopPropagation()}>
+            {dialog.type === 'aviso' && (<>
+              <div className="text-[14px] font-bold text-[#1A1D26] mb-1.5">Un momento</div>
+              <div className="text-[13px] text-[#4B5563] leading-snug">{dialog.msg}</div>
+              <div className="flex justify-end mt-4"><button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Entendido</button></div>
+            </>)}
+
+            {dialog.type === 'table' && (<>
+              <div className="text-[15px] font-bold text-[#1A1D26] mb-3.5">Insertar tabla</div>
+              <div className="flex items-center gap-3">
+                <label className="flex-1 text-[12px] font-semibold text-[#6B7280]">Columnas
+                  <input type="number" min="1" max="12" value={dialog.cols} autoFocus onChange={(e) => setDialog({ ...dialog, cols: e.target.value })} className="mt-1 w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[14px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+                </label>
+                <label className="flex-1 text-[12px] font-semibold text-[#6B7280]">Filas
+                  <input type="number" min="1" max="60" value={dialog.rows} onChange={(e) => setDialog({ ...dialog, rows: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') doTable(); }} className="mt-1 w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[14px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+                </label>
+              </div>
+              <div className="text-[11px] text-[#9098A4] mt-2">La primera fila queda como encabezado.</div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+                <button onClick={doTable} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Insertar</button>
+              </div>
+            </>)}
+
+            {dialog.type === 'image' && (<>
+              <div className="text-[15px] font-bold text-[#1A1D26] mb-3.5">Insertar imagen</div>
+              <input type="url" value={dialog.url} autoFocus placeholder="https://…" onChange={(e) => setDialog({ ...dialog, url: e.target.value, err: null })} onKeyDown={(e) => { if (e.key === 'Enter') doImage(); }} className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+              <div className="text-[11px] text-[#9098A4] mt-2">Pegá el link de la imagen. (La galería de Recursos viene después.)</div>
+              {dialog.err && <div className="text-[11.5px] text-[#DC2626] mt-1.5">{dialog.err}</div>}
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+                <button onClick={doImage} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Insertar</button>
+              </div>
+            </>)}
+
+            {dialog.type === 'avatar' && (<>
+              <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Insertar avatar</div>
+              <div className="text-[11.5px] text-[#9098A4] mb-3">Inserta el bloque en orden: nombre → Segmentación → Descripción.</div>
+              <input type="text" value={dialog.name} autoFocus placeholder="Nombre del avatar" onChange={(e) => setDialog({ ...dialog, name: e.target.value, err: null })} onKeyDown={(e) => { if (e.key === 'Enter') doAvatar(); }} className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+              {dialog.err && <div className="text-[11.5px] text-[#DC2626] mt-1.5">{dialog.err}</div>}
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+                <button onClick={doAvatar} className="py-2 px-4 rounded-lg border-none bg-[#2E69E0] text-white text-[13px] font-semibold cursor-pointer">Insertar</button>
+              </div>
+            </>)}
+          </div>
+        </div>
+      )}
       <style>{`
         .rte-content:empty:before {
           content: attr(data-placeholder);
@@ -241,6 +418,12 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         .rte-content li { margin: 2px 0; display: list-item; }
         .rte-content li::marker { color: #111827; }
         .rte-content a  { color: #3B82F6; text-decoration: underline; }
+        /* Tablas y h4-h6: solo aparecen en el DEL (las notas no los generan). */
+        .rte-content h4, .rte-content h5, .rte-content h6 { font-size: 12px; font-weight: 800; margin: 8px 0 3px; color: #6B7280; text-transform: uppercase; letter-spacing: .05em; }
+        .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+        .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
+        .rte-content figure[data-drive-image] { margin: 8px 0; padding: 10px; border: 1px dashed #D0D5DD; border-radius: 8px; background: #F7F8FA; color: #9098A4; font-size: 11px; font-style: italic; text-align: center; }
+        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
         /* Flechita de plegado (estilo Google Docs) en la canaleta izquierda */
         .rte-content h1, .rte-content h2, .rte-content h3 { position: relative; }
         .rte-content h1::before, .rte-content h2::before, .rte-content h3::before {

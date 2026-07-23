@@ -10,7 +10,6 @@ import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock, Building2, Users, Tag } from 'lucide-react';
 import FunnelsView from '../components/clientes/FunnelsView';
-import CarpetasView from '../components/clientes/CarpetasView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
@@ -171,26 +170,18 @@ export default function ClientDetail({ client: c }) {
         // Las consultorias/entrenamientos que hicimos PARA su equipo se vinculan al
         // cliente en DB (queda el rastro), pero no aparecen acá para no ensuciar el
         // historial 1-a-1 con el cliente.
-        const clientLlamadas = (llamadas || []).filter(l => l.cliente_id === c.id && l.categoria === 'cliente');
         const hasAds = c.metaAds && c.metaAds.length > 0 && c.metaAds.some(a => a.status !== 'interna');
         const adsActive = c.metaMetrics?.adsActive;
-        // Publicidad oculta temporalmente — descomentar la linea de abajo
-        // cuando se decida volver a usar el modulo.
-        const myStrategies = (strategies || []).filter(s => s.client_id === c.id);
-        const strategiesCount = myStrategies.length;
-        const stratIdSet = new Set(myStrategies.map(s => s.id));
-        const funnelsCount = (strategyPages || []).filter(p => stratIdSet.has(p.strategy_id)).length;
-        // Recursos visuales: suma de todas las estrategias del cliente
-        const visualesArr = myStrategies.flatMap(s => Array.isArray(s.visual_resources) ? s.visual_resources : []);
-        const visualesDone = visualesArr.filter(v => v.ok).length;
-        const visualesTotal = visualesArr.length;
-        const clientInvoices = (invoices || []).filter(i => i.client_id === c.id);
-        const invoicesCount = clientInvoices.length;
+        // Los funnels del cliente, directo. Antes habia que dar la vuelta por las
+        // estrategias (armar el set de sus ids y filtrar strategy_pages por ahi);
+        // ahora el funnel sabe de que cliente es.
+        const funnelsCount = (strategyPages || []).filter(p => p.client_id === c.id).length;
         const contractsCount = (contracts || []).filter(ct => ct.client_id === c.id).length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Funnels', count: funnelsCount },
-          { key: 'drive', label: 'Carpetas' },
+          // La pestaña "Carpetas" (espejo de Drive) se eliminó: todo vive ahora en el
+          // sistema propio — los recursos en "Recursos" dentro del DEL de cada funnel.
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
@@ -273,8 +264,6 @@ export default function ClientDetail({ client: c }) {
 
             {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
 
-            {activeTab === 'drive' && <CarpetasView client={c} />}
-
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 
             {activeTab === 'satisfaccion' && <SatisfaccionTab sat={satByClient?.[c.id]} clientId={c.id} />}
@@ -297,32 +286,6 @@ export default function ClientDetail({ client: c }) {
                   </div>
                 </div>
                 <ObjetivosView clientId={c.id} />
-              </div>
-            )}
-
-            {activeTab === 'llamadas' && (
-              <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
-                {clientLlamadas.length === 0 ? (
-                  <div className="text-center text-text3 text-xs py-12">Sin llamadas registradas</div>
-                ) : (
-                  <div className="py-1">
-                    {clientLlamadas.map(l => (
-                      <div key={l.id} className="px-4 py-3 border-b border-border last:border-b-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-semibold text-gray-800 flex-1 min-w-0 truncate">{l.titulo}</span>
-                          {l.fecha && <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(l.fecha?.split('T')[0])}</span>}
-                          {l.recording_url && (
-                            <a href={l.recording_url} target="_blank" rel="noreferrer"
-                              className="text-[11px] text-blue no-underline shrink-0 hover:underline">{'🎬'} Ver</a>
-                          )}
-                        </div>
-                        {l.resumen && (
-                          <div className="text-[12px] text-text3 mt-1 leading-snug line-clamp-2">{l.resumen}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
