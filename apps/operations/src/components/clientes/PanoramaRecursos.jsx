@@ -32,6 +32,24 @@ function CellDot({ ok }) {
   );
 }
 
+// Chip de conteo compacto (por funnel): verde con el número si hay ≥1, rojo ✗ si no hay.
+function CellCount({ n }) {
+  const ok = n > 0;
+  return (
+    <span title={ok ? `${n} testimonio(s)` : 'sin testimonios'} className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold shrink-0"
+      style={ok ? { background: '#E6F7EE', color: '#15803D' } : { background: '#FDECEC', color: '#DC2626' }}>
+      {ok ? n : <X size={11} strokeWidth={3} />}
+    </span>
+  );
+}
+
+// Fecha corta del funnel (ej. "12 jul 2026"); vacío si no hay dato.
+const fmtFecha = (iso) => {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  catch { return ''; }
+};
+
 // Tracking por funnel: 3 chips compactos P/C/E (Pixel / Clarity / Eventos), verde si está, gris si falta.
 function TrackDots({ pixel, clarity, eventos }) {
   const items = [['P', 'Pixel de Meta', pixel], ['C', 'Microsoft Clarity', clarity], ['E', 'Eventos de conversión', eventos]];
@@ -95,7 +113,6 @@ function ClienteCell({ r, rowSpan }) {
         <ResChip label="Logo" ok={r.tiene_logo} />
         <ResChip label="Colores" ok={r.tiene_colores} />
         <ResChip label="Imágenes" ok={r.imagenes_files > 0} count={r.imagenes_files} />
-        <ResChip label="Testimonios" ok={r.testimonios_files > 0} count={r.testimonios_files} />
       </div>
     </td>
   );
@@ -166,13 +183,13 @@ export default function PanoramaRecursos() {
           <thead>
             <tr className="bg-[#F8FAFD]">
               <th className={th}>Cliente · Nicho · Recursos</th>
-              <th className={th}>Estrategia</th>
               <th className={th}>DEL</th>
               <th className={th}>Avatar</th>
               <th className={th}>VSL guión</th>
               <th className={th}>VSL editado</th>
+              <th className={th}>Testimonios</th>
               <th className={th}>Tracking</th>
-              <th className={th}>Funnels</th>
+              <th className={th}>Funnels · creado</th>
               <th className={th}>Dominio</th>
             </tr>
           </thead>
@@ -195,12 +212,6 @@ export default function PanoramaRecursos() {
                 return (
                   <tr key={r.client_id + ':' + (e.id || i)} className="hover:bg-[#FBFCFE]">
                     {i === 0 && <ClienteCell r={r} rowSpan={estr.length} />}
-                    {/* Estrategia */}
-                    <td className={tdBase} style={st}>
-                      <span className="inline-flex items-center text-[11.5px] text-[#3F4653] leading-tight">
-                        <TipoBadge tipo={e.tipo} />{e.name}
-                      </span>
-                    </td>
                     {/* DEL vinculado */}
                     <td className={tdBase} style={st}>
                       {e.del_ok
@@ -222,6 +233,11 @@ export default function PanoramaRecursos() {
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
                         : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.vsl_editado} /></div>))}</div>}
                     </td>
+                    {/* Testimonios — por funnel (videos cargados en la carpeta del funnel) */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellCount n={f.testimonios_files || 0} /></div>))}</div>}
+                    </td>
                     {/* Tracking (P/C/E) — por funnel */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
@@ -233,7 +249,10 @@ export default function PanoramaRecursos() {
                         ? <span className="text-[11px] text-[#C2C7D0]">—</span>
                         : <div className="flex flex-col gap-1">
                             {(e.funnels || []).map((f, j) => (
-                              <span key={j} className="text-[11.5px] text-[#3F4653] leading-[18px] h-[18px] truncate max-w-[220px]" title={f.name}>{f.name}</span>
+                              <span key={j} className="flex items-center gap-1.5 h-[18px] max-w-[260px]" title={`${f.name}${f.created_at ? ' · creado ' + fmtFecha(f.created_at) : ''}`}>
+                                <span className="text-[11.5px] text-[#3F4653] leading-[18px] truncate">{f.name}</span>
+                                {f.created_at && <span className="text-[10px] text-[#AEB4BF] leading-[18px] shrink-0 whitespace-nowrap">{fmtFecha(f.created_at)}</span>}
+                              </span>
                             ))}
                           </div>}
                     </td>
@@ -264,8 +283,8 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><Check size={12} className="text-[#15803D]" strokeWidth={3} />Está</span>
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
         <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = detectado y leído por el cerebro.</span>
-        <span className="inline-flex items-center gap-1"><b>Avatar</b> = al menos 1 avatar cargado · <b>VSL guión</b> = guión escrito · <b>VSL editado</b> = link del video listo · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
-        <span className="inline-flex items-center gap-1"><Layers size={12} />Nicho y recursos son del cliente (una vez); Avatar/VSL/Tracking son por FUNNEL, alineados con cada funnel de la columna.</span>
+        <span className="inline-flex items-center gap-1"><b>Avatar</b> = avatar cargado en el DEL · <b>VSL guión</b> = guión escrito en el DEL · <b>VSL editado</b> = video listo · <b>Testimonios</b> = videos cargados en la carpeta del funnel · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
+        <span className="inline-flex items-center gap-1"><Layers size={12} />Logo/colores/imágenes son del cliente (una vez); Avatar/VSL/Testimonios/Tracking/fecha son por FUNNEL, alineados con cada funnel de la columna. Los checks leen el sistema nuevo (DEL nativo + carpetas del funnel).</span>
       </div>
     </div>
   );

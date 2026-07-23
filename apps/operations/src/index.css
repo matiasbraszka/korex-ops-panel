@@ -54,6 +54,9 @@ html, body {
   text-transform: uppercase; letter-spacing: .07em; margin: 14px 0 4px;
 }
 .del-rich > :first-child { margin-top: 0; }
+/* Una imagen embebida en un DEL (compartido o no) escala al ancho disponible en vez de
+   recortarse: la seccion es overflow-hidden y en mobile no debe desbordar. */
+.del-rich img { max-width: 100%; height: auto; }
 .del-rich p { margin: 7px 0; }
 .del-rich strong { font-weight: 700; color: #1A1D26; }
 .del-rich em { font-style: italic; }

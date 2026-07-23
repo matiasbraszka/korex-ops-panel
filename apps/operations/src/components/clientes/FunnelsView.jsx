@@ -92,6 +92,11 @@ const VID_BUCKETS = [
   { key: 'vsl_rec', label: 'VSL · grabación',      url: 'vsl_rec_folder_url',  files: 'vsl_rec_files',  c: '#16A34A', bg: '#ECFDF3', border: '#C9F0D8' },
   { key: 'vsl_edit', label: 'VSL · edición',       url: 'vsl_edit_folder_url', files: 'vsl_edit_files', c: '#2E69E0', bg: '#EFF6FF', border: '#C7DBFB', voomly: true },
 ];
+// Anuncios: una dupla grabación/edición POR AVATAR (cada avatar tiene sus anuncios).
+// VSL: una sola dupla POR FUNNEL (el VSL no es por avatar). Se versiona a nivel funnel
+// (strategy_pages.vsl_versions): un "relanzamiento completo" agrega la versión nueva.
+const AD_BUCKETS = VID_BUCKETS.filter(b => b.key === 'ad_rec' || b.key === 'ad_edit');
+const VSL_BUCKETS = VID_BUCKETS.filter(b => b.key === 'vsl_rec' || b.key === 'vsl_edit');
 // Las 6 categorías estándar de recursos del CLIENTE (Matías 2026-07-18): sirven para
 // todos sus funnels, pueden ser foto o video. La migración del Drive ordena el material
 // en estas carpetas. "Sin clasificar" recibe lo que no se pudo ubicar solo.
@@ -103,6 +108,7 @@ const CLIENT_CATS = [
   { key: 'empresa',     label: 'Material de la empresa', c: '#B45309', bg: '#FFF7ED' },
   { key: 'stock',       label: 'Stock / B-Roll',       c: '#0891B2', bg: '#E7FBFE' },
   { key: 'imagenes_diseno', label: 'Imagenes para diseño', c: '#DB2777', bg: '#FDF2F8' },
+  { key: 'instagram',   label: 'Imágenes de Instagram', c: '#C13584', bg: '#FBF0F7' },
   // Anuncios/VSL NO van en Recursos del cliente (son de cada funnel). Lo que caiga suelto a
   // nivel cliente se manda a "Sin clasificar".
   { key: 'sin_clasif',  label: 'Sin clasificar',       c: '#6B7280', bg: '#F1F3F7' },
@@ -772,24 +778,34 @@ Quedo a la espera de tu respuesta`;
   // Si no se eligió ninguno (funnel de un solo avatar), se aplica a todos.
   const onVersionComplete = (newVersion, avatarNames) => {
     const names = new Set((avatarNames || []).map(n => String(n).trim()).filter(Boolean));
-    onUpdate(f.id, { avatars: avatars.map(a => {
-      const match = !names.size || names.has((a.name || '').trim());
-      if (!match) return a;
-      const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
-      return rv.includes(newVersion) ? a : { ...a, rec_versions: [...rv, newVersion] };
-    }) });
+    // Anuncios: por avatar (los elegidos suman la versión). VSL: por funnel (una sola).
+    const vv = Array.isArray(f.vsl_versions) && f.vsl_versions.length ? f.vsl_versions : [1];
+    onUpdate(f.id, {
+      avatars: avatars.map(a => {
+        const match = !names.size || names.has((a.name || '').trim());
+        if (!match) return a;
+        const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
+        return rv.includes(newVersion) ? a : { ...a, rec_versions: [...rv, newVersion] };
+      }),
+      vsl_versions: vv.includes(newVersion) ? vv : [...vv, newVersion],
+    });
   };
 
   // Borraron una versión del DEL. Se saca de los avatares para que no muestre sus carpetas;
   // salvo que queden ediciones de esa versión (keep=true), que se conservan y siguen visibles.
   const onVersionDelete = (v, keep) => {
     if (keep) return;
-    onUpdate(f.id, { avatars: avatars.map(a => {
-      const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
-      if (!rv.includes(v)) return a;
-      const nrv = rv.filter(x => x !== v);
-      return { ...a, rec_versions: nrv.length ? nrv : [1] };
-    }) });
+    const vv = Array.isArray(f.vsl_versions) && f.vsl_versions.length ? f.vsl_versions : [1];
+    const nvv = vv.filter(x => x !== v);
+    onUpdate(f.id, {
+      avatars: avatars.map(a => {
+        const rv = Array.isArray(a.rec_versions) && a.rec_versions.length ? a.rec_versions : [1];
+        if (!rv.includes(v)) return a;
+        const nrv = rv.filter(x => x !== v);
+        return { ...a, rec_versions: nrv.length ? nrv : [1] };
+      }),
+      vsl_versions: nvv.length ? nvv : [1],
+    });
   };
 
   // ── Bloques que la maqueta movió del funnel al DEL ───────────────────────────
@@ -803,18 +819,25 @@ Quedo a la espera de tu respuesta`;
   // las del cliente. Cada destino carga su scope para reubicar el recurso donde sea.
   const moveTargets = useMemo(() => {
     const out = [];
+    // Anuncios: destinos por avatar/versión.
     for (const av of avatars) {
       const nombre = (av.name || '').trim() || 'Avatar s/nombre';
       const recVers = Array.isArray(av.rec_versions) && av.rec_versions.length ? [...new Set(av.rec_versions)].sort((a, b) => a - b) : [1];
       const multiV = recVers.length > 1;
-      for (const v of recVers) for (const b of VID_BUCKETS) {
+      for (const v of recVers) for (const b of AD_BUCKETS) {
         out.push({ id: `f:${av.id}:${v}:${b.key}`, key: b.key, label: `${nombre} · ${b.label}${multiV ? ' · V' + v : ''}`, scope: 'funnel', strategyId: f.strategy_id, avatarId: av.id, version: v });
       }
+    }
+    // VSL: destinos por funnel/versión (avatar_id null).
+    const vslVers = Array.isArray(f.vsl_versions) && f.vsl_versions.length ? [...new Set(f.vsl_versions)].sort((a, b) => a - b) : [1];
+    const vslMultiV = vslVers.length > 1;
+    for (const v of vslVers) for (const b of VSL_BUCKETS) {
+      out.push({ id: `f:vsl:${v}:${b.key}`, key: b.key, label: `${b.label}${vslMultiV ? ' · V' + v : ''}`, scope: 'funnel', strategyId: f.strategy_id, avatarId: null, version: v });
     }
     out.push({ id: 'f:testimonios', key: 'testimonios', label: 'Testimonios del funnel', scope: 'funnel', strategyId: f.strategy_id, avatarId: null, version: 1 });
     for (const cat of CLIENT_CATS) out.push({ id: `c:${cat.key}`, key: cat.key, label: cat.label, scope: 'client' });
     return out;
-  }, [avatars, f.strategy_id]);
+  }, [avatars, f.strategy_id, f.vsl_versions]);
 
   const funnelRecursosNode = (
     <div className="flex flex-col gap-3.5">
@@ -841,8 +864,8 @@ Quedo a la espera de tu respuesta`;
         <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-white py-8 px-4 text-center text-[12.5px] text-[#9098A4]">Este funnel todavía no tiene avatares. Generalos del DEL con el botón de arriba.</div>
       )}
 
-      {/* Una tarjeta por avatar, con sus 4 carpetas (como la maqueta): verde si tiene
-          archivos, gris si está vacía; un clic abre la carpeta en el Drive. */}
+      {/* Una tarjeta por avatar, con sus carpetas de Anuncios (grabación/edición): verde si
+          tiene archivos, gris si está vacía. El VSL NO va acá (es 1 por funnel, abajo). */}
       {avatars.map((av, i) => {
         const nombre = (av.name || '').trim();
         // Versiones de grabación/edición del avatar. Una V2 "completa" del funnel (VSL/anuncios
@@ -856,13 +879,13 @@ Quedo a la espera de tu respuesta`;
               <span className="text-[13.5px] font-bold truncate flex-1 min-w-0" style={{ color: nombre ? '#1A1D26' : '#DC2626' }}>{nombre || 'Falta el nombre del avatar'}</span>
               <button onClick={() => removeAvatarUndoable(av)} title="Borrar este avatar (se puede deshacer)" className="inline-flex items-center justify-center w-7 h-7 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer shrink-0 hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
             </div>
-            {/* Las 4 carpetas del avatar por VERSIÓN: se suben los archivos acá mismo (no más
-                link de Drive). Con una sola versión no se muestra rótulo; con V2+ se separan. */}
+            {/* Las carpetas de Anuncios del avatar por VERSIÓN: se suben los archivos acá mismo
+                (no más link de Drive). Con una sola versión no se muestra rótulo; con V2+ se separan. */}
             <div className="p-2.5 flex flex-col gap-2.5">
               {recVers.map(v => (
                 <div key={v} className="flex flex-col gap-1.5">
                   {multiV && <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4] px-1 pt-0.5">Versión {v}</div>}
-                  {VID_BUCKETS.map(b => (
+                  {AD_BUCKETS.map(b => (
                     <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
                       bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
                       moveTargets={moveTargets} selfId={`f:${av.id}:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
@@ -874,6 +897,37 @@ Quedo a la espera de tu respuesta`;
           </div>
         );
       })}
+
+      {/* VSL: UNA dupla grabación/edición POR FUNNEL (no por avatar), versionada por funnel.
+          Un "relanzamiento completo" (V2) agrega su propio juego de carpetas VSL. */}
+      {(() => {
+        const vslVers = Array.isArray(f.vsl_versions) && f.vsl_versions.length ? [...new Set(f.vsl_versions)].sort((a, b) => a - b) : [1];
+        const vslMultiV = vslVers.length > 1;
+        return (
+          <div className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
+            <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EFF6FF] text-[#2E69E0] shrink-0"><Clapperboard size={15} /></span>
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold text-[#1A1D26]">VSL de este funnel</div>
+                <div className="text-[11px] text-[#9098A4]">Grabación y edición del VSL — uno por funnel, compartido por todos sus avatares.</div>
+              </div>
+            </div>
+            <div className="p-2.5 flex flex-col gap-2.5">
+              {vslVers.map(v => (
+                <div key={v} className="flex flex-col gap-1.5">
+                  {vslMultiV && <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4] px-1 pt-0.5">Versión {v}</div>}
+                  {VSL_BUCKETS.map(b => (
+                    <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={null}
+                      bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
+                      moveTargets={moveTargets} selfId={`f:vsl:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                      extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Testimonios: van POR FUNNEL (no al apartado general del cliente). Una carpeta por
           este funnel, compartida por todos sus avatares. */}

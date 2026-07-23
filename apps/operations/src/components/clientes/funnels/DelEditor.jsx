@@ -53,11 +53,11 @@ const HL_COLORS = [
 const IMG_BUCKET_LABELS = {
   autoridad: 'Fotos de Autoridad', estilo_vida: 'Fotos Estilo de vida', branding: 'Branding',
   productos: 'Foto de productos', empresa: 'Material de la empresa', stock: 'Stock / B-Roll',
-  imagenes_diseno: 'Imagenes para diseño', testimonios: 'Testimonios', sin_clasif: 'Sin clasificar',
+  imagenes_diseno: 'Imagenes para diseño', instagram: 'Imágenes de Instagram', testimonios: 'Testimonios', sin_clasif: 'Sin clasificar',
   ad_rec: 'Anuncios · grabación', ad_edit: 'Anuncios · edición', vsl_rec: 'VSL · grabación', vsl_edit: 'VSL · edición',
 };
 // Orden de las categorías del cliente (las del funnel van al final).
-const IMG_CAT_ORDER = ['autoridad', 'estilo_vida', 'branding', 'productos', 'empresa', 'stock', 'imagenes_diseno', 'testimonios', 'sin_clasif'];
+const IMG_CAT_ORDER = ['autoridad', 'estilo_vida', 'branding', 'productos', 'empresa', 'stock', 'imagenes_diseno', 'instagram', 'testimonios', 'sin_clasif'];
 // Agrupa las imágenes por (scope + categoría) para mostrarlas rotuladas en el modal.
 function agruparImagenes(list) {
   const groups = new Map();
@@ -214,6 +214,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [comments, setComments] = useState([]);      // todos los del DEL
   const [threadFor, setThreadFor] = useState(null);  // id de sección con el hilo abierto
   const [draft, setDraft] = useState('');            // texto del comentario nuevo
+  const [replyDraft, setReplyDraft] = useState({});  // texto de la respuesta por comentario {id: texto}
   const [present, setPresent] = useState([]);        // quién está en el DEL ahora (Realtime)
   const [myEditing, setMyEditing] = useState(null);  // qué sección estoy editando (para el candado)
   const [activeApi, setActiveApi] = useState(null);  // API de la sección enfocada (barra única)
@@ -285,12 +286,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
         const [rows, hidden, extras] = await Promise.all([
           sbFetch(`client_brain_docs?select=id,node_id,title,doc_kind,text,panel_html,char_count,web_url&client_id=eq.${encodeURIComponent(cid)}&doc_kind=neq.del&order=doc_kind.asc`),
           sbFetch(`del_client_doc_hidden?select=node_id&client_id=eq.${encodeURIComponent(cid)}`),
-          sbFetch(`del_client_extra_docs?select=id,title,html,updated_at&client_id=eq.${encodeURIComponent(cid)}&order=created_at.asc`),
+          sbFetch(`del_client_extra_docs?select=id,title,html,updated_at,system&client_id=eq.${encodeURIComponent(cid)}&order=created_at.asc`),
         ]);
         if (!alive) return;
         // Unifico los del Drive (brain) con los propios del panel (extra) en una sola lista.
         const brain = (Array.isArray(rows) ? rows : []).map(d => ({ ...d, _kind: 'brain', key: 'b_' + d.id }));
-        const extra = (Array.isArray(extras) ? extras : []).map(d => ({ id: d.id, title: d.title, panel_html: d.html, doc_kind: 'extra', _kind: 'extra', key: 'x_' + d.id }));
+        const extra = (Array.isArray(extras) ? extras : []).map(d => ({ id: d.id, title: d.title, panel_html: d.html, doc_kind: 'extra', _kind: 'extra', _system: !!d.system, key: 'x_' + d.id }));
         setClientDocs([...brain, ...extra]);
         setExcluded(new Set((Array.isArray(hidden) ? hidden : []).map(p => p.node_id)));
       } catch { if (alive) setClientDocs([]); }
@@ -299,7 +300,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   }, [cid]);
 
   const quitarClientDoc = async (d) => {
-    if (d._kind === 'extra') { borrarExtraDoc(d); return; } // los propios del panel se borran
+    if (d._kind === 'extra') { if (d._system) { window.alert('El “Resumen de la venta” es un documento del sistema: no se puede borrar.'); return; } borrarExtraDoc(d); return; } // los propios del panel se borran
     setExcluded((prev) => new Set(prev).add(d.node_id));
     if (view === 'cliente:' + d.id) setView('del');
     await supabase.from('del_client_doc_hidden').upsert({ client_id: cid, node_id: d.node_id }, { onConflict: 'client_id,node_id' });
@@ -344,6 +345,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     setView('cliente:' + data.id); setDocEditing(true);
   };
   const borrarExtraDoc = async (doc) => {
+    if (doc._system) return; // el resumen de la venta es del sistema
     if (!window.confirm(`¿Borrar el documento "${doc.title}"? No se puede deshacer.`)) return;
     setClientDocs((prev) => prev.filter(d => d.id !== doc.id));
     if (view === 'cliente:' + doc.id) setView('del');
@@ -356,7 +358,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       // Mismo criterio que las secciones: por doc_id si el funnel tiene DEL propio,
       // si no por strategy_id (la carpeta). Así los comentarios no se cruzan entre funnels.
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
-      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at&${filtro}&order=created_at.asc`, { cache: 'no-store' });
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at,parent_id,guest_id&${filtro}&order=created_at.asc`, { cache: 'no-store' });
       setComments(Array.isArray(rows) ? rows : []);
     } catch { /* si falla, sin comentarios */ }
   }, [strategyId, docId]);
@@ -387,14 +389,39 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     emitir('comment', { action: 'upsert', row: { id: c.id, resolved: !c.resolved } });
   };
   const borrarComment = async (c) => {
-    setComments((prev) => prev.filter(x => x.id !== c.id));
+    // Al borrar un comentario padre, sus respuestas caen con él (FK ON DELETE CASCADE en la base).
+    setComments((prev) => prev.filter(x => x.id !== c.id && x.parent_id !== c.id));
     await supabase.from('del_comments').delete().eq('id', c.id);
     emitir('comment', { action: 'delete', id: c.id });
   };
-  // Comentarios por sección.
+  // Responder a un comentario (hilo): la respuesta hereda la sección del padre.
+  const responder = async (parent) => {
+    const body = (replyDraft[parent.id] || '').trim();
+    if (!body) return;
+    setReplyDraft(d => ({ ...d, [parent.id]: '' }));
+    const sec = secs?.find(x => x.id === parent.section_id);
+    const tempId = 'tmp_' + Date.now();
+    setComments(prev => [...prev, { id: tempId, section_id: parent.section_id, parent_id: parent.id, body, author_name: myName, author_id: by, resolved: false, created_at: new Date().toISOString() }]);
+    const { data, error } = await supabase.from('del_comments').insert({
+      section_id: parent.section_id, doc_id: sec?.doc_id, strategy_id: strategyId,
+      parent_id: parent.id, author_id: by, author_name: myName, body,
+    }).select().single();
+    if (error) { setComments(prev => prev.filter(c => c.id !== tempId)); window.alert('No pude guardar la respuesta: ' + (error.message || error.code || '')); return; }
+    setComments(prev => prev.map(c => c.id === tempId ? data : c));
+    emitir('comment', { action: 'upsert', row: data });
+  };
+  // Comentarios por sección (solo de primer nivel: las respuestas no cuentan como notas nuevas).
   const commentsBySection = useMemo(() => {
     const m = {};
-    for (const c of comments) (m[c.section_id] ||= []).push(c);
+    for (const c of comments) if (!c.parent_id) (m[c.section_id] ||= []).push(c);
+    return m;
+  }, [comments]);
+  // Hilos: comentarios de primer nivel + sus respuestas agrupadas por parent_id.
+  const topComments = useMemo(() => comments.filter(c => !c.parent_id), [comments]);
+  const repliesByParent = useMemo(() => {
+    const m = {};
+    for (const c of comments) if (c.parent_id) (m[c.parent_id] ||= []).push(c);
+    for (const k in m) m[k].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     return m;
   }, [comments]);
 
@@ -921,8 +948,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   style={{ color: on ? '#1A1D26' : '#6B7280' }}>
                   {d._kind === 'extra' ? <FileText size={13} className="shrink-0 text-[#7C3AED]" /> : <Monitor size={13} className="shrink-0 text-[#9098A4]" />}
                   <span className="truncate flex-1 min-w-0">{d._kind === 'extra' ? d.title : (DOC_KIND_LABEL[d.doc_kind] || d.title)}</span>
+                  {d._system && <span className="text-[8px] font-bold text-[#7C3AED] bg-[#F3EFFF] rounded px-1 shrink-0 uppercase tracking-wide">venta</span>}
                 </button>
-                <button onClick={() => quitarClientDoc(d)} title={d._kind === 'extra' ? 'Borrar documento' : 'Quitar de este cliente'} className="opacity-0 group-hover/cd:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>
+                {d._system
+                  ? <span title="Resumen de la venta · documento del sistema (no se borra)" className="w-6 h-6 inline-flex items-center justify-center text-[#C3C9D4] shrink-0 mr-1"><Lock size={11} /></span>
+                  : <button onClick={() => quitarClientDoc(d)} title={d._kind === 'extra' ? 'Borrar documento' : 'Quitar de este cliente'} className="opacity-0 group-hover/cd:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>}
               </div>
             );
           })}
@@ -1240,23 +1270,59 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             {comments.length === 0 && (
               <div className="text-[11px] text-[#AEB4BF] px-1 leading-snug">Marcá una frase en el texto y tocá <b>Comentar</b> para dejar una nota acá.</div>
             )}
-            {[...comments].sort((a, b) => (a.resolved ? 1 : 0) - (b.resolved ? 1 : 0) || (new Date(a.created_at) - new Date(b.created_at))).map(c => (
-              <div key={c.id} onClick={() => irAComment(c)}
-                className="rounded-lg border bg-white p-2.5 cursor-pointer transition-colors"
+            {[...topComments].sort((a, b) => (a.resolved ? 1 : 0) - (b.resolved ? 1 : 0) || (new Date(a.created_at) - new Date(b.created_at))).map(c => {
+              const reps = repliesByParent[c.id] || [];
+              return (
+              <div key={c.id}
+                className="rounded-lg border bg-white p-2.5 transition-colors"
                 style={{ borderColor: flashCmt === c.id ? '#2E69E0' : '#E7EAF0', boxShadow: flashCmt === c.id ? '0 0 0 2px #DBEAFE' : 'none', opacity: c.resolved ? 0.6 : 1 }}>
-                {c.quote && <div className="text-[10.5px] text-[#8A6D2B] border-l-2 border-[#EAB308] pl-1.5 mb-1 italic line-clamp-2">“{c.quote}”</div>}
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ background: colorFor(c.author_id || c.author_name) }}>{initialOf(c.author_name)}</span>
-                  <span className="text-[11.5px] font-bold text-[#1A1D26] truncate">{c.author_name || 'Alguien'}</span>
-                  <span className="text-[10px] text-[#AEB4BF] ml-auto shrink-0">{haceRato(c.created_at)}</span>
+                <div onClick={() => irAComment(c)} className="cursor-pointer">
+                  {c.quote && <div className="text-[10.5px] text-[#8A6D2B] border-l-2 border-[#EAB308] pl-1.5 mb-1 italic line-clamp-2">“{c.quote}”</div>}
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ background: colorFor(c.author_id || c.author_name) }}>{initialOf(c.author_name)}</span>
+                    <span className="text-[11.5px] font-bold text-[#1A1D26] truncate">{c.author_name || 'Alguien'}</span>
+                    {!c.author_id && <span className="text-[8.5px] font-bold text-[#B45309] bg-[#FEF3C7] rounded px-1 py-px shrink-0 uppercase tracking-wide">externo</span>}
+                    <span className="text-[10px] text-[#AEB4BF] ml-auto shrink-0">{haceRato(c.created_at)}</span>
+                  </div>
+                  <div className="text-[12px] text-[#3F4653] leading-snug whitespace-pre-wrap break-words" style={{ textDecoration: c.resolved ? 'line-through' : 'none' }}>{c.body}</div>
                 </div>
-                <div className="text-[12px] text-[#3F4653] leading-snug whitespace-pre-wrap break-words" style={{ textDecoration: c.resolved ? 'line-through' : 'none' }}>{c.body}</div>
-                <div className="flex items-center gap-1 mt-1.5">
-                  <button onClick={(e) => { e.stopPropagation(); resolverComment(c); }} className="inline-flex items-center gap-1 text-[10.5px] font-semibold py-0.5 px-1.5 rounded border-none cursor-pointer" style={c.resolved ? { background: '#F1F3F7', color: '#6B7280' } : { background: '#ECFDF5', color: '#15803D' }}><Check size={11} strokeWidth={3} />{c.resolved ? 'Reabrir' : 'Resolver'}</button>
-                  {c.author_id === by && <button onClick={(e) => { e.stopPropagation(); borrarComment(c); }} title="Borrar" className="inline-flex items-center justify-center w-6 h-6 rounded text-[#C3C9D4] hover:text-[#B91C1C] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer"><Trash2 size={11} /></button>}
-                </div>
+                {reps.length > 0 && (
+                  <div className="mt-1.5 pl-2 border-l-2 border-[#EDF0F5] flex flex-col gap-1.5">
+                    {reps.map(r => (
+                      <div key={r.id}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full inline-flex items-center justify-center text-[8px] font-bold text-white shrink-0" style={{ background: colorFor(r.author_id || r.author_name) }}>{initialOf(r.author_name)}</span>
+                          <span className="text-[11px] font-bold text-[#1A1D26] truncate">{r.author_name || 'Alguien'}</span>
+                          {!r.author_id && <span className="text-[8.5px] font-bold text-[#B45309] bg-[#FEF3C7] rounded px-1 py-px shrink-0 uppercase tracking-wide">externo</span>}
+                          <span className="text-[9.5px] text-[#AEB4BF] ml-auto shrink-0">{haceRato(r.created_at)}</span>
+                          <button onClick={(e) => { e.stopPropagation(); borrarComment(r); }} title="Borrar respuesta" className="inline-flex items-center justify-center w-5 h-5 rounded text-[#C3C9D4] hover:text-[#B91C1C] border-none bg-transparent cursor-pointer shrink-0"><Trash2 size={10} /></button>
+                        </div>
+                        <div className="text-[11.5px] text-[#3F4653] leading-snug whitespace-pre-wrap break-words pl-[22px]">{r.body}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {threadFor === c.id ? (
+                  <div className="mt-1.5">
+                    <textarea value={replyDraft[c.id] || ''} autoFocus onChange={e => setReplyDraft(d => ({ ...d, [c.id]: e.target.value }))} rows={2}
+                      onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); responder(c); } if (e.key === 'Escape') setThreadFor(null); }}
+                      placeholder="Responder…  (Ctrl+Enter)"
+                      className="w-full py-1.5 px-2 border border-[#E2E5EB] rounded-lg text-[12px] text-[#1A1D26] bg-white resize-y outline-none focus:border-blue leading-snug" />
+                    <div className="flex justify-end gap-1.5 mt-1">
+                      <button onClick={() => setThreadFor(null)} className="py-1 px-2 rounded border border-[#E2E5EB] bg-white text-[#4B5563] text-[11px] font-semibold cursor-pointer">Cancelar</button>
+                      <button onClick={() => responder(c)} disabled={!(replyDraft[c.id] || '').trim()} className="inline-flex items-center gap-1 py-1 px-2 rounded border-none bg-[#2E69E0] text-white text-[11px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50"><Send size={11} />Responder</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button onClick={(e) => { e.stopPropagation(); setThreadFor(c.id); }} className="inline-flex items-center gap-1 text-[10.5px] font-semibold py-0.5 px-1.5 rounded border-none cursor-pointer bg-[#EFF3FF] text-[#2E69E0]"><MessageSquare size={11} />Responder</button>
+                    <button onClick={(e) => { e.stopPropagation(); resolverComment(c); }} className="inline-flex items-center gap-1 text-[10.5px] font-semibold py-0.5 px-1.5 rounded border-none cursor-pointer" style={c.resolved ? { background: '#F1F3F7', color: '#6B7280' } : { background: '#ECFDF5', color: '#15803D' }}><Check size={11} strokeWidth={3} />{c.resolved ? 'Reabrir' : 'OK'}</button>
+                    <button onClick={(e) => { e.stopPropagation(); borrarComment(c); }} title="Borrar" className="inline-flex items-center justify-center w-6 h-6 rounded text-[#C3C9D4] hover:text-[#B91C1C] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer ml-auto"><Trash2 size={11} /></button>
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </aside>
         )}
       </div>
