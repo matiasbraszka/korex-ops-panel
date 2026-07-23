@@ -103,11 +103,6 @@ function ClienteCell({ r, rowSpan }) {
       {r.niche
         ? <div className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#7C3AED] bg-[#F4F1FE] py-0.5 px-1.5 rounded-md" title="Nicho del cliente">{r.niche}</div>
         : <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#B4BAC6] bg-[#F4F5F7] py-0.5 px-1.5 rounded-md" title="Nicho sin definir">nicho —</div>}
-      {r.n_estrategias > 1 && (
-        <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#8A93A3]">
-          <Layers size={10} />{r.n_estrategias} estrategias
-        </div>
-      )}
       <div className="mt-2.5 pt-2 border-t border-[#EEF1F6] flex flex-col gap-1">
         <div className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#B4BAC6] mb-0.5">Recursos</div>
         <ResChip label="Logo" ok={r.tiene_logo} />
@@ -149,7 +144,7 @@ export default function PanoramaRecursos() {
     return list;
   }, [rows, q, soloFaltantes]);
 
-  const totalEstr = useMemo(() => (filtered || []).reduce((a, r) => a + Math.max(1, (r.estrategias || []).length), 0), [filtered]);
+  const totalFunnels = useMemo(() => (filtered || []).reduce((a, r) => a + (r.estrategias || []).reduce((s, e) => s + Math.max(0, (e.funnels || []).length), 0), 0), [filtered]);
 
   if (rows === null) {
     return <div className="flex items-center gap-2 text-[13px] text-gray-500 py-10 justify-center"><Loader2 size={16} className="animate-spin" />Cargando panorama…</div>;
@@ -174,7 +169,7 @@ export default function PanoramaRecursos() {
           style={soloFaltantes ? { background: '#FDECEC', color: '#DC2626', borderColor: '#F7C6C6' } : { background: '#fff', color: '#4B5563', borderColor: '#E2E5EB' }}>
           <Filter size={13} />Solo con faltantes
         </button>
-        <span className="text-[12px] text-[#9098A4] ml-auto">{filtered.length} clientes · {totalEstr} estrategias</span>
+        <span className="text-[12px] text-[#9098A4] ml-auto">{filtered.length} clientes · {totalFunnels} funnels</span>
       </div>
 
       {/* Tabla */}
@@ -202,7 +197,7 @@ export default function PanoramaRecursos() {
                   <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
                     <ClienteCell r={r} rowSpan={1} />
                     <td className={tdBase} style={cellStyle(true)} colSpan={8}>
-                      <span className="text-[11.5px] text-[#C2C7D0]">— sin estrategia creada —</span>
+                      <span className="text-[11.5px] text-[#C2C7D0]">— sin funnel creado —</span>
                     </td>
                   </tr>
                 );
