@@ -434,6 +434,41 @@ export function userSeesTask(task, currentUser, teamMembers = []) {
 }
 
 /**
+ * taskIsAdminOwned: ¿la tarea es "de un administrador"? Regla de negocio: una
+ * tarea es de admin cuando su ENCARGADO/responsable es admin. `adminMembers` es
+ * la lista de team_members con rol admin (id + nombre), que viene del RPC
+ * korex_admin_member_ids resuelto contra teamMembers. Se compara el `assignee`
+ * (nombres/ids separados por coma) normalizando acentos/espacios.
+ * Criterio multi-encargado: solo es "de admin" si TODOS los encargados son
+ * admin; si hay al menos un encargado NO admin, es trabajo de equipo y queda
+ * visible. Sin encargado → false (visible para todos).
+ */
+export function taskIsAdminOwned(task, adminMembers = []) {
+  if (!task?.assignee || !adminMembers?.length) return false;
+  const adminKeys = new Set();
+  for (const m of adminMembers) {
+    if (m?.id) adminKeys.add(normalizeName(m.id));
+    if (m?.name) {
+      adminKeys.add(normalizeName(m.name));
+      adminKeys.add(normalizeName(m.name.split(' ')[0]));
+    }
+  }
+  const parts = task.assignee.split(',').map(s => normalizeName(s)).filter(Boolean);
+  if (!parts.length) return false;
+  return parts.every(p => adminKeys.has(p));
+}
+
+/**
+ * taskVisibleToNonAdmin: filtro de visibilidad para usuarios NO admin bajo la
+ * regla nueva "ven las tareas de todos menos las de los administradores". Ve la
+ * tarea si NO es de admin, o si de todos modos es suya (encargado/creador/
+ * revisor, vía userSeesTask) aunque un admin también figure como encargado.
+ */
+export function taskVisibleToNonAdmin(task, currentUser, teamMembers = [], adminMembers = []) {
+  return !taskIsAdminOwned(task, adminMembers) || userSeesTask(task, currentUser, teamMembers);
+}
+
+/**
  * departmentForAssignee: área (department) por defecto según el RESPONSABLE.
  * Mira el primer responsable y devuelve su `department` (cargado en team_members).
  * Sirve para autocompletar el área de una tarea al asignarla, sin dejarla en

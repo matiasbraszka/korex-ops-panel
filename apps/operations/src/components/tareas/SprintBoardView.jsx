@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SPRINT_COLUMNS, DEPARTMENTS, TASK_PRIORITY } from '../../utils/constants';
-import { sprintTasks, userOwnsTask, userSeesTask, isReviewerOf, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft, isSprintLocked, canValidate, pendingCriteria, sprintCount, daysAgo, daysBetween, assigneeMatches } from '../../utils/helpers';
+import { sprintTasks, taskVisibleToNonAdmin, isReviewerOf, sprintProgress, getAllPhases, isTaskBlocked, sprintDaysLeft, isSprintLocked, canValidate, pendingCriteria, sprintCount, daysAgo, daysBetween, assigneeMatches } from '../../utils/helpers';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import TaskDetailDrawer from './TaskDetailDrawer';
 import PriorityPicker from './PriorityPicker';
@@ -24,7 +24,7 @@ function insertIndexAt(colEl, clientY, draggedId) {
 export default function SprintBoardView() {
   const {
     activeSprint, sprints, tasks, updateTask, reorderTask, moveTaskToSprint, teamMembers, clients, currentUser,
-    taskAssignee, taskClientFilter, taskComments, changedTaskIds, unreadCommentTaskIds, openTaskComments,
+    taskAssignee, taskClientFilter, taskComments, changedTaskIds, unreadCommentTaskIds, openTaskComments, adminMembers,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
   // Invitado ("mover y marcar"): arrastra tarjetas entre columnas, pero no cambia
@@ -74,7 +74,7 @@ export default function SprintBoardView() {
   // (además del responsable) para que le aparezca al filtrar por su nombre.
   const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee) || isReviewerOf(t, taskAssignee);
   const visible = (t) => {
-    if (restricted && !userSeesTask(t, currentUser, teamMembers)) return false;
+    if (restricted && !taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers)) return false;
     if (!matchesAssignee(t)) return false;
     if (!matchesQuery(t)) return false;
     if (taskClientFilter !== 'all' && t.clientId !== taskClientFilter) return false;
