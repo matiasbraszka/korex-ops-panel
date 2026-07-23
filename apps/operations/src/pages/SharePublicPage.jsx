@@ -48,9 +48,17 @@ async function subirVideo(token, name, file, onProgress, registerTus) {
     up.start();
   });
   const thumbUrl = hostname ? `https://${hostname}/${videoId}/thumbnail.jpg` : '';
-  const commit = await supabase.functions.invoke('share-upload', { body: { token, action: 'bunny-commit', name, title: file.name.replace(/\.[^.]+$/, ''), videoId, embedUrl, thumbUrl } });
-  if (commit.error || !commit.data?.ok) throw new Error('Subí el video pero no lo pude registrar');
-  return commit.data.resource;
+  // El video YA está en Bunny. Registrar la fila es un POST chico: si falla por un parpadeo
+  // de red, reintentamos (hasta 3) antes de rendirnos, para que el video no quede "colgado".
+  const commitBody = { token, action: 'bunny-commit', name, title: file.name.replace(/\.[^.]+$/, ''), videoId, embedUrl, thumbUrl };
+  let commit, lastErr;
+  for (let intento = 0; intento < 3; intento++) {
+    if (intento > 0) await new Promise((r) => setTimeout(r, 1500 * intento));
+    commit = await supabase.functions.invoke('share-upload', { body: commitBody });
+    if (!commit.error && commit.data?.ok) return commit.data.resource;
+    lastErr = commit.error || commit.data?.error;
+  }
+  throw new Error('Subí el video pero no lo pude registrar' + (lastErr ? ` (${lastErr})` : ''));
 }
 
 function Shell({ children }) {
