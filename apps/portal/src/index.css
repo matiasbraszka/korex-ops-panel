@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* Tokens de marca Korex — mismos que el panel de operaciones, así el portal
+   y el panel comparten paleta. */
+@theme {
+  --color-bg: #F7F8FA;
+  --color-surface: #FFFFFF;
+  --color-surface2: #F0F2F5;
+  --color-surface3: #E8EBF0;
+  --color-border: #E2E5EB;
+  --color-border-light: #D0D5DD;
+  --color-blue: #5B7CF5;
+  --color-blue-ink: #2E69E0;
+  --color-blue-light: #7B9AFF;
+  --color-blue-dark: #4A67D8;
+  --color-blue-bg: #EEF2FF;
+  --color-blue-bg2: #F5F7FF;
+  --color-green: #22C55E;
+  --color-green-bg: #ECFDF5;
+  --color-green-ink: #16A34A;
+  --color-yellow: #EAB308;
+  --color-yellow-bg: #FEFCE8;
+  --color-red: #EF4444;
+  --color-red-bg: #FEF2F2;
+  --color-orange: #F97316;
+  --color-orange-bg: #FFF7ED;
+  --color-purple: #8B5CF6;
+  --color-purple-bg: #F5F3FF;
+  --color-cyan: #06B6D4;
+  --color-ink: #0A0A0A;
+  --color-text: #1A1D26;
+  --color-text2: #6B7280;
+  --color-text3: #9CA3AF;
+  --font-display: "Montserrat", system-ui, sans-serif;
+  --font-ui: "Inter", -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  overflow-x: clip;
+  max-width: 100vw;
+  background: #E9EBF0;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ocultamos scrollbars para un look mobile más limpio. */
+::-webkit-scrollbar { width: 0; height: 0; }
+
+button { font-family: inherit; }
+
+/* Impresión: solo el documento del guion (para "Descargar PDF"). El doc se ve
+   en pantalla normalmente; al imprimir se oculta todo lo demás. */
+@media print {
+  body * { visibility: hidden !important; }
+  #print-doc, #print-doc * { visibility: visible !important; }
+  #print-doc { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+}
+
+@keyframes mk-spin { to { transform: rotate(360deg); } }
+.mk-spin { animation: mk-spin 0.9s linear infinite; }

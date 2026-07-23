@@ -16,6 +16,8 @@
     "dev:operations": "npm run dev -w @korex/operations",
     "build": "npm run build -w @korex/operations",
     "build:operations": "npm run build -w @korex/operations",
+    "dev:portal": "npm run dev -w @korex/portal",
+    "build:portal": "npm run build -w @korex/portal",
     "lint": "npm run lint -w @korex/operations",
     "test": "npm run test -w @korex/operations",
     "preview": "npm run preview -w @korex/operations"
