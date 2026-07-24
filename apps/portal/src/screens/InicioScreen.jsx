@@ -22,6 +22,7 @@ export default function InicioScreen() {
   const { data, loading } = useAsync(() => api.funnels(), []);
   const { data: tareasData } = useAsync(() => api.tareas(), []);
   const [playing, setPlaying] = useState(false);
+  const [tareasOpen, setTareasOpen] = useState(false); // desplegable de tareas pendientes
 
   if (loading) return <Loading label="Cargando tus funnels…" />;
   const funnels = Array.isArray(data) ? data : [];
@@ -55,21 +56,47 @@ export default function InicioScreen() {
           </Card>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {tareas.map((t) => {
-              const p = PRIO[String(t.prioridad || 'normal').toLowerCase()] || PRIO.normal;
-              return (
-                <Card key={t.id} style={{ padding: 14, borderLeft: `4px solid ${p.color}` }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26', lineHeight: 1.3 }}>{t.titulo}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: p.bg, color: p.color }}>{p.label}</span>
-                    {t.funnel && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: '#EEF2FF', color: '#4F63C4' }}>{t.funnel}</span>}
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, color: '#9CA3AF' }}>
-                      <Clock size={12} /> {t.dias === 0 ? 'hoy' : t.dias === 1 ? 'hace 1 día' : `hace ${t.dias} días`}
-                    </span>
+            {/* Tus tareas: desplegable tipo checklist. Las marca el EQUIPO cuando las
+                valida (por eso los círculos no se tocan): al validarse desaparecen. */}
+            {tareas.length > 0 && (
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                <div onClick={() => setTareasOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 16px', cursor: 'pointer' }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 11, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <ClipboardList size={19} color="#5B7CF5" />
                   </div>
-                </Card>
-              );
-            })}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 800, color: '#1A1D26' }}>
+                      Tenés {tareas.length} {tareas.length === 1 ? 'tarea pendiente' : 'tareas pendientes'}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>Tocá para {tareasOpen ? 'cerrar' : 'ver'} la lista</div>
+                  </div>
+                  <ChevronRight size={19} color="#9CA3AF" style={{ flexShrink: 0, transform: tareasOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+                </div>
+                {tareasOpen && (
+                  <div style={{ borderTop: '1px solid #F0F2F5', padding: '4px 16px 10px' }}>
+                    {tareas.map((t, i) => {
+                      const p = PRIO[String(t.prioridad || 'normal').toLowerCase()] || PRIO.normal;
+                      return (
+                        <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #F5F6F8' }}>
+                          {/* Checklist de solo lectura: lo tildamos nosotros al validar. */}
+                          <span style={{ width: 21, height: 21, borderRadius: 7, border: '2px solid #D0D5DD', background: '#fff', flexShrink: 0, marginTop: 1 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#1A1D26', lineHeight: 1.3 }}>{t.titulo}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
+                              <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, background: p.bg, color: p.color }}>{p.label}</span>
+                              {t.funnel && <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#EEF2FF', color: '#4F63C4' }}>{t.funnel}</span>}
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#9CA3AF' }}>
+                                <Clock size={11} /> {t.dias === 0 ? 'hoy' : t.dias === 1 ? 'hace 1 día' : `hace ${t.dias} días`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            )}
             {funnelsConPend.map((f) => (
               <Card key={'p' + f.id} onClick={() => nav(`/funnel/${f.id}`)} style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
                 <AlertCircle size={18} color="#B45309" style={{ flexShrink: 0 }} />

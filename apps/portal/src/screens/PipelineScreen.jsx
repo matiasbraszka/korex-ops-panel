@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, Loader2, Circle, ChevronLeft, Upload, Undo2, FileText, ClipboardCheck } from 'lucide-react';
+import { ChevronLeft, Upload, Undo2, FileText, ClipboardCheck, Trophy } from 'lucide-react';
 import PhoneFrame from '../components/PhoneFrame';
 import { Screen, Card, Progress, Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 
-// Ícono por tipo de movimiento del historial.
+// Ícono por tipo de movimiento del historial automático.
 const MOV_ICON = {
   subida:     { Icon: Upload, color: '#2E69E0', bg: '#EEF2FF' },
   devolucion: { Icon: Undo2, color: '#059669', bg: '#ECFDF5' },
@@ -12,23 +12,18 @@ const MOV_ICON = {
   tarea:      { Icon: ClipboardCheck, color: '#B45309', bg: '#FEF3C7' },
 };
 
-const ESTADO = {
-  hecho:     { color: '#16A34A', bg: '#22C55E', ring: '#86EFAC', label: 'Listo' },
-  en_curso:  { color: '#2E69E0', bg: '#5B7CF5', ring: '#B9C4E8', label: 'En curso' },
-  pendiente: { color: '#9CA3AF', bg: '#FFFFFF', ring: '#E2E5EB', label: 'Pendiente' },
-};
-
-// Pantalla propia (con "Volver"), enlazada desde la tarjeta "Avance" del Inicio.
+// Avance del proyecto:
+//   · Progreso general = el avance REAL de los funnels (guion→grabación→edición→
+//     publicado). Todos publicados = 100% → "Funnels todos terminados".
+//   · Historial = la línea de tiempo que el equipo lleva en operaciones.
 export default function PipelineScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.pipeline(), []);
   const { data: movs } = useAsync(() => api.movimientos(), []);
-  const fases = data?.fases || [];
   const progreso = data?.progreso ?? 0;
-  const movimientos = Array.isArray(movs) ? movs : [];
-  // El historial REAL del proyecto: lo que el equipo registra en operaciones
-  // (pestaña Historial). Solo lo marcado para el cliente (incluir_resumen).
+  const terminado = data?.todosTerminados === true;
   const eventos = Array.isArray(data?.eventos) ? data.eventos : [];
+  const movimientos = Array.isArray(movs) ? movs : [];
 
   return (
     <PhoneFrame>
@@ -38,105 +33,81 @@ export default function PipelineScreen() {
         </button>
       </div>
       {loading ? <Loading label="Cargando el avance…" /> : (
-    <Screen>
-      {isDemo() && <DemoBanner />}
-      <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>Avance de tu proyecto</h1>
-      <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Estas son las etapas de tu proyecto y sus fechas. Así ves en qué estamos y qué sigue.</p>
+        <Screen>
+          {isDemo() && <DemoBanner />}
+          <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>Avance de tu proyecto</h1>
+          <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Así viene tu proyecto y todo lo que fuimos haciendo.</p>
 
-      {fases.length > 0 && (
-        <Card style={{ padding: 18, marginBottom: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26' }}>Progreso general</span>
-            <span style={{ fontSize: 22, fontWeight: 800, color: '#5B7CF5', letterSpacing: '-0.02em' }}>{progreso}%</span>
-          </div>
-          <Progress value={progreso} color="#5B7CF5" height={12} />
-        </Card>
-      )}
-
-      <div style={{ position: 'relative', paddingLeft: 4 }}>
-        {fases.map((f, i) => {
-          const e = ESTADO[f.estado] || ESTADO.pendiente;
-          const last = i === fases.length - 1;
-          return (
-            <div key={f.id} style={{ display: 'flex', gap: 14, position: 'relative' }}>
-              {/* Columna del hito + línea */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 999, background: e.bg, border: `2px solid ${e.ring}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {f.estado === 'hecho' ? <Check size={17} color="#FFFFFF" strokeWidth={3.5} />
-                    : f.estado === 'en_curso' ? <Loader2 size={16} color="#FFFFFF" className="mk-spin" />
-                    : <Circle size={9} color="#C4C9D4" fill="#C4C9D4" />}
-                </div>
-                {!last && <div style={{ width: 2, flex: 1, minHeight: 26, background: f.estado === 'hecho' ? '#86EFAC' : '#E2E5EB', margin: '2px 0' }} />}
+          {terminado ? (
+            <Card style={{ padding: 20, marginBottom: 8, background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Trophy size={24} color="#FFFFFF" />
               </div>
-              {/* Contenido */}
-              <div style={{ flex: 1, paddingBottom: last ? 0 : 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: f.estado === 'pendiente' ? '#6B7280' : '#1A1D26' }}>{f.nombre}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: f.estado === 'hecho' ? '#ECFDF5' : f.estado === 'en_curso' ? '#EEF2FF' : '#F0F2F5', color: e.color }}>{e.label}</span>
-                </div>
-                {f.fecha && <div style={{ fontSize: 13, fontWeight: 600, color: e.color, marginTop: 2 }}>{f.fecha}</div>}
-                {f.detalle && <div style={{ fontSize: 13.5, color: '#9CA3AF', marginTop: 4, lineHeight: 1.45 }}>{f.detalle}</div>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 800, color: '#065F46', lineHeight: 1.25 }}>Funnels todos terminados</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#059669', marginTop: 2 }}>Ahora, optimizando los resultados</div>
+              </div>
+              <span style={{ fontSize: 22, fontWeight: 800, color: '#059669', flexShrink: 0 }}>100%</span>
+            </Card>
+          ) : (
+            <Card style={{ padding: 18, marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26' }}>Progreso general</span>
+                <span style={{ fontSize: 22, fontWeight: 800, color: '#5B7CF5', letterSpacing: '-0.02em' }}>{progreso}%</span>
+              </div>
+              <Progress value={progreso} color="#5B7CF5" height={12} />
+              <div style={{ fontSize: 12.5, color: '#9CA3AF', marginTop: 10 }}>Calculado con el avance real de tus funnels (guion → grabación → edición → publicado).</div>
+            </Card>
+          )}
+
+          {/* ── HISTORIAL DEL PROYECTO: la línea de tiempo que lleva el equipo. ── */}
+          {eventos.length > 0 && (
+            <div style={{ marginTop: 22 }}>
+              <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Historial de tu proyecto</h2>
+              <p style={{ margin: '0 0 12px', fontSize: 13.5, color: '#6B7280' }}>Todo lo que fuimos haciendo, día a día.</p>
+              <div style={{ position: 'relative', paddingLeft: 4 }}>
+                {eventos.map((e, i) => {
+                  const last = i === eventos.length - 1;
+                  const bloqueo = e.tipo === 'bloqueo';
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 12, position: 'relative' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                        <div style={{ width: 12, height: 12, borderRadius: 999, marginTop: 5, background: bloqueo ? '#F59E0B' : '#22C55E', border: `2px solid ${bloqueo ? '#FDE68A' : '#BBF7D0'}` }} />
+                        {!last && <div style={{ width: 2, flex: 1, minHeight: 18, background: '#E2E5EB', margin: '2px 0' }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, paddingBottom: last ? 0 : 16 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700, color: '#9CA3AF' }}>{e.fecha}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1D26', lineHeight: 1.4, marginTop: 2 }}>{e.titulo}</div>
+                        {e.descripcion && <div style={{ fontSize: 12.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.45 }}>{e.descripcion}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          );
-        })}
-        {fases.length === 0 && eventos.length === 0 && (
-          <Card style={{ padding: 22, textAlign: 'center', color: '#6B7280' }}>
-            Todavía no cargamos las etapas de tu proyecto. En cuanto estén, las vas a ver acá con sus fechas.
-          </Card>
-        )}
-      </div>
+          )}
 
-      {/* ── HISTORIAL DEL PROYECTO: la línea de tiempo que lleva el equipo en
-          operaciones (misma data de la pestaña Historial del panel). ── */}
-      {eventos.length > 0 && (
-        <div style={{ marginTop: 26 }}>
-          <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Historial de tu proyecto</h2>
-          <p style={{ margin: '0 0 12px', fontSize: 13.5, color: '#6B7280' }}>Todo lo que fuimos haciendo, día a día.</p>
-          <div style={{ position: 'relative', paddingLeft: 4 }}>
-            {eventos.map((e, i) => {
-              const last = i === eventos.length - 1;
-              const bloqueo = e.tipo === 'bloqueo';
-              return (
-                <div key={i} style={{ display: 'flex', gap: 12, position: 'relative' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                    <div style={{ width: 12, height: 12, borderRadius: 999, marginTop: 5, background: bloqueo ? '#F59E0B' : '#22C55E', border: `2px solid ${bloqueo ? '#FDE68A' : '#BBF7D0'}` }} />
-                    {!last && <div style={{ width: 2, flex: 1, minHeight: 18, background: '#E2E5EB', margin: '2px 0' }} />}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0, paddingBottom: last ? 0 : 16 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#9CA3AF' }}>{e.fecha}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1D26', lineHeight: 1.4, marginTop: 2 }}>{e.titulo}</div>
-                    {e.descripcion && <div style={{ fontSize: 12.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.45 }}>{e.descripcion}</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Historial automático: lo último que pasó en la plataforma (subidas,
-          devoluciones, guiones publicados, tareas completadas). */}
-      {movimientos.length > 0 && (
-        <div style={{ marginTop: 26 }}>
-          <h2 style={{ margin: '0 0 12px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Últimos movimientos</h2>
-          <Card style={{ padding: '4px 16px' }}>
-            {movimientos.map((m, i) => {
-              const mi = MOV_ICON[m.tipo] || MOV_ICON.subida;
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #F0F2F5' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 9, background: mi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <mi.Icon size={16} color={mi.color} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: '#1A1D26', lineHeight: 1.35 }}>{m.texto}</div>
-                  <div style={{ fontSize: 11.5, color: '#9CA3AF', flexShrink: 0 }}>{m.fecha}</div>
-                </div>
-              );
-            })}
-          </Card>
-        </div>
-      )}
-    </Screen>
+          {/* Historial automático de la plataforma (subidas, devoluciones, guiones, tareas). */}
+          {movimientos.length > 0 && (
+            <div style={{ marginTop: 26 }}>
+              <h2 style={{ margin: '0 0 12px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Últimos movimientos</h2>
+              <Card style={{ padding: '4px 16px' }}>
+                {movimientos.map((m, i) => {
+                  const mi = MOV_ICON[m.tipo] || MOV_ICON.subida;
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #F0F2F5' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 9, background: mi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <mi.Icon size={16} color={mi.color} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: '#1A1D26', lineHeight: 1.35 }}>{m.texto}</div>
+                      <div style={{ fontSize: 11.5, color: '#9CA3AF', flexShrink: 0 }}>{m.fecha}</div>
+                    </div>
+                  );
+                })}
+              </Card>
+            </div>
+          )}
+        </Screen>
       )}
     </PhoneFrame>
   );

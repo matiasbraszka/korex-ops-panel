@@ -207,6 +207,7 @@ export const MOCK_MOVIMIENTOS = [
 
 export const MOCK_PIPELINE = {
   progreso: 45,
+  todosTerminados: false,
   fases: [
     { id: 'f1', nombre: 'Onboarding y estrategia', estado: 'hecho', fecha: '10/07/2026', detalle: 'Reunión inicial y definición de avatares.' },
     { id: 'f2', nombre: 'Guiones listos', estado: 'hecho', fecha: '20/07/2026', detalle: 'VSL y anuncios escritos y aprobados.' },
