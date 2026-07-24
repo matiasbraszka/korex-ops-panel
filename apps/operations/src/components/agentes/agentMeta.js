@@ -4,7 +4,7 @@
 //
 // `live: true` = el backend (edge fn agent-chat) ya sabe responder por ese agente.
 // Los demás se muestran con el cartel "Pronto" y no se pueden abrir.
-import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot, Compass } from 'lucide-react';
+import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot, Compass, LineChart } from 'lucide-react';
 
 // `general` no es un agente de chat: es la capa base (ADN Korex) que heredan
 // todos los demás. Se edita en Marketing → Configuración, no se chatea con él.
@@ -77,6 +77,22 @@ export const AGENT_META = {
       { label: '¿Qué caso clonar?', prompt: '¿Qué funnel de la biblioteca es el más cercano a este avatar y por qué? ¿Qué estructura le clonarías?' },
     ],
   },
+  // Primer agente de la FÁBRICA (agent-run, no agent-chat): `runtime` le dice al chat a qué
+  // edge fn pegarle. Mientras esté `active=false` en la DB solo se ve con VITE_AGENT_PREVIEW.
+  analista: {
+    Icon: LineChart,
+    desc: 'Diagnóstico de funnels: métricas de anuncios, leads, Clarity, VSL y cierre',
+    live: true,
+    runtime: 'agent-run',
+    suggestions: [
+      { label: 'Diagnóstico completo', prompt: 'Haceme el diagnóstico completo de este funnel.' },
+      { label: '¿Por qué el CPL?', prompt: '¿Por qué está donde está el CPL de este funnel? ¿Subió o bajó en los últimos 30 días y por qué?' },
+      { label: 'Calidad de leads', prompt: '¿Qué calidad tienen los leads que están entrando? Mirá las respuestas reales del formulario.' },
+      { label: '¿Dónde se caen en el VSL?', prompt: '¿En qué parte del VSL se está yendo la gente y qué dice el guión justo ahí?' },
+      { label: 'Dice que no cierra', prompt: 'El cliente dice que no está cerrando ventas. Atá cabos con los datos: ¿el problema es de leads, de seguimiento o de cierre?' },
+      { label: '¿Qué métricas faltan?', prompt: '¿Qué métricas nos faltan para diagnosticar bien este funnel y cómo conseguimos cada una?' },
+    ],
+  },
   formularios: {
     Icon: ClipboardList,
     desc: 'Preguntas de calificación de leads',
@@ -100,8 +116,14 @@ const FALLBACK = { Icon: Bot, desc: 'Agente de marketing', live: false, suggesti
 
 export const agentMeta = (key) => AGENT_META[key] || FALLBACK;
 
+// Vista previa local de agentes ocultos (active=false en la DB): en apps/operations/.env.local
+//   VITE_AGENT_PREVIEW=analista
+// La variable no existe en Vercel, así que en producción esto no muestra nada aunque se mergee.
+const PREVIEW = String(import.meta.env.VITE_AGENT_PREVIEW || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
 // Los agentes que se pueden elegir en el selector (todos menos la capa base).
 export const chatAgents = (subagents) =>
   (subagents || [])
-    .filter((s) => s.key !== BASE_AGENT_KEY && s.active !== false)
+    .filter((s) => s.key !== BASE_AGENT_KEY && (s.active !== false || PREVIEW.includes(s.key)))
     .map((s) => ({ ...s, ...agentMeta(s.key) }));
