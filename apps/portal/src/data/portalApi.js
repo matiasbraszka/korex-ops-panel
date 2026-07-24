@@ -47,14 +47,22 @@ export const api = {
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   tutoriales:() => rpc('portal_cliente_tutoriales',{}, () => mock.MOCK_TUTORIALES),
 
+  // Tareas asignadas al cliente (desaparecen al validarse en ops).
+  tareas:      () => rpc('portal_cliente_tareas',      {}, () => mock.MOCK_TAREAS),
+  // Sus accesos (CRM, plataformas): los carga el equipo en operaciones.
+  accesos:     () => rpc('portal_cliente_accesos',     {}, () => mock.MOCK_ACCESOS),
+  // Historial de movimientos (para la pantalla Avance).
+  movimientos: () => rpc('portal_cliente_movimientos', {}, () => mock.MOCK_MOVIMIENTOS),
+
   toggleGuion: (sectionId, grabado) =>
     rpc('portal_cliente_toggle_guion',
         { p_section_id: sectionId, p_grabado: grabado },
         () => ({ ok: true, demo: true })),
 
-  // Lista los archivos de una carpeta. En demo devuelve lo que tenga el mock local.
-  carpeta: (folderId) =>
-    rpc('portal_cliente_carpeta', { p_folder: folderId }, () => ({ items: [] })),
+  // Lista los archivos de una carpeta. Si la carpeta es de un funnel (vsl_rec,
+  // ad_rec__<avatar>, testimonios), viaja el funnel para listar SOLO lo suyo.
+  carpeta: (folderId, strategyId) =>
+    rpc('portal_cliente_carpeta', { p_folder: folderId, p_strategy: strategyId || null }, () => ({ items: [] })),
 };
 
 // ── Subidas ─────────────────────────────────────────────────────────────────
@@ -102,7 +110,11 @@ async function subirAStorage(file, folderId, onProgress) {
 }
 
 // Sube 1 archivo real y lo registra vía RPC. onProgress(frac 0..1).
-export async function uploadRecurso(folderId, file, onProgress) {
+// `ctx.strategyId`: el funnel desde el que se abrió la carpeta. Con eso la RPC
+// guarda el archivo en la carpeta REAL del panel de operaciones:
+//   vsl_rec (1 por funnel) · ad_rec__<avatarId> (anuncios por avatar) ·
+//   testimonios (por funnel) · el resto a nivel cliente (autoridad, branding…).
+export async function uploadRecurso(folderId, file, onProgress, ctx = {}) {
   const title = file.name;
   const res = isVideo(file)
     ? await subirABunny(file, title, onProgress)
@@ -117,6 +129,8 @@ export async function uploadRecurso(folderId, file, onProgress) {
     p_bunny_id: res.bunny_id || null,
     p_mime: file.type || null,
     p_size: file.size || null,
+    p_strategy: ctx.strategyId || null,
+    p_avatar: null, // el avatar viaja en el folderId (ad_rec__<id>); la RPC lo extrae
   });
   if (error) throw error;
   return { ...res, title };

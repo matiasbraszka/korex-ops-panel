@@ -1,51 +1,103 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, AlertCircle, CheckCircle2, Hammer, Play, Rocket, Map } from 'lucide-react';
+import { ChevronRight, AlertCircle, CheckCircle2, Hammer, Play, Rocket, Map, ClipboardList, Clock } from 'lucide-react';
 import { Screen, Card, Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { INTRO_VIDEO } from '../data/mockData';
 
 const STAGES = ['Guion', 'Grabación', 'Edición', 'Publicado'];
+// Colores de prioridad de la tarea (misma semántica que el panel del equipo).
+const PRIO = {
+  alta:    { label: 'Urgente', bg: '#FEF2F2', color: '#DC2626' },
+  high:    { label: 'Urgente', bg: '#FEF2F2', color: '#DC2626' },
+  urgente: { label: 'Urgente', bg: '#FEF2F2', color: '#DC2626' },
+  normal:  { label: 'Normal', bg: '#EEF2FF', color: '#4F63C4' },
+  baja:    { label: 'Cuando puedas', bg: '#F0F2F5', color: '#6B7280' },
+};
 
-// Home = tus funnels. Entrás a uno para ver sus guiones y lo que falta.
+// Home = lo que necesitamos de vos (arriba de todo) + tus funnels.
 export default function InicioScreen() {
   const nav = useNavigate();
   const { data: me } = useAsync(() => api.me(), []);
   const { data, loading } = useAsync(() => api.funnels(), []);
+  const { data: tareasData } = useAsync(() => api.tareas(), []);
   const [playing, setPlaying] = useState(false);
 
   if (loading) return <Loading label="Cargando tus funnels…" />;
   const funnels = Array.isArray(data) ? data : [];
+  const tareas = Array.isArray(tareasData) ? tareasData : [];
   const nombre = (me?.name || me?.clientName || '').split(' ')[0];
   // Próximo a lanzar: 1) el marcado como prioridad desde el panel; si no hay,
   // 2) el primer funnel en construcción según el orden del panel.
   const nextId = funnels.find((f) => f.esPrioridad)?.id
     || funnels.find((f) => f.status === 'borrador')?.id;
+  // Funnels que además tienen pendientes propios (material que falta).
+  const funnelsConPend = funnels.filter((f) => (f.pendientes || 0) > 0);
+  const hayUrgente = tareas.length > 0 || funnelsConPend.length > 0;
 
   return (
     <Screen>
       {isDemo() && <DemoBanner />}
       <div style={{ fontSize: 14, fontWeight: 600, color: '#6B7280' }}>Hola{nombre ? `, ${nombre}` : ''} 👋</div>
       <h1 style={{ margin: '2px 0 6px', fontSize: 30, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>¡Bienvenido!</h1>
-      <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.45 }}>Esta es tu plataforma de Método Korex. Mirá el video para arrancar y después entrá a tus funnels.</p>
+      <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.45 }}>Esta es tu plataforma de Método Korex.</p>
 
-      {/* Video: cómo usar la plataforma */}
-      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', background: '#0A0A0A', aspectRatio: '16 / 9', marginBottom: 22 }}>
-        {playing && INTRO_VIDEO ? (
-          <video controls autoPlay playsInline src={INTRO_VIDEO} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000' }} />
+      {/* ── LO QUE NECESITAMOS DE VOS: lo urgente, arriba de todo ── */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <ClipboardList size={19} color={hayUrgente ? '#B45309' : '#059669'} />
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Lo que necesitamos de vos</h2>
+        </div>
+        {!hayUrgente ? (
+          <Card style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <CheckCircle2 size={20} color="#22C55E" style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 14.5, fontWeight: 600, color: '#1A1D26' }}>¡Estás al día! No te falta nada por ahora.</span>
+          </Card>
         ) : (
-          <div onClick={() => setPlaying(true)} style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(120% 120% at 50% 0%, rgba(91,124,245,.28), transparent 60%)' }} />
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 66, height: 66, borderRadius: 999, background: 'rgba(255,255,255,.14)', backdropFilter: 'blur(6px)', border: '1.5px solid rgba(255,255,255,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Play size={27} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
-              </div>
-              <div style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 700 }}>Cómo usar la plataforma</div>
-            </div>
-            <div style={{ position: 'absolute', top: 12, left: 14, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,.7)' }}>Video · 2 min</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {tareas.map((t) => {
+              const p = PRIO[String(t.prioridad || 'normal').toLowerCase()] || PRIO.normal;
+              return (
+                <Card key={t.id} style={{ padding: 14, borderLeft: `4px solid ${p.color}` }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26', lineHeight: 1.3 }}>{t.titulo}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: p.bg, color: p.color }}>{p.label}</span>
+                    {t.funnel && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: '#EEF2FF', color: '#4F63C4' }}>{t.funnel}</span>}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, color: '#9CA3AF' }}>
+                      <Clock size={12} /> {t.dias === 0 ? 'hoy' : t.dias === 1 ? 'hace 1 día' : `hace ${t.dias} días`}
+                    </span>
+                  </div>
+                </Card>
+              );
+            })}
+            {funnelsConPend.map((f) => (
+              <Card key={'p' + f.id} onClick={() => nav(`/funnel/${f.id}`)} style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                <AlertCircle size={18} color="#B45309" style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#78350F' }}>Falta material en <b>{f.name}</b> — tocá para verlo</span>
+                <ChevronRight size={18} color="#D97706" style={{ flexShrink: 0 }} />
+              </Card>
+            ))}
           </div>
         )}
       </div>
+
+      {/* Video "cómo usar": compacto; se expande al tocarlo. */}
+      {playing && INTRO_VIDEO ? (
+        <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', background: '#0A0A0A', aspectRatio: '16 / 9', marginBottom: 22 }}>
+          <video controls autoPlay playsInline src={INTRO_VIDEO} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000' }} />
+        </div>
+      ) : (
+        <Card onClick={() => setPlaying(true)} style={{ padding: 13, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 11, background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Play size={18} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#1A1D26' }}>¿Primera vez acá?</div>
+            <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>Mirá cómo usar la plataforma · 2 min</div>
+          </div>
+          <ChevronRight size={18} color="#C4C9D4" style={{ flexShrink: 0 }} />
+        </Card>
+      )}
 
       {/* Avance del proyecto: la vista "en qué punto estamos" completa, con fechas. */}
       <Card onClick={() => nav('/avance')} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 13, marginBottom: 22 }}>

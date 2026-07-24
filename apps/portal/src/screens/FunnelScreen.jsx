@@ -19,6 +19,30 @@ export default function FunnelScreen() {
   const pendientes = (data?.pendientes || []).filter((p) => !p.ok);
   const enConstruccion = data?.status === 'borrador';
 
+  // ── Carpetas de este funnel, armadas con SUS avatares ──
+  // Regla Korex: el VSL es UNO por funnel; los anuncios se graban POR AVATAR →
+  // si hay más de un avatar, cada uno tiene su carpeta de grabaciones separada.
+  // Los ids ('vsl_rec', 'ad_rec__<avatar>') son los buckets REALES del panel de
+  // operaciones: lo que se sube acá aparece directo en la carpeta del equipo.
+  const avatars = data?.avatars || [];
+  const carpetasGrabacion = [
+    { id: 'vsl_rec', label: 'Grabaciones · VSL', iconKey: 'film', color: '#8B5CF6', bg: '#F5F3FF', required: hayVsl },
+    ...(avatars.length > 0
+      ? avatars.map((a) => ({
+        id: `ad_rec__${a.id}`,
+        label: avatars.length > 1 ? `Anuncios · ${a.name}` : 'Grabaciones · Anuncios',
+        iconKey: 'camera', color: '#2E69E0', bg: '#EEF2FF', required: hayAnuncios,
+      }))
+      : [{ id: 'ad_rec__general', label: 'Grabaciones · Anuncios', iconKey: 'camera', color: '#2E69E0', bg: '#EEF2FF', required: hayAnuncios }]),
+  ];
+  const SECCIONES = [
+    { titulo: 'Subí tus grabaciones', sub: 'Cada video en su carpeta, así no se mezcla nada', iconKey: 'video', color: '#8B5CF6', bg: '#F5F3FF', items: carpetasGrabacion },
+    ...RECURSO_SECTIONS.filter((s) => s.items.some((f) => !f.id.startsWith('grab-') && f.id !== 'accesos'))
+      .map((s) => ({ ...s, items: s.items.filter((f) => !f.id.startsWith('grab-') && f.id !== 'accesos') }))
+      .filter((s) => s.items.length),
+  ];
+  const abrirCarpeta = (f) => nav(`/funnel/${id}/carpeta/${f.id}`, { state: { label: f.label } });
+
   return (
     <PhoneFrame>
       <div style={{ position: 'sticky', top: 0, background: '#F7F8FA', padding: '14px 18px 10px', zIndex: 10 }}>
@@ -66,7 +90,7 @@ export default function FunnelScreen() {
           )}
 
           {/* Recursos: SIEMPRE habilitados, segmentados y con color/ícono propio */}
-          {RECURSO_SECTIONS.map((sec) => {
+          {SECCIONES.map((sec) => {
             const SecIcon = ICON[sec.iconKey] || Sparkles;
             return (
               <div key={sec.titulo} style={{ marginTop: 24 }}>
@@ -86,7 +110,7 @@ export default function FunnelScreen() {
                     const filled = count > 0;
                     const falta = !filled && f.required;
                     return (
-                      <div key={f.id} onClick={() => nav(`/carpetas/${f.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: falta ? '#FFFBEB' : '#FFFFFF', border: `1px solid ${falta ? '#FDE68A' : '#E2E5EB'}`, borderRadius: 14, padding: 14, cursor: 'pointer' }}>
+                      <div key={f.id} onClick={() => abrirCarpeta(f)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: falta ? '#FFFBEB' : '#FFFFFF', border: `1px solid ${falta ? '#FDE68A' : '#E2E5EB'}`, borderRadius: 14, padding: 14, cursor: 'pointer' }}>
                         <div style={{ width: 40, height: 40, borderRadius: 11, background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Ico size={20} color={f.color} />
                         </div>

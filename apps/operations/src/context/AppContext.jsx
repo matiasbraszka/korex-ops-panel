@@ -316,10 +316,10 @@ export function AppProvider({ children }) {
 
   const dbSaveTask = useCallback(async (t) => {
     const payload = {
-      // funnel_id va acá Y en los dos mapeos de lectura (rawMappedTasks y mapPollTask).
-      // Los tres o ninguno: si un mapeo no lo trae, t.funnelId queda undefined, esta
-      // linea escribe null, y el funnel de la tarea se pierde en la base sin aviso.
-      id: t.id, title: t.title, client_id: t.clientId, funnel_id: t.funnelId || null, assignee: t.assignee,
+      // funnel_id (y asignada_cliente) van acá Y en los dos mapeos de lectura
+      // (rawMappedTasks y mapPollTask). Los tres o ninguno: si un mapeo no lo trae,
+      // t.funnelId queda undefined, esta linea escribe null, y el dato se pierde.
+      id: t.id, title: t.title, client_id: t.clientId, funnel_id: t.funnelId || null, asignada_cliente: !!t.asignadaCliente, assignee: t.assignee,
       priority: t.priority, status: t.status, notes: t.notes,
       description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
       started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
@@ -445,7 +445,7 @@ export function AppProvider({ children }) {
         await sbFetch('clients', { method: 'POST', headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' }, body: JSON.stringify(batch) });
       }
       const taskRows = taskList.map(t => ({
-        id: t.id, title: t.title, client_id: t.clientId, funnel_id: t.funnelId || null, assignee: t.assignee,
+        id: t.id, title: t.title, client_id: t.clientId, funnel_id: t.funnelId || null, asignada_cliente: !!t.asignadaCliente, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
         description: t.description || '', step_idx: t.stepIdx, created_date: t.createdDate,
         started_date: t.startedDate || null, completed_date: t.completedDate || null, blocked_since: t.blockedSince || null,
@@ -2392,7 +2392,7 @@ export function AppProvider({ children }) {
           clientType: c.client_type || null,
         }));
         const rawMappedTasks = (sbTasks || []).map(t => ({
-          id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, assignee: t.assignee,
+          id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, asignadaCliente: !!t.asignada_cliente, assignee: t.assignee,
           priority: t.priority, status: t.status, notes: t.notes,
           description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
           startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
@@ -2522,7 +2522,7 @@ export function AppProvider({ children }) {
       if (!remoteTasks || !remoteTasks.length) return;
 
       const mapPollTask = (t) => ({
-        id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, assignee: t.assignee,
+        id: t.id, title: t.title, clientId: t.client_id, funnelId: t.funnel_id || null, asignadaCliente: !!t.asignada_cliente, assignee: t.assignee,
         priority: t.priority, status: t.status, notes: t.notes,
         description: t.description || '', stepIdx: t.step_idx, createdDate: t.created_date,
         startedDate: t.started_date || null, completedDate: t.completed_date || null, blockedSince: t.blocked_since || null,
