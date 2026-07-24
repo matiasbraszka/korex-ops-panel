@@ -393,7 +393,9 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
       return data;
     }
 
-    const { data, error } = await supabase.functions.invoke('agent-chat', { body, signal });
+    // Los agentes de la fábrica declaran su edge fn en agentMeta.runtime (hoy: 'agent-run').
+    // Sin runtime declarado, el camino es el histórico: agent-chat.
+    const { data, error } = await supabase.functions.invoke(agentMeta(agentKey).runtime || 'agent-chat', { body, signal });
     // supabase-js devuelve un error genérico ante cualquier status que no sea 2xx —
     // "Edge Function returned a non-2xx status code"— y deja el cuerpo de la respuesta en
     // `error.context`. Ahí está lo que la fn se tomó el trabajo de explicar (qué falta, qué tope
