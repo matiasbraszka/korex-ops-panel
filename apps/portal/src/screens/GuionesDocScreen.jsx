@@ -29,7 +29,7 @@ export default function GuionesDocScreen() {
       </div>
 
       {loading ? <Loading /> : guiones.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Todavía no hay guiones acá.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Todavía no hay guiones aquí.</div>
       ) : (
         <div style={{ padding: '8px 14px 24px', overflowY: 'auto' }}>
           <div id="print-doc" style={{ background: '#FFFFFF', border: '1px solid #E2E5EB', borderRadius: 6, boxShadow: '0 4px 12px rgba(10,22,40,.06)', padding: '32px 26px 40px' }}>
@@ -53,7 +53,7 @@ export default function GuionesDocScreen() {
             })}
 
             <div style={{ marginTop: 28, paddingTop: 18, borderTop: '1px solid #EAECF0', fontSize: 14, lineHeight: 1.6, color: '#6B7280' }}>
-              Grabá mirando a la cámara, natural, con tus palabras. Cuando termines, subí los videos en <b style={{ color: '#5B7CF5' }}>Recursos → Grabaciones</b>.
+              Graba mirando a la cámara, natural, con tus palabras. Cuando termines, sube los videos en <b style={{ color: '#5B7CF5' }}>Recursos → Grabaciones</b>.
             </div>
           </div>
         </div>

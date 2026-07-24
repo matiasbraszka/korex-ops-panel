@@ -37,7 +37,7 @@ export default function GuionesScreen() {
     <Screen>
       {isDemo() && <DemoBanner />}
       <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>Guiones</h1>
-      <p style={{ margin: '0 0 20px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Tocá el círculo cuando ya lo grabaste, o abrí cualquiera para leerlo.</p>
+      <p style={{ margin: '0 0 20px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Toca el círculo cuando ya lo grabaste, o abre cualquiera para leerlo.</p>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
         <Stat n={porGrabar.length} label="Por grabar" color="#F97316" />

@@ -23,7 +23,7 @@ export default function FunnelScreen() {
   // Regla Korex: el VSL es UNO por funnel; los anuncios se graban POR AVATAR →
   // si hay más de un avatar, cada uno tiene su carpeta de grabaciones separada.
   // Los ids ('vsl_rec', 'ad_rec__<avatar>') son los buckets REALES del panel de
-  // operaciones: lo que se sube acá aparece directo en la carpeta del equipo.
+  // operaciones: lo que se sube aquí aparece directo en la carpeta del equipo.
   const avatars = data?.avatars || [];
   const carpetasGrabacion = [
     { id: 'vsl_rec', label: 'Grabaciones · VSL', iconKey: 'film', color: '#8B5CF6', bg: '#F5F3FF', required: hayVsl },
@@ -36,7 +36,7 @@ export default function FunnelScreen() {
       : [{ id: 'ad_rec__general', label: 'Grabaciones · Anuncios', iconKey: 'camera', color: '#2E69E0', bg: '#EEF2FF', required: hayAnuncios }]),
   ];
   const SECCIONES = [
-    { titulo: 'Subí tus grabaciones', sub: 'Cada video en su carpeta, así no se mezcla nada', iconKey: 'video', color: '#8B5CF6', bg: '#F5F3FF', items: carpetasGrabacion },
+    { titulo: 'Sube tus grabaciones', sub: 'Cada video en su carpeta, así no se mezcla nada', iconKey: 'video', color: '#8B5CF6', bg: '#F5F3FF', items: carpetasGrabacion },
     ...RECURSO_SECTIONS.filter((s) => s.items.some((f) => !f.id.startsWith('grab-') && f.id !== 'accesos'))
       .map((s) => ({ ...s, items: s.items.filter((f) => !f.id.startsWith('grab-') && f.id !== 'accesos') }))
       .filter((s) => s.items.length),
@@ -62,7 +62,7 @@ export default function FunnelScreen() {
           {pendientes.length > 0 && (
             <div style={{ marginBottom: 24, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 16, padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, color: '#B45309', fontSize: 15, fontWeight: 800 }}>
-                <AlertCircle size={18} /> Lo que necesitamos de vos
+                <AlertCircle size={18} /> Lo que necesitamos de ti
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {pendientes.map((p, i) => (
@@ -78,7 +78,7 @@ export default function FunnelScreen() {
           {(hayAnuncios || hayVsl) && (
             <>
               <SectionLabel color="#5B7CF5">Guiones para grabar</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 6 }}>
+              <div className="mk-grid2" style={{ marginBottom: 6 }}>
                 {hayAnuncios && (
                   <GuionDocCard Icon={Megaphone} color="#2E69E0" bg="#EEF2FF" titulo="Anuncios para grabar" sub="Todos los anuncios, texto completo" onOpen={() => nav(`/funnel/${id}/guiones/anuncios`)} />
                 )}
@@ -103,7 +103,7 @@ export default function FunnelScreen() {
                     <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>{sec.sub}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="mk-grid2">
                   {sec.items.map((f) => {
                     const Ico = ICON[f.iconKey] || Package;
                     const count = (data?.recursos && data.recursos[f.id]) || 0;

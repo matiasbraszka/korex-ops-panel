@@ -15,7 +15,7 @@ const PRIO = {
   baja:    { label: 'Cuando puedas', bg: '#F0F2F5', color: '#6B7280' },
 };
 
-// Home = lo que necesitamos de vos (arriba de todo) + tus funnels.
+// Home = lo que necesitamos de ti (arriba de todo) + tus funnels.
 export default function InicioScreen() {
   const nav = useNavigate();
   const { data: me } = useAsync(() => api.me(), []);
@@ -47,7 +47,7 @@ export default function InicioScreen() {
       <div style={{ marginBottom: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <ClipboardList size={19} color={hayUrgente ? '#B45309' : '#059669'} />
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Lo que necesitamos de vos</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Lo que necesitamos de ti</h2>
         </div>
         {!hayUrgente ? (
           <Card style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -66,9 +66,9 @@ export default function InicioScreen() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15.5, fontWeight: 800, color: '#1A1D26' }}>
-                      Tenés {tareas.length} {tareas.length === 1 ? 'tarea pendiente' : 'tareas pendientes'}
+                      Tienes {tareas.length} {tareas.length === 1 ? 'tarea pendiente' : 'tareas pendientes'}
                     </div>
-                    <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>Tocá para {tareasOpen ? 'cerrar' : 'ver'} la lista</div>
+                    <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>Toca para {tareasOpen ? 'cerrar' : 'ver'} la lista</div>
                   </div>
                   <ChevronRight size={19} color="#9CA3AF" style={{ flexShrink: 0, transform: tareasOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
                 </div>
@@ -100,7 +100,7 @@ export default function InicioScreen() {
             {funnelsConPend.map((f) => (
               <Card key={'p' + f.id} onClick={() => nav(`/funnel/${f.id}`)} style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 10, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
                 <AlertCircle size={18} color="#B45309" style={{ flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#78350F' }}>Falta material en <b>{f.name}</b> — tocá para verlo</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#78350F' }}>Falta material en <b>{f.name}</b> — toca para verlo</span>
                 <ChevronRight size={18} color="#D97706" style={{ flexShrink: 0 }} />
               </Card>
             ))}
@@ -119,8 +119,8 @@ export default function InicioScreen() {
             <Play size={18} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 2 }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#1A1D26' }}>¿Primera vez acá?</div>
-            <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>Mirá cómo usar la plataforma · 2 min</div>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#1A1D26' }}>¿Primera vez aquí?</div>
+            <div style={{ fontSize: 12.5, color: '#9CA3AF' }}>Mira cómo usar la plataforma · 2 min</div>
           </div>
           <ChevronRight size={18} color="#C4C9D4" style={{ flexShrink: 0 }} />
         </Card>
@@ -133,21 +133,21 @@ export default function InicioScreen() {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16.5, fontWeight: 800, color: '#1A1D26', lineHeight: 1.2 }}>Avance de tu proyecto</div>
-          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Mirá en qué etapa estamos y qué sigue</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Mira en qué etapa estamos y qué sigue</div>
         </div>
         <ChevronRight size={20} color="#C4C9D4" style={{ flexShrink: 0 }} />
       </Card>
 
       {/* Sección: tus funnels */}
       <h2 style={{ margin: '4px 0 4px', fontSize: 21, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Tus funnels</h2>
-      <p style={{ margin: '0 0 16px', fontSize: 14, color: '#6B7280', lineHeight: 1.4 }}>Los proyectos que estamos armando con vos. Tocá uno para ver sus guiones y lo que falta.</p>
+      <p style={{ margin: '0 0 16px', fontSize: 14, color: '#6B7280', lineHeight: 1.4 }}>Los proyectos que estamos armando contigo. Toca uno para ver sus guiones y lo que falta.</p>
 
       {funnels.length === 0 ? (
         <Card style={{ padding: 22, textAlign: 'center', color: '#6B7280' }}>
-          Todavía no tenés funnels asignados. En cuanto arranquemos uno, va a aparecer acá.
+          Todavía no tienes funnels asignados. En cuanto arranquemos uno, va a aparecer aquí.
         </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="mk-grid2">
           {funnels.map((f) => (
             <FunnelCard key={f.id} f={f} isNext={f.id === nextId} onOpen={() => nav(`/funnel/${f.id}`)} />
           ))}
@@ -186,7 +186,7 @@ function FunnelCard({ f, isNext, onOpen }) {
 
       {pend > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 12, padding: '9px 12px' }}>
-          <AlertCircle size={16} /> Tenés cosas para enviarnos
+          <AlertCircle size={16} /> Tienes cosas para enviarnos
         </div>
       )}
     </Card>

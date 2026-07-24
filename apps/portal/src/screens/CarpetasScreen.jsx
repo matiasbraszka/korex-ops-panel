@@ -15,7 +15,7 @@ export default function CarpetasScreen() {
     <Screen>
       {isDemo() && <DemoBanner />}
       <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>Carpetas</h1>
-      <p style={{ margin: '0 0 22px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Subí tus grabaciones y recursos acá. Tocá una carpeta para abrirla.</p>
+      <p style={{ margin: '0 0 22px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Sube tus grabaciones y recursos aquí. Toca una carpeta para abrirla.</p>
 
       {secciones.map((sec) => (
         <div key={sec.key} style={{ marginBottom: 24 }}>

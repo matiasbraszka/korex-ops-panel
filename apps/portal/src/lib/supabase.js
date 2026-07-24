@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Cliente Supabase del portal.
 //
-// AL MERGEAR AL MONOREPO (apps/portal): podés borrar este archivo y reemplazar
+// AL MERGEAR AL MONOREPO (apps/portal): puedes borrar este archivo y reemplazar
 // los imports por `import { supabase } from '@korex/db'`. Es idéntico al de
 // packages/db/src/index.js — lo dejamos self-contained solo para que la app
 // corra sola fuera del monorepo mientras trabajamos aparte.

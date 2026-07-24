@@ -81,7 +81,7 @@ export default function CarpetaDetalleScreen() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.name}</div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: u.error ? '#DC2626' : u.done ? '#16A34A' : '#5B7CF5' }}>
-                        {u.error ? 'No se pudo subir · reintentá' : u.done ? 'Subido correctamente' : `Subiendo… ${u.pct}%`}
+                        {u.error ? 'No se pudo subir · reintenta' : u.done ? 'Subido correctamente' : `Subiendo… ${u.pct}%`}
                       </div>
                     </div>
                     <div style={{ width: 28, height: 28, borderRadius: 999, background: u.done ? '#22C55E' : '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -102,7 +102,7 @@ export default function CarpetaDetalleScreen() {
         {items.length > 0 ? (
           <div>
             <Label>En esta carpeta</Label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            <div className="mk-mediagrid">
               {items.map((t, i) => (
                 <a key={t.id || i} href={t.public_url || t.url || '#'} target="_blank" rel="noreferrer" style={{ aspectRatio: '1', borderRadius: 12, background: i % 2 ? '#F0F2F5' : '#F7F8FA', border: '1px solid #E2E5EB', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', overflow: 'hidden' }}>
                   {(t.kind === 'image' && (t.public_url || t.url))
@@ -115,7 +115,7 @@ export default function CarpetaDetalleScreen() {
         ) : uploads.length === 0 && (
           <div style={{ textAlign: 'center', padding: '30px 20px', color: '#9CA3AF' }}>
             <FolderOpen size={40} color="#C4C9D4" style={{ marginBottom: 10 }} />
-            <p style={{ margin: 0, fontSize: 15 }}>Todavía no hay archivos acá.<br />Tocá <b style={{ color: '#5B7CF5' }}>Subir archivos</b> para empezar.</p>
+            <p style={{ margin: 0, fontSize: 15 }}>Todavía no hay archivos aquí.<br />Toca <b style={{ color: '#5B7CF5' }}>Subir archivos</b> para empezar.</p>
           </div>
         )}
       </div>

@@ -56,7 +56,7 @@ function AccesosSheet({ onClose }) {
   );
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '82vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
+      <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '82vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
         <div style={{ width: 44, height: 5, borderRadius: 999, background: '#E2E5EB', margin: '10px auto 16px' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Tus accesos</h2>
@@ -64,9 +64,9 @@ function AccesosSheet({ onClose }) {
             <X size={20} color="#6B7280" />
           </button>
         </div>
-        <p style={{ margin: '0 0 16px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Las claves de tus plataformas, siempre a mano. Tocá el botón para copiar.</p>
+        <p style={{ margin: '0 0 16px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Las claves de tus plataformas, siempre a mano. Toca el botón para copiar.</p>
         {items.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 14, padding: '22px 10px' }}>Todavía no cargamos accesos acá.</div>
+          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 14, padding: '22px 10px' }}>Todavía no cargamos accesos aquí.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {items.map((a, i) => (
@@ -98,7 +98,7 @@ function TutorialesSheet({ onClose }) {
   const items = data || [];
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '82vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
+      <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '82vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
         <div style={{ width: 44, height: 5, borderRadius: 999, background: '#E2E5EB', margin: '10px auto 16px' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Tutoriales</h2>
@@ -106,7 +106,7 @@ function TutorialesSheet({ onClose }) {
             <X size={20} color="#6B7280" />
           </button>
         </div>
-        <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Videos cortos para que grabes como un profesional. Tocá para ver.</p>
+        <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Videos cortos para que grabes como un profesional. Toca para ver.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {items.map((t) => (
             <a key={t.id} href={t.url || '#'} target={t.url ? '_blank' : undefined} rel="noreferrer" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 14, background: '#F7F8FA', border: '1px solid #E2E5EB', borderRadius: 16, padding: 12, cursor: 'pointer' }}>
@@ -135,7 +135,7 @@ export default function Layout() {
   return (
     <PhoneFrame>
       {/* Confirmar antes de salir: un toque de más no puede dejar afuera a una persona mayor. */}
-      <Header clientName={clientName} onAccesos={() => setAcc(true)} onTutoriales={() => setTut(true)} onSignOut={() => { if (window.confirm('¿Querés cerrar sesión?')) signOut(); }} />
+      <Header clientName={clientName} onAccesos={() => setAcc(true)} onTutoriales={() => setTut(true)} onSignOut={() => { if (window.confirm('¿Quieres cerrar sesión?')) signOut(); }} />
       <main style={{ flex: 1, overflowY: 'auto' }}>
         <Outlet />
         <div style={{ height: 12 }} />

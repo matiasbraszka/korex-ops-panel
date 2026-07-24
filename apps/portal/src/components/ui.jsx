@@ -31,9 +31,9 @@ export function Loading({ label = 'Cargando…' }) {
   );
 }
 
-// Contenedor de scroll de cada pantalla (padding + espacio para la nav inferior).
+// Contenedor de scroll de cada pantalla (padding responsivo vía .mk-screen).
 export function Screen({ children, style }) {
-  return <div style={{ padding: '20px 18px 8px', ...style }}>{children}</div>;
+  return <div className="mk-screen" style={style}>{children}</div>;
 }
 
 export function Card({ children, onClick, style }) {

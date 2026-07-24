@@ -23,7 +23,7 @@ export default function LoginScreen() {
   };
 
   const recuperar = async () => {
-    if (!email.trim()) { setMsg({ type: 'error', text: 'Escribí tu email arriba y tocá de nuevo.' }); return; }
+    if (!email.trim()) { setMsg({ type: 'error', text: 'Escribe tu email arriba y toca de nuevo.' }); return; }
     try {
       await resetPassword(email);
       setMsg({ type: 'ok', text: 'Te enviamos un email para recuperar tu contraseña.' });
@@ -39,7 +39,7 @@ export default function LoginScreen() {
           <span style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800, fontSize: 30, color: '#FFFFFF', letterSpacing: '-0.03em' }}>K</span>
         </div>
         <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', textAlign: 'center', letterSpacing: '-0.02em' }}>Tu plataforma</h1>
-        <p style={{ margin: '0 0 26px', fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 1.4 }}>Ingresá con el email y la contraseña que te dio Método Korex.</p>
+        <p style={{ margin: '0 0 26px', fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 1.4 }}>Ingresa con el email y la contraseña que te dio Método Korex.</p>
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={lbl}>Email
@@ -83,8 +83,8 @@ const lbl = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fo
 const inp = { height: 54, borderRadius: 14, border: '1px solid #D0D5DD', padding: '0 16px', fontSize: 16, fontFamily: 'inherit', color: '#1A1D26', outline: 'none' };
 
 function traducir(m) {
-  if (!m) return 'No pudimos ingresar. Probá de nuevo.';
+  if (!m) return 'No pudimos ingresar. Prueba de nuevo.';
   if (/invalid login|credentials/i.test(m)) return 'Email o contraseña incorrectos.';
-  if (/email not confirmed/i.test(m)) return 'Tu email todavía no está confirmado. Escribinos por WhatsApp.';
+  if (/email not confirmed/i.test(m)) return 'Tu email todavía no está confirmado. Escríbenos por WhatsApp.';
   return m;
 }

@@ -45,7 +45,7 @@ export default function GuionDocScreen() {
             </div>
 
             <div style={{ marginTop: 26, paddingTop: 18, borderTop: '1px solid #EAECF0', fontSize: 14, lineHeight: 1.6, color: '#6B7280' }}>
-              Grabá mirando a la cámara. No hace falta memorizar palabra por palabra: contalo natural. Cuando termines, subí el video en <b style={{ color: '#5B7CF5' }}>Recursos → Grabaciones</b>.
+              Graba mirando a la cámara. No hace falta memorizar palabra por palabra: cuéntalo natural. Cuando termines, sube el video en <b style={{ color: '#5B7CF5' }}>Recursos → Grabaciones</b>.
             </div>
           </div>
         </div>
