@@ -782,6 +782,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     onVersionDelete?.(v, tieneEdiciones);
   };
 
+  // Mobile: el menú de la izquierda vive en un cajón lateral (tres rayitas ☰).
+  // Elegir una sección / vista / versión lo cierra solo.
+  // OJO: estos hooks van ANTES de los returns tempranos de abajo (regla de React:
+  // los hooks corren siempre, en el mismo orden — si no, pantalla en blanco).
+  const isMobile = useIsMobile();
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); }, [view, activa, verActiva]);
+
   if (err) {
     return (
       <div className="p-6"><div className="rounded-xl border p-4 text-[13px]" style={{ background: '#FEF2F2', borderColor: '#F5C2C2', color: '#B91C1C' }}>
@@ -833,12 +841,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // La columna de comentarios (solo lectura) aparece SOLO si hay comentarios: si no,
   // la hoja gana esos ~300px y queda protagonista, tipo Google Docs.
   const showComments = view === 'del' && !editando && comments.length > 0;
-
-  // Mobile: el menú de la izquierda vive en un cajón lateral (tres rayitas ☰).
-  // Elegir una sección / vista / versión lo cierra solo.
-  const isMobile = useIsMobile();
-  const [navOpen, setNavOpen] = useState(false);
-  useEffect(() => { setNavOpen(false); }, [view, activa, verActiva]);
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }} onMouseDown={() => { if (selBtn) setSelBtn(null); }}>
