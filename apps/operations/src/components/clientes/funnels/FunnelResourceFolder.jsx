@@ -38,7 +38,7 @@ async function subirABunny(file, title, onProgress) {
 }
 
 const VOOMLY_URL = 'https://app.voomly.com/';   // dashboard de Voombly (buscar el VSL y copiar su link)
-function Tile({ r, voomly = false, onVoomly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds }) {
+function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [voomEdit, setVoomEdit] = useState(false);
@@ -108,17 +108,24 @@ function Tile({ r, voomly = false, onVoomly, selected, onToggleSelect, onDelete,
                 className="flex-1 min-w-0 text-[9.5px] border border-[#E2E5EB] rounded px-1 py-0.5 outline-none focus:border-[#2E69E0]" />
             </div>
           )}
-          <a href={VOOMLY_URL} target="_blank" rel="noreferrer" title="Abrir Voombly para buscar el VSL y copiar su link"
-            className="inline-flex items-center justify-center gap-1 py-0.5 rounded border border-dashed border-[#C7DBFB] text-[9px] font-bold text-[#2E69E0] no-underline hover:bg-[#EFF6FF]">
-            🔍 Buscar en Voombly
-          </a>
+          {onOpenVoombly ? (
+            <button type="button" onClick={onOpenVoombly} title="Abrir la lista de VSL (Voombly) del sistema de operaciones"
+              className="inline-flex items-center justify-center gap-1 py-0.5 rounded border border-dashed border-[#C7DBFB] text-[9px] font-bold text-[#2E69E0] bg-white cursor-pointer hover:bg-[#EFF6FF]">
+              🔍 Buscar en Voombly
+            </button>
+          ) : (
+            <a href={VOOMLY_URL} target="_blank" rel="noreferrer" title="Abrir Voombly para buscar el VSL y copiar su link"
+              className="inline-flex items-center justify-center gap-1 py-0.5 rounded border border-dashed border-[#C7DBFB] text-[9px] font-bold text-[#2E69E0] no-underline hover:bg-[#EFF6FF]">
+              🔍 Buscar en Voombly
+            </a>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -420,7 +427,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             )}
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} />)}
+                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} />)}
               </div>
             )}
             {/* Paginado: mostramos de a 10 para que la carpeta abra fluida aunque tenga cientos. */}
