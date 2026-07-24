@@ -68,7 +68,8 @@ export default function Layout() {
 
   return (
     <PhoneFrame>
-      <Header clientName={clientName} onTutoriales={() => setTut(true)} onSignOut={signOut} />
+      {/* Confirmar antes de salir: un toque de más no puede dejar afuera a una persona mayor. */}
+      <Header clientName={clientName} onTutoriales={() => setTut(true)} onSignOut={() => { if (window.confirm('¿Querés cerrar sesión?')) signOut(); }} />
       <main style={{ flex: 1, overflowY: 'auto' }}>
         <Outlet />
         <div style={{ height: 12 }} />

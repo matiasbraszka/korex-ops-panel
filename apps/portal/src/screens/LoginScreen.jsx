@@ -64,12 +64,16 @@ export default function LoginScreen() {
           ¿Olvidaste tu contraseña?
         </button>
 
-        <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid #E2E5EB', textAlign: 'center' }}>
-          <button onClick={enterDemo} style={{ border: '1px solid #D0D5DD', background: '#FFFFFF', color: '#1A1D26', fontSize: 14, fontWeight: 700, borderRadius: 999, padding: '10px 18px', cursor: 'pointer' }}>
-            Ver demo (sin cuenta)
-          </button>
-          <div style={{ marginTop: 8, fontSize: 12, color: '#9CA3AF' }}>Para revisar la plataforma con datos de ejemplo.</div>
-        </div>
+        {/* El demo es una herramienta INTERNA (datos de ejemplo). En el dominio público
+            no se ofrece: solo en localhost o entrando con ?demo en la URL. */}
+        {(window.location.hostname === 'localhost' || new URLSearchParams(window.location.search).has('demo')) && (
+          <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid #E2E5EB', textAlign: 'center' }}>
+            <button onClick={enterDemo} style={{ border: '1px solid #D0D5DD', background: '#FFFFFF', color: '#1A1D26', fontSize: 14, fontWeight: 700, borderRadius: 999, padding: '10px 18px', cursor: 'pointer' }}>
+              Ver demo (sin cuenta)
+            </button>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#9CA3AF' }}>Para revisar la plataforma con datos de ejemplo.</div>
+          </div>
+        )}
       </div>
     </PhoneFrame>
   );
