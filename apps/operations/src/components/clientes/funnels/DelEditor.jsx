@@ -267,7 +267,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     try {
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status&${filtro}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
         // servía una versión vieja cacheada del documento tras reorganizarlo.
         { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
@@ -725,6 +725,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     else emitir('section', { row: { id, title: title.trim() } });
   };
 
+  // "Para grabar": marca la sección (VSL/anuncios) para que aparezca en el
+  // PORTAL DEL CLIENTE como guion a grabar. Antes se marcaba por SQL.
+  const toggleParaGrabar = async (s) => {
+    const next = !s.para_grabar;
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, para_grabar: next } : x));
+    const { error } = await supabase.from('del_sections')
+      .update({ para_grabar: next, orden_grabacion: s.orden_grabacion ?? s.ord ?? null })
+      .eq('id', s.id);
+    if (error) { window.alert('No pude marcarla: ' + error.message); await cargar(); return; }
+    emitir('section', { row: { id: s.id, para_grabar: next } });
+  };
+
   // Mover una sección a otra categoría (cambia su `kind` → aparece en otro grupo).
   const moverACategoria = async (id, kind) => {
     setMoveMenu(null);
@@ -1163,6 +1175,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     <span title="Comentarios en esta sección" className="inline-flex items-center gap-1 shrink-0 text-[11px] font-bold" style={{ color: abiertos ? '#B45309' : '#9098A4' }}>
                       <MessageSquare size={13} />{scomments.length}
                     </span>
+                  )}
+                  {/* PARA GRABAR: lo que ve el cliente en su portal. Solo VSL/anuncios. */}
+                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (
+                    <button onClick={() => toggleParaGrabar(s)}
+                      title={s.para_grabar ? 'El cliente VE este guion en su portal (clic para ocultarlo)' : 'Marcar para que el cliente lo vea en su portal y lo grabe'}
+                      className="inline-flex items-center gap-1 shrink-0 py-1 px-2 rounded-full text-[10px] font-extrabold uppercase tracking-[0.04em] border cursor-pointer transition-colors"
+                      style={s.para_grabar
+                        ? { background: '#EFEBFF', color: '#6D28D9', borderColor: '#DDD3FF' }
+                        : { background: 'transparent', color: '#AEB4BF', borderColor: '#E2E5EB' }}>
+                      🎬 {s.para_grabar ? 'Para grabar' : 'No visible'}
+                    </button>
                   )}
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
