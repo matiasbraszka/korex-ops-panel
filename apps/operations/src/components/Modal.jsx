@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function Modal({ open, onClose, title, children, footer, maxWidth = 480, dismissOnOverlay = true, dismissOnEscape = true, fullScreen = false, headerExtra = null }) {
+export default function Modal({ open, onClose, title, children, footer, maxWidth = 480, dismissOnOverlay = true, dismissOnEscape = true, fullScreen = false, headerExtra = null, z = 200 }) {
   const overlayRef = useRef(null);
 
   useEffect(() => {
@@ -18,8 +18,8 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
   return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[200] flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: z }}
       onClick={(e) => { if (dismissOnOverlay && e.target === overlayRef.current) onClose(); }}
     >
       <div

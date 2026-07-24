@@ -919,7 +919,7 @@ Quedo a la espera de tu respuesta`;
                   {vslMultiV && <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4] px-1 pt-0.5">Versión {v}</div>}
                   {VSL_BUCKETS.map(b => (
                     <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={null}
-                      bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
+                      bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly} onOpenVoombly={() => setVoomlyOpen(true)}
                       moveTargets={moveTargets} selfId={`f:vsl:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
                       extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
                   ))}
@@ -1391,7 +1391,7 @@ export default function FunnelsView({ clientId }) {
 
       {/* Modal tracking de un funnel */}
       {trackFunnel && (
-        <Modal open={!!trackFunnel} onClose={() => setTrackFunnel(null)} title={`Tracking · ${trackFunnel.name}`} maxWidth={580}
+        <Modal open={!!trackFunnel} onClose={() => setTrackFunnel(null)} title={`Tracking · ${trackFunnel.name}`} maxWidth={580} z={300}
           footer={<div className="flex justify-end gap-2 w-full"><button className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={() => setTrackFunnel(null)}>Cerrar</button><button className="text-[13px] py-2.5 px-4 rounded-[9px] border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark inline-flex items-center gap-1.5" onClick={() => saveTrack(trackFunnel._edit)}><Check size={14} />Guardar tracking</button></div>}>
           <div className="p-1"><TrackingEditor value={trackFunnel._edit} onChange={(v) => setTrackFunnel(tf => ({ ...tf, _edit: v }))} /></div>
         </Modal>
