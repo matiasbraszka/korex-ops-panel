@@ -401,7 +401,11 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
                               </span>
                               )}
-                              {!isGuest && <AssigneePicker value={t.assignee} onChange={(name) => { updateTask(t.id, { assignee: name }); setFlashTaskId(t.id); }} />}
+                              {/* Asignar al CLIENTE: la tarea aparece en la home de su portal
+                                  (asignada_cliente). Elegir a alguien del equipo la devuelve. */}
+                              {!isGuest && <AssigneePicker value={t.assignee}
+                                cliente={o.c?.name ? { name: o.c.name, active: !!t.asignadaCliente, onSelect: (v) => { updateTask(t.id, { asignadaCliente: v, ...(v ? { assignee: '' } : {}) }); setFlashTaskId(t.id); } } : null}
+                                onChange={(name) => { updateTask(t.id, { assignee: name, ...(name && t.asignadaCliente ? { asignadaCliente: false } : {}) }); setFlashTaskId(t.id); }} />}
                               {/* Columna fija para el botón de sprint: así "En sprint"/"al sprint"
                                   y las tareas terminadas (sin botón) quedan alineadas en la fila. */}
                               {!isGuest && (
