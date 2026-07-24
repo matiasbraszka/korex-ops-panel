@@ -261,7 +261,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       const list = Array.isArray(rows) ? rows : [];
       setSecs(list);
       if (list.length) {
-        setActiva((a) => a || list[0].id);
+        // Por defecto abre la sección de Estrategia (si existe); si no, la primera.
+        setActiva((a) => a || (list.find((s) => s.kind === 'estrategia')?.id ?? list[0].id));
         setResolvedDoc((d) => d || list[0].doc_id);
         setResolvedClient((c) => c || list[0].client_id);
       }
