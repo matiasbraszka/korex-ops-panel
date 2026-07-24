@@ -62,3 +62,23 @@ button { font-family: inherit; }
 
 @keyframes mk-spin { to { transform: rotate(360deg); } }
 .mk-spin { animation: mk-spin 0.9s linear infinite; }
+
+/* ── Responsive PC ────────────────────────────────────────────────────────────
+   La prioridad es mobile (columna de 440px), pero desde 900px el marco se
+   ensancha y las listas pasan a 2 columnas para aprovechar la pantalla. */
+.mk-shell {
+  width: 100%; max-width: 440px; min-height: 100vh; background: #F7F8FA;
+  display: flex; flex-direction: column; position: relative;
+  box-shadow: 0 0 60px rgba(10, 22, 40, .10);
+}
+.mk-screen { padding: 20px 18px 8px; }
+.mk-grid2 { display: flex; flex-direction: column; gap: 12px; }
+.mk-mediagrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mk-sheet { width: 100%; max-width: 440px; }
+@media (min-width: 900px) {
+  .mk-shell { max-width: 800px; }
+  .mk-screen { padding: 28px 36px 16px; }
+  .mk-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .mk-mediagrid { grid-template-columns: repeat(6, 1fr); }
+  .mk-sheet { max-width: 560px; }
+}

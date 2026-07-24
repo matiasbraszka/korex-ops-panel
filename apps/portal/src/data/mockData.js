@@ -2,11 +2,11 @@
 // Datos de DEMO (cliente piloto: Sergio Cánovas).
 //
 // Se usan SOLO como fallback cuando las RPCs `portal_cliente_*` todavía no están
-// desplegadas en Supabase (o cuando entrás en "modo demo" sin sesión). Apenas las
+// desplegadas en Supabase (o cuando entras en "modo demo" sin sesión). Apenas las
 // RPCs existan, portalApi.js usa los datos reales y esto queda ignorado.
 //
 // La FORMA de estos objetos ES el contrato que deben devolver las RPCs. Si cambiás
-// algo acá, reflejalo en migrations/portal_cliente_v2_rpcs.sql (y viceversa).
+// algo aquí, reflejalo en migrations/portal_cliente_v2_rpcs.sql (y viceversa).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const MOCK_CLIENT = { id: 'demo-sergio', name: 'Sergio Cánovas', company: 'Sergio Cánovas' };
@@ -26,16 +26,16 @@ export const MOCK_HOME = {
 
 export const MOCK_GUIONES = [
   { id: 'a1', tipo: 'Anuncio', avatar: 'Avatar 1 · Emprendedor', dur: '~45 seg', fecha: '18/07/2026', grabado: false, titulo: 'Deja de perseguir contactos', bloques: [
-    { marca: '0-3s', label: 'Hook', texto: 'Si estás cansado de perseguir a amigos y familiares para que se sumen a tu negocio, quedate 30 segundos.' },
+    { marca: '0-3s', label: 'Hook', texto: 'Si estás cansado de perseguir a amigos y familiares para que se sumen a tu negocio, quédate 30 segundos.' },
     { marca: '3-15s', label: 'Identificación', texto: 'Sé lo que se siente: mandar mensajes todos los días y que casi nadie te conteste. No es tu culpa, es el método que te enseñaron.' },
     { marca: '15-35s', label: 'Mecanismo', texto: 'Armé un sistema que muestra mi presentación a personas nuevas cada día, de forma automática. Yo hablo solo con las que ya la vieron.' },
-    { marca: '35-45s', label: 'Cierre', texto: 'Tocá el botón de acá abajo y mirá cómo funciona.' },
+    { marca: '35-45s', label: 'Cierre', texto: 'Toca el botón de aquí abajo y mira cómo funciona.' },
   ]},
   { id: 'a2', tipo: 'Anuncio', avatar: 'Avatar 1 · Emprendedor', dur: '~50 seg', fecha: '18/07/2026', grabado: true, titulo: 'Mi historia', bloques: [
-    { marca: '0-4s', label: 'Hook', texto: 'Hace un año yo también le escribía a toda mi lista de contactos… y me sentía un vendedor pesado.' },
+    { marca: '0-4s', label: 'Hook', texto: 'Hace un año yo también le escribea a toda mi lista de contactos… y me sentía un vendedor pesado.' },
     { marca: '4-20s', label: 'Historia', texto: 'Todo cambió cuando dejé de perseguir gente y armé un sistema que trabaja por mí, incluso mientras duermo.' },
     { marca: '20-40s', label: 'Prueba', texto: 'Hoy hablo solo con personas que ya vieron mi presentación y quieren dar el paso.' },
-    { marca: '40-50s', label: 'Cierre', texto: 'Mirá el video para saber exactamente cómo lo hago.' },
+    { marca: '40-50s', label: 'Cierre', texto: 'Mira el video para saber exactamente cómo lo hago.' },
   ]},
   { id: 'a3', tipo: 'Anuncio', avatar: 'Avatar 2 · Mamá emprendedora', dur: '~40 seg', fecha: '20/07/2026', grabado: false, titulo: 'La invitación', bloques: [
     { marca: '0-4s', label: 'Hook', texto: 'Si sos mamá y buscás un ingreso extra desde casa, sin descuidar a tus hijos, esto es para vos.' },
@@ -45,21 +45,21 @@ export const MOCK_GUIONES = [
   { id: 'v1', tipo: 'VSL', avatar: 'Avatar 1 · Emprendedor', dur: '~6 min', fecha: '20/07/2026', grabado: false, titulo: 'VSL Principal · La oportunidad', bloques: [
     { marca: 'Bloque 1', label: 'Hook', texto: 'En los próximos minutos te voy a mostrar cómo construir un ingreso sin perseguir a tu familia ni a tus amigos.' },
     { marca: 'Bloque 2', label: 'Identificación', texto: 'Si ya probaste el multinivel de la forma tradicional, sabés lo agotador que es. Mensajes que nadie responde, gente que te evita. Te entiendo perfectamente.' },
-    { marca: 'Bloque 3', label: 'Tu historia', texto: 'Contá en 30 segundos de dónde venís, qué probaste antes y qué te frenaba. Sé honesto, la gente conecta con lo real.' },
+    { marca: 'Bloque 3', label: 'Tu historia', texto: 'Cuenta en 30 segundos de dónde venís, qué probaste antes y qué te frenaba. Sé honesto, la gente conecta con lo real.' },
     { marca: 'Bloque 4', label: 'El problema real', texto: 'El problema no sos vos. Es que te enseñaron a vender a fuerza de insistir, cuando lo que funciona es que la gente llegue ya convencida.' },
     { marca: 'Bloque 5', label: 'El sistema', texto: 'Yo uso un sistema simple: un video que presenta la oportunidad, y publicidad que lo pone frente a personas nuevas cada día. Ellas deciden si quieren saber más.' },
     { marca: 'Bloque 6', label: 'Cómo funciona', texto: 'Paso uno: ven el video. Paso dos: las que se interesan dejan sus datos. Paso tres: yo hablo solo con esas. Nada de perseguir.' },
-    { marca: 'Bloque 7', label: 'Prueba', texto: 'Contá un resultado concreto tuyo o de tu equipo. Un número, un caso real, algo que se pueda creer.' },
-    { marca: 'Bloque 8', label: 'Cierre', texto: 'Si querés que te muestre cómo armar esto en tu negocio, dejá tus datos abajo y agendamos una llamada. Sin compromiso.' },
+    { marca: 'Bloque 7', label: 'Prueba', texto: 'Cuenta un resultado concreto tuyo o de tu equipo. Un número, un caso real, algo que se pueda creer.' },
+    { marca: 'Bloque 8', label: 'Cierre', texto: 'Si quieres que te muestre cómo armar esto en tu negocio, deja tus datos abajo y agendamos una llamada. Sin compromiso.' },
   ]},
   { id: 'v2', tipo: 'VSL', avatar: 'Avatar 2 · Mamá emprendedora', dur: '~5 min', fecha: '20/07/2026', grabado: false, titulo: 'VSL Principal · Para mamás', bloques: [
     { marca: 'Bloque 1', label: 'Hook', texto: 'En los próximos minutos te voy a mostrar cómo generar un ingreso desde casa, con tu celular, sin descuidar a tu familia.' },
     { marca: 'Bloque 2', label: 'Identificación', texto: 'Sé lo que es querer aportar en casa y sentir que no te alcanza el tiempo ni la plata. No estás sola.' },
-    { marca: 'Bloque 3', label: 'Tu historia', texto: 'Contá tu situación real: por qué empezaste a buscar algo propio y qué querés lograr para tu familia.' },
+    { marca: 'Bloque 3', label: 'Tu historia', texto: 'Cuenta tu situación real: por qué empezaste a buscar algo propio y qué quieres lograr para tu familia.' },
     { marca: 'Bloque 4', label: 'El problema real', texto: 'No necesitás vender a tus amigas ni llenar el grupo de WhatsApp. Eso cansa y no funciona.' },
     { marca: 'Bloque 5', label: 'El sistema', texto: 'Con un video y publicidad, personas nuevas ven la oportunidad cada día. Vos solo hablás con las que ya se interesaron.' },
     { marca: 'Bloque 6', label: 'Cómo funciona', texto: 'Ellas ven el video, dejan sus datos si les interesa, y vos las contactás. Todo desde el celular, en los ratos libres.' },
-    { marca: 'Bloque 7', label: 'Cierre', texto: 'Si querés que te muestre cómo empezar, dejá tus datos abajo. Te acompaño paso a paso.' },
+    { marca: 'Bloque 7', label: 'Cierre', texto: 'Si quieres que te muestre cómo empezar, deja tus datos abajo. Te acompaño paso a paso.' },
   ]},
 // El texto que ve el cliente es el DEL COMPLETO, tal cual (sin fragmentar). En demo
 // lo componemos a partir de los bloques; con datos reales viene de del_sections.text.
@@ -97,7 +97,7 @@ export const INTRO_VIDEO = 'https://commondatastorage.googleapis.com/gtv-videos-
 // se dé cuenta (branding, testimonios y accesos son los que más avisamos).
 export const RECURSO_SECTIONS = [
   {
-    titulo: 'Grabaciones', sub: 'Subí los videos que grabaste', iconKey: 'video', color: '#5B7CF5', bg: '#EEF2FF',
+    titulo: 'Grabaciones', sub: 'Sube los videos que grabaste', iconKey: 'video', color: '#5B7CF5', bg: '#EEF2FF',
     items: [
       { id: 'grab-anuncios', label: 'Grabaciones · Anuncios', iconKey: 'camera', color: '#2E69E0', bg: '#EEF2FF', required: true },
       { id: 'grab-vsl', label: 'Grabaciones · VSL', iconKey: 'film', color: '#8B5CF6', bg: '#F5F3FF', required: true },
@@ -131,7 +131,7 @@ export const RECURSO_FOLDERS = RECURSO_SECTIONS.flatMap((s) => s.items);
 export const MOCK_TUTORIALES = [
   { id: 't1', titulo: 'Cómo grabarte con el celular', dur: '2 min', url: '' },
   { id: 't2', titulo: 'Luz y encuadre en 1 minuto', dur: '1 min', url: '' },
-  { id: 't3', titulo: 'Cómo subir tus archivos acá', dur: '90 seg', url: '' },
+  { id: 't3', titulo: 'Cómo subir tus archivos aquí', dur: '90 seg', url: '' },
   { id: 't4', titulo: 'Tips para hablar natural a cámara', dur: '3 min', url: '' },
 ];
 
@@ -211,7 +211,7 @@ export const MOCK_PIPELINE = {
   fases: [
     { id: 'f1', nombre: 'Onboarding y estrategia', estado: 'hecho', fecha: '10/07/2026', detalle: 'Reunión inicial y definición de avatares.' },
     { id: 'f2', nombre: 'Guiones listos', estado: 'hecho', fecha: '20/07/2026', detalle: 'VSL y anuncios escritos y aprobados.' },
-    { id: 'f3', nombre: 'Grabación (vos)', estado: 'en_curso', fecha: '26/07/2026', detalle: 'Grabás los guiones y subís los videos acá.' },
+    { id: 'f3', nombre: 'Grabación (tú)', estado: 'en_curso', fecha: '26/07/2026', detalle: 'Grabas los guiones y subes los videos aquí.' },
     { id: 'f4', nombre: 'Edición de anuncios', estado: 'pendiente', fecha: '28/07/2026', detalle: 'Editamos tus grabaciones y te las devolvemos.' },
     { id: 'f5', nombre: 'Armado del funnel', estado: 'pendiente', fecha: '02/08/2026', detalle: 'Landing, formulario y páginas listas.' },
     { id: 'f6', nombre: 'Publicación y ads', estado: 'pendiente', fecha: '05/08/2026', detalle: 'Salimos a publicidad y empezamos a medir.' },

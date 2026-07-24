@@ -26,7 +26,7 @@ export default class ErrorBoundary extends Component {
             <div style={{ fontSize: 40, marginBottom: 12 }}>😕</div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A1D26', margin: '0 0 8px' }}>Se nos trabó algo</h1>
             <p style={{ fontSize: 15, color: '#6B7280', lineHeight: 1.5, margin: '0 0 20px' }}>
-              No pudimos mostrar esta pantalla. Probá de nuevo; si sigue igual, escribinos por WhatsApp.
+              No pudimos mostrar esta pantalla. Prueba de nuevo; si sigue igual, escríbenos por WhatsApp.
             </p>
             <button
               onClick={() => { this.setState({ error: null }); window.location.assign('/'); }}

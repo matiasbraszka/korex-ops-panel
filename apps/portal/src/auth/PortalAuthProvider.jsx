@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 // Auth del PORTAL (cliente). Mismo patrón que packages/auth/AuthProvider.jsx del
 // panel, pero para clientes: login por email+password contra Supabase Auth. La
 // identidad/rol del cliente y el scoping de datos se resuelven server-side en las
-// RPCs portal_cliente_* (no cargamos team_members/user_roles acá).
+// RPCs portal_cliente_* (no cargamos team_members/user_roles aquí).
 //
 // `demo` permite ver la UI con datos de ejemplo SIN sesión (útil mientras el
 // backend/RPCs todavía no están, y para revisión rápida).
