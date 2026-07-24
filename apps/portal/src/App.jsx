@@ -10,6 +10,7 @@ import FunnelScreen from './screens/FunnelScreen';
 import GuionesDocScreen from './screens/GuionesDocScreen';
 import GuionDocScreen from './screens/GuionDocScreen';
 import CarpetaDetalleScreen from './screens/CarpetaDetalleScreen';
+import PipelineScreen from './screens/PipelineScreen';
 
 export default function App() {
   const { authed, loading } = usePortalAuth();
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/" element={<InicioScreen />} />
         </Route>
         {/* Detalle inmersivo (con "Volver") */}
+        <Route path="/avance" element={<PipelineScreen />} />
         <Route path="/funnel/:id" element={<FunnelScreen />} />
         <Route path="/funnel/:id/guiones/:tipo" element={<GuionesDocScreen />} />
         <Route path="/guiones/:id" element={<GuionDocScreen />} />

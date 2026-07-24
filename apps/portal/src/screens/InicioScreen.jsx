@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, AlertCircle, CheckCircle2, Hammer, Play, Rocket } from 'lucide-react';
+import { ChevronRight, AlertCircle, CheckCircle2, Hammer, Play, Rocket, Map } from 'lucide-react';
 import { Screen, Card, Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { INTRO_VIDEO } from '../data/mockData';
@@ -46,6 +46,18 @@ export default function InicioScreen() {
           </div>
         )}
       </div>
+
+      {/* Avance del proyecto: la vista "en qué punto estamos" completa, con fechas. */}
+      <Card onClick={() => nav('/avance')} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 13, marginBottom: 22 }}>
+        <div style={{ width: 46, height: 46, borderRadius: 12, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Map size={23} color="#5B7CF5" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16.5, fontWeight: 800, color: '#1A1D26', lineHeight: 1.2 }}>Avance de tu proyecto</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Mirá en qué etapa estamos y qué sigue</div>
+        </div>
+        <ChevronRight size={20} color="#C4C9D4" style={{ flexShrink: 0 }} />
+      </Card>
 
       {/* Sección: tus funnels */}
       <h2 style={{ margin: '4px 0 4px', fontSize: 21, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Tus funnels</h2>

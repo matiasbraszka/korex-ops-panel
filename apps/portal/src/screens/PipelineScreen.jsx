@@ -1,4 +1,6 @@
-import { Check, Loader2, Circle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Check, Loader2, Circle, ChevronLeft } from 'lucide-react';
+import PhoneFrame from '../components/PhoneFrame';
 import { Screen, Card, Progress, Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 
@@ -8,13 +10,21 @@ const ESTADO = {
   pendiente: { color: '#9CA3AF', bg: '#FFFFFF', ring: '#E2E5EB', label: 'Pendiente' },
 };
 
+// Pantalla propia (con "Volver"), enlazada desde la tarjeta "Avance" del Inicio.
 export default function PipelineScreen() {
+  const nav = useNavigate();
   const { data, loading } = useAsync(() => api.pipeline(), []);
-  if (loading) return <Loading label="Cargando el avance…" />;
   const fases = data?.fases || [];
   const progreso = data?.progreso ?? 0;
 
   return (
+    <PhoneFrame>
+      <div style={{ position: 'sticky', top: 0, background: '#F7F8FA', padding: '14px 18px 10px', zIndex: 10 }}>
+        <button onClick={() => nav('/')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', color: '#5B7CF5', fontSize: 16, fontWeight: 600, cursor: 'pointer', padding: '6px 0' }}>
+          <ChevronLeft size={20} /> Inicio
+        </button>
+      </div>
+      {loading ? <Loading label="Cargando el avance…" /> : (
     <Screen>
       {isDemo() && <DemoBanner />}
       <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>Avance de tu proyecto</h1>
@@ -55,7 +65,14 @@ export default function PipelineScreen() {
             </div>
           );
         })}
+        {fases.length === 0 && (
+          <Card style={{ padding: 22, textAlign: 'center', color: '#6B7280' }}>
+            Todavía no cargamos las etapas de tu proyecto. En cuanto estén, las vas a ver acá con sus fechas.
+          </Card>
+        )}
       </div>
     </Screen>
+      )}
+    </PhoneFrame>
   );
 }

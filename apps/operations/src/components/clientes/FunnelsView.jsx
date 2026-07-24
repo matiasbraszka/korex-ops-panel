@@ -10,10 +10,11 @@ import {
   Check, Trash2, Zap, Globe, Clapperboard,
   Brain, Sparkles, FileText, RefreshCw, Search as SearchIcon, Maximize2, Lock,
   FolderOpen, FolderPlus, Clipboard, Package, AlertCircle, LayoutGrid,
-  Image as ImageIcon, KeyRound,
+  Image as ImageIcon, KeyRound, Smartphone,
 } from 'lucide-react';
 import Modal from '../Modal';
 import ClientAccessModal from './ClientAccessModal';
+import PortalClienteModal from './PortalClienteModal';
 import FunnelTasksBlock from './funnels/FunnelTasksBlock';
 import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
@@ -1107,6 +1108,7 @@ Quedo a la espera de tu respuesta`;
 export default function FunnelsView({ clientId }) {
   const { clients, strategies, strategyPages, addStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage, updateClient } = useApp();
   const [accessOpen, setAccessOpen] = useState(false);   // panel de accesos del cliente
+  const [portalOpen, setPortalOpen] = useState(false);   // portal del cliente (cuenta + credenciales)
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
   // Los FUNNELS del cliente, PLANOS. La "estrategia" dejo de ser una capa de navegacion:
   // de 40 estrategias, 26 de 33 clientes tenian una sola -> no agrupaba nada, y su nombre
@@ -1288,6 +1290,7 @@ export default function FunnelsView({ clientId }) {
             <div className="text-[15px] font-bold text-[#1A1D26] tracking-[-.01em]">Funnels</div>
             <div className="text-[11.5px] text-[#9098A4] mt-px">{myFunnels.length === 0 ? 'Todavía no hay ninguno' : `${myFunnels.length} funnel${myFunnels.length === 1 ? '' : 's'} de ${client.name || 'este cliente'}`}</div>
           </div>
+          <button onClick={() => setPortalOpen(true)} title="Portal del cliente (su app: cuenta y credenciales)" className="inline-flex items-center justify-center w-[38px] h-[38px] border rounded-[10px] cursor-pointer shrink-0 hover:bg-[#EEF2FF]" style={{ color: '#5B7CF5', borderColor: '#DDE5FB', background: '#fff' }}><Smartphone size={16} /></button>
           <button onClick={() => setAccessOpen(true)} title="Accesos del cliente (CRM, plataformas, webs)" className="inline-flex items-center justify-center w-[38px] h-[38px] border rounded-[10px] cursor-pointer shrink-0 hover:bg-[#FFF7ED]" style={{ color: '#B45309', borderColor: '#F1DDBA', background: '#fff' }}><KeyRound size={16} /></button>
           {myFunnels.length > 0 && (
             <button onClick={() => openNew()} className="inline-flex items-center gap-1.5 py-[9px] px-3.5 border-none rounded-[10px] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95 shrink-0" style={{ background: '#2E69E0', boxShadow: '0 1px 2px rgba(46,105,224,.35)' }}><Plus size={14} strokeWidth={2.6} />Nuevo funnel</button>
@@ -1352,6 +1355,7 @@ export default function FunnelsView({ clientId }) {
       </div>
 
       {accessOpen && <ClientAccessModal client={client} onClose={() => setAccessOpen(false)} />}
+      {portalOpen && <PortalClienteModal client={client} onClose={() => setPortalOpen(false)} />}
 
       {/* Modal nuevo funnel */}
       {modal && (
