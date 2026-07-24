@@ -26,6 +26,9 @@ export default function PipelineScreen() {
   const fases = data?.fases || [];
   const progreso = data?.progreso ?? 0;
   const movimientos = Array.isArray(movs) ? movs : [];
+  // El historial REAL del proyecto: lo que el equipo registra en operaciones
+  // (pestaña Historial). Solo lo marcado para el cliente (incluir_resumen).
+  const eventos = Array.isArray(data?.eventos) ? data.eventos : [];
 
   return (
     <PhoneFrame>
@@ -40,13 +43,15 @@ export default function PipelineScreen() {
       <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.03em' }}>Avance de tu proyecto</h1>
       <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Estas son las etapas de tu proyecto y sus fechas. Así ves en qué estamos y qué sigue.</p>
 
-      <Card style={{ padding: 18, marginBottom: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26' }}>Progreso general</span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#5B7CF5', letterSpacing: '-0.02em' }}>{progreso}%</span>
-        </div>
-        <Progress value={progreso} color="#5B7CF5" height={12} />
-      </Card>
+      {fases.length > 0 && (
+        <Card style={{ padding: 18, marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26' }}>Progreso general</span>
+            <span style={{ fontSize: 22, fontWeight: 800, color: '#5B7CF5', letterSpacing: '-0.02em' }}>{progreso}%</span>
+          </div>
+          <Progress value={progreso} color="#5B7CF5" height={12} />
+        </Card>
+      )}
 
       <div style={{ position: 'relative', paddingLeft: 4 }}>
         {fases.map((f, i) => {
@@ -75,15 +80,43 @@ export default function PipelineScreen() {
             </div>
           );
         })}
-        {fases.length === 0 && (
+        {fases.length === 0 && eventos.length === 0 && (
           <Card style={{ padding: 22, textAlign: 'center', color: '#6B7280' }}>
             Todavía no cargamos las etapas de tu proyecto. En cuanto estén, las vas a ver acá con sus fechas.
           </Card>
         )}
       </div>
 
-      {/* Historial: lo último que pasó en tu proyecto (subidas, devoluciones,
-          guiones publicados, tareas completadas). */}
+      {/* ── HISTORIAL DEL PROYECTO: la línea de tiempo que lleva el equipo en
+          operaciones (misma data de la pestaña Historial del panel). ── */}
+      {eventos.length > 0 && (
+        <div style={{ marginTop: 26 }}>
+          <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Historial de tu proyecto</h2>
+          <p style={{ margin: '0 0 12px', fontSize: 13.5, color: '#6B7280' }}>Todo lo que fuimos haciendo, día a día.</p>
+          <div style={{ position: 'relative', paddingLeft: 4 }}>
+            {eventos.map((e, i) => {
+              const last = i === eventos.length - 1;
+              const bloqueo = e.tipo === 'bloqueo';
+              return (
+                <div key={i} style={{ display: 'flex', gap: 12, position: 'relative' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: 999, marginTop: 5, background: bloqueo ? '#F59E0B' : '#22C55E', border: `2px solid ${bloqueo ? '#FDE68A' : '#BBF7D0'}` }} />
+                    {!last && <div style={{ width: 2, flex: 1, minHeight: 18, background: '#E2E5EB', margin: '2px 0' }} />}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, paddingBottom: last ? 0 : 16 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#9CA3AF' }}>{e.fecha}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1D26', lineHeight: 1.4, marginTop: 2 }}>{e.titulo}</div>
+                    {e.descripcion && <div style={{ fontSize: 12.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.45 }}>{e.descripcion}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Historial automático: lo último que pasó en la plataforma (subidas,
+          devoluciones, guiones publicados, tareas completadas). */}
       {movimientos.length > 0 && (
         <div style={{ marginTop: 26 }}>
           <h2 style={{ margin: '0 0 12px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Últimos movimientos</h2>

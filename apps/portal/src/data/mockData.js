@@ -215,4 +215,10 @@ export const MOCK_PIPELINE = {
     { id: 'f5', nombre: 'Armado del funnel', estado: 'pendiente', fecha: '02/08/2026', detalle: 'Landing, formulario y páginas listas.' },
     { id: 'f6', nombre: 'Publicación y ads', estado: 'pendiente', fecha: '05/08/2026', detalle: 'Salimos a publicidad y empezamos a medir.' },
   ],
+  // Historial de operaciones (contrato: eventos de historial_eventos con incluir_resumen).
+  eventos: [
+    { fecha: '22/07/2026', titulo: 'Ajustamos la segmentación de los anuncios del Avatar 1', descripcion: '', tipo: 'tarea', estado: 'completado' },
+    { fecha: '20/07/2026', titulo: 'Llamada de seguimiento: revisamos los guiones y quedaron aprobados', descripcion: '', tipo: 'llamada', estado: 'completado' },
+    { fecha: '15/07/2026', titulo: 'Arrancamos el armado de tu funnel de reclutamiento', descripcion: 'Estructura de páginas y primer borrador del VSL.', tipo: 'hito', estado: 'completado' },
+  ],
 };
