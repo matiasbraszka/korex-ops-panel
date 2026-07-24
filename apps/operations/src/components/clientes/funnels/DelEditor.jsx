@@ -207,8 +207,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
-  // Qué se ve en el panel derecho: 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
-  const [view, setView] = useState('del');
+  // Qué se ve en el panel derecho: 'estrategia' | 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
+  // Por defecto abre en ESTRATEGIA (decisión de Matías): es la primera pestaña y la vista de arranque.
+  const [view, setView] = useState('estrategia');
   const [clientDocs, setClientDocs] = useState([]);
   // Colaboración: comentarios por sección + presencia en vivo + candado de edición.
   const [comments, setComments] = useState([]);      // todos los del DEL
@@ -863,7 +864,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               )}
             </div>
           </div>
-          {/* "DEL" arriba de todo = el documento entero */}
+          {/* Estrategia PRIMERO: es la vista por defecto del DEL (decisión de Matías).
+              Muestra el bloque de estrategia del funnel; el documento va en "DEL", abajo. */}
+          <button onClick={() => setView('estrategia')}
+            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-bold transition-colors"
+            style={{ background: view === 'estrategia' ? '#ECFEFF' : 'transparent', color: view === 'estrategia' ? '#0891B2' : '#4B5563' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></svg>Estrategia
+          </button>
+          {/* "DEL" = el documento entero */}
           <button onClick={() => { setView('del'); scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
             className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-bold transition-colors"
             style={{ background: view === 'del' ? '#EFEBFF' : 'transparent', color: view === 'del' ? '#6D28D9' : '#4B5563' }}>
@@ -916,13 +924,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             </button>
           )}
 
-          {/* Las páginas del funnel de la maqueta, debajo de las secciones. */}
+          {/* Separador antes de las vistas especiales del funnel (Config / Recursos).
+              La "Estrategia" ya no va acá: se movió arriba de todo (primera pestaña). */}
           <div className="h-px my-2 mx-1" style={{ background: '#EDF0F5' }} />
-          <button onClick={() => setView('estrategia')}
-            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-semibold transition-colors"
-            style={{ background: view === 'estrategia' ? '#ECFEFF' : 'transparent', color: view === 'estrategia' ? '#0891B2' : '#4B5563' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></svg>Estrategia
-          </button>
           <button onClick={() => setView('config')}
             className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-semibold transition-colors"
             style={{ background: view === 'config' ? '#EEF3FF' : 'transparent', color: view === 'config' ? '#1D4FD8' : '#4B5563' }}>
