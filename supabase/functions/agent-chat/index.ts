@@ -1129,14 +1129,19 @@ Deno.serve(async (req) => {
   // El de funnels es así a propósito: no guarda en el DEL, se copia del chat.
   const TOOL_BY_AGENT: Record<string, typeof adTool | typeof vslTool> = { anuncios: adTool, vsl: vslTool };
   const tool = TOOL_BY_AGENT[subagentKey] || null;
-  // La herramienta va SIEMPRE, y lo que cambia entre chatear y generar es solo `tool_choice`.
-  // No es cosmético: `tools` se renderiza ANTES que `system` y que `messages`, así que agregarla
-  // o sacarla invalida los tres niveles de cache. `tool_choice`, en cambio, no invalida ni las
-  // herramientas ni el system — solo los mensajes. Antes, cada vez que alguien alternaba entre
-  // chatear y apretar "Generar" se pagaba de nuevo TODO el prefijo a precio de escritura.
-  if (tool) {
+  // La herramienta va SOLO en modo generate. Suena tentador dejarla siempre presente (con
+  // `tool_choice:"none"` al chatear) para no invalidar el cache —`tools` se renderiza antes que
+  // `system`, así que agregarla o sacarla rompe el prefijo cacheado—, y así estaba. Pero rompía
+  // la función: al chatear, el modelo VE que existe `emit_ad_copy`, escribe un preámbulo
+  // ("Voy a crear 4 ángulos…") y DIFIERE el contenido real a la herramienta… que `tool_choice:
+  // "none"` le prohíbe llamar. Resultado: corta el turno con la respuesta vacía. En generate,
+  // que fuerza la herramienta, nunca pasó. La correctitud manda sobre el cache: al chatear no hay
+  // herramienta, así que el agente escribe la respuesta como markdown (que es lo que el panel
+  // pinta). Lo único que se paga es un miss de cache al alternar chat↔generate — despreciable al
+  // lado de un chat que no respondía.
+  if (tool && mode === "generate") {
     reqBody.tools = [tool];
-    reqBody.tool_choice = mode === "generate" ? { type: "tool", name: tool.name } : { type: "none" };
+    reqBody.tool_choice = { type: "tool", name: tool.name };
   }
   if (!/sonnet-5|opus-4|fable-5/i.test(model)) reqBody.temperature = mode === "generate" ? 0 : 0.6;
 
