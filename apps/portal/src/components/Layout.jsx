@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { HelpCircle, X, Play, LogOut, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { HelpCircle, X, Play, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import PhoneFrame from './PhoneFrame';
+import BottomNav from './BottomNav';
 import { api } from '../data/portalApi';
 import { useAsync } from './ui';
-import { usePortalAuth } from '../auth/PortalAuthProvider';
 
-function Header({ clientName, onAccesos, onTutoriales, onSignOut }) {
+function Header({ clientName, onAccesos, onTutoriales }) {
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 40, background: '#FFFFFF', borderBottom: '1px solid #E2E5EB', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ width: 38, height: 38, borderRadius: 10, background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -23,16 +23,14 @@ function Header({ clientName, onAccesos, onTutoriales, onSignOut }) {
       <button onClick={onTutoriales} aria-label="Tutoriales" style={iconBtn}>
         <HelpCircle size={22} color="#5B7CF5" />
       </button>
-      <button onClick={onSignOut} aria-label="Salir" style={iconBtn}>
-        <LogOut size={20} color="#9CA3AF" />
-      </button>
     </header>
   );
 }
 
 // Hoja de "Tus accesos": el cliente ve las claves de sus propias plataformas
 // (las mismas que el equipo guarda en operaciones → Accesos del cliente).
-function AccesosSheet({ onClose }) {
+// Exportada: también se abre desde el tab Perfil.
+export function AccesosSheet({ onClose }) {
   const { data } = useAsync(() => api.accesos(), []);
   const items = data || [];
   const [show, setShow] = useState({});
@@ -93,7 +91,7 @@ function AccesosSheet({ onClose }) {
 
 const iconBtn = { width: 44, height: 44, borderRadius: 12, border: '1px solid #E2E5EB', background: '#F7F8FA', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 };
 
-function TutorialesSheet({ onClose }) {
+export function TutorialesSheet({ onClose }) {
   const { data } = useAsync(() => api.tutoriales(), []);
   const items = data || [];
   return (
@@ -128,18 +126,18 @@ function TutorialesSheet({ onClose }) {
 export default function Layout() {
   const [tut, setTut] = useState(false);
   const [acc, setAcc] = useState(false);
-  const { signOut } = usePortalAuth();
   const { data: me } = useAsync(() => api.me(), []);
   const clientName = me?.name || me?.clientName;
 
   return (
     <PhoneFrame>
-      {/* Confirmar antes de salir: un toque de más no puede dejar afuera a una persona mayor. */}
-      <Header clientName={clientName} onAccesos={() => setAcc(true)} onTutoriales={() => setTut(true)} onSignOut={() => { if (window.confirm('¿Quieres cerrar sesión?')) signOut(); }} />
+      {/* Cerrar sesión vive en el tab Perfil (con confirmación). */}
+      <Header clientName={clientName} onAccesos={() => setAcc(true)} onTutoriales={() => setTut(true)} />
       <main style={{ flex: 1, overflowY: 'auto' }}>
         <Outlet />
         <div style={{ height: 12 }} />
       </main>
+      <BottomNav />
       {tut && <TutorialesSheet onClose={() => setTut(false)} />}
       {acc && <AccesosSheet onClose={() => setAcc(false)} />}
     </PhoneFrame>

@@ -189,9 +189,12 @@ export function mockGuion(id) {
 // Tareas asignadas al cliente (contrato de portal_cliente_tareas): con funnel,
 // prioridad y días desde que se creó. Al validarse en ops, desaparecen.
 export const MOCK_TAREAS = [
-  { id: 'mt1', titulo: 'Grabar los 3 anuncios del Avatar 1', prioridad: 'alta', dias: 4, funnel: 'Reclutamiento', vence: null },
-  { id: 'mt2', titulo: 'Subir fotos de autoridad (evento de Madrid)', prioridad: 'normal', dias: 2, funnel: 'Reclutamiento', vence: null },
+  { id: 'mt1', titulo: 'Grabar los 3 anuncios del Avatar 1', prioridad: 'alta', dias: 4, funnel: 'Reclutamiento', funnelId: 'f_reclu', vence: null },
+  { id: 'mt2', titulo: 'Subir fotos de autoridad (evento de Madrid)', prioridad: 'normal', dias: 2, funnel: 'Reclutamiento', funnelId: 'f_reclu', vence: null },
 ];
+
+// Conteo de archivos por carpeta a nivel cliente (contrato de portal_cliente_recursos).
+export const MOCK_RECURSOS = { productos: 3, autoridad: 12 };
 
 // Accesos del cliente (contrato de portal_cliente_accesos).
 export const MOCK_ACCESOS = [
