@@ -22,8 +22,13 @@ import { spawn } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+// --fn <nombre>: qué edge function levantar. Default agent-chat (retrocompatible).
+// Los agentes de la fábrica (analista, ...) corren en agent-run:  node scripts/agent-fn-local.mjs --fn agent-run
+const fnArgIdx = process.argv.indexOf("--fn");
+const FN_NAME = fnArgIdx > -1 ? (process.argv[fnArgIdx + 1] || "agent-chat") : "agent-chat";
+
 const ENV_FILE = join(process.cwd(), "scripts", "agent-fn-local.env");
-const FN = join(process.cwd(), "supabase", "functions", "agent-chat", "index.ts");
+const FN = join(process.cwd(), "supabase", "functions", FN_NAME, "index.ts");
 const DENO = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "deno.cmd" : "deno");
 const PORT = process.env.PORT || "8000";
 
@@ -54,7 +59,7 @@ if (faltan.length) {
   process.exit(1);
 }
 
-console.log("agent-chat LOCAL");
+console.log(`${FN_NAME} LOCAL`);
 console.log(`  runtime : Deno (el mismo de Supabase)`);
 console.log(`  DB      : ${env.SUPABASE_URL}  ← la REAL: el corpus, el gate y los clientes son los de verdad`);
 console.log(`  escucha : http://localhost:${PORT}`);
