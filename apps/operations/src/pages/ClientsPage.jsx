@@ -26,20 +26,23 @@ function AdsBadge({ client }) {
   const m = client.metaMetrics;
   if (!m) return <span className="text-[10px] text-text3">—</span>;
   const status = m.pauseStatus;
-  if (status === 'mcp_pendiente') {
-    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-blue-50 text-blue-700" title={m.pauseReason || 'MCP pendiente'}>🔵 MCP</span>;
-  }
   if (status === 'deuda_meta') {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Deuda con Meta — pago rechazado'}>💰 Deuda</span>;
   }
   if (status === 'cuenta_bloqueada') {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-red-50 text-red-700" title={m.pauseReason || 'Bloqueada por Meta'}>🚫 Bloqueada</span>;
   }
+  // Activa gana sobre "MCP": si la cuenta no entra por el conector MCP pero el
+  // sync por token SÍ la mide (hay gasto real), para el equipo está Activa.
+  // El badge azul quedaba pegado porque meta-ads-sync no limpia pauseStatus.
+  if (m.adsActive) {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-green-50 text-green-700" title={status === 'mcp_pendiente' ? 'Midiendo por token (cuenta sin Ads MCP)' : undefined}>● Activa</span>;
+  }
+  if (status === 'mcp_pendiente') {
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-blue-50 text-blue-700" title={m.pauseReason || 'MCP pendiente'}>🔵 MCP</span>;
+  }
   if (status === 'sin_tarjeta') {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-amber-50 text-amber-700" title={m.pauseReason || 'Sin tarjeta vinculada'}>💳 Sin tarjeta</span>;
-  }
-  if (m.adsActive) {
-    return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-green-50 text-green-700">● Activa</span>;
   }
   return <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 bg-gray-100 text-gray-500" title={m.pauseReason || 'Sin gasto reciente'}>○ Inactiva</span>;
 }
