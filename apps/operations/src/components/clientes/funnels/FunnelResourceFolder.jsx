@@ -338,7 +338,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             <Share2 size={12} />Compartir
           </button>
           {shareOpen && (
-            <div className="absolute z-30 mt-1 right-0 w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+            <div className="absolute z-[60] mt-1 right-0 w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Link para subir a “{label}”</span>
                 <button onClick={() => setShareOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>

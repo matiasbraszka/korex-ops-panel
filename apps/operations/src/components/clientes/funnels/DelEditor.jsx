@@ -261,7 +261,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       const list = Array.isArray(rows) ? rows : [];
       setSecs(list);
       if (list.length) {
-        setActiva((a) => a || list[0].id);
+        // Por defecto abre la sección de Estrategia (si existe); si no, la primera.
+        setActiva((a) => a || (list.find((s) => s.kind === 'estrategia')?.id ?? list[0].id));
         setResolvedDoc((d) => d || list[0].doc_id);
         setResolvedClient((c) => c || list[0].client_id);
       }
@@ -998,7 +999,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                 <Share2 size={13} />Compartir
               </button>
               {shareDelOpen && (
-                <div className="absolute z-30 mt-1 right-0 w-[340px] rounded-xl border border-[#E7EAF0] bg-white p-3" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+                <div className="absolute z-[60] mt-1 right-0 w-[340px] rounded-xl border border-[#E7EAF0] bg-white p-3" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Compartir para comentar</span>
                     <button onClick={() => setShareDelOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
