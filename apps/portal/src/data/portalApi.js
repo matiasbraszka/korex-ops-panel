@@ -49,6 +49,8 @@ export const api = {
 
   // Tareas asignadas al cliente (desaparecen al validarse en ops).
   tareas:      () => rpc('portal_cliente_tareas',      {}, () => mock.MOCK_TAREAS),
+  // Conteo de archivos por carpeta a nivel cliente (tab Recursos).
+  recursos:    () => rpc('portal_cliente_recursos',    {}, () => mock.MOCK_RECURSOS),
   // Sus accesos (CRM, plataformas): los carga el equipo en operaciones.
   accesos:     () => rpc('portal_cliente_accesos',     {}, () => mock.MOCK_ACCESOS),
   // Historial de movimientos (para la pantalla Avance).

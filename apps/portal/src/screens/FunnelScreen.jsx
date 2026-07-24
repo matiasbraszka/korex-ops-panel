@@ -1,4 +1,5 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, AlertCircle, Upload, Check, Megaphone, Clapperboard, Video, Camera, Film, Sparkles, Award, Package, Sun, Palette, Building2, MessageSquareQuote, KeyRound } from 'lucide-react';
 import PhoneFrame from '../components/PhoneFrame';
 import { Loading, SectionLabel, useAsync } from '../components/ui';
@@ -11,7 +12,19 @@ const ICON = { video: Video, camera: Camera, film: Film, sparkles: Sparkles, awa
 export default function FunnelScreen() {
   const { id } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
   const { data, loading } = useAsync(() => api.funnel(id), [id]);
+
+  // Deep-link desde una tarea de la Home: focus 'guiones' (tareas de grabar) o
+  // 'recursos' (tareas de subir material) → scroll directo a esa sección.
+  const focus = location.state?.focus;
+  const guionesRef = useRef(null);
+  const recursosRef = useRef(null);
+  useEffect(() => {
+    if (!data || !focus) return;
+    const el = focus === 'guiones' ? guionesRef.current : focus === 'recursos' ? recursosRef.current : null;
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 180);
+  }, [data, focus]);
 
   const guiones = data?.guiones || [];
   const hayAnuncios = guiones.some((g) => g.tipo !== 'VSL');
@@ -46,7 +59,7 @@ export default function FunnelScreen() {
   return (
     <PhoneFrame>
       <div style={{ position: 'sticky', top: 0, background: '#F7F8FA', padding: '14px 18px 10px', zIndex: 10 }}>
-        <button onClick={() => nav('/')} style={backBtn}><ChevronLeft size={20} /> Funnels</button>
+        <button onClick={() => nav('/funnels')} style={backBtn}><ChevronLeft size={20} /> Funnels</button>
       </div>
 
       {loading ? <Loading label="Abriendo el funnel…" /> : !data ? (
@@ -76,7 +89,7 @@ export default function FunnelScreen() {
 
           {/* Guiones: un documento por tipo. Solo aparecen si hay algo para grabar. */}
           {(hayAnuncios || hayVsl) && (
-            <>
+            <div ref={guionesRef} style={{ scrollMarginTop: 56 }}>
               <SectionLabel color="#5B7CF5">Guiones para grabar</SectionLabel>
               <div className="mk-grid2" style={{ marginBottom: 6 }}>
                 {hayAnuncios && (
@@ -86,14 +99,14 @@ export default function FunnelScreen() {
                   <GuionDocCard Icon={Clapperboard} color="#8B5CF6" bg="#F5F3FF" titulo="VSL para grabar" sub="El guion completo del VSL" onOpen={() => nav(`/funnel/${id}/guiones/vsl`)} />
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {/* Recursos: SIEMPRE habilitados, segmentados y con color/ícono propio */}
-          {SECCIONES.map((sec) => {
+          {SECCIONES.map((sec, si) => {
             const SecIcon = ICON[sec.iconKey] || Sparkles;
             return (
-              <div key={sec.titulo} style={{ marginTop: 24 }}>
+              <div key={sec.titulo} ref={si === 0 ? recursosRef : undefined} style={{ marginTop: 24, scrollMarginTop: 56 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 2px 12px' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: sec.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <SecIcon size={19} color={sec.color} />
