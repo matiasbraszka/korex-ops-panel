@@ -65,6 +65,17 @@ export const api = {
   // ad_rec__<avatar>, testimonios), viaja el funnel para listar SOLO lo suyo.
   carpeta: (folderId, strategyId) =>
     rpc('portal_cliente_carpeta', { p_folder: folderId, p_strategy: strategyId || null }, () => ({ items: [] })),
+
+  // ── Portal v2 (diseño nuevo): Inicio · Guiones · Embudos · Material ────────
+  inicio:    () => rpc('portal_cliente_inicio',    {}, () => mock.MOCK_INICIO),
+  meta:      () => rpc('portal_cliente_meta',      {}, () => mock.MOCK_META),
+  documento: (strategyId, tipo) => rpc('portal_cliente_documento', { p_strategy: strategyId, p_tipo: tipo }, () => mock.mockDocumento(strategyId, tipo)),
+  comentar:  (sectionId, body, quote, parentId) =>
+    rpc('portal_cliente_comentar', { p_section_id: sectionId, p_body: body, p_quote: quote || null, p_parent_id: parentId || null }, () => ({ ok: true, demo: true })),
+  embudos:   () => rpc('portal_cliente_embudos',   {}, () => mock.MOCK_EMBUDOS),
+  material:  () => rpc('portal_cliente_material',  {}, () => mock.MOCK_MATERIAL),
+  materialVisto: () => rpc('portal_cliente_material_visto', {}, () => ({ ok: true })),
+  marcarAccesoMeta: () => rpc('portal_cliente_marcar_acceso_meta', {}, () => ({ ok: true, demo: true })),
 };
 
 // ── Subidas ─────────────────────────────────────────────────────────────────

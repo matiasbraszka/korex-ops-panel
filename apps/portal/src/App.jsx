@@ -6,19 +6,18 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { Loading } from './components/ui';
 import LoginScreen from './screens/LoginScreen';
 import InicioScreen from './screens/InicioScreen';
-import FunnelsScreen from './screens/FunnelsScreen';
-import RecursosScreen from './screens/RecursosScreen';
-import PerfilScreen from './screens/PerfilScreen';
-import FunnelScreen from './screens/FunnelScreen';
-import GuionesDocScreen from './screens/GuionesDocScreen';
-import GuionDocScreen from './screens/GuionDocScreen';
-import CarpetaDetalleScreen from './screens/CarpetaDetalleScreen';
+import GuionesTabScreen from './screens/GuionesTabScreen';
+import DocumentoScreen from './screens/DocumentoScreen';
+import EmbudosScreen from './screens/EmbudosScreen';
+import MaterialScreen from './screens/MaterialScreen';
+import SubirPedidoScreen from './screens/SubirPedidoScreen';
+import AccesoMetaScreen from './screens/AccesoMetaScreen';
 
 export default function App() {
   const { authed, loading } = usePortalAuth();
 
   if (loading) {
-    return <PhoneFrame><div style={{ margin: 'auto' }}><Loading label="Abriendo tu plataforma…" /></div></PhoneFrame>;
+    return <PhoneFrame><div style={{ margin: 'auto' }}><Loading label="Abriendo tu espacio…" /></div></PhoneFrame>;
   }
 
   if (!authed) {
@@ -34,22 +33,23 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
-        {/* Tabs con header + navegación inferior: Home · Funnels · Recursos · Perfil */}
+        {/* Tabs con header + navegación inferior: Inicio · Guiones · Embudos · Material */}
         <Route element={<Layout />}>
           <Route path="/" element={<InicioScreen />} />
-          <Route path="/funnels" element={<FunnelsScreen />} />
-          <Route path="/recursos" element={<RecursosScreen />} />
-          <Route path="/perfil" element={<PerfilScreen />} />
+          <Route path="/guiones" element={<GuionesTabScreen />} />
+          <Route path="/embudos" element={<EmbudosScreen />} />
+          <Route path="/material" element={<MaterialScreen />} />
         </Route>
-        {/* La vieja pantalla "Avance" ahora es el tab Funnels (pipeline por funnel). */}
-        <Route path="/avance" element={<Navigate to="/funnels" replace />} />
-        <Route path="/funnel/:id" element={<FunnelScreen />} />
-        <Route path="/funnel/:id/guiones/:tipo" element={<GuionesDocScreen />} />
-        <Route path="/guiones/:id" element={<GuionDocScreen />} />
-        {/* Carpeta abierta desde un funnel: viaja el funnel (fid) para que la subida
-            caiga en la carpeta REAL de ese funnel en operaciones. */}
-        <Route path="/funnel/:fid/carpeta/:id" element={<CarpetaDetalleScreen />} />
-        <Route path="/carpetas/:id" element={<CarpetaDetalleScreen />} />
+        {/* Pantallas inmersivas (con "Volver") */}
+        <Route path="/documento/:sid/:tipo" element={<DocumentoScreen />} />
+        <Route path="/pedido/:id" element={<SubirPedidoScreen />} />
+        <Route path="/meta" element={<AccesoMetaScreen />} />
+        {/* Rutas del portal viejo → sus equivalentes nuevas */}
+        <Route path="/funnels" element={<Navigate to="/embudos" replace />} />
+        <Route path="/avance" element={<Navigate to="/embudos" replace />} />
+        <Route path="/recursos" element={<Navigate to="/material" replace />} />
+        <Route path="/perfil" element={<Navigate to="/" replace />} />
+        <Route path="/funnel/:id" element={<Navigate to="/embudos" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ErrorBoundary>

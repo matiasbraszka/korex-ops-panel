@@ -196,6 +196,61 @@ export const MOCK_TAREAS = [
 // Conteo de archivos por carpeta a nivel cliente (contrato de portal_cliente_recursos).
 export const MOCK_RECURSOS = { productos: 3, autoridad: 12 };
 
+// ── Portal v2 (diseño nuevo) — contratos de las RPCs v10 ─────────────────────
+export const MOCK_INICIO = {
+  name: 'Sergio Cánovas',
+  progreso: 45,
+  todosTerminados: false,
+  whatsapp: '5491100000000',
+  pendientes: [
+    { tipo: 'grabacion_ads', titulo: 'Graba tus anuncios', descripcion: 'Los guiones ya están escritos en tu documento del embudo Reclutamiento. Cada uno dura menos de un minuto.', dias: 6, bloqueante: false, estado: 'pendiente', strategyId: 'f_reclu', docTipo: 'ads', target: null, subidos: 0, bucket: 'ad_rec' },
+    { id: 'pp1', tipo: 'fotos', titulo: 'Sube 5 fotos tuyas', descripcion: 'Las usamos en la portada de tus videos y en tu página. Con fotos del celular alcanza.', dias: 12, bloqueante: false, estado: 'pendiente', target: 5, subidos: 3, bucket: 'autoridad', strategyId: null },
+    { id: 'pp2', tipo: 'acceso_meta', titulo: 'Danos acceso a Meta', descripcion: 'Sin esto no podemos publicar tus anuncios. Te dejamos el paso a paso con capturas.', dias: 9, bloqueante: true, estado: 'pendiente', target: null, subidos: 0, bucket: null, strategyId: null },
+  ],
+  completados: [{ titulo: 'Tu logo y tus colores' }],
+};
+
+export const MOCK_META = { partnerId: '1284 5590 3311', whatsapp: '5491100000000', estado: 'pendiente' };
+
+export function mockDocumento(strategyId, tipo) {
+  const guiones = MOCK_GUIONES.filter((g) => (tipo === 'vsl' ? g.tipo === 'VSL' : g.tipo !== 'VSL'));
+  return {
+    funnel: { id: strategyId || 'f_reclu', name: 'Reclutamiento' },
+    tipo: tipo === 'vsl' ? 'vsl' : 'ads',
+    bucket: tipo === 'vsl' ? 'vsl_rec' : 'ad_rec',
+    secciones: guiones.map((g, i) => ({ id: g.id, titulo: g.titulo, texto: g.texto, html: '', grabado: i === 1, avatar: g.avatar })),
+    comentarios: [
+      { id: 'c1', sectionId: guiones[0]?.id, body: 'Aquí prefiero decir el sistema que te enseñaron', quote: 'No es tu culpa, es el método que te enseñaron.', parentId: null, resolved: false, authorName: 'Sergio Cánovas', isTeam: false, isCliente: true, createdAt: new Date().toISOString() },
+    ],
+    avatars: MOCK_AVATARS,
+    subidas: { count: 0, items: [] },
+    siguiente: tipo === 'vsl' ? null : { strategyId: strategyId || 'f_reclu', tipo: 'vsl', label: 'VSL · Reclutamiento' },
+  };
+}
+
+export const MOCK_EMBUDOS = [
+  { id: 'f_reclu', name: 'Reclutamiento', etapa: 2, progreso: 40, etiqueta: 'te_toca', razon: 'Esperando tus grabaciones', grabPendiente: { pend: true, dias: 6 }, pagina: null, startDate: '2026-07-02' },
+  { id: 'f_tribu', name: 'Tribu Networkers', etapa: 4, progreso: 100, etiqueta: 'al_aire', razon: 'Publicado y corriendo', grabPendiente: { pend: false, dias: 0 }, pagina: 'canovasteam.com/tribu', startDate: '2026-05-12' },
+  { id: 'f_abril', name: 'Reclutamiento · Abril', etapa: 4, progreso: 100, etiqueta: 'al_aire', razon: 'Publicado y corriendo', grabPendiente: { pend: false, dias: 0 }, pagina: 'canovasteam.com/oportunidad', startDate: '2026-04-04' },
+];
+
+export const MOCK_MATERIAL = {
+  grabaciones: [
+    { funnel: 'Reclutamiento', strategyId: 'f_reclu', tipo: 'ads', titulo: 'Anuncios grabados', subidos: 0, estado: 'falta', dias: 6, ultimo: null },
+    { funnel: 'Reclutamiento', strategyId: 'f_reclu', tipo: 'vsl', titulo: 'VSL grabado', subidos: 1, estado: 'subido', dias: 6, ultimo: 'vsl-toma-final.mp4' },
+    { funnel: 'Tribu Networkers', strategyId: 'f_tribu', tipo: 'ads', titulo: 'Anuncios grabados', subidos: 4, estado: 'subido', dias: 0, ultimo: 'ad-4.mp4' },
+  ],
+  marca: [
+    { id: 'pp1', tipo: 'fotos', titulo: 'Sube 5 fotos tuyas', bucket: 'autoridad', target: 5, subidos: 3, dias: 12, bloqueante: false, estado: 'pendiente' },
+    { id: 'pp3', tipo: 'logo', titulo: 'Tu logo y tus colores', bucket: 'branding', target: null, subidos: 4, dias: 20, bloqueante: false, estado: 'completo' },
+  ],
+  accesoMeta: 'pendiente',
+  devoluciones: [
+    { funnel: 'Reclutamiento', strategyId: 'f_reclu', count: 3, ultimo: '22/07', nuevo: true, items: [{ titulo: 'Anuncio 1 · editado', url: '', kind: 'video' }] },
+  ],
+  paginas: [{ funnel: 'Reclutamiento · Abril', url: 'canovasteam.com/oportunidad' }],
+};
+
 // Accesos del cliente (contrato de portal_cliente_accesos).
 export const MOCK_ACCESOS = [
   { label: 'CRM Korex', url: 'https://metodokorex.com', email: 'demo@cliente.com', password: 'demo1234', notes: '' },

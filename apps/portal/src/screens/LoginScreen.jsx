@@ -2,7 +2,10 @@ import { useState } from 'react';
 import PhoneFrame from '../components/PhoneFrame';
 import { usePortalAuth } from '../auth/PortalAuthProvider';
 import { Spinner } from '../components/ui';
+import { T, bigBtn, microLabel } from '../components/theme';
 
+// ENTRAR (diseño nuevo): "Tu espacio de trabajo con Método Korex".
+// Login con email + contraseña (decisión de Matías: sin magic link).
 export default function LoginScreen() {
   const { signIn, resetPassword, enterDemo } = usePortalAuth();
   const [email, setEmail] = useState('');
@@ -34,44 +37,50 @@ export default function LoginScreen() {
 
   return (
     <PhoneFrame>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '28px 22px' }}>
-        <div style={{ width: 64, height: 64, borderRadius: 18, background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-          <span style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800, fontSize: 30, color: '#FFFFFF', letterSpacing: '-0.03em' }}>K</span>
-        </div>
-        <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: '#1A1D26', textAlign: 'center', letterSpacing: '-0.02em' }}>Tu plataforma</h1>
-        <p style={{ margin: '0 0 26px', fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 1.4 }}>Ingresa con el email y la contraseña que te dio Método Korex.</p>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '28px 24px', background: T.bg }}>
+        <span style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800, fontSize: 30, color: T.primary, letterSpacing: '-0.05em', marginBottom: 22 }}>mk<span style={{ color: T.ink, fontSize: 11, verticalAlign: 'super' }}>●</span></span>
+        <h1 style={{ margin: '0 0 4px', fontSize: 31, fontWeight: 800, color: T.ink, letterSpacing: '-0.03em', lineHeight: 1.12 }}>
+          Tu espacio de trabajo<br /><span style={{ color: T.text3 }}>con Método Korex</span>
+        </h1>
+        <p style={{ margin: '10px 0 26px', fontSize: 15.5, color: T.text2, lineHeight: 1.5 }}>
+          Aquí vas a ver qué necesitamos de ti y dónde están tus guiones para grabar.
+        </p>
 
-        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <label style={lbl}>Email
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={microLabel()}>Tu email</span>
             <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" style={inp} />
           </label>
-          <label style={lbl}>Contraseña
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={microLabel()}>Tu contraseña</span>
             <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inp} />
           </label>
 
           {msg && (
-            <div style={{ fontSize: 14, fontWeight: 600, padding: '10px 14px', borderRadius: 12, background: msg.type === 'ok' ? '#ECFDF5' : '#FEF2F2', color: msg.type === 'ok' ? '#16A34A' : '#DC2626' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, padding: '10px 14px', borderRadius: 12, background: msg.type === 'ok' ? T.greenSoft : T.redSoft, color: msg.type === 'ok' ? T.green : T.red }}>
               {msg.text}
             </div>
           )}
 
-          <button type="submit" disabled={busy} style={{ height: 56, borderRadius: 14, border: 'none', background: '#5B7CF5', color: '#FFFFFF', fontSize: 17, fontWeight: 700, cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: busy ? 0.7 : 1 }}>
+          <button type="submit" disabled={busy} style={{ ...bigBtn(), height: 54, fontSize: 13.5, opacity: busy ? 0.7 : 1 }}>
             {busy ? <Spinner size={20} color="#fff" /> : 'Entrar'}
           </button>
         </form>
 
-        <button onClick={recuperar} style={{ margin: '16px auto 0', border: 'none', background: 'none', color: '#6B7280', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={recuperar} style={{ margin: '14px auto 0', border: 'none', background: 'none', color: T.text2, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
           ¿Olvidaste tu contraseña?
         </button>
+        <div style={{ textAlign: 'center', marginTop: 6, fontSize: 12.5, color: T.text3 }}>
+          Si no tienes tu clave, pídela por WhatsApp: te la damos al instante.
+        </div>
 
-        {/* El demo es una herramienta INTERNA (datos de ejemplo). En el dominio público
-            no se ofrece: solo en localhost o entrando con ?demo en la URL. */}
+        {/* El demo es una herramienta INTERNA (datos de ejemplo): localhost o ?demo. */}
         {(window.location.hostname === 'localhost' || new URLSearchParams(window.location.search).has('demo')) && (
-          <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid #E2E5EB', textAlign: 'center' }}>
-            <button onClick={enterDemo} style={{ border: '1px solid #D0D5DD', background: '#FFFFFF', color: '#1A1D26', fontSize: 14, fontWeight: 700, borderRadius: 999, padding: '10px 18px', cursor: 'pointer' }}>
+          <div style={{ marginTop: 26, paddingTop: 18, borderTop: `1px solid ${T.border}`, textAlign: 'center' }}>
+            <button onClick={enterDemo} style={{ border: `1px solid ${T.border}`, background: '#FFFFFF', color: T.ink, fontSize: 14, fontWeight: 700, borderRadius: 999, padding: '10px 18px', cursor: 'pointer' }}>
               Ver demo (sin cuenta)
             </button>
-            <div style={{ marginTop: 8, fontSize: 12, color: '#9CA3AF' }}>Para revisar la plataforma con datos de ejemplo.</div>
+            <div style={{ marginTop: 8, fontSize: 12, color: T.text3 }}>Para revisar la plataforma con datos de ejemplo.</div>
           </div>
         )}
       </div>
@@ -79,11 +88,10 @@ export default function LoginScreen() {
   );
 }
 
-const lbl = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 700, color: '#6B7280' };
-const inp = { height: 54, borderRadius: 14, border: '1px solid #D0D5DD', padding: '0 16px', fontSize: 16, fontFamily: 'inherit', color: '#1A1D26', outline: 'none' };
+const inp = { height: 52, borderRadius: 14, border: '1px solid #DDE0E8', padding: '0 16px', fontSize: 16, fontFamily: 'inherit', color: '#171B26', outline: 'none', background: '#fff' };
 
 function traducir(m) {
-  if (!m) return 'No pudimos ingresar. Prueba de nuevo.';
+  if (!m) return 'No pudimos entrar. Prueba de nuevo.';
   if (/invalid login|credentials/i.test(m)) return 'Email o contraseña incorrectos.';
   if (/email not confirmed/i.test(m)) return 'Tu email todavía no está confirmado. Escríbenos por WhatsApp.';
   return m;
