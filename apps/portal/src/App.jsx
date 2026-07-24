@@ -41,6 +41,9 @@ export default function App() {
         <Route path="/funnel/:id" element={<FunnelScreen />} />
         <Route path="/funnel/:id/guiones/:tipo" element={<GuionesDocScreen />} />
         <Route path="/guiones/:id" element={<GuionDocScreen />} />
+        {/* Carpeta abierta desde un funnel: viaja el funnel (fid) para que la subida
+            caiga en la carpeta REAL de ese funnel en operaciones. */}
+        <Route path="/funnel/:fid/carpeta/:id" element={<CarpetaDetalleScreen />} />
         <Route path="/carpetas/:id" element={<CarpetaDetalleScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

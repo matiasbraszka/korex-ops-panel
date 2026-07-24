@@ -275,6 +275,22 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 </select>
               </div>
             )}
+            {/* Asignada al cliente: la ve en SU portal (con funnel, prioridad y días).
+                Desaparece de su vista sola cuando se valida. Solo tareas de un cliente. */}
+            {!!task.clientId && (
+              <div style={metaRow}>
+                <span style={metaLabel}>Portal del cliente</span>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, cursor: canEdit ? 'pointer' : 'default' }}>
+                  <span style={{ fontSize: 11.5, color: task.asignadaCliente ? '#5B7CF5' : '#9CA3AF', fontWeight: 600 }}>
+                    {task.asignadaCliente ? 'El cliente la ve' : 'No la ve'}
+                  </span>
+                  <span onClick={() => { if (canEdit) updateTask(task.id, { asignadaCliente: !task.asignadaCliente }); }}
+                    style={{ width: 36, height: 20, borderRadius: 999, background: task.asignadaCliente ? '#5B7CF5' : '#D8DCE3', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
+                    <span style={{ position: 'absolute', top: 2, left: task.asignadaCliente ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.25)', transition: 'left .15s' }} />
+                  </span>
+                </label>
+              </div>
+            )}
             <div style={{ ...metaRow, alignItems: 'flex-start' }}><span style={{ ...metaLabel, paddingTop: 1 }}>Objetivo / fase</span><span style={{ fontSize: 12.5, fontWeight: 500, textAlign: 'right', lineHeight: 1.35 }}>{phaseLabel}</span></div>
             <div style={metaRow}>
               <span style={metaLabel}>Fecha de entrega</span>

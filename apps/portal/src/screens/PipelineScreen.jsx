@@ -1,8 +1,16 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, Loader2, Circle, ChevronLeft } from 'lucide-react';
+import { Check, Loader2, Circle, ChevronLeft, Upload, Undo2, FileText, ClipboardCheck } from 'lucide-react';
 import PhoneFrame from '../components/PhoneFrame';
 import { Screen, Card, Progress, Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
+
+// Ícono por tipo de movimiento del historial.
+const MOV_ICON = {
+  subida:     { Icon: Upload, color: '#2E69E0', bg: '#EEF2FF' },
+  devolucion: { Icon: Undo2, color: '#059669', bg: '#ECFDF5' },
+  guion:      { Icon: FileText, color: '#8B5CF6', bg: '#F5F3FF' },
+  tarea:      { Icon: ClipboardCheck, color: '#B45309', bg: '#FEF3C7' },
+};
 
 const ESTADO = {
   hecho:     { color: '#16A34A', bg: '#22C55E', ring: '#86EFAC', label: 'Listo' },
@@ -14,8 +22,10 @@ const ESTADO = {
 export default function PipelineScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.pipeline(), []);
+  const { data: movs } = useAsync(() => api.movimientos(), []);
   const fases = data?.fases || [];
   const progreso = data?.progreso ?? 0;
+  const movimientos = Array.isArray(movs) ? movs : [];
 
   return (
     <PhoneFrame>
@@ -71,6 +81,28 @@ export default function PipelineScreen() {
           </Card>
         )}
       </div>
+
+      {/* Historial: lo último que pasó en tu proyecto (subidas, devoluciones,
+          guiones publicados, tareas completadas). */}
+      {movimientos.length > 0 && (
+        <div style={{ marginTop: 26 }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 20, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Últimos movimientos</h2>
+          <Card style={{ padding: '4px 16px' }}>
+            {movimientos.map((m, i) => {
+              const mi = MOV_ICON[m.tipo] || MOV_ICON.subida;
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #F0F2F5' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: mi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <mi.Icon size={16} color={mi.color} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: '#1A1D26', lineHeight: 1.35 }}>{m.texto}</div>
+                  <div style={{ fontSize: 11.5, color: '#9CA3AF', flexShrink: 0 }}>{m.fecha}</div>
+                </div>
+              );
+            })}
+          </Card>
+        </div>
+      )}
     </Screen>
       )}
     </PhoneFrame>

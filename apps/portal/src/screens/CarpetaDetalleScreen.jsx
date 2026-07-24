@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Upload, Check, Loader2, Film, Image as ImageIcon, FolderOpen } from 'lucide-react';
 import PhoneFrame from '../components/PhoneFrame';
-import { Loading, useAsync } from '../components/ui';
+import { useAsync } from '../components/ui';
 import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
 import { RECURSO_FOLDERS } from '../data/mockData';
 
@@ -10,19 +10,20 @@ let _uid = 0;
 const isVideo = (f) => (f.type || '').startsWith('video');
 
 export default function CarpetaDetalleScreen() {
-  const { id } = useParams();
+  // `fid` = el funnel desde el que se abrió (si vino de un funnel): con eso la
+  // subida cae en la carpeta REAL de ese funnel en operaciones (vsl_rec/ad_rec…).
+  const { id, fid } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
   const inputRef = useRef(null);
 
-  const { data: carpetas, loading } = useAsync(() => api.carpetas(), []);
-  const { data: detalle, reload } = useAsync(() => api.carpeta(id), [id]);
+  const { data: detalle, reload } = useAsync(() => api.carpeta(id, fid || null), [id, fid]);
   const [uploads, setUploads] = useState([]);
 
-  if (loading) return <PhoneFrame><Loading /></PhoneFrame>;
-
-  const folder = (carpetas || []).flatMap((s) => s.items).find((f) => String(f.id) === String(id));
+  // El nombre viaja desde la pantalla del funnel; fallbacks para links directos.
   const recurso = RECURSO_FOLDERS.find((f) => f.id === String(id));
-  const title = folder?.cardLabel || recurso?.label || 'Subir archivos';
+  const title = location.state?.label || recurso?.label
+    || (String(id) === 'vsl_rec' ? 'Grabaciones · VSL' : String(id).startsWith('ad_rec__') ? 'Grabaciones · Anuncios' : 'Subir archivos');
   const items = detalle?.items || [];
   const demo = isDemo();
 
@@ -43,7 +44,7 @@ export default function CarpetaDetalleScreen() {
       if (demo) {
         simulateUpload(file, onProgress, markDone);
       } else {
-        uploadRecurso(id, file, onProgress).then(markDone).catch((err) => { console.warn('upload error', err); markError(); });
+        uploadRecurso(id, file, onProgress, { strategyId: fid || null }).then(markDone).catch((err) => { console.warn('upload error', err); markError(); });
       }
     });
   };

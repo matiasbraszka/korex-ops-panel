@@ -169,15 +169,41 @@ const FUNNEL_EXTRA = {
   },
 };
 
+// Avatares del funnel demo: alimentan las carpetas de grabación SEGMENTADAS
+// (una carpeta de anuncios por avatar; el VSL es una sola por funnel).
+export const MOCK_AVATARS = [
+  { id: 'av1', name: 'Avatar 1 · Emprendedor' },
+  { id: 'av2', name: 'Avatar 2 · Mamá emprendedora' },
+];
+
 export function mockFunnel(id) {
   const base = MOCK_FUNNELS.find((f) => f.id === id) || MOCK_FUNNELS[0];
   const extra = FUNNEL_EXTRA[id] || FUNNEL_EXTRA.f_reclu;
-  return { ...base, ...extra, recursos: MOCK_RECURSO_COUNTS };
+  return { ...base, ...extra, avatars: MOCK_AVATARS, recursos: MOCK_RECURSO_COUNTS };
 }
 
 export function mockGuion(id) {
   return MOCK_GUIONES.find((g) => String(g.id) === String(id)) || null;
 }
+
+// Tareas asignadas al cliente (contrato de portal_cliente_tareas): con funnel,
+// prioridad y días desde que se creó. Al validarse en ops, desaparecen.
+export const MOCK_TAREAS = [
+  { id: 'mt1', titulo: 'Grabar los 3 anuncios del Avatar 1', prioridad: 'alta', dias: 4, funnel: 'Reclutamiento', vence: null },
+  { id: 'mt2', titulo: 'Subir fotos de autoridad (evento de Madrid)', prioridad: 'normal', dias: 2, funnel: 'Reclutamiento', vence: null },
+];
+
+// Accesos del cliente (contrato de portal_cliente_accesos).
+export const MOCK_ACCESOS = [
+  { label: 'CRM Korex', url: 'https://metodokorex.com', email: 'demo@cliente.com', password: 'demo1234', notes: '' },
+];
+
+// Historial de movimientos (contrato de portal_cliente_movimientos).
+export const MOCK_MOVIMIENTOS = [
+  { texto: 'Guion listo para grabar: VSL Principal', fecha: '20/07/2026', tipo: 'guion' },
+  { texto: 'Subiste "VSL P01.mp4"', fecha: '21/07/2026', tipo: 'subida' },
+  { texto: 'Te devolvimos "Anuncio 1 · editado"', fecha: '22/07/2026', tipo: 'devolucion' },
+];
 
 export const MOCK_PIPELINE = {
   progreso: 45,
