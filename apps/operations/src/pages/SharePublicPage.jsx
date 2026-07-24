@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as tus from 'tus-js-client';
 import { supabase } from '@korex/db';
-import { UploadCloud, Image as ImageIcon, Film, Loader2, Check, Send, MessageSquare, KeyRound, X, Trash2 } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Film, Loader2, Check, Send, MessageSquare, KeyRound, X, Trash2, Menu } from 'lucide-react';
 import { sanitizeDelHtml } from '../components/clientes/funnels/delSanitize';
 
 const TOKEN = (() => { const m = window.location.pathname.match(/^\/compartir\/([A-Za-z0-9]{1,40})/); return m ? m[1] : ''; })();
@@ -98,7 +98,7 @@ export default function SharePublicPage() {
         <div className="bg-white rounded-2xl border border-[#E7EAF0] p-5 sm:p-8 max-w-[440px] mx-auto">
           <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[#EEF2FF] text-[#2E69E0] mb-3"><KeyRound size={20} /></div>
           <div className="text-[16px] font-bold text-[#1A1D26]">{data.label || 'Contenido compartido'}</div>
-          <div className="text-[12.5px] text-[#6B7280] mt-1 mb-4">{data.kind === 'folder' ? 'Vas a poder subir archivos a esta carpeta.' : 'Vas a poder leer y comentar.'} Primero, ¿cómo te llamás?</div>
+          <div className="text-[12.5px] text-[#6B7280] mt-1 mb-4">{data.kind === 'folder' ? 'Vas a poder subir archivos a esta carpeta.' : 'Vas a poder leer y comentar.'} Primero, ¿cómo te llamas?</div>
           <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') guardarNombre(); }} autoFocus placeholder="Tu nombre" className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-[10px] text-[14px] outline-none focus:border-[#2E69E0] bg-white" />
           <button onClick={guardarNombre} disabled={!name.trim()} className="mt-3 w-full py-2.5 rounded-[10px] border-none bg-[#2E69E0] text-white text-[14px] font-semibold cursor-pointer disabled:opacity-50">Continuar</button>
         </div>
@@ -173,12 +173,12 @@ function FolderShare({ data, name, onReload }) {
     <div className="flex flex-col gap-4">
       <div className="bg-white rounded-2xl border border-[#E7EAF0] p-4 sm:p-6">
         <div className="text-[17px] font-bold text-[#1A1D26]">{data.label || 'Carpeta compartida'}</div>
-        <div className="text-[12.5px] text-[#6B7280] mt-0.5 mb-4">Subí acá videos o imágenes. Se agregan directo a la carpeta. Estás como <b>{name}</b>.</div>
+        <div className="text-[12.5px] text-[#6B7280] mt-0.5 mb-4">Sube aquí videos o imágenes. Se agregan directo a la carpeta. Estás como <b>{name}</b>.</div>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => subir(e.target.files)} />
         <button onClick={() => fileRef.current?.click()} disabled={!!busy}
           className="w-full flex flex-col items-center justify-center gap-2 py-9 rounded-xl border-2 border-dashed border-[#C7D2FE] text-[#2E69E0] bg-[#F5F8FF] cursor-pointer disabled:opacity-60 hover:bg-[#EEF3FF]">
           {busy ? <><Loader2 size={22} className="animate-spin" /><span className="text-[13px] font-semibold">{busy.label}{busy.pct ? ` · ${busy.pct}%` : '…'}</span></>
-                : <><UploadCloud size={26} /><span className="text-[13.5px] font-semibold">Elegí archivos para subir</span><span className="text-[11.5px] text-[#8AA0E0]">Videos o imágenes</span></>}
+                : <><UploadCloud size={26} /><span className="text-[13.5px] font-semibold">Elige archivos para subir</span><span className="text-[11.5px] text-[#8AA0E0]">Videos o imágenes</span></>}
         </button>
         {busy && (
           <button onClick={cancelar} className="mt-2 w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#FECACA] bg-white text-[#DC2626] text-[12.5px] font-semibold cursor-pointer hover:bg-[#FEF2F2]">
@@ -195,7 +195,7 @@ function FolderShare({ data, name, onReload }) {
             {files.map((r) => (
               <div key={r.id} className="rounded-lg border border-[#E7EAF0] overflow-hidden bg-[#FBFCFE] relative group">
                 {esMio(r) && (
-                  <button onClick={() => borrar(r)} disabled={borrando === r.id} title="Borrar (lo subiste vos)"
+                  <button onClick={() => borrar(r)} disabled={borrando === r.id} title="Borrar (lo subiste tú)"
                     className="absolute top-1 right-1 z-10 inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/90 border border-[#E2E5EB] text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA] disabled:opacity-50">
                     {borrando === r.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                   </button>
@@ -206,7 +206,7 @@ function FolderShare({ data, name, onReload }) {
                     : <Film size={26} className="text-[#9098A4]" />}
                 </div>
                 <div className="px-2 py-1.5 text-[11px] font-semibold text-[#3F4653] truncate flex items-center gap-1">{r.kind === 'image' ? <ImageIcon size={11} /> : <Film size={11} />}{r.title}</div>
-                {esMio(r) && <div className="px-2 pb-1.5 -mt-1 text-[10.5px] text-[#AEB4BF]">Subiste vos</div>}
+                {esMio(r) && <div className="px-2 pb-1.5 -mt-1 text-[10.5px] text-[#AEB4BF]">Lo subiste tú</div>}
               </div>
             ))}
           </div>
@@ -220,6 +220,10 @@ function FolderShare({ data, name, onReload }) {
 function DelShare({ data, name, onReload }) {
   const [selBtn, setSelBtn] = useState(null);      // botón flotante {top,left,quote,sectionId}
   const [composer, setComposer] = useState(null);  // caja de comentario anclado {quote,sectionId,top,left}
+  const [navOpen, setNavOpen] = useState(false);   // cajón con la lista de guiones (tres rayitas)
+  // Bienvenida guiada: se muestra UNA vez (por dispositivo) la primera vez que abre un DEL.
+  const [welcome, setWelcome] = useState(() => { try { return !localStorage.getItem('korex_share_welcome'); } catch { return false; } });
+  const cerrarWelcome = () => { try { localStorage.setItem('korex_share_welcome', '1'); } catch { /* */ } setWelcome(false); };
   const [draft, setDraft] = useState('');          // texto del composer
   const [flashCmt, setFlashCmt] = useState(null);  // id del comentario a destacar (al tocar su resaltado)
   const [replyFor, setReplyFor] = useState(null);  // id del comentario con la caja de respuesta abierta
@@ -267,7 +271,7 @@ function DelShare({ data, name, onReload }) {
       p_token: TOKEN, p_section_id: sectionId, p_body: b, p_name: name,
       p_quote: quote || null, p_parent_id: parentId || null, p_guest_id: GUEST_ID,
     });
-    if (error || !r?.ok) { window.alert('No pude guardar. Probá de nuevo.'); return false; }
+    if (error || !r?.ok) { window.alert('No pude guardar. Prueba de nuevo.'); return false; }
     // Optimista: aparece al instante; la recarga lo confirma desde el servidor.
     setLocalComments((prev) => [...prev, { id: r.id || ('tmp_' + Date.now()), section_id: sectionId, parent_id: parentId || null, quote: quote || null, body: b, author_name: name, is_team: false, resolved: false, created_at: new Date().toISOString() }]);
     setSent(true); setTimeout(() => setSent(false), 2500);
@@ -305,11 +309,25 @@ function DelShare({ data, name, onReload }) {
 
   return (
     <>
+    {/* Header sticky con las TRES RAYITAS: abre la lista de guiones para saltar a cualquiera. */}
+    <div className="sticky top-2 z-40 mb-3">
+      <div className="flex items-center gap-2.5 py-2 px-2.5 rounded-xl border border-[#E7EAF0] bg-white" style={{ boxShadow: '0 4px 16px rgba(10,22,40,.08)' }}>
+        <button onClick={() => setNavOpen(true)} aria-label="Ver la lista de guiones" className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[#E7EAF0] bg-white text-[#1A1D26] cursor-pointer shrink-0">
+          <Menu size={18} />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9098A4]">Tus guiones</div>
+          <div className="text-[13.5px] font-bold text-[#1A1D26] truncate">{data.label || 'Documento compartido'}</div>
+        </div>
+        <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#6B7280] bg-[#F1F3F7] rounded-full py-1 px-2.5 shrink-0" title="Comentarios"><MessageSquare size={12} />{topComments.length}</span>
+      </div>
+    </div>
+
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-4 lg:items-start" onMouseUp={onDocMouseUp} onTouchEnd={onDocTouchEnd} onClick={onDocClick}>
       <div className="flex flex-col gap-4 min-w-0">
       <div className="bg-white rounded-2xl border border-[#E7EAF0] p-5 sm:p-6">
         <div className="text-[16px] sm:text-[17px] font-bold text-[#1A1D26]">{data.label || 'Documento compartido'}</div>
-        <div className="text-[12.5px] text-[#6B7280] mt-1 leading-relaxed">Para comentar, <b>marcá el texto</b> (en el celular, mantené presionado hasta que se pinte) y tocá <b>Comentar</b>. Tus comentarios y las respuestas del equipo aparecen al costado (o abajo en el celular). Tocá una <mark style={{ background: '#FEF9C3', padding: '0 3px', borderRadius: 2 }}>frase resaltada</mark> para ver su comentario. Sos <b>{name}</b>.</div>
+        <div className="text-[12.5px] text-[#6B7280] mt-1 leading-relaxed">Para comentar, <b>marca el texto</b> (en el celular, mantén presionado hasta que se pinte) y toca <b>Comentar</b>. Tus comentarios y las respuestas del equipo aparecen al costado (o abajo en el celular). Toca una <mark style={{ background: '#FEF9C3', padding: '0 3px', borderRadius: 2 }}>frase resaltada</mark> para ver su comentario. Estás como <b>{name}</b>.</div>
         {sent && <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#16A34A]"><Check size={14} />¡Comentario enviado!</div>}
       </div>
       {sections.map((s) => {
@@ -325,7 +343,7 @@ function DelShare({ data, name, onReload }) {
           try { html = html.replace(new RegExp('(?![^<]*>)(' + esc + ')'), '<mark style="background:#BFDBFE;border-radius:2px;padding:0 1px;">$1</mark>'); } catch { /* frase con caracteres raros */ }
         }
         return (
-          <div key={s.id} className="bg-white rounded-2xl border border-[#E7EAF0] overflow-hidden">
+          <div key={s.id} id={'sec-' + s.id} className="bg-white rounded-2xl border border-[#E7EAF0] overflow-hidden" style={{ scrollMarginTop: 72 }}>
             <div className="py-2.5 px-5 border-b border-[#F1F3F7] text-[13px] font-bold text-[#1A1D26]">{s.title || 'Sección'}</div>
             <div data-secid={s.id} className="del-rich py-5 px-4 sm:py-6 sm:px-8 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words"
               dangerouslySetInnerHTML={{ __html: html }} />
@@ -338,7 +356,7 @@ function DelShare({ data, name, onReload }) {
       <aside className="mt-4 lg:mt-0 lg:sticky lg:top-4 flex flex-col gap-2 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pb-6">
         <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#9098A4] px-1 flex items-center gap-1.5"><MessageSquare size={12} />Comentarios{topComments.length ? ` · ${topComments.length}` : ''}</div>
         {topComments.length === 0 && (
-          <div className="text-[11.5px] text-[#AEB4BF] leading-snug bg-white rounded-xl border border-[#E7EAF0] p-3">Todavía no hay comentarios. Marcá una frase del texto y tocá <b>Comentar</b> para dejar el primero.</div>
+          <div className="text-[11.5px] text-[#AEB4BF] leading-snug bg-white rounded-xl border border-[#E7EAF0] p-3">Todavía no hay comentarios. Marca una frase del texto y toca <b>Comentar</b> para dejar el primero.</div>
         )}
         {topComments.map((c) => {
           const reps = repliesByParent[c.id] || [];
@@ -406,7 +424,7 @@ function DelShare({ data, name, onReload }) {
           <div className="text-[10.5px] text-[#8A6D2B] border-l-2 border-[#EAB308] pl-1.5 mb-2 italic line-clamp-3">“{composer.quote}”</div>
           <textarea value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} rows={3}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); enviarQuote(); } if (e.key === 'Escape') { setComposer(null); setDraft(''); } }}
-            placeholder="Escribí tu comentario…  (Ctrl+Enter)" className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] bg-white resize-y outline-none focus:border-[#2E69E0] leading-snug" />
+            placeholder="Escribe tu comentario…  (Ctrl+Enter)" className="w-full py-2 px-2.5 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] bg-white resize-y outline-none focus:border-[#2E69E0] leading-snug" />
           <div className="flex justify-end gap-2 mt-2">
             <button onClick={() => { setComposer(null); setDraft(''); }} className="py-1.5 px-3 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[12px] font-semibold cursor-pointer">Cancelar</button>
             <button onClick={enviarQuote} disabled={sending === 'c' || !draft.trim()} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[12px] font-semibold cursor-pointer hover:bg-[#1D4FD8] disabled:opacity-50">{sending === 'c' ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}Comentar</button>
@@ -414,6 +432,51 @@ function DelShare({ data, name, onReload }) {
         </div>
         );
       })()}
+
+      {/* Cajón lateral con la lista de guiones: tocar uno salta directo a esa sección. */}
+      {navOpen && (
+        <div className="fixed inset-0 z-[80] flex" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setNavOpen(false); }}>
+          <div className="bg-white h-full w-[300px] max-w-[86vw] overflow-y-auto p-3 flex flex-col gap-0.5" style={{ boxShadow: '8px 0 30px rgba(10,22,40,.25)' }}>
+            <div className="flex items-center justify-between px-1 pb-2 border-b border-[#F1F3F7] mb-1">
+              <span className="text-[12.5px] font-bold text-[#1A1D26]">Guiones de este documento</span>
+              <button onClick={() => setNavOpen(false)} aria-label="Cerrar" className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer shrink-0"><X size={15} /></button>
+            </div>
+            {sections.map((s, i) => (
+              <button key={s.id} onClick={() => { setNavOpen(false); document.getElementById('sec-' + s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                className="w-full flex items-center gap-2.5 text-left py-2.5 px-2.5 rounded-lg border-none bg-transparent hover:bg-[#F4F6F9] cursor-pointer">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[#EEF2FF] text-[#2E69E0] text-[11px] font-extrabold shrink-0">{i + 1}</span>
+                <span className="text-[13px] font-semibold text-[#3F4653] leading-snug">{s.title || 'Sección'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Bienvenida guiada (una sola vez): los dos gestos con los que el cliente es autónomo. */}
+      {welcome && (
+        <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-3" style={{ background: 'rgba(10,14,25,.55)' }}>
+          <div className="bg-white rounded-2xl w-full max-w-[430px] p-5 sm:p-6" style={{ boxShadow: '0 24px 80px rgba(10,22,40,.35)' }}>
+            <div className="w-10 h-10 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center text-[16px] font-extrabold mb-3">K</div>
+            <div className="text-[19px] font-extrabold text-[#1A1D26] leading-tight mb-1">Aquí viven tus guiones, listos para leer y comentar.</div>
+            <div className="text-[13px] text-[#6B7280] mb-4">Dos gestos y listo. Te los mostramos:</div>
+            <div className="flex gap-3 mb-3.5">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#2E69E0] text-white text-[12.5px] font-extrabold shrink-0">1</span>
+              <div>
+                <div className="text-[13.5px] font-bold text-[#1A1D26]">Encuentra cualquier guión</div>
+                <div className="text-[12.5px] text-[#6B7280] leading-snug mt-0.5">Toca las <b>tres rayitas</b> (☰) arriba a la izquierda: se abre la lista de guiones. Toca uno para ir directo.</div>
+              </div>
+            </div>
+            <div className="flex gap-3 mb-4">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#2E69E0] text-white text-[12.5px] font-extrabold shrink-0">2</span>
+              <div>
+                <div className="text-[13.5px] font-bold text-[#1A1D26]">Comenta lo que quieras</div>
+                <div className="text-[12.5px] text-[#6B7280] leading-snug mt-0.5">Mantén el dedo y <b>selecciona un fragmento</b> del texto: aparece el botón <b>Comentar</b> para dejar tu nota, sin tocar el texto original.</div>
+              </div>
+            </div>
+            <button onClick={cerrarWelcome} className="w-full py-3 rounded-xl bg-[#2E69E0] text-white text-[14px] font-bold border-none cursor-pointer">Ver mis guiones</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -23,6 +23,19 @@ const haceRato = (iso) => {
   if (d < 86400) return `hace ${Math.floor(d / 3600)} h`;
   return `hace ${Math.floor(d / 86400)} d`;
 };
+
+// ¿Pantalla chica? El DEL colapsa a UNA columna y el menú de la izquierda pasa a
+// un cajón lateral que se abre con las tres rayitas (☰). Igual de funcional.
+function useIsMobile(bp = 900) {
+  const [m, setM] = useState(() => typeof window !== 'undefined' && window.matchMedia(`(max-width:${bp}px)`).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width:${bp}px)`);
+    const fn = (e) => setM(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', fn); else mq.addListener(fn);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', fn); else mq.removeListener(fn); };
+  }, [bp]);
+  return m;
+}
 
 // El DEL, editable adentro del panel. Apalancado en la herramienta de notas de
 // accountability (RichTextEditor), pero por secciones y con tablas.
@@ -821,6 +834,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // la hoja gana esos ~300px y queda protagonista, tipo Google Docs.
   const showComments = view === 'del' && !editando && comments.length > 0;
 
+  // Mobile: el menú de la izquierda vive en un cajón lateral (tres rayitas ☰).
+  // Elegir una sección / vista / versión lo cierra solo.
+  const isMobile = useIsMobile();
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); }, [view, activa, verActiva]);
+
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }} onMouseDown={() => { if (selBtn) setSelBtn(null); }}>
       <style>{`
@@ -828,12 +847,28 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
         .del-rich mark.del-cmt.is-active{background:#FDBA74;box-shadow:0 0 0 3px rgba(249,115,22,.45);border-bottom-color:#EA580C;animation:delCmtPulse 1.8s ease-out}
         @keyframes delCmtPulse{0%,55%{background:#FB923C}100%{background:#FDBA74}}
       `}</style>
-      <div className="grid gap-5 items-start mx-auto py-5 px-6" style={{ maxWidth: view === 'del' ? (editando ? 1520 : (showComments ? 1640 : 1360)) : 1180, gridTemplateColumns: view === 'del' ? (editando ? 'minmax(0,190px) minmax(0,1fr)' : (showComments ? 'minmax(0,190px) minmax(0,1fr) 300px' : 'minmax(0,190px) minmax(0,1fr)')) : 'minmax(0,215px) minmax(0,1fr)' }}>
+      <div className="grid gap-5 items-start mx-auto py-5 px-6" style={isMobile
+        ? { maxWidth: '100%', gridTemplateColumns: 'minmax(0,1fr)', padding: '10px 10px 48px', gap: 12 }
+        : { maxWidth: view === 'del' ? (editando ? 1520 : (showComments ? 1640 : 1360)) : 1180, gridTemplateColumns: view === 'del' ? (editando ? 'minmax(0,190px) minmax(0,1fr)' : (showComments ? 'minmax(0,190px) minmax(0,1fr) 300px' : 'minmax(0,190px) minmax(0,1fr)')) : 'minmax(0,215px) minmax(0,1fr)' }}>
 
         {/* El menú del DEL (maqueta): ESTE FUNNEL (las secciones del documento) · las dos
             pestañas Configuración/Recursos · y abajo los documentos DEL CLIENTE, que
             comparten todos sus funnels. */}
-        <nav className="sticky top-0 flex flex-col gap-0.5 p-2 rounded-xl border border-[#E7EAF0] bg-white max-h-[calc(100vh-120px)] overflow-y-auto" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>
+        {/* En mobile el menú vive en un cajón lateral que se abre con las tres rayitas ☰;
+            en desktop es la columna fija de siempre. Mismo contenido en los dos casos. */}
+        <div className={isMobile ? (navOpen ? 'fixed inset-0 z-[75] flex' : 'hidden') : 'contents'}
+          style={isMobile && navOpen ? { background: 'rgba(15,23,42,.45)' } : undefined}
+          onMouseDown={isMobile ? (e) => { if (e.target === e.currentTarget) setNavOpen(false); } : undefined}>
+        <nav className={isMobile
+            ? 'flex flex-col gap-0.5 p-2 bg-white h-full w-[300px] max-w-[86vw] overflow-y-auto'
+            : 'sticky top-0 flex flex-col gap-0.5 p-2 rounded-xl border border-[#E7EAF0] bg-white max-h-[calc(100vh-120px)] overflow-y-auto'}
+          style={isMobile ? { boxShadow: '8px 0 30px rgba(10,22,40,.25)' } : { boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>
+          {isMobile && (
+            <div className="flex items-center justify-between px-2 pt-1 pb-2 border-b border-[#F1F3F7] mb-1">
+              <span className="text-[12px] font-bold text-[#1A1D26]">Menú del DEL</span>
+              <button onClick={() => setNavOpen(false)} aria-label="Cerrar" className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer"><X size={15} /></button>
+            </div>
+          )}
           <div className="px-2 pt-1 pb-1.5">
             <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Este funnel</span>
             {/* Selector de versión del funnel: V1 por defecto; el + agrega V2, V3… con su
@@ -982,14 +1017,31 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             )}
           </div>
         </nav>
+        </div>
 
-        <div className="min-w-0 flex flex-col gap-3 w-full" style={editando && view === 'del' ? { maxWidth: 1040, marginInline: 'auto' } : undefined} onMouseUp={view === 'del' ? onDocMouseUp : undefined}>
+        {/* En el celular la selección llega con el dedo: el touchend se revisa con un
+            pequeño delay para que la selección termine de asentarse (igual que /compartir). */}
+        <div className="min-w-0 flex flex-col gap-3 w-full" style={editando && view === 'del' ? { maxWidth: 1040, marginInline: 'auto' } : undefined} onMouseUp={view === 'del' ? onDocMouseUp : undefined} onTouchEnd={view === 'del' ? () => setTimeout(onDocMouseUp, 80) : undefined}>
+          {/* Tres rayitas para las vistas que no tienen barra propia (Estrategia, Config, Recursos, docs del cliente). */}
+          {isMobile && view !== 'del' && (
+            <div className="sticky top-0 z-10 py-1.5" style={{ background: '#FBFCFD' }}>
+              <button onClick={() => setNavOpen(true)} className="inline-flex items-center gap-2 py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white text-[12.5px] font-bold text-[#1A1D26] cursor-pointer">
+                <Menu size={16} />Menú del DEL
+              </button>
+            </div>
+          )}
           {view === 'del' && (<>
           {/* Barra Leer/Editar + (en editar) la BARRA ÚNICA de herramientas, ambas fijas
               arriba tipo Google Docs: la barra opera sobre la sección que tengas enfocada. */}
           <div className="sticky top-0 z-10 flex flex-col gap-2 pb-1" style={{ background: '#FBFCFD' }}>
           {/* Barra: leer vs editar + de dónde salió + link al Doc */}
           <div className="flex items-center gap-2.5 flex-wrap py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white">
+            {isMobile && (
+              <button onClick={() => setNavOpen(true)} aria-label="Abrir el menú del DEL" title="Menú del DEL (secciones, versiones, documentos)"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[#E7EAF0] bg-white text-[#1A1D26] cursor-pointer shrink-0">
+                <Menu size={17} />
+              </button>
+            )}
             <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
               <button onClick={() => setModo('leer')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
               <button onClick={() => setModo('editar')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
@@ -1160,10 +1212,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     />
                   </div>
                 ) : s.html ? (
-                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch' }}
+                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}
                     dangerouslySetInnerHTML={{ __html: highlightHtml(sanitizeDelHtml(s.html), scomments) }} />
                 ) : (
-                  <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch' }}>
+                  <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
                     {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
                   </div>
                 )}
@@ -1256,7 +1308,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     placeholder="Escribí acá…"
                   />
                 ) : (
-                  <div className="del-rich rounded-xl border border-[#E7EAF0] bg-white py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch' }}>
+                  <div className="del-rich rounded-xl border border-[#E7EAF0] bg-white py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
                     {(doc.panel_html || (doc.text || '').trim())
                       ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(docHtml) }} />
                       : <span className="italic text-[#C3C9D4]">Este documento está vacío. Tocá “Editar” para escribirlo.</span>}
@@ -1270,7 +1322,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
         {/* Margen de comentarios (como Google Docs): las notas ancladas a frases.
             En modo edición se oculta para que la página ocupe el protagonismo. */}
         {showComments && (
-          <aside className="sticky top-0 flex flex-col gap-2 max-h-[calc(100vh-120px)] overflow-y-auto pb-6">
+          <aside className={isMobile ? 'flex flex-col gap-2 pb-6' : 'sticky top-0 flex flex-col gap-2 max-h-[calc(100vh-120px)] overflow-y-auto pb-6'}>
             <div className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF] px-1 pt-1">Comentarios</div>
             {comments.length === 0 && (
               <div className="text-[11px] text-[#AEB4BF] px-1 leading-snug">Marcá una frase en el texto y tocá <b>Comentar</b> para dejar una nota acá.</div>
@@ -1336,13 +1388,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       {selBtn && !composer && (
         <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={() => { setComposer({ quote: selBtn.quote, sectionId: selBtn.sectionId, top: selBtn.top, left: selBtn.left }); setDraft(''); setSelBtn(null); }}
           className="fixed z-[70] inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-[#1A1D26] text-white text-[12px] font-semibold cursor-pointer shadow-lg"
-          style={{ top: selBtn.top, left: selBtn.left, transform: 'translate(-50%,-130%)' }}>
+          style={{ top: Math.max(52, selBtn.top), left: Math.min(Math.max(selBtn.left, 64), (typeof window !== 'undefined' ? window.innerWidth : 1200) - 64), transform: 'translate(-50%,-130%)' }}>
           <MessageSquare size={13} />Comentar
         </button>
       )}
       {composer && (
-        <div onMouseDown={(e) => e.stopPropagation()} className="fixed z-[71] bg-white rounded-xl border border-[#E2E5EB] p-3 w-[300px]"
-          style={{ top: Math.min(composer.top, (typeof window !== 'undefined' ? window.innerHeight : 800) - 200), left: Math.min(composer.left, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 320), transform: 'translate(-50%, 10px)', boxShadow: '0 12px 40px rgba(10,22,40,.22)' }}>
+        /* En mobile el composer va como hoja pegada abajo (el teclado no lo tapa);
+           en desktop flota anclado a la frase, como siempre. */
+        <div onMouseDown={(e) => e.stopPropagation()}
+          className={`fixed z-[71] bg-white border border-[#E2E5EB] p-3 ${isMobile ? 'inset-x-2 bottom-2 rounded-2xl' : 'rounded-xl w-[300px]'}`}
+          style={isMobile
+            ? { boxShadow: '0 -8px 40px rgba(10,22,40,.20)' }
+            : { top: Math.min(composer.top, (typeof window !== 'undefined' ? window.innerHeight : 800) - 200), left: Math.min(composer.left, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 320), transform: 'translate(-50%, 10px)', boxShadow: '0 12px 40px rgba(10,22,40,.22)' }}>
           <div className="text-[10.5px] text-[#8A6D2B] border-l-2 border-[#EAB308] pl-1.5 mb-2 italic line-clamp-3">“{composer.quote}”</div>
           <textarea value={draft} autoFocus onChange={e => setDraft(e.target.value)} rows={3}
             onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); comentarQuote(); } if (e.key === 'Escape') { setComposer(null); setDraft(''); } }}
