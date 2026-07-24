@@ -1,29 +1,61 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { HelpCircle, X, Play, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { HelpCircle, X, Play, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink, LogOut, ChevronRight } from 'lucide-react';
 import PhoneFrame from './PhoneFrame';
 import BottomNav from './BottomNav';
 import { api } from '../data/portalApi';
 import { useAsync } from './ui';
+import { usePortalAuth } from '../auth/PortalAuthProvider';
+import { T } from './theme';
 
-function Header({ clientName, onAccesos, onTutoriales }) {
+// Header del diseño nuevo: logo "mk" + iniciales del cliente (abre su perfil).
+function Header({ clientName, onPerfil }) {
+  const iniciales = String(clientName || '·').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 40, background: '#FFFFFF', borderBottom: '1px solid #E2E5EB', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 38, height: 38, borderRadius: 10, background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <span style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800, fontSize: 17, color: '#FFFFFF', letterSpacing: '-0.03em' }}>K</span>
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9CA3AF' }}>Método Korex</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1A1D26', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clientName || '…'}</div>
-      </div>
-      {/* Accesos: las claves de SUS plataformas (CRM, web) que le carga el equipo. */}
-      <button onClick={onAccesos} aria-label="Tus accesos" style={iconBtn}>
-        <KeyRound size={20} color="#B45309" />
-      </button>
-      <button onClick={onTutoriales} aria-label="Tutoriales" style={iconBtn}>
-        <HelpCircle size={22} color="#5B7CF5" />
+    <header style={{ position: 'sticky', top: 0, zIndex: 40, background: T.bg, padding: '14px 20px 6px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800, fontSize: 21, color: T.primary, letterSpacing: '-0.05em', flexShrink: 0 }}>mk<span style={{ color: T.ink, fontSize: 8, verticalAlign: 'super' }}>●</span></span>
+      <span style={{ flex: 1 }} />
+      <button onClick={onPerfil} aria-label="Tu perfil" style={{ width: 38, height: 38, borderRadius: 999, border: `1px solid ${T.border}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: T.text2 }}>{iniciales}</span>
       </button>
     </header>
+  );
+}
+
+// Hoja de PERFIL: datos + accesos + tutoriales + cerrar sesión.
+function PerfilSheet({ clientName, onClose, onAccesos, onTutoriales }) {
+  const { signOut, user } = usePortalAuth();
+  const fila = (Icon, color, bg, titulo, sub, onClick) => (
+    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 4px', cursor: 'pointer', borderTop: '1px solid #F0F2F5' }}>
+      <div style={{ width: 40, height: 40, borderRadius: 11, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon size={19} color={color} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>{titulo}</div>
+        {sub && <div style={{ fontSize: 12.5, color: T.text3 }}>{sub}</div>}
+      </div>
+      <ChevronRight size={18} color="#C4C9D4" />
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '82vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
+        <div style={{ width: 44, height: 5, borderRadius: 999, background: '#E2E5EB', margin: '10px auto 16px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 999, background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>{String(clientName || '·').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: T.ink }}>{clientName || '…'}</div>
+            {user?.email && <div style={{ fontSize: 12.5, color: T.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>}
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ width: 36, height: 36, borderRadius: 999, border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} color="#6B7280" /></button>
+        </div>
+        {fila(KeyRound, '#B45309', '#FEF3C7', 'Tus accesos', 'Las claves de tus plataformas, a mano', onAccesos)}
+        {fila(HelpCircle, T.primary, T.primarySoft, 'Tutoriales', 'Videos cortos para grabar como un pro', onTutoriales)}
+        {fila(LogOut, T.red, T.redSoft, 'Cerrar sesión', null, () => { if (window.confirm('¿Quieres cerrar sesión?')) signOut(); })}
+      </div>
+    </div>
   );
 }
 
@@ -126,18 +158,22 @@ export function TutorialesSheet({ onClose }) {
 export default function Layout() {
   const [tut, setTut] = useState(false);
   const [acc, setAcc] = useState(false);
+  const [perfil, setPerfil] = useState(false);
   const { data: me } = useAsync(() => api.me(), []);
+  const { data: inicio } = useAsync(() => api.inicio(), []);
   const clientName = me?.name || me?.clientName;
+  // Puntito rojo en Guiones: hay grabaciones esperando.
+  const dotGuiones = Array.isArray(inicio?.pendientes) && inicio.pendientes.some((p) => String(p.tipo || '').startsWith('grabacion'));
 
   return (
     <PhoneFrame>
-      {/* Cerrar sesión vive en el tab Perfil (con confirmación). */}
-      <Header clientName={clientName} onAccesos={() => setAcc(true)} onTutoriales={() => setTut(true)} />
-      <main style={{ flex: 1, overflowY: 'auto' }}>
+      <Header clientName={clientName} onPerfil={() => setPerfil(true)} />
+      <main style={{ flex: 1, overflowY: 'auto', background: T.bg }}>
         <Outlet />
         <div style={{ height: 12 }} />
       </main>
-      <BottomNav />
+      <BottomNav dotGuiones={dotGuiones} />
+      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onTutoriales={() => { setPerfil(false); setTut(true); }} />}
       {tut && <TutorialesSheet onClose={() => setTut(false)} />}
       {acc && <AccesosSheet onClose={() => setAcc(false)} />}
     </PhoneFrame>

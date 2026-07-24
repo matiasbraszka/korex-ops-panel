@@ -38,7 +38,7 @@ async function subirABunny(file, title, onProgress) {
 }
 
 const VOOMLY_URL = 'https://app.voomly.com/';   // dashboard de Voombly (buscar el VSL y copiar su link)
-function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds }) {
+function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds, publicable = false, onVisibleCliente }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [voomEdit, setVoomEdit] = useState(false);
@@ -60,6 +60,15 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSe
           <button onClick={() => setEditing(true)} title="Cambiar el título" className="flex items-center gap-1 flex-1 min-w-0 text-left border-none bg-transparent cursor-pointer p-0">
             <span className="text-[10.5px] font-semibold text-[#3F4653] truncate">{r.title}</span>
             <Pencil size={9} className="opacity-0 group-hover:opacity-100 text-[#C3C9D4] shrink-0 transition-opacity" />
+          </button>
+        )}
+        {/* Edición publicada al PORTAL del cliente ("Lo que te devolvemos"). */}
+        {publicable && (
+          <button onClick={() => onVisibleCliente?.(r)}
+            title={r.visible_cliente ? 'El cliente lo VE en su portal (clic para ocultarlo)' : 'Publicar al portal del cliente'}
+            className="shrink-0 text-[8.5px] font-extrabold uppercase tracking-[0.03em] rounded px-1 py-0.5 border-none cursor-pointer"
+            style={r.visible_cliente ? { background: '#DCFCE7', color: '#15803D' } : { background: '#F1F3F7', color: '#9098A4' }}>
+            {r.visible_cliente ? 'Cliente ✓' : 'Publicar'}
           </button>
         )}
       </div>
@@ -197,7 +206,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
       // Orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10" quedan en secuencia
       // (localeCompare con numeric respeta los números dentro del texto).
@@ -271,6 +280,13 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const renombrar = async (r, title) => {
     setItems((prev) => (prev || []).map(x => x.id === r.id ? { ...x, title } : x));
     await supabase.from('funnel_resources').update({ title }).eq('id', r.id);
+  };
+
+  // "Lo que te devolvemos": publicar/despublicar una edición al PORTAL del cliente.
+  const toggleVisibleCliente = async (r) => {
+    const next = !r.visible_cliente;
+    setItems((prev) => (prev || []).map(x => x.id === r.id ? { ...x, visible_cliente: next } : x));
+    await supabase.from('funnel_resources').update({ visible_cliente: next }).eq('id', r.id);
   };
 
   // Guarda el link de Voombly del VSL (además del video normal alojado en Bunny).
@@ -427,7 +443,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             )}
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} />)}
+                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} publicable={bucketKey === 'ad_edit' || bucketKey === 'vsl_edit'} onVisibleCliente={toggleVisibleCliente} />)}
               </div>
             )}
             {/* Paginado: mostramos de a 10 para que la carpeta abra fluida aunque tenga cientos. */}
