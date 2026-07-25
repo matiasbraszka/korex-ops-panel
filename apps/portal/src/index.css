@@ -107,6 +107,54 @@ button { font-family: inherit; }
 .mk-sheet { width: 100%; max-width: 440px; margin: 0 auto; }
 @media (min-width: 1024px) { .mk-sheet { max-width: 560px; } }
 
+/* ── Onboarding ─────────────────────────────────────────────────────────────
+   Wrapper PROPIO, no [data-kx-screen]: esa regla mete un padding-left de 236px
+   pensado para el menú lateral, y el onboarding no tiene menú (es pantalla
+   completa, sin tabs, para que el cliente no se distraiga).
+
+   El cuerpo va a 16-17px en vez de los 13-15px del resto del portal: acá el
+   cliente pasa 40 minutos leyendo y respondiendo, y hay que contemplar que del
+   otro lado puede haber alguien de 60 años leyendo desde el celular. */
+[data-kx-onb] {
+  height: 100%; display: flex; flex-direction: column;
+  position: relative; animation: kxFade .22s ease;
+  font-size: 16px;
+}
+[data-kx-onb] .kxs { padding-inline: 20px; }
+
+@media (min-width: 1024px) {
+  /* Dos columnas: índice de tramos fijo a la izquierda, contenido acotado. */
+  [data-kx-onb] { padding-left: 280px; }
+  [data-kx-onb] .kxs { padding-inline: max(32px, calc((100% - 720px) / 2)) !important; }
+  [data-kx-onb] [data-kx-onbfooter] { padding-inline: max(32px, calc((100% - 720px) / 2)) !important; }
+  [data-kx-onbindice] {
+    position: absolute !important; left: 0; top: 0; bottom: 0; width: 280px;
+    display: flex !important; flex-direction: column;
+    padding: 26px 20px; box-sizing: border-box; overflow-y: auto;
+    background: #fff; box-shadow: 1px 0 0 var(--mk-border);
+  }
+}
+[data-kx-onbindice] { display: none; }
+
+/* Onda del grabador: 12 barritas que suben y bajan mientras se graba.
+   Es decorativa a propósito — un AnalyserNode real cuesta batería en el
+   celular y no aporta nada que el cliente pueda usar. */
+@keyframes kxOnda { 0%,100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+.kx-onda span {
+  display: block; width: 3px; height: 22px; border-radius: 999px;
+  background: currentColor; transform-origin: center;
+  animation: kxOnda .9s ease-in-out infinite;
+}
+
+/* Respeta a quien pidió menos movimiento: el fade se queda (orienta),
+   los rebotes y pulsos se van. */
+@media (prefers-reduced-motion: reduce) {
+  [data-kx-onb] *, [data-kx-onb] *::before, [data-kx-onb] *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
 /* Impresión: solo el documento del guion. */
 @media print {
   body * { visibility: hidden !important; }

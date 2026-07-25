@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { usePortalAuth } from './auth/PortalAuthProvider';
 import Layout from './components/Layout';
 import PhoneFrame from './components/PhoneFrame';
@@ -14,6 +14,13 @@ import EntregablesScreen from './screens/EntregablesScreen';
 import MaterialScreen from './screens/MaterialScreen';
 import SubirPedidoScreen from './screens/SubirPedidoScreen';
 import AccesoMetaScreen from './screens/AccesoMetaScreen';
+import { OnboardingProvider } from './onboarding/OnboardingProvider';
+import OnboardingIndex from './onboarding/screens/OnboardingIndex';
+import AgendarScreen from './onboarding/screens/AgendarScreen';
+import TramoScreen from './onboarding/screens/TramoScreen';
+import PreguntaScreen from './onboarding/screens/PreguntaScreen';
+import RepasoScreen from './onboarding/screens/RepasoScreen';
+import CelebracionScreen from './onboarding/screens/CelebracionScreen';
 
 export default function App() {
   const { authed, loading } = usePortalAuth();
@@ -35,6 +42,20 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
+
+        {/* Onboarding: pantalla completa, SIN tabs ni menú lateral, para que el
+            cliente no se distraiga. Es donde cae el magic link del mail. Su
+            Provider envuelve solo estas rutas: el resto del portal no necesita
+            cargar el catálogo de preguntas. */}
+        <Route path="/onboarding" element={<OnboardingProvider><PhoneFrame><Outlet /></PhoneFrame></OnboardingProvider>}>
+          <Route index element={<OnboardingIndex />} />
+          <Route path="agendar" element={<AgendarScreen />} />
+          <Route path="repaso" element={<RepasoScreen />} />
+          <Route path="listo" element={<CelebracionScreen />} />
+          <Route path=":tramo" element={<TramoScreen />} />
+          <Route path=":tramo/:qkey" element={<PreguntaScreen />} />
+        </Route>
+
         {/* Tabs con navegación inferior (menú lateral en PC): Inicio · Guiones · Embudos · Material */}
         <Route element={<Layout />}>
           <Route path="/" element={<InicioScreen />} />

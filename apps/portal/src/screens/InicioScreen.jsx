@@ -5,7 +5,7 @@ import { api, isDemo } from '../data/portalApi';
 import { destinoTarea } from '../data/taskNav';
 import { PerfilSheet, AccesosSheet, TutorialesSheet } from '../components/Layout';
 import { T, display, microLabel } from '../components/theme';
-import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile } from '../components/icons';
+import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile, IcoDoc } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
 
 // INICIO — exacta al prototipo: logo + iniciales, "Hola, Sergio", Avance,
@@ -29,9 +29,18 @@ export default function InicioScreen() {
   const completados = Array.isArray(d.completados) ? d.completados : [];
   const total = pendientes.length + tareas.length;
   const wa = (d.whatsapp || '').replace(/\D/g, '');
-  const intro = total === 0
-    ? 'Nos entregaste todo lo que necesitábamos. Ahora seguimos nosotros.'
-    : `Necesitamos ${total === 1 ? '1 cosa tuya' : `${total} cosas tuyas`} para seguir avanzando. Empieza por la primera.`;
+
+  // Onboarding sin terminar: es lo único que importa hasta que lo cierre.
+  const onb = d.onboarding || {};
+  const onbPendiente = !!onb.existe && !onb.completo;
+
+  const intro = onbPendiente
+    ? (onb.pct > 0
+      ? 'Te falta poco para que arranquemos. Seguí donde quedaste.'
+      : 'Antes de arrancar necesitamos que nos cuentes sobre tu negocio.')
+    : total === 0
+      ? 'Nos entregaste todo lo que necesitábamos. Ahora seguimos nosotros.'
+      : `Necesitamos ${total === 1 ? '1 cosa tuya' : `${total} cosas tuyas`} para seguir avanzando. Empieza por la primera.`;
   const avanceNota = total === 0
     ? 'Ya entregaste todo. De aquí en adelante avanzamos nosotros.'
     : 'Este número sube cuando subes el material que falta. Sin eso no podemos seguir.';
@@ -52,6 +61,55 @@ export default function InicioScreen() {
         <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
 
+      {/* Onboarding sin terminar: reemplaza TODO el bloque de pendientes por una
+          sola tarjeta grande. Mientras no lo complete, no hay nada más que
+          hacer en la plataforma — mostrarle pendientes de material mezclados
+          con el onboarding lo dispersa y lo hace tardar más. */}
+      {onbPendiente ? (
+        <div style={{ padding: '22px 22px 0' }}>
+          <div
+            onClick={() => nav('/onboarding')} role="button"
+            style={{ cursor: 'pointer', background: '#fff', borderRadius: 22, padding: 22, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 16 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '6px 11px', borderRadius: 999, background: 'var(--mk-blue-bg)', color: 'var(--mk-blue-ink)' }}>
+                Te toca a ti
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 15, alignItems: 'flex-start' }}>
+              <span style={{ width: 46, height: 46, borderRadius: 15, background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+                <IcoDoc size={21} stroke="var(--mk-blue-ink)" />
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.16, color: T.ink }}>
+                  {onb.pct > 0 ? 'Seguí con tu onboarding' : 'Completá tu onboarding'}
+                </div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2, marginTop: 6 }}>
+                  {onb.agendaEstado === 'pendiente'
+                    ? 'Primero reservá el día de tu sesión, y después contanos sobre tu negocio.'
+                    : 'Es de donde sacamos tu estrategia, tus anuncios y tu video de ventas.'}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ height: 8, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 999, background: T.primary, transition: 'width .35s ease', width: `${onb.pct || 0}%` }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: T.text2, marginTop: 7 }}>
+                <span>{onb.pct || 0}% completo</span>
+                <span>{onb.respondidas || 0} de {onb.requeridas || 0} respuestas</span>
+              </div>
+            </div>
+
+            <div style={{ height: 48, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              {onb.pct > 0 ? 'Seguir donde quedé' : 'Empezar'}
+            </div>
+          </div>
+        </div>
+      ) : (
+      <>
       {/* Avance de tu proyecto */}
       <div style={{ margin: '20px 22px 0', padding: '18px 20px', background: '#fff', borderRadius: 20, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 11 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -99,6 +157,8 @@ export default function InicioScreen() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
         ¿Algo no se entiende?{' '}

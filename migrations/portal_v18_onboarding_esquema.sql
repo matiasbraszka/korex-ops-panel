@@ -1,5 +1,12 @@
 -- ═════════════════════════════════════════════════════════════════════════════
--- Portal del cliente v15 — ONBOARDING: esquema base
+-- Portal del cliente v18 — ONBOARDING: esquema base
+--
+-- Aplicada a prod (cgdwieoxjoexzlfbxrfc) el 2026-07-25 vía MCP.
+-- OJO: se aplicaron con la numeración vieja (v15-v21) y después se renumeraron
+-- a v18-v24 acá, porque v15 y v17 ya estaban tomadas por portal_v15_guias_grabacion
+-- y portal_v17_accion_estado_secciones. En supabase_migrations.schema_migrations
+-- figuran como portal_v15_onboarding_esquema … portal_v21_onboarding_revoke_anon.
+-- No hay que re-aplicarlas.
 --
 -- El onboarding deja de ser un Google Doc que el cliente completa por fuera y
 -- pasa a ser la primera pantalla de la plataforma. Cinco tablas:
@@ -25,7 +32,7 @@
 --    WhatsApp + recordatorios); acá solo guardamos el FK.
 --
 --  · RLS solo-equipo en las 5 tablas. El cliente NUNCA las lee directo: todo
---    pasa por RPCs security definer (portal_v17). Es la doctrina del portal.
+--    pasa por RPCs security definer (portal_v20). Es la doctrina del portal.
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- ── 1 · Catálogo: tramos ─────────────────────────────────────────────────────
@@ -46,7 +53,7 @@ create table if not exists public.onboarding_sections (
 );
 
 -- ── 2 · Catálogo: preguntas ──────────────────────────────────────────────────
--- target_column NO se usa para armar SQL dinámico: portal_v18 tiene un `case`
+-- target_column NO se usa para armar SQL dinámico: portal_v21 tiene un `case`
 -- explícito con la allowlist de columnas escribibles. Acá es solo el mapeo.
 create table if not exists public.onboarding_questions (
   qkey          text primary key,                -- 'historia_por_que_empece' — clave estable, jamás se renombra

@@ -1,5 +1,6 @@
 -- ═════════════════════════════════════════════════════════════════════════════
--- Portal del cliente v16 — ONBOARDING: catálogo (tramos + preguntas)
+-- Portal del cliente v19 — ONBOARDING: catálogo (tramos + preguntas)
+-- Aplicada a prod el 2026-07-25 vía MCP: 7 tramos, 66 preguntas (53 requeridas).
 --
 -- Reemplaza las ~70 preguntas del prototipo por 7 tramos y ~40 preguntas que
 -- se responden en ~40 minutos. Tres cambios de fondo respecto del prototipo:

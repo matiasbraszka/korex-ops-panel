@@ -7,6 +7,7 @@ import { api } from '../data/portalApi';
 import { useAsync } from './ui';
 import { usePortalAuth } from '../auth/PortalAuthProvider';
 import { T } from './theme';
+import CandadoSheet from '../onboarding/gate/CandadoSheet';
 
 // Hoja de PERFIL: datos + accesos + tutoriales + cerrar sesión.
 export function PerfilSheet({ clientName, onClose, onAccesos, onTutoriales }) {
@@ -144,11 +145,29 @@ export function TutorialesSheet({ onClose }) {
 // Layout de los tabs: pantalla completa con fade al cambiar de ruta (el CSS de
 // index.css convierte la tab bar en menú lateral en PC). El header con logo y
 // perfil vive DENTRO de Inicio, como en el prototipo.
+//
+// MURO SUAVE: mientras el cliente no termina su onboarding, los tabs que
+// dependen de esa información quedan con candado. El desbloqueo es PROGRESIVO
+// —cada tramo abre lo suyo— porque ver algo abrirse a mitad de camino es lo que
+// sostiene el esfuerzo; dejar todo para el final no motiva a nadie.
+//
+// El enforcement es solo del front, a propósito: es un muro de producto, no de
+// seguridad. Blindar las RPCs solo agregaría formas de que un cliente quede
+// trabado sin ningún beneficio: no hay nada peligroso en que lea el estado de
+// su propio funnel.
 export default function Layout() {
   const { pathname } = useLocation();
   const { data: inicio } = useAsync(() => api.inicio(), []);
+  const [candado, setCandado] = useState(null);
+
   // Puntito rojo en Guiones: hay grabaciones esperando.
   const dotGuiones = Array.isArray(inicio?.pendientes) && inicio.pendientes.some((p) => String(p.tipo || '').startsWith('grabacion'));
+
+  const onb = inicio?.onboarding;
+  const abiertas = Array.isArray(onb?.desbloqueadas) ? onb.desbloqueadas : [];
+  const bloqueados = (onb?.existe && !onb?.completo)
+    ? ['/guiones', '/embudos', '/material'].filter((r) => !abiertas.includes(r))
+    : [];
 
   return (
     <PhoneFrame>
@@ -156,8 +175,15 @@ export default function Layout() {
         <main className="kxs" style={{ flex: 1, overflowY: 'auto' }}>
           <Outlet />
         </main>
-        <BottomNav dotGuiones={dotGuiones} />
+        <BottomNav
+          dotGuiones={dotGuiones}
+          bloqueados={bloqueados}
+          onBloqueado={(ruta) => setCandado(ruta)}
+        />
       </KxScreen>
+      {candado && (
+        <CandadoSheet ruta={candado} pct={onb?.pct || 0} onCerrar={() => setCandado(null)} />
+      )}
     </PhoneFrame>
   );
 }

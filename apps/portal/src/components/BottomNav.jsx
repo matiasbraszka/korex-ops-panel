@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { IcoHome, IcoDoc, IcoEmbudos, IcoUpload } from './icons';
+import { IcoHome, IcoDoc, IcoEmbudos, IcoUpload, IcoLock } from './icons';
 
 // Navegación del prototipo: 4 tabs abajo en el celular; en PC (≥1024px) el CSS
 // la vuelve menú lateral de 236px (data-kx-tabbar). Punto rojo en Guiones
@@ -11,7 +11,11 @@ const TABS = [
   { to: '/material', label: 'Material', Ico: IcoUpload },
 ];
 
-export default function BottomNav({ dotGuiones = false, activeOverride }) {
+// `bloqueados`: rutas con candado mientras el cliente no termina su onboarding.
+// El candado NO navega: abre una hoja que explica qué falta. Es un muro suave —
+// el cliente VE que hay más plataforma esperándolo, que es justamente lo que lo
+// empuja a terminar; esconderlo no motivaría a nadie.
+export default function BottomNav({ dotGuiones = false, activeOverride, bloqueados = [], onBloqueado }) {
   const nav = useNavigate();
   const { pathname } = useLocation();
   return (
@@ -22,12 +26,20 @@ export default function BottomNav({ dotGuiones = false, activeOverride }) {
           : (to === '/' ? pathname === '/' : pathname.startsWith(to)
             || (to === '/guiones' && pathname.startsWith('/documento'))
             || (to === '/embudos' && (pathname.startsWith('/embudo/') || pathname.startsWith('/entregables'))));
+        const trabado = bloqueados.includes(to);
         return (
-          <div key={to} data-active={active ? '1' : '0'} onClick={() => nav(to)} role="button" aria-label={label}
-            style={{ cursor: 'pointer', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: active ? 'var(--mk-blue-ops)' : 'var(--mk-text3)', position: 'relative' }}>
+          <div key={to} data-active={active ? '1' : '0'}
+            onClick={() => (trabado ? onBloqueado?.(to) : nav(to))}
+            role="button" aria-label={trabado ? `${label} (se abre al terminar tu onboarding)` : label}
+            style={{ cursor: 'pointer', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: active ? 'var(--mk-blue-ops)' : 'var(--mk-text3)', position: 'relative', opacity: trabado ? 0.45 : 1 }}>
             <span style={{ position: 'relative', display: 'inline-flex' }}>
               <Ico size={20} stroke="currentColor" sw={active ? 2.3 : 1.8} />
-              {to === '/guiones' && dotGuiones && (
+              {trabado && (
+                <span style={{ position: 'absolute', top: -3, right: -6, width: 13, height: 13, borderRadius: '50%', background: 'var(--mk-surface3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <IcoLock size={8} stroke="var(--mk-text2)" sw={2.6} />
+                </span>
+              )}
+              {to === '/guiones' && dotGuiones && !trabado && (
                 <span style={{ position: 'absolute', top: -2, right: -5, width: 8, height: 8, borderRadius: '50%', background: 'var(--mk-red)' }} />
               )}
             </span>

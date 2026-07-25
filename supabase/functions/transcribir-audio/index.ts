@@ -3,13 +3,17 @@
 // speech-to-text compatible con OpenAI (Groq Whisper por defecto, o OpenAI).
 //
 // Diseño deliberadamente stateless y de superficie mínima: no toca la base, no
-// usa Storage, no depende de cron. El navegador (herramienta "Auditoría de
-// audios" en Soporte › Recursos) parsea el _chat.txt, llama a esta función una
-// vez por audio (con concurrencia limitada) y arma el texto final. Cada
-// invocación transcribe un audio corto → nunca se acerca al timeout de 150s.
+// usa Storage, no depende de cron. Cada invocación transcribe un audio corto →
+// nunca se acerca al timeout de 150s.
 //
-// Auth: verify_jwt=true + permiso soporte:read (mismo patrón que whatsapp-media),
-// para que no sea un endpoint de pago abierto.
+// Dos consumidores:
+//   1) El EQUIPO, desde "Auditoría de audios" en Soporte › Recursos: el
+//      navegador parsea el _chat.txt y llama una vez por audio.
+//   2) El CLIENTE, desde el micrófono del onboarding del portal (ver la rama
+//      authorizePortalCliente más abajo).
+//
+// Auth: verify_jwt=true + permiso soporte:read, o cliente con onboarding en
+// curso. Es un endpoint de pago: no puede quedar abierto.
 //
 // Secrets (setear al menos uno):
 //   GROQ_API_KEY    → usa https://api.groq.com  (barato y rápido; default)
@@ -78,6 +82,67 @@ async function authorizeSoporteRead(req: Request): Promise<boolean> {
   return (perms || []).length > 0;
 }
 
+// ── Rama CLIENTE (portal) ────────────────────────────────────────────────────
+// El onboarding del portal deja al cliente contestar hablando en vez de
+// escribir — es lo único que resuelve de verdad el problema de las respuestas
+// de tres líneas. Ese cliente no tiene rol soporte:read, así que necesita su
+// propia puerta.
+//
+// Se agrega como RAMA de esta función y no como función nueva a propósito:
+// duplicarla significaría duplicar el manejo de proveedor, los límites, el
+// timeout y la alerta de saldo de Groq, y que dentro de tres meses una tenga un
+// arreglo que la otra no.
+//
+// Es un endpoint que cuesta plata, así que el permiso es estrecho: solo un
+// cliente con onboarding EN CURSO, y con tope diario.
+const CLIENTE_MAX_DIA = 60;
+
+async function authorizePortalCliente(req: Request): Promise<string | null> {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const { data: { user }, error } = await admin.auth.getUser(token);
+  if (error || !user?.email) return null;
+
+  const { data: acc } = await admin
+    .from("portal_access").select("id, person_id, enabled")
+    .ilike("login_email", user.email).maybeSingle();
+  if (!acc?.enabled) return null;
+
+  // El run activo es a la vez la identidad del cliente y la ventana de permiso:
+  // fuera del onboarding, la función vuelve a ser solo del equipo.
+  const { data: runs } = await admin
+    .from("onboarding_runs").select("id, client_id, estado")
+    .in("estado", ["invitado", "en_curso"]);
+  if (!runs?.length) return null;
+
+  const { data: person } = await admin
+    .from("fin_directory").select("nombre, aliases").eq("id", acc.person_id).maybeSingle();
+  if (!person) return null;
+
+  // Mismo criterio que fin_norm() en la base: sin acentos, solo [a-z0-9].
+  const norm = (s: string) =>
+    (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]/g, "");
+  const claves = new Set([person.nombre, ...(person.aliases || [])].map(norm));
+
+  for (const r of runs) {
+    const { data: c } = await admin.from("clients").select("name").eq("id", r.client_id).maybeSingle();
+    if (c && claves.has(norm(c.name))) return r.client_id as string;
+  }
+  return null;
+}
+
+async function excedeCupoDiario(clientId: string): Promise<boolean> {
+  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await admin
+    .from("onboarding_answers")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .not("audio_ms", "is", null)
+    .gte("updated_at", desde);
+  return (count ?? 0) >= CLIENTE_MAX_DIA;
+}
+
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -119,8 +184,8 @@ async function maybeAlertQuota(detail: string): Promise<void> {
     );
     await sendSlackAlert(
       "🔴 *Transcripcion de audios sin saldo*\n" +
-        "La API de transcripcion (OpenAI) se quedo sin credito: no se pueden transcribir audios en el panel " +
-        "(Soporte › Auditoria de audios y el boton de la bandeja).\n" +
+        "La API de transcripcion se quedo sin credito: no se pueden transcribir audios en el panel " +
+        "(Soporte › Auditoria de audios) NI en el microfono del onboarding de los clientes.\n" +
         "➡️ Carga saldo en OpenAI (o configura una key de Groq) para reactivarlo.\n" +
         "_Detalle: " + detail.slice(0, 180) + "_",
     );
@@ -133,7 +198,15 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResp(405, { error: "method_not_allowed" });
 
-  if (!(await authorizeSoporteRead(req))) return jsonResp(403, { error: "forbidden" });
+  // Equipo (auditoría de audios de Soporte) o cliente con onboarding en curso.
+  let clienteId: string | null = null;
+  if (!(await authorizeSoporteRead(req))) {
+    clienteId = await authorizePortalCliente(req);
+    if (!clienteId) return jsonResp(403, { error: "forbidden" });
+    if (await excedeCupoDiario(clienteId)) {
+      return jsonResp(200, { ok: false, error: "cupo_diario" });
+    }
+  }
 
   const provider = resolveProvider();
   if (!provider) {
