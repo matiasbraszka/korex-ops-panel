@@ -60,8 +60,10 @@ export default function DocumentoScreen() {
   const { sid, tipo } = useParams();
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo]);
+  const { data: config } = useAsync(() => api.config(), []);
 
   const [drawer, setDrawer] = useState(false);
+  const [guiaOpen, setGuiaOpen] = useState(false);
   const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
   const [composer, setComposer] = useState(null); // {quote,sectionId,parentId?}
   const [draft, setDraft] = useState('');
@@ -207,6 +209,10 @@ export default function DocumentoScreen() {
             <IcoComment size={14} stroke="currentColor" sw={2} />
             {topComs.length}
           </div>
+          {/* "?" → la guía en video de cómo grabarse (anuncios o VSL) */}
+          {esGuion && (esVsl ? config?.guiaVsl : config?.guiaAds) && (
+            <div onClick={() => setGuiaOpen(true)} role="button" aria-label="Cómo grabar" style={{ cursor: 'pointer', width: 30, height: 30, borderRadius: '50%', background: 'var(--mk-blue-bg)', color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flex: 'none' }}>?</div>
+          )}
         </div>
 
         {/* Fondo BLANCO en el documento: más contraste para leer (pedido de Matías). */}
@@ -445,6 +451,28 @@ export default function DocumentoScreen() {
               )}
             </div>
           </>
+        )}
+
+        {/* Hoja "¿Cómo grabar?" con la guía en video */}
+        {guiaOpen && (
+          <div onClick={() => setGuiaOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 75, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'kxFade .2s ease' }}>
+            <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#fff', borderRadius: '22px 22px 0 0', padding: '8px 22px 30px', animation: 'kxUp .25s ease' }}>
+              <div style={{ width: 44, height: 5, borderRadius: 999, background: 'var(--mk-border)', margin: '10px auto 18px' }} />
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <IcoPlaySoft size={24} stroke="var(--mk-blue-ops)" sw={2.2} />
+              </div>
+              <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: T.ink, textAlign: 'center', marginBottom: 6 }}>
+                ¿Cómo grabar {esVsl ? 'tu VSL' : 'tus anuncios'}?
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, textAlign: 'center', marginBottom: 18 }}>
+                Mira esta guía corta antes de grabar: te muestra paso a paso cómo hacerlo bien a la primera.
+              </div>
+              <a href={esVsl ? config?.guiaVsl : config?.guiaAds} target="_blank" rel="noreferrer" style={{ height: 52, borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, textDecoration: 'none', boxShadow: '0 8px 22px rgba(91,124,245,.34)' }}>
+                Ver la guía en video
+              </a>
+              <div onClick={() => setGuiaOpen(false)} role="button" style={{ cursor: 'pointer', textAlign: 'center', marginTop: 14, fontSize: 13.5, fontWeight: 600, color: T.text2 }}>Cerrar</div>
+            </div>
+          </div>
         )}
 
         {/* Botón flotante Comentar (estilo del prototipo) */}
