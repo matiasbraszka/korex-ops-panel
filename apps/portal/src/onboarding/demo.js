@@ -102,6 +102,7 @@ export async function demoGuardar(qkey, valor, opts = {}) {
   mutar((d) => {
     d.respuestas[qkey] = {
       valor: valor ?? '',
+      valorJson: opts.valorJson ?? d.respuestas[qkey]?.valorJson ?? null,
       source: opts.source || 'texto',
       flag: opts.flag ?? null,
     };
@@ -115,7 +116,12 @@ export async function demoGuardarLote(items) {
   await demora(180);
   mutar((d) => {
     (items || []).forEach((it) => {
-      d.respuestas[it.qkey] = { valor: it.valor ?? '', source: it.source || 'texto', flag: it.flag ?? null };
+      d.respuestas[it.qkey] = {
+        valor: it.valor ?? '',
+        valorJson: it.valorJson ?? d.respuestas[it.qkey]?.valorJson ?? null,
+        source: it.source || 'texto',
+        flag: it.flag ?? null,
+      };
     });
   });
   return { ok: true, demo: true };

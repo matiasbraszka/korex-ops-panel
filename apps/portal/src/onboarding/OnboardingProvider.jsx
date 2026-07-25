@@ -145,6 +145,7 @@ export function OnboardingProvider({ children }) {
     setRespuestas((r) => ({
       ...r,
       [qkey]: { ...(r[qkey] || {}), valor, ...(opts.source ? { source: opts.source } : {}),
+        ...(opts.valorJson !== undefined ? { valorJson: opts.valorJson } : {}),
         ...(opts.flag !== undefined ? { flag: opts.flag } : {}) },
     }));
     setSync('guardando');

@@ -7,7 +7,7 @@
 // completa tanto alguien de 25 desde el celular como alguien de 65 desde la
 // computadora, y el segundo es el que decide el tamaño.
 import { useState } from 'react';
-import { IcoCheck } from '../../components/icons';
+import { IcoCheck, IcoLapiz } from '../../components/icons';
 import { TO, F, dsp, label } from '../tokens';
 import CampoAbierto from './CampoAbierto';
 import CampoSubida from './CampoSubida';
@@ -104,20 +104,73 @@ function Opciones({ q, valor, onChange, multi }) {
   );
 }
 
-// Pantalla de confirmación del tramo 1: NO pregunta, muestra lo que el sistema
-// ya sabe del cliente (viene de crear-venta) y le pide que lo valide. Son dos
-// minutos que en el formulario viejo eran diez.
-function Confirmar({ q, valor, onChange, prefill }) {
-  const filas = [
-    ['Nombre', prefill.nombre],
-    ['Empresa', prefill.empresa],
-    ['Email', prefill.email],
-    ['Teléfono', prefill.telefono],
-    ['País', prefill.pais],
-    ['Datos del contrato', prefill.contrato],
-  ].filter(([, v]) => v);
+// ─────────────────────────────────────────────────────────────────────────────
+// Pantalla de confirmación del tramo 1.
+//
+// NO pregunta: muestra lo que el sistema ya sabe del cliente (viene de
+// crear-venta) y le pide que lo valide. Son dos minutos que en el formulario
+// viejo eran diez.
+//
+// Y si algo está mal, LO CORRIGE ACÁ MISMO. Mandarlo a WhatsApp por un teléfono
+// mal tipeado es pedirle que salga de la plataforma, espere una respuesta y
+// vuelva — con suerte. Encima ese dato es el que usamos después para escribirle.
+//
+// Lo que se corrige NO se escribe directo sobre el cliente desde el navegador:
+// se guarda como respuesta y el write-back aplica solo los campos seguros. El
+// nombre y los datos del contrato quedan para que los mire el equipo — el
+// nombre es la llave con la que la plataforma reconoce al cliente, y cambiarlo
+// solo lo dejaría afuera de su propio portal.
+// ─────────────────────────────────────────────────────────────────────────────
+const CAMPOS_CONFIRMAR = [
+  { k: 'nombre', label: 'Nombre', tipo: 'text' },
+  { k: 'empresa', label: 'Empresa', tipo: 'text' },
+  { k: 'email', label: 'Email', tipo: 'email' },
+  { k: 'telefono', label: 'Teléfono', tipo: 'tel' },
+  { k: 'pais', label: 'País', tipo: 'text' },
+  { k: 'contrato', label: 'Datos del contrato', tipo: 'textarea' },
+];
 
-  const ok = String(valor || '') === 'ok';
+// Los que el equipo revisa a mano antes de aplicarlos.
+const REVISA_EQUIPO = new Set(['nombre', 'contrato']);
+
+const textoConfirmado = (datos, cambios) => CAMPOS_CONFIRMAR
+  .filter((c) => String(datos[c.k] || '').trim())
+  .map((c) => `${c.label}: ${String(datos[c.k]).trim()}`)
+  .concat(cambios.length ? [`(El cliente corrigió: ${cambios.join(', ')})`] : [])
+  .join('\n');
+
+function Confirmar({ q, valor, valorJson, onChange, prefill }) {
+  const [editando, setEditando] = useState(null);
+  const [borrador, setBorrador] = useState('');
+
+  const guardados = valorJson?.datos || {};
+  const datos = CAMPOS_CONFIRMAR.reduce((acc, c) => {
+    acc[c.k] = guardados[c.k] ?? prefill[c.k] ?? '';
+    return acc;
+  }, {});
+
+  const cambiados = CAMPOS_CONFIRMAR
+    .filter((c) => String(datos[c.k] || '').trim() !== String(prefill[c.k] || '').trim())
+    .map((c) => c.k);
+
+  const confirmado = String(valor || '').trim() !== '';
+
+  const emitir = (proximos, confirmar) => {
+    const cambios = CAMPOS_CONFIRMAR
+      .filter((c) => String(proximos[c.k] || '').trim() !== String(prefill[c.k] || '').trim())
+      .map((c) => c.label.toLowerCase());
+    // Mientras no toque "Está todo bien" el value_text queda vacío, así que la
+    // pregunta no cuenta como respondida: corregir un campo no es confirmar.
+    onChange(
+      confirmar || confirmado ? textoConfirmado(proximos, cambios) : '',
+      { valorJson: { datos: proximos, cambios, confirmado: !!(confirmar || confirmado) }, inmediato: true },
+    );
+  };
+
+  const abrir = (k) => { setBorrador(String(datos[k] || '')); setEditando(k); };
+  const cerrar = () => { setEditando(null); setBorrador(''); };
+  const aplicar = (k) => { emitir({ ...datos, [k]: borrador.trim() }); cerrar(); };
+  const restaurar = (k) => { emitir({ ...datos, [k]: prefill[k] ?? '' }); cerrar(); };
 
   return (
     <div>
@@ -126,37 +179,120 @@ function Confirmar({ q, valor, onChange, prefill }) {
         marginTop: 18, borderRadius: 18, background: '#fff',
         border: `1px solid ${TO.line}`, overflow: 'hidden',
       }}>
-        {filas.map(([k, v], i) => (
-          <div key={k} style={{
-            padding: '15px 17px', borderTop: i ? `1px solid ${TO.line}` : 'none',
-          }}>
-            <div style={label()}>{k}</div>
-            <div style={{ fontSize: F.input, fontWeight: 600, color: TO.ink, marginTop: 5, lineHeight: 1.45 }}>
-              {v}
+        {CAMPOS_CONFIRMAR.map((c, i) => {
+          const enEdicion = editando === c.k;
+          const corregido = cambiados.includes(c.k);
+          const valorActual = String(datos[c.k] || '');
+          if (!valorActual && !enEdicion && !corregido && !prefill[c.k]) return null;
+
+          return (
+            <div key={c.k} style={{
+              padding: '15px 17px', borderTop: i ? `1px solid ${TO.line}` : 'none',
+              background: enEdicion ? TO.blueWash : corregido ? TO.greenWash : 'transparent',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ ...label(corregido ? TO.greenInk : TO.meta), flex: 1 }}>
+                  {c.label}{corregido && ' · corregido'}
+                </span>
+                {!enEdicion && (
+                  <button type="button" onClick={() => abrir(c.k)} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none',
+                    background: 'none', border: `1.5px solid ${TO.lineStrong}`, borderRadius: 999,
+                    padding: '7px 13px', cursor: 'pointer', color: TO.blue,
+                    fontSize: 14, fontWeight: 700, fontFamily: 'inherit',
+                  }}>
+                    <IcoLapiz size={15} stroke={TO.blue} sw={2.2} /> Corregir
+                  </button>
+                )}
+              </div>
+
+              {enEdicion ? (
+                <div style={{ marginTop: 10 }}>
+                  {c.tipo === 'textarea' ? (
+                    <textarea
+                      value={borrador} onChange={(e) => setBorrador(e.target.value)}
+                      autoFocus rows={3}
+                      style={{
+                        ...inputStyle(true), height: 'auto', minHeight: 90,
+                        padding: '13px 15px', lineHeight: 1.5, resize: 'vertical',
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type={c.tipo} value={borrador} onChange={(e) => setBorrador(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter') aplicar(c.k); if (e.key === 'Escape') cerrar(); }}
+                      style={inputStyle(true)}
+                    />
+                  )}
+
+                  {REVISA_EQUIPO.has(c.k) && (
+                    <div style={{
+                      fontSize: F.meta, lineHeight: 1.5, color: TO.amber, marginTop: 10,
+                      padding: '11px 13px', background: TO.amberWash,
+                      border: '1px solid #E0A96A', borderRadius: 12,
+                    }}>
+                      Esto lo revisa una persona del equipo antes de cambiarlo.
+                      Escribilo igual y nosotros lo corregimos.
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 9, marginTop: 12, flexWrap: 'wrap' }}>
+                    <button type="button" onClick={() => aplicar(c.k)} style={{
+                      flex: 1, minWidth: 130, height: 48, borderRadius: 999, cursor: 'pointer',
+                      border: 'none', background: TO.blueBtn, color: '#fff',
+                      fontSize: 15, fontWeight: 800, fontFamily: 'inherit',
+                    }}>Guardar</button>
+                    <button type="button" onClick={cerrar} style={botonSecundario}>Cancelar</button>
+                    {corregido && (
+                      <button type="button" onClick={() => restaurar(c.k)} style={botonSecundario}>
+                        Volver al original
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  fontSize: F.input, fontWeight: 600, color: valorActual ? TO.ink : TO.meta,
+                  marginTop: 5, lineHeight: 1.45, whiteSpace: 'pre-wrap',
+                }}>
+                  {valorActual || 'Sin cargar — tocá "Corregir" y completalo'}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-        <button type="button" onClick={() => onChange('ok')} aria-pressed={ok} style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-          height: 56, borderRadius: 999, cursor: 'pointer',
-          border: `2px solid ${ok ? TO.greenInk : TO.lineStrong}`,
-          background: ok ? TO.greenWash : '#fff',
-          color: ok ? TO.greenInk : TO.ink, fontSize: F.input, fontWeight: 800,
-        }}>
-          <IcoCheck size={19} stroke={ok ? TO.greenInk : TO.body} sw={2.6} />
-          Está todo bien
+        <button
+          type="button" onClick={() => emitir(datos, true)} aria-pressed={confirmado}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            height: 56, borderRadius: 999, cursor: 'pointer',
+            border: `2px solid ${confirmado ? TO.greenInk : TO.lineStrong}`,
+            background: confirmado ? TO.greenWash : '#fff',
+            color: confirmado ? TO.greenInk : TO.ink, fontSize: F.input, fontWeight: 800,
+          }}
+        >
+          <IcoCheck size={19} stroke={confirmado ? TO.greenInk : TO.body} sw={2.6} />
+          {cambiados.length ? 'Listo, ahora está bien' : 'Está todo bien'}
         </button>
         <div style={{ fontSize: F.meta, color: TO.meta, textAlign: 'center', lineHeight: 1.5 }}>
-          ¿Hay algo mal? Escribinos por WhatsApp y lo corregimos — así no lo tenés
-          que cargar de nuevo.
+          {cambiados.length
+            ? `Guardamos tus correcciones en ${cambiados.length === 1 ? 'un dato' : `${cambiados.length} datos`}.`
+            : 'Si algo cambió, tocá "Corregir" en ese dato.'}
         </div>
       </div>
     </div>
   );
 }
+
+const botonSecundario = {
+  height: 48, borderRadius: 999, padding: '0 18px', cursor: 'pointer',
+  border: `1.5px solid ${TO.lineStrong}`, background: '#fff', color: TO.body,
+  fontSize: 15, fontWeight: 700, fontFamily: 'inherit', flex: 'none',
+};
 
 function CampoTexto({ q, valor, onChange, autoFocus, chico }) {
   const [enfocado, setEnfocado] = useState(false);
@@ -200,7 +336,7 @@ function CampoTexto({ q, valor, onChange, autoFocus, chico }) {
   );
 }
 
-export default function Campo({ q, valor, flag, onChange, onVoz, onAudioPendiente,
+export default function Campo({ q, valor, valorJson, flag, onChange, onVoz, onAudioPendiente,
   clientHint, prefill, autoFocus, chico, bloqueante }) {
   if (q.tipo === 'abierta') {
     return (
@@ -214,7 +350,11 @@ export default function Campo({ q, valor, flag, onChange, onVoz, onAudioPendient
   if (q.tipo === 'subida') return <CampoSubida q={q} bloqueante={bloqueante} />;
 
   if (q.tipo === 'confirmar') {
-    return <Confirmar q={q} valor={valor} onChange={onChange} prefill={prefill || {}} />;
+    return (
+      <Confirmar
+        q={q} valor={valor} valorJson={valorJson} onChange={onChange} prefill={prefill || {}}
+      />
+    );
   }
 
   if (q.tipo === 'opciones' || q.tipo === 'chips_multi') {

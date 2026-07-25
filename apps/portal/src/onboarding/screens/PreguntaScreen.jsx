@@ -106,11 +106,12 @@ export default function PreguntaScreen() {
               chico={pantalla.preguntas.length > 1}
               autoFocus={i === 0 && q.tipo !== 'abierta' && pantalla.preguntas.length === 1}
               valor={respuestas[q.qkey]?.valor || ''}
+              valorJson={respuestas[q.qkey]?.valorJson}
               flag={respuestas[q.qkey]?.flag}
               prefill={prefill}
               clientHint={estado?.runId}
               bloqueante={(bloqueantes || []).find((b) => b.bucket === q.bucket)}
-              onChange={(v) => responder(q.qkey, v)}
+              onChange={(v, opts) => responder(q.qkey, v, opts)}
               onVoz={(texto) => {
                 // Se APENDEA, nunca se reemplaza: si el cliente ya había escrito
                 // algo, pisárselo sería el peor final posible para su esfuerzo.
