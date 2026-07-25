@@ -261,6 +261,59 @@ async function leads(ctx: AgentCtx, clientName: string, cuentas: string[]): Prom
   };
 }
 
+// ── 3c) Calidad del lead (DME: curiosos / interesados / calificados) ─────────
+// El DME es lo ÚNICO que dice si el lead sirve cuando el CRM de Facebook no está conectado: el
+// equipo carga a mano cuántos leads fueron curiosos, interesados y calificados.
+// PERO el formulario tiene un solo cajón de embudo ("embudo1_") por cliente: si el cliente corre
+// varios embudos, todo cae mezclado ahí. Atribuirle esos porcentajes a ESTE embudo sería un
+// diagnóstico falso — y un número equivocado es peor que ninguno. Por eso la atribución la decide
+// el CÓDIGO (cuántos embudos tiene el cliente y cuántos están en vivo) y el agente la obedece.
+async function calidadDME(ctx: AgentCtx, page: Record<string, unknown>): Promise<Bloque | null> {
+  const desde = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  const [{ data: dme }, { data: funnels }] = await Promise.all([
+    ctx.supabase.from("dme_daily").select("date,metrics").eq("client_id", ctx.clientId)
+      .gte("date", desde).order("date", { ascending: false }).limit(20),
+    ctx.supabase.from("strategy_pages").select("id,is_live").eq("client_id", ctx.clientId),
+  ]);
+  const dias = Array.isArray(dme) ? dme : [];
+  if (!dias.length) return null;
+
+  const sum = (k: string) => dias.reduce((a, d) => a + num((d.metrics as Record<string, unknown>)?.[k]), 0);
+  const leadsTot = sum("embudo1_total_leads") || sum("embudo1_leads_registrados");
+  if (!leadsTot) return null;
+  const curiosos = sum("embudo1_leads_curiosos");
+  const interesados = sum("embudo1_leads_interesados");
+  const calificados = sum("embudo1_leads_calificados");
+  const pc = (n: number) => `${n} (${Math.round((n / leadsTot) * 100)}%)`;
+
+  // Atribuible si el cliente tiene un solo embudo, o si tiene uno solo EN VIVO y es este.
+  const todos = Array.isArray(funnels) ? funnels : [];
+  const enVivo = todos.filter((f) => f.is_live);
+  const esteEnVivo = !!page.is_live;
+  const atribuible = todos.length <= 1 || (enVivo.length === 1 && esteEnVivo);
+
+  const aviso = atribuible
+    ? (todos.length > 1
+      ? `ATRIBUCIÓN: el cliente tiene ${todos.length} embudos pero solo este está en vivo, así que el DME es de este embudo. Si le prenden otro, deja de valer.`
+      : "")
+    : `ATRIBUCIÓN — LEELO ANTES DE USAR ESTOS NÚMEROS: el DME tiene UN SOLO cajón de embudo por cliente ("embudo1") y este cliente tiene ${todos.length} embudos${enVivo.length ? ` (${enVivo.length} en vivo)` : ""}. Estos porcentajes son del CLIENTE ENTERO, no de este embudo. NO afirmes con esto que los leads de este embudo son buenos o malos: si lo usás, va rotulado CONJETURA y decís por qué.`;
+
+  return {
+    texto: [
+      `— CALIDAD DEL LEAD (DME cargado por el equipo · últimos ${dias.length} días con carga) —`,
+      `Leads: ${leadsTot} · curiosos ${pc(curiosos)} · interesados ${pc(interesados)} · calificados ${pc(calificados)}`,
+      `Recorrido: ${sum("embudo1_visitas_landing")} visitas a la landing → ${sum("embudo1_quiz_iniciado")} empiezan el quiz → ${sum("embudo1_quiz_terminado")} lo terminan → ${leadsTot} leads → ${sum("embudo1_whatsapp")} pasan a WhatsApp → ${sum("embudo1_cierres")} cierres`,
+      `Gasto cargado en el DME: ${fUsd(sum("embudo1_total_gastado"))}`,
+      aviso,
+    ].filter(Boolean).join("\n"),
+    fuente: atribuible
+      ? { rotulo: "Calidad del lead", estado: "ok", detalle: `DME, ${dias.length} días` }
+      : { rotulo: "Calidad del lead", estado: "parcial", detalle: `DME del cliente entero (${todos.length} embudos), no de este embudo` },
+    remedio: atribuible ? undefined : `El DME mezcla los ${todos.length} embudos de este cliente en un solo cajón ("embudo1_"), así que su % de curiosos/interesados/calificados NO sirve para diagnosticar ESTE embudo. Remedio de fondo: que el DME se cargue POR EMBUDO (un bloque de métricas por funnel, atado al id del funnel) en vez del cajón fijo. Mientras tanto, la calidad de este embudo solo la da el CRM de Facebook conectado.`,
+    meta: { dias: dias.length, leads: leadsTot, atribuible, embudos: todos.length },
+  };
+}
+
 // ── 4) Clarity (comportamiento en la página) ─────────────────────────────────
 async function clarity(ctx: AgentCtx, page: Record<string, unknown>): Promise<Bloque> {
   const { data: cfs } = await ctx.supabase.from("clarity_funnels")
@@ -480,17 +533,18 @@ const analista: AgentModule = {
     const datasets = Array.isArray(ctx.manifest.datasets) ? (ctx.manifest.datasets as string[]) : ["meta_ads", "spend", "leads", "clarity", "vsl", "contenido", "ventas"];
     const activo = (k: string) => datasets.includes(k);
 
-    const [bMeta, bSpend, bLeads, bClarity, bVsl, bVentas] = await Promise.all([
+    const [bMeta, bSpend, bLeads, bCalidad, bClarity, bVsl, bVentas] = await Promise.all([
       activo("meta_ads") ? metaAds(ctx) : null,
       activo("spend") ? spend(ctx, cuentas) : null,
       activo("leads") ? leads(ctx, clientName, cuentas) : null,
+      activo("leads") ? calidadDME(ctx, pg) : null,
       activo("clarity") ? clarity(ctx, pg) : null,
       activo("vsl") ? vsl(ctx, clientName, pg) : null,
       activo("ventas") ? ventas(ctx) : null,
     ]);
     const bContenido = activo("contenido") ? contenido(pg, ctx.avatarId) : null;
 
-    const bloques = [bMeta, bSpend, bLeads, bClarity, bVsl, bContenido, bVentas].filter(Boolean) as Bloque[];
+    const bloques = [bMeta, bSpend, bLeads, bCalidad, bClarity, bVsl, bContenido, bVentas].filter(Boolean) as Bloque[];
 
     // ── COBERTURA DE DATOS: calculada por código. Es el corazón del gap-analysis. ──
     const cobertura = [
