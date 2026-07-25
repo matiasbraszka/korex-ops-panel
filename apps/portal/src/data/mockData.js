@@ -212,6 +212,13 @@ export const MOCK_INICIO = {
 
 export const MOCK_META = { partnerId: '1284 5590 3311', whatsapp: '5491100000000', agenda: '', estado: 'pendiente' };
 
+// "Tus guiones para grabar" (contrato de portal_cliente_guiones v14).
+export const MOCK_GUIONES_LISTA = [
+  { id: 'g1', strategyId: 'f_reclu', docTipo: 'ads', funnel: 'Reclutamiento', titulo: 'Deja de perseguir contactos', snippet: 'Si estás cansado de perseguir a amigos y familiares para que se sumen a tu negocio, quédate 30 segundos.', palabras: 110, grabado: false, entregado: false },
+  { id: 'g2', strategyId: 'f_reclu', docTipo: 'ads', funnel: 'Reclutamiento', titulo: 'El domingo por la noche', snippet: '¿Te pasa que los domingos a la noche te preguntas si esta es la vida que querías? Tienes capacidad, ganas y años de trabajo encima.', palabras: 95, grabado: false, entregado: false },
+  { id: 'g3', strategyId: 'f_reclu', docTipo: 'vsl', funnel: 'Reclutamiento', titulo: 'VSL Avatar 1', snippet: 'En los próximos 6 minutos te voy a mostrar el sistema que uso para hablar solo con personas que ya vieron mi presentación completa.', palabras: 360, grabado: false, entregado: true },
+];
+
 export function mockDocumento(strategyId, tipo) {
   const t = ['vsl', 'avatar', 'estrategia'].includes(tipo) ? tipo : 'ads';
   const docs = {

@@ -59,9 +59,11 @@ export default function AccesoMetaScreen() {
               <div style={{ fontSize: 13.5, lineHeight: 1.55, color: T.text2 }}>
                 Nos conectamos contigo y te configuramos todo: los accesos, la cuenta publicitaria y lo que haga falta. Tú solo entras con tu Facebook.
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', borderRadius: 14, background: T.surface2 }}>
-                <IcoVideo size={17} stroke="var(--mk-text2)" sw={2} style={{ flex: 'none' }} />
-                <span style={{ fontSize: 13, lineHeight: 1.45, color: T.textSoft }}>Es una videollamada corta. Hazla desde la computadora si puedes.</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '12px 14px', borderRadius: 14, background: T.surface2 }}>
+                <IcoVideo size={17} stroke="var(--mk-text2)" sw={2} style={{ flex: 'none', marginTop: 1 }} />
+                <span style={{ fontSize: 13, lineHeight: 1.5, color: T.textSoft }}>
+                  <b style={{ color: T.ink }}>Importante: conéctate desde la computadora.</b> La configuración de Meta se hace desde la PC, no se puede desde el celular.
+                </span>
               </div>
             </div>
           </div>

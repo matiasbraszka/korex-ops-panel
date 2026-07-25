@@ -1,53 +1,81 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import PhoneFrame from '../components/PhoneFrame';
-import { Loading, useAsync } from '../components/ui';
-import { api } from '../data/portalApi';
-import { T } from '../components/theme';
-import { IcoComment, IcoMenu, IcoArrowR } from '../components/icons';
+import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
+import BottomNav from '../components/BottomNav';
+import { Loading, DemoBanner, useAsync } from '../components/ui';
+import { api, isDemo } from '../data/portalApi';
+import { T, display, pill } from '../components/theme';
+import { IcoComment, IcoMenu, IcoArrowR, IcoVideo, IcoPlaySoft, IcoClock, IcoChevR, IcoCheck } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
 
 const WELCOME_KEY = 'korex_portal_guiones_bienvenida';
 
-// Tab GUIONES — como en el prototipo, NO hay lista intermedia: la primera vez
-// se muestra la bienvenida (los 3 gestos, animada) y después el tab lleva
-// DIRECTO al documento de Ads del embudo que tiene guiones pendientes.
+// Duración estimada de lectura (~2.4 palabras/seg) → "< 1 min" / "2:30 min".
+const durLabel = (palabras) => {
+  const seg = Math.round((palabras || 0) / 2.4);
+  if (seg < 60) return '< 1 min';
+  const m = Math.floor(seg / 60), s = Math.round((seg % 60) / 15) * 15 % 60;
+  return `${m}:${String(s).padStart(2, '0')} min`;
+};
+
+// Tab GUIONES — bienvenida animada la primera vez; después, "Tus guiones para
+// grabar": una tarjeta por guion (título, resumen, duración) que lleva al
+// guion exacto dentro del documento. Los datos salen del DEL real (para_grabar).
 export default function GuionesTabScreen() {
   const nav = useNavigate();
-  const { data: funnels, loading } = useAsync(() => api.funnels(), []);
+  const { data: guiones, loading } = useAsync(() => api.guiones(), []);
   const [intro, setIntro] = useState(() => { try { return !localStorage.getItem(WELCOME_KEY); } catch { return false; } });
 
-  // El destino: primer embudo con guiones sin grabar (o el primero con guiones).
-  const destino = useMemo(() => {
-    const fs = Array.isArray(funnels) ? funnels : [];
-    const con = fs.filter((f) => (f.guionesTotal || 0) > 0);
-    const pend = con.find((f) => (f.guionesGrabados || 0) < (f.guionesTotal || 0));
-    return pend || con[0] || null;
-  }, [funnels]);
-
-  useEffect(() => {
-    if (!intro && !loading && destino) nav(`/documento/${destino.id}/ads`, { replace: true });
-  }, [intro, loading, destino, nav]);
-
   if (loading) return <PhoneFrame><Loading label="Buscando tus guiones…" /></PhoneFrame>;
-
-  if (!destino) {
-    return (
-      <PhoneFrame>
-        <div style={{ padding: '60px 30px', textAlign: 'center', color: T.text2, fontSize: 14.5, lineHeight: 1.5 }}>
-          Todavía no hay guiones marcados para grabar.<br />Cuando el equipo los prepare, aparecen aquí.
-        </div>
-      </PhoneFrame>
-    );
-  }
-
-  if (!intro) return <PhoneFrame><Loading label="Abriendo tus guiones…" /></PhoneFrame>;
+  const lista = Array.isArray(guiones) ? guiones : [];
 
   const cerrarIntro = () => {
     try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* */ }
     setIntro(false);
-    nav(`/documento/${destino.id}/ads`);
   };
+
+  // ── LISTA "Tus guiones para grabar" ──
+  if (!intro) {
+    const pendientes = lista.filter((g) => !g.grabado && !g.entregado);
+    const hechos = lista.filter((g) => g.grabado || g.entregado);
+    return (
+      <PhoneFrame>
+        <KxScreen>
+          <div className="kxs" style={{ flex: 1, overflowY: 'auto' }}>
+            {isDemo() && <div style={{ padding: '12px 22px 0' }}><DemoBanner /></div>}
+            <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={display(30, '-0.035em')}>Tus guiones para grabar</div>
+              <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>
+                Preparamos estos textos para que solo tengas que leer y brillar frente a la cámara.
+              </div>
+              {pendientes.length > 0 && (
+                <span style={{ ...pill('var(--mk-green-bg)', 'var(--mk-green)'), alignSelf: 'flex-start', marginTop: 2, gap: 6 }}>
+                  <IcoCheck size={11} stroke="var(--mk-green)" sw={3} />
+                  {pendientes.length === 1 ? '1 listo para hoy' : `${pendientes.length} listos para hoy`}
+                </span>
+              )}
+            </div>
+
+            {lista.length === 0 && (
+              <div style={{ margin: '24px 22px 0', background: '#fff', borderRadius: 20, padding: 24, textAlign: 'center', color: T.text2, fontSize: 14.5, lineHeight: 1.5, boxShadow: 'var(--shadow-md)' }}>
+                Todavía no hay guiones marcados para grabar.<br />Cuando el equipo los prepare, aparecen aquí.
+              </div>
+            )}
+
+            <div style={{ padding: '20px 20px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+              {pendientes.map((g) => <GuionCard key={g.id} g={g} nav={nav} />)}
+              {hechos.map((g) => <GuionCard key={g.id} g={g} nav={nav} hecho />)}
+            </div>
+
+            <div style={{ padding: '24px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
+              Dentro del guion puedes comentar lo que quieras cambiar y subir tus videos al final.
+            </div>
+          </div>
+          <BottomNav activeOverride="/guiones" />
+        </KxScreen>
+      </PhoneFrame>
+    );
+  }
 
   // ── BIENVENIDA (exacta al prototipo, con los demos animados) ──
   return (
@@ -150,3 +178,44 @@ const introHead = { display: 'flex', alignItems: 'center', gap: 10, marginBottom
 const introNum = { width: 26, height: 26, borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
 const introTitle = { fontSize: 16, fontWeight: 800, color: 'var(--mk-ink)' };
 const introCaption = { fontSize: 13, lineHeight: 1.5, color: 'var(--mk-text2)', margin: '12px 2px 0' };
+
+// Tarjeta de un guion: qué es, cuánto dura y ABRIR GUIÓN (va al guion exacto).
+function GuionCard({ g, nav, hecho = false }) {
+  const esVsl = g.docTipo === 'vsl';
+  const abrir = () => nav(`/documento/${g.strategyId}/${g.docTipo}`, { state: { secId: g.id } });
+  return (
+    <div onClick={abrir} role="button" style={{ cursor: 'pointer', background: '#fff', borderRadius: 20, padding: 18, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 12, opacity: hecho ? 0.72 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ width: 42, height: 42, flex: 'none', borderRadius: 13, background: esVsl ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {esVsl
+            ? <IcoPlaySoft size={20} stroke="var(--mk-green)" sw={2} />
+            : <IcoVideo size={20} stroke="var(--mk-blue-ops)" sw={1.9} />}
+        </div>
+        {(g.grabado || g.entregado) && (
+          <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
+            {g.entregado ? 'Entregado' : 'Grabado'}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.18, color: T.ink, textWrap: 'balance' }}>{g.titulo}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Anuncio'} · {g.funnel}</div>
+        {g.snippet && (
+          <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {g.snippet}{g.snippet.length >= 160 ? '…' : ''}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #EEF0F4' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: T.textSoft }}>
+          <IcoClock size={13} stroke="currentColor" sw={2.2} />
+          {durLabel(g.palabras)}
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.primary }}>
+          Abrir guion
+          <IcoChevR size={13} stroke="var(--mk-blue-ops)" sw={2.6} />
+        </span>
+      </div>
+    </div>
+  );
+}
