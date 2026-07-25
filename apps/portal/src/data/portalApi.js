@@ -76,6 +76,12 @@ export const api = {
   embudos:   () => rpc('portal_cliente_embudos',   {}, () => mock.MOCK_EMBUDOS),
   material:  () => rpc('portal_cliente_material',  {}, () => mock.MOCK_MATERIAL),
   materialVisto: () => rpc('portal_cliente_material_visto', {}, () => ({ ok: true })),
+  // Config general del portal (guías de grabación, agenda, WhatsApp).
+  config: () => rpc('portal_cliente_config', {}, () => ({
+    whatsapp: '', agenda: '',
+    guiaAds: 'https://drive.google.com/file/d/1ad0-7akANcn75xIklZsa6qJhfHwY6kXh/view?usp=sharing',
+    guiaVsl: 'https://drive.google.com/file/d/1ObCVIf50f5WN2XZUShRGXnRW1XmG3q5T/view?usp=sharing',
+  })),
   marcarAccesoMeta: () => rpc('portal_cliente_marcar_acceso_meta', {}, () => ({ ok: true, demo: true })),
 };
 
