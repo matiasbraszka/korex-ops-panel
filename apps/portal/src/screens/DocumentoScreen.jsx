@@ -18,7 +18,11 @@ const DOCS = {
   vsl: { eyebrow: 'VSL', accent: 'var(--mk-green)' },
   avatar: { eyebrow: 'AVATARES', accent: 'var(--mk-orange)' },
   estrategia: { eyebrow: 'ESTRATEGIA', accent: 'var(--mk-purple)' },
+  guias: { eyebrow: 'GUÍAS', accent: 'var(--mk-cyan)' },
 };
+
+// Link de Drive → versión incrustable (el visor /preview adentro del portal).
+const drivePreview = (url) => String(url || '').replace(/\/view[^/]*$/, '/preview');
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const rxEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -63,7 +67,6 @@ export default function DocumentoScreen() {
   const { data: config } = useAsync(() => api.config(), []);
 
   const [drawer, setDrawer] = useState(false);
-  const [guiaOpen, setGuiaOpen] = useState(false);
   const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
   const [composer, setComposer] = useState(null); // {quote,sectionId,parentId?}
   const [draft, setDraft] = useState('');
@@ -94,9 +97,10 @@ export default function DocumentoScreen() {
   if (loading) return <PhoneFrame><Loading label="Abriendo el documento…" /></PhoneFrame>;
   if (!data) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este documento.</div></PhoneFrame>;
 
-  const doc = DOCS[data.tipo] || DOCS.ads;
-  const esVsl = data.tipo === 'vsl';
-  const esGuion = data.tipo === 'ads' || data.tipo === 'vsl';
+  const esGuias = tipo === 'guias';   // página global "Guías" (aplica a todos los DEL)
+  const doc = esGuias ? DOCS.guias : (DOCS[data.tipo] || DOCS.ads);
+  const esVsl = !esGuias && data.tipo === 'vsl';
+  const esGuion = !esGuias && (data.tipo === 'ads' || data.tipo === 'vsl');
   const secciones = Array.isArray(data.secciones) ? data.secciones : [];
   const comentarios = [...(Array.isArray(data.comentarios) ? data.comentarios : []), ...localComs];
   const topComs = comentarios.filter((c) => !c.parentId);
@@ -106,7 +110,8 @@ export default function DocumentoScreen() {
   const listos = subidosOk > 0;
   const docs = data.docs || {};
   const otros = Array.isArray(data.otros) ? data.otros : [];
-  const titulo = data.titulo
+  const titulo = esGuias ? 'Guías de grabación'
+    : data.titulo
     || (data.tipo === 'ads' ? `Anuncios — ${data.funnel?.name || ''}`
       : data.tipo === 'vsl' ? `VSL — ${data.funnel?.name || ''}`
       : data.tipo === 'avatar' ? (secciones[0]?.titulo || 'Avatares')
@@ -201,17 +206,15 @@ export default function DocumentoScreen() {
             <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.12em', color: doc.accent }}>{doc.eyebrow}</div>
             <div style={{ fontSize: 13, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo}</div>
           </div>
-          <div style={{ display: 'flex', background: T.surface2, borderRadius: 999, padding: 3, gap: 2, flex: 'none' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 13px', borderRadius: 999, background: '#fff', color: T.primary, boxShadow: '0 1px 2px rgba(10,22,40,.08)' }}>Leer</span>
-            <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 13px', borderRadius: 999, color: T.text2 }}>Editar</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--mk-border)', background: '#fff', color: T.textSoft, fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 999, flex: 'none' }}>
-            <IcoComment size={14} stroke="currentColor" sw={2} />
-            {topComs.length}
-          </div>
-          {/* "?" → la guía en video de cómo grabarse (anuncios o VSL) */}
-          {esGuion && (esVsl ? config?.guiaVsl : config?.guiaAds) && (
-            <div onClick={() => setGuiaOpen(true)} role="button" aria-label="Cómo grabar" style={{ cursor: 'pointer', width: 30, height: 30, borderRadius: '50%', background: 'var(--mk-blue-bg)', color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flex: 'none' }}>?</div>
+          {!esGuias && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--mk-border)', background: '#fff', color: T.textSoft, fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 999, flex: 'none' }}>
+              <IcoComment size={14} stroke="currentColor" sw={2} />
+              {topComs.length}
+            </div>
+          )}
+          {/* "?" → la página de Guías (adentro del portal, para todos los DEL) */}
+          {esGuion && (config?.guiaAds || config?.guiaVsl) && (
+            <div onClick={() => nav(`/documento/${sid}/guias`)} role="button" aria-label="Guías de grabación" style={{ cursor: 'pointer', width: 30, height: 30, borderRadius: '50%', background: 'var(--mk-blue-bg)', color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flex: 'none' }}>?</div>
           )}
         </div>
 
@@ -219,13 +222,14 @@ export default function DocumentoScreen() {
         <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={onDocMouseUp} onTouchEnd={onDocTouchEnd}>
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
-          {/* Aviso del flujo (solo guiones) */}
-          {esGuion && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--mk-blue-bg2)', borderBottom: '1px solid var(--mk-border)' }}>
-              <IcoInfo size={15} stroke="var(--mk-blue-ops)" sw={2.2} style={{ flex: 'none' }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk }}>
-                {esVsl ? 'Lee el guion, grábalo y sube tu video al final' : 'Graba los anuncios y súbelos todos juntos al final'}
+          {/* Banner ARRIBA DE TODO: la guía de grabación, imposible de no ver. */}
+          {esGuion && (config?.guiaAds || config?.guiaVsl) && (
+            <div onClick={() => nav(`/documento/${sid}/guias`)} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'var(--mk-blue-bg2)', borderBottom: '1px solid var(--mk-border)' }}>
+              <span style={{ width: 22, height: 22, flex: 'none', borderRadius: '50%', background: 'var(--mk-blue-ops)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800 }}>?</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.primaryInk, flex: 1 }}>
+                ¿Dudas de cómo grabarte? <b style={{ textDecoration: 'underline' }}>Mira la guía</b>
               </span>
+              <IcoChevR size={15} stroke="var(--mk-blue-ops)" sw={2.4} style={{ flex: 'none' }} />
             </div>
           )}
 
@@ -236,7 +240,30 @@ export default function DocumentoScreen() {
               <div style={{ fontSize: 19, fontWeight: 800, color: T.text, letterSpacing: '-0.02em' }}>{titulo}</div>
             </div>
 
-            {secciones.length === 0 && (
+            {/* ── GUÍAS (página global): los PDF incrustados adentro del portal ── */}
+            {esGuias && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 10 }}>
+                <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, margin: '-8px 0 2px' }}>
+                  Todo lo que necesitas saber antes de ponerte frente a la cámara. Léelas una vez y graba tranquilo.
+                </div>
+                {[{ url: config?.guiaAds, titulo: 'Cómo grabarte los anuncios', sub: 'Videos cortos, uno por guion' },
+                  { url: config?.guiaVsl, titulo: 'Cómo grabarte el VSL', sub: 'El video largo, en una sola toma' }]
+                  .filter((g) => g.url).map((g, i) => (
+                  <div key={i} style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+                    <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #EEF0F4', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{g.titulo}</div>
+                        <div style={{ fontSize: 12.5, color: T.text3 }}>{g.sub}</div>
+                      </div>
+                      <a href={g.url} target="_blank" rel="noreferrer" style={{ flex: 'none', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.primary }}>Ver en grande</a>
+                    </div>
+                    <iframe src={drivePreview(g.url)} title={g.titulo} allow="autoplay" style={{ display: 'block', width: '100%', height: 'min(70vh, 560px)', border: 'none', background: 'var(--mk-surface2)' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!esGuias && secciones.length === 0 && (
               <div style={{ background: '#fff', borderRadius: 18, padding: 20, textAlign: 'center', color: T.text2, fontSize: 14, boxShadow: 'var(--shadow-md)' }}>
                 {esGuion
                   ? <>Todavía no hay guiones de {esVsl ? 'VSL' : 'anuncios'} marcados para grabar en este embudo.</>
@@ -245,7 +272,7 @@ export default function DocumentoScreen() {
             )}
 
             {/* Secciones */}
-            <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft }}>
+            <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft, display: esGuias ? 'none' : 'block' }}>
               {secciones.map((s, i) => {
                 const coms = topComs.filter((c) => (c.sectionId || c.section_id) === s.id);
                 const html = marcarQuotes(textoAHtml(s.texto), coms, marking && marking.sectionId === s.id ? marking : null);
@@ -436,6 +463,15 @@ export default function DocumentoScreen() {
                 )}
               </div>
 
+              {/* AYUDA: las guías de grabación, iguales para todos los DEL. */}
+              {(config?.guiaAds || config?.guiaVsl) && (
+                <>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 6px', textTransform: 'uppercase' }}>AYUDA</div>
+                  <FilaDoc dot="var(--mk-cyan)" nombre="Guías de grabación" activo={esGuias}
+                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/guias`); }} />
+                </>
+              )}
+
               {otros.length > 0 && (
                 <>
                   <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 2px', textTransform: 'uppercase' }}>OTROS EMBUDOS</div>
@@ -451,28 +487,6 @@ export default function DocumentoScreen() {
               )}
             </div>
           </>
-        )}
-
-        {/* Hoja "¿Cómo grabar?" con la guía en video */}
-        {guiaOpen && (
-          <div onClick={() => setGuiaOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 75, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'kxFade .2s ease' }}>
-            <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#fff', borderRadius: '22px 22px 0 0', padding: '8px 22px 30px', animation: 'kxUp .25s ease' }}>
-              <div style={{ width: 44, height: 5, borderRadius: 999, background: 'var(--mk-border)', margin: '10px auto 18px' }} />
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                <IcoPlaySoft size={24} stroke="var(--mk-blue-ops)" sw={2.2} />
-              </div>
-              <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: T.ink, textAlign: 'center', marginBottom: 6 }}>
-                ¿Cómo grabar {esVsl ? 'tu VSL' : 'tus anuncios'}?
-              </div>
-              <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, textAlign: 'center', marginBottom: 18 }}>
-                Mira esta guía corta antes de grabar: te muestra paso a paso cómo hacerlo bien a la primera.
-              </div>
-              <a href={esVsl ? config?.guiaVsl : config?.guiaAds} target="_blank" rel="noreferrer" style={{ height: 52, borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, textDecoration: 'none', boxShadow: '0 8px 22px rgba(91,124,245,.34)' }}>
-                Ver la guía en video
-              </a>
-              <div onClick={() => setGuiaOpen(false)} role="button" style={{ cursor: 'pointer', textAlign: 'center', marginTop: 14, fontSize: 13.5, fontWeight: 600, color: T.text2 }}>Cerrar</div>
-            </div>
-          </div>
         )}
 
         {/* Botón flotante Comentar (estilo del prototipo) */}
