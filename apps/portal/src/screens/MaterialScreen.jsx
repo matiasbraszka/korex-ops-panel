@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
-import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoExternal, IcoFolder } from '../components/icons';
+import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoFolder } from '../components/icons';
 
 // TU MATERIAL — exacta al prototipo: secciones con título afuera de la tarjeta
 // (Tus grabaciones · Materiales de marca · Accesos · Lo que te devolvemos),
@@ -20,7 +20,6 @@ export default function MaterialScreen() {
   const grab = Array.isArray(d.grabaciones) ? d.grabaciones : [];
   const marca = Array.isArray(d.marca) ? d.marca : [];
   const devol = Array.isArray(d.devoluciones) ? d.devoluciones : [];
-  const paginas = Array.isArray(d.paginas) ? d.paginas : [];
   const faltan = grab.filter((g) => g.estado === 'falta').length
     + marca.filter((m) => m.estado === 'pendiente' || m.estado === 'cliente_dice_listo').length
     + (d.accesoMeta === 'pendiente' ? 1 : 0);
@@ -130,8 +129,8 @@ export default function MaterialScreen() {
           </div>
         )}
 
-        {/* Lo que te devolvemos */}
-        {(devol.length > 0 || paginas.length > 0) && (
+        {/* Lo que te devolvemos (las páginas al aire ya se ven en Embudos) */}
+        {devol.length > 0 && (
           <div style={seccion}>
             <div style={secHead}>
               <IcoCheck size={19} stroke="var(--mk-green)" sw={2.1} />
@@ -146,15 +145,6 @@ export default function MaterialScreen() {
                   </div>
                   {dv.nuevo && <span style={pill('var(--mk-blue-bg)', 'var(--mk-blue-ink)')}>Nuevo</span>}
                 </div>
-              ))}
-              {paginas.map((p, i) => (
-                <a key={'p' + i} href={/^https?:\/\//.test(p.url) ? p.url : 'https://' + p.url} target="_blank" rel="noreferrer" style={{ ...fila, padding: '14px 16px', textDecoration: 'none' }}>
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={filaTitulo}>Tu página del embudo</span>
-                    <span style={{ ...filaSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(p.url).replace(/^https?:\/\//, '')}</span>
-                  </div>
-                  <IcoExternal size={17} stroke="var(--mk-text3)" sw={2.2} />
-                </a>
               ))}
             </div>
           </div>

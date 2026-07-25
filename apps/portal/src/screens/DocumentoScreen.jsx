@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import BottomNav from '../components/BottomNav';
 import { Loading, DemoBanner, Spinner, useAsync } from '../components/ui';
@@ -73,6 +73,18 @@ export default function DocumentoScreen() {
   const demo = isDemo();
 
   useEffect(() => { setLocalComs([]); setSubidas([]); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
+
+  // Si vienen desde "Tus guiones para grabar", saltamos al guion exacto.
+  const { state: navState } = useLocation();
+  useEffect(() => {
+    if (!loading && navState?.secId) {
+      const t = setTimeout(() => {
+        const el = scrollRef.current?.querySelector?.(`[data-secid="${navState.secId}"]`);
+        el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => clearTimeout(t);
+    }
+  }, [loading, navState, sid, tipo]);
 
   if (loading) return <PhoneFrame><Loading label="Abriendo el documento…" /></PhoneFrame>;
   if (!data) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este documento.</div></PhoneFrame>;

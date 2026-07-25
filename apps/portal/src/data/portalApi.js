@@ -42,7 +42,8 @@ export const api = {
   funnel:    (id) => rpc('portal_cliente_funnel',  { p_strategy: id }, () => mock.mockFunnel(id)),
   guion:     (id) => rpc('portal_cliente_guion',   { p_section_id: id }, () => mock.mockGuion(id)),
 
-  guiones:   () => rpc('portal_cliente_guiones',   {}, () => mock.MOCK_GUIONES),
+  // Lista 'Tus guiones para grabar' (v14): una tarjeta por guion para_grabar.
+  guiones:   () => rpc('portal_cliente_guiones',   {}, () => mock.MOCK_GUIONES_LISTA),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   tutoriales:() => rpc('portal_cliente_tutoriales',{}, () => mock.MOCK_TUTORIALES),
