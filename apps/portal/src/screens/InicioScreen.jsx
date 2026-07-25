@@ -114,90 +114,87 @@ export default function InicioScreen() {
   );
 }
 
-// Tarjeta de un pedido, con el diseño EXACTO del prototipo según su tipo.
-function PendienteCard({ p, nav }) {
-  const esGrab = String(p.tipo || '').startsWith('grabacion');
-  const esMeta = p.tipo === 'acceso_meta';
-  const validando = p.estado === 'cliente_dice_listo';
-  const abrir = () => {
-    if (esGrab) nav(`/documento/${p.strategyId}/${p.docTipo || 'ads'}`);
-    else if (esMeta) nav('/meta');
-    else nav(`/pedido/${p.id}`, { state: { pedido: p } });
-  };
-  const pedidoHace = p.dias == null ? null : p.dias === 0 ? 'Te lo pedimos hoy' : p.dias === 1 ? 'Te lo pedimos hace 1 día' : `Te lo pedimos hace ${p.dias} días`;
-  const Icon = esGrab ? IcoVideo : esMeta ? IcoKey : IcoImage;
-
+// ── Tarjeta UNIFORME de pendiente (misma estructura para todas, mobile-first):
+//    chip de estado + "hace N días" · icono + título + descripción · botón azul
+//    grande IGUAL en todas. El cliente nunca tiene que adivinar dónde tocar.
+function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption }) {
   return (
-    <div onClick={abrir} style={{ cursor: 'pointer', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-md)' }}>
+    <div onClick={onClick} style={{ cursor: 'pointer', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: 'var(--shadow-md)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+        {chip}
+        {dias != null && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: T.text3 }}>
+            <IcoClock size={12} stroke="currentColor" sw={2.3} />
+            {dias === 0 ? 'Pedido hoy' : dias === 1 ? 'Hace 1 día' : `Hace ${dias} días`}
+          </span>
+        )}
+      </div>
       <div style={{ display: 'flex', gap: 15, alignItems: 'flex-start' }}>
-        <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 15, background: esMeta ? 'var(--mk-red-bg)' : 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={22} stroke={esMeta ? 'var(--mk-red)' : 'var(--mk-blue-ops)'} sw={1.9} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.14, color: T.ink, textWrap: 'balance' }}>{p.titulo}</div>
-          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{p.descripcion}</div>
+        {tile}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.16, color: T.ink, textWrap: 'balance' }}>{titulo}</div>
+          {descripcion && <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{descripcion}</div>}
         </div>
       </div>
-      {pedidoHace && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--mk-orange)' }}>
-          <IcoClock size={13} stroke="var(--mk-orange)" sw={2.3} />
-          {pedidoHace}
-        </div>
-      )}
-      {esGrab ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <div style={{ height: 48, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            Abrir mis guiones
-            <IcoChevR size={16} stroke="#fff" sw={2.4} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: T.text3 }}>
-            <IcoFile size={14} stroke="var(--mk-text3)" sw={2} />
-            Te lleva al documento, sección {p.docTipo === 'vsl' ? 'VSL' : 'Ads'}
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', height: 46, padding: '0 22px', borderRadius: 999, background: esMeta ? T.primary : T.ink, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-            {esMeta ? (validando ? 'Ver el paso a paso' : 'Cómo se hace') : p.tipo === 'fotos' ? 'Subir fotos' : 'Subir material'}
-          </div>
-          {esMeta
-            ? <span style={{ fontSize: 12.5, fontWeight: 600, color: validando ? 'var(--mk-green)' : 'var(--mk-red)' }}>{validando ? 'Lo estamos validando' : p.bloqueante ? 'Nos está frenando' : ''}</span>
-            : p.target != null && <span style={{ fontSize: 12.5, color: T.text3 }}>{p.subidos ?? 0} de {p.target} subidas</span>}
-        </div>
-      )}
+      <div style={{ height: 48, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+        {cta}
+        <IcoChevR size={16} stroke="#fff" sw={2.4} />
+      </div>
+      {caption}
     </div>
   );
 }
 
-// Tarea del sistema de operaciones asignada al cliente (mismo look de tarjeta).
+const tileStyle = (bg) => ({ width: 46, height: 46, flex: 'none', borderRadius: 15, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' });
+const chipEstado = (bg, ink, texto) => (
+  <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, background: bg, color: ink }}>{texto}</span>
+);
+
+function PendienteCard({ p, nav }) {
+  const esGrab = String(p.tipo || '').startsWith('grabacion');
+  const esMeta = p.tipo === 'acceso_meta';
+  const validando = p.estado === 'cliente_dice_listo';
+  const enProceso = !esGrab && !esMeta && p.target != null && (p.subidos ?? 0) > 0;
+
+  const abrir = () => {
+    if (esGrab) nav('/guiones');                 // a ELEGIR el guion, no a un documento de una
+    else if (esMeta) nav('/meta');
+    else nav(`/pedido/${p.id}`, { state: { pedido: p } });
+  };
+  const chip = validando ? chipEstado('var(--mk-blue-bg)', 'var(--mk-blue-ops)', 'En revisión')
+    : enProceso ? chipEstado('var(--mk-orange-bg)', 'var(--mk-orange)', `En proceso · ${p.subidos} de ${p.target}`)
+    : chipEstado('var(--mk-red-bg)', 'var(--mk-red)', 'Pendiente');
+  const tile = esGrab ? <div style={tileStyle('var(--mk-blue-bg)')}><IcoVideo size={22} stroke="var(--mk-blue-ops)" sw={1.9} /></div>
+    : esMeta ? <div style={tileStyle('var(--mk-red-bg)')}><IcoKey size={22} stroke="var(--mk-red)" sw={1.9} /></div>
+    : <div style={tileStyle('var(--mk-blue-bg)')}><IcoImage size={22} stroke="var(--mk-blue-ops)" sw={1.9} /></div>;
+  const cta = esGrab ? 'Ver mis guiones'
+    : esMeta ? (validando ? 'Ver el paso a paso' : 'Conectar mi Meta')
+    : p.tipo === 'fotos' ? 'Subir fotos' : 'Subir material';
+  const caption = esGrab ? (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: T.text3 }}>
+      <IcoFile size={13} stroke="var(--mk-text3)" sw={2} />
+      Te lleva a elegir cuál grabar
+    </div>
+  ) : esMeta && p.bloqueante && !validando ? (
+    <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--mk-red)' }}>Nos está frenando</div>
+  ) : null;
+
+  return <CardBase onClick={abrir} tile={tile} chip={chip} dias={p.dias} titulo={p.titulo} descripcion={p.descripcion} cta={cta} caption={caption} />;
+}
+
+// Tarea del sistema de operaciones asignada al cliente (misma tarjeta uniforme).
 function TareaCard({ t, nav }) {
   const dest = destinoTarea(t);
-  const pedidoHace = t.dias == null ? null : t.dias === 0 ? 'Te lo pedimos hoy' : t.dias === 1 ? 'Te lo pedimos hace 1 día' : `Te lo pedimos hace ${t.dias} días`;
+  if (!dest) return null;
   return (
-    <div onClick={() => dest && nav(dest.to, { state: dest.state })} style={{ cursor: dest ? 'pointer' : 'default', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-md)' }}>
-      <div style={{ display: 'flex', gap: 15, alignItems: 'flex-start' }}>
-        <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 15, background: 'var(--mk-orange-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <IcoFile size={22} stroke="var(--mk-orange)" sw={1.9} />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.14, color: T.ink, textWrap: 'balance' }}>{t.titulo}</div>
-          {t.funnel && <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Embudo {t.funnel}</div>}
-        </div>
-      </div>
-      {pedidoHace && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--mk-orange)' }}>
-          <IcoClock size={13} stroke="var(--mk-orange)" sw={2.3} />
-          {pedidoHace}
-        </div>
-      )}
-      {dest && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 46, padding: '0 22px', borderRadius: 999, background: T.ink, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-            {dest.cta}
-            <IcoChevR size={14} stroke="#fff" sw={2.4} />
-          </div>
-        </div>
-      )}
-    </div>
+    <CardBase
+      onClick={() => nav(dest.to, { state: dest.state })}
+      tile={<div style={tileStyle('var(--mk-orange-bg)')}><IcoFile size={22} stroke="var(--mk-orange)" sw={1.9} /></div>}
+      chip={chipEstado('var(--mk-red-bg)', 'var(--mk-red)', 'Pendiente')}
+      dias={t.dias}
+      titulo={t.titulo}
+      descripcion={t.funnel ? `Embudo ${t.funnel}` : null}
+      cta={dest.cta}
+    />
   );
 }
