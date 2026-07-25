@@ -21,7 +21,7 @@ import { useMemo, useRef } from 'react';
 import { IcoUpload, IcoCheck, IcoWarn } from '../../components/icons';
 import { Spinner } from '../../components/ui';
 import { TO, F, dsp, chip } from '../tokens';
-import { uploadRecurso } from '../../data/portalApi';
+import { subirRecurso } from '../api';
 import { useOnboarding } from '../OnboardingProvider';
 
 export default function CampoSubida({ q, bloqueante }) {
@@ -44,7 +44,7 @@ export default function CampoSubida({ q, bloqueante }) {
       const uid = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const patch = registrarSubida({ uid, bucket: q.bucket, name: file.name, pct: 0 });
 
-      uploadRecurso(q.bucket, file, (p) => patch({ pct: Math.round(p * 100) }))
+      subirRecurso(q.bucket, file, (p) => patch({ pct: Math.round(p * 100) }))
         .then(() => {
           patch({ pct: 100, done: true });
           // El conteo del servidor llega en el próximo refresco; mientras tanto

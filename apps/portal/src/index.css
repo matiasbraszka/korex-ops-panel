@@ -117,7 +117,10 @@ button { font-family: inherit; }
    cliente pasa una hora leyendo y respondiendo, muchas veces desde el celular y
    muchas veces con más de 60 años. La escala completa vive en onboarding/tokens.js. */
 [data-kx-onb] {
-  height: 100%; display: flex; flex-direction: column;
+  /* flex:1 en vez de height:100% — así convive con el cartel del modo prueba,
+     que va arriba como hermano dentro del mismo contenedor. */
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
   position: relative; animation: kxFade .22s ease;
   font-size: 17.5px;
   color: #252B36;

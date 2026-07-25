@@ -8,6 +8,8 @@
 // propagan, y el Provider decide reintentar.
 // ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from '../lib/supabase';
+import { uploadRecurso } from '../data/portalApi';
+import * as demo from './demo';
 
 async function call(fn, args) {
   const { data, error } = await supabase.rpc(fn, args || {});
@@ -15,32 +17,71 @@ async function call(fn, args) {
   return data;
 }
 
+// Cada ESCRITURA pasa por acá. En modo prueba se desvía a la versión simulada y
+// no sale nada de este navegador; en modo normal es exactamente lo de antes.
+// Ver onboarding/demo.js para el porqué (reservar un horario manda WhatsApps de
+// verdad, terminar el onboarding escribe el cerebro y avisa por Slack).
+const escribir = (real, simulado) => (...args) => (
+  demo.demoActivo() ? simulado(...args) : real(...args)
+);
+
 export const onb = {
   catalogo: () => call('portal_onboarding_catalogo'),
-  estado:   () => call('portal_onboarding_estado'),
 
-  guardar: (qkey, valor, opts = {}) => call('portal_onboarding_guardar', {
-    p_qkey: qkey,
-    p_value_text: valor ?? '',
-    p_value_json: opts.valorJson ?? null,
-    p_source: opts.source || 'texto',
-    p_flag: opts.flag ?? null,
-    p_transcript: opts.transcript ?? null,
-    p_audio_path: opts.audioPath ?? null,
-    p_audio_ms: opts.audioMs ?? null,
-    p_expected: opts.expected ?? null,
-  }),
+  estado: async () => {
+    const e = await call('portal_onboarding_estado');
+    return demo.demoActivo() ? demo.demoMezclarEstado(e) : e;
+  },
 
-  guardarLote: (items) => call('portal_onboarding_guardar_lote', { p_items: items }),
-  seccionCompleta: (skey) => call('portal_onboarding_seccion_completa', { p_skey: skey }),
+  guardar: escribir(
+    (qkey, valor, opts = {}) => call('portal_onboarding_guardar', {
+      p_qkey: qkey,
+      p_value_text: valor ?? '',
+      p_value_json: opts.valorJson ?? null,
+      p_source: opts.source || 'texto',
+      p_flag: opts.flag ?? null,
+      p_transcript: opts.transcript ?? null,
+      p_audio_path: opts.audioPath ?? null,
+      p_audio_ms: opts.audioMs ?? null,
+      p_expected: opts.expected ?? null,
+    }),
+    demo.demoGuardar,
+  ),
+
+  guardarLote: escribir(
+    (items) => call('portal_onboarding_guardar_lote', { p_items: items }),
+    demo.demoGuardarLote,
+  ),
+
+  seccionCompleta: escribir(
+    (skey) => call('portal_onboarding_seccion_completa', { p_skey: skey }),
+    async () => ({ ok: true, demo: true }),
+  ),
 
   agendaDatos: () => call('portal_onboarding_agenda_datos'),
-  agendaRegistrar: (appointmentId) =>
-    call('portal_onboarding_agenda_registrar', { p_appointment_id: appointmentId }),
-  agendaOmitir: (motivo) => call('portal_onboarding_agenda_omitir', { p_motivo: motivo || null }),
 
-  completar: () => call('portal_onboarding_completar'),
+  agendaRegistrar: escribir(
+    (appointmentId) => call('portal_onboarding_agenda_registrar', { p_appointment_id: appointmentId }),
+    async () => ({ ok: true, demo: true }),
+  ),
+
+  agendaOmitir: escribir(
+    (motivo) => call('portal_onboarding_agenda_omitir', { p_motivo: motivo || null }),
+    demo.demoOmitirAgenda,
+  ),
+
+  completar: escribir(() => call('portal_onboarding_completar'), demo.demoCompletar),
 };
+
+/**
+ * Subida de material. En modo prueba simula el progreso y no toca ni Bunny ni
+ * Storage ni funnel_resources; en modo normal es `uploadRecurso` tal cual.
+ */
+export function subirRecurso(bucket, file, onProgress) {
+  return demo.demoActivo()
+    ? demo.demoSubir(bucket, file, onProgress)
+    : uploadRecurso(bucket, file, onProgress);
+}
 
 // ── Agenda: el sistema de Soporte, invocado directo desde el portal ──────────
 // `agenda-publica` tiene verify_jwt:false y CORS *, así que se llama igual que
@@ -56,6 +97,11 @@ export async function agendaSlots(token, year, month) {
 }
 
 export async function agendaReservar({ token, date, time, nombre, email, telefono, tz }) {
+  // En modo prueba NO se llama a `book`: esa acción crea la cita, el evento de
+  // Google Calendar y manda WhatsApp al cliente y al equipo. Es la operación
+  // más irreversible de todo el flujo.
+  if (demo.demoActivo()) return demo.demoReservar({ date, time });
+
   // El teléfono del cliente viene de su ficha y puede traer el prefijo pegado.
   // agenda-publica espera dial y phone por separado.
   const limpio = String(telefono || '').replace(/[^\d+]/g, '');
@@ -99,6 +145,8 @@ export async function transcribir(blob) {
 // dijo es el peor error posible de esta pantalla: si Whisper no responde, nos
 // quedamos igual con el audio y lo pasamos a texto nosotros.
 export async function guardarAudio(clientHint, qkey, blob) {
+  if (demo.demoActivo()) return demo.demoGuardarAudio(clientHint, qkey);
+
   const ext = (blob.type || '').includes('mp4') ? 'm4a' : 'webm';
   const path = `portal/onboarding/${clientHint || 'cliente'}/${qkey}_${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from('funnel-recursos')

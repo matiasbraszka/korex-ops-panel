@@ -15,6 +15,7 @@ import MaterialScreen from './screens/MaterialScreen';
 import SubirPedidoScreen from './screens/SubirPedidoScreen';
 import AccesoMetaScreen from './screens/AccesoMetaScreen';
 import { OnboardingProvider } from './onboarding/OnboardingProvider';
+import BarraDemo from './onboarding/components/BarraDemo';
 import OnboardingIndex from './onboarding/screens/OnboardingIndex';
 import AgendarScreen from './onboarding/screens/AgendarScreen';
 import TramoScreen from './onboarding/screens/TramoScreen';
@@ -47,7 +48,7 @@ export default function App() {
             cliente no se distraiga. Es donde cae el magic link del mail. Su
             Provider envuelve solo estas rutas: el resto del portal no necesita
             cargar el catálogo de preguntas. */}
-        <Route path="/onboarding" element={<OnboardingProvider><PhoneFrame><Outlet /></PhoneFrame></OnboardingProvider>}>
+        <Route path="/onboarding" element={<OnboardingProvider><PhoneFrame><BarraDemo /><Outlet /></PhoneFrame></OnboardingProvider>}>
           <Route index element={<OnboardingIndex />} />
           <Route path="agendar" element={<AgendarScreen />} />
           <Route path="repaso" element={<RepasoScreen />} />
