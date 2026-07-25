@@ -177,8 +177,8 @@ export default function DocumentoScreen() {
     <PhoneFrame>
       <KxScreen style={{ overflow: 'hidden', background: 'var(--mk-bg-panel)' }}>
         <style>{`
-          .doc-label{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--mk-text3);margin:0 0 4px}
-          .doc-p{font-size:15px;line-height:1.62;color:var(--mk-text-soft);margin:0 0 14px}
+          .doc-label{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--mk-text2);margin:0 0 4px}
+          .doc-p{font-size:15px;line-height:1.62;color:var(--mk-text);margin:0 0 14px}
           mark[data-cmt]{background:rgba(234,179,8,.28);border-bottom:2px solid var(--mk-yellow);border-radius:2px;color:inherit;padding:0}
           mark.marcando{background:var(--mk-blue-bg);border-radius:2px;color:inherit;padding:0}
           .doc-sel,.doc-sel *{user-select:text!important;-webkit-user-select:text!important}
@@ -206,7 +206,8 @@ export default function DocumentoScreen() {
           </div>
         </div>
 
-        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px' }} onMouseUp={onDocMouseUp} onTouchEnd={onDocTouchEnd}>
+        {/* Fondo BLANCO en el documento: más contraste para leer (pedido de Matías). */}
+        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={onDocMouseUp} onTouchEnd={onDocTouchEnd}>
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
           {/* Aviso del flujo (solo guiones) */}
@@ -241,11 +242,12 @@ export default function DocumentoScreen() {
                 const html = marcarQuotes(textoAHtml(s.texto), coms, marking && marking.sectionId === s.id ? marking : null);
                 return (
                   <div key={s.id}>
+                    {/* Cada bloque es UNA PESTAÑA del DEL (hooks/textos base), no un anuncio suelto. */}
                     {data.tipo === 'ads' && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: T.primaryInk }}>ANUNCIO {i + 1}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: T.primaryInk }}>GUION {i + 1}</span>
                         <span style={{ height: 1, flex: 1, background: 'var(--mk-border)' }} />
-                        <span style={{ fontSize: 11, fontWeight: 600, color: T.text3 }}>~{segundos(s.texto)} seg</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>~{segundos(s.texto)} seg</span>
                       </div>
                     )}
                     {(data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
