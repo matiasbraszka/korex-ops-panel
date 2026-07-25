@@ -8,7 +8,7 @@ import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Tr
 import Modal from '../Modal';
 
 // URL pública del portal. Configurable por env; fallback al dominio previsto.
-const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || 'https://cliente.metodokorex.com';
+const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || 'https://clientes.metodokorex.com';
 
 // Carpetas del cliente donde puede caer el material de un pedido.
 const BUCKETS_PEDIDO = [
