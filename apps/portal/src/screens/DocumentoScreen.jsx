@@ -390,31 +390,38 @@ export default function DocumentoScreen() {
                 <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.primary }}>Volver al portal</span>
               </div>
               <div style={{ height: 1, background: 'var(--mk-border)', margin: '0 8px 12px' }} />
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '0 8px 8px', textTransform: 'uppercase' }}>EMBUDO {String(data.funnel?.name || '').toUpperCase()}</div>
 
-              <FilaDoc dot="var(--mk-blue-ops)" nombre={docs.ads?.titulo || 'Anuncios'} activo={data.tipo === 'ads'}
-                derecha={docs.ads?.pendiente ? 'por_grabar' : docs.ads?.listo ? 'check' : null}
-                onClick={() => { setDrawer(false); nav(`/documento/${sid}/ads`); }} />
-              <FilaDoc dot="var(--mk-green)" nombre={docs.vsl?.titulo || 'VSL'} activo={data.tipo === 'vsl'}
-                derecha={docs.vsl?.pendiente ? 'por_grabar' : docs.vsl?.listo ? 'check' : null}
-                onClick={() => { setDrawer(false); nav(`/documento/${sid}/vsl`); }} />
-              {docs.avatar?.existe !== false && (
-                <FilaDoc dot="var(--mk-orange)" nombre={docs.avatar?.titulo || 'Avatares'} activo={data.tipo === 'avatar'}
-                  onClick={() => { setDrawer(false); nav(`/documento/${sid}/avatar`); }} />
-              )}
-              {docs.estrategia?.existe !== false && (
-                <FilaDoc dot="var(--mk-purple)" nombre="Estrategia del embudo" activo={data.tipo === 'estrategia'}
-                  onClick={() => { setDrawer(false); nav(`/documento/${sid}/estrategia`); }} />
-              )}
+              {/* El embudo ACTUAL, en su caja: se ve clarito de qué embudo son estos guiones */}
+              <div style={{ margin: '0 4px', background: 'var(--mk-blue-bg2)', border: '1px solid var(--mk-border)', borderRadius: 14, padding: '10px 6px 6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 8px 8px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mk-blue-ops)', flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: T.primaryInk, textTransform: 'uppercase' }}>Estás en: {data.funnel?.name}</span>
+                </div>
+                <FilaDoc dot="var(--mk-blue-ops)" nombre={docs.ads?.titulo || 'Anuncios'} activo={data.tipo === 'ads'}
+                  derecha={docs.ads?.pendiente ? 'por_grabar' : docs.ads?.listo ? 'check' : null}
+                  onClick={() => { setDrawer(false); nav(`/documento/${sid}/ads`); }} />
+                <FilaDoc dot="var(--mk-green)" nombre={docs.vsl?.titulo || 'VSL'} activo={data.tipo === 'vsl'}
+                  derecha={docs.vsl?.pendiente ? 'por_grabar' : docs.vsl?.listo ? 'check' : null}
+                  onClick={() => { setDrawer(false); nav(`/documento/${sid}/vsl`); }} />
+                {docs.avatar?.existe !== false && (
+                  <FilaDoc dot="var(--mk-orange)" nombre={docs.avatar?.titulo || 'Avatares'} activo={data.tipo === 'avatar'}
+                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/avatar`); }} />
+                )}
+                {docs.estrategia?.existe !== false && (
+                  <FilaDoc dot="var(--mk-purple)" nombre="Estrategia del embudo" activo={data.tipo === 'estrategia'}
+                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/estrategia`); }} />
+                )}
+              </div>
 
               {otros.length > 0 && (
                 <>
-                  <div style={{ height: 1, background: 'var(--mk-border)', margin: '14px 8px' }} />
-                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '0 8px 6px', textTransform: 'uppercase' }}>OTROS EMBUDOS</div>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 2px', textTransform: 'uppercase' }}>OTROS EMBUDOS</div>
+                  <div style={{ fontSize: 11, color: T.text3, padding: '0 8px 6px' }}>Toca uno para abrir sus guiones.</div>
                   {otros.map((f) => (
-                    <div key={f.id} onClick={() => { setDrawer(false); nav(`/documento/${f.id}/ads`); }} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 10px', borderRadius: 10 }}>
+                    <div key={f.id} onClick={() => { setDrawer(false); nav(`/documento/${f.id}/ads`); }} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 10px', margin: '0 4px', borderRadius: 10, border: '1px solid transparent' }}>
                       <IcoFile size={15} stroke="var(--mk-text3)" sw={1.9} />
-                      <span style={{ flex: 1, fontSize: 13, color: T.text2 }}>{f.name}</span>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text2 }}>{f.name}</span>
+                      <IcoChevR size={14} stroke="var(--mk-text3)" sw={2.2} />
                     </div>
                   ))}
                 </>
@@ -467,7 +474,7 @@ function ReglaFila({ ok = false, texto }) {
 
 function FilaDoc({ dot, nombre, activo, derecha, onClick }) {
   return (
-    <div onClick={onClick} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 10px', borderRadius: 10, background: activo ? 'var(--mk-surface2)' : 'transparent' }}>
+    <div onClick={onClick} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 10px', borderRadius: 10, background: activo ? '#fff' : 'transparent', boxShadow: activo ? 'var(--shadow-sm)' : 'none' }}>
       <span style={{ width: 7, height: 7, borderRadius: 99, background: dot, flexShrink: 0 }} />
       <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
       {derecha === 'por_grabar' && (

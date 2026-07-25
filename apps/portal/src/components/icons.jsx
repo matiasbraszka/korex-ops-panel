@@ -34,3 +34,5 @@ export const IcoPlay = ({ size = 24, fill = '#fff', style }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="none" style={style} aria-hidden="true"><path d="m9 7 9 5-9 5V7Z" /></svg>
 );
 export const IcoPlaySoft = (p) => <S {...p}><path d="m10 8 6 4-6 4V8Z" /></S>;
+export const IcoFolder = (p) => <S {...p}><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></S>;
+export const IcoPalette = (p) => <S {...p}><circle cx="13.5" cy="6.5" r=".5" /><circle cx="17.5" cy="10.5" r=".5" /><circle cx="8.5" cy="7.5" r=".5" /><circle cx="6.5" cy="12.5" r=".5" /><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" /></S>;

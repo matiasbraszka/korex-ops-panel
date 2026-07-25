@@ -33,6 +33,7 @@ export default function SubirPedidoScreen() {
   }
 
   const esFotos = pedido.tipo === 'fotos';
+  const esLogo = pedido.tipo === 'logo' || /logo|marca|brand/i.test(pedido.bucket || '') || /logo/i.test(pedido.titulo || '');
   const target = pedido.target || null;
   const okCount = (pedido.subidos || 0) + subidas.filter((u) => u.done).length;
   const listo = target ? okCount >= target : false;
@@ -65,19 +66,33 @@ export default function SubirPedidoScreen() {
             </div>
           </div>
 
-          {/* Ejemplos + "Así sí, así no" (para fotos) */}
-          {esFotos && (
+          {/* Ejemplos + "Así sí, así no" (fotos y logo, como el prototipo) */}
+          {(esFotos || esLogo) && (
             <div style={{ margin: '22px 22px 0', background: '#fff', borderRadius: 22, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
               <div style={{ display: 'flex', gap: 2, height: 128, background: 'var(--mk-border-light)' }}>
-                {['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'linear-gradient(160deg,#E4E8EF,#CFD5DF)'].map((bg, i) => (
-                  <div key={i} style={{ flex: 1, background: bg, display: 'flex', alignItems: 'flex-end', padding: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text2 }}>Ejemplo</div>
+                {(esFotos
+                  ? [['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'Ejemplo'], ['linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'Ejemplo'], ['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'Ejemplo']]
+                  : [['linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'Tu logo'], ['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'Tus colores'], ['linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'Tipografía']]
+                ).map(([bg, label], i) => (
+                  <div key={i} style={{ flex: 1, background: bg, display: 'flex', alignItems: 'flex-end', padding: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text2 }}>{label}</div>
                 ))}
               </div>
               <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 17, fontWeight: 800, letterSpacing: '-0.025em', color: T.ink }}>Así sí, así no</div>
-                <Regla ok texto="De frente, con luz natural y fondo simple" />
-                <Regla ok texto="Alguna dando una charla o con tu equipo" />
-                <Regla texto="Borrosas, grupales o con filtros" />
+                {esFotos ? (
+                  <>
+                    <Regla ok texto="De frente, con luz natural y fondo simple" />
+                    <Regla ok texto="Alguna dando una charla o con tu equipo" />
+                    <Regla texto="Borrosas, grupales o con filtros" />
+                  </>
+                ) : (
+                  <>
+                    <Regla ok texto="El logo en la mejor calidad que tengas (ideal PNG con fondo transparente)" />
+                    <Regla ok texto="Tus colores de marca: sirve una captura, el manual de marca o los códigos" />
+                    <Regla ok texto="Si usas una tipografía específica, dinos cuál" />
+                    <Regla texto="Fotos del logo impreso o capturas borrosas y chiquitas" />
+                  </>
+                )}
               </div>
             </div>
           )}
