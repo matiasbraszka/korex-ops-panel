@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
-import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoExternal, IcoFolder, IcoPlaySoft } from '../components/icons';
+import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoExternal, IcoFolder } from '../components/icons';
 
 // TU MATERIAL — exacta al prototipo: secciones con título afuera de la tarjeta
 // (Tus grabaciones · Materiales de marca · Accesos · Lo que te devolvemos),
@@ -64,9 +64,7 @@ export default function MaterialScreen() {
                 </div>
                 {f.items.map((g, i) => (
                   <div key={i} onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`)} role="button" style={{ ...fila, borderTop: i > 0 ? '1px solid #EEF0F4' : 'none' }}>
-                    <div style={{ width: 40, height: 40, flex: 'none', borderRadius: 12, background: g.estado === 'subido' ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <IcoPlaySoft size={18} stroke={g.estado === 'subido' ? 'var(--mk-green)' : 'var(--mk-blue-ops)'} sw={2.1} />
-                    </div>
+                    <CarpetaTile lleno={g.estado === 'subido'} />
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <span style={filaTitulo}>{g.titulo}</span>
                       <span style={filaSub}>
@@ -92,13 +90,15 @@ export default function MaterialScreen() {
               <span style={secTitulo}>Materiales de marca</span>
             </div>
             <div style={cardLista}>
-              {marca.map((m) => {
+              {marca.map((m, mi) => {
                 const completo = m.estado === 'completo' || m.estado === 'validado';
+                const n = m.subidos ?? 0;
                 return (
-                  <div key={m.id} onClick={() => nav(`/pedido/${m.id}`, { state: { pedido: m } })} role="button" style={{ ...fila, padding: '14px 16px' }}>
+                  <div key={m.id} onClick={() => nav(`/pedido/${m.id}`, { state: { pedido: m } })} role="button" style={{ ...fila, padding: '14px 16px', borderTop: mi > 0 ? '1px solid #EEF0F4' : 'none' }}>
+                    <CarpetaTile lleno={n > 0} />
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <span style={filaTitulo}>{String(m.titulo || '').replace(/^Sube /, '').replace(/^./, (c) => c.toUpperCase())}</span>
-                      <span style={filaSub}>{m.target ? `${m.subidos ?? 0} de ${m.target} subidas` : `${m.subidos ?? 0} ${(m.subidos ?? 0) === 1 ? 'archivo' : 'archivos'}`}</span>
+                      <span style={filaSub}>{m.target ? `${Math.min(n, m.target)} de ${m.target} subidas${n > m.target ? ` (¡nos diste ${n}!)` : ''}` : `${n} ${n === 1 ? 'archivo' : 'archivos'}`}</span>
                       {!completo && m.dias != null && <span style={filaNaranja}>Pedido {m.dias === 0 ? 'hoy' : `hace ${m.dias} ${m.dias === 1 ? 'día' : 'días'}`}</span>}
                     </div>
                     {completo ? chipSubido : chipFalta}
@@ -165,6 +165,15 @@ export default function MaterialScreen() {
         ¿No sabes qué es algo de esto? Escríbenos y te lo explicamos.
       </div>
     </>
+  );
+}
+
+// Tile de carpeta: roja si está vacía (falta contenido), verde si ya tiene.
+function CarpetaTile({ lleno }) {
+  return (
+    <div style={{ width: 40, height: 40, flex: 'none', borderRadius: 12, background: lleno ? 'var(--mk-green-bg)' : 'var(--mk-red-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <IcoFolder size={18} stroke={lleno ? 'var(--mk-green)' : 'var(--mk-red)'} sw={2.1} />
+    </div>
   );
 }
 
