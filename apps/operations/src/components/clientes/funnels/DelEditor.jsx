@@ -267,7 +267,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     try {
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion&${filtro}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
         // servía una versión vieja cacheada del documento tras reorganizarlo.
         { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
@@ -635,7 +635,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       }
       (byKind[s.kind] || (byKind[s.kind] = [])).push(s);
     }
-    const kinds = Array.from(new Set([...STANDARD_KINDS, ...sorted.map(s => s.kind)]));
+    // 'estrategia' SIEMPRE presente: es el encabezado del DEL (bloque del funnel
+    // arriba + la estrategia real escrita abajo), aunque todavía esté vacía.
+    const kinds = Array.from(new Set(['estrategia', ...STANDARD_KINDS, ...sorted.map(s => s.kind)]));
     kinds.sort((a, b) => kindRank(a) - kindRank(b));
     return kinds.map(k => ({ kind: k, items: byKind[k] || [] }));
   }, [sorted, verActiva, kindVersionsMap]);
@@ -727,6 +729,20 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
 
   // "Para grabar": marca la sección (VSL/anuncios) para que aparezca en el
   // PORTAL DEL CLIENTE como guion a grabar. Antes se marcaba por SQL.
+  // Acción del cliente + estado por pestaña (reemplazan el tilde 🎬):
+  // "Grabarse" + "Terminado" ⇒ para_grabar (compatibilidad con el portal).
+  const setSeccionMeta = async (s, cambios) => {
+    const accion = cambios.accion ?? s.accion_cliente ?? 'solo_equipo';
+    const estado = cambios.estado ?? s.estado_seccion ?? 'en_construccion';
+    const paraGrabar = (s.kind === 'vsl' || s.kind === 'anuncios') && accion === 'grabarse' && estado === 'terminado';
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar } : x));
+    const { error } = await supabase.from('del_sections')
+      .update({ accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar, orden_grabacion: s.orden_grabacion ?? s.ord ?? null })
+      .eq('id', s.id);
+    if (error) { console.error(error); cargar(); return; }
+    emitir('section', { row: { id: s.id, accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar } });
+  };
+
   const toggleParaGrabar = async (s) => {
     const next = !s.para_grabar;
     setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, para_grabar: next } : x));
@@ -913,18 +929,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               )}
             </div>
           </div>
-          {/* Estrategia PRIMERO: es la vista por defecto del DEL (decisión de Matías).
-              Muestra el bloque de estrategia del funnel; el documento va en "DEL", abajo. */}
-          <button onClick={() => setView('estrategia')}
+          {/* Estrategia PRIMERO (decisión de Matías): ya no es una vista aparte —
+              es la primera categoría del documento, con el bloque del funnel como
+              encabezado y la estrategia real escrita abajo. El botón lleva ahí.
+              (El botón "DEL" se eliminó: no aportaba nada.) */}
+          <button onClick={() => { setView('del'); scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
             className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-bold transition-colors"
             style={{ background: view === 'estrategia' ? '#ECFEFF' : 'transparent', color: view === 'estrategia' ? '#0891B2' : '#4B5563' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></svg>Estrategia
-          </button>
-          {/* "DEL" = el documento entero */}
-          <button onClick={() => { setView('del'); scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            className="flex items-center gap-2 w-full py-2 px-2.5 rounded-[9px] text-left border-none cursor-pointer text-[12.5px] font-bold transition-colors"
-            style={{ background: view === 'del' ? '#EFEBFF' : 'transparent', color: view === 'del' ? '#6D28D9' : '#4B5563' }}>
-            <FileText size={14} className="shrink-0" />DEL
           </button>
           {/* Las secciones del documento, agrupadas por categoría con su color. */}
           {groups.map(gr => {
@@ -1136,9 +1148,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   </span>
                   <span className="h-px flex-1" style={{ background: '#EDF0F5' }} />
                 </div>
+                {/* Estrategia incrustada (decisión de Matías): el bloque del funnel
+                    (tipo · punto diferencial · fecha) es el ENCABEZADO de la primera
+                    categoría; abajo el equipo escribe la estrategia real como pestaña. */}
+                {gr.kind === 'estrategia' && estrategiaNode && (
+                  <div className="rounded-xl border border-[#E7EAF0] bg-white p-3">{estrategiaNode}</div>
+                )}
                 {gr.items.length === 0 && (
                   <div className="rounded-xl border border-dashed border-[#E2E5EB] bg-white/60 py-5 px-5 text-center">
-                    <div className="text-[12.5px] text-[#9098A4] font-medium">Todavía no está escrita la sección de <b style={{ color: gc.c }}>{gc.label}</b>.</div>
+                    <div className="text-[12.5px] text-[#9098A4] font-medium">
+                      {gr.kind === 'estrategia'
+                        ? <>Todavía no está escrita la <b style={{ color: gc.c }}>estrategia real</b> de este embudo (el texto completo, debajo del encabezado).</>
+                        : <>Todavía no está escrita la sección de <b style={{ color: gc.c }}>{gc.label}</b>.</>}
+                    </div>
                     {editando
                       ? <button onClick={() => agregar(null, gr.kind)} className="inline-flex items-center gap-1.5 mt-2.5 py-1.5 px-3 rounded-[9px] border-none bg-[#7C3AED] text-white text-[12px] font-semibold cursor-pointer hover:brightness-95"><Plus size={13} />Escribir {gc.label}</button>
                       : <div className="text-[11px] text-[#C3C9D4] mt-1">Tocá “Editar” para empezar a escribirla.</div>}
@@ -1176,17 +1198,39 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                       <MessageSquare size={13} />{scomments.length}
                     </span>
                   )}
-                  {/* PARA GRABAR: lo que ve el cliente en su portal. Solo VSL/anuncios. */}
-                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (
-                    <button onClick={() => toggleParaGrabar(s)}
-                      title={s.para_grabar ? 'El cliente VE este guion en su portal (clic para ocultarlo)' : 'Marcar para que el cliente lo vea en su portal y lo grabe'}
-                      className="inline-flex items-center gap-1 shrink-0 py-1 px-2 rounded-full text-[10px] font-extrabold uppercase tracking-[0.04em] border cursor-pointer transition-colors"
-                      style={s.para_grabar
-                        ? { background: '#EFEBFF', color: '#6D28D9', borderColor: '#DDD3FF' }
-                        : { background: 'transparent', color: '#AEB4BF', borderColor: '#E2E5EB' }}>
-                      🎬 {s.para_grabar ? 'Para grabar' : 'No visible'}
-                    </button>
-                  )}
+                  {/* ACCIÓN DEL CLIENTE + ESTADO por pestaña (reemplazan el tilde 🎬):
+                      la acción dice qué hace el cliente con esta pestaña; el estado
+                      dice si ya está terminada. El cliente solo ve lo TERMINADO que
+                      no sea "Solo equipo". Grabarse+Terminado = le aparece para grabar. */}
+                  <select
+                    value={s.accion_cliente || 'solo_equipo'}
+                    onChange={(e) => setSeccionMeta(s, { accion: e.target.value })}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Qué tiene que hacer el cliente con esta pestaña"
+                    className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none"
+                    style={{
+                      grabarse: { background: '#EFEBFF', color: '#6D28D9', borderColor: '#DDD3FF' },
+                      revisar: { background: '#EEF3FF', color: '#1D4FD8', borderColor: '#C7D2FE' },
+                      solo_ver: { background: '#ECFEFF', color: '#0891B2', borderColor: '#A5F3FC' },
+                      solo_equipo: { background: '#F4F5F7', color: '#7A8290', borderColor: '#E2E5EB' },
+                    }[s.accion_cliente || 'solo_equipo']}>
+                    <option value="grabarse">🎬 Grabarse</option>
+                    <option value="revisar">Revisar</option>
+                    <option value="solo_ver">Solo ver</option>
+                    <option value="solo_equipo">Solo equipo</option>
+                  </select>
+                  <select
+                    value={s.estado_seccion || 'en_construccion'}
+                    onChange={(e) => setSeccionMeta(s, { estado: e.target.value })}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Estado de esta pestaña (el cliente solo ve lo terminado)"
+                    className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none"
+                    style={(s.estado_seccion || 'en_construccion') === 'terminado'
+                      ? { background: '#DCFCE7', color: '#15803D', borderColor: '#BBF7D0' }
+                      : { background: '#FEF6E7', color: '#B45309', borderColor: '#FDE9C8' }}>
+                    <option value="en_construccion">🔨 En construcción</option>
+                    <option value="terminado">✔ Terminado</option>
+                  </select>
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
