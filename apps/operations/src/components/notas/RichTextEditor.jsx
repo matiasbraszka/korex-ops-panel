@@ -38,9 +38,34 @@ const headingLevel = (el) => Number(el.tagName[1]);
 // galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
 export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar, noToolbar = false, onActive }) {
   const ref = useRef(null);
+  const rootRef = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // diálogo nativo (tabla/imagen/avatar/aviso)
+  // Imagen seleccionada (con delTools): click en una imagen → menú de tamaño /
+  // reemplazar / quitar, como cualquier otra herramienta del editor.
+  const [imgSel, setImgSel] = useState(null); // { el, top, left }
+  const cerrarImgSel = () => {
+    if (imgSel?.el) imgSel.el.classList.remove('rte-img-sel');
+    setImgSel(null);
+  };
+  const setImgWidth = (pct) => {
+    if (!imgSel?.el) return;
+    imgSel.el.style.width = pct + '%';
+    imgSel.el.style.maxWidth = '100%';
+    imgSel.el.removeAttribute('width');
+    handleInput();
+  };
+  const quitarImg = () => {
+    if (!imgSel?.el) return;
+    imgSel.el.remove();
+    setImgSel(null);
+    handleInput();
+  };
+  const reemplazarImg = () => {
+    if (!imgSel?.el) return;
+    setDialog({ type: 'image', url: '', replaceEl: imgSel.el });
+  };
 
   useEffect(() => {
     if (!ref.current) return;
@@ -186,6 +211,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const doImage = () => {
     const safe = (dialog.url || '').trim();
     if (!/^https?:\/\//i.test(safe)) { setDialog({ ...dialog, err: 'El link debe empezar con http:// o https://' }); return; }
+    // Reemplazar: cambia el src de la imagen seleccionada, conservando su tamaño.
+    if (dialog.replaceEl) {
+      dialog.replaceEl.src = safe;
+      setDialog(null);
+      handleInput();
+      return;
+    }
     setDialog(null);
     insertHTML(`<img src="${safe.replace(/"/g, '&quot;')}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`);
   };
@@ -240,6 +272,17 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   };
 
   const handleClick = (e) => {
+    // Selección de imagen (herramienta del DEL): click en la imagen → menú.
+    if (delTools && e.target.tagName === 'IMG' && ref.current?.contains(e.target)) {
+      e.preventDefault();
+      if (imgSel?.el && imgSel.el !== e.target) imgSel.el.classList.remove('rte-img-sel');
+      e.target.classList.add('rte-img-sel');
+      const rRoot = rootRef.current.getBoundingClientRect();
+      const rImg = e.target.getBoundingClientRect();
+      setImgSel({ el: e.target, top: rImg.top - rRoot.top - 38, left: Math.max(8, rImg.left - rRoot.left + 8) });
+      return;
+    }
+    if (imgSel) cerrarImgSel();
     const h = e.target.closest?.('h1,h2,h3');
     if (!h || !ref.current?.contains(h)) return;
     // Solo togglear si el click cae en la "canaleta" izquierda donde vive la flecha.
@@ -273,7 +316,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const Divider = () => <div className="w-px h-5 bg-gray-200" />;
 
   return (
-    <div className="border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
+    <div ref={rootRef} className="relative border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
       {!noToolbar && (
       <div className="sticky top-0 z-20 flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg flex-wrap">
         <Btn Icon={Bold}          title="Negrita (Ctrl+B)"   onClick={() => exec('bold')} />
@@ -351,6 +394,21 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         style={{ minHeight }}
       />
 
+      {/* Menú flotante de imagen: tamaño / reemplazar / quitar (herramienta del DEL). */}
+      {imgSel && (
+        <div className="absolute z-30 flex items-center gap-0.5 bg-white border border-[#E2E5EB] rounded-lg px-1 py-0.5" style={{ top: Math.max(2, imgSel.top), left: imgSel.left, boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}
+          onMouseDown={(e) => e.preventDefault()}>
+          {[25, 50, 75, 100].map((p) => (
+            <button key={p} type="button" onClick={() => setImgWidth(p)}
+              className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">{p}%</button>
+          ))}
+          <div className="w-px h-4 bg-gray-200" />
+          <button type="button" onClick={reemplazarImg} className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">Reemplazar</button>
+          <button type="button" onClick={quitarImg} className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer">Quitar</button>
+          <button type="button" onClick={cerrarImgSel} className="py-1 px-1 rounded text-[10.5px] font-bold text-[#9CA3AF] hover:text-[#4B5563] border-none bg-transparent cursor-pointer">✕</button>
+        </div>
+      )}
+
       {/* Diálogo NATIVO de la plataforma (nada de window.prompt del navegador). */}
       {dialog && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }}
@@ -423,7 +481,8 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
         .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
         .rte-content figure[data-drive-image] { margin: 8px 0; padding: 10px; border: 1px dashed #D0D5DD; border-radius: 8px; background: #F7F8FA; color: #9098A4; font-size: 11px; font-style: italic; text-align: center; }
-        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
+        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; cursor: pointer; }
+        .rte-content img.rte-img-sel { outline: 2px solid #2E69E0; outline-offset: 2px; }
         /* Flechita de plegado (estilo Google Docs) en la canaleta izquierda */
         .rte-content h1, .rte-content h2, .rte-content h3 { position: relative; }
         .rte-content h1::before, .rte-content h2::before, .rte-content h3::before {
