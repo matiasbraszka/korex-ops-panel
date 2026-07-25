@@ -199,7 +199,7 @@ function GuionCard({ g, nav, hecho = false }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.18, color: T.ink, textWrap: 'balance' }}>{g.titulo}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Anuncio'} · {g.funnel}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Guion de anuncios'} · {g.funnel}</div>
         {g.snippet && (
           <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {g.snippet}{g.snippet.length >= 160 ? '…' : ''}
