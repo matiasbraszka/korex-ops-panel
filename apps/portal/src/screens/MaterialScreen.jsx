@@ -62,7 +62,7 @@ export default function MaterialScreen() {
                   <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--mk-blue-ops)' }}>{f.funnel}</span>
                 </div>
                 {f.items.map((g, i) => (
-                  <div key={i} onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`)} role="button" style={{ ...fila, borderTop: i > 0 ? '1px solid #EEF0F4' : 'none' }}>
+                  <div key={i} onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`, { state: { uploader: true } })} role="button" style={{ ...fila, borderTop: i > 0 ? '1px solid #EEF0F4' : 'none' }}>
                     <CarpetaTile lleno={g.estado === 'subido'} />
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <span style={filaTitulo}>{g.titulo}</span>

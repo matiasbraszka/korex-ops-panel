@@ -75,13 +75,16 @@ export default function DocumentoScreen() {
   useEffect(() => { setLocalComs([]); setSubidas([]); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
 
   // Si vienen desde "Tus guiones para grabar", saltamos al guion exacto.
+  // Si vienen desde una CARPETA (Material / embudo), saltamos directo al cargador.
   const { state: navState } = useLocation();
   useEffect(() => {
-    if (!loading && navState?.secId) {
+    if (!loading && (navState?.secId || navState?.uploader)) {
       const t = setTimeout(() => {
-        const el = scrollRef.current?.querySelector?.(`[data-secid="${navState.secId}"]`);
-        el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-      }, 150);
+        const el = navState?.uploader
+          ? scrollRef.current?.querySelector?.('[data-uploader]')
+          : scrollRef.current?.querySelector?.(`[data-secid="${navState.secId}"]`);
+        el?.scrollIntoView?.({ behavior: 'smooth', block: navState?.uploader ? 'center' : 'start' });
+      }, 200);
       return () => clearTimeout(t);
     }
   }, [loading, navState, sid, tipo]);
@@ -265,7 +268,7 @@ export default function DocumentoScreen() {
 
             {/* ── SUBIR LAS GRABACIONES (solo guiones, al final, todas juntas) ── */}
             {esGuion && secciones.length > 0 && (
-              <div style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+              <div data-uploader="" style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
                 <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #EEF0F4' }}>
                   <div style={{ fontSize: 16, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', marginBottom: 4 }}>
                     {esVsl ? 'Tu video del VSL' : 'Ya los grabé, los subo'}
