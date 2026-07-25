@@ -149,6 +149,9 @@ button { font-family: inherit; }
   [data-kx-onb] { padding-left: 280px; }
   [data-kx-onb] .kxs { padding-inline: max(32px, calc((100% - 720px) / 2)) !important; }
   [data-kx-onb] [data-kx-onbfooter] { padding-inline: max(32px, calc((100% - 720px) / 2)) !important; }
+  /* El anillo del header solo en móvil: en PC el índice lateral ya tiene el
+     grande, y dos porcentajes en la misma pantalla se estorban. */
+  [data-kx-onbanillo] { display: none; }
   [data-kx-onbindice] {
     position: absolute !important; left: 0; top: 0; bottom: 0; width: 280px;
     display: flex !important; flex-direction: column;

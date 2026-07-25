@@ -1,13 +1,18 @@
-// Portada y cierre de tramo.
+// Portada de tramo: qué se pregunta acá, para qué sirve y cuánto tarda.
 //
-// Es donde vive casi toda la dopamina del onboarding, y por una razón: si
-// celebráramos cada respuesta, para la pregunta 30 el cliente odiaría la
-// animación. Se celebra cinco veces, y siempre con una CONSECUENCIA CONCRETA
-// ("con esto ya podemos escribir tu VSL") en vez de un elogio vacío. El refuerzo
-// tiene que ser información, no palmadita.
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { IcoCheck, IcoArrowR, IcoClock, IcoPlay, IcoImage } from '../../components/icons';
+// NO hay pantalla de cierre de tramo. Antes existía una celebración al terminar
+// cada uno ("Tu historia, listo · 23%") y se sacó: el anillo de progreso del
+// header ya se mueve con cada respuesta, así que esa pantalla le contaba al
+// cliente algo que acababa de ver, a cambio de un toque más y de romper el
+// ritmo justo cuando lo tenía agarrado. Del último tramo se sale al repaso.
+//
+// Lo que sí se conserva es la CONSECUENCIA CONCRETA ("con esto ya podemos
+// escribir tu video de ventas"): el refuerzo tiene que ser información, no
+// palmadita. Ahora va en la portada, antes de arrancar, que es donde sirve para
+// decidir invertir los minutos.
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { IcoArrowR, IcoPlay } from '../../components/icons';
 import { TO, F, dsp, btn, btnTexto, label } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell, OnbHeader, OnbFooter } from '../components/OnbShell';
@@ -15,144 +20,19 @@ import { pantallasDe, tramoCompleto } from '../progreso';
 
 export default function TramoScreen() {
   const { tramo } = useParams();
-  const [params] = useSearchParams();
   const navigate = useNavigate();
-  const esCierre = params.get('cierre') === '1';
 
-  const { secciones, tramos, respuestas, bloqueantes, minutos, progreso, flush, checklist } = useOnboarding();
+  const { secciones, tramos, respuestas, bloqueantes, flush } = useOnboarding();
   const seccion = secciones.find((s) => s.skey === tramo);
-
-  const [pctAnim, setPctAnim] = useState(progreso.pct);
-  useEffect(() => {
-    if (!esCierre) { setPctAnim(progreso.pct); return; }
-    // Arranca donde estaba y sube: ver el número moverse es media celebración.
-    const t = setTimeout(() => setPctAnim(progreso.pct), 260);
-    return () => clearTimeout(t);
-  }, [esCierre, progreso.pct]);
-
   if (!seccion) return null;
 
   const i = tramos.findIndex((s) => s.skey === tramo);
   const pantallas = pantallasDe(seccion, respuestas);
   const completo = tramoCompleto(seccion, respuestas, bloqueantes);
-  const siguiente = tramos[i + 1];
-
-  const ir = async (destino) => { await flush(); navigate(destino); };
-
-  const irAlSiguiente = () => {
-    if (siguiente) return ir(`/onboarding/${siguiente.skey}`);
-    return ir('/onboarding/repaso');
-  };
-
-  // ── Cierre ─────────────────────────────────────────────────────────────────
-  if (esCierre) {
-    // El recordatorio del material se muestra al cerrar el ANTEÚLTIMO tramo:
-    // es el último momento útil para juntarlo antes de que se lo pidamos.
-    const avisarMaterial = siguiente?.skey === 'material' && (checklist || []).length > 0;
-
-    return (
-      <OnbShell>
-        <OnbHeader titulo={seccion.titulo} ocultarProgreso onVolver={() => navigate(`/onboarding/${tramo}`)} />
-        <div className="kxs" style={{ flex: 1, paddingTop: 34, paddingBottom: 30, textAlign: 'center' }}>
-          <div style={{ animation: 'kxUp .4s ease' }}>
-            <div style={{
-              width: 74, height: 74, borderRadius: '50%', margin: '0 auto 24px',
-              background: completo ? TO.greenInk : TO.blueBtn,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              animation: 'kxPop .55s ease',
-            }}>
-              <IcoCheck size={34} stroke="#fff" sw={2.6} />
-            </div>
-
-            <div style={{ ...dsp(F.h2), lineHeight: 1.18 }}>
-              {completo ? `${seccion.titulo}, listo.` : `Guardamos ${seccion.titulo.toLowerCase()}.`}
-            </div>
-
-            {seccion.promesa && (
-              <div style={{
-                fontSize: F.body, lineHeight: 1.55, color: TO.body,
-                marginTop: 14, maxWidth: 420, marginInline: 'auto',
-              }}>{seccion.promesa}</div>
-            )}
-
-            {/* La barra global moviéndose de verdad, con el número contando. */}
-            <div style={{ maxWidth: 340, margin: '30px auto 0' }}>
-              <div style={{
-                fontFamily: "'Montserrat', sans-serif", fontSize: 44, fontWeight: 800,
-                letterSpacing: '-0.035em', color: TO.ink, lineHeight: 1,
-              }}>{pctAnim}%</div>
-              <div style={{ height: 10, borderRadius: 999, background: TO.fill, marginTop: 14, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: 999, background: TO.blueBtn,
-                  width: `${pctAnim}%`, transition: 'width .7s cubic-bezier(.22,1,.36,1)',
-                }} />
-              </div>
-              {minutos > 0 && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  fontSize: F.meta, fontWeight: 600, color: TO.meta, marginTop: 14,
-                }}>
-                  <IcoClock size={17} stroke={TO.meta} />
-                  Te quedan unos {minutos} minutos
-                </div>
-              )}
-            </div>
-
-            {avisarMaterial && (
-              <div style={{
-                marginTop: 28, padding: '17px 18px', borderRadius: 18, textAlign: 'left',
-                background: TO.blueWash, border: `2px solid ${TO.blueLine}`,
-                maxWidth: 440, marginInline: 'auto',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <IcoImage size={20} stroke={TO.blue} sw={2.2} />
-                  <div style={{ fontSize: 17, fontWeight: 800, color: TO.ink, letterSpacing: '-0.01em' }}>
-                    Último paso: tu material
-                  </div>
-                </div>
-                {checklist.filter((c) => c.requerido).map((c) => (
-                  <div key={c.qkey} style={{
-                    fontSize: F.meta, lineHeight: 1.5, color: TO.body, marginTop: 5,
-                  }}>· {c.texto}</div>
-                ))}
-              </div>
-            )}
-
-            {seccion.desbloquea && completo && (
-              <div style={{
-                marginTop: 26, padding: '15px 17px', borderRadius: 16,
-                background: TO.greenWash, border: '1px solid #A7DFBE',
-                maxWidth: 420, marginInline: 'auto',
-                fontSize: F.meta, lineHeight: 1.55, color: TO.greenInk, fontWeight: 600,
-              }}>
-                Se te desbloqueó una sección nueva de la plataforma. La vas a ver
-                cuando termines.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <OnbFooter>
-          <button type="button" onClick={irAlSiguiente} style={btn()}>
-            {siguiente ? 'SEGUIR' : 'IR AL REPASO'}
-            <IcoArrowR size={18} stroke="#fff" sw={2.4} />
-          </button>
-
-          {/* Dar permiso explícito de parar BAJA el abandono: elimina la sensación
-              de estar atrapado en un formulario que no termina más. */}
-          {seccion.checkpoint && (
-            <button type="button" onClick={() => ir('/')} style={btnTexto}>
-              Continuar más tarde
-            </button>
-          )}
-        </OnbFooter>
-      </OnbShell>
-    );
-  }
-
-  // ── Portada ────────────────────────────────────────────────────────────────
   const primera = pantallas[0];
   const requeridas = (seccion.preguntas || []).filter((q) => q.requerida).length;
+
+  const ir = async (destino) => { await flush(); navigate(destino); };
 
   return (
     <OnbShell>
@@ -210,6 +90,16 @@ export default function TramoScreen() {
           {completo ? 'REVISAR MIS RESPUESTAS' : 'EMPEZAR'}
           <IcoArrowR size={18} stroke="#fff" sw={2.4} />
         </button>
+
+        {/* Dar permiso explícito de parar BAJA el abandono: elimina la sensación
+            de estar atrapado en un formulario que no termina más. Vive acá
+            porque la portada es el único punto de respiro que quedó entre
+            tramos. */}
+        {seccion.checkpoint && (
+          <button type="button" onClick={() => ir('/')} style={btnTexto}>
+            Continuar más tarde
+          </button>
+        )}
       </OnbFooter>
     </OnbShell>
   );

@@ -45,9 +45,16 @@ export default function PreguntaScreen() {
 
   const irA = async (destino) => { await flush(); navigate(destino); };
 
+  // Al terminar un tramo se pasa DIRECTO a la portada del siguiente. Antes había
+  // una pantalla de celebración en el medio ("Tu historia, listo · 23%") y no
+  // aportaba nada: el anillo de progreso del header ya se mueve con cada
+  // respuesta, así que la celebración le contaba al cliente algo que acababa de
+  // ver, a cambio de un toque más.
   const siguiente = () => {
     if (idx + 1 < pantallas.length) return irA(`/onboarding/${tramo}/${pantallas[idx + 1].id}`);
-    return irA(`/onboarding/${tramo}?cierre=1`);
+    const i = tramos.findIndex((s) => s.skey === tramo);
+    const proximo = tramos[i + 1];
+    return irA(proximo ? `/onboarding/${proximo.skey}` : '/onboarding/repaso');
   };
 
   const anterior = () => {
@@ -134,7 +141,9 @@ export default function PreguntaScreen() {
 
       <OnbFooter>
         <button type="button" onClick={continuar} style={btn()}>
-          {idx + 1 < pantallas.length ? 'SIGUIENTE' : 'TERMINAR ESTE TRAMO'}
+          {idx + 1 < pantallas.length ? 'SIGUIENTE'
+            : tramos[tramoIdx + 1] ? `SEGUIR CON ${tramos[tramoIdx + 1].titulo.toUpperCase()}`
+            : 'IR AL REPASO'}
           <IcoArrowR size={18} stroke="#fff" sw={2.4} />
         </button>
       </OnbFooter>
