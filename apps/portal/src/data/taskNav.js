@@ -17,8 +17,10 @@ export function destinoTarea(t) {
   const esSubir = RE_SUBIR.test(txt) || (!RE_GRABAR.test(txt) && RE_MATERIAL.test(txt));
   const esGrabar = !esSubir && RE_GRABAR.test(txt);
 
-  if (esGrabar && t?.funnelId) {
-    return { to: `/documento/${t.funnelId}/${RE_VSL.test(txt) ? 'vsl' : 'ads'}`, state: {}, cta: 'Ver los guiones' };
+  // Grabar → SIEMPRE a la pantalla de selección de guiones (el cliente elige
+  // ahí cuál abrir; nada de tirarlo adentro de un documento de una).
+  if (esGrabar) {
+    return { to: '/guiones', state: {}, cta: 'Ver mis guiones' };
   }
   if (esSubir) return { to: '/material', state: {}, cta: 'Subir material' };
   if (t?.funnelId) return { to: '/embudos', state: {}, cta: 'Ver el embudo' };
