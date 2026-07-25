@@ -1,29 +1,15 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { HelpCircle, X, Play, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink, LogOut, ChevronRight } from 'lucide-react';
-import PhoneFrame from './PhoneFrame';
+import PhoneFrame, { KxScreen } from './PhoneFrame';
 import BottomNav from './BottomNav';
 import { api } from '../data/portalApi';
 import { useAsync } from './ui';
 import { usePortalAuth } from '../auth/PortalAuthProvider';
 import { T } from './theme';
 
-// Header del diseño nuevo: logo "mk" + iniciales del cliente (abre su perfil).
-function Header({ clientName, onPerfil }) {
-  const iniciales = String(clientName || '·').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-  return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 40, background: T.bg, padding: '14px 20px 6px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800, fontSize: 21, color: T.primary, letterSpacing: '-0.05em', flexShrink: 0 }}>mk<span style={{ color: T.ink, fontSize: 8, verticalAlign: 'super' }}>●</span></span>
-      <span style={{ flex: 1 }} />
-      <button onClick={onPerfil} aria-label="Tu perfil" style={{ width: 38, height: 38, borderRadius: 999, border: `1px solid ${T.border}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: T.text2 }}>{iniciales}</span>
-      </button>
-    </header>
-  );
-}
-
 // Hoja de PERFIL: datos + accesos + tutoriales + cerrar sesión.
-function PerfilSheet({ clientName, onClose, onAccesos, onTutoriales }) {
+export function PerfilSheet({ clientName, onClose, onAccesos, onTutoriales }) {
   const { signOut, user } = usePortalAuth();
   const fila = (Icon, color, bg, titulo, sub, onClick) => (
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 4px', cursor: 'pointer', borderTop: '1px solid #F0F2F5' }}>
@@ -155,27 +141,23 @@ export function TutorialesSheet({ onClose }) {
   );
 }
 
+// Layout de los tabs: pantalla completa con fade al cambiar de ruta (el CSS de
+// index.css convierte la tab bar en menú lateral en PC). El header con logo y
+// perfil vive DENTRO de Inicio, como en el prototipo.
 export default function Layout() {
-  const [tut, setTut] = useState(false);
-  const [acc, setAcc] = useState(false);
-  const [perfil, setPerfil] = useState(false);
-  const { data: me } = useAsync(() => api.me(), []);
+  const { pathname } = useLocation();
   const { data: inicio } = useAsync(() => api.inicio(), []);
-  const clientName = me?.name || me?.clientName;
   // Puntito rojo en Guiones: hay grabaciones esperando.
   const dotGuiones = Array.isArray(inicio?.pendientes) && inicio.pendientes.some((p) => String(p.tipo || '').startsWith('grabacion'));
 
   return (
     <PhoneFrame>
-      <Header clientName={clientName} onPerfil={() => setPerfil(true)} />
-      <main style={{ flex: 1, overflowY: 'auto', background: T.bg }}>
-        <Outlet />
-        <div style={{ height: 12 }} />
-      </main>
-      <BottomNav dotGuiones={dotGuiones} />
-      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onTutoriales={() => { setPerfil(false); setTut(true); }} />}
-      {tut && <TutorialesSheet onClose={() => setTut(false)} />}
-      {acc && <AccesosSheet onClose={() => setAcc(false)} />}
+      <KxScreen key={pathname}>
+        <main className="kxs" style={{ flex: 1, overflowY: 'auto' }}>
+          <Outlet />
+        </main>
+        <BottomNav dotGuiones={dotGuiones} />
+      </KxScreen>
     </PhoneFrame>
   );
 }

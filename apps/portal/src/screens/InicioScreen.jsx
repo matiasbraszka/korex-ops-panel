@@ -1,155 +1,203 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, ChevronRight, Video, Camera, KeyRound, CheckCircle2, PlusCircle, ClipboardList, PartyPopper } from 'lucide-react';
-import { Screen, Loading, DemoBanner, useAsync } from '../components/ui';
+import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { destinoTarea } from '../data/taskNav';
-import { T, cardStyle, microLabel, bigBtn } from '../components/theme';
+import { PerfilSheet, AccesosSheet, TutorialesSheet } from '../components/Layout';
+import { T, display, microLabel } from '../components/theme';
+import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile } from '../components/icons';
+import logo from '../assets/logo-korex.svg';
 
-// INICIO (diseño nuevo): "Hola, Sergio" + avance + LO QUE TE FALTA como tarjetas
-// accionables. Cada tarjeta lleva al lugar exacto: documento de guiones, subir
-// material o el paso a paso de Meta. Las tareas del sistema de operaciones
-// asignadas al cliente también entran acá.
+// INICIO — exacta al prototipo: logo + iniciales, "Hola, Sergio", Avance,
+// LO QUE TE FALTA como tarjetas grandes accionables y lo entregado en verde.
 export default function InicioScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.inicio(), []);
   const { data: tareasData } = useAsync(() => api.tareas(), []);
+  const { data: me } = useAsync(() => api.me(), []);
+  const [perfil, setPerfil] = useState(false);
+  const [acc, setAcc] = useState(false);
+  const [tut, setTut] = useState(false);
 
   if (loading) return <Loading label="Cargando tu proyecto…" />;
   const d = data || {};
+  const clientName = me?.name || me?.clientName || d.name;
+  const iniciales = String(clientName || '·').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const nombre = String(d.name || '').split(' ')[0];
   const pendientes = Array.isArray(d.pendientes) ? d.pendientes : [];
   const tareas = (Array.isArray(tareasData) ? tareasData : []).map((t) => ({ ...t, _tarea: true }));
   const completados = Array.isArray(d.completados) ? d.completados : [];
   const total = pendientes.length + tareas.length;
   const wa = (d.whatsapp || '').replace(/\D/g, '');
+  const intro = total === 0
+    ? 'Nos entregaste todo lo que necesitábamos. Ahora seguimos nosotros.'
+    : `Necesitamos ${total === 1 ? '1 cosa tuya' : `${total} cosas tuyas`} para seguir avanzando. Empieza por la primera.`;
+  const avanceNota = total === 0
+    ? 'Ya entregaste todo. De aquí en adelante avanzamos nosotros.'
+    : 'Este número sube cuando subes el material que falta. Sin eso no podemos seguir.';
 
   return (
-    <Screen style={{ background: T.bg }}>
-      {isDemo() && <DemoBanner />}
-      <h1 style={{ margin: '4px 0 6px', fontSize: 30, fontWeight: 800, color: T.ink, letterSpacing: '-0.03em' }}>Hola{nombre ? `, ${nombre}` : ''}</h1>
-      <p style={{ margin: '0 0 16px', fontSize: 15.5, color: T.text2, lineHeight: 1.45 }}>
-        {total > 0
-          ? <>Necesitamos {total === 1 ? '1 cosa tuya' : `${total} cosas tuyas`} para seguir avanzando. Empieza por la primera.</>
-          : <>Estás al día. No necesitamos nada de ti por ahora.</>}
-      </p>
+    <>
+      {isDemo() && <div style={{ padding: '12px 22px 0' }}><DemoBanner /></div>}
 
-      {/* Avance del proyecto */}
-      <div style={{ ...cardStyle, padding: '16px 18px', marginBottom: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontSize: 14.5, fontWeight: 800, color: T.ink }}>Avance de tu proyecto</span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: d.todosTerminados ? T.green : T.primary, letterSpacing: '-0.02em' }}>{d.progreso ?? 0}%</span>
+      {/* Logo + perfil (iniciales) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 0' }}>
+        <img src={logo} alt="Método Korex" style={{ height: 26, width: 'auto' }} />
+        <div onClick={() => setPerfil(true)} role="button" aria-label="Tu perfil" style={{ cursor: 'pointer', width: 36, height: 36, borderRadius: '50%', background: '#fff', boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: T.text2 }}>{iniciales}</div>
+      </div>
+
+      {/* Hola */}
+      <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={display(30, '-0.035em')}>Hola{nombre ? `, ${nombre}` : ''}</div>
+        <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
+      </div>
+
+      {/* Avance de tu proyecto */}
+      <div style={{ margin: '20px 22px 0', padding: '18px 20px', background: '#fff', borderRadius: 20, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: T.textSoft }}>Avance de tu proyecto</span>
+          <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 17, fontWeight: 800, color: T.primary }}>{d.progreso ?? 0}%</span>
         </div>
-        <div style={{ height: 8, borderRadius: 999, background: '#EDEFF5', overflow: 'hidden' }}>
-          <div style={{ height: '100%', borderRadius: 999, background: d.todosTerminados ? T.green : T.primary, width: `${Math.min(100, d.progreso ?? 0)}%`, transition: 'width .3s' }} />
+        <div style={{ height: 8, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+          <div style={{ height: '100%', borderRadius: 999, background: T.primary, transition: 'width .35s ease', width: `${Math.min(100, d.progreso ?? 0)}%` }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 10, fontSize: 12.5, color: T.text3, lineHeight: 1.4 }}>
-          {d.todosTerminados
-            ? <><PartyPopper size={14} color={T.green} style={{ flexShrink: 0, marginTop: 1 }} /> Embudos todos al aire. Ahora, optimizando los resultados.</>
-            : <><PlusCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> Este número sube cuando subes el material que falta. Sin eso no podemos seguir.</>}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+          <IcoInfo size={15} stroke="var(--mk-text3)" sw={2.1} style={{ flex: 'none', marginTop: 2 }} />
+          <span style={{ fontSize: 12.5, lineHeight: 1.45, color: T.text2, flex: 1 }}>{d.todosTerminados ? 'Embudos todos al aire. Ahora, optimizando los resultados.' : avanceNota}</span>
         </div>
       </div>
 
       {/* LO QUE TE FALTA */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>Lo que te falta</h2>
-        {total > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: T.red, background: T.redSoft, borderRadius: 999, padding: '2px 9px' }}>{total}</span>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '30px 22px 14px' }}>
+        <div style={display(22, '-0.03em')}>Lo que te falta</div>
+        {total > 0 && <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 24, height: 24, padding: '0 8px', borderRadius: 999, background: 'var(--mk-red-bg)', color: 'var(--mk-red)', fontSize: 12.5, fontWeight: 700 }}>{total}</div>}
       </div>
 
-      {total === 0 ? (
-        <div style={{ ...cardStyle, padding: 16, display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <CheckCircle2 size={20} color={T.green} style={{ flexShrink: 0 }} />
-          <span style={{ fontSize: 14.5, fontWeight: 600, color: T.ink }}>Nada pendiente. Cuando necesitemos algo, aparece aquí.</span>
-        </div>
-      ) : (
-        <div className="mk-grid2" style={{ marginBottom: 20 }}>
-          {pendientes.map((p, i) => <PendienteCard key={p.id || p.tipo + i} p={p} nav={nav} />)}
-          {tareas.map((t) => <TareaCard key={t.id} t={t} nav={nav} />)}
-        </div>
-      )}
+      <div style={{ padding: '0 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {pendientes.map((p, i) => <PendienteCard key={p.id || (p.tipo || '') + i} p={p} nav={nav} />)}
+        {tareas.map((t) => <TareaCard key={t.id} t={t} nav={nav} />)}
 
-      {/* Lo ya entregado */}
-      {completados.map((c, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 4px', fontSize: 14, fontWeight: 600, color: T.text3 }}>
-          <CheckCircle2 size={17} color={T.green} style={{ flexShrink: 0 }} />
-          <span style={{ textDecoration: 'line-through' }}>Ya entregaste: {c.titulo}</span>
-        </div>
-      ))}
+        {total === 0 && (
+          <div style={{ background: '#fff', borderRadius: 22, padding: '26px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: 'var(--shadow-md)', textAlign: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--mk-green-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IcoCheck size={26} stroke="var(--mk-green)" sw={2.6} />
+            </div>
+            <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', color: T.ink }}>Estás al día</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Nos entregaste todo. Seguimos nosotros: editamos tus videos y publicamos. Te avisamos aquí.</div>
+          </div>
+        )}
 
-      <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13.5, color: T.text3 }}>
+        {/* Lo ya entregado */}
+        {completados.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingTop: 2 }}>
+            {completados.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 17px', borderRadius: 16, background: 'var(--mk-green-bg)' }}>
+                <IcoCheck size={17} stroke="var(--mk-green)" sw={2.5} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.textSoft }}>Ya entregaste: {c.titulo}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
         ¿Algo no se entiende?{' '}
         {wa
           ? <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" style={{ color: T.primary, fontWeight: 700 }}>Escríbenos por WhatsApp.</a>
           : <b style={{ color: T.text2 }}>Escríbenos por WhatsApp.</b>}
       </div>
-    </Screen>
+
+      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onTutoriales={() => { setPerfil(false); setTut(true); }} />}
+      {acc && <AccesosSheet onClose={() => setAcc(false)} />}
+      {tut && <TutorialesSheet onClose={() => setTut(false)} />}
+    </>
   );
 }
 
-// Tarjeta de un pedido: ícono + título + por qué + hace cuánto + CTA exacto.
+// Tarjeta de un pedido, con el diseño EXACTO del prototipo según su tipo.
 function PendienteCard({ p, nav }) {
   const esGrab = String(p.tipo || '').startsWith('grabacion');
   const esMeta = p.tipo === 'acceso_meta';
-  const Icon = esGrab ? Video : esMeta ? KeyRound : Camera;
   const validando = p.estado === 'cliente_dice_listo';
-
   const abrir = () => {
     if (esGrab) nav(`/documento/${p.strategyId}/${p.docTipo || 'ads'}`);
     else if (esMeta) nav('/meta');
     else nav(`/pedido/${p.id}`, { state: { pedido: p } });
   };
-  const cta = esGrab ? 'Abrir mis guiones' : esMeta ? (validando ? 'Ver el paso a paso' : 'Cómo se hace') : (p.tipo === 'fotos' ? 'Subir fotos' : 'Subir material');
-  const caption = esGrab
-    ? `Te lleva al documento, sección ${p.docTipo === 'vsl' ? 'VSL' : 'Ads'}`
-    : validando ? 'Nos avisaste que ya está — lo estamos validando'
-    : esMeta && p.bloqueante ? 'Nos está frenando'
-    : (p.target ? `${p.subidos ?? 0} de ${p.target} subidas` : null);
+  const pedidoHace = p.dias == null ? null : p.dias === 0 ? 'Te lo pedimos hoy' : p.dias === 1 ? 'Te lo pedimos hace 1 día' : `Te lo pedimos hace ${p.dias} días`;
+  const Icon = esGrab ? IcoVideo : esMeta ? IcoKey : IcoImage;
 
   return (
-    <div style={{ ...cardStyle, padding: 18 }}>
-      <div style={{ display: 'flex', gap: 13 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 13, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Icon size={21} color={T.primary} />
+    <div onClick={abrir} style={{ cursor: 'pointer', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-md)' }}>
+      <div style={{ display: 'flex', gap: 15, alignItems: 'flex-start' }}>
+        <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 15, background: esMeta ? 'var(--mk-red-bg)' : 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={22} stroke={esMeta ? 'var(--mk-red)' : 'var(--mk-blue-ops)'} sw={1.9} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 17.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.01em', lineHeight: 1.25 }}>{p.titulo}</div>
-          <div style={{ fontSize: 13.5, color: T.text2, lineHeight: 1.45, marginTop: 5 }}>{p.descripcion}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.14, color: T.ink, textWrap: 'balance' }}>{p.titulo}</div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{p.descripcion}</div>
         </div>
       </div>
-      {p.dias != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12.5, fontWeight: 700, color: T.orange }}>
-          <Clock size={13} /> Te lo pedimos {p.dias === 0 ? 'hoy' : p.dias === 1 ? 'hace 1 día' : `hace ${p.dias} días`}
+      {pedidoHace && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--mk-orange)' }}>
+          <IcoClock size={13} stroke="var(--mk-orange)" sw={2.3} />
+          {pedidoHace}
         </div>
       )}
-      <button onClick={abrir} style={{ ...bigBtn(), marginTop: 12 }}>{cta} <ChevronRight size={15} /></button>
-      {caption && (
-        <div style={{ textAlign: 'center', marginTop: 8, fontSize: 12, fontWeight: caption === 'Nos está frenando' ? 800 : 600, color: caption === 'Nos está frenando' ? T.red : validando ? T.green : T.text3 }}>
-          {caption}
+      {esGrab ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div style={{ height: 48, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            Abrir mis guiones
+            <IcoChevR size={16} stroke="#fff" sw={2.4} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: T.text3 }}>
+            <IcoFile size={14} stroke="var(--mk-text3)" sw={2} />
+            Te lleva al documento, sección {p.docTipo === 'vsl' ? 'VSL' : 'Ads'}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', height: 46, padding: '0 22px', borderRadius: 999, background: esMeta ? T.primary : T.ink, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+            {esMeta ? (validando ? 'Ver el paso a paso' : 'Cómo se hace') : p.tipo === 'fotos' ? 'Subir fotos' : 'Subir material'}
+          </div>
+          {esMeta
+            ? <span style={{ fontSize: 12.5, fontWeight: 600, color: validando ? 'var(--mk-green)' : 'var(--mk-red)' }}>{validando ? 'Lo estamos validando' : p.bloqueante ? 'Nos está frenando' : ''}</span>
+            : p.target != null && <span style={{ fontSize: 12.5, color: T.text3 }}>{p.subidos ?? 0} de {p.target} subidas</span>}
         </div>
       )}
     </div>
   );
 }
 
-// Tarea del sistema de operaciones asignada al cliente (desaparece al validarse).
+// Tarea del sistema de operaciones asignada al cliente (mismo look de tarjeta).
 function TareaCard({ t, nav }) {
   const dest = destinoTarea(t);
+  const pedidoHace = t.dias == null ? null : t.dias === 0 ? 'Te lo pedimos hoy' : t.dias === 1 ? 'Te lo pedimos hace 1 día' : `Te lo pedimos hace ${t.dias} días`;
   return (
-    <div style={{ ...cardStyle, padding: 18 }}>
-      <div style={{ display: 'flex', gap: 13 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 13, background: T.amberSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <ClipboardList size={21} color={T.orange} />
+    <div onClick={() => dest && nav(dest.to, { state: dest.state })} style={{ cursor: dest ? 'pointer' : 'default', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-md)' }}>
+      <div style={{ display: 'flex', gap: 15, alignItems: 'flex-start' }}>
+        <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 15, background: 'var(--mk-orange-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <IcoFile size={22} stroke="var(--mk-orange)" sw={1.9} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16.5, fontWeight: 800, color: T.ink, lineHeight: 1.3 }}>{t.titulo}</div>
-          {t.funnel && <div style={{ fontSize: 12.5, color: T.text3, marginTop: 4 }}>Embudo {t.funnel}</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.14, color: T.ink, textWrap: 'balance' }}>{t.titulo}</div>
+          {t.funnel && <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Embudo {t.funnel}</div>}
         </div>
       </div>
-      {t.dias != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12.5, fontWeight: 700, color: T.orange }}>
-          <Clock size={13} /> Te lo pedimos {t.dias === 0 ? 'hoy' : t.dias === 1 ? 'hace 1 día' : `hace ${t.dias} días`}
+      {pedidoHace && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--mk-orange)' }}>
+          <IcoClock size={13} stroke="var(--mk-orange)" sw={2.3} />
+          {pedidoHace}
         </div>
       )}
-      {dest && <button onClick={() => nav(dest.to, { state: dest.state })} style={{ ...bigBtn(T.ink), marginTop: 12 }}>{dest.cta} <ChevronRight size={15} /></button>}
+      {dest && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 46, padding: '0 22px', borderRadius: 999, background: T.ink, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+            {dest.cta}
+            <IcoChevR size={14} stroke="#fff" sw={2.4} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

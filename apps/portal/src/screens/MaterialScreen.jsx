@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Film, Camera, KeyRound, Sparkles, ExternalLink } from 'lucide-react';
-import { Screen, Loading, DemoBanner, useAsync } from '../components/ui';
+import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
-import { T, cardStyle, microLabel, pill } from '../components/theme';
+import { T, display, pill } from '../components/theme';
+import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoExternal } from '../components/icons';
 
-// TU MATERIAL: todo lo que necesitamos del cliente en un solo lugar —
-// grabaciones por embudo, materiales de marca (X de Y), accesos y lo que
-// le devolvemos (ediciones publicadas, con badge NUEVO).
+// TU MATERIAL — exacta al prototipo: secciones con título afuera de la tarjeta
+// (Tus grabaciones · Materiales de marca · Accesos · Lo que te devolvemos),
+// filas con chips SUBIDO/FALTA y "Pedido hace N días" en naranja.
 export default function MaterialScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.material(), []);
@@ -33,128 +33,139 @@ export default function MaterialScreen() {
     f.items.push(g);
   }
 
-  return (
-    <Screen style={{ background: T.bg }}>
-      {isDemo() && <DemoBanner />}
-      <h1 style={{ margin: '4px 0 6px', fontSize: 26, fontWeight: 800, color: T.ink, letterSpacing: '-0.03em' }}>Tu material</h1>
-      <p style={{ margin: '0 0 18px', fontSize: 15, color: T.text2, lineHeight: 1.45 }}>
-        Todo lo que necesitamos de ti, en un solo lugar.{faltan > 0 ? ` Nos ${faltan === 1 ? 'falta 1' : `faltan ${faltan}`}.` : ' Está todo. 🎉'}
-      </p>
+  const chipSubido = <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>Subido</span>;
+  const chipFalta = <span style={pill('var(--mk-red-bg)', 'var(--mk-red)')}>Falta</span>;
 
-      {/* Tus grabaciones */}
-      {porFunnel.length > 0 && (
-        <Seccion titulo="Tus grabaciones" sub="Se organizan por embudo.">
-          {porFunnel.map((f) => (
-            <div key={f.funnel} style={{ marginBottom: 6 }}>
-              <div style={{ ...microLabel(), margin: '10px 2px 6px' }}>{f.funnel}</div>
-              {f.items.map((g, i) => (
-                <Fila key={i} Icon={Film}
-                  titulo={g.titulo}
-                  sub={g.estado === 'subido' ? (g.ultimo || `${g.subidos} ${g.subidos === 1 ? 'video' : 'videos'}`) : `Pedido ${g.dias === 0 ? 'hoy' : `hace ${g.dias} ${g.dias === 1 ? 'día' : 'días'}`}`}
-                  estado={g.estado === 'subido' ? 'subido' : 'falta'}
-                  onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`)} />
+  return (
+    <>
+      {isDemo() && <div style={{ padding: '12px 22px 0' }}><DemoBanner /></div>}
+      <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={display(30, '-0.035em')}>Tu material</div>
+        <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>
+          {faltan === 0 ? 'Todo lo que necesitábamos de ti ya está aquí.' : `Todo lo que necesitamos de ti, en un solo lugar. Nos ${faltan === 1 ? 'falta 1' : `faltan ${faltan}`}.`}
+        </div>
+      </div>
+
+      <div style={{ padding: '26px 22px 0', display: 'flex', flexDirection: 'column', gap: 26 }}>
+
+        {/* Tus grabaciones */}
+        {porFunnel.length > 0 && (
+          <div style={seccion}>
+            <div style={secHead}>
+              <IcoVideo size={19} stroke="var(--mk-blue-ops)" sw={2.1} />
+              <span style={secTitulo}>Tus grabaciones</span>
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, margin: '-4px 0 2px' }}>Se organizan por embudo y, dentro de cada uno, por avatar.</div>
+            <div style={cardLista}>
+              {porFunnel.map((f, fi) => (
+                <div key={f.funnel}>
+                  {fi > 0 && <div style={{ height: 1, background: '#EEF0F4', margin: '6px 12px' }} />}
+                  <div style={{ padding: `${fi > 0 ? 10 : 12}px 16px 4px`, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: fi === 0 ? 'var(--mk-blue-ops)' : T.text3 }}>{f.funnel}</div>
+                  {f.items.map((g, i) => (
+                    <div key={i} onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`)} role="button" style={fila}>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <span style={filaTitulo}>{g.titulo}</span>
+                        <span style={filaSub}>{g.estado === 'subido' ? (g.ultimo || `${g.subidos} ${g.subidos === 1 ? 'video' : 'videos'}`) : g.tipo === 'vsl' ? 'El video largo, en una toma' : 'Uno por cada guion de anuncio'}</span>
+                        {g.estado !== 'subido' && g.dias != null && <span style={filaNaranja}>Pedido {g.dias === 0 ? 'hoy' : `hace ${g.dias} ${g.dias === 1 ? 'día' : 'días'}`}</span>}
+                      </div>
+                      {g.estado === 'subido' ? chipSubido : chipFalta}
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
-        </Seccion>
-      )}
+          </div>
+        )}
 
-      {/* Materiales de marca */}
-      {marca.length > 0 && (
-        <Seccion titulo="Materiales de marca">
-          {marca.map((m) => {
-            const completo = m.estado === 'completo' || m.estado === 'validado';
-            return (
-              <Fila key={m.id} Icon={Camera}
-                titulo={m.titulo.replace(/^Sube /, '').replace(/^./, (c) => c.toUpperCase())}
-                sub={m.target ? `${m.subidos ?? 0} de ${m.target} subidas` : (completo ? `${m.subidos} archivos` : `Pedido hace ${m.dias} días`)}
-                estado={completo ? 'subido' : 'falta'}
-                onClick={() => nav(`/pedido/${m.id}`, { state: { pedido: m } })} />
-            );
-          })}
-        </Seccion>
-      )}
+        {/* Materiales de marca */}
+        {marca.length > 0 && (
+          <div style={seccion}>
+            <div style={secHead}>
+              <IcoImage size={19} stroke="var(--mk-blue-ops)" sw={2.1} />
+              <span style={secTitulo}>Materiales de marca</span>
+            </div>
+            <div style={cardLista}>
+              {marca.map((m) => {
+                const completo = m.estado === 'completo' || m.estado === 'validado';
+                return (
+                  <div key={m.id} onClick={() => nav(`/pedido/${m.id}`, { state: { pedido: m } })} role="button" style={{ ...fila, padding: '14px 16px' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={filaTitulo}>{String(m.titulo || '').replace(/^Sube /, '').replace(/^./, (c) => c.toUpperCase())}</span>
+                      <span style={filaSub}>{m.target ? `${m.subidos ?? 0} de ${m.target} subidas` : `${m.subidos ?? 0} ${(m.subidos ?? 0) === 1 ? 'archivo' : 'archivos'}`}</span>
+                      {!completo && m.dias != null && <span style={filaNaranja}>Pedido {m.dias === 0 ? 'hoy' : `hace ${m.dias} ${m.dias === 1 ? 'día' : 'días'}`}</span>}
+                    </div>
+                    {completo ? chipSubido : chipFalta}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-      {/* Accesos */}
-      {d.accesoMeta !== 'sin_pedido' && (
-        <Seccion titulo="Accesos">
-          <Fila Icon={KeyRound} titulo="Meta Business"
-            sub={d.accesoMeta === 'validado' ? 'Acceso confirmado' : d.accesoMeta === 'cliente_dice_listo' ? 'Lo estamos validando' : 'Sin esto no podemos publicar'}
-            estado={d.accesoMeta === 'validado' ? 'subido' : d.accesoMeta === 'cliente_dice_listo' ? 'validando' : 'falta'}
-            onClick={() => nav('/meta')} />
-        </Seccion>
-      )}
-
-      {/* Lo que te devolvemos */}
-      {devol.length > 0 && (
-        <Seccion titulo="Lo que te devolvemos" sub="Tus videos ya editados por el equipo.">
-          {devol.map((dv, i) => (
-            <div key={i} style={{ padding: '10px 0', borderTop: '1px solid #F0F2F5' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 40, height: 40, borderRadius: 12, background: T.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} color={T.green} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: T.ink }}>Anuncios y VSL editados</div>
-                  <div style={{ fontSize: 12.5, color: T.text3 }}>{dv.funnel} · {dv.count} {dv.count === 1 ? 'archivo' : 'archivos'} · {dv.ultimo}</div>
+        {/* Accesos */}
+        {d.accesoMeta !== 'sin_pedido' && (
+          <div style={seccion}>
+            <div style={secHead}>
+              <IcoKey size={19} stroke="var(--mk-blue-ops)" sw={2.1} />
+              <span style={secTitulo}>Accesos</span>
+            </div>
+            <div style={cardLista}>
+              <div onClick={() => nav('/meta')} role="button" style={{ ...fila, padding: '14px 16px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <span style={filaTitulo}>Meta Business</span>
+                  <span style={filaSub}>{d.accesoMeta === 'validado' ? 'Acceso confirmado' : d.accesoMeta === 'cliente_dice_listo' ? 'Lo estamos validando' : 'Sin esto no podemos publicar'}</span>
                 </div>
-                {dv.nuevo && <span style={pill(T.primary, '#fff')}>Nuevo</span>}
+                {d.accesoMeta === 'validado' ? <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>Listo</span>
+                  : d.accesoMeta === 'cliente_dice_listo' ? <span style={pill('var(--mk-blue-bg)', 'var(--mk-blue-ops)')}>Validando</span>
+                  : chipFalta}
               </div>
-              {(dv.items || []).slice(0, 4).map((it, j) => (
-                <a key={j} href={it.url || '#'} target={it.url ? '_blank' : undefined} rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0 0 50px', fontSize: 13, fontWeight: 600, color: T.primary, textDecoration: 'none' }}>
-                  <Film size={13} /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.titulo}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Lo que te devolvemos */}
+        {(devol.length > 0 || paginas.length > 0) && (
+          <div style={seccion}>
+            <div style={secHead}>
+              <IcoCheck size={19} stroke="var(--mk-green)" sw={2.1} />
+              <span style={secTitulo}>Lo que te devolvemos</span>
+            </div>
+            <div style={cardLista}>
+              {devol.map((dv, i) => (
+                <div key={i} onClick={() => nav(`/entregables/${dv.strategyId}`)} role="button" style={{ ...fila, padding: '14px 16px' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={filaTitulo}>Anuncios y VSL editados</span>
+                    <span style={filaSub}>{dv.funnel} · {dv.count} {dv.count === 1 ? 'archivo' : 'archivos'}</span>
+                  </div>
+                  {dv.nuevo && <span style={pill('var(--mk-blue-bg)', 'var(--mk-blue-ink)')}>Nuevo</span>}
+                </div>
+              ))}
+              {paginas.map((p, i) => (
+                <a key={'p' + i} href={/^https?:\/\//.test(p.url) ? p.url : 'https://' + p.url} target="_blank" rel="noreferrer" style={{ ...fila, padding: '14px 16px', textDecoration: 'none' }}>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={filaTitulo}>Tu página del embudo</span>
+                    <span style={{ ...filaSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(p.url).replace(/^https?:\/\//, '')}</span>
+                  </div>
+                  <IcoExternal size={17} stroke="var(--mk-text3)" sw={2.2} />
                 </a>
               ))}
             </div>
-          ))}
-        </Seccion>
-      )}
+          </div>
+        )}
+      </div>
 
-      {/* Tus páginas */}
-      {paginas.length > 0 && (
-        <Seccion titulo="Tus páginas al aire">
-          {paginas.map((p, i) => (
-            <a key={i} href={/^https?:\/\//.test(p.url) ? p.url : 'https://' + p.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid #F0F2F5', textDecoration: 'none' }}>
-              <span style={{ width: 40, height: 40, borderRadius: 12, background: T.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ExternalLink size={16} color={T.green} /></span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 800, color: T.ink }}>{p.funnel}</div>
-                <div style={{ fontSize: 12.5, color: T.green, fontWeight: 700 }}>{String(p.url).replace(/^https?:\/\//, '')}</div>
-              </div>
-              <ChevronRight size={17} color="#C4C9D4" />
-            </a>
-          ))}
-        </Seccion>
-      )}
-
-      <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12.5, color: T.text3 }}>
+      <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
         ¿No sabes qué es algo de esto? Escríbenos y te lo explicamos.
       </div>
-    </Screen>
+    </>
   );
 }
 
-function Seccion({ titulo, sub, children }) {
-  return (
-    <div style={{ ...cardStyle, padding: '14px 16px', marginBottom: 14 }}>
-      <div style={{ fontSize: 16.5, fontWeight: 800, color: T.ink }}>{titulo}</div>
-      {sub && <div style={{ fontSize: 12.5, color: T.text3, marginTop: 2, marginBottom: 4 }}>{sub}</div>}
-      {children}
-    </div>
-  );
-}
-
-function Fila({ Icon, titulo, sub, estado, onClick }) {
-  return (
-    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid #F0F2F5', cursor: 'pointer' }}>
-      <span style={{ width: 40, height: 40, borderRadius: 12, background: estado === 'subido' ? T.greenSoft : T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon size={18} color={estado === 'subido' ? T.green : T.primary} />
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 800, color: T.ink }}>{titulo}</div>
-        <div style={{ fontSize: 12.5, color: T.text3 }}>{sub}</div>
-      </div>
-      {estado === 'subido' && <span style={pill(T.greenSoft, T.green)}>Subido</span>}
-      {estado === 'falta' && <span style={pill(T.redSoft, T.red)}>Falta</span>}
-      {estado === 'validando' && <span style={pill(T.primarySoft, T.primary)}>Validando</span>}
-      <ChevronRight size={17} color="#C4C9D4" />
-    </div>
-  );
-}
+const seccion = { display: 'flex', flexDirection: 'column', gap: 12 };
+const secHead = { display: 'flex', alignItems: 'center', gap: 10 };
+const secTitulo = { fontFamily: "'Montserrat', sans-serif", fontSize: 19, fontWeight: 800, letterSpacing: '-0.028em', color: 'var(--mk-ink)' };
+const cardLista = { background: '#fff', borderRadius: 20, padding: '6px 4px', boxShadow: 'var(--shadow-md)' };
+const fila = { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px' };
+const filaTitulo = { fontSize: 15, fontWeight: 600, color: 'var(--mk-text)' };
+const filaSub = { fontSize: 12.5, color: 'var(--mk-text3)' };
+const filaNaranja = { fontSize: 12, fontWeight: 600, color: 'var(--mk-orange)' };

@@ -9,6 +9,8 @@ import InicioScreen from './screens/InicioScreen';
 import GuionesTabScreen from './screens/GuionesTabScreen';
 import DocumentoScreen from './screens/DocumentoScreen';
 import EmbudosScreen from './screens/EmbudosScreen';
+import EmbudoScreen from './screens/EmbudoScreen';
+import EntregablesScreen from './screens/EntregablesScreen';
 import MaterialScreen from './screens/MaterialScreen';
 import SubirPedidoScreen from './screens/SubirPedidoScreen';
 import AccesoMetaScreen from './screens/AccesoMetaScreen';
@@ -33,15 +35,18 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
-        {/* Tabs con header + navegación inferior: Inicio · Guiones · Embudos · Material */}
+        {/* Tabs con navegación inferior (menú lateral en PC): Inicio · Guiones · Embudos · Material */}
         <Route element={<Layout />}>
           <Route path="/" element={<InicioScreen />} />
-          <Route path="/guiones" element={<GuionesTabScreen />} />
           <Route path="/embudos" element={<EmbudosScreen />} />
           <Route path="/material" element={<MaterialScreen />} />
         </Route>
+        {/* Guiones: bienvenida la primera vez; después va DIRECTO al documento */}
+        <Route path="/guiones" element={<GuionesTabScreen />} />
         {/* Pantallas inmersivas (con "Volver") */}
         <Route path="/documento/:sid/:tipo" element={<DocumentoScreen />} />
+        <Route path="/embudo/:id" element={<EmbudoScreen />} />
+        <Route path="/entregables/:id" element={<EntregablesScreen />} />
         <Route path="/pedido/:id" element={<SubirPedidoScreen />} />
         <Route path="/meta" element={<AccesoMetaScreen />} />
         {/* Rutas del portal viejo → sus equivalentes nuevas */}

@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Check, X, Loader2, ImagePlus, Sun, Users, Ban } from 'lucide-react';
-import PhoneFrame from '../components/PhoneFrame';
-import { useAsync } from '../components/ui';
+import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
+import { useAsync, Spinner } from '../components/ui';
 import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
-import { T, cardStyle, microLabel, bigBtn } from '../components/theme';
+import { T, display, pill } from '../components/theme';
+import { IcoChevL, IcoCheck, IcoX, IcoArrowUp } from '../components/icons';
 
-// SUBIR MATERIAL de un pedido ("Sube 5 fotos tuyas", "Tu logo y tus colores"…):
-// explicación con ejemplos, subida múltiple y progreso "X de Y subidas".
+// SUBIR MATERIAL de un pedido ("Sube 5 fotos tuyas", "Tu logo y tus colores"…)
+// — exacta al prototipo: ejemplos, "Así sí, así no", subida y "Ya subiste".
 // El archivo cae en la carpeta REAL de operaciones (pedido.bucket).
 export default function SubirPedidoScreen() {
   const { id } = useParams();
@@ -22,20 +22,21 @@ export default function SubirPedidoScreen() {
 
   const [subidas, setSubidas] = useState([]);   // {uid,name,pct,done,error}
   const demo = isDemo();
-  let _uid = useRef(0);
+  const _uid = useRef(0);
 
   if (!pedido) {
     return (
-      <PhoneFrame>
-        <Back nav={nav} />
-        <div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>Cargando el pedido…</div>
-      </PhoneFrame>
+      <PhoneFrame><KxScreen>
+        <div className="kxs" style={{ flex: 1 }}><Volver nav={nav} /><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>Cargando el pedido…</div></div>
+      </KxScreen></PhoneFrame>
     );
   }
 
   const esFotos = pedido.tipo === 'fotos';
   const target = pedido.target || null;
   const okCount = (pedido.subidos || 0) + subidas.filter((u) => u.done).length;
+  const listo = target ? okCount >= target : false;
+  const label = target ? `${Math.min(okCount, target)} de ${target} subidas` : `${okCount} ${okCount === 1 ? 'archivo' : 'archivos'}`;
 
   const onPick = (e) => {
     const files = Array.from(e.target.files || []);
@@ -53,84 +54,113 @@ export default function SubirPedidoScreen() {
 
   return (
     <PhoneFrame>
-      <Back nav={nav} />
-      <div style={{ padding: '4px 20px 28px', overflowY: 'auto', background: T.bg, flex: 1 }}>
-        <h1 style={{ margin: '0 0 6px', fontSize: 25, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-          {esFotos ? `Necesitamos ${target || 'tus'} fotos tuyas` : pedido.titulo}
-        </h1>
-        <p style={{ margin: '0 0 18px', fontSize: 14.5, color: T.text2, lineHeight: 1.5 }}>
-          {pedido.descripcion}{esFotos ? ' Que se te vea la cara y haya buena luz.' : ''}
-        </p>
+      <KxScreen>
+        <div className="kxs" style={{ flex: 1, overflowY: 'auto' }}>
+          <Volver nav={nav} />
 
-        {/* Así sí, así no (solo para fotos) */}
-        {esFotos && (
-          <div style={{ ...cardStyle, padding: 16, marginBottom: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-              {[0, 1, 2].map((i) => (
-                <div key={i} style={{ aspectRatio: '3/4', borderRadius: 12, background: '#EDEFF5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6 }}>
-                  <ImagePlus size={20} color="#B9C0CC" />
-                  <span style={microLabel('#B9C0CC')}>Ejemplo</span>
-                </div>
-              ))}
+          <div style={{ padding: '18px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>{esFotos && target ? `Necesitamos ${target} fotos tuyas` : pedido.titulo}</div>
+            <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, textWrap: 'pretty' }}>
+              {pedido.descripcion}{esFotos ? ' Que se te vea la cara y haya buena luz.' : ''}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 8 }}>Así sí, así no</div>
-            <Regla ok Icon={Sun} texto="De frente, con luz natural y fondo simple" />
-            <Regla ok Icon={Users} texto="Alguna dando una charla o con tu equipo" />
-            <Regla Icon={Ban} texto="Borrosas, grupales o con filtros" />
           </div>
-        )}
 
-        {/* Subida */}
-        <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 110, borderRadius: 16, border: `2px dashed ${T.primary}55`, background: T.primarySoft, cursor: 'pointer', padding: 16, marginBottom: 14 }}>
-          <input ref={inputRef} type="file" multiple onChange={onPick} accept="image/*,video/*,.pdf" style={{ display: 'none' }} />
-          <ImagePlus size={30} color={T.primary} />
-          <span style={{ fontSize: 16, fontWeight: 800, color: T.primary }}>{esFotos ? 'Elige las fotos del celular' : 'Elige los archivos'}</span>
-          <span style={{ fontSize: 12.5, color: T.text2 }}>Puedes subir varias juntas. Nosotros las guardamos donde van.</span>
-        </label>
-
-        {/* Ya subiste */}
-        {(okCount > 0 || subidas.length > 0) && (
-          <div style={{ ...cardStyle, padding: 16, marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 800, color: T.ink }}>Ya subiste</span>
-              {target && <span style={microLabel(okCount >= target ? T.green : T.primary)}>{Math.min(okCount, target)} de {target} subidas</span>}
-            </div>
-            {subidas.map((u) => (
-              <div key={u.uid} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 0', borderTop: '1px solid #F0F2F5', fontSize: 13.5, fontWeight: 600, color: T.text }}>
-                {u.error ? <X size={15} color={T.red} /> : u.done ? <Check size={15} color={T.green} strokeWidth={3} /> : <Loader2 size={14} color={T.primary} className="mk-spin" />}
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
-                {!u.done && !u.error && <span style={{ fontSize: 12, color: T.text3 }}>{u.pct}%</span>}
+          {/* Ejemplos + "Así sí, así no" (para fotos) */}
+          {esFotos && (
+            <div style={{ margin: '22px 22px 0', background: '#fff', borderRadius: 22, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+              <div style={{ display: 'flex', gap: 2, height: 128, background: 'var(--mk-border-light)' }}>
+                {['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'linear-gradient(160deg,#E4E8EF,#CFD5DF)'].map((bg, i) => (
+                  <div key={i} style={{ flex: 1, background: bg, display: 'flex', alignItems: 'flex-end', padding: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text2 }}>Ejemplo</div>
+                ))}
               </div>
-            ))}
-            {pedido.subidos > 0 && subidas.length === 0 && (
-              <div style={{ fontSize: 13, color: T.text3 }}>Ya tenemos {pedido.subidos} {pedido.subidos === 1 ? 'archivo' : 'archivos'} tuyos en esta carpeta.</div>
-            )}
-          </div>
-        )}
+              <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 17, fontWeight: 800, letterSpacing: '-0.025em', color: T.ink }}>Así sí, así no</div>
+                <Regla ok texto="De frente, con luz natural y fondo simple" />
+                <Regla ok texto="Alguna dando una charla o con tu equipo" />
+                <Regla texto="Borrosas, grupales o con filtros" />
+              </div>
+            </div>
+          )}
 
-        <button onClick={() => nav('/')} style={{ ...bigBtn('#FFFFFF'), color: T.text2, border: `1px solid ${T.border}` }}>Lo hago más tarde</button>
-      </div>
+          {/* Subida (pendiente) o "Listo, las recibimos" */}
+          {!listo ? (
+            <label style={{ display: 'flex', margin: '16px 22px 0', background: '#fff', border: '2px dashed #C3CFEF', borderRadius: 22, padding: '28px 20px', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+              <input ref={inputRef} type="file" multiple onChange={onPick} accept="image/*,video/*,.pdf" style={{ display: 'none' }} />
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <IcoArrowUp size={24} stroke="#fff" sw={2.4} />
+              </div>
+              <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', textAlign: 'center', color: T.ink }}>
+                {esFotos ? 'Elige las fotos del celular' : 'Elige los archivos'}
+              </div>
+              <div style={{ fontSize: 13, color: T.text2, textAlign: 'center', lineHeight: 1.5 }}>Puedes subir varias juntas. Nosotros las guardamos donde van.</div>
+            </label>
+          ) : (
+            <div style={{ margin: '16px 22px 0', background: 'var(--mk-green-bg)', borderRadius: 22, padding: '22px 20px', display: 'flex', alignItems: 'center', gap: 14, animation: 'kxUp .3s ease' }}>
+              <div style={{ width: 44, height: 44, flex: 'none', borderRadius: '50%', background: 'var(--mk-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <IcoCheck size={22} stroke="#fff" sw={2.8} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 17, fontWeight: 800, letterSpacing: '-0.02em', color: T.ink }}>Listo, las recibimos</div>
+                <div style={{ fontSize: 13, lineHeight: 1.45, color: T.textSoft }}>Ya no tienes nada pendiente aquí.</div>
+              </div>
+            </div>
+          )}
+
+          {/* Ya subiste */}
+          {(okCount > 0 || subidas.length > 0) && (
+            <div style={{ padding: '24px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', color: T.ink }}>Ya subiste</div>
+                <span style={pill('var(--mk-purple-bg)', 'var(--mk-purple)')}>{label}</span>
+              </div>
+              <div style={{ background: '#fff', borderRadius: 20, padding: '6px 4px', boxShadow: 'var(--shadow-md)' }}>
+                {subidas.map((u) => (
+                  <div key={u.uid} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 16px' }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 12, background: '#E4E8EF', flex: 'none' }} />
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.textSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                    {u.error ? <IcoX size={19} stroke="var(--mk-red)" sw={2.4} />
+                      : u.done ? <IcoCheck size={19} stroke="var(--mk-green)" sw={2.4} />
+                      : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.text3 }}><Spinner size={14} />{u.pct}%</span>}
+                  </div>
+                ))}
+                {pedido.subidos > 0 && (
+                  <div style={{ padding: '12px 16px', fontSize: 13, color: T.text3 }}>
+                    Ya tenemos {pedido.subidos} {pedido.subidos === 1 ? 'archivo' : 'archivos'} tuyos en esta carpeta.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <div style={{ height: 26 }} />
+        </div>
+
+        {/* Footer fijo */}
+        <div data-kx-footer="" style={{ flex: 'none', padding: '16px 22px 28px', background: 'rgba(255,255,255,.97)', backdropFilter: 'blur(10px)', boxShadow: '0 -1px 0 var(--mk-border)' }}>
+          <div onClick={() => nav('/')} role="button" style={{ cursor: 'pointer', height: 52, borderRadius: 999, background: T.ink, color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {listo ? 'Volver al inicio' : 'Lo hago más tarde'}
+          </div>
+        </div>
+      </KxScreen>
     </PhoneFrame>
   );
 }
 
-function Regla({ ok = false, Icon, texto }) {
+function Regla({ ok = false, texto }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 0', fontSize: 13.5, fontWeight: 600, color: ok ? T.text : T.text3 }}>
-      <span style={{ width: 26, height: 26, borderRadius: 8, background: ok ? T.greenSoft : T.redSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon size={14} color={ok ? T.green : T.red} />
-      </span>
-      <span style={{ textDecoration: ok ? 'none' : 'line-through' }}>{texto}</span>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      {ok
+        ? <IcoCheck size={18} stroke="var(--mk-green)" sw={2.4} style={{ flex: 'none', marginTop: 2 }} />
+        : <IcoX size={18} stroke="var(--mk-red)" sw={2.4} style={{ flex: 'none', marginTop: 2 }} />}
+      <span style={{ fontSize: 14, lineHeight: 1.5, color: ok ? T.textSoft : T.text2 }}>{texto}</span>
     </div>
   );
 }
 
-function Back({ nav }) {
+function Volver({ nav }) {
   return (
-    <div style={{ position: 'sticky', top: 0, background: T.bg, padding: '14px 20px 8px', zIndex: 10 }}>
-      <button onClick={() => nav(-1)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'none', color: T.primary, fontSize: 13, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', padding: '6px 0' }}>
-        <ChevronLeft size={17} /> Volver
-      </button>
+    <div onClick={() => nav(-1)} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px 0', color: T.primary, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+      <IcoChevL size={17} stroke="var(--mk-blue-ops)" sw={2.4} />
+      Volver
     </div>
   );
 }
