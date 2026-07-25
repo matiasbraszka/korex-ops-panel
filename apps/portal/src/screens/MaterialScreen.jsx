@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
-import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoExternal } from '../components/icons';
+import { IcoVideo, IcoImage, IcoKey, IcoCheck, IcoExternal, IcoFolder, IcoPlaySoft } from '../components/icons';
 
 // TU MATERIAL — exacta al prototipo: secciones con título afuera de la tarjeta
 // (Tus grabaciones · Materiales de marca · Accesos · Lo que te devolvemos),
@@ -48,32 +48,39 @@ export default function MaterialScreen() {
 
       <div style={{ padding: '26px 22px 0', display: 'flex', flexDirection: 'column', gap: 26 }}>
 
-        {/* Tus grabaciones */}
+        {/* Tus grabaciones: UNA tarjeta por embudo, con sus carpetas adentro */}
         {porFunnel.length > 0 && (
           <div style={seccion}>
             <div style={secHead}>
               <IcoVideo size={19} stroke="var(--mk-blue-ops)" sw={2.1} />
               <span style={secTitulo}>Tus grabaciones</span>
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, margin: '-4px 0 2px' }}>Se organizan por embudo y, dentro de cada uno, por avatar.</div>
-            <div style={cardLista}>
-              {porFunnel.map((f, fi) => (
-                <div key={f.funnel}>
-                  {fi > 0 && <div style={{ height: 1, background: '#EEF0F4', margin: '6px 12px' }} />}
-                  <div style={{ padding: `${fi > 0 ? 10 : 12}px 16px 4px`, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: fi === 0 ? 'var(--mk-blue-ops)' : T.text3 }}>{f.funnel}</div>
-                  {f.items.map((g, i) => (
-                    <div key={i} onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`)} role="button" style={fila}>
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <span style={filaTitulo}>{g.titulo}</span>
-                        <span style={filaSub}>{g.estado === 'subido' ? (g.ultimo || `${g.subidos} ${g.subidos === 1 ? 'video' : 'videos'}`) : g.tipo === 'vsl' ? 'El video largo, en una toma' : 'Uno por cada guion de anuncio'}</span>
-                        {g.estado !== 'subido' && g.dias != null && <span style={filaNaranja}>Pedido {g.dias === 0 ? 'hoy' : `hace ${g.dias} ${g.dias === 1 ? 'día' : 'días'}`}</span>}
-                      </div>
-                      {g.estado === 'subido' ? chipSubido : chipFalta}
-                    </div>
-                  ))}
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, margin: '-4px 0 2px' }}>Cada embudo tiene sus carpetas: una para los anuncios y otra para el VSL.</div>
+            {porFunnel.map((f) => (
+              <div key={f.funnel} style={cardLista}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 4px' }}>
+                  <IcoFolder size={14} stroke="var(--mk-blue-ops)" sw={2.2} />
+                  <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--mk-blue-ops)' }}>{f.funnel}</span>
                 </div>
-              ))}
-            </div>
+                {f.items.map((g, i) => (
+                  <div key={i} onClick={() => nav(`/documento/${g.strategyId}/${g.tipo}`)} role="button" style={{ ...fila, borderTop: i > 0 ? '1px solid #EEF0F4' : 'none' }}>
+                    <div style={{ width: 40, height: 40, flex: 'none', borderRadius: 12, background: g.estado === 'subido' ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <IcoPlaySoft size={18} stroke={g.estado === 'subido' ? 'var(--mk-green)' : 'var(--mk-blue-ops)'} sw={2.1} />
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={filaTitulo}>{g.titulo}</span>
+                      <span style={filaSub}>
+                        {g.estado === 'subido'
+                          ? (g.subidos > 0 ? (g.ultimo || `${g.subidos} ${g.subidos === 1 ? 'video' : 'videos'}`) : 'Recibido · ya está en edición')
+                          : g.tipo === 'vsl' ? 'El video largo, en una toma' : 'Uno por cada guion de anuncio'}
+                      </span>
+                      {g.estado !== 'subido' && g.dias != null && <span style={filaNaranja}>Pedido {g.dias === 0 ? 'hoy' : `hace ${g.dias} ${g.dias === 1 ? 'día' : 'días'}`}</span>}
+                    </div>
+                    {g.estado === 'subido' ? chipSubido : chipFalta}
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         )}
 
