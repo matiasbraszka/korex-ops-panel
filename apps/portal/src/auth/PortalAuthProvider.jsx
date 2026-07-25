@@ -13,7 +13,11 @@ const Ctx = createContext(null);
 
 export function PortalAuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = cargando
-  const [demo, setDemo] = useState(false);
+  // ?demo en la URL = entrar DIRECTO en modo demo, sin login (link compartible
+  // para revisar la plataforma con datos de ejemplo).
+  const [demo, setDemo] = useState(() => {
+    try { return new URLSearchParams(window.location.search).has('demo'); } catch { return false; }
+  });
 
   useEffect(() => {
     let mounted = true;

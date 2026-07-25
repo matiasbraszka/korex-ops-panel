@@ -1,34 +1,25 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import { useAsync } from '../components/ui';
 import { api } from '../data/portalApi';
 import { T, display } from '../components/theme';
-import { IcoChevL, IcoCheck, IcoCopy, IcoInfo } from '../components/icons';
+import { IcoChevL, IcoCheck, IcoInfo, IcoVideo } from '../components/icons';
 
-// ACCESO A META — exacta al prototipo: 3 pasos con captura, el número de socio
-// copiable y el botón "Ya te di el acceso" (avisa al equipo por Slack).
+// ACCESO A META — flujo simple (decisión de Matías): el cliente NO configura
+// nada solo. Son 2 pasos: definir desde qué Facebook/Instagram sale la
+// publicidad, y agendar una sesión de 15 minutos donde el equipo configura todo.
 export default function AccesoMetaScreen() {
   const nav = useNavigate();
-  const { data, reload } = useAsync(() => api.meta(), []);
-  const [copiado, setCopiado] = useState(false);
-  const [marcando, setMarcando] = useState(false);
+  const { data } = useAsync(() => api.meta(), []);
 
-  const partner = data?.partnerId || '';
   const estado = data?.estado || 'pendiente';
   const wa = (data?.whatsapp || '').replace(/\D/g, '');
-
-  const copiar = async () => { try { await navigator.clipboard.writeText(partner.replace(/\s/g, '')); setCopiado(true); setTimeout(() => setCopiado(false), 1500); } catch { /* */ } };
-  const yaLoDi = async () => {
-    setMarcando(true);
-    try { await api.marcarAccesoMeta(); await reload?.(); } finally { setMarcando(false); }
-  };
+  const agenda = (data?.agenda || '').trim();
+  const linkAgenda = agenda ? (/^https?:\/\//.test(agenda) ? agenda : 'https://' + agenda)
+    : wa ? `https://wa.me/${wa}?text=${encodeURIComponent('Hola, quiero agendar la sesión de 15 minutos para configurar mi Meta.')}` : '';
 
   const numChip = (n) => (
     <span style={{ width: 26, height: 26, flex: 'none', borderRadius: '50%', background: T.primary, color: '#fff', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
-  );
-  const captura = (
-    <div style={{ height: 104, borderRadius: 14, background: 'linear-gradient(160deg,#E9EDF4,#D9DFE9)', display: 'flex', alignItems: 'flex-end', padding: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text2 }}>Captura</div>
   );
 
   return (
@@ -41,46 +32,37 @@ export default function AccesoMetaScreen() {
           </div>
 
           <div style={{ padding: '18px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>Danos acceso a tu Meta</div>
+            <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>Conectemos tu Meta</div>
             <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, textWrap: 'pretty' }}>
-              Es lo único que no podemos hacer por ti. Son 3 pasos desde la computadora y tarda 4 minutos.
+              No tienes que configurar nada solo. Son 2 pasos y el resto lo hacemos contigo.
             </div>
           </div>
 
           <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Paso 1 · Definir el Facebook e Instagram */}
             <div style={cardPaso}>
-              <div style={pasoHead}>{numChip(1)}<span style={pasoTitulo}>Entra a business.facebook.com</span></div>
-              {captura}
-              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Inicia sesión con la cuenta que usas para tu página.</div>
-            </div>
-
-            <div style={cardPaso}>
-              <div style={pasoHead}>{numChip(2)}<span style={pasoTitulo}>Configuración › Socios › Agregar</span></div>
-              {captura}
-            </div>
-
-            <div style={cardPaso}>
-              <div style={pasoHead}>{numChip(3)}<span style={pasoTitulo}>Pega nuestro número de socio</span></div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 14, background: 'var(--mk-blue-bg2)', border: '1px dashed #C3CFEF' }}>
-                <span style={{ flex: 1, fontFamily: "'Montserrat', sans-serif", fontSize: partner ? 19 : 13.5, fontWeight: 800, letterSpacing: '0.02em', color: partner ? T.primaryInk : T.text3 }}>
-                  {partner || 'Te lo pasamos por WhatsApp'}
-                </span>
-                {partner && (
-                  <span onClick={copiar} role="button" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px', borderRadius: 999, background: '#fff', border: '1px solid var(--mk-border)', fontSize: 12, fontWeight: 700, color: copiado ? 'var(--mk-green)' : T.textSoft }}>
-                    {copiado ? <IcoCheck size={14} stroke="var(--mk-green)" sw={2.6} /> : <IcoCopy size={14} stroke="currentColor" sw={2} />}
-                    {copiado ? 'Copiado' : 'Copiar'}
-                  </span>
-                )}
+              <div style={pasoHead}>{numChip(1)}<span style={pasoTitulo}>Define tu Facebook e Instagram</span></div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.55, color: T.text2 }}>
+                Elige desde qué página de Facebook y qué Instagram vamos a lanzar tu publicidad.
               </div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Elige el rol <b style={{ color: T.textSoft }}>Administrar campañas</b> y confirma.</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-blue-bg2)', border: '1px solid var(--mk-border)' }}>
+                <IcoInfo size={16} stroke="var(--mk-blue-ops)" sw={2.2} style={{ flex: 'none', marginTop: 1 }} />
+                <span style={{ fontSize: 13, lineHeight: 1.5, color: T.textSoft }}>
+                  Idealmente que estén relacionados con lo que vamos a lanzar. <b style={{ color: T.ink }}>No importa si tienen pocos o muchos seguidores.</b>
+                </span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 17px', borderRadius: 16, background: T.surface2 }}>
-              <IcoInfo size={18} stroke="var(--mk-text2)" sw={2.1} />
-              <span style={{ fontSize: 13, lineHeight: 1.45, color: T.textSoft }}>
-                ¿Se te complica? Lo hacemos juntos por videollamada de 10 minutos.{' '}
-                {wa && <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" style={{ color: T.primary, fontWeight: 700 }}>Escríbenos</a>}
-              </span>
+            {/* Paso 2 · Agendar la sesión */}
+            <div style={cardPaso}>
+              <div style={pasoHead}>{numChip(2)}<span style={pasoTitulo}>Agenda una sesión de 15 minutos</span></div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.55, color: T.text2 }}>
+                Nos conectamos contigo y te configuramos todo: los accesos, la cuenta publicitaria y lo que haga falta. Tú solo entras con tu Facebook.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', borderRadius: 14, background: T.surface2 }}>
+                <IcoVideo size={17} stroke="var(--mk-text2)" sw={2} style={{ flex: 'none' }} />
+                <span style={{ fontSize: 13, lineHeight: 1.45, color: T.textSoft }}>Es una videollamada corta. Hazla desde la computadora si puedes.</span>
+              </div>
             </div>
           </div>
           <div style={{ height: 26 }} />
@@ -91,16 +73,15 @@ export default function AccesoMetaScreen() {
           {estado === 'validado' ? (
             <div onClick={() => nav('/')} role="button" style={{ cursor: 'pointer', height: 52, borderRadius: 999, background: 'var(--mk-green-bg)', color: T.textSoft, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <IcoCheck size={18} stroke="var(--mk-green)" sw={2.6} />
-              Acceso confirmado
+              Tu Meta ya está configurada
             </div>
-          ) : estado === 'cliente_dice_listo' ? (
-            <div style={{ height: 52, borderRadius: 999, background: 'var(--mk-blue-bg)', color: T.primary, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-              <IcoCheck size={18} stroke="var(--mk-blue-ops)" sw={2.6} />
-              Nos avisaste — lo estamos validando
-            </div>
+          ) : linkAgenda ? (
+            <a href={linkAgenda} target="_blank" rel="noreferrer" style={{ height: 52, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 8px 22px rgba(91,124,245,.34)' }}>
+              Agendar la sesión de 15 minutos
+            </a>
           ) : (
-            <div onClick={marcando ? undefined : yaLoDi} role="button" style={{ cursor: 'pointer', height: 52, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: marcando ? 0.7 : 1 }}>
-              {marcando ? 'Avisando…' : 'Ya te di el acceso'}
+            <div style={{ height: 52, borderRadius: 999, background: T.surface2, color: T.text2, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+              Escríbenos por WhatsApp y la agendamos
             </div>
           )}
         </div>

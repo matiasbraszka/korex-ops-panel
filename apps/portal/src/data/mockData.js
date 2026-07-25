@@ -210,7 +210,7 @@ export const MOCK_INICIO = {
   completados: [{ titulo: 'Tu logo y tus colores' }],
 };
 
-export const MOCK_META = { partnerId: '1284 5590 3311', whatsapp: '5491100000000', estado: 'pendiente' };
+export const MOCK_META = { partnerId: '1284 5590 3311', whatsapp: '5491100000000', agenda: '', estado: 'pendiente' };
 
 export function mockDocumento(strategyId, tipo) {
   const t = ['vsl', 'avatar', 'estrategia'].includes(tipo) ? tipo : 'ads';
