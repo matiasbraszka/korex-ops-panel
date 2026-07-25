@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -136,6 +136,37 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('hiliteColor', false, color);
     document.execCommand('styleWithCSS', false, false);
+    handleInput();
+    ref.current?.focus();
+  };
+
+  // Checklist: una lista con casilleros ☐ en vez de puntos. Por dentro es una <ul>
+  // normal con el casillero como marcador (list-style-type con string), así Enter
+  // sigue agregando casilleros solo y el estilo viaja inline (sobrevive al
+  // sanitizador y se ve igual en el portal del cliente).
+  const CHECK_MARKER = '"☐  "';
+  const closestUl = () => {
+    const sel = window.getSelection();
+    const n = sel?.anchorNode;
+    if (!n) return null;
+    const el = n.nodeType === 1 ? n : n.parentElement;
+    const ul = el?.closest?.('ul');
+    return (ul && ref.current?.contains(ul)) ? ul : null;
+  };
+  const toggleChecklist = () => {
+    let ul = closestUl();
+    if (ul && ul.style.listStyleType) {
+      // Ya es checklist: el botón la saca (vuelve a texto normal).
+      ul.style.listStyleType = '';
+      document.execCommand('insertUnorderedList');
+    } else if (ul) {
+      // Era lista de viñetas: la convierte en checklist.
+      ul.style.listStyleType = CHECK_MARKER;
+    } else {
+      document.execCommand('insertUnorderedList');
+      ul = closestUl();
+      if (ul) ul.style.listStyleType = CHECK_MARKER;
+    }
     handleInput();
     ref.current?.focus();
   };
@@ -298,7 +329,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   // este editor toma el foco, avisa con onActive(api) y la barra opera sobre ÉL. Así la
   // barra no se repite en cada sección. Ver DelToolbar en DelEditor.
   const apiRef = useRef({});
-  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint };
+  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint, toggleChecklist };
   const handleFocus = () => onActive?.(apiRef.current);
 
   const Btn = ({ Icon, title, onClick, label }) => (
@@ -329,6 +360,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         <Divider />
         <Btn Icon={List}        title="Lista con viñetas" onClick={() => exec('insertUnorderedList')} />
         <Btn Icon={ListOrdered} title="Lista numerada"    onClick={() => exec('insertOrderedList')} />
+        <Btn Icon={ListChecks}  title="Checklist (casilleros ☐)" onClick={toggleChecklist} />
         <Divider />
         {/* Color de letra: botón con popover de swatches */}
         <div className="relative">
