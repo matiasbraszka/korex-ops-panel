@@ -161,7 +161,7 @@ export default function EmbudoScreen() {
                   <>
                     <div style={{ padding: '12px 16px 6px', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Tus grabaciones</div>
                     {grabs.map((g, i) => (
-                      <div key={i} onClick={() => nav(`/documento/${id}/${g.tipo}`)} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px' }}>
+                      <div key={i} onClick={() => nav(`/documento/${id}/${g.tipo}`, { state: { uploader: true } })} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px' }}>
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{g.titulo}</span>
                           <span style={{ fontSize: 12.5, color: T.text3 }}>{g.estado === 'subido' ? (g.ultimo || 'Recibido') : g.tipo === 'vsl' ? 'El video largo, en una toma' : 'Uno por cada guion de anuncio'}</span>
