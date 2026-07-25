@@ -19,12 +19,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { T, display, bigBtn, microLabel } from '../../components/theme';
 import { IcoCalendar, IcoCheck, IcoArrowR, IcoChevL, IcoChevR, IcoWarn } from '../../components/icons';
 import { Loading, Spinner } from '../../components/ui';
+import { TO, F, dsp, btn, btnTexto, label } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell, OnbHeader, OnbFooter } from '../components/OnbShell';
 import { onb, agendaSlots, agendaReservar } from '../api';
+
+// Guion de la sesión, por si la base todavía no lo tiene cargado. Vive en
+// app_settings.onboarding_config.sesion_agenda y se edita sin deploy.
+const SESION_FALLBACK = [
+  { titulo: 'Resolvemos tus dudas del onboarding',
+    texto: 'Repasamos juntos lo que completaste acá. Por eso es fundamental que lo termines antes de la reunión.' },
+  { titulo: 'Configuramos tu Meta Business',
+    texto: 'Necesitás tener acceso a una página de Facebook y a un Instagram. Si no los tenés, vamos a tener que reagendar.',
+    aviso: true },
+  { titulo: 'Dejamos definidos los próximos pasos',
+    texto: 'Qué hacemos nosotros, qué necesitamos de vos y cuándo sale cada cosa.' },
+];
 
 const DIAS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -128,29 +140,31 @@ export default function AgendarScreen() {
     return (
       <OnbShell>
         <OnbHeader titulo="Tu sesión" ocultarProgreso onVolver={() => navigate('/onboarding')} />
-        <div className="kxs" style={{
-          flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center',
-        }}>
+        <div className="kxs" style={{ flex: 1, paddingTop: 30, paddingBottom: 30, textAlign: 'center' }}>
           <div style={{
-            width: 66, height: 66, borderRadius: '50%', background: T.green, margin: '0 auto 20px',
+            width: 70, height: 70, borderRadius: '50%', background: TO.greenInk, margin: '0 auto 22px',
             display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'kxPop .5s ease',
-          }}><IcoCheck size={30} stroke="#fff" sw={2.6} /></div>
-          <div style={{ ...display(26, '-0.03em'), lineHeight: 1.2 }}>Tu sesión está reservada</div>
+          }}><IcoCheck size={32} stroke="#fff" sw={2.6} /></div>
+          <div style={{ ...dsp(F.h2), lineHeight: 1.2 }}>Tu sesión está reservada</div>
           {f && (
-            <div style={{ fontSize: 18, color: T.textSoft, marginTop: 12, fontWeight: 600 }}>
+            <div style={{ fontSize: 20, color: TO.ink, marginTop: 14, fontWeight: 800, letterSpacing: '-0.02em' }}>
               {f.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
               {' · '}
               {f.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
-          <div style={{ fontSize: 15, color: T.text2, marginTop: 10, lineHeight: 1.55 }}>
+          <div style={{ fontSize: F.sub, color: TO.body, marginTop: 12, lineHeight: 1.55 }}>
             Te mandamos la invitación por mail y por WhatsApp con el link para entrar.
+          </div>
+
+          <div style={{ textAlign: 'left', marginTop: 26 }}>
+            <GuionSesion items={datos?.sesion} />
           </div>
         </div>
         <OnbFooter>
           <button type="button" onClick={() => navigate(primerTramo ? `/onboarding/${primerTramo.skey}` : '/onboarding')}
-            style={bigBtn(T.primary, 52)}>
-            EMPEZAR EL ONBOARDING <IcoArrowR size={17} stroke="#fff" />
+            style={btn()}>
+            EMPEZAR EL ONBOARDING <IcoArrowR size={18} stroke="#fff" sw={2.4} />
           </button>
         </OnbFooter>
       </OnbShell>
@@ -167,17 +181,22 @@ export default function AgendarScreen() {
     <OnbShell indice={false}>
       <OnbHeader titulo="Agendá tu sesión" ocultarProgreso onVolver={() => navigate('/onboarding')} />
 
-      <div className="kxs" style={{ flex: 1, paddingTop: 22, paddingBottom: 28 }}>
-        <div style={{ ...microLabel(T.primaryInk), marginBottom: 10 }}>Primer paso</div>
-        <div style={{ ...display(27, '-0.032em'), lineHeight: 1.15 }}>
+      <div className="kxs" style={{ flex: 1, paddingTop: 24, paddingBottom: 30 }}>
+        <div style={{ ...label(TO.blue), marginBottom: 10 }}>Primer paso</div>
+        <div style={{ ...dsp(F.h1, '-0.032em'), lineHeight: 1.14 }}>
           Reservá el día en que nos vemos
         </div>
-        <div style={{ fontSize: 16, lineHeight: 1.55, color: T.text2, marginTop: 11, textWrap: 'pretty' }}>
-          Es una videollamada de una hora donde repasamos todo lo que vas a completar
-          acá y dejamos listo el acceso a tu Facebook e Instagram.
-          <strong style={{ color: T.textSoft }}> Elegila primero</strong> y después
-          completás con tranquilidad: tenés hasta ese día.
+        <div style={{ fontSize: F.body, lineHeight: 1.55, color: TO.body, marginTop: 12, textWrap: 'pretty' }}>
+          Es una videollamada de una hora.
+          <strong style={{ color: TO.ink }}> Elegila primero</strong> y después
+          completás el onboarding con tranquilidad: tenés hasta ese día.
         </div>
+
+        {/* Qué se hace en la sesión. Va ARRIBA, antes de elegir el horario, no
+            en la confirmación: el punto de Facebook e Instagram es el que hoy
+            obliga a reagendar reuniones, y el cliente lo tiene que leer cuando
+            todavía está a tiempo de resolverlo. */}
+        <GuionSesion items={datos?.sesion} />
 
         {problema === 'sin_config' && (
           <Aviso
@@ -197,30 +216,30 @@ export default function AgendarScreen() {
             {/* Mes */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginTop: 26, marginBottom: 12,
+              marginTop: 28, marginBottom: 14,
             }}>
               <button
                 type="button" disabled={mesMinimo} aria-label="Mes anterior"
                 onClick={() => setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { ...c, m: c.m - 1 }))}
-                style={{ ...btnMes, opacity: mesMinimo ? 0.3 : 1 }}
-              ><IcoChevL size={18} stroke={T.text2} /></button>
-              <div style={{ fontSize: 16.5, fontWeight: 700, color: T.ink, textTransform: 'capitalize' }}>
+                style={{ ...btnMes, opacity: mesMinimo ? 0.35 : 1 }}
+              ><IcoChevL size={20} stroke={TO.body} sw={2.2} /></button>
+              <div style={{ fontSize: 19, fontWeight: 800, color: TO.ink, textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
                 {nombreMes}
               </div>
               <button
                 type="button" aria-label="Mes siguiente"
                 onClick={() => setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { ...c, m: c.m + 1 }))}
                 style={btnMes}
-              ><IcoChevR size={18} stroke={T.text2} /></button>
+              ><IcoChevR size={20} stroke={TO.body} sw={2.2} /></button>
             </div>
 
             {cargando ? <Loading label="Buscando horarios…" /> : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 5 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6 }}>
                   {DIAS.map((d) => (
                     <div key={d} style={{
-                      textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: T.text3,
-                      letterSpacing: '0.06em', paddingBottom: 5,
+                      textAlign: 'center', fontSize: 13, fontWeight: 800, color: TO.meta,
+                      letterSpacing: '0.06em', paddingBottom: 6,
                     }}>{d}</div>
                   ))}
                   {diasDelMes.map((c, i) => {
@@ -229,13 +248,17 @@ export default function AgendarScreen() {
                     return (
                       <button
                         key={c.iso} type="button" disabled={!c.libre}
+                        aria-label={`${c.dia}${c.libre ? '' : ', sin horarios'}`}
                         onClick={() => setSel({ dia: c.iso, hora: null })}
                         style={{
-                          aspectRatio: '1', border: 'none', borderRadius: 13, cursor: c.libre ? 'pointer' : 'default',
-                          fontSize: 15.5, fontWeight: activo ? 800 : c.libre ? 700 : 400,
-                          background: activo ? T.primary : c.libre ? T.primarySoft : 'transparent',
-                          color: activo ? '#fff' : c.libre ? T.primaryInk : T.text3,
-                          opacity: c.libre ? 1 : 0.45, transition: 'all .15s',
+                          aspectRatio: '1', borderRadius: 14, cursor: c.libre ? 'pointer' : 'default',
+                          fontSize: 17, fontWeight: activo || c.libre ? 800 : 500,
+                          // Los días libres llevan borde además de fondo: sin él,
+                          // el celeste sobre blanco casi no se distingue del vacío.
+                          border: c.libre ? `2px solid ${activo ? TO.blueBtn : TO.blueLine}` : '2px solid transparent',
+                          background: activo ? TO.blueBtn : c.libre ? TO.blueWash : 'transparent',
+                          color: activo ? '#fff' : c.libre ? TO.blue : TO.faint,
+                          transition: 'all .15s',
                         }}
                       >{c.dia}</button>
                     );
@@ -243,28 +266,29 @@ export default function AgendarScreen() {
                 </div>
 
                 {Object.keys(dias).length === 0 && (
-                  <div style={{ fontSize: 14.5, color: T.text2, textAlign: 'center', marginTop: 20, lineHeight: 1.55 }}>
+                  <div style={{ fontSize: F.sub, color: TO.body, textAlign: 'center', marginTop: 22, lineHeight: 1.55 }}>
                     No hay horarios libres este mes. Probá con el siguiente.
                   </div>
                 )}
 
                 {/* Horas */}
                 {sel.dia && (
-                  <div style={{ marginTop: 24, animation: 'kxUp .25s ease' }}>
-                    <div style={{ ...microLabel(), marginBottom: 10 }}>
+                  <div style={{ marginTop: 26, animation: 'kxUp .25s ease' }}>
+                    <div style={{ ...label(), marginBottom: 11 }}>
                       Horarios disponibles · hora de {tz.split('/').pop().replace(/_/g, ' ')}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(88px,1fr))', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(96px,1fr))', gap: 9 }}>
                       {horas.map((h) => {
                         const activa = sel.hora === h;
                         return (
                           <button
                             key={h} type="button" onClick={() => setSel((s) => ({ ...s, hora: h }))}
+                            aria-pressed={activa}
                             style={{
-                              height: 48, borderRadius: 13, cursor: 'pointer', fontSize: 15.5, fontWeight: 700,
-                              border: `1.5px solid ${activa ? T.primary : T.border}`,
-                              background: activa ? T.primary : '#fff',
-                              color: activa ? '#fff' : T.text,
+                              height: 56, borderRadius: 14, cursor: 'pointer', fontSize: 17, fontWeight: 800,
+                              border: `2px solid ${activa ? TO.blueBtn : TO.lineStrong}`,
+                              background: activa ? TO.blueBtn : '#fff',
+                              color: activa ? '#fff' : TO.ink,
                               fontVariantNumeric: 'tabular-nums', transition: 'all .15s',
                             }}
                           >{h}</button>
@@ -276,11 +300,11 @@ export default function AgendarScreen() {
 
                 {evento?.confirm_instructions?.length > 0 && sel.hora && (
                   <div style={{
-                    marginTop: 22, padding: '15px 17px', borderRadius: 16,
-                    background: T.primaryWash, border: '1px solid #E3E9FB',
+                    marginTop: 24, padding: '16px 18px', borderRadius: 16,
+                    background: TO.bg, border: `1px solid ${TO.line}`,
                   }}>
-                    <div style={{ ...microLabel(T.primaryInk), marginBottom: 8 }}>Cómo es la sesión</div>
-                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14.5, lineHeight: 1.65, color: T.textSoft }}>
+                    <div style={{ ...label(), marginBottom: 9 }}>Antes de la reunión</div>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: F.meta, lineHeight: 1.7, color: TO.body }}>
                       {evento.confirm_instructions.map((x, i) => <li key={i}>{x}</li>)}
                     </ul>
                   </div>
@@ -288,8 +312,9 @@ export default function AgendarScreen() {
 
                 {errorReserva && (
                   <div style={{
-                    marginTop: 16, padding: '12px 14px', borderRadius: 13, background: T.redSoft,
-                    fontSize: 14.5, lineHeight: 1.55, color: '#991B1B',
+                    marginTop: 18, padding: '14px 16px', borderRadius: 14, background: TO.redWash,
+                    border: '1px solid #E8A0A0', fontSize: F.meta, lineHeight: 1.55,
+                    color: TO.redInk, fontWeight: 600,
                   }}>{errorReserva}</div>
                 )}
               </>
@@ -302,15 +327,12 @@ export default function AgendarScreen() {
         <OnbFooter>
           <button
             type="button" onClick={reservar} disabled={!sel.hora || reservando}
-            style={{ ...bigBtn(T.primary, 52), opacity: !sel.hora || reservando ? 0.45 : 1 }}
+            style={{ ...btn(), opacity: !sel.hora || reservando ? 0.5 : 1 }}
           >
-            {reservando ? <Spinner size={18} color="#fff" /> : <IcoCalendar size={17} stroke="#fff" />}
+            {reservando ? <Spinner size={19} color="#fff" /> : <IcoCalendar size={18} stroke="#fff" sw={2.2} />}
             {reservando ? 'RESERVANDO…' : 'RESERVAR ESTE HORARIO'}
           </button>
-          <button type="button" onClick={() => omitir('ya_agende')} style={{
-            display: 'block', width: '100%', marginTop: 12, background: 'none', border: 'none',
-            padding: '6px 0', cursor: 'pointer', fontSize: 14.5, color: T.text2,
-          }}>
+          <button type="button" onClick={() => omitir('ya_agende')} style={btnTexto}>
             Ya la agendé por otro lado
           </button>
         </OnbFooter>
@@ -319,18 +341,61 @@ export default function AgendarScreen() {
   );
 }
 
+/**
+ * Qué se hace en la sesión de onboarding.
+ *
+ * El punto del medio (Facebook e Instagram) es la razón por la que hoy se
+ * reagendan reuniones, así que se pinta distinto del resto: si el cliente lee
+ * una sola cosa de esta pantalla, tiene que ser esa.
+ */
+function GuionSesion({ items }) {
+  const lista = Array.isArray(items) && items.length ? items : SESION_FALLBACK;
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ ...label(), marginBottom: 12 }}>Qué hacemos en esa reunión</div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {lista.map((x, i) => (
+          <div key={x.titulo || i} style={{
+            display: 'flex', gap: 13, padding: '16px 17px', borderRadius: 16,
+            background: x.aviso ? TO.amberWash : '#fff',
+            border: `${x.aviso ? 2 : 1}px solid ${x.aviso ? '#E0A96A' : TO.line}`,
+          }}>
+            <span style={{
+              width: 28, height: 28, borderRadius: '50%', flex: 'none', marginTop: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: x.aviso ? TO.amber : TO.blueBtn, color: '#fff',
+              fontSize: 14, fontWeight: 800,
+            }}>{x.aviso ? '!' : i + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 17, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em',
+                color: x.aviso ? TO.amber : TO.ink,
+              }}>{x.titulo}</div>
+              <div style={{
+                fontSize: F.meta, lineHeight: 1.55, marginTop: 5,
+                color: x.aviso ? TO.amber : TO.body,
+                fontWeight: x.aviso ? 600 : 400,
+              }}>{x.texto}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Aviso({ texto, onSeguir }) {
   return (
     <div style={{
-      marginTop: 22, padding: '16px 17px', borderRadius: 16,
-      background: T.amberSoft, border: '1px solid #FDE68A',
+      marginTop: 24, padding: '17px 18px', borderRadius: 16,
+      background: TO.amberWash, border: '2px solid #E0A96A',
     }}>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <IcoWarn size={19} stroke={T.orange} style={{ flex: 'none', marginTop: 1 }} />
-        <div style={{ fontSize: 14.5, lineHeight: 1.55, color: '#92400E' }}>{texto}</div>
+      <div style={{ display: 'flex', gap: 11 }}>
+        <IcoWarn size={21} stroke={TO.amber} style={{ flex: 'none', marginTop: 2 }} />
+        <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.amber }}>{texto}</div>
       </div>
-      <button type="button" onClick={onSeguir} style={{ ...bigBtn(T.ink, 48), marginTop: 15 }}>
-        SEGUIR CON EL ONBOARDING <IcoArrowR size={16} stroke="#fff" />
+      <button type="button" onClick={onSeguir} style={{ ...btn(TO.ink, 52), marginTop: 16 }}>
+        SEGUIR CON EL ONBOARDING <IcoArrowR size={17} stroke="#fff" sw={2.4} />
       </button>
     </div>
   );
@@ -350,6 +415,6 @@ function construirGrilla(y, m, dias) {
 }
 
 const btnMes = {
-  width: 40, height: 40, borderRadius: 12, border: '1px solid var(--mk-border)',
+  width: 48, height: 48, borderRadius: 14, border: `2px solid ${TO.lineStrong}`,
   background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
 };

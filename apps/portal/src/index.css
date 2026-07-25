@@ -112,15 +112,34 @@ button { font-family: inherit; }
    pensado para el menú lateral, y el onboarding no tiene menú (es pantalla
    completa, sin tabs, para que el cliente no se distraiga).
 
-   El cuerpo va a 16-17px en vez de los 13-15px del resto del portal: acá el
-   cliente pasa 40 minutos leyendo y respondiendo, y hay que contemplar que del
-   otro lado puede haber alguien de 60 años leyendo desde el celular. */
+   El cuerpo va a 17.5px en vez de los 13-15px del resto del portal, y el texto
+   más claro que se permite es #525A6B (6.8:1) en vez de #9CA3AF (2.5:1): acá el
+   cliente pasa una hora leyendo y respondiendo, muchas veces desde el celular y
+   muchas veces con más de 60 años. La escala completa vive en onboarding/tokens.js. */
 [data-kx-onb] {
   height: 100%; display: flex; flex-direction: column;
   position: relative; animation: kxFade .22s ease;
-  font-size: 16px;
+  font-size: 17.5px;
+  color: #252B36;
+  line-height: 1.55;
 }
 [data-kx-onb] .kxs { padding-inline: 20px; }
+
+/* Los campos nunca por debajo de 16px: iOS hace zoom automático al enfocar y el
+   cliente queda con la pantalla descuadrada a mitad de una respuesta. */
+[data-kx-onb] input,
+[data-kx-onb] textarea,
+[data-kx-onb] select { font-size: 17px; }
+
+/* Foco visible de verdad. El portal lo apaga con outline:none en cada campo;
+   acá hace falta, porque hay gente completando esto con teclado. */
+[data-kx-onb] :is(button, input, textarea, a):focus-visible {
+  outline: 3px solid #1D4ED8;
+  outline-offset: 2px;
+}
+
+/* Placeholders: el gris por defecto del navegador queda en ~2.8:1. */
+[data-kx-onb] ::placeholder { color: #6E7789; opacity: 1; }
 
 @media (min-width: 1024px) {
   /* Dos columnas: índice de tramos fijo a la izquierda, contenido acotado. */
@@ -131,7 +150,7 @@ button { font-family: inherit; }
     position: absolute !important; left: 0; top: 0; bottom: 0; width: 280px;
     display: flex !important; flex-direction: column;
     padding: 26px 20px; box-sizing: border-box; overflow-y: auto;
-    background: #fff; box-shadow: 1px 0 0 var(--mk-border);
+    background: #fff; border-right: 1px solid #D3D8E0;
   }
 }
 [data-kx-onbindice] { display: none; }

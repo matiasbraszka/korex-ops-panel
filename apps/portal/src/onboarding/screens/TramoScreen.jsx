@@ -7,8 +7,8 @@
 // tiene que ser información, no palmadita.
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { T, display, bigBtn, microLabel } from '../../components/theme';
-import { IcoCheck, IcoArrowR, IcoClock, IcoPlay } from '../../components/icons';
+import { IcoCheck, IcoArrowR, IcoClock, IcoPlay, IcoImage } from '../../components/icons';
+import { TO, F, dsp, btn, btnTexto, label } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell, OnbHeader, OnbFooter } from '../components/OnbShell';
 import { pantallasDe, tramoCompleto } from '../progreso';
@@ -19,7 +19,7 @@ export default function TramoScreen() {
   const navigate = useNavigate();
   const esCierre = params.get('cierre') === '1';
 
-  const { secciones, tramos, respuestas, bloqueantes, minutos, progreso, flush, cortas } = useOnboarding();
+  const { secciones, tramos, respuestas, bloqueantes, minutos, progreso, flush, checklist } = useOnboarding();
   const seccion = secciones.find((s) => s.skey === tramo);
 
   const [pctAnim, setPctAnim] = useState(progreso.pct);
@@ -46,62 +46,84 @@ export default function TramoScreen() {
 
   // ── Cierre ─────────────────────────────────────────────────────────────────
   if (esCierre) {
+    // El recordatorio del material se muestra al cerrar el ANTEÚLTIMO tramo:
+    // es el último momento útil para juntarlo antes de que se lo pidamos.
+    const avisarMaterial = siguiente?.skey === 'material' && (checklist || []).length > 0;
+
     return (
       <OnbShell>
         <OnbHeader titulo={seccion.titulo} ocultarProgreso onVolver={() => navigate(`/onboarding/${tramo}`)} />
-        <div className="kxs" style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          justifyContent: 'center', paddingBottom: 30, textAlign: 'center',
-        }}>
+        <div className="kxs" style={{ flex: 1, paddingTop: 34, paddingBottom: 30, textAlign: 'center' }}>
           <div style={{ animation: 'kxUp .4s ease' }}>
             <div style={{
-              width: 68, height: 68, borderRadius: '50%', margin: '0 auto 22px',
-              background: completo ? T.green : T.primary,
+              width: 74, height: 74, borderRadius: '50%', margin: '0 auto 24px',
+              background: completo ? TO.greenInk : TO.blueBtn,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               animation: 'kxPop .55s ease',
             }}>
-              <IcoCheck size={31} stroke="#fff" sw={2.6} />
+              <IcoCheck size={34} stroke="#fff" sw={2.6} />
             </div>
 
-            <div style={{ ...display(27, '-0.03em'), lineHeight: 1.15 }}>
+            <div style={{ ...dsp(F.h2), lineHeight: 1.18 }}>
               {completo ? `${seccion.titulo}, listo.` : `Guardamos ${seccion.titulo.toLowerCase()}.`}
             </div>
 
             {seccion.promesa && (
               <div style={{
-                fontSize: 16.5, lineHeight: 1.55, color: T.textSoft,
-                marginTop: 12, maxWidth: 400, marginInline: 'auto',
+                fontSize: F.body, lineHeight: 1.55, color: TO.body,
+                marginTop: 14, maxWidth: 420, marginInline: 'auto',
               }}>{seccion.promesa}</div>
             )}
 
             {/* La barra global moviéndose de verdad, con el número contando. */}
-            <div style={{ maxWidth: 320, margin: '28px auto 0' }}>
+            <div style={{ maxWidth: 340, margin: '30px auto 0' }}>
               <div style={{
-                fontFamily: "'Montserrat', sans-serif", fontSize: 38, fontWeight: 800,
-                letterSpacing: '-0.035em', color: T.ink, lineHeight: 1,
+                fontFamily: "'Montserrat', sans-serif", fontSize: 44, fontWeight: 800,
+                letterSpacing: '-0.035em', color: TO.ink, lineHeight: 1,
               }}>{pctAnim}%</div>
-              <div style={{ height: 7, borderRadius: 999, background: T.surface2, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ height: 10, borderRadius: 999, background: TO.fill, marginTop: 14, overflow: 'hidden' }}>
                 <div style={{
-                  height: '100%', borderRadius: 999, background: T.primary,
+                  height: '100%', borderRadius: 999, background: TO.blueBtn,
                   width: `${pctAnim}%`, transition: 'width .7s cubic-bezier(.22,1,.36,1)',
                 }} />
               </div>
               {minutos > 0 && (
                 <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 14, color: T.text2, marginTop: 12,
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  fontSize: F.meta, fontWeight: 600, color: TO.meta, marginTop: 14,
                 }}>
-                  <IcoClock size={15} stroke={T.text2} />
+                  <IcoClock size={17} stroke={TO.meta} />
                   Te quedan unos {minutos} minutos
                 </div>
               )}
             </div>
 
+            {avisarMaterial && (
+              <div style={{
+                marginTop: 28, padding: '17px 18px', borderRadius: 18, textAlign: 'left',
+                background: TO.blueWash, border: `2px solid ${TO.blueLine}`,
+                maxWidth: 440, marginInline: 'auto',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <IcoImage size={20} stroke={TO.blue} sw={2.2} />
+                  <div style={{ fontSize: 17, fontWeight: 800, color: TO.ink, letterSpacing: '-0.01em' }}>
+                    Último paso: tu material
+                  </div>
+                </div>
+                {checklist.filter((c) => c.requerido).map((c) => (
+                  <div key={c.qkey} style={{
+                    fontSize: F.meta, lineHeight: 1.5, color: TO.body, marginTop: 5,
+                  }}>· {c.texto}</div>
+                ))}
+              </div>
+            )}
+
             {seccion.desbloquea && completo && (
               <div style={{
-                marginTop: 24, padding: '13px 16px', borderRadius: 15,
-                background: T.greenSoft, maxWidth: 400, marginInline: 'auto',
-                fontSize: 14.5, lineHeight: 1.55, color: '#166534',
+                marginTop: 26, padding: '15px 17px', borderRadius: 16,
+                background: TO.greenWash, border: '1px solid #A7DFBE',
+                maxWidth: 420, marginInline: 'auto',
+                fontSize: F.meta, lineHeight: 1.55, color: TO.greenInk, fontWeight: 600,
               }}>
                 Se te desbloqueó una sección nueva de la plataforma. La vas a ver
                 cuando termines.
@@ -111,18 +133,15 @@ export default function TramoScreen() {
         </div>
 
         <OnbFooter>
-          <button type="button" onClick={irAlSiguiente} style={bigBtn(T.primary, 52)}>
+          <button type="button" onClick={irAlSiguiente} style={btn()}>
             {siguiente ? 'SEGUIR' : 'IR AL REPASO'}
-            <IcoArrowR size={17} stroke="#fff" />
+            <IcoArrowR size={18} stroke="#fff" sw={2.4} />
           </button>
 
           {/* Dar permiso explícito de parar BAJA el abandono: elimina la sensación
               de estar atrapado en un formulario que no termina más. */}
           {seccion.checkpoint && (
-            <button type="button" onClick={() => ir('/')} style={{
-              display: 'block', width: '100%', marginTop: 12, background: 'none', border: 'none',
-              padding: '6px 0', cursor: 'pointer', fontSize: 14.5, color: T.text2,
-            }}>
+            <button type="button" onClick={() => ir('/')} style={btnTexto}>
               Continuar más tarde
             </button>
           )}
@@ -133,19 +152,21 @@ export default function TramoScreen() {
 
   // ── Portada ────────────────────────────────────────────────────────────────
   const primera = pantallas[0];
+  const requeridas = (seccion.preguntas || []).filter((q) => q.requerida).length;
+
   return (
     <OnbShell>
       <OnbHeader titulo={`Tramo ${i + 1} de ${tramos.length}`} onVolver={() => navigate('/onboarding')} />
 
-      <div className="kxs" style={{ flex: 1, paddingTop: 26, paddingBottom: 30 }}>
-        <div style={{ ...microLabel(T.primaryInk), marginBottom: 10 }}>
+      <div className="kxs" style={{ flex: 1, paddingTop: 28, paddingBottom: 30 }}>
+        <div style={{ ...label(TO.blue), marginBottom: 11 }}>
           {completo ? 'Ya lo completaste' : `Unos ${seccion.minutos} minutos`}
         </div>
 
-        <div style={{ ...display(30, '-0.035em'), lineHeight: 1.12 }}>{seccion.titulo}</div>
+        <div style={{ ...dsp(F.h1, '-0.035em'), lineHeight: 1.12 }}>{seccion.titulo}</div>
 
         {seccion.subtitulo && (
-          <div style={{ fontSize: 16.5, lineHeight: 1.55, color: T.text2, marginTop: 12, textWrap: 'pretty' }}>
+          <div style={{ fontSize: F.body, lineHeight: 1.55, color: TO.body, marginTop: 13, textWrap: 'pretty' }}>
             {seccion.subtitulo}
           </div>
         )}
@@ -156,22 +177,27 @@ export default function TramoScreen() {
 
         {seccion.promesa && (
           <div style={{
-            marginTop: 20, padding: '15px 17px', borderRadius: 16,
-            background: T.primaryWash, border: '1px solid #E3E9FB',
+            marginTop: 22, padding: '16px 18px', borderRadius: 16,
+            background: TO.blueWash, border: `1px solid ${TO.blueLine}`,
           }}>
-            <div style={{ ...microLabel(T.primaryInk), marginBottom: 6 }}>Para qué sirve</div>
-            <div style={{ fontSize: 15.5, lineHeight: 1.55, color: T.textSoft }}>{seccion.promesa}</div>
+            <div style={{ ...label(TO.blue), marginBottom: 7 }}>Para qué sirve</div>
+            <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.body }}>{seccion.promesa}</div>
           </div>
         )}
 
         {seccion.intro && (
-          <div style={{ fontSize: 15.5, lineHeight: 1.6, color: T.textSoft, marginTop: 18, whiteSpace: 'pre-wrap' }}>
+          <div style={{ fontSize: F.sub, lineHeight: 1.6, color: TO.body, marginTop: 20, whiteSpace: 'pre-wrap' }}>
             {seccion.intro}
           </div>
         )}
 
-        <div style={{ fontSize: 14, color: T.text3, marginTop: 20 }}>
-          {pantallas.length} {pantallas.length === 1 ? 'pregunta' : 'preguntas'} · se guarda solo
+        <div style={{
+          fontSize: F.meta, fontWeight: 600, color: TO.meta, marginTop: 22,
+          paddingTop: 18, borderTop: `1px solid ${TO.line}`,
+        }}>
+          {pantallas.length} {pantallas.length === 1 ? 'pantalla' : 'pantallas'}
+          {requeridas > 0 && ` · ${requeridas} ${requeridas === 1 ? 'pregunta' : 'preguntas'}`}
+          {' · se guarda solo'}
         </div>
       </div>
 
@@ -179,10 +205,10 @@ export default function TramoScreen() {
         <button
           type="button"
           onClick={() => primera && ir(`/onboarding/${tramo}/${primera.id}`)}
-          style={bigBtn(completo ? T.ink : T.primary, 52)}
+          style={btn(completo ? TO.ink : TO.blueBtn)}
         >
           {completo ? 'REVISAR MIS RESPUESTAS' : 'EMPEZAR'}
-          <IcoArrowR size={17} stroke="#fff" />
+          <IcoArrowR size={18} stroke="#fff" sw={2.4} />
         </button>
       </OnbFooter>
     </OnbShell>
@@ -193,8 +219,8 @@ function VideoTramo({ url }) {
   const [play, setPlay] = useState(false);
   return (
     <div style={{
-      marginTop: 20, position: 'relative', width: '100%', aspectRatio: '16 / 9',
-      borderRadius: 18, overflow: 'hidden', background: '#E4E8EF',
+      marginTop: 22, position: 'relative', width: '100%', aspectRatio: '16 / 9',
+      borderRadius: 18, overflow: 'hidden', background: '#DDE2EA',
     }}>
       {play ? (
         <iframe
@@ -208,16 +234,16 @@ function VideoTramo({ url }) {
         // Nunca autoplay: mucha gente entra desde el celular con datos móviles.
         <button type="button" onClick={() => setPlay(true)} style={{
           position: 'absolute', inset: 0, border: 'none', cursor: 'pointer',
-          background: 'linear-gradient(135deg,#EEF2FF,#E4E8EF)',
+          background: 'linear-gradient(135deg,#E4EBFF,#DDE2EA)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', gap: 10,
+          justifyContent: 'center', gap: 12,
         }}>
           <span style={{
-            width: 56, height: 56, borderRadius: '50%', background: T.primary,
+            width: 62, height: 62, borderRadius: '50%', background: TO.blueBtn,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 8px 22px rgba(91,124,245,.34)',
-          }}><IcoPlay size={24} /></span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: T.ink }}>
+            boxShadow: '0 8px 22px rgba(74,103,216,.3)',
+          }}><IcoPlay size={26} /></span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: TO.ink }}>
             Mirá el video (menos de 1 minuto)
           </span>
         </button>

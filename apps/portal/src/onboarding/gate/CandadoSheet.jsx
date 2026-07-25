@@ -3,8 +3,8 @@
 // No dice "no podés entrar": dice qué se abre y cuánto falta. La diferencia
 // importa — un candado que explica motiva, un candado que rechaza frustra.
 import { useNavigate } from 'react-router-dom';
-import { T, display, bigBtn } from '../../components/theme';
 import { IcoLock, IcoArrowR } from '../../components/icons';
+import { TO, F, dsp, btn } from '../tokens';
 
 const QUE_HAY = {
   '/guiones': {
@@ -41,31 +41,31 @@ export default function CandadoSheet({ ruta, pct, onCerrar }) {
           animation: 'kxUp .26s ease',
         }}
       >
-        <div style={{ width: 44, height: 5, borderRadius: 999, background: T.border, margin: '0 auto 20px' }} />
+        <div style={{ width: 46, height: 5, borderRadius: 999, background: TO.lineStrong, margin: '0 auto 20px' }} />
 
         <div style={{
-          width: 52, height: 52, borderRadius: 17, background: T.surface2,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+          width: 56, height: 56, borderRadius: 18, background: TO.fill,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
         }}>
-          <IcoLock size={23} stroke={T.text2} />
+          <IcoLock size={25} stroke={TO.body} sw={2.2} />
         </div>
 
-        <div style={{ ...display(22, '-0.025em'), lineHeight: 1.2 }}>{info.titulo}</div>
-        <div style={{ fontSize: 15.5, lineHeight: 1.6, color: T.text2, marginTop: 10 }}>
+        <div style={{ ...dsp(F.h2 - 2, '-0.025em'), lineHeight: 1.2 }}>{info.titulo}</div>
+        <div style={{ fontSize: F.sub, lineHeight: 1.6, color: TO.body, marginTop: 12 }}>
           {info.texto}
         </div>
-        <div style={{ fontSize: 15.5, lineHeight: 1.6, color: T.textSoft, marginTop: 12 }}>
+        <div style={{ fontSize: F.sub, lineHeight: 1.6, color: TO.ink, marginTop: 12, fontWeight: 600 }}>
           Se abre cuando termines tu onboarding — es de donde sacamos todo esto.
         </div>
 
-        <div style={{ marginTop: 20 }}>
-          <div style={{ height: 7, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+        <div style={{ marginTop: 22 }}>
+          <div style={{ height: 9, borderRadius: 999, background: TO.fill, overflow: 'hidden' }}>
             <div style={{
-              height: '100%', borderRadius: 999, background: T.primary,
+              height: '100%', borderRadius: 999, background: TO.blueBtn,
               width: `${pct || 0}%`, transition: 'width .5s ease',
             }} />
           </div>
-          <div style={{ fontSize: 13.5, color: T.text2, marginTop: 8 }}>
+          <div style={{ fontSize: F.meta, fontWeight: 600, color: TO.meta, marginTop: 9 }}>
             Llevás {pct || 0}% completo
           </div>
         </div>
@@ -73,9 +73,9 @@ export default function CandadoSheet({ ruta, pct, onCerrar }) {
         <button
           type="button"
           onClick={() => { onCerrar?.(); navigate('/onboarding'); }}
-          style={{ ...bigBtn(T.primary, 52), marginTop: 20 }}
+          style={{ ...btn(), marginTop: 22 }}
         >
-          SEGUIR DONDE QUEDÉ <IcoArrowR size={17} stroke="#fff" />
+          SEGUIR DONDE QUEDÉ <IcoArrowR size={18} stroke="#fff" sw={2.4} />
         </button>
       </div>
     </div>

@@ -21,6 +21,7 @@ const Ctx = createContext(null);
 export const useOnboarding = () => useContext(Ctx);
 
 const COLA_KEY = 'korex_onb_cola';
+const CAT_KEY = 'korex_onb_catalogo';
 const DEBOUNCE_MS = 900;
 
 function leerCola() {
@@ -30,8 +31,21 @@ function escribirCola(c) {
   try { localStorage.setItem(COLA_KEY, JSON.stringify(c)); } catch { /* modo incógnito lleno */ }
 }
 
+// El catálogo (7 tramos + 66 preguntas + ejemplos) es el mismo para todos los
+// clientes y cambia solo cuando el equipo lo edita. Cachearlo evita volver a
+// pedirlo en cada recarga dura: sin esto, navegar rápido llegaba a dejar al
+// navegador sin conexiones libres (ERR_INSUFFICIENT_RESOURCES).
+function leerCatalogo() {
+  try { return JSON.parse(localStorage.getItem(CAT_KEY) || 'null'); } catch { return null; }
+}
+function escribirCatalogo(c) {
+  try { localStorage.setItem(CAT_KEY, JSON.stringify(c)); } catch { /* nada */ }
+}
+
 export function OnboardingProvider({ children }) {
-  const [catalogo, setCatalogo] = useState(null);
+  // Arranca con el catálogo cacheado si lo hay: la primera pintura es inmediata
+  // y la versión fresca lo reemplaza cuando llega.
+  const [catalogo, setCatalogo] = useState(leerCatalogo);
   const [estado, setEstado] = useState(null);
   const [respuestas, setRespuestas] = useState({});
   const [cargando, setCargando] = useState(true);
@@ -50,7 +64,7 @@ export function OnboardingProvider({ children }) {
     try {
       const [cat, est] = await Promise.all([onb.catalogo(), onb.estado()]);
       if (!montado.current) return;
-      setCatalogo(cat);
+      if (cat) { setCatalogo(cat); escribirCatalogo(cat); }
       setEstado(est);
       setRespuestas(est?.respuestas || {});
     } catch (e) {
@@ -189,6 +203,7 @@ export function OnboardingProvider({ children }) {
   const value = {
     cargando, error, recargar: cargar,
     catalogo, secciones, tramos, estado, respuestas, bloqueantes,
+    checklist: catalogo?.checklist || [],
     progreso, minutos, cortas, sync,
     responder, enviar, flush,
     subiendo, registrarSubida, limpiarSubidas,

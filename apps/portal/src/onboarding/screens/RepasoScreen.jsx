@@ -6,9 +6,9 @@
 // mejorar" y no "te faltan".
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { T, display, bigBtn, microLabel, pill } from '../../components/theme';
-import { IcoCheck, IcoArrowR, IcoWarn, IcoUpload, IcoChevR } from '../../components/icons';
+import { IcoCheck, IcoWarn, IcoUpload, IcoChevR } from '../../components/icons';
 import { Spinner } from '../../components/ui';
+import { TO, F, dsp, btn, label, chip } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell, OnbHeader, OnbFooter } from '../components/OnbShell';
 import { onb } from '../api';
@@ -50,34 +50,40 @@ export default function RepasoScreen() {
 
   const listo = progreso.pct >= 100;
 
+  // El título tiene que corresponderse con el número que muestra la barra: decir
+  // "casi terminás" con un 5% hace que el cliente deje de creerle a la pantalla.
+  const titulo = listo ? 'Está todo listo'
+    : progreso.pct >= 80 ? 'Casi terminás'
+    : progreso.pct >= 40 ? 'Vas por la mitad'
+    : 'Esto es lo que falta';
+  const bajada = listo ? 'Repasá si querés mejorar alguna respuesta y cerramos.'
+    : progreso.pct >= 80 ? 'Te falta poco. Esto es lo que necesitamos para arrancar.'
+    : 'Podés seguir cuando quieras, no se pierde nada. Acá tenés todo lo que queda pendiente.';
+
   return (
     <OnbShell>
       <OnbHeader titulo="Repaso final" onVolver={() => navigate('/onboarding')} />
 
-      <div className="kxs" style={{ flex: 1, paddingTop: 24, paddingBottom: 28 }}>
-        <div style={{ ...display(28, '-0.033em'), lineHeight: 1.15 }}>
-          {listo ? 'Está todo listo' : 'Casi terminás'}
-        </div>
-        <div style={{ fontSize: 16, lineHeight: 1.55, color: T.text2, marginTop: 11 }}>
-          {listo
-            ? 'Repasá si querés mejorar alguna respuesta y cerramos.'
-            : 'Te falta poco. Esto es lo que necesitamos para arrancar.'}
+      <div className="kxs" style={{ flex: 1, paddingTop: 26, paddingBottom: 30 }}>
+        <div style={{ ...dsp(F.h1, '-0.033em'), lineHeight: 1.14 }}>{titulo}</div>
+        <div style={{ fontSize: F.body, lineHeight: 1.55, color: TO.body, marginTop: 12 }}>
+          {bajada}
         </div>
 
         {/* Material bloqueante */}
         {bloqPend.length > 0 && (
-          <div style={{ marginTop: 26 }}>
-            <div style={{ ...microLabel(T.orange), marginBottom: 10 }}>
+          <div style={{ marginTop: 28 }}>
+            <div style={{ ...label(TO.amber), marginBottom: 11 }}>
               Sin esto no podemos empezar
             </div>
-            <div style={{ background: '#fff', borderRadius: 18, boxShadow: 'var(--shadow-md)', padding: '4px 4px' }}>
+            <div style={{ background: '#fff', borderRadius: 18, border: `1px solid ${TO.line}`, padding: 4 }}>
               {bloqPend.map((b, i) => (
                 <Fila
                   key={b.tipo} borde={i > 0}
-                  icono={<IcoUpload size={17} stroke={T.orange} />}
+                  icono={<IcoUpload size={19} stroke={TO.amber} />}
                   titulo={b.titulo}
                   detalle={b.target ? `${b.subidos || 0} de ${b.target}` : 'Falta'}
-                  color={T.orange}
+                  color={TO.amber} fondo={TO.amberWash}
                   onClick={() => {
                     const s = secciones.find((x) => (x.preguntas || []).some((q) => q.bucket === b.bucket));
                     const q = s?.preguntas?.find((x) => x.bucket === b.bucket);
@@ -91,21 +97,21 @@ export default function RepasoScreen() {
 
         {/* Respuestas cortas */}
         {cortas.length > 0 && (
-          <div style={{ marginTop: 26 }}>
-            <div style={{ ...microLabel(), marginBottom: 4 }}>
+          <div style={{ marginTop: 28 }}>
+            <div style={{ ...label(), marginBottom: 6 }}>
               {cortas.length} {cortas.length === 1 ? 'respuesta que podemos mejorar' : 'respuestas que podemos mejorar'}
             </div>
-            <div style={{ fontSize: 14, color: T.text2, marginBottom: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: F.meta, color: TO.body, marginBottom: 12, lineHeight: 1.55 }}>
               Con un poco más de detalle, lo que escribamos te va a salir mucho mejor.
               Tocá una y contala hablando: son menos de dos minutos.
             </div>
-            <div style={{ background: '#fff', borderRadius: 18, boxShadow: 'var(--shadow-md)', padding: '4px 4px' }}>
+            <div style={{ background: '#fff', borderRadius: 18, border: `1px solid ${TO.line}`, padding: 4 }}>
               {cortas.map((q, i) => {
                 const len = String(respuestas[q.qkey]?.valor || '').trim().length;
                 return (
                   <Fila
                     key={q.qkey} borde={i > 0}
-                    icono={<span style={{ fontSize: 12, fontWeight: 800, color: T.text3 }}>{i + 1}</span>}
+                    icono={<span style={{ fontSize: 14, fontWeight: 800, color: TO.meta }}>{i + 1}</span>}
                     titulo={q.label}
                     detalle={`${Math.round((len / q.minChars) * 100)}%`}
                     onClick={() => irA(q.qkey)}
@@ -118,29 +124,30 @@ export default function RepasoScreen() {
 
         {/* Lo que sí está */}
         <div style={{
-          marginTop: 26, padding: '16px 17px', borderRadius: 18,
-          background: T.greenSoft, display: 'flex', gap: 12, alignItems: 'flex-start',
+          marginTop: 28, padding: '18px 18px', borderRadius: 18,
+          background: TO.greenWash, border: '1px solid #A7DFBE',
+          display: 'flex', gap: 13, alignItems: 'flex-start',
         }}>
-          <IcoCheck size={19} stroke={T.green} sw={2.5} style={{ flex: 'none', marginTop: 2 }} />
+          <IcoCheck size={21} stroke={TO.greenInk} sw={2.6} style={{ flex: 'none', marginTop: 2 }} />
           <div>
-            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#166534' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TO.greenInk, letterSpacing: '-0.01em' }}>
               {progreso.respondidas} de {progreso.requeridas} respuestas completas
             </div>
-            <div style={{ fontSize: 14.5, color: '#15803D', marginTop: 3, lineHeight: 1.5 }}>
+            <div style={{ fontSize: F.meta, color: TO.greenInk, marginTop: 4, lineHeight: 1.5 }}>
               Todo guardado. No se pierde nada aunque cierres.
             </div>
           </div>
         </div>
 
         {faltan && faltan.length > 0 && (
-          <div style={{ marginTop: 22 }}>
-            <div style={{ ...microLabel(T.red), marginBottom: 10 }}>Todavía falta esto</div>
-            <div style={{ background: '#fff', borderRadius: 18, boxShadow: 'var(--shadow-md)', padding: '4px 4px' }}>
+          <div style={{ marginTop: 24 }}>
+            <div style={{ ...label(TO.redInk), marginBottom: 11 }}>Todavía falta esto</div>
+            <div style={{ background: '#fff', borderRadius: 18, border: `1px solid ${TO.line}`, padding: 4 }}>
               {faltan.map((f, i) => (
                 <Fila
                   key={f.qkey} borde={i > 0}
-                  icono={<IcoWarn size={17} stroke={T.red} />}
-                  titulo={f.label} detalle={f.seccion} color={T.red}
+                  icono={<IcoWarn size={19} stroke={TO.redInk} />}
+                  titulo={f.label} detalle={f.seccion} color={TO.redInk} fondo={TO.redWash}
                   onClick={() => irA(f.qkey)}
                 />
               ))}
@@ -150,8 +157,9 @@ export default function RepasoScreen() {
 
         {error && (
           <div style={{
-            marginTop: 18, padding: '12px 14px', borderRadius: 13, background: T.redSoft,
-            fontSize: 14.5, lineHeight: 1.55, color: '#991B1B',
+            marginTop: 20, padding: '14px 16px', borderRadius: 14, background: TO.redWash,
+            border: '1px solid #E8A0A0', fontSize: F.meta, lineHeight: 1.55,
+            color: TO.redInk, fontWeight: 600,
           }}>{error}</div>
         )}
       </div>
@@ -159,13 +167,15 @@ export default function RepasoScreen() {
       <OnbFooter>
         <button
           type="button" onClick={terminar} disabled={cerrando}
-          style={{ ...bigBtn(listo ? T.green : T.primary, 52), opacity: cerrando ? 0.6 : 1 }}
+          style={{ ...btn(listo ? TO.greenInk : TO.blueBtn), opacity: cerrando ? 0.6 : 1 }}
         >
-          {cerrando ? <Spinner size={18} color="#fff" /> : <IcoCheck size={18} stroke="#fff" sw={2.5} />}
+          {cerrando ? <Spinner size={19} color="#fff" /> : <IcoCheck size={19} stroke="#fff" sw={2.6} />}
           {cerrando ? 'CERRANDO…' : 'TERMINAR MI ONBOARDING'}
         </button>
         {!listo && (
-          <div style={{ fontSize: 13.5, color: T.text3, textAlign: 'center', marginTop: 9, lineHeight: 1.45 }}>
+          <div style={{
+            fontSize: F.meta, color: TO.meta, textAlign: 'center', marginTop: 11, lineHeight: 1.45,
+          }}>
             Te falta {100 - progreso.pct}% para poder cerrarlo.
           </div>
         )}
@@ -174,22 +184,22 @@ export default function RepasoScreen() {
   );
 }
 
-function Fila({ icono, titulo, detalle, color, onClick, borde }) {
+function Fila({ icono, titulo, detalle, color, fondo, onClick, borde }) {
   return (
     <button type="button" onClick={onClick} style={{
-      display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
-      padding: '14px 13px', background: 'none', border: 'none', cursor: 'pointer',
-      borderTop: borde ? '1px solid #EEF0F4' : 'none',
+      display: 'flex', alignItems: 'center', gap: 13, width: '100%', textAlign: 'left',
+      padding: '16px 13px', background: 'none', border: 'none', cursor: 'pointer',
+      borderTop: borde ? `1px solid ${TO.line}` : 'none', minHeight: 60,
     }}>
       <span style={{
-        width: 26, height: 26, borderRadius: 9, background: T.surface2, flex: 'none',
+        width: 32, height: 32, borderRadius: 10, background: fondo || TO.fill, flex: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>{icono}</span>
       <span style={{
-        flex: 1, minWidth: 0, fontSize: 15, color: T.text, lineHeight: 1.4,
+        flex: 1, minWidth: 0, fontSize: F.sub, fontWeight: 600, color: TO.ink, lineHeight: 1.4,
       }}>{titulo}</span>
-      {detalle && <span style={pill(T.surface2, color || T.text2)}>{detalle}</span>}
-      <IcoChevR size={16} stroke={T.text3} style={{ flex: 'none' }} />
+      {detalle && <span style={chip(fondo || TO.fill, color || TO.meta)}>{detalle}</span>}
+      <IcoChevR size={18} stroke={TO.meta} style={{ flex: 'none' }} />
     </button>
   );
 }

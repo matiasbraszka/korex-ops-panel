@@ -6,8 +6,8 @@
 // VE, no se anuncia.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { T, display, bigBtn } from '../../components/theme';
 import { IcoCheck, IcoHome, IcoDoc, IcoEmbudos, IcoFolder, IcoCalendar } from '../../components/icons';
+import { TO, F, dsp, btn } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell } from '../components/OnbShell';
 
@@ -45,11 +45,11 @@ export default function CelebracionScreen() {
       }}>
         <div style={{ position: 'relative', width: 96, height: 96, margin: '0 auto 26px' }}>
           <div style={{
-            position: 'absolute', inset: 4, borderRadius: '50%', background: T.green,
+            position: 'absolute', inset: 4, borderRadius: '50%', background: TO.greenInk,
             animation: 'kxRing 2s ease-out infinite',
           }} />
           <div style={{
-            position: 'relative', width: 96, height: 96, borderRadius: '50%', background: T.green,
+            position: 'relative', width: 96, height: 96, borderRadius: '50%', background: TO.greenInk,
             display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'kxPop .6s ease',
           }}>
             <IcoCheck size={44} stroke="#fff" sw={2.6} />
@@ -58,16 +58,16 @@ export default function CelebracionScreen() {
 
         <div style={{
           fontFamily: "'Montserrat', sans-serif", fontSize: 46, fontWeight: 800,
-          letterSpacing: '-0.04em', color: T.ink, lineHeight: 1,
+          letterSpacing: '-0.04em', color: TO.ink, lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
         }}>{n}%</div>
 
-        <div style={{ ...display(28, '-0.033em'), lineHeight: 1.15, marginTop: 20, animation: 'kxUp .5s ease' }}>
+        <div style={{ ...dsp(F.h1, '-0.033em'), lineHeight: 1.15, marginTop: 20, animation: 'kxUp .5s ease' }}>
           {primer ? `Terminaste, ${primer}.` : 'Terminaste.'}
         </div>
         <div style={{
-          fontSize: 17, lineHeight: 1.55, color: T.textSoft, marginTop: 10,
-          maxWidth: 380, marginInline: 'auto', animation: 'kxUp .6s ease',
+          fontSize: F.body, lineHeight: 1.55, color: TO.body, marginTop: 12,
+          maxWidth: 400, marginInline: 'auto', animation: 'kxUp .6s ease',
         }}>
           Ahora empezamos nosotros. Con lo que nos contaste ya podemos armar tu
           estrategia, tus anuncios y tu video de ventas.
@@ -75,20 +75,20 @@ export default function CelebracionScreen() {
 
         {f && (
           <div style={{
-            marginTop: 26, padding: '15px 18px', borderRadius: 18, background: '#fff',
-            boxShadow: 'var(--shadow-md)', maxWidth: 380, marginInline: 'auto',
-            display: 'flex', alignItems: 'center', gap: 13, textAlign: 'left',
+            marginTop: 28, padding: '17px 18px', borderRadius: 18, background: '#fff',
+            border: `1px solid ${TO.line}`, maxWidth: 400, marginInline: 'auto',
+            display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left',
             animation: 'kxUp .7s ease',
           }}>
             <span style={{
-              width: 44, height: 44, borderRadius: 15, background: T.primarySoft, flex: 'none',
+              width: 48, height: 48, borderRadius: 15, background: TO.blueWash, flex: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><IcoCalendar size={20} stroke={T.primaryInk} /></span>
+            }}><IcoCalendar size={22} stroke={TO.blue} sw={2.2} /></span>
             <div>
-              <div style={{ fontSize: 15.5, fontWeight: 700, color: T.ink }}>Nos vemos el {
+              <div style={{ fontSize: 17, fontWeight: 800, color: TO.ink, letterSpacing: '-0.01em' }}>Nos vemos el {
                 f.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
               }</div>
-              <div style={{ fontSize: 14.5, color: T.text2, marginTop: 2 }}>
+              <div style={{ fontSize: F.meta, color: TO.body, marginTop: 3 }}>
                 a las {f.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })} · te llega el link por mail
               </div>
             </div>
@@ -96,21 +96,21 @@ export default function CelebracionScreen() {
         )}
 
         {/* El desbloqueo, en vivo */}
-        <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 13.5, color: T.text2, marginBottom: 14 }}>
+        <div style={{ marginTop: 34 }}>
+          <div style={{ fontSize: F.meta, fontWeight: 600, color: TO.meta, marginBottom: 16 }}>
             Se te abrió toda la plataforma
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 22 }}>
             {TABS.map(({ Ico, label }, i) => (
               <div key={label} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
                 animation: `kxPop .5s ease ${0.3 + i * 0.12}s both`,
               }}>
                 <span style={{
-                  width: 46, height: 46, borderRadius: 15, background: T.primarySoft,
+                  width: 50, height: 50, borderRadius: 16, background: TO.blueWash,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><Ico size={21} stroke={T.primaryInk} /></span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: T.text2 }}>{label}</span>
+                }}><Ico size={23} stroke={TO.blue} sw={2.2} /></span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: TO.body }}>{label}</span>
               </div>
             ))}
           </div>
@@ -118,7 +118,7 @@ export default function CelebracionScreen() {
       </div>
 
       <div style={{ flex: 'none', padding: '14px 20px calc(18px + env(safe-area-inset-bottom))' }}>
-        <button type="button" onClick={() => navigate('/', { replace: true })} style={bigBtn(T.primary, 54)}>
+        <button type="button" onClick={() => navigate('/', { replace: true })} style={btn()}>
           ENTRAR A MI ESPACIO
         </button>
       </div>

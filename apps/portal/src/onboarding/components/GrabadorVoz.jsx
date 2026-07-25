@@ -14,10 +14,14 @@
 // avanza; nadie le pide que lo cuente de nuevo.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { T } from '../../components/theme';
 import { IcoMic, IcoCheck, IcoBasura, IcoWarn } from '../../components/icons';
 import { Spinner } from '../../components/ui';
+import { TO, F } from '../tokens';
 import { transcribir, guardarAudio } from '../api';
+
+// Rojo de grabación oscurecido: el #EF4444 del portal con un icono blanco
+// encima queda en 3.8:1 y en un celular al sol el micrófono desaparece.
+const ROJO = '#C81E1E';
 
 const MAX_SEG = 240;        // 4 min: por encima, Whisper se pone caro y el cliente se pierde
 const AVISO_SEG = 210;
@@ -130,8 +134,8 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   // que el cliente igual puede contestar hablando.
   if (!soporta()) {
     return (
-      <label style={{ ...botonBase, background: T.primary, cursor: 'pointer' }}>
-        <IcoMic size={19} stroke="#fff" />
+      <label style={{ ...botonBase, background: TO.blueBtn, cursor: 'pointer' }}>
+        <IcoMic size={20} stroke="#fff" />
         <span>GRABAR UNA NOTA DE VOZ</span>
         <input
           type="file" accept="audio/*" capture hidden
@@ -146,23 +150,23 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   // Le mostramos cuánto grabó (prueba de que lo tenemos) y cuánto va a tardar.
   if (fase === 'transcribiendo') {
     return (
-      <div style={{ ...cajaBase, background: T.primaryWash, borderColor: '#C3CFEF' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Spinner size={20} />
+      <div style={{ ...cajaBase, background: TO.blueWash, borderColor: TO.blueLine }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <Spinner size={22} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TO.ink }}>
               Estamos pasando tu audio a texto
             </div>
-            <div style={{ fontSize: 13.5, color: T.text2, marginTop: 2 }}>
+            <div style={{ fontSize: F.meta, color: TO.body, marginTop: 3 }}>
               Grabaste {fmt(seg)}. Tarda unos 10 segundos.
             </div>
           </div>
         </div>
-        <div style={{ fontSize: 13.5, color: T.text2, marginTop: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: F.meta, color: TO.body, marginTop: 12, lineHeight: 1.5 }}>
           Después vas a poder leerlo y corregir lo que quieras.
         </div>
         {avisoLento && (
-          <div style={{ fontSize: 13, color: T.orange, marginTop: 8, fontWeight: 600 }}>
+          <div style={{ fontSize: F.meta, color: TO.amber, marginTop: 10, fontWeight: 700 }}>
             Está tardando un poco más de lo normal. No cierres la pantalla.
           </div>
         )}
@@ -173,50 +177,51 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   // ── Grabando ───────────────────────────────────────────────────────────────
   if (fase === 'grabando') {
     return (
-      <div style={{ ...cajaBase, background: '#fff', borderColor: '#FCA5A5' }}>
+      <div style={{ ...cajaBase, background: '#fff', borderColor: ROJO, borderWidth: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ position: 'relative', width: 52, height: 52, flex: 'none' }}>
+          <div style={{ position: 'relative', width: 56, height: 56, flex: 'none' }}>
             <div style={{
-              position: 'absolute', inset: 0, borderRadius: '50%', background: T.red,
+              position: 'absolute', inset: 0, borderRadius: '50%', background: ROJO,
               animation: 'kxRing 1.6s ease-out infinite',
             }} />
             <div style={{
-              position: 'relative', width: 52, height: 52, borderRadius: '50%',
-              background: T.red, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              position: 'relative', width: 56, height: 56, borderRadius: '50%',
+              background: ROJO, display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <IcoMic size={22} stroke="#fff" />
+              <IcoMic size={24} stroke="#fff" sw={2.2} />
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontSize: 20, fontWeight: 800, color: T.ink,
+              fontSize: 24, fontWeight: 800, color: TO.ink,
               fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em',
             }}>{fmt(seg)}</div>
-            <div style={{ fontSize: 13.5, color: T.text2 }}>
+            <div style={{ fontSize: F.meta, color: TO.body, fontWeight: 600 }}>
               {seg >= AVISO_SEG ? 'Se corta en un momento, andá cerrando.'
                 : seg >= 15 ? 'Vas bien, seguí.'
                 : 'Te escuchamos. Contá con calma.'}
             </div>
           </div>
           <div className="kx-onda" style={{
-            display: 'flex', alignItems: 'center', gap: 3, height: 26, color: '#FCA5A5', flex: 'none',
+            display: 'flex', alignItems: 'center', gap: 3, height: 26, color: ROJO,
+            opacity: 0.55, flex: 'none',
           }}>
             {Array.from({ length: 8 }).map((_, i) => (
               <span key={i} style={{ animationDelay: `${i * 0.11}s` }} />
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
           <button type="button" onClick={() => frenar(true)} style={{
-            ...botonBase, flex: '0 0 auto', width: 52, background: T.surface2, color: T.text2,
-            padding: 0, gap: 0,
-          }} aria-label="Descartar">
-            <IcoBasura size={18} stroke={T.text2} />
+            ...botonBase, flex: '0 0 auto', width: 56, background: '#fff', color: TO.body,
+            border: `2px solid ${TO.lineStrong}`, padding: 0, gap: 0,
+          }} aria-label="Descartar la grabación">
+            <IcoBasura size={20} stroke={TO.body} />
           </button>
           <button type="button" onClick={() => frenar(false)} style={{
-            ...botonBase, background: T.green, flex: 1,
+            ...botonBase, background: TO.greenInk, flex: 1,
           }}>
-            <IcoCheck size={18} stroke="#fff" />
+            <IcoCheck size={20} stroke="#fff" sw={2.6} />
             <span>LISTO</span>
           </button>
         </div>
@@ -227,17 +232,17 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   // ── Permiso denegado ───────────────────────────────────────────────────────
   if (fase === 'error' && err === 'permiso') {
     return (
-      <div style={{ ...cajaBase, background: T.amberSoft, borderColor: '#FDE68A' }}>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <IcoWarn size={19} stroke={T.orange} style={{ flex: 'none', marginTop: 1 }} />
-          <div style={{ fontSize: 14.5, lineHeight: 1.55, color: '#92400E' }}>
+      <div style={{ ...cajaBase, background: TO.amberWash, borderColor: '#E0A96A' }}>
+        <div style={{ display: 'flex', gap: 11 }}>
+          <IcoWarn size={21} stroke={TO.amber} style={{ flex: 'none', marginTop: 2 }} />
+          <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.amber }}>
             <strong>El navegador bloqueó el micrófono.</strong><br />
             Tocá el candado (o la cámara) en la barra de direcciones y permití el
             micrófono para este sitio. O escribí la respuesta, también está bien.
           </div>
         </div>
         <button type="button" onClick={arrancar} style={{
-          ...botonBase, background: T.ink, marginTop: 14,
+          ...botonBase, background: TO.ink, marginTop: 16,
         }}>PROBAR DE NUEVO</button>
       </div>
     );
@@ -246,10 +251,10 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   // ── Otro error ─────────────────────────────────────────────────────────────
   if (fase === 'error') {
     return (
-      <div style={{ ...cajaBase, background: T.redSoft, borderColor: '#FECACA' }}>
-        <div style={{ fontSize: 14.5, lineHeight: 1.55, color: '#991B1B' }}>{err}</div>
+      <div style={{ ...cajaBase, background: TO.redWash, borderColor: '#E8A0A0' }}>
+        <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.redInk }}>{err}</div>
         <button type="button" onClick={arrancar} style={{
-          ...botonBase, background: T.ink, marginTop: 14,
+          ...botonBase, background: TO.ink, marginTop: 16,
         }}>PROBAR DE NUEVO</button>
       </div>
     );
@@ -259,14 +264,16 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   return (
     <div>
       <button type="button" onClick={arrancar} disabled={fase === 'permiso'} style={{
-        ...botonBase, background: T.primary,
-        boxShadow: '0 8px 22px rgba(91,124,245,.28)',
+        ...botonBase, background: TO.blueBtn,
+        boxShadow: '0 8px 22px rgba(74,103,216,.26)',
         opacity: fase === 'permiso' ? 0.7 : 1,
       }}>
-        {fase === 'permiso' ? <Spinner size={18} color="#fff" /> : <IcoMic size={19} stroke="#fff" />}
+        {fase === 'permiso' ? <Spinner size={19} color="#fff" /> : <IcoMic size={20} stroke="#fff" sw={2.2} />}
         <span>{fase === 'permiso' ? 'ABRIENDO EL MICRÓFONO…' : 'CONTALO HABLANDO'}</span>
       </button>
-      <div style={{ fontSize: 13, color: T.text2, textAlign: 'center', marginTop: 9, lineHeight: 1.5 }}>
+      <div style={{
+        fontSize: F.meta, color: TO.body, textAlign: 'center', marginTop: 11, lineHeight: 1.5,
+      }}>
         {sugerencia || 'Es más rápido y sale mucho más natural. Nosotros lo pasamos a texto.'}
       </div>
     </div>
@@ -276,10 +283,10 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
 const botonBase = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
   width: '100%', border: 'none', borderRadius: 999, color: '#fff',
-  fontSize: 12.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
-  height: 50, padding: '0 18px', cursor: 'pointer',
+  fontSize: 13.5, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase',
+  height: 56, padding: '0 18px', cursor: 'pointer',
 };
 
 const cajaBase = {
-  border: '1px solid', borderRadius: 18, padding: '16px 16px 18px',
+  border: '1px solid', borderRadius: 18, padding: '17px 17px 19px',
 };

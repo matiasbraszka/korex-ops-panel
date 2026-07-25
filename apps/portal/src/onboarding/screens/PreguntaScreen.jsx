@@ -12,8 +12,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { T, display, bigBtn } from '../../components/theme';
 import { IcoMic, IcoArrowR } from '../../components/icons';
+import { TO, F, dsp, btn, btnTexto, label } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell, OnbHeader, OnbFooter } from '../components/OnbShell';
 import Campo from '../components/Campo';
@@ -86,18 +86,20 @@ export default function PreguntaScreen() {
         onVolver={anterior}
       />
 
-      <div className="kxs" style={{ flex: 1, paddingTop: 22, paddingBottom: 28 }}>
+      <div className="kxs" style={{ flex: 1, paddingTop: 24, paddingBottom: 30 }}>
         {tramoIdx === 0 && idx === 0 && (
-          <div style={{
-            ...display(15, '-0.01em'), color: T.primaryInk, marginBottom: 14,
-            fontWeight: 700, fontSize: 13.5, letterSpacing: '0.06em', textTransform: 'uppercase',
-          }}>
+          <div style={{ ...label(TO.blue), marginBottom: 16 }}>
             Tramo {tramoIdx + 1} de {tramos.length}
           </div>
         )}
 
-        <div style={{ display: 'grid', gap: 30 }}>
+        {/* Separador entre preguntas agrupadas: sin él, con varias cortas en una
+            misma pantalla no se ve dónde termina una y empieza la otra. */}
+        <div style={{ display: 'grid', gap: 34 }}>
           {pantalla.preguntas.map((q, i) => (
+            <div key={q.qkey} style={i > 0
+              ? { paddingTop: 30, borderTop: `1px solid ${TO.line}` }
+              : undefined}>
             <Campo
               key={q.qkey}
               q={q}
@@ -124,14 +126,15 @@ export default function PreguntaScreen() {
                 });
               }}
             />
+            </div>
           ))}
         </div>
       </div>
 
       <OnbFooter>
-        <button type="button" onClick={continuar} style={bigBtn(T.primary, 52)}>
+        <button type="button" onClick={continuar} style={btn()}>
           {idx + 1 < pantallas.length ? 'SIGUIENTE' : 'TERMINAR ESTE TRAMO'}
-          <IcoArrowR size={17} stroke="#fff" />
+          <IcoArrowR size={18} stroke="#fff" sw={2.4} />
         </button>
       </OnbFooter>
 
@@ -160,33 +163,30 @@ function SheetCorta({ q, onCerrar, onSeguir }) {
         onClick={(e) => e.stopPropagation()}
         className="mk-sheet"
         style={{
-          background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 22px 26px',
+          background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 22px 28px',
           animation: 'kxUp .26s ease', marginBottom: 0,
         }}
       >
-        <div style={{ width: 44, height: 5, borderRadius: 999, background: T.border, margin: '0 auto 18px' }} />
+        <div style={{ width: 46, height: 5, borderRadius: 999, background: TO.lineStrong, margin: '0 auto 20px' }} />
 
-        <div style={{ ...display(22, '-0.025em'), lineHeight: 1.2 }}>
+        <div style={{ ...dsp(F.h2 - 2, '-0.025em'), lineHeight: 1.2 }}>
           Con esto todavía no nos alcanza
         </div>
-        <div style={{ fontSize: 15.5, lineHeight: 1.6, color: T.text2, marginTop: 10 }}>
+        <div style={{ fontSize: F.sub, lineHeight: 1.6, color: TO.body, marginTop: 12 }}>
           Con lo que escribiste no podemos escribir tu video ni tus anuncios.
-          Contalo hablando: son <strong>{textoDuracion(seg)}</strong> y sale mucho
-          más natural que escribiendo.
+          Contalo hablando: son <strong style={{ color: TO.ink }}>{textoDuracion(seg)}</strong> y
+          sale mucho más natural que escribiendo.
         </div>
 
-        <button type="button" onClick={onCerrar} style={{ ...bigBtn(T.primary, 52), marginTop: 20 }}>
-          <IcoMic size={18} stroke="#fff" />
+        <button type="button" onClick={onCerrar} style={{ ...btn(), marginTop: 22 }}>
+          <IcoMic size={19} stroke="#fff" sw={2.2} />
           CONTARLO HABLANDO
         </button>
 
-        <button type="button" onClick={onSeguir} style={{
-          display: 'block', width: '100%', marginTop: 14, background: 'none', border: 'none',
-          padding: '6px 0', cursor: 'pointer', fontSize: 14.5, color: T.text2,
-        }}>
+        <button type="button" onClick={onSeguir} style={btnTexto}>
           Igual quiero seguir
         </button>
-        <div style={{ fontSize: 13, color: T.text3, textAlign: 'center', marginTop: 4, lineHeight: 1.45 }}>
+        <div style={{ fontSize: F.meta, color: TO.meta, textAlign: 'center', marginTop: 6, lineHeight: 1.45 }}>
           No te preocupes, te la volvemos a mostrar al final.
         </div>
       </div>

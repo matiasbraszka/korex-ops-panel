@@ -11,12 +11,14 @@
 //    calibra contra un número, calibra contra lo que ve. Nunca va como
 //    placeholder — se copia literal y contamina el documento del cerebro.
 //
-//  · NARANJA, NUNCA ROJO. Rojo es "está mal"; naranja es "falta". La respuesta
+//  · ÁMBAR, NUNCA ROJO. Rojo es "está mal"; ámbar es "falta". La respuesta
 //    corta no es un error del cliente, es una oportunidad de contar más.
+//    (El ámbar del texto es #8A4B08, no el naranja de marca: #F97316 sobre
+//    blanco da 3.0:1 y no se lee.)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from 'react';
-import { T, display, microLabel } from '../../components/theme';
 import { IcoChevR, IcoCheck } from '../../components/icons';
+import { TO, F, dsp, label } from '../tokens';
 import { segundosDeVoz, textoDuracion } from '../progreso';
 import GrabadorVoz from './GrabadorVoz';
 
@@ -25,37 +27,46 @@ function Semaforo({ len, minChars }) {
   const pct = Math.min(100, (len / minChars) * 100);
   const faltanSeg = segundosDeVoz(minChars - len);
 
-  let color = T.surface3; let texto = 'Contalo con calma. Lo mejor sale hablando.'; let listo = false;
+  // barra = color pleno (es un gráfico) · texto = versión oscura (hay que leerlo)
+  let barra = TO.lineStrong;
+  let tinta = TO.meta;
+  let texto = 'Contalo con calma. Lo mejor sale hablando.';
+  let listo = false;
   if (len === 0) {
     // deja el default
   } else if (pct >= 160) {
-    color = T.green; texto = 'Excelente. Esto nos sirve muchísimo.'; listo = true;
+    barra = 'var(--mk-green)'; tinta = TO.greenInk; listo = true;
+    texto = 'Excelente. Esto nos sirve muchísimo.';
   } else if (pct >= 100) {
-    color = T.green; texto = 'Perfecto, con esto trabajamos.'; listo = true;
+    barra = 'var(--mk-green)'; tinta = TO.greenInk; listo = true;
+    texto = 'Perfecto, con esto trabajamos.';
   } else if (pct >= 45) {
-    color = T.orange; texto = 'Vas bien. Un poquito más y queda perfecto.';
+    barra = 'var(--mk-orange)'; tinta = TO.amber;
+    texto = 'Vas bien. Un poquito más y queda perfecto.';
   } else {
-    color = T.orange; texto = `Te falta como ${textoDuracion(faltanSeg)} hablando.`;
+    barra = 'var(--mk-orange)'; tinta = TO.amber;
+    texto = `Te falta como ${textoDuracion(faltanSeg)} hablando.`;
   }
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ height: 4, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+    <div style={{ marginTop: 12 }}>
+      <div style={{ height: 7, borderRadius: 999, background: TO.fill, overflow: 'hidden' }}>
         <div style={{
-          height: '100%', borderRadius: 999, background: color,
+          height: '100%', borderRadius: 999, background: barra,
           width: `${Math.min(100, pct)}%`, transition: 'width .3s ease, background .3s ease',
         }} />
       </div>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6, marginTop: 7,
-        fontSize: 13.5, color: listo ? T.green : T.text2, fontWeight: listo ? 600 : 400,
+        display: 'flex', alignItems: 'center', gap: 7, marginTop: 9,
+        fontSize: F.meta, lineHeight: 1.45, color: tinta, fontWeight: 600,
       }}>
         {listo && (
           <span style={{
-            display: 'inline-flex', width: 17, height: 17, borderRadius: '50%', background: T.green,
+            display: 'inline-flex', width: 20, height: 20, borderRadius: '50%',
+            background: TO.greenInk,
             alignItems: 'center', justifyContent: 'center', animation: 'kxPop .4s ease', flex: 'none',
           }}>
-            <IcoCheck size={11} stroke="#fff" sw={3} />
+            <IcoCheck size={12} stroke="#fff" sw={3} />
           </span>
         )}
         <span>{texto}</span>
@@ -67,23 +78,25 @@ function Semaforo({ len, minChars }) {
 function Ejemplo({ texto, abierto, onToggle }) {
   if (!texto) return null;
   return (
-    <div style={{ marginTop: 14 }}>
+    <div style={{ marginTop: 16 }}>
       <button type="button" onClick={onToggle} style={{
-        display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none',
-        padding: 0, cursor: 'pointer', color: T.primaryInk, fontSize: 14, fontWeight: 600,
+        display: 'flex', alignItems: 'center', gap: 8, background: 'none',
+        border: `1.5px solid ${TO.blueLine}`, borderRadius: 999,
+        padding: '11px 16px', cursor: 'pointer', color: TO.blue,
+        fontSize: 15.5, fontWeight: 700,
       }}>
-        <IcoChevR size={15} stroke={T.primaryInk}
+        <IcoChevR size={16} stroke={TO.blue} sw={2.5}
           style={{ transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
         {abierto ? 'Ocultar el ejemplo' : 'Así de largo nos sirve'}
       </button>
       {abierto && (
         <div style={{
-          marginTop: 10, padding: '15px 16px', borderRadius: 14,
-          background: T.primaryWash, border: '1px solid #E3E9FB',
+          marginTop: 12, padding: '16px 17px', borderRadius: 16,
+          background: TO.blueWash, border: `1px solid ${TO.blueLine}`,
           animation: 'kxUp .25s ease',
         }}>
-          <div style={{ ...microLabel(T.primaryInk), marginBottom: 8 }}>Respuesta de ejemplo</div>
-          <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft, whiteSpace: 'pre-wrap' }}>
+          <div style={{ ...label(TO.blue), marginBottom: 9 }}>Respuesta de ejemplo</div>
+          <div style={{ fontSize: F.sub, lineHeight: 1.65, color: TO.body, whiteSpace: 'pre-wrap' }}>
             {texto}
           </div>
         </div>
@@ -95,6 +108,7 @@ function Ejemplo({ texto, abierto, onToggle }) {
 export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioPendiente, clientHint, autoFocus }) {
   const [verEjemplo, setVerEjemplo] = useState(false);
   const [chipsUsados, setChipsUsados] = useState([]);
+  const [enfocado, setEnfocado] = useState(false);
   const ref = useRef(null);
 
   const len = String(valor || '').trim().length;
@@ -102,6 +116,7 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
 
   // El teclado del celular tapa el campo si no lo centramos al enfocar.
   const enfocar = () => {
+    setEnfocado(true);
     setTimeout(() => ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
   };
 
@@ -115,18 +130,19 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
 
   return (
     <div>
-      <label htmlFor={q.qkey} style={{ ...display(21, '-0.025em'), display: 'block', lineHeight: 1.25 }}>
+      <label htmlFor={q.qkey} style={{ ...dsp(F.q, '-0.025em'), display: 'block', lineHeight: 1.22 }}>
         {q.label}
       </label>
       {q.sublabel && (
-        <div style={{ fontSize: 15.5, lineHeight: 1.55, color: T.text2, marginTop: 8 }}>
+        <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 9 }}>
           {q.sublabel}
         </div>
       )}
       {q.ayuda && (
         <div style={{
-          fontSize: 14.5, lineHeight: 1.55, color: T.textSoft, marginTop: 10,
-          padding: '11px 13px', background: T.surface2, borderRadius: 12,
+          fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 12,
+          padding: '13px 15px', background: TO.blueWash,
+          borderLeft: `4px solid ${TO.blue}`, borderRadius: '4px 14px 14px 4px',
         }}>
           {q.ayuda}
         </div>
@@ -135,24 +151,27 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
       {/* Chips guía: recordatorios de qué contar. NO insertan texto — si lo
           hicieran, el cliente completaría los huecos en vez de contar su historia. */}
       {chips.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 13 }}>
-          {chips.map((c) => {
-            const usado = chipsUsados.includes(c);
-            return (
-              <button
-                key={c} type="button"
-                onClick={() => setChipsUsados((u) => (usado ? u.filter((x) => x !== c) : [...u, c]))}
-                style={{
-                  fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 999,
-                  border: `1px solid ${usado ? T.green : T.border}`,
-                  background: usado ? T.greenSoft : '#fff',
-                  color: usado ? T.green : T.text2,
-                  textDecoration: usado ? 'line-through' : 'none',
-                  cursor: 'pointer', transition: 'all .18s',
-                }}
-              >{c}</button>
-            );
-          })}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ ...label(), marginBottom: 9 }}>Acordate de contar</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {chips.map((c) => {
+              const usado = chipsUsados.includes(c);
+              return (
+                <button
+                  key={c} type="button"
+                  onClick={() => setChipsUsados((u) => (usado ? u.filter((x) => x !== c) : [...u, c]))}
+                  style={{
+                    fontSize: 14.5, fontWeight: 700, padding: '10px 14px', borderRadius: 999,
+                    border: `1.5px solid ${usado ? TO.greenInk : TO.lineStrong}`,
+                    background: usado ? TO.greenWash : '#fff',
+                    color: usado ? TO.greenInk : TO.body,
+                    textDecoration: usado ? 'line-through' : 'none',
+                    cursor: 'pointer', transition: 'all .18s',
+                  }}
+                >{c}</button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -160,15 +179,17 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
         id={q.qkey} ref={ref} value={valor || ''}
         onChange={(e) => onChange(e.target.value)}
         onFocus={enfocar}
+        onBlur={() => setEnfocado(false)}
         autoFocus={autoFocus}
         placeholder={q.placeholder || 'Escribí acá, o tocá el micrófono y contalo hablando…'}
         style={{
-          width: '100%', marginTop: 14, minHeight: 140, resize: 'none',
-          border: '1px solid var(--mk-border)', borderRadius: 16, padding: '14px 16px',
-          // 16px es obligatorio: por debajo, iOS hace zoom automático al enfocar
-          // y el cliente queda con la pantalla descuadrada.
-          fontSize: 16, lineHeight: 1.6, fontFamily: 'inherit', color: T.text,
-          boxShadow: 'var(--shadow-sm)', outline: 'none', background: '#fff',
+          width: '100%', marginTop: 16, minHeight: 150, resize: 'none',
+          // Borde de 2px y color visible: con el hairline de #E2E5EB del portal,
+          // en un celular al sol, no se distingue dónde empieza el campo.
+          border: `2px solid ${enfocado ? TO.blue : TO.lineStrong}`,
+          borderRadius: 16, padding: '15px 16px',
+          fontSize: F.input, lineHeight: 1.62, fontFamily: 'inherit', color: TO.body,
+          outline: 'none', background: '#fff', transition: 'border-color .16s',
         }}
       />
 
@@ -176,8 +197,9 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
 
       {flag === 'audio_pendiente' && (
         <div style={{
-          marginTop: 10, padding: '11px 13px', borderRadius: 12,
-          background: T.amberSoft, fontSize: 13.5, lineHeight: 1.5, color: '#92400E',
+          marginTop: 12, padding: '13px 15px', borderRadius: 14,
+          background: TO.amberWash, border: `1px solid #F5D9AE`,
+          fontSize: F.meta, lineHeight: 1.5, color: TO.amber, fontWeight: 600,
         }}>
           Nos quedamos con tu audio. Lo pasamos a texto nosotros — no hace falta que lo repitas.
         </div>
@@ -186,7 +208,7 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
       <Ejemplo texto={q.ejemplo} abierto={verEjemplo} onToggle={() => setVerEjemplo((v) => !v)} />
 
       {q.voz !== false && (
-        <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 20 }}>
           <GrabadorVoz
             qkey={q.qkey}
             clientHint={clientHint}

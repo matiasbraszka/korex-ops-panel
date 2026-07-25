@@ -34,9 +34,11 @@ export default function InicioScreen() {
   const onb = d.onboarding || {};
   const onbPendiente = !!onb.existe && !onb.completo;
 
+  // El texto tiene que corresponderse con el número de la barra: decir "te
+  // falta poco" con un 5% hace que el cliente deje de creerle a la pantalla.
   const intro = onbPendiente
-    ? (onb.pct > 0
-      ? 'Te falta poco para que arranquemos. Seguí donde quedaste.'
+    ? (onb.pct >= 70 ? 'Te falta poco para que arranquemos. Seguí donde quedaste.'
+      : onb.pct > 0 ? 'Vas bien. Seguí donde quedaste, se guardó todo.'
       : 'Antes de arrancar necesitamos que nos cuentes sobre tu negocio.')
     : total === 0
       ? 'Nos entregaste todo lo que necesitábamos. Ahora seguimos nosotros.'
@@ -79,13 +81,13 @@ export default function InicioScreen() {
 
             <div style={{ display: 'flex', gap: 15, alignItems: 'flex-start' }}>
               <span style={{ width: 46, height: 46, borderRadius: 15, background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-                <IcoDoc size={21} stroke="var(--mk-blue-ink)" />
+                <IcoDoc size={21} stroke="#1D4ED8" />
               </span>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.16, color: T.ink }}>
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.16, color: T.ink }}>
                   {onb.pct > 0 ? 'Seguí con tu onboarding' : 'Completá tu onboarding'}
                 </div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2, marginTop: 6 }}>
+                <div style={{ fontSize: 15, lineHeight: 1.5, color: '#252B36', marginTop: 7 }}>
                   {onb.agendaEstado === 'pendiente'
                     ? 'Primero reservá el día de tu sesión, y después contanos sobre tu negocio.'
                     : 'Es de donde sacamos tu estrategia, tus anuncios y tu video de ventas.'}
@@ -94,16 +96,19 @@ export default function InicioScreen() {
             </div>
 
             <div>
-              <div style={{ height: 8, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: 999, background: T.primary, transition: 'width .35s ease', width: `${onb.pct || 0}%` }} />
+              <div style={{ height: 9, borderRadius: 999, background: '#EDF0F4', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 999, background: 'var(--mk-blue-dark)', transition: 'width .35s ease', width: `${onb.pct || 0}%` }} />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: T.text2, marginTop: 7 }}>
+              {/* Solo el porcentaje. Arrancar viendo "0 de 49 respuestas" es un
+                  número que asusta y no ayuda a decidir nada; el detalle está
+                  adentro, tramo por tramo. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, color: '#525A6B', marginTop: 8 }}>
                 <span>{onb.pct || 0}% completo</span>
-                <span>{onb.respondidas || 0} de {onb.requeridas || 0} respuestas</span>
+                {onb.desbloqueadas > 0 && <span>{onb.desbloqueadas} {onb.desbloqueadas === 1 ? 'tramo listo' : 'tramos listos'}</span>}
               </div>
             </div>
 
-            <div style={{ height: 48, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <div style={{ height: 54, borderRadius: 999, background: 'var(--mk-blue-dark)', color: '#fff', fontSize: 13.5, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               {onb.pct > 0 ? 'Seguir donde quedé' : 'Empezar'}
             </div>
           </div>

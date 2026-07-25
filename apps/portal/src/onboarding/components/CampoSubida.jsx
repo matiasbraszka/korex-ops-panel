@@ -1,22 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Subida de material.
 //
-// El movimiento clave del rediseño: este tramo dejó de estar al final y pasó a
-// ser el segundo. La causa de que hoy el cliente no suba nada es que se lo
-// pedimos cuando ya lleva una hora contestando.
+// Va en el ÚLTIMO tramo, igual que en el documento de onboarding original
+// ("8. Necesitamos del cliente"): primero se recolecta toda la información que
+// solo el cliente tiene en la cabeza, y recién al final los archivos.
 //
-// Y el truco que hace que deje de costar tiempo: la subida sigue corriendo en
-// background mientras el cliente contesta el tramo siguiente. El estado vive en
-// el Provider, no acá, así que sobrevive a la navegación — el cliente ve
-// "3 de 5 subiendo" en el header mientras habla de su historia.
+// Que esté al final no puede volver a producir la falla de siempre — que el
+// cliente no suba nada. Lo que lo evita es que la lista de material aparece en
+// la BIENVENIDA, antes de la primera pregunta: el cliente sabe desde el minuto
+// cero que va a necesitar el logo, las fotos y los testimonios, y los junta
+// mientras contesta. Cuando llega acá ya los tiene a mano.
+//
+// Y la subida sigue corriendo en background mientras navega: el estado vive en
+// el Provider, no acá, así que sobrevive a los cambios de pantalla.
 //
 // Reusa uploadRecurso() de portalApi tal cual: video → Bunny por TUS,
 // imagen → Storage, y el registro en funnel_resources lo hace la RPC.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useMemo, useRef } from 'react';
-import { T, display, pill } from '../../components/theme';
 import { IcoUpload, IcoCheck, IcoWarn } from '../../components/icons';
 import { Spinner } from '../../components/ui';
+import { TO, F, dsp, chip } from '../tokens';
 import { uploadRecurso } from '../../data/portalApi';
 import { useOnboarding } from '../OnboardingProvider';
 
@@ -57,16 +61,17 @@ export default function CampoSubida({ q, bloqueante }) {
 
   return (
     <div>
-      <div style={{ ...display(21, '-0.025em'), lineHeight: 1.25 }}>{q.label}</div>
+      <div style={{ ...dsp(F.q, '-0.025em'), lineHeight: 1.22 }}>{q.label}</div>
       {q.sublabel && (
-        <div style={{ fontSize: 15.5, lineHeight: 1.55, color: T.text2, marginTop: 8 }}>
+        <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 9 }}>
           {q.sublabel}
         </div>
       )}
       {q.ayuda && (
         <div style={{
-          fontSize: 14.5, lineHeight: 1.5, color: T.textSoft, marginTop: 10,
-          padding: '11px 13px', background: T.surface2, borderRadius: 12,
+          fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 12,
+          padding: '13px 15px', background: TO.blueWash,
+          borderLeft: `4px solid ${TO.blue}`, borderRadius: '4px 14px 14px 4px',
         }}>{q.ayuda}</div>
       )}
 
@@ -75,23 +80,22 @@ export default function CampoSubida({ q, bloqueante }) {
         type="button"
         onClick={() => inputRef.current?.click()}
         style={{
-          width: '100%', marginTop: 16, padding: '26px 20px', cursor: 'pointer',
-          borderRadius: 22, border: '2px dashed #C3CFEF', background: T.primaryWash,
+          width: '100%', marginTop: 18, padding: '30px 20px', cursor: 'pointer',
+          borderRadius: 22, border: `2px dashed ${TO.blue}`, background: TO.blueWash,
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
         }}
       >
         <span style={{
-          width: 52, height: 52, borderRadius: '50%', background: T.primary,
+          width: 58, height: 58, borderRadius: '50%', background: TO.blueBtn,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none',
         }}>
-          <IcoUpload size={23} stroke="#fff" />
+          <IcoUpload size={25} stroke="#fff" sw={2.2} />
         </span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: T.ink }}>
+        <span style={{ fontSize: 19, fontWeight: 800, color: TO.ink, letterSpacing: '-0.01em' }}>
           {total > 0 ? 'Subir más' : 'Elegir archivos'}
         </span>
-        <span style={{ fontSize: 13.5, color: T.text2, textAlign: 'center', lineHeight: 1.5 }}>
-          Podés elegir varios de una. Se siguen subiendo solos mientras contestás
-          las próximas preguntas.
+        <span style={{ fontSize: F.meta, color: TO.body, textAlign: 'center', lineHeight: 1.5 }}>
+          Podés elegir varios de una. Se siguen subiendo solos mientras seguís navegando.
         </span>
       </button>
       <input
@@ -101,17 +105,15 @@ export default function CampoSubida({ q, bloqueante }) {
       />
 
       {/* Estado */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
         {completo
-          ? <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
-              <IcoCheck size={11} stroke="var(--mk-green)" sw={3} /> Listo
+          ? <span style={chip(TO.greenWash, TO.greenInk)}>
+              <IcoCheck size={13} stroke={TO.greenInk} sw={3} /> Listo
             </span>
-          : <span style={pill('var(--mk-orange-bg)', 'var(--mk-orange)')}>
-              {total} de {meta}
-            </span>}
+          : <span style={chip(TO.amberWash, TO.amber)}>{total} de {meta}</span>}
         {q.target > 1 && !completo && (
-          <span style={{ fontSize: 13.5, color: T.text2 }}>
-            Te faltan {meta - total}.
+          <span style={{ fontSize: F.meta, fontWeight: 600, color: TO.body }}>
+            Te {meta - total === 1 ? 'falta' : 'faltan'} {meta - total}.
           </span>
         )}
       </div>
@@ -119,24 +121,28 @@ export default function CampoSubida({ q, bloqueante }) {
       {/* Archivos de esta tanda */}
       {mios.length > 0 && (
         <div style={{
-          marginTop: 14, background: '#fff', borderRadius: 18,
-          boxShadow: 'var(--shadow-md)', padding: '4px 4px',
+          marginTop: 16, background: '#fff', borderRadius: 18,
+          border: `1px solid ${TO.line}`, padding: 4,
         }}>
           {mios.map((s, i) => (
             <div key={s.uid} style={{
-              display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
-              borderTop: i ? '1px solid #EEF0F4' : 'none',
+              display: 'flex', alignItems: 'center', gap: 12, padding: '14px 13px',
+              borderTop: i ? `1px solid ${TO.line}` : 'none',
             }}>
-              <span style={{ flex: 'none', width: 20, display: 'flex', justifyContent: 'center' }}>
-                {s.error ? <IcoWarn size={17} stroke={T.red} />
-                  : s.done ? <IcoCheck size={17} stroke={T.green} sw={2.5} />
-                  : <Spinner size={16} />}
+              <span style={{ flex: 'none', width: 22, display: 'flex', justifyContent: 'center' }}>
+                {s.error ? <IcoWarn size={19} stroke={TO.redInk} />
+                  : s.done ? <IcoCheck size={19} stroke={TO.greenInk} sw={2.6} />
+                  : <Spinner size={17} />}
               </span>
               <span style={{
-                flex: 1, minWidth: 0, fontSize: 14.5, color: s.error ? T.red : T.text,
+                flex: 1, minWidth: 0, fontSize: F.meta, fontWeight: 600,
+                color: s.error ? TO.redInk : TO.body,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>{s.name}</span>
-              <span style={{ fontSize: 13, color: T.text3, flex: 'none', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{
+                fontSize: F.meta, fontWeight: 700, color: TO.meta, flex: 'none',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
                 {s.error ? 'Error' : s.done ? '' : `${s.pct}%`}
               </span>
             </div>
@@ -146,8 +152,9 @@ export default function CampoSubida({ q, bloqueante }) {
 
       {mios.some((s) => s.error) && (
         <div style={{
-          marginTop: 10, padding: '11px 13px', borderRadius: 12, background: T.redSoft,
-          fontSize: 13.5, lineHeight: 1.5, color: '#991B1B',
+          marginTop: 12, padding: '13px 15px', borderRadius: 14, background: TO.redWash,
+          border: '1px solid #F5C6C6', fontSize: F.meta, lineHeight: 1.5, color: TO.redInk,
+          fontWeight: 600,
         }}>
           Algunos archivos no se pudieron subir. Suele ser la conexión: probá de nuevo
           con esos, o mandánoslos por WhatsApp y los cargamos nosotros.
