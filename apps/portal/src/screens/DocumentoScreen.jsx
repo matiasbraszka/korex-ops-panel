@@ -13,6 +13,8 @@ import { IcoChevL, IcoChevR, IcoMenu, IcoComment, IcoCheck, IcoX, IcoUpload, Ico
 //  · Avatar / Estrategia: solo lectura (los otros documentos del embudo).
 // Las tres rayitas (☰) abren el cajón con todos los guiones del embudo.
 
+import { supabase } from '../lib/supabase';
+
 const DOCS = {
   ads: { eyebrow: 'ADS', accent: 'var(--mk-blue-ops)' },
   vsl: { eyebrow: 'VSL', accent: 'var(--mk-green)' },
@@ -21,8 +23,27 @@ const DOCS = {
   guias: { eyebrow: 'GUÍAS', accent: 'var(--mk-cyan)' },
 };
 
-// Link de Drive → versión incrustable (el visor /preview adentro del portal).
-const drivePreview = (url) => String(url || '').replace(/\/view[^/]*$/, '/preview');
+// Las GUÍAS GLOBALES (páginas del sistema, iguales para todos los clientes):
+// las escribe el equipo en el panel (menú del DEL → Guías) y acá se ven nativas.
+const MOCK_GUIAS = [
+  { id: 'mg1', titulo: 'Cómo grabarte los anuncios', html: '<p>Videos cortos, uno por guion. Vertical, con buena luz y el celular quieto. (Contenido de ejemplo del modo demo.)</p>' },
+  { id: 'mg2', titulo: 'Cómo grabarte el VSL', html: '<p>El video largo, en una sola toma. Lee el guion completo antes de empezar. (Contenido de ejemplo del modo demo.)</p>' },
+];
+const cargarGuias = async () => {
+  try {
+    const { data, error } = await supabase.rpc('portal_cliente_guias');
+    if (error || data == null) throw error || new Error('vacío');
+    return data;
+  } catch { return MOCK_GUIAS; }
+};
+
+// Sanitizado mínimo del HTML de las guías (lo escribe solo el equipo, pero
+// igual: sin scripts, iframes ni handlers).
+const limpiarHtml = (h) => String(h || '')
+  .replace(/<\/(?:script|style|iframe|object|embed)>/gi, '')
+  .replace(/<(?:script|style|iframe|object|embed)[^>]*>/gi, '')
+  .replace(/\son\w+="[^"]*"/gi, '').replace(/\son\w+='[^']*'/gi, '')
+  .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"');
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const rxEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -64,7 +85,7 @@ export default function DocumentoScreen() {
   const { sid, tipo } = useParams();
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo]);
-  const { data: config } = useAsync(() => api.config(), []);
+  const { data: guias } = useAsync(() => cargarGuias(), []);
 
   const [drawer, setDrawer] = useState(false);
   const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
@@ -213,7 +234,7 @@ export default function DocumentoScreen() {
             </div>
           )}
           {/* "?" → la página de Guías (adentro del portal, para todos los DEL) */}
-          {esGuion && (config?.guiaAds || config?.guiaVsl) && (
+          {esGuion && (
             <div onClick={() => nav(`/documento/${sid}/guias`)} role="button" aria-label="Guías de grabación" style={{ cursor: 'pointer', width: 30, height: 30, borderRadius: '50%', background: 'var(--mk-blue-bg)', color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flex: 'none' }}>?</div>
           )}
         </div>
@@ -223,7 +244,7 @@ export default function DocumentoScreen() {
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
           {/* Banner ARRIBA DE TODO: la guía de grabación, imposible de no ver. */}
-          {esGuion && (config?.guiaAds || config?.guiaVsl) && (
+          {esGuion && (
             <div onClick={() => nav(`/documento/${sid}/guias`)} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'var(--mk-blue-bg2)', borderBottom: '1px solid var(--mk-border)' }}>
               <span style={{ width: 22, height: 22, flex: 'none', borderRadius: '50%', background: 'var(--mk-blue-ops)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800 }}>?</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: T.primaryInk, flex: 1 }}>
@@ -240,24 +261,29 @@ export default function DocumentoScreen() {
               <div style={{ fontSize: 19, fontWeight: 800, color: T.text, letterSpacing: '-0.02em' }}>{titulo}</div>
             </div>
 
-            {/* ── GUÍAS (página global): los PDF incrustados adentro del portal ── */}
+            {/* ── GUÍAS (páginas del sistema, iguales para todos los clientes) ── */}
             {esGuias && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 10 }}>
+                <style>{`
+                  .guia-rich{font-size:15px;line-height:1.62;color:var(--mk-text)}
+                  .guia-rich p{margin:0 0 12px}
+                  .guia-rich h1,.guia-rich h2,.guia-rich h3{color:var(--mk-ink);letter-spacing:-.01em;line-height:1.25;margin:18px 0 8px}
+                  .guia-rich h1{font-size:19px}.guia-rich h2{font-size:17px}.guia-rich h3{font-size:15.5px}
+                  .guia-rich ul,.guia-rich ol{margin:0 0 12px;padding-left:22px}
+                  .guia-rich li{margin:4px 0}
+                  .guia-rich img{max-width:100%;border-radius:12px}
+                  .guia-rich a{color:var(--mk-blue-ink);font-weight:600}
+                `}</style>
                 <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, margin: '-8px 0 2px' }}>
                   Todo lo que necesitas saber antes de ponerte frente a la cámara. Léelas una vez y graba tranquilo.
                 </div>
-                {[{ url: config?.guiaAds, titulo: 'Cómo grabarte los anuncios', sub: 'Videos cortos, uno por guion' },
-                  { url: config?.guiaVsl, titulo: 'Cómo grabarte el VSL', sub: 'El video largo, en una sola toma' }]
-                  .filter((g) => g.url).map((g, i) => (
-                  <div key={i} style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
-                    <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #EEF0F4', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{g.titulo}</div>
-                        <div style={{ fontSize: 12.5, color: T.text3 }}>{g.sub}</div>
-                      </div>
-                      <a href={g.url} target="_blank" rel="noreferrer" style={{ flex: 'none', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.primary }}>Ver en grande</a>
+                {(Array.isArray(guias) ? guias : []).map((g) => (
+                  <div key={g.id} style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, boxShadow: 'var(--shadow-md)', overflow: 'hidden' }}>
+                    <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #EEF0F4' }}>
+                      <div style={{ fontSize: 16.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{g.titulo}</div>
                     </div>
-                    <iframe src={drivePreview(g.url)} title={g.titulo} allow="autoplay" style={{ display: 'block', width: '100%', height: 'min(70vh, 560px)', border: 'none', background: 'var(--mk-surface2)' }} />
+                    <div className="guia-rich" style={{ padding: '16px 18px 18px' }}
+                      dangerouslySetInnerHTML={{ __html: limpiarHtml(g.html) || '<p style="color:var(--mk-text3);font-style:italic">Muy pronto.</p>' }} />
                   </div>
                 ))}
               </div>
@@ -464,13 +490,9 @@ export default function DocumentoScreen() {
               </div>
 
               {/* AYUDA: las guías de grabación, iguales para todos los DEL. */}
-              {(config?.guiaAds || config?.guiaVsl) && (
-                <>
-                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 6px', textTransform: 'uppercase' }}>AYUDA</div>
-                  <FilaDoc dot="var(--mk-cyan)" nombre="Guías de grabación" activo={esGuias}
-                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/guias`); }} />
-                </>
-              )}
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 6px', textTransform: 'uppercase' }}>AYUDA</div>
+              <FilaDoc dot="var(--mk-cyan)" nombre="Guías de grabación" activo={esGuias}
+                onClick={() => { setDrawer(false); nav(`/documento/${sid}/guias`); }} />
 
               {otros.length > 0 && (
                 <>

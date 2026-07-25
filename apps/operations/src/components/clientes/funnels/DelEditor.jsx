@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -365,6 +365,42 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     setClientDocs((prev) => prev.filter(d => d.id !== doc.id));
     if (view === 'cliente:' + doc.id) setView('del');
     await supabase.from('del_client_extra_docs').delete().eq('id', doc.id);
+  };
+
+  // ── GUÍAS GLOBALES: páginas del sistema que aparecen en TODOS los DEL de
+  //    TODOS los clientes (guías de grabación). Se editan acá; el portal las
+  //    muestra nativas al cliente (tabla del_guias_globales).
+  const [guias, setGuias] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    sbFetch('del_guias_globales?select=id,title,html,text,orden,activo&order=orden.asc,created_at.asc')
+      .then((rows) => { if (alive) setGuias(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (alive) setGuias([]); });
+    return () => { alive = false; };
+  }, []);
+  const guiaTimer = useRef(null);
+  const saveGuia = (g, html) => {
+    setGuias((prev) => prev.map(x => x.id === g.id ? { ...x, html } : x));
+    clearTimeout(guiaTimer.current);
+    guiaTimer.current = setTimeout(() => {
+      supabase.from('del_guias_globales')
+        .update({ html, text: htmlToText(html), updated_at: new Date().toISOString() }).eq('id', g.id);
+    }, 900);
+  };
+  const crearGuia = async () => {
+    const title = window.prompt('Nombre de la guía (la ven TODOS los clientes):', 'Guía nueva');
+    if (!title || !title.trim()) return;
+    const { data, error } = await supabase.from('del_guias_globales')
+      .insert({ title: title.trim(), html: '', text: '', orden: guias.length + 1, created_by: by }).select().single();
+    if (error) { window.alert('No pude crear la guía: ' + (error.message || '')); return; }
+    setGuias((prev) => [...prev, data]);
+    setView('guia:' + data.id); setDocEditing(true);
+  };
+  const borrarGuia = async (g) => {
+    if (!window.confirm(`¿Borrar la guía "${g.title}" para TODOS los clientes? No se puede deshacer.`)) return;
+    setGuias((prev) => prev.filter(x => x.id !== g.id));
+    if (view === 'guia:' + g.id) setView('del');
+    await supabase.from('del_guias_globales').delete().eq('id', g.id);
   };
 
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
@@ -1042,6 +1078,33 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               </div>
             )}
           </div>
+
+          {/* GUÍAS: páginas del sistema, iguales en TODOS los DEL de TODOS los
+              clientes (las guías de grabación que ve el cliente en su portal). */}
+          <div className="px-2 pt-3 pb-1.5">
+            <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Guías</span>
+            <div className="text-[9.5px] text-[#C3C9D4] font-medium mt-0.5 normal-case tracking-normal">Iguales para todos los clientes; el cliente las ve en su portal</div>
+          </div>
+          {guias.map(g => {
+            const on = view === 'guia:' + g.id;
+            return (
+              <div key={g.id} className="group/gg flex items-center gap-1 rounded-[9px]" style={{ background: on ? '#ECFEFF' : 'transparent' }}>
+                <button onClick={() => setView('guia:' + g.id)}
+                  className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pl-2.5 pr-1 text-left border-none cursor-pointer text-[12px] font-semibold bg-transparent"
+                  style={{ color: on ? '#0891B2' : '#6B7280' }}>
+                  <HelpCircle size={13} className="shrink-0" style={{ color: '#0891B2' }} />
+                  <span className="truncate flex-1 min-w-0">{g.title}</span>
+                </button>
+                <button onClick={() => borrarGuia(g)} title="Borrar la guía (para todos los clientes)" className="opacity-0 group-hover/gg:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>
+              </div>
+            );
+          })}
+          <div className="px-1 mt-0.5">
+            <button onClick={crearGuia}
+              className="flex items-center gap-1.5 w-full py-1.5 px-1.5 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#0891B2] hover:text-[#0891B2] bg-transparent">
+              <Plus size={12} />Agregar guía
+            </button>
+          </div>
         </nav>
         </div>
 
@@ -1381,6 +1444,49 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     {(doc.panel_html || (doc.text || '').trim())
                       ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(docHtml) }} />
                       : <span className="italic text-[#C3C9D4]">Este documento está vacío. Tocá “Editar” para escribirlo.</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Una GUÍA GLOBAL (igual para todos los clientes): editable. */}
+          {view.startsWith('guia:') && (() => {
+            const g = guias.find(x => 'guia:' + x.id === view);
+            if (!g) return null;
+            return (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2 py-2 px-1 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#ECFEFF', color: '#0891B2' }}><HelpCircle size={16} /></span>
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{g.title}</div>
+                      <div className="text-[11px] text-[#9098A4]">Guía global: la ven TODOS los clientes en su portal.{docEditing ? ' Se guarda solo.' : ''}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
+                      <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
+                      <button onClick={() => setDocEditing(true)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: '#fff', color: '#0891B2', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
+                    </div>
+                    <button onClick={() => borrarGuia(g)} title="Borrar esta guía (para todos los clientes)" className="inline-flex items-center justify-center w-8 h-8 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+                {docEditing ? (
+                  <RichTextEditor
+                    key={g.id}
+                    value={g.html || ''}
+                    onChange={(html) => saveGuia(g, html)}
+                    sanitize={sanitizeDelHtml}
+                    delTools
+                    minHeight={320}
+                    placeholder="Escribí acá la guía (el cliente la ve tal cual en su portal)…"
+                  />
+                ) : (
+                  <div className="del-rich rounded-xl border border-[#E7EAF0] bg-white py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
+                    {(g.html || '').trim()
+                      ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(g.html) }} />
+                      : <span className="italic text-[#C3C9D4]">Esta guía está vacía. Tocá “Editar” para escribirla.</span>}
                   </div>
                 )}
               </div>
