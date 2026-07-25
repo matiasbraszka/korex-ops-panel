@@ -213,18 +213,39 @@ export const MOCK_INICIO = {
 export const MOCK_META = { partnerId: '1284 5590 3311', whatsapp: '5491100000000', estado: 'pendiente' };
 
 export function mockDocumento(strategyId, tipo) {
-  const guiones = MOCK_GUIONES.filter((g) => (tipo === 'vsl' ? g.tipo === 'VSL' : g.tipo !== 'VSL'));
+  const t = ['vsl', 'avatar', 'estrategia'].includes(tipo) ? tipo : 'ads';
+  const docs = {
+    ads: { existe: true, titulo: 'Anuncios', pendiente: true, listo: false },
+    vsl: { existe: true, titulo: 'VSL', pendiente: false, listo: true },
+    avatar: { existe: true, titulo: 'Avatar 1 — Emprendedores' },
+    estrategia: { existe: true },
+  };
+  const otros = [{ id: 'f_tribu', name: 'Tribu Networkers' }, { id: 'f_abril', name: 'Reclutamiento · Abril' }];
+  const base = { funnel: { id: strategyId || 'f_reclu', name: 'Reclutamiento' }, tipo: t, avatars: MOCK_AVATARS, docs, otros };
+
+  if (t === 'avatar') {
+    return {
+      ...base, titulo: 'Avatar 1 — Emprendedores', bucket: null, comentarios: [], subidas: { count: 0, items: [] }, siguiente: null,
+      secciones: [{ id: 'sec_av1', titulo: 'Avatar 1 — Emprendedores', grabado: false, avatar: '', texto: 'DOLORES EXTERNOS\nTrabajan o tienen autoempleo que les consume muchas horas. Sus ingresos cubren las facturas pero no permiten construir la vida que realmente quieren.\nDOLORES INTERNOS\nSensación de estancamiento crónico. Frustración de saber que tienen capacidad pero no encontrar el vehículo correcto.\nMIEDOS\nMiedo a equivocarse otra vez y enfocarse en el proyecto incorrecto.' }],
+    };
+  }
+  if (t === 'estrategia') {
+    return {
+      ...base, titulo: 'Embudo Reclutamiento', bucket: null, comentarios: [], subidas: { count: 0, items: [] }, siguiente: null,
+      secciones: [{ id: 'sec_es1', titulo: 'Estrategia del embudo', grabado: false, avatar: '', texto: 'PROMESA CENTRAL\nHablas solo con personas que ya vieron tu presentación completa. Nada de perseguir amigos ni contactos en frío.\nRECORRIDO\nAnuncio en Meta → pre-landing con tu historia → VSL de 6 minutos → formulario de calificación → tu llamada.\nQUÉ NECESITAMOS DE TI\nLos videos de tus anuncios, el VSL grabado, 5 fotos y el acceso a tu Meta. Con eso lanzamos.' }],
+    };
+  }
+  const guiones = MOCK_GUIONES.filter((g) => (t === 'vsl' ? g.tipo === 'VSL' : g.tipo !== 'VSL'));
   return {
-    funnel: { id: strategyId || 'f_reclu', name: 'Reclutamiento' },
-    tipo: tipo === 'vsl' ? 'vsl' : 'ads',
-    bucket: tipo === 'vsl' ? 'vsl_rec' : 'ad_rec',
+    ...base,
+    titulo: t === 'vsl' ? 'VSL — Reclutamiento' : 'Anuncios — Reclutamiento',
+    bucket: t === 'vsl' ? 'vsl_rec' : 'ad_rec',
     secciones: guiones.map((g, i) => ({ id: g.id, titulo: g.titulo, texto: g.texto, html: '', grabado: i === 1, avatar: g.avatar })),
     comentarios: [
       { id: 'c1', sectionId: guiones[0]?.id, body: 'Aquí prefiero decir el sistema que te enseñaron', quote: 'No es tu culpa, es el método que te enseñaron.', parentId: null, resolved: false, authorName: 'Sergio Cánovas', isTeam: false, isCliente: true, createdAt: new Date().toISOString() },
     ],
-    avatars: MOCK_AVATARS,
-    subidas: { count: 0, items: [] },
-    siguiente: tipo === 'vsl' ? null : { strategyId: strategyId || 'f_reclu', tipo: 'vsl', label: 'VSL · Reclutamiento' },
+    subidas: t === 'vsl' ? { count: 1, items: [{ titulo: 'vsl-toma-final.mp4', fecha: '22/07' }] } : { count: 0, items: [] },
+    siguiente: t === 'vsl' ? null : { strategyId: strategyId || 'f_reclu', tipo: 'vsl', label: 'VSL · Reclutamiento' },
   };
 }
 
@@ -246,7 +267,11 @@ export const MOCK_MATERIAL = {
   ],
   accesoMeta: 'pendiente',
   devoluciones: [
-    { funnel: 'Reclutamiento', strategyId: 'f_reclu', count: 3, ultimo: '22/07', nuevo: true, items: [{ titulo: 'Anuncio 1 · editado', url: '', kind: 'video' }] },
+    { funnel: 'Reclutamiento', strategyId: 'f_reclu', count: 3, ultimo: '23/07', nuevo: true, items: [
+      { titulo: 'Deja de perseguir contactos', url: '', kind: 'video', bucket: 'ad_edit', fecha: '23/07' },
+      { titulo: 'El domingo por la noche', url: '', kind: 'video', bucket: 'ad_edit', fecha: '23/07' },
+      { titulo: 'VSL Avatar 1', url: '', kind: 'video', bucket: 'vsl_edit', fecha: '23/07' },
+    ] },
   ],
   paginas: [{ funnel: 'Reclutamiento · Abril', url: 'canovasteam.com/oportunidad' }],
 };

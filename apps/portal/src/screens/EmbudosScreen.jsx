@@ -1,97 +1,126 @@
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, AlertCircle, ExternalLink } from 'lucide-react';
-import { Screen, Loading, DemoBanner, useAsync } from '../components/ui';
+import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
-import { T, cardStyle, microLabel, bigBtn, pill } from '../components/theme';
+import { T, display } from '../components/theme';
+import { IcoCheck, IcoWarn, IcoChevR, IcoExternal } from '../components/icons';
 
-// TUS EMBUDOS: cada campaña con su avance real, la razón en cristiano y, si ya
-// está al aire, el link a su página. "TE TOCA A TI" cuando falta algo del cliente.
+// TUS EMBUDOS — exacta al prototipo: tarjetas numeradas con barra de color,
+// etiqueta de estado, avance grande, el aviso de qué falta y TU PÁGINA.
+const fmt = (d) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
+  if (m) return `${m[3]}/${m[2]}`;   // fecha "YYYY-MM-DD" sin corrimiento de zona horaria
+  try { const x = new Date(d); return `${String(x.getDate()).padStart(2, '0')}/${String(x.getMonth() + 1).padStart(2, '0')}`; } catch { return ''; }
+};
+
 export default function EmbudosScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.embudos(), []);
+
   if (loading) return <Loading label="Cargando tus embudos…" />;
   const embudos = Array.isArray(data) ? data : [];
   const alAire = embudos.filter((e) => e.etiqueta === 'al_aire').length;
-  const enObra = embudos.length - alAire;
+  const resto = embudos.length - alAire;
+  const intro = embudos.length === 0 ? 'Cuando armemos tu primera campaña, aparece aquí.'
+    : resto === 0 ? `Tienes ${embudos.length === 1 ? '1 campaña y ya está al aire' : `${embudos.length} campañas y ya están todas al aire`}.`
+    : alAire === 0 ? `Tienes ${embudos.length === 1 ? '1 campaña. La estamos armando' : `${embudos.length} campañas. Las estamos armando`}.`
+    : `Tienes ${embudos.length} campañas. ${resto === 1 ? '1 está en armado' : `${resto} están en armado`}, ${alAire === 1 ? 'la otra ya está al aire' : `las otras ${alAire} ya están al aire`}.`;
 
   return (
-    <Screen style={{ background: T.bg }}>
-      {isDemo() && <DemoBanner />}
-      <h1 style={{ margin: '4px 0 6px', fontSize: 26, fontWeight: 800, color: T.ink, letterSpacing: '-0.03em' }}>Tus embudos</h1>
-      <p style={{ margin: '0 0 18px', fontSize: 15, color: T.text2, lineHeight: 1.45 }}>
-        {embudos.length === 0 ? 'Cuando arranquemos tu primera campaña, aparece aquí.'
-          : `Tienes ${embudos.length} ${embudos.length === 1 ? 'campaña' : 'campañas'}.${enObra > 0 ? ` ${enObra === 1 ? 'Una la estamos armando' : `${enObra} las estamos armando`},` : ''}${alAire > 0 ? ` ${alAire === 1 ? 'una ya está al aire' : `${alAire} ya están al aire`}.` : ''}`}
-      </p>
-
-      <div className="mk-grid2">
-        {embudos.map((e, i) => {
-          const teToca = e.etiqueta === 'te_toca';
-          const aire = e.etiqueta === 'al_aire';
-          const color = aire ? T.green : T.primary;
-          return (
-            <div key={e.id} style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
-              <div style={{ height: 5, background: color }} />
-              <div style={{ padding: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 10, background: aire ? T.greenSoft : T.primarySoft, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
-                  <span style={{ flex: 1 }} />
-                  <span style={pill(aire ? T.green : teToca ? T.primary : '#EDEFF5', aire || teToca ? '#fff' : T.text2)}>
-                    {aire ? 'Al aire' : teToca ? 'Te toca a ti' : 'En armado'}
-                  </span>
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', lineHeight: 1.2 }}>{e.name}</div>
-                <div style={{ fontSize: 12.5, color: T.text3, marginTop: 3 }}>
-                  {aire ? 'Al aire' : 'Empezado'}{e.startDate ? ` desde el ${fmtFecha(e.startDate)}` : ''}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 14, marginBottom: 6 }}>
-                  <div>
-                    <div style={microLabel()}>Avance del embudo</div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text, marginTop: 2 }}>{e.razon}</div>
-                  </div>
-                  <span style={{ fontSize: 26, fontWeight: 800, color, letterSpacing: '-0.02em' }}>{e.progreso}%</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 999, background: '#EDEFF5', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 999, background: color, width: `${Math.min(100, e.progreso || 0)}%` }} />
-                </div>
-
-                {teToca && e.grabPendiente?.pend && (
-                  <div style={{ display: 'flex', gap: 9, background: T.redSoft, border: '1px solid #F6C9C9', borderRadius: 12, padding: '10px 12px', marginTop: 12 }}>
-                    <AlertCircle size={16} color={T.red} style={{ flexShrink: 0, marginTop: 1 }} />
-                    <div>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#991B1B' }}>Falta que grabes tus videos</div>
-                      <div style={{ fontSize: 12.5, color: '#B45454' }}>Te lo pedimos {e.grabPendiente.dias === 0 ? 'hoy' : `hace ${e.grabPendiente.dias} ${e.grabPendiente.dias === 1 ? 'día' : 'días'}`}.</div>
-                    </div>
-                  </div>
-                )}
-
-                {teToca ? (
-                  <button onClick={() => nav(`/documento/${e.id}/ads`)} style={{ ...bigBtn(), marginTop: 12 }}>Abrir este embudo <ChevronRight size={15} /></button>
-                ) : aire && e.pagina ? (
-                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={microLabel()}>Tu página</span>
-                    <a href={/^https?:\/\//.test(e.pagina) ? e.pagina : 'https://' + e.pagina} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 800, color: T.green, textDecoration: 'none' }}>
-                      {String(e.pagina).replace(/^https?:\/\//, '')} <ExternalLink size={13} />
-                    </a>
-                  </div>
-                ) : aire ? (
-                  <div style={{ marginTop: 12, fontSize: 13, color: T.text3 }}>Está corriendo. No necesitas hacer nada.</div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+    <>
+      {isDemo() && <div style={{ padding: '12px 22px 0' }}><DemoBanner /></div>}
+      <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={display(30, '-0.035em')}>Tus embudos</div>
+        <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
 
-      {embudos.length > 0 && (
-        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12.5, color: T.text3 }}>
-          Un embudo es una campaña completa: anuncios, video y página.
-        </div>
-      )}
-    </Screen>
+      <div style={{ padding: '24px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {embudos.map((e, i) => <EmbudoCard key={e.id} e={e} n={i + 1} nav={nav} />)}
+      </div>
+
+      <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
+        Un embudo es una campaña completa: anuncios, video y página.
+      </div>
+    </>
   );
 }
 
-function fmtFecha(d) {
-  try { const [y, m, dd] = String(d).split('-'); return `${dd}/${m}`; } catch { return d; }
+function EmbudoCard({ e, n, nav }) {
+  const alAire = e.etiqueta === 'al_aire';
+  const pend = !!e.grabPendiente?.pend;
+  const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
+  const acentoSuave = alAire ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
+  const etiqueta = alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
+  const sub = alAire
+    ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
+    : (e.startDate ? `Empezado el ${fmt(e.startDate)}` : 'En curso');
+  const aviso = alAire ? 'Está corriendo. No necesitas hacer nada.'
+    : pend ? 'Falta que grabes tus anuncios'
+    : e.razon;
+  const avisoDetalle = alAire ? null
+    : pend ? (e.grabPendiente?.dias > 0 ? `Te lo pedimos hace ${e.grabPendiente.dias} ${e.grabPendiente.dias === 1 ? 'día' : 'días'}.` : 'Te lo pedimos hoy.')
+    : e.etapa === 3 ? 'Te avisamos cuando estén editados.' : 'Estamos con esto. No necesitas hacer nada.';
+  const pagina = e.pagina;
+
+  return (
+    <div style={{ borderRadius: 20, overflow: 'hidden', background: '#fff', border: '1px solid var(--mk-border)', boxShadow: 'var(--shadow-md)' }}>
+      <div style={{ height: 4, background: acento }} />
+      <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: acentoSuave, color: acento, fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</div>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#fff', background: acento, padding: '6px 11px', borderRadius: 999, whiteSpace: 'nowrap', flex: 'none' }}>{etiqueta}</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: -6 }}>
+          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: T.ink, lineHeight: 1.12 }}>{e.name}</div>
+          <div style={{ fontSize: 12.5, color: T.text3 }}>{sub}</div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textSoft }}>{e.razon}</span>
+            </div>
+            <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
+          </div>
+          <div style={{ height: 9, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: alAire ? 'var(--mk-green-bg)' : pend ? 'var(--mk-red-bg)' : 'var(--mk-blue-bg2)' }}>
+          {alAire || !pend
+            ? <IcoCheck size={16} stroke={alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)'} sw={2.6} style={{ flex: 'none' }} />
+            : <IcoWarn size={16} stroke="var(--mk-red)" sw={2.3} style={{ flex: 'none' }} />}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.textSoft }}>{aviso}</span>
+            {avisoDetalle && <span style={{ fontSize: 12, color: T.text2 }}>{avisoDetalle}</span>}
+          </div>
+        </div>
+
+        {alAire ? (
+          <>
+            {pagina && (
+              <a href={/^https?:\/\//.test(pagina) ? pagina : 'https://' + pagina} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-bg-panel)', border: '1px solid var(--mk-border)', textDecoration: 'none' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Tu página</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(pagina).replace(/^https?:\/\//, '')}</span>
+                </div>
+                <div style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <IcoExternal size={15} stroke="#fff" sw={2.4} />
+                </div>
+              </a>
+            )}
+            <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.text3 }}>
+              Ver el detalle
+            </div>
+          </>
+        ) : (
+          <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', height: 46, borderRadius: 999, background: acento, color: '#fff', fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
+            Abrir este embudo
+            <IcoChevR size={15} stroke="#fff" sw={2.5} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

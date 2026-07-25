@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Copy, Check, Monitor, Video } from 'lucide-react';
-import PhoneFrame from '../components/PhoneFrame';
+import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import { useAsync } from '../components/ui';
 import { api } from '../data/portalApi';
-import { T, cardStyle, microLabel, bigBtn } from '../components/theme';
+import { T, display } from '../components/theme';
+import { IcoChevL, IcoCheck, IcoCopy, IcoInfo } from '../components/icons';
 
-// ACCESO A META: el paso a paso para que el cliente nos dé acceso a su
-// Business Manager, con el número de socio copiable y el botón
-// "YA TE DI EL ACCESO" (avisa al equipo por Slack para validar).
+// ACCESO A META — exacta al prototipo: 3 pasos con captura, el número de socio
+// copiable y el botón "Ya te di el acceso" (avisa al equipo por Slack).
 export default function AccesoMetaScreen() {
   const nav = useNavigate();
   const { data, reload } = useAsync(() => api.meta(), []);
@@ -25,90 +24,91 @@ export default function AccesoMetaScreen() {
     try { await api.marcarAccesoMeta(); await reload?.(); } finally { setMarcando(false); }
   };
 
+  const numChip = (n) => (
+    <span style={{ width: 26, height: 26, flex: 'none', borderRadius: '50%', background: T.primary, color: '#fff', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
+  );
+  const captura = (
+    <div style={{ height: 104, borderRadius: 14, background: 'linear-gradient(160deg,#E9EDF4,#D9DFE9)', display: 'flex', alignItems: 'flex-end', padding: 10, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text2 }}>Captura</div>
+  );
+
   return (
     <PhoneFrame>
-      <div style={{ position: 'sticky', top: 0, background: T.bg, padding: '14px 20px 8px', zIndex: 10 }}>
-        <button onClick={() => nav(-1)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'none', color: T.primary, fontSize: 13, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', padding: '6px 0' }}>
-          <ChevronLeft size={17} /> Volver
-        </button>
-      </div>
-      <div style={{ padding: '4px 20px 28px', overflowY: 'auto', background: T.bg, flex: 1 }}>
-        <h1 style={{ margin: '0 0 6px', fontSize: 25, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>Danos acceso a tu Meta</h1>
-        <p style={{ margin: '0 0 18px', fontSize: 14.5, color: T.text2, lineHeight: 1.5 }}>
-          Es lo único que no podemos hacer por ti. Son 3 pasos desde la computadora y tarda 4 minutos.
-        </p>
+      <KxScreen>
+        <div className="kxs" style={{ flex: 1, overflowY: 'auto' }}>
+          <div onClick={() => nav(-1)} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px 0', color: T.primary, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            <IcoChevL size={17} stroke="var(--mk-blue-ops)" sw={2.4} />
+            Volver
+          </div>
 
-        <Paso n={1} titulo="Entra a business.facebook.com" sub="Inicia sesión con la cuenta que usas para tu página." />
-        <Paso n={2} titulo="Configuración › Socios › Agregar" sub="Dentro de Configuración del negocio, sección Socios." />
+          <div style={{ padding: '18px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>Danos acceso a tu Meta</div>
+            <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, textWrap: 'pretty' }}>
+              Es lo único que no podemos hacer por ti. Son 3 pasos desde la computadora y tarda 4 minutos.
+            </div>
+          </div>
 
-        {/* Paso 3: el número de socio */}
-        <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <NumChip n={3} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: T.ink, lineHeight: 1.3 }}>Pega nuestro número de socio</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0' }}>
-                <span style={{ flex: 1, fontFamily: 'ui-monospace, monospace', fontSize: partner ? 18 : 13, fontWeight: 800, color: partner ? T.ink : T.text3, letterSpacing: '0.04em', background: '#F4F5F9', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={cardPaso}>
+              <div style={pasoHead}>{numChip(1)}<span style={pasoTitulo}>Entra a business.facebook.com</span></div>
+              {captura}
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Inicia sesión con la cuenta que usas para tu página.</div>
+            </div>
+
+            <div style={cardPaso}>
+              <div style={pasoHead}>{numChip(2)}<span style={pasoTitulo}>Configuración › Socios › Agregar</span></div>
+              {captura}
+            </div>
+
+            <div style={cardPaso}>
+              <div style={pasoHead}>{numChip(3)}<span style={pasoTitulo}>Pega nuestro número de socio</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 14, background: 'var(--mk-blue-bg2)', border: '1px dashed #C3CFEF' }}>
+                <span style={{ flex: 1, fontFamily: "'Montserrat', sans-serif", fontSize: partner ? 19 : 13.5, fontWeight: 800, letterSpacing: '0.02em', color: partner ? T.primaryInk : T.text3 }}>
                   {partner || 'Te lo pasamos por WhatsApp'}
                 </span>
                 {partner && (
-                  <button onClick={copiar} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${T.border}`, background: '#fff', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, fontWeight: 800, color: copiado ? T.green : T.primary, cursor: 'pointer' }}>
-                    {copiado ? <Check size={14} strokeWidth={3} /> : <Copy size={14} />}{copiado ? 'Copiado' : 'Copiar'}
-                  </button>
+                  <span onClick={copiar} role="button" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px', borderRadius: 999, background: '#fff', border: '1px solid var(--mk-border)', fontSize: 12, fontWeight: 700, color: copiado ? 'var(--mk-green)' : T.textSoft }}>
+                    {copiado ? <IcoCheck size={14} stroke="var(--mk-green)" sw={2.6} /> : <IcoCopy size={14} stroke="currentColor" sw={2} />}
+                    {copiado ? 'Copiado' : 'Copiar'}
+                  </span>
                 )}
               </div>
-              <div style={{ fontSize: 13, color: T.text2, lineHeight: 1.45 }}>Elige el rol <b>Administrar campañas</b> y confirma.</div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>Elige el rol <b style={{ color: T.textSoft }}>Administrar campañas</b> y confirma.</div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 17px', borderRadius: 16, background: T.surface2 }}>
+              <IcoInfo size={18} stroke="var(--mk-text2)" sw={2.1} />
+              <span style={{ fontSize: 13, lineHeight: 1.45, color: T.textSoft }}>
+                ¿Se te complica? Lo hacemos juntos por videollamada de 10 minutos.{' '}
+                {wa && <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" style={{ color: T.primary, fontWeight: 700 }}>Escríbenos</a>}
+              </span>
             </div>
           </div>
+          <div style={{ height: 26 }} />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16, fontSize: 13, color: T.text2, lineHeight: 1.45 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Video size={16} color={T.primary} /></span>
-          <span>¿Se te complica? Lo hacemos juntos por videollamada de 10 minutos.{' '}
-            {wa && <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" style={{ color: T.primary, fontWeight: 700 }}>Escríbenos</a>}
-          </span>
+        {/* Footer fijo */}
+        <div data-kx-footer="" style={{ flex: 'none', padding: '16px 22px 28px', background: 'rgba(255,255,255,.97)', backdropFilter: 'blur(10px)', boxShadow: '0 -1px 0 var(--mk-border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {estado === 'validado' ? (
+            <div onClick={() => nav('/')} role="button" style={{ cursor: 'pointer', height: 52, borderRadius: 999, background: 'var(--mk-green-bg)', color: T.textSoft, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <IcoCheck size={18} stroke="var(--mk-green)" sw={2.6} />
+              Acceso confirmado
+            </div>
+          ) : estado === 'cliente_dice_listo' ? (
+            <div style={{ height: 52, borderRadius: 999, background: 'var(--mk-blue-bg)', color: T.primary, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <IcoCheck size={18} stroke="var(--mk-blue-ops)" sw={2.6} />
+              Nos avisaste — lo estamos validando
+            </div>
+          ) : (
+            <div onClick={marcando ? undefined : yaLoDi} role="button" style={{ cursor: 'pointer', height: 52, borderRadius: 999, background: T.primary, color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: marcando ? 0.7 : 1 }}>
+              {marcando ? 'Avisando…' : 'Ya te di el acceso'}
+            </div>
+          )}
         </div>
-
-        {estado === 'validado' ? (
-          <div style={{ ...cardStyle, padding: 16, display: 'flex', alignItems: 'center', gap: 10, background: T.greenSoft, border: '1px solid #BBE9CD' }}>
-            <Check size={19} color={T.green} strokeWidth={3} />
-            <span style={{ fontSize: 14.5, fontWeight: 700, color: '#116A34' }}>Acceso confirmado. ¡Gracias!</span>
-          </div>
-        ) : estado === 'cliente_dice_listo' ? (
-          <div style={{ ...cardStyle, padding: 16, display: 'flex', alignItems: 'center', gap: 10, background: T.primarySoft, border: '1px solid #D5D9FC' }}>
-            <Check size={19} color={T.primary} strokeWidth={3} />
-            <span style={{ fontSize: 14.5, fontWeight: 700, color: T.primary }}>Nos avisaste que ya está. Lo estamos validando.</span>
-          </div>
-        ) : (
-          <button onClick={yaLoDi} disabled={marcando} style={{ ...bigBtn(T.green), opacity: marcando ? 0.7 : 1 }}>
-            {marcando ? 'Avisando…' : 'Ya te di el acceso'} <Check size={16} strokeWidth={3} />
-          </button>
-        )}
-      </div>
+      </KxScreen>
     </PhoneFrame>
   );
 }
 
-function NumChip({ n }) {
-  return (
-    <span style={{ width: 34, height: 34, borderRadius: 999, background: T.primarySoft, color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14.5, fontWeight: 800, flexShrink: 0 }}>{n}</span>
-  );
-}
-
-function Paso({ n, titulo, sub }) {
-  return (
-    <div style={{ ...cardStyle, padding: 16, marginBottom: 14 }}>
-      <div style={{ display: 'flex', gap: 12 }}>
-        <NumChip n={n} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 800, color: T.ink, lineHeight: 1.3 }}>{titulo}</div>
-          <div style={{ margin: '10px 0', height: 84, borderRadius: 12, background: '#EDEFF5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 5 }}>
-            <Monitor size={20} color="#B9C0CC" />
-            <span style={microLabel('#B9C0CC')}>Captura</span>
-          </div>
-          <div style={{ fontSize: 13, color: T.text2, lineHeight: 1.45 }}>{sub}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const cardPaso = { background: '#fff', borderRadius: 20, padding: 18, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 12 };
+const pasoHead = { display: 'flex', alignItems: 'center', gap: 11 };
+const pasoTitulo = { fontSize: 16, fontWeight: 800, color: 'var(--mk-ink)' };
