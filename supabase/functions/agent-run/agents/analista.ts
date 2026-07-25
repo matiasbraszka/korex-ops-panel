@@ -80,10 +80,51 @@ async function metaAds(ctx: AgentCtx): Promise<Bloque> {
   };
 }
 
+// ── 2b) Gasto y CPL desde Meta (respaldo de fbcrm_spend_daily) ───────────────
+// fbcrm_spend_daily es la serie DIARIA exacta, pero solo existe para los clientes que tienen
+// el CRM de Facebook conectado (2 de 24 al 25/7/2026). El gasto igual está en meta_ad_insights,
+// que llega solo todos los días por el token: cada snapshot es la ventana móvil de 7 días de esa
+// fecha. No es lo mismo que la serie diaria —las ventanas se pisan entre sí, NO se suman— pero
+// responde "cuánto gasté y a qué CPL" y cómo se movió. Un ✗ acá significaría "no hay dato",
+// y sí lo hay.
+async function spendDesdeMeta(ctx: AgentCtx): Promise<Bloque | null> {
+  const { data } = await ctx.supabase.from("meta_ad_insights")
+    .select("snapshot_date,spend,leads,impressions,clicks")
+    .eq("client_id", ctx.clientId).order("snapshot_date", { ascending: false }).limit(600);
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) return null;
+
+  const porFecha = new Map<string, { gasto: number; leads: number }>();
+  for (const r of rows) {
+    const d = str(r.snapshot_date);
+    const acc = porFecha.get(d) || { gasto: 0, leads: 0 };
+    acc.gasto += num(r.spend); acc.leads += num(r.leads);
+    porFecha.set(d, acc);
+  }
+  const fechas = [...porFecha.entries()].sort(([a], [b]) => b.localeCompare(a));
+  const [ultimaFecha, ultimo] = fechas[0];
+  const dias = diasDesde(ultimaFecha);
+  const cpl = (v: { gasto: number; leads: number }) => (v.leads ? fUsd(v.gasto / v.leads) : "—");
+  const linea = ([d, v]: [string, { gasto: number; leads: number }]) =>
+    `${d} · gasto ${fUsd(v.gasto)} · ${v.leads} leads · CPL ${cpl(v)}`;
+
+  return {
+    texto: [
+      `— GASTO Y CPL (de Meta · ventana móvil de 7 días, NO es serie diaria: las líneas se pisan entre sí, no las sumes) —`,
+      `ÚLTIMOS 7 DÍAS (al ${ultimaFecha}): gasto ${fUsd(ultimo.gasto)} · ${ultimo.leads} leads · CPL ${cpl(ultimo)}`,
+      fechas.length > 1 ? `CÓMO SE MOVIÓ (cada línea son los 7 días previos a esa fecha):` : "",
+      ...fechas.slice(0, 14).map(linea),
+    ].filter(Boolean).join("\n"),
+    fuente: { rotulo: "Gasto/CPL", estado: "parcial", detalle: `de Meta, 7d al ${ultimaFecha}${dias > 2 ? ` (hace ${dias} días)` : ""}` },
+    remedio: "El gasto sale de Meta en ventana de 7 días porque este cliente no tiene el CRM de Facebook conectado (fbcrm_spend_daily). Para la serie DIARIA de 30 días: conectar su página en el CRM, o pedir que meta-ads-sync guarde el desglose por día (time_increment=1).",
+    meta: { origen: "meta_ad_insights", snapshots: fechas.length, gasto_7d: Number(ultimo.gasto.toFixed(2)) },
+  };
+}
+
 // ── 2) Gasto y CPL diario (fbcrm_spend_daily, 30 días) ───────────────────────
 async function spend(ctx: AgentCtx, cuentas: string[]): Promise<Bloque> {
   if (!cuentas.length) {
-    return {
+    return (await spendDesdeMeta(ctx)) ?? {
       texto: "", fuente: { rotulo: "Gasto/CPL", estado: "falta", detalle: "sin cuentas Meta" },
       remedio: "El cliente no tiene meta_ad_account_ids cargadas en su ficha: sin eso no se puede atar el gasto diario. Cargarlas en el panel (ficha del cliente).",
     };
@@ -94,9 +135,9 @@ async function spend(ctx: AgentCtx, cuentas: string[]): Promise<Bloque> {
     .in("ad_account_id", cuentas).gte("date", desde).order("date", { ascending: true });
   const rows = Array.isArray(data) ? data : [];
   if (!rows.length) {
-    return {
+    return (await spendDesdeMeta(ctx)) ?? {
       texto: "", fuente: { rotulo: "Gasto/CPL", estado: "falta", detalle: "sin gasto 30d" },
-      remedio: "Sus cuentas de Meta no registran gasto en fbcrm_spend_daily en 30 días: o la campaña está apagada, o el sync de gasto (fbcrm-cpl-2h) no cubre esas cuentas.",
+      remedio: "Sus cuentas de Meta no registran gasto en fbcrm_spend_daily en 30 días, y tampoco hay snapshots de meta_ad_insights: o la campaña está apagada, o ninguno de los dos syncs cubre esas cuentas.",
     };
   }
   // Suma por día (puede haber 2 cuentas).
@@ -135,18 +176,65 @@ async function spend(ctx: AgentCtx, cuentas: string[]): Promise<Bloque> {
   };
 }
 
+// ── 3b) Leads desde Meta (respaldo de fbcrm_leads) ───────────────────────────
+// CUÁNTOS leads y a qué costo siempre está en meta_ad_insights. Lo que NO está es QUÉ CONTESTARON
+// —eso solo lo tiene el CRM de Facebook— así que este bloque cuenta y avisa qué le falta: la
+// diferencia entre "no hay leads" (✗) y "hay leads pero no sé si son buenos" (⚠) cambia el
+// diagnóstico entero.
+async function leadsDesdeMeta(ctx: AgentCtx, motivo: string): Promise<Bloque | null> {
+  const { data } = await ctx.supabase.from("meta_ad_insights")
+    .select("snapshot_date,ad_name,campaign_name,spend,leads,cpl")
+    .eq("client_id", ctx.clientId).order("snapshot_date", { ascending: false }).limit(400);
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) return null;
+  const ultimo = str(rows[0].snapshot_date);
+  const snap = rows.filter((r) => str(r.snapshot_date) === ultimo);
+  const tot = snap.reduce((a, r) => ({ gasto: a.gasto + num(r.spend), leads: a.leads + num(r.leads) }), { gasto: 0, leads: 0 });
+  const conLeads = snap.filter((r) => num(r.leads) > 0).sort((a, b) => num(b.leads) - num(a.leads));
+
+  return {
+    texto: [
+      `— LEADS (de Meta · últimos 7 días al ${ultimo}) —`,
+      `TOTAL: ${tot.leads} leads · gasto ${fUsd(tot.gasto)} · CPL ${tot.leads ? fUsd(tot.gasto / tot.leads) : "—"}`,
+      conLeads.length ? "De dónde vienen (anuncio · leads · CPL):" : "",
+      ...conLeads.slice(0, 10).map((r) => `- ${str(r.ad_name) || "(sin nombre)"} · ${num(r.leads)} leads · CPL ${fUsd(r.cpl)} · campaña ${str(r.campaign_name) || "—"}`),
+      "",
+      "OJO: esto es CUÁNTOS leads y a qué costo. NO tengo lo que contestaron en el formulario, así que",
+      "de la CALIDAD del lead no podés afirmar nada acá: si el diagnóstico la necesita, es CONJETURA.",
+    ].filter(Boolean).join("\n"),
+    fuente: { rotulo: "Leads", estado: "parcial", detalle: `${tot.leads} en 7d (de Meta, sin respuestas del formulario)` },
+    remedio: `${motivo} Por eso hay cantidad y costo pero no las respuestas del formulario (lo único que dice si el lead es bueno). Remedio: conectar la página de Facebook de este cliente en el CRM (fbcrm_pages: active=true y su ad_account_id cargado) — el token ya está guardado y los crons de formularios y leads corren solos cada 30 y 10 minutos.`,
+    meta: { origen: "meta_ad_insights", leads_7d: tot.leads },
+  };
+}
+
 // ── 3) Leads y su calidad (fbcrm_leads: las respuestas REALES del formulario) ─
-async function leads(ctx: AgentCtx, clientName: string): Promise<Bloque> {
+async function leads(ctx: AgentCtx, clientName: string, cuentas: string[]): Promise<Bloque> {
+  // El CRM guarda los leads bajo el nombre de la PÁGINA de Facebook, que casi nunca es igual al
+  // nombre del cliente en el panel ("Antonio & Madelaine" vs "Antonio De la Cruz"). Buscar por
+  // nombre da 0 leads con el CRM perfectamente conectado. El vínculo confiable es la cuenta de
+  // anuncios; el nombre queda solo como último recurso.
+  let crmName = clientName;
+  if (cuentas.length) {
+    const { data: pages } = await ctx.supabase.from("fbcrm_pages")
+      .select("client_name,active").in("ad_account_id", cuentas).limit(5);
+    const pg = (Array.isArray(pages) ? pages : []).find((p) => p.active) || (Array.isArray(pages) ? pages : [])[0];
+    if (pg && str(pg.client_name)) crmName = str(pg.client_name);
+  }
+
   const desde = new Date(Date.now() - 30 * 86400000).toISOString();
   const { data } = await ctx.supabase.from("fbcrm_leads")
     .select("created_time,full_name,answers,campaign_name,ad_name,form_name,platform,status,contacted,wa_outbound_at,wa_inbound_at")
-    .ilike("client_name", `%${clientName}%`).gte("created_time", desde)
+    .ilike("client_name", `%${crmName}%`).gte("created_time", desde)
     .order("created_time", { ascending: false }).limit(300);
   const rows = Array.isArray(data) ? data : [];
   if (!rows.length) {
-    return {
+    const motivo = crmName === clientName
+      ? `Este cliente no tiene ninguna página de Facebook conectada al CRM (ninguna fila de fbcrm_pages apunta a sus cuentas de anuncios).`
+      : `La página "${crmName}" está mapeada a este cliente pero no trajo leads en 30 días.`;
+    return (await leadsDesdeMeta(ctx, motivo)) ?? {
       texto: "", fuente: { rotulo: "Leads", estado: "falta", detalle: "sin leads 30d" },
-      remedio: `No hay leads de los últimos 30 días mapeados a "${clientName}" en fbcrm_leads. O no están entrando leads, o el formulario no está mapeado al cliente (revisar fbcrm_forms / client_name).`,
+      remedio: `${motivo} Y tampoco hay leads contados en meta_ad_insights: o de verdad no está entrando nadie, o las campañas no están optimizadas a lead.`,
     };
   }
   const contactados = rows.filter((r) => r.contacted).length;
@@ -395,7 +483,7 @@ const analista: AgentModule = {
     const [bMeta, bSpend, bLeads, bClarity, bVsl, bVentas] = await Promise.all([
       activo("meta_ads") ? metaAds(ctx) : null,
       activo("spend") ? spend(ctx, cuentas) : null,
-      activo("leads") ? leads(ctx, clientName) : null,
+      activo("leads") ? leads(ctx, clientName, cuentas) : null,
       activo("clarity") ? clarity(ctx, pg) : null,
       activo("vsl") ? vsl(ctx, clientName, pg) : null,
       activo("ventas") ? ventas(ctx) : null,
