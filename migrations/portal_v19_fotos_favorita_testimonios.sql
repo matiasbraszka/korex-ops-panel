@@ -59,3 +59,12 @@ grant execute on function public.portal_cliente_foto_favorita(text) to authentic
 -- 4) La guía "Qué testimonios enviarnos" quedó insertada en del_guias_globales
 --    (orden 3) con el contenido adaptado del docx de Matías
 --    (Guia_testimonios_funnels_version_completa), en formato editable del DEL.
+--
+-- v19b (mismo día): la condición del pedido de testimonios buscaba kind='avatar'
+-- pero los DEL reales usan kind='avatares' — la función acepta los dos.
+--
+-- Reparación DEL Marta (2026-07-26, sin migración): la desconexión de Drive del
+-- 23/07 re-importó el Doc completo al funnel viejo y pisó la separación 1 DEL =
+-- 1 funnel. Se rehizo moviendo del_sections por id (7 pestañas → strat_marta_madres,
+-- 18 → strat_marta_belleza; 15 quedan en el Reclutamiento viejo con los duplicados
+-- de la re-importación, a depurar por el equipo).
