@@ -63,6 +63,7 @@ const BOX_COLORS = [
   { c: '#E8F7EE', label: 'Verde (bien)' },
   { c: '#FDE8E8', label: 'Rojo (cuidado)' },
   { c: '#F3F4F6', label: 'Gris (nota)' },
+  { c: '#0E1F38', label: 'Azul oscuro (destacado, letra blanca)' },
 ];
 // Colores del marcador (resaltado de fondo). El primero (transparent) lo QUITA.
 const HL_COLORS = [

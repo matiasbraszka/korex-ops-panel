@@ -25,6 +25,7 @@ const BOX_COLORS = [
   { c: '#E8F7EE', label: 'Verde (bien)' },
   { c: '#FDE8E8', label: 'Rojo (cuidado)' },
   { c: '#F3F4F6', label: 'Gris (nota)' },
+  { c: '#0E1F38', label: 'Azul oscuro (destacado, letra blanca)' },
 ];
 
 const TEXT_COLORS = [
@@ -230,15 +231,36 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     let block = closestBlock();
     if (!block) { document.execCommand('formatBlock', false, 'P'); block = closestBlock(); }
     if (!block) return;
+    // La caja azul oscuro lleva la letra en blanco (también las negritas, que en el
+    // DEL tienen color propio por CSS y sin esto quedarían invisibles). Al cambiar a
+    // una caja clara o quitarla, ese blanco se limpia solo.
+    const esBlanco = (v) => v === 'rgb(255, 255, 255)' || v === '#ffffff' || v === 'white';
+    const limpiarBlanco = (c) => {
+      if (esBlanco(c.style.color)) c.style.color = '';
+      c.querySelectorAll('strong,b').forEach((s) => {
+        if (esBlanco(s.style.color)) {
+          s.style.color = '';
+          if (!s.getAttribute('style')) s.removeAttribute('style');
+        }
+      });
+    };
     mutarNodo(block, (c) => {
       if (bg) {
+        const oscura = bg === '#0E1F38';
         c.style.background = bg;
-        c.style.borderRadius = '10px';
-        c.style.padding = '12px 14px';
+        c.style.borderRadius = oscura ? '14px' : '10px';
+        c.style.padding = oscura ? '16px 18px' : '12px 14px';
+        if (oscura) {
+          c.style.color = '#ffffff';
+          c.querySelectorAll('strong,b').forEach((s) => { if (!s.style.color) s.style.color = '#ffffff'; });
+        } else {
+          limpiarBlanco(c);
+        }
       } else {
         c.style.background = '';
         c.style.borderRadius = '';
         c.style.padding = '';
+        limpiarBlanco(c);
         if (!c.getAttribute('style')) c.removeAttribute('style');
       }
     });
