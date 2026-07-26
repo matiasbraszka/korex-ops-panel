@@ -103,6 +103,10 @@ const VSL_BUCKETS = VID_BUCKETS.filter(b => b.key === 'vsl_rec' || b.key === 'vs
 // en estas carpetas. "Sin clasificar" recibe lo que no se pudo ubicar solo.
 const CLIENT_CATS = [
   { key: 'testimonios_korex', label: 'Testimonios Korex', c: '#059669', bg: '#ECFDF5' },
+  // Los testimonios que sube el CLIENTE (onboarding, paso 18) llegan sin funnel:
+  // son suyos, no de un embudo. Sin esta carpeta caían en `funnel_resources` y no
+  // había dónde verlos — la de abajo, la del funnel, filtra por strategy_id.
+  { key: 'testimonios', label: 'Testimonios del cliente', c: '#0F766E', bg: '#E6FFFA' },
   { key: 'autoridad',   label: 'Fotos de Autoridad',   c: '#2E69E0', bg: '#EAF1FF' },
   { key: 'estilo_vida', label: 'Fotos Estilo de vida', c: '#0E7490', bg: '#E7FBFE' },
   { key: 'branding',    label: 'Branding (colores, logo)', c: '#7C3AED', bg: '#F3EFFF' },
