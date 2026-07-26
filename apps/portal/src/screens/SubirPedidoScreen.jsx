@@ -69,27 +69,33 @@ export default function SubirPedidoScreen() {
           {/* Ejemplos + "Así sí, así no" (fotos y logo, como el prototipo) */}
           {(esFotos || esLogo) && (
             <div style={{ margin: '22px 22px 0', background: '#fff', borderRadius: 22, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+              {/* Ejemplos REALES: fotos tipo stock (de frente, con autoridad) y una marca
+                  ficticia para el logo/paleta — sin exponer material de otros clientes. */}
               <div style={{ display: 'flex', gap: 2, height: 128, background: 'var(--mk-border-light)' }}>
                 {(esFotos
-                  ? [['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'Ejemplo'], ['linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'Ejemplo'], ['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'Ejemplo']]
-                  : [['linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'Tu logo'], ['linear-gradient(160deg,#E4E8EF,#CFD5DF)', 'Tus colores'], ['linear-gradient(160deg,#E9EDF4,#D5DBE4)', 'Tipografía']]
-                ).map(([bg, label], i) => (
-                  <div key={i} style={{ flex: 1, background: bg, display: 'flex', alignItems: 'flex-end', padding: 9, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text2 }}>{label}</div>
+                  ? [['/pedidos/ejemplo-foto-1.jpg', 'Ejemplo'], ['/pedidos/ejemplo-foto-2.jpg', 'Ejemplo'], ['/pedidos/ejemplo-foto-3.jpg', 'Ejemplo']]
+                  : [['/pedidos/ejemplo-logo.png', 'Tu logo'], ['/pedidos/ejemplo-colores.png', 'Tus colores']]
+                ).map(([src, label], i) => (
+                  <div key={i} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                    <img src={src} alt={label} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 9px 8px', background: 'linear-gradient(transparent, rgba(13,17,23,.55))', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff' }}>{label}</div>
+                  </div>
                 ))}
               </div>
               <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 17, fontWeight: 800, letterSpacing: '-0.025em', color: T.ink }}>Así sí, así no</div>
                 {esFotos ? (
                   <>
-                    <Regla ok texto="De frente, con luz natural y fondo simple" />
-                    <Regla ok texto="Alguna dando una charla o con tu equipo" />
-                    <Regla texto="Borrosas, grupales o con filtros" />
+                    <Regla ok texto="De frente y mirando a cámara, como los ejemplos: son para tu página" />
+                    <Regla ok texto="Con buena luz, fondo simple y en la mejor calidad que tengas" />
+                    <Regla ok texto="Suma alguna dando una charla o trabajando con tu equipo" />
+                    <Regla texto="Borrosas, grupales, de muy lejos o con filtros" />
                   </>
                 ) : (
                   <>
                     <Regla ok texto="El logo en la mejor calidad que tengas (ideal PNG con fondo transparente)" />
-                    <Regla ok texto="Tus colores de marca: sirve una captura, el manual de marca o los códigos" />
-                    <Regla ok texto="Si usas una tipografía específica, dinos cuál" />
+                    <Regla ok texto="Tus colores de marca: sube tu paleta o manual de marca si lo tienes…" />
+                    <Regla ok texto="…o simplemente escríbelos en un comentario del portal o por WhatsApp (por ejemplo: azul oscuro y dorado, o los códigos #0E1F38 y #F4B942)" />
                     <Regla texto="Fotos del logo impreso o capturas borrosas y chiquitas" />
                   </>
                 )}
