@@ -153,7 +153,11 @@ export default function OnbShell({ children, contador = '', pie = null, mostrarP
 
   return (
     <div data-kx-onb="" style={{
-      display: 'flex', height: '100dvh', width: '100%', overflow: 'hidden',
+      display: 'flex',
+      // Le descuenta el cartel del modo prueba, que va arriba y empuja. En
+      // producción la variable no existe y esto es 100dvh a secas.
+      height: 'calc(100dvh - var(--kx-demo-alto, 0px))',
+      width: '100%', overflow: 'hidden',
       background: T.bg, fontFamily: FUENTE.ui, color: T.ink,
     }}>
       {ancho && <BarraLateral />}

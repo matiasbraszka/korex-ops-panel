@@ -16,6 +16,7 @@ import SubirPedidoScreen from './screens/SubirPedidoScreen';
 import AccesoMetaScreen from './screens/AccesoMetaScreen';
 import { OnboardingProvider } from './onboarding/OnboardingProvider';
 import BarraDemo from './onboarding/components/BarraDemo';
+import { DEMO_DISPONIBLE } from './onboarding/demo';
 import BienvenidaScreen from './onboarding/screens/BienvenidaScreen';
 import AvanceScreen from './onboarding/screens/AvanceScreen';
 import PasoScreen from './onboarding/screens/PasoScreen';
@@ -32,6 +33,21 @@ export default function App() {
     return (
       <Routes>
         <Route path="/login" element={<LoginScreen />} />
+        {/* El onboarding en MODO PRUEBA, sin cuenta.
+            Sin esto, la única forma de mirarlo era entrar con las credenciales
+            de un cliente real — es decir, mirando SUS respuestas. Acá el
+            catálogo sale de una copia local y nada se guarda en ningún lado.
+            `DEMO_DISPONIBLE` es false en el build de producción, así que este
+            bloque no existe fuera de desarrollo. */}
+        {DEMO_DISPONIBLE && (
+          <Route path="/onboarding" element={<OnboardingProvider><BarraDemo /><Outlet /></OnboardingProvider>}>
+            <Route index element={<BienvenidaScreen />} />
+            <Route path="avance" element={<AvanceScreen />} />
+            <Route path="listo" element={<ListoScreen />} />
+            <Route path=":paso" element={<PasoScreen />} />
+            <Route path=":paso/:pantalla" element={<PasoScreen />} />
+          </Route>
+        )}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );

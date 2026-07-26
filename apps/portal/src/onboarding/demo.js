@@ -178,3 +178,40 @@ export function demoMezclarEstado(estado) {
       : b)),
   };
 }
+
+// ── Modo prueba SIN CUENTA ───────────────────────────────────────────────────
+// Para recorrer el onboarding entero sin credenciales de cliente y sin que la
+// base se entere de nada. Hace falta porque /onboarding vive detrás del login
+// del portal, y la única forma de verlo era entrar con la cuenta de un cliente
+// real — es decir, mirando SUS respuestas.
+//
+// El catálogo sale de una copia local generada desde el mismo fuente del HTML
+// (migrations/portal_v29_generador_json.cjs). Si alguien edita una pregunta
+// desde /admin/onboarding, esta copia queda vieja: sirve para ver el flujo y el
+// diseño, no para probar la integración con la base.
+// Se carga a demanda, no con un import estatico: son 144 KB de preguntas y
+// ejemplos que en produccion no los mira nadie. Asi Vite lo deja en un archivo
+// aparte que el cliente real nunca pide.
+let cache = null;
+export async function demoCatalogo() {
+  if (!cache) cache = (await import('./catalogoPrueba.json')).default;
+  return cache;
+}
+
+/** Un cliente inventado, para que la pantalla tenga a quién saludar. */
+export function demoEstado() {
+  const d = demoDatos();
+  return {
+    runId: 'demo',
+    estado: d.completado ? 'completado' : (Object.keys(d.respuestas).length ? 'en_curso' : 'invitado'),
+    completo: !!d.completado,
+    progreso: 0, requeridas: 0, respondidas: 0,
+    faltan: [], bloqueantes: [], bloques: [],
+    agenda: d.agenda || { estado: 'pendiente' },
+    prefill: {
+      nombre: 'Sergio Cabrera', empresa: 'Cabrera Nutrición',
+      email: 'sergio@ejemplo.com', telefono: '+54 9 341 555 1234', pais: 'Argentina',
+    },
+    respuestas: d.respuestas,
+  };
+}

@@ -4,11 +4,32 @@
 // interfaz real. La peor falla posible de un modo prueba es que alguien crea
 // que está probando cuando en realidad está reservando una cita de verdad, o al
 // revés. Por eso el cartel dice siempre en qué modo está y qué implica.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DEMO_DISPONIBLE, demoActivo, demoCambiar, demoReset } from '../demo';
 
 export default function BarraDemo() {
   const [abierto, setAbierto] = useState(false);
+  const ref = useRef(null);
+
+  // El cartel empuja el onboarding hacia abajo, y el onboarding mide 100dvh:
+  // sin esto la suma se pasa de la ventana y el pie —donde está "Continuar"—
+  // queda fuera de la pantalla. Publica su alto real para que el armazón se lo
+  // descuente. Es una variable CSS y no un cálculo fijo porque el cartel se
+  // parte en dos líneas cuando la ventana es angosta.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const medir = () => document.documentElement.style
+      .setProperty('--kx-demo-alto', `${el.offsetHeight}px`);
+    medir();
+    const obs = new ResizeObserver(medir);
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      document.documentElement.style.removeProperty('--kx-demo-alto');
+    };
+  }, [abierto]);
+
   if (!DEMO_DISPONIBLE) return null;          // en producción no existe
 
   const on = demoActivo();
@@ -17,7 +38,7 @@ export default function BarraDemo() {
   const borrar = () => { demoReset(); window.location.reload(); };
 
   return (
-    <div style={{
+    <div ref={ref} style={{
       flex: 'none', background: on ? '#0B0F17' : '#7A1414', color: '#fff',
       fontSize: 13, lineHeight: 1.35, padding: '9px 14px',
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',

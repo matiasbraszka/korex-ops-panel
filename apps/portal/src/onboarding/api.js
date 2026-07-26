@@ -25,10 +25,26 @@ const escribir = (real, simulado) => (...args) => (
   demo.demoActivo() ? simulado(...args) : real(...args)
 );
 
+/**
+ * ¿Estamos mirando el onboarding sin ser un cliente?
+ *
+ * Pasa cuando se abre el modo prueba sin sesión, para recorrer el flujo sin las
+ * credenciales de nadie. En ese caso las dos lecturas —catálogo y estado— salen
+ * de la copia local, porque las RPC piden sesión.
+ */
+const sinSesion = async () => {
+  if (!demo.demoActivo()) return false;
+  const { data } = await supabase.auth.getSession();
+  return !data?.session;
+};
+
 export const onb = {
-  catalogo: () => call('portal_onboarding_catalogo'),
+  catalogo: async () => (await sinSesion()
+    ? demo.demoCatalogo()
+    : call('portal_onboarding_catalogo')),
 
   estado: async () => {
+    if (await sinSesion()) return demo.demoEstado();
     const e = await call('portal_onboarding_estado');
     return demo.demoActivo() ? demo.demoMezclarEstado(e) : e;
   },
@@ -58,7 +74,27 @@ export const onb = {
     async () => ({ ok: true, demo: true }),
   ),
 
-  agendaDatos: () => call('portal_onboarding_agenda_datos'),
+  agendaDatos: async () => {
+    if (await sinSesion()) {
+      // Sin token no se piden horarios reales: la pantalla muestra el guion de
+      // la sesión y cae en su salida ("seguí sin agendar"), que es justo el
+      // camino que conviene poder ver.
+      return {
+        token: null,
+        sesion: [
+          { titulo: 'Resolvemos tus dudas del onboarding',
+            texto: 'Repasamos juntos lo que completaste acá. Por eso es fundamental que lo termines antes de la reunión.' },
+          { titulo: 'Configuramos tu Meta Business', aviso: true,
+            texto: 'Necesitás tener acceso a una página de Facebook y a un Instagram. Si no los tenés, vamos a tener que reagendar.' },
+          { titulo: 'Dejamos definidos los próximos pasos',
+            texto: 'Qué hacemos nosotros, qué necesitamos de vos y cuándo sale cada cosa.' },
+        ],
+        nombre: 'Sergio Cabrera', email: 'sergio@ejemplo.com',
+        telefono: '+54 9 341 555 1234', pais: 'Argentina',
+      };
+    }
+    return call('portal_onboarding_agenda_datos');
+  },
 
   agendaRegistrar: escribir(
     (appointmentId) => call('portal_onboarding_agenda_registrar', { p_appointment_id: appointmentId }),
