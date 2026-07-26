@@ -541,7 +541,7 @@ function EditorMessageModal({ initial, onClose }) {
 //    desplegable — al clickear se va a la pantalla del funnel.
 //  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
 //    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false }) {
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [] }) {
   const { currentUser } = useApp();
   const meId = currentUser?.id || null;
   const [note, setNote] = useState(null);
@@ -821,8 +821,9 @@ Quedo a la espera de tu respuesta`;
   const funnelConfigNode = <FunnelConfigBlock f={f} onUpdate={onUpdate} events={events} onTrack={onTrack} />;
   const funnelEstrategiaNode = <FunnelEstrategiaBlock f={f} onUpdate={onUpdate} />;
 
-  // P8 — destinos de "Mover a…": TODAS las carpetas de ESTE funnel (por avatar/versión) +
-  // las del cliente. Cada destino carga su scope para reubicar el recurso donde sea.
+  // P8 — destinos de "Mover a…": TODAS las carpetas de ESTE funnel (por avatar/versión),
+  // las del cliente y las de los OTROS funnels del cliente. Cada destino carga su scope
+  // completo (strategy/avatar/versión/bucket) para reubicar el recurso donde sea.
   const moveTargets = useMemo(() => {
     const out = [];
     // Anuncios: destinos por avatar/versión.
@@ -842,8 +843,37 @@ Quedo a la espera de tu respuesta`;
     }
     out.push({ id: 'f:testimonios', key: 'testimonios', label: 'Testimonios del funnel', scope: 'funnel', strategyId: f.strategy_id, avatarId: null, version: 1 });
     for (const cat of CLIENT_CATS) out.push({ id: `c:${cat.key}`, key: cat.key, label: cat.label, scope: 'client' });
+    // OTROS funnels del mismo cliente: sus carpetas también son destino (con rótulo del
+    // funnel, agrupadas aparte en el desplegable). Si dos funnels comparten carpeta del
+    // Drive (mismo strategy_id) sus carpetas son las mismas — se evita duplicarlas.
+    const yaEsta = new Set(out.filter(t => t.scope === 'funnel').map(t => `${t.strategyId}|${t.avatarId || ''}|${t.version}|${t.key}`));
+    for (const sf of siblings) {
+      if (sf.id === f.id) continue;
+      const gname = (sf.name || '').trim() || 'Funnel sin nombre';
+      const agregar = (t) => {
+        const k = `${t.strategyId}|${t.avatarId || ''}|${t.version}|${t.key}`;
+        if (yaEsta.has(k)) return;
+        yaEsta.add(k);
+        out.push({ ...t, group: gname });
+      };
+      const savs = Array.isArray(sf.avatars) ? sf.avatars : [];
+      for (const av of savs) {
+        const nombre = (av.name || '').trim() || 'Avatar s/nombre';
+        const rv = Array.isArray(av.rec_versions) && av.rec_versions.length ? [...new Set(av.rec_versions)].sort((a, b) => a - b) : [1];
+        const multi = rv.length > 1;
+        for (const v of rv) for (const b of AD_BUCKETS) {
+          agregar({ id: `o:${sf.id}:${av.id}:${v}:${b.key}`, key: b.key, label: `${nombre} · ${b.label}${multi ? ' · V' + v : ''}`, scope: 'funnel', strategyId: sf.strategy_id, avatarId: av.id, version: v });
+        }
+      }
+      const svv = Array.isArray(sf.vsl_versions) && sf.vsl_versions.length ? [...new Set(sf.vsl_versions)].sort((a, b) => a - b) : [1];
+      const svMulti = svv.length > 1;
+      for (const v of svv) for (const b of VSL_BUCKETS) {
+        agregar({ id: `o:${sf.id}:vsl:${v}:${b.key}`, key: b.key, label: `${b.label}${svMulti ? ' · V' + v : ''}`, scope: 'funnel', strategyId: sf.strategy_id, avatarId: null, version: v });
+      }
+      agregar({ id: `o:${sf.id}:testimonios`, key: 'testimonios', label: 'Testimonios', scope: 'funnel', strategyId: sf.strategy_id, avatarId: null, version: 1 });
+    }
     return out;
-  }, [avatars, f.strategy_id, f.vsl_versions]);
+  }, [avatars, f.id, f.strategy_id, f.vsl_versions, siblings]);
 
   const funnelRecursosNode = (
     <div className="flex flex-col gap-3.5">
@@ -1278,7 +1308,7 @@ export default function FunnelsView({ clientId }) {
     return (
       <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onBack={() => setPageFunnelId(null)} forcePage last />
+          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onBack={() => setPageFunnelId(null)} forcePage last siblings={myFunnels} />
         </div>
       </div>
     );
@@ -1345,7 +1375,7 @@ export default function FunnelsView({ clientId }) {
                           </div>
                           {group.map((f, i) => {
                             const del = delOf(f);
-                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} />;
+                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} siblings={myFunnels} />;
                           })}
                         </div>
                       </div>
