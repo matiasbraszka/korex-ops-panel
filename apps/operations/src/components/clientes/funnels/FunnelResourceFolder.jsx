@@ -90,6 +90,10 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSe
             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/55 text-white group-hover:bg-black/70 transition-colors"><Play size={13} fill="currentColor" /></span>
           </span>
         )}
+        {/* La foto que el CLIENTE eligió como favorita para su página (desde el portal). */}
+        {r.favorita && (
+          <span title="Favorita del cliente: la eligió para su página" className="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold pointer-events-none" style={{ background: '#F4B942', color: '#0B1526', boxShadow: '0 2px 8px rgba(0,0,0,.25)' }}>★ FAVORITA</span>
+        )}
       </button>
       {/* Acciones ABAJO: elegir (para mover en masa) + borrar */}
       <div className="flex items-center gap-1 px-1.5 py-1.5 border-t border-[#F1F3F7]">
@@ -206,7 +210,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente,favorita&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
       // Orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10" quedan en secuencia
       // (localeCompare con numeric respeta los números dentro del texto).
