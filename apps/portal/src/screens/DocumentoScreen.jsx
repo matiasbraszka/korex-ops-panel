@@ -261,7 +261,8 @@ export default function DocumentoScreen() {
 
         {/* Header del documento (exacto al prototipo) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 10px', background: '#fff', borderBottom: '1px solid var(--mk-border)', flex: 'none' }}>
-          <div onClick={() => nav('/')} role="button" aria-label="Volver" style={{ cursor: 'pointer', width: 34, height: 34, borderRadius: 9, background: T.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+          {/* Volver = paso ANTERIOR (historial); al inicio solo si se entró por link directo. */}
+          <div onClick={() => (window.history.state?.idx > 0 ? nav(-1) : nav('/'))} role="button" aria-label="Volver" style={{ cursor: 'pointer', width: 34, height: 34, borderRadius: 9, background: T.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
             <IcoChevL size={18} stroke="var(--mk-blue-ops)" sw={2.4} />
           </div>
           <div onClick={() => setDrawer(true)} role="button" aria-label="Lista de guiones" style={{ cursor: 'pointer', width: 34, height: 34, borderRadius: 9, border: '1px solid var(--mk-border)', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
