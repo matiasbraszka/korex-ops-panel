@@ -5,7 +5,7 @@ import BottomNav from '../components/BottomNav';
 import { Loading, DemoBanner, Spinner, useAsync } from '../components/ui';
 import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
 import { T } from '../components/theme';
-import { IcoChevL, IcoChevR, IcoMenu, IcoComment, IcoCheck, IcoX, IcoUpload, IcoInfo, IcoFile, IcoPlaySoft } from '../components/icons';
+import { IcoChevL, IcoChevR, IcoMenu, IcoComment, IcoCheck, IcoX, IcoUpload, IcoInfo, IcoFile, IcoPlaySoft, IcoArrowUp } from '../components/icons';
 
 // DOCUMENTO — la pantalla central del portal, exacta al prototipo:
 //  · Ads / VSL: se leen, se comentan seleccionando texto y AL FINAL se suben
@@ -13,12 +13,37 @@ import { IcoChevL, IcoChevR, IcoMenu, IcoComment, IcoCheck, IcoX, IcoUpload, Ico
 //  · Avatar / Estrategia: solo lectura (los otros documentos del embudo).
 // Las tres rayitas (☰) abren el cajón con todos los guiones del embudo.
 
+import { supabase } from '../lib/supabase';
+
 const DOCS = {
   ads: { eyebrow: 'ADS', accent: 'var(--mk-blue-ops)' },
   vsl: { eyebrow: 'VSL', accent: 'var(--mk-green)' },
   avatar: { eyebrow: 'AVATARES', accent: 'var(--mk-orange)' },
   estrategia: { eyebrow: 'ESTRATEGIA', accent: 'var(--mk-purple)' },
+  guias: { eyebrow: 'GUÍAS', accent: 'var(--mk-cyan)' },
 };
+
+// Las GUÍAS GLOBALES (páginas del sistema, iguales para todos los clientes):
+// las escribe el equipo en el panel (menú del DEL → Guías) y acá se ven nativas.
+const MOCK_GUIAS = [
+  { id: 'mg1', titulo: 'Cómo grabarte los anuncios', html: '<p>Videos cortos, uno por guion. Vertical, con buena luz y el celular quieto. (Contenido de ejemplo del modo demo.)</p>' },
+  { id: 'mg2', titulo: 'Cómo grabarte el VSL', html: '<p>El video largo, en una sola toma. Lee el guion completo antes de empezar. (Contenido de ejemplo del modo demo.)</p>' },
+];
+const cargarGuias = async () => {
+  try {
+    const { data, error } = await supabase.rpc('portal_cliente_guias');
+    if (error || data == null) throw error || new Error('vacío');
+    return data;
+  } catch { return MOCK_GUIAS; }
+};
+
+// Sanitizado mínimo del HTML de las guías (lo escribe solo el equipo, pero
+// igual: sin scripts, iframes ni handlers).
+const limpiarHtml = (h) => String(h || '')
+  .replace(/<\/(?:script|style|iframe|object|embed)>/gi, '')
+  .replace(/<(?:script|style|iframe|object|embed)[^>]*>/gi, '')
+  .replace(/\son\w+="[^"]*"/gi, '').replace(/\son\w+='[^']*'/gi, '')
+  .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"');
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const rxEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -60,10 +85,9 @@ export default function DocumentoScreen() {
   const { sid, tipo } = useParams();
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo]);
-  const { data: config } = useAsync(() => api.config(), []);
+  const { data: guias } = useAsync(() => cargarGuias(), []);
 
   const [drawer, setDrawer] = useState(false);
-  const [guiaOpen, setGuiaOpen] = useState(false);
   const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
   const [composer, setComposer] = useState(null); // {quote,sectionId,parentId?}
   const [draft, setDraft] = useState('');
@@ -72,6 +96,17 @@ export default function DocumentoScreen() {
   const [subidas, setSubidas] = useState([]);     // uploads en curso
   const [avatarSel, setAvatarSel] = useState(null);
   const scrollRef = useRef(null);
+  const pdfRef = useRef(null);
+  // Zoom de lectura (queda guardado en el teléfono del cliente).
+  const [zoom, setZoom] = useState(() => {
+    const v = parseInt(localStorage.getItem('kx_doc_zoom') || '100', 10);
+    return Number.isFinite(v) ? Math.min(150, Math.max(85, v)) : 100;
+  });
+  const cambiarZoom = (d) => setZoom((z) => {
+    const n = Math.min(150, Math.max(85, z + d));
+    try { localStorage.setItem('kx_doc_zoom', String(n)); } catch { /* privado */ }
+    return n;
+  });
   const demo = isDemo();
 
   useEffect(() => { setLocalComs([]); setSubidas([]); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
@@ -94,9 +129,10 @@ export default function DocumentoScreen() {
   if (loading) return <PhoneFrame><Loading label="Abriendo el documento…" /></PhoneFrame>;
   if (!data) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este documento.</div></PhoneFrame>;
 
-  const doc = DOCS[data.tipo] || DOCS.ads;
-  const esVsl = data.tipo === 'vsl';
-  const esGuion = data.tipo === 'ads' || data.tipo === 'vsl';
+  const esGuias = tipo === 'guias';   // página global "Guías" (aplica a todos los DEL)
+  const doc = esGuias ? DOCS.guias : (DOCS[data.tipo] || DOCS.ads);
+  const esVsl = !esGuias && data.tipo === 'vsl';
+  const esGuion = !esGuias && (data.tipo === 'ads' || data.tipo === 'vsl');
   const secciones = Array.isArray(data.secciones) ? data.secciones : [];
   const comentarios = [...(Array.isArray(data.comentarios) ? data.comentarios : []), ...localComs];
   const topComs = comentarios.filter((c) => !c.parentId);
@@ -106,7 +142,8 @@ export default function DocumentoScreen() {
   const listos = subidosOk > 0;
   const docs = data.docs || {};
   const otros = Array.isArray(data.otros) ? data.otros : [];
-  const titulo = data.titulo
+  const titulo = esGuias ? 'Guías de grabación'
+    : data.titulo
     || (data.tipo === 'ads' ? `Anuncios — ${data.funnel?.name || ''}`
       : data.tipo === 'vsl' ? `VSL — ${data.funnel?.name || ''}`
       : data.tipo === 'avatar' ? (secciones[0]?.titulo || 'Avatares')
@@ -126,6 +163,39 @@ export default function DocumentoScreen() {
     setSelBtn({ top: rect.top, left: rect.left + rect.width / 2, quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
   };
   const onDocTouchEnd = () => setTimeout(onDocMouseUp, 80);
+
+  // "Descargar PDF": arma una copia imprimible del documento (con los estilos de la
+  // app) en un iframe oculto y abre el diálogo de impresión — ahí el cliente elige
+  // "Guardar como PDF". Funciona igual en el teléfono y en la compu.
+  const descargarPdf = () => {
+    const nodo = pdfRef.current;
+    if (!nodo) return;
+    let css = '';
+    try {
+      css = [...document.styleSheets]
+        .flatMap((ss) => { try { return [...ss.cssRules].map((r) => r.cssText); } catch { return []; } })
+        .join('\n');
+    } catch { /* hoja externa */ }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;visibility:hidden';
+    document.body.appendChild(f);
+    const d = f.contentDocument;
+    d.open();
+    d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${css}</style><style>
+      html,body{background:#fff!important;margin:0;padding:0}
+      body{padding:26px 30px;font-family:Inter,system-ui,sans-serif}
+      body>div{max-width:780px;margin:0 auto}
+      img{max-width:100%!important;height:auto}
+      [data-uploader],button,[data-no-pdf]{display:none!important}
+      mark[data-cmt],mark.marcando{background:transparent;border:0}
+    </style></head><body><div class="doc-sel">${nodo.innerHTML}</div></body></html>`);
+    d.close();
+    const listo = () => {
+      Promise.all([...d.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))))
+        .then(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch { /* */ } setTimeout(() => f.remove(), 60000); });
+    };
+    if (d.readyState === 'complete') listo(); else f.onload = listo;
+  };
 
   const enviarComentario = async () => {
     const body = draft.trim();
@@ -191,7 +261,8 @@ export default function DocumentoScreen() {
 
         {/* Header del documento (exacto al prototipo) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 10px', background: '#fff', borderBottom: '1px solid var(--mk-border)', flex: 'none' }}>
-          <div onClick={() => nav('/')} role="button" aria-label="Volver" style={{ cursor: 'pointer', width: 34, height: 34, borderRadius: 9, background: T.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+          {/* Volver = paso ANTERIOR (historial); al inicio solo si se entró por link directo. */}
+          <div onClick={() => (window.history.state?.idx > 0 ? nav(-1) : nav('/'))} role="button" aria-label="Volver" style={{ cursor: 'pointer', width: 34, height: 34, borderRadius: 9, background: T.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
             <IcoChevL size={18} stroke="var(--mk-blue-ops)" sw={2.4} />
           </div>
           <div onClick={() => setDrawer(true)} role="button" aria-label="Lista de guiones" style={{ cursor: 'pointer', width: 34, height: 34, borderRadius: 9, border: '1px solid var(--mk-border)', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
@@ -201,17 +272,15 @@ export default function DocumentoScreen() {
             <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.12em', color: doc.accent }}>{doc.eyebrow}</div>
             <div style={{ fontSize: 13, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo}</div>
           </div>
-          <div style={{ display: 'flex', background: T.surface2, borderRadius: 999, padding: 3, gap: 2, flex: 'none' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 13px', borderRadius: 999, background: '#fff', color: T.primary, boxShadow: '0 1px 2px rgba(10,22,40,.08)' }}>Leer</span>
-            <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 13px', borderRadius: 999, color: T.text2 }}>Editar</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--mk-border)', background: '#fff', color: T.textSoft, fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 999, flex: 'none' }}>
-            <IcoComment size={14} stroke="currentColor" sw={2} />
-            {topComs.length}
-          </div>
-          {/* "?" → la guía en video de cómo grabarse (anuncios o VSL) */}
-          {esGuion && (esVsl ? config?.guiaVsl : config?.guiaAds) && (
-            <div onClick={() => setGuiaOpen(true)} role="button" aria-label="Cómo grabar" style={{ cursor: 'pointer', width: 30, height: 30, borderRadius: '50%', background: 'var(--mk-blue-bg)', color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flex: 'none' }}>?</div>
+          {!esGuias && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--mk-border)', background: '#fff', color: T.textSoft, fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 999, flex: 'none' }}>
+              <IcoComment size={14} stroke="currentColor" sw={2} />
+              {topComs.length}
+            </div>
+          )}
+          {/* "?" → la página de Guías (adentro del portal, para todos los DEL) */}
+          {esGuion && (
+            <div onClick={() => nav(`/documento/${sid}/guias`)} role="button" aria-label="Guías de grabación" style={{ cursor: 'pointer', width: 30, height: 30, borderRadius: '50%', background: 'var(--mk-blue-bg)', color: T.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, flex: 'none' }}>?</div>
           )}
         </div>
 
@@ -219,24 +288,70 @@ export default function DocumentoScreen() {
         <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={onDocMouseUp} onTouchEnd={onDocTouchEnd}>
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
-          {/* Aviso del flujo (solo guiones) */}
+          {/* Banner ARRIBA DE TODO: la guía de grabación, imposible de no ver. */}
           {esGuion && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--mk-blue-bg2)', borderBottom: '1px solid var(--mk-border)' }}>
-              <IcoInfo size={15} stroke="var(--mk-blue-ops)" sw={2.2} style={{ flex: 'none' }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk }}>
-                {esVsl ? 'Lee el guion, grábalo y sube tu video al final' : 'Graba los anuncios y súbelos todos juntos al final'}
+            <div onClick={() => nav(`/documento/${sid}/guias`)} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'var(--mk-blue-bg2)', borderBottom: '1px solid var(--mk-border)' }}>
+              <span style={{ width: 22, height: 22, flex: 'none', borderRadius: '50%', background: 'var(--mk-blue-ops)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800 }}>?</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.primaryInk, flex: 1 }}>
+                ¿Dudas de cómo grabarte? <b style={{ textDecoration: 'underline' }}>Mira la guía</b>
               </span>
+              <IcoChevR size={15} stroke="var(--mk-blue-ops)" sw={2.4} style={{ flex: 'none' }} />
             </div>
           )}
 
           <div style={{ padding: '16px 16px 0' }}>
+            {/* Lectura cómoda: zoom (A− / A+) y Descargar PDF */}
+            <div data-no-pdf="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid var(--mk-border)', borderRadius: 10, background: 'var(--mk-bg-panel)', padding: 2 }}>
+                <div onClick={() => cambiarZoom(-10)} role="button" aria-label="Achicar la letra" style={{ cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: T.textSoft, background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>A−</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.text2, minWidth: 38, textAlign: 'center' }}>{zoom}%</div>
+                <div onClick={() => cambiarZoom(10)} role="button" aria-label="Agrandar la letra" style={{ cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: T.textSoft, background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>A+</div>
+              </div>
+              <div onClick={descargarPdf} role="button" style={{ cursor: 'pointer', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 10, border: '1px solid var(--mk-border)', background: '#fff', fontSize: 12, fontWeight: 700, color: T.primaryInk }}>
+                <IcoArrowUp size={13} stroke="currentColor" sw={2.4} style={{ transform: 'rotate(180deg)' }} />Descargar PDF
+              </div>
+            </div>
+
+            <div ref={pdfRef} style={{ zoom: zoom / 100 }}>
             {/* Encabezado del documento */}
             <div style={{ borderLeft: `3px solid ${doc.accent}`, paddingLeft: 12, marginBottom: 18 }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', color: doc.accent, marginBottom: 3 }}>{doc.eyebrow}</div>
               <div style={{ fontSize: 19, fontWeight: 800, color: T.text, letterSpacing: '-0.02em' }}>{titulo}</div>
             </div>
 
-            {secciones.length === 0 && (
+            {/* ── GUÍAS (páginas del sistema, iguales para todos los clientes) ── */}
+            {esGuias && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 10 }}>
+                <style>{`
+                  .guia-rich{font-size:15px;line-height:1.62;color:var(--mk-text)}
+                  .guia-rich p{margin:0 0 12px}
+                  .guia-rich h1,.guia-rich h2,.guia-rich h3{color:var(--mk-ink);letter-spacing:-.01em;line-height:1.25;margin:18px 0 8px}
+                  .guia-rich h1{font-size:19px}.guia-rich h2{font-size:17px}.guia-rich h3{font-size:15.5px}
+                  .guia-rich ul,.guia-rich ol{margin:0 0 12px;padding-left:22px}
+                  .guia-rich li{margin:4px 0}
+                  .guia-rich img{max-width:100%;border-radius:12px}
+                  .guia-rich hr{border:none;border-top:2px solid var(--mk-border);margin:16px 0}
+                  .guia-rich a{color:var(--mk-blue-ink);font-weight:600}
+                  .guia-rich table{width:100%;border-collapse:collapse;margin:0 0 14px;font-size:13.5px}
+                  .guia-rich th{text-align:left;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-text2);background:var(--mk-surface2);padding:8px 10px;border:1px solid var(--mk-border)}
+                  .guia-rich td{padding:8px 10px;border:1px solid var(--mk-border);vertical-align:top}
+                `}</style>
+                <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, margin: '-8px 0 2px' }}>
+                  Todo lo que necesitas saber antes de ponerte frente a la cámara. Léelas una vez y graba tranquilo.
+                </div>
+                {(Array.isArray(guias) ? guias : []).map((g) => (
+                  <div key={g.id} style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, boxShadow: 'var(--shadow-md)', overflow: 'hidden' }}>
+                    <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #EEF0F4' }}>
+                      <div style={{ fontSize: 16.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{g.titulo}</div>
+                    </div>
+                    <div className="guia-rich" style={{ padding: '16px 18px 18px' }}
+                      dangerouslySetInnerHTML={{ __html: limpiarHtml(g.html) || '<p style="color:var(--mk-text3);font-style:italic">Muy pronto.</p>' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!esGuias && secciones.length === 0 && (
               <div style={{ background: '#fff', borderRadius: 18, padding: 20, textAlign: 'center', color: T.text2, fontSize: 14, boxShadow: 'var(--shadow-md)' }}>
                 {esGuion
                   ? <>Todavía no hay guiones de {esVsl ? 'VSL' : 'anuncios'} marcados para grabar en este embudo.</>
@@ -245,7 +360,7 @@ export default function DocumentoScreen() {
             )}
 
             {/* Secciones */}
-            <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft }}>
+            <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft, display: esGuias ? 'none' : 'block' }}>
               {secciones.map((s, i) => {
                 const coms = topComs.filter((c) => (c.sectionId || c.section_id) === s.id);
                 const html = marcarQuotes(textoAHtml(s.texto), coms, marking && marking.sectionId === s.id ? marking : null);
@@ -271,6 +386,7 @@ export default function DocumentoScreen() {
                 );
               })}
             </div>
+            </div>{/* fin pdfRef/zoom */}
 
             {/* ── SUBIR LAS GRABACIONES (solo guiones, al final, todas juntas) ── */}
             {esGuion && secciones.length > 0 && (
@@ -436,6 +552,11 @@ export default function DocumentoScreen() {
                 )}
               </div>
 
+              {/* AYUDA: las guías de grabación, iguales para todos los DEL. */}
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 6px', textTransform: 'uppercase' }}>AYUDA</div>
+              <FilaDoc dot="var(--mk-cyan)" nombre="Guías de grabación" activo={esGuias}
+                onClick={() => { setDrawer(false); nav(`/documento/${sid}/guias`); }} />
+
               {otros.length > 0 && (
                 <>
                   <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: T.text3, padding: '16px 8px 2px', textTransform: 'uppercase' }}>OTROS EMBUDOS</div>
@@ -451,28 +572,6 @@ export default function DocumentoScreen() {
               )}
             </div>
           </>
-        )}
-
-        {/* Hoja "¿Cómo grabar?" con la guía en video */}
-        {guiaOpen && (
-          <div onClick={() => setGuiaOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 75, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'kxFade .2s ease' }}>
-            <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#fff', borderRadius: '22px 22px 0 0', padding: '8px 22px 30px', animation: 'kxUp .25s ease' }}>
-              <div style={{ width: 44, height: 5, borderRadius: 999, background: 'var(--mk-border)', margin: '10px auto 18px' }} />
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                <IcoPlaySoft size={24} stroke="var(--mk-blue-ops)" sw={2.2} />
-              </div>
-              <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: T.ink, textAlign: 'center', marginBottom: 6 }}>
-                ¿Cómo grabar {esVsl ? 'tu VSL' : 'tus anuncios'}?
-              </div>
-              <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, textAlign: 'center', marginBottom: 18 }}>
-                Mira esta guía corta antes de grabar: te muestra paso a paso cómo hacerlo bien a la primera.
-              </div>
-              <a href={esVsl ? config?.guiaVsl : config?.guiaAds} target="_blank" rel="noreferrer" style={{ height: 52, borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, textDecoration: 'none', boxShadow: '0 8px 22px rgba(91,124,245,.34)' }}>
-                Ver la guía en video
-              </a>
-              <div onClick={() => setGuiaOpen(false)} role="button" style={{ cursor: 'pointer', textAlign: 'center', marginTop: 14, fontSize: 13.5, fontWeight: 600, color: T.text2 }}>Cerrar</div>
-            </div>
-          </div>
         )}
 
         {/* Botón flotante Comentar (estilo del prototipo) */}

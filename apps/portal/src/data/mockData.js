@@ -190,7 +190,7 @@ export function mockGuion(id) {
 // prioridad y días desde que se creó. Al validarse en ops, desaparecen.
 export const MOCK_TAREAS = [
   { id: 'mt1', titulo: 'Grabar los 3 anuncios del Avatar 1', prioridad: 'alta', dias: 4, funnel: 'Reclutamiento', funnelId: 'f_reclu', vence: null },
-  { id: 'mt2', titulo: 'Subir fotos de autoridad (evento de Madrid)', prioridad: 'normal', dias: 2, funnel: 'Reclutamiento', funnelId: 'f_reclu', vence: null },
+  { id: 'mt2', titulo: 'Revisar el borrador de tu página y dejar comentarios', prioridad: 'normal', dias: 2, funnel: 'Reclutamiento', funnelId: 'f_reclu', vence: null },
 ];
 
 // Conteo de archivos por carpeta a nivel cliente (contrato de portal_cliente_recursos).
@@ -204,7 +204,8 @@ export const MOCK_INICIO = {
   whatsapp: '5491100000000',
   pendientes: [
     { tipo: 'grabacion_ads', titulo: 'Graba tus anuncios', descripcion: 'Los guiones ya están escritos en tu documento del embudo Reclutamiento. Cada uno dura menos de un minuto.', dias: 6, bloqueante: false, estado: 'pendiente', strategyId: 'f_reclu', docTipo: 'ads', target: null, subidos: 0, bucket: 'ad_rec' },
-    { id: 'pp1', tipo: 'fotos', titulo: 'Sube 5 fotos tuyas', descripcion: 'Las usamos en la portada de tus videos y en tu página. Con fotos del celular alcanza.', dias: 12, bloqueante: false, estado: 'pendiente', target: 5, subidos: 3, bucket: 'autoridad', strategyId: null },
+    { id: 'pp1', tipo: 'fotos', titulo: '5 fotos tuyas de autoridad', descripcion: 'De frente y mirando a cámara: son las que van en tu página y en tus anuncios. Con fotos del celular alcanza.', dias: 12, bloqueante: false, estado: 'pendiente', target: 5, subidos: 3, bucket: 'autoridad', strategyId: null },
+    { id: 'pp4', tipo: 'fotos', titulo: 'Fotos de tu estilo de vida', descripcion: 'Tu día a día: trabajando, de viaje, con tu familia o tu equipo. Le dan vida real a tu marca. Hasta 10.', dias: 12, bloqueante: false, estado: 'pendiente', target: 10, subidos: 0, bucket: 'estilo_vida', strategyId: null },
     { id: 'pp2', tipo: 'acceso_meta', titulo: 'Danos acceso a Meta', descripcion: 'Sin esto no podemos publicar tus anuncios. Te dejamos el paso a paso con capturas.', dias: 9, bloqueante: true, estado: 'pendiente', target: null, subidos: 0, bucket: null, strategyId: null },
   ],
   completados: [{ titulo: 'Tu logo y tus colores' }],
@@ -269,7 +270,7 @@ export const MOCK_MATERIAL = {
     { funnel: 'Tribu Networkers', strategyId: 'f_tribu', tipo: 'ads', titulo: 'Anuncios grabados', subidos: 4, estado: 'subido', dias: 0, ultimo: 'ad-4.mp4' },
   ],
   marca: [
-    { id: 'pp1', tipo: 'fotos', titulo: 'Sube 5 fotos tuyas', bucket: 'autoridad', target: 5, subidos: 3, dias: 12, bloqueante: false, estado: 'pendiente' },
+    { id: 'pp1', tipo: 'fotos', titulo: '5 fotos tuyas de autoridad', bucket: 'autoridad', target: 5, subidos: 3, dias: 12, bloqueante: false, estado: 'pendiente' },
     { id: 'pp3', tipo: 'logo', titulo: 'Tu logo y tus colores', bucket: 'branding', target: null, subidos: 4, dias: 20, bloqueante: false, estado: 'completo' },
   ],
   accesoMeta: 'pendiente',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus, PaintBucket, Minus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -16,6 +16,18 @@ import { sanitizeNoteHtml } from './sanitize';
 // porque rompe la posicion del cursor durante la escritura.
 
 // Paleta de colores de letra disponibles en la barra.
+// Caja de color: pinta el fondo de TODO el párrafo (bloque redondeado con aire),
+// para avisos y consejos. La primera opción la quita.
+const BOX_COLORS = [
+  { c: null,      label: 'Quitar caja' },
+  { c: '#FEF3C7', label: 'Amarillo (aviso)' },
+  { c: '#E7EDFF', label: 'Azul (consejo)' },
+  { c: '#E8F7EE', label: 'Verde (bien)' },
+  { c: '#FDE8E8', label: 'Rojo (cuidado)' },
+  { c: '#F3F4F6', label: 'Gris (nota)' },
+  { c: '#0E1F38', label: 'Azul oscuro (destacado, letra blanca)' },
+];
+
 const TEXT_COLORS = [
   { label: 'Predeterminado', value: '#1F2937' },
   { label: 'Gris',     value: '#6B7280' },
@@ -38,9 +50,38 @@ const headingLevel = (el) => Number(el.tagName[1]);
 // galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
 export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar, noToolbar = false, onActive }) {
   const ref = useRef(null);
+  const rootRef = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
+  const [boxOpen, setBoxOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // diálogo nativo (tabla/imagen/avatar/aviso)
+  // Imagen seleccionada (con delTools): click en una imagen → menú de tamaño /
+  // reemplazar / quitar, como cualquier otra herramienta del editor.
+  const [imgSel, setImgSel] = useState(null); // { el, top, left }
+  const cerrarImgSel = () => {
+    if (imgSel?.el) imgSel.el.classList.remove('rte-img-sel');
+    setImgSel(null);
+  };
+  const setImgWidth = (pct) => {
+    if (!imgSel?.el) return;
+    mutarNodo(imgSel.el, (c) => {
+      c.classList.remove('rte-img-sel');
+      if (!c.getAttribute('class')) c.removeAttribute('class');
+      c.style.width = pct + '%';
+      c.style.maxWidth = '100%';
+      c.removeAttribute('width');
+    });
+    setImgSel(null);
+  };
+  const quitarImg = () => {
+    if (!imgSel?.el) return;
+    borrarNodo(imgSel.el);
+    setImgSel(null);
+  };
+  const reemplazarImg = () => {
+    if (!imgSel?.el) return;
+    setDialog({ type: 'image', url: '', replaceEl: imgSel.el });
+  };
 
   useEffect(() => {
     if (!ref.current) return;
@@ -53,6 +94,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   }, [value]);
 
   const exec = (cmd, arg = null) => {
+    snapshot(true);
     document.execCommand(cmd, false, arg);
     handleInput();
     ref.current?.focus();
@@ -66,23 +108,101 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     onChange?.(clean);
   };
 
+  // ── Historial propio de deshacer ─────────────────────────────────────────────
+  // El historial nativo del navegador no registra los cambios que las herramientas
+  // hacen sobre el DOM (cajas, imágenes, checklist), y reemplazar nodos vía
+  // execCommand para "engañarlo" rompe bloques complejos (parte párrafos y arrastra
+  // lo que sigue). Solución: el editor guarda sus propios estados y Ctrl+Z / Ctrl+Y
+  // usan SIEMPRE este historial, para el tipeo y para las herramientas por igual.
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+  const lastSnapAt = useRef(0);
+  const snapshot = (force = false) => {
+    const el = ref.current;
+    if (!el) return;
+    const now = Date.now();
+    if (!force && now - lastSnapAt.current < 700) return; // agrupa el tipeo en ráfagas
+    lastSnapAt.current = now;
+    const html = el.innerHTML;
+    if (undoStack.current[undoStack.current.length - 1] === html) return;
+    undoStack.current.push(html);
+    if (undoStack.current.length > 200) undoStack.current.shift();
+    redoStack.current = [];
+  };
+  const restaurar = (html) => {
+    const el = ref.current;
+    if (!el) return;
+    el.innerHTML = html;
+    // No sabemos dónde estaba el cursor en ese estado: lo dejamos al final.
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    setImgSel(null);
+    lastSnapAt.current = 0;
+    handleInput();
+  };
+  const undo = () => {
+    const cur = ref.current?.innerHTML;
+    let prev;
+    while (undoStack.current.length) {
+      const t = undoStack.current.pop();
+      if (t !== cur) { prev = t; break; }
+    }
+    if (prev === undefined) return;
+    redoStack.current.push(cur);
+    restaurar(prev);
+  };
+  const redo = () => {
+    const cur = ref.current?.innerHTML;
+    let next;
+    while (redoStack.current.length) {
+      const t = redoStack.current.pop();
+      if (t !== cur) { next = t; break; }
+    }
+    if (next === undefined) return;
+    undoStack.current.push(cur);
+    restaurar(next);
+  };
+
+  // Cambios de las herramientas: estado al historial y mutación DIRECTA del nodo
+  // (sin trucos de reemplazo, que es lo que rompía los bloques).
+  const mutarNodo = (node, mutate) => {
+    snapshot(true);
+    mutate(node);
+    handleInput();
+  };
+  const borrarNodo = (node) => {
+    snapshot(true);
+    node.remove();
+    handleInput();
+  };
+
   const handlePaste = (e) => {
     // Pegar como texto plano evita arrastrar estilos raros de Word/Google Docs.
     e.preventDefault();
+    snapshot(true);
     const text = (e.clipboardData || window.clipboardData).getData('text');
     document.execCommand('insertText', false, text);
     handleInput();
   };
 
-  // Deshacer / rehacer (Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z). El contentEditable tiene
-  // historial nativo; lo enganchamos explícito para que ande siempre y refresque el
-  // guardado. (El navegador ya maneja el stack por cada tecla, no de a bloque.)
+  // Deshacer / rehacer (Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z) con el historial PROPIO del
+  // editor. Además, antes de cada tecla que modifica el contenido se guarda el
+  // estado (agrupado en ráfagas de ~1s, así un Ctrl+Z deshace de a frases, no letra
+  // por letra).
   const handleKeyDown = (e) => {
     const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return;
-    const k = e.key.toLowerCase();
-    if (k === 'z' && !e.shiftKey) { e.preventDefault(); document.execCommand('undo'); handleInput(); }
-    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); document.execCommand('redo'); handleInput(); }
+    if (mod) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); return; }
+      if (k === 'b' || k === 'i' || k === 'u' || k === 'x' || k === 'v') snapshot(true);
+      return;
+    }
+    if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter') snapshot();
   };
 
   const addLink = () => {
@@ -98,6 +218,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   const applyColor = (color) => {
     // styleWithCSS=true => foreColor genera <span style="color:..."> en vez de <font>.
+    snapshot(true);
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('foreColor', false, color);
     document.execCommand('styleWithCSS', false, false);
@@ -108,10 +229,101 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   // Marcador / resaltado: pinta el FONDO del texto seleccionado. 'transparent' lo quita.
   const applyHighlight = (color) => {
+    snapshot(true);
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('hiliteColor', false, color);
     document.execCommand('styleWithCSS', false, false);
     handleInput();
+    ref.current?.focus();
+  };
+
+  // Checklist: una lista con casilleros ☐ en vez de puntos. Por dentro es una <ul>
+  // normal con el casillero como marcador (list-style-type con string), así Enter
+  // sigue agregando casilleros solo y el estilo viaja inline (sobrevive al
+  // sanitizador y se ve igual en el portal del cliente).
+  const CHECK_MARKER = '"☐  "';
+  const closestUl = () => {
+    const sel = window.getSelection();
+    const n = sel?.anchorNode;
+    if (!n) return null;
+    const el = n.nodeType === 1 ? n : n.parentElement;
+    const ul = el?.closest?.('ul');
+    return (ul && ref.current?.contains(ul)) ? ul : null;
+  };
+  const toggleChecklist = () => {
+    let ul = closestUl();
+    if (ul && ul.style.listStyleType) {
+      // Ya es checklist: el botón la saca (cada ítem vuelve a párrafo normal).
+      snapshot(true);
+      const frag = document.createDocumentFragment();
+      [...ul.children].forEach((li) => {
+        const p = document.createElement('p');
+        while (li.firstChild) p.appendChild(li.firstChild);
+        frag.appendChild(p);
+      });
+      ul.replaceWith(frag);
+      handleInput();
+    } else if (ul) {
+      // Era lista de viñetas: la convierte en checklist.
+      mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; });
+    } else {
+      snapshot(true);
+      document.execCommand('insertUnorderedList');
+      ul = closestUl();
+      if (ul) ul.style.listStyleType = CHECK_MARKER;
+      handleInput();
+    }
+    ref.current?.focus();
+  };
+
+  // Caja de color: fondo pintado del párrafo entero (aviso/consejo). Va como estilo
+  // inline sobre el bloque, así sobrevive al sanitizador y se ve igual en el portal.
+  const closestBlock = () => {
+    const sel = window.getSelection();
+    const n = sel?.anchorNode;
+    if (!n) return null;
+    const el = n.nodeType === 1 ? n : n.parentElement;
+    const b = el?.closest?.('p,h1,h2,h3,h4,h5,h6,li,blockquote');
+    return (b && ref.current?.contains(b) && b !== ref.current) ? b : null;
+  };
+  const applyBox = (bg) => {
+    let block = closestBlock();
+    if (!block) { document.execCommand('formatBlock', false, 'P'); block = closestBlock(); }
+    if (!block) return;
+    // La caja azul oscuro lleva la letra en blanco (también las negritas, que en el
+    // DEL tienen color propio por CSS y sin esto quedarían invisibles). Al cambiar a
+    // una caja clara o quitarla, ese blanco se limpia solo.
+    const esBlanco = (v) => v === 'rgb(255, 255, 255)' || v === '#ffffff' || v === 'white';
+    const limpiarBlanco = (c) => {
+      if (esBlanco(c.style.color)) c.style.color = '';
+      c.querySelectorAll('strong,b').forEach((s) => {
+        if (esBlanco(s.style.color)) {
+          s.style.color = '';
+          if (!s.getAttribute('style')) s.removeAttribute('style');
+        }
+      });
+    };
+    mutarNodo(block, (c) => {
+      if (bg) {
+        const oscura = bg === '#0E1F38';
+        c.style.background = bg;
+        c.style.borderRadius = oscura ? '14px' : '10px';
+        c.style.padding = oscura ? '16px 18px' : '12px 14px';
+        if (oscura) {
+          c.style.color = '#ffffff';
+          c.querySelectorAll('strong,b').forEach((s) => { if (!s.style.color) s.style.color = '#ffffff'; });
+        } else {
+          limpiarBlanco(c);
+        }
+      } else {
+        c.style.background = '';
+        c.style.borderRadius = '';
+        c.style.padding = '';
+        limpiarBlanco(c);
+        if (!c.getAttribute('style')) c.removeAttribute('style');
+      }
+    });
+    setBoxOpen(false);
     ref.current?.focus();
   };
 
@@ -146,6 +358,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       r.collapse(false);
       sel.addRange(r);
     }
+    snapshot(true);
     document.execCommand('insertHTML', false, html);
     savedRange.current = null;
     handleInput();
@@ -156,10 +369,34 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const changeFontSize = (bigger) => {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setDialog({ type: 'aviso', msg: 'Seleccioná primero el texto que querés ' + (bigger ? 'agrandar' : 'achicar') + '.' }); return; }
-    const span = document.createElement('span');
-    span.style.fontSize = bigger ? 'larger' : 'smaller';
     const range = sel.getRangeAt(0);
-    try { span.appendChild(range.extractContents()); range.insertNode(span); } catch { return; }
+    // Envuelve cada pedazo de texto POR SEPARADO, en su lugar. Arrancar el contenido
+    // de la selección entera (extractContents) rompía las tablas cuando la selección
+    // cruzaba de una celda a otra: quedaban celdas fantasma fuera de la tabla.
+    const { startContainer, startOffset, endContainer, endOffset } = range;
+    const raiz = range.commonAncestorContainer;
+    let textos = [];
+    if (raiz.nodeType === 3) {
+      textos = [raiz];
+    } else {
+      const walker = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (range.intersectsNode(n) && n.nodeValue.trim() !== '') textos.push(n);
+      }
+    }
+    if (!textos.length) return;
+    snapshot(true);
+    for (const n of textos) {
+      if (n === endContainer && endOffset === 0) continue;
+      if (n === startContainer && startOffset >= n.length) continue;
+      let nodo = n;
+      if (n === endContainer && endOffset < n.length) n.splitText(endOffset);
+      if (n === startContainer && startOffset > 0) nodo = n.splitText(startOffset);
+      const span = document.createElement('span');
+      span.style.fontSize = bigger ? 'larger' : 'smaller';
+      nodo.parentNode.insertBefore(span, nodo);
+      span.appendChild(nodo);
+    }
     sel.removeAllRanges();
     handleInput();
     ref.current?.focus();
@@ -186,6 +423,17 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const doImage = () => {
     const safe = (dialog.url || '').trim();
     if (!/^https?:\/\//i.test(safe)) { setDialog({ ...dialog, err: 'El link debe empezar con http:// o https://' }); return; }
+    // Reemplazar: cambia el src de la imagen seleccionada, conservando su tamaño.
+    if (dialog.replaceEl) {
+      mutarNodo(dialog.replaceEl, (c) => {
+        c.src = safe;
+        c.classList.remove('rte-img-sel');
+        if (!c.getAttribute('class')) c.removeAttribute('class');
+      });
+      setDialog(null);
+      setImgSel(null);
+      return;
+    }
     setDialog(null);
     insertHTML(`<img src="${safe.replace(/"/g, '&quot;')}" alt="" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`);
   };
@@ -240,6 +488,17 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   };
 
   const handleClick = (e) => {
+    // Selección de imagen (herramienta del DEL): click en la imagen → menú.
+    if (delTools && e.target.tagName === 'IMG' && ref.current?.contains(e.target)) {
+      e.preventDefault();
+      if (imgSel?.el && imgSel.el !== e.target) imgSel.el.classList.remove('rte-img-sel');
+      e.target.classList.add('rte-img-sel');
+      const rRoot = rootRef.current.getBoundingClientRect();
+      const rImg = e.target.getBoundingClientRect();
+      setImgSel({ el: e.target, top: rImg.top - rRoot.top - 38, left: Math.max(8, rImg.left - rRoot.left + 8) });
+      return;
+    }
+    if (imgSel) cerrarImgSel();
     const h = e.target.closest?.('h1,h2,h3');
     if (!h || !ref.current?.contains(h)) return;
     // Solo togglear si el click cae en la "canaleta" izquierda donde vive la flecha.
@@ -255,7 +514,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   // este editor toma el foco, avisa con onActive(api) y la barra opera sobre ÉL. Así la
   // barra no se repite en cada sección. Ver DelToolbar en DelEditor.
   const apiRef = useRef({});
-  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint };
+  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint, toggleChecklist, applyBox };
   const handleFocus = () => onActive?.(apiRef.current);
 
   const Btn = ({ Icon, title, onClick, label }) => (
@@ -273,7 +532,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const Divider = () => <div className="w-px h-5 bg-gray-200" />;
 
   return (
-    <div className="border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
+    <div ref={rootRef} className="relative border border-gray-200 rounded-lg bg-white focus-within:border-blue-400 transition-colors">
       {!noToolbar && (
       <div className="sticky top-0 z-20 flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg flex-wrap">
         <Btn Icon={Bold}          title="Negrita (Ctrl+B)"   onClick={() => exec('bold')} />
@@ -286,6 +545,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         <Divider />
         <Btn Icon={List}        title="Lista con viñetas" onClick={() => exec('insertUnorderedList')} />
         <Btn Icon={ListOrdered} title="Lista numerada"    onClick={() => exec('insertOrderedList')} />
+        <Btn Icon={ListChecks}  title="Checklist (casilleros ☐)" onClick={toggleChecklist} />
         <Divider />
         {/* Color de letra: botón con popover de swatches */}
         <div className="relative">
@@ -324,10 +584,49 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
             </>
           )}
         </div>
+        {/* Caja de color: popover de fondos para el párrafo entero */}
+        <div className="relative">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setBoxOpen(v => !v)}
+            title="Caja de color (pinta el fondo del párrafo)"
+            className={`w-7 h-7 flex items-center justify-center rounded bg-transparent border-none cursor-pointer transition-colors ${boxOpen ? 'bg-gray-200 text-gray-800' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}
+          >
+            <PaintBucket size={14} />
+          </button>
+          {boxOpen && (
+            <>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setBoxOpen(false)}
+                className="fixed inset-0 z-30 bg-transparent border-none cursor-default"
+                aria-label="Cerrar"
+              />
+              <div className="absolute left-0 top-9 z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-3 gap-1.5 w-[132px]">
+                {BOX_COLORS.map(b => (
+                  <button
+                    key={b.label}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyBox(b.c)}
+                    title={b.label}
+                    className="w-6 h-6 rounded-md border border-gray-200 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center"
+                    style={{ background: b.c || '#fff' }}
+                  >
+                    {!b.c && <span className="text-[13px] text-[#9098A4] leading-none">⌀</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         {delTools && (<>
           <Divider />
           <Btn label="A−" title="Achicar la letra seleccionada" onClick={() => changeFontSize(false)} />
           <Btn label="A+" title="Agrandar la letra seleccionada" onClick={() => changeFontSize(true)} />
+          <Btn Icon={Minus}     title="Divisor (línea horizontal)" onClick={() => exec('insertHorizontalRule')} />
           <Btn Icon={Table}     title="Insertar tabla" onClick={openTable} />
           <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={openImage} />
           <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={openAvatar} />
@@ -337,10 +636,14 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         <Btn Icon={Eraser} title="Quitar formato"  onClick={clearFormat} />
       </div>
       )}
+      {/* lang="es" + spellCheck: el corrector del navegador subraya en rojo las faltas
+          en español y las corrige con click derecho → sugerencia. Gratis y offline. */}
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
+        lang="es"
+        spellCheck
         onInput={handleInput}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
@@ -350,6 +653,21 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
         style={{ minHeight }}
       />
+
+      {/* Menú flotante de imagen: tamaño / reemplazar / quitar (herramienta del DEL). */}
+      {imgSel && (
+        <div className="absolute z-30 flex items-center gap-0.5 bg-white border border-[#E2E5EB] rounded-lg px-1 py-0.5" style={{ top: Math.max(2, imgSel.top), left: imgSel.left, boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}
+          onMouseDown={(e) => e.preventDefault()}>
+          {[25, 50, 75, 100].map((p) => (
+            <button key={p} type="button" onClick={() => setImgWidth(p)}
+              className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">{p}%</button>
+          ))}
+          <div className="w-px h-4 bg-gray-200" />
+          <button type="button" onClick={reemplazarImg} className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">Reemplazar</button>
+          <button type="button" onClick={quitarImg} className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer">Quitar</button>
+          <button type="button" onClick={cerrarImgSel} className="py-1 px-1 rounded text-[10.5px] font-bold text-[#9CA3AF] hover:text-[#4B5563] border-none bg-transparent cursor-pointer">✕</button>
+        </div>
+      )}
 
       {/* Diálogo NATIVO de la plataforma (nada de window.prompt del navegador). */}
       {dialog && (
@@ -423,7 +741,8 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
         .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
         .rte-content figure[data-drive-image] { margin: 8px 0; padding: 10px; border: 1px dashed #D0D5DD; border-radius: 8px; background: #F7F8FA; color: #9098A4; font-size: 11px; font-style: italic; text-align: center; }
-        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
+        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; cursor: pointer; }
+        .rte-content img.rte-img-sel { outline: 2px solid #2E69E0; outline-offset: 2px; }
         /* Flechita de plegado (estilo Google Docs) en la canaleta izquierda */
         .rte-content h1, .rte-content h2, .rte-content h3 { position: relative; }
         .rte-content h1::before, .rte-content h2::before, .rte-content h3::before {

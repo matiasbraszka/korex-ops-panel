@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
-  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu } from 'lucide-react';
+  Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -54,6 +54,17 @@ function useIsMobile(bp = 900) {
 // enfocada (cada sección avisa con onActive(api) al RichTextEditor). Si no hay
 // ninguna enfocada, los botones quedan atenuados.
 const TB_COLORS = ['#1F2937', '#6B7280', '#DC2626', '#EA580C', '#CA8A04', '#16A34A', '#2563EB', '#7C3AED', '#DB2777'];
+// Cajas de color (fondo del párrafo entero). La primera lo quita. Misma paleta que
+// la del editor (RichTextEditor).
+const BOX_COLORS = [
+  { c: null,      label: 'Quitar caja' },
+  { c: '#FEF3C7', label: 'Amarillo (aviso)' },
+  { c: '#E7EDFF', label: 'Azul (consejo)' },
+  { c: '#E8F7EE', label: 'Verde (bien)' },
+  { c: '#FDE8E8', label: 'Rojo (cuidado)' },
+  { c: '#F3F4F6', label: 'Gris (nota)' },
+  { c: '#0E1F38', label: 'Azul oscuro (destacado, letra blanca)' },
+];
 // Colores del marcador (resaltado de fondo). El primero (transparent) lo QUITA.
 const HL_COLORS = [
   { c: 'transparent', label: 'Sin marcador' },
@@ -101,6 +112,7 @@ function TbDiv() { return <div className="w-px h-5 bg-gray-200 mx-0.5" />; }
 function DelToolbar({ api }) {
   const [colorOpen, setColorOpen] = useState(false);
   const [hlOpen, setHlOpen] = useState(false);
+  const [boxOpen, setBoxOpen] = useState(false);
   const [bpOpen, setBpOpen] = useState(false);
   const off = !api;
   const call = (fn, ...a) => { if (api && typeof api[fn] === 'function') api[fn](...a); };
@@ -116,6 +128,8 @@ function DelToolbar({ api }) {
       <TbDiv />
       <TbBtn Icon={List} title="Lista con viñetas" disabled={off} onClick={() => call('exec', 'insertUnorderedList')} />
       <TbBtn Icon={ListOrdered} title="Lista numerada" disabled={off} onClick={() => call('exec', 'insertOrderedList')} />
+      <TbBtn Icon={ListChecks} title="Checklist (casilleros ☐)" disabled={off} onClick={() => call('toggleChecklist')} />
+      <TbBtn Icon={Minus} title="Divisor (línea horizontal)" disabled={off} onClick={() => call('exec', 'insertHorizontalRule')} />
       <TbDiv />
       <div className="relative">
         <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setColorOpen(v => !v)} disabled={off} title="Color de letra"
@@ -146,6 +160,25 @@ function DelToolbar({ api }) {
                 className="w-6 h-6 rounded-md border border-gray-200 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center"
                 style={{ background: h.c === 'transparent' ? '#fff' : h.c }}>
                 {h.c === 'transparent' && <span className="text-[13px] text-[#9098A4] leading-none">⌀</span>}
+              </button>
+            ))}
+          </div>
+        </>)}
+      </div>
+      {/* Caja de color: pinta el fondo del párrafo entero (avisos/consejos). */}
+      <div className="relative">
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setBoxOpen(v => !v)} disabled={off} title="Caja de color (fondo del párrafo)"
+          className={`w-8 h-8 flex items-center justify-center rounded-md bg-transparent border-none cursor-pointer transition-colors disabled:opacity-40 ${boxOpen ? 'bg-gray-200 text-gray-800' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
+          <PaintBucket size={15} />
+        </button>
+        {boxOpen && !off && (<>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setBoxOpen(false)} className="fixed inset-0 z-30 bg-transparent border-none cursor-default" aria-label="Cerrar" />
+          <div className="absolute left-0 top-9 z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-3 gap-1.5 w-[132px]">
+            {BOX_COLORS.map(b => (
+              <button key={b.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { call('applyBox', b.c); setBoxOpen(false); }} title={b.label}
+                className="w-6 h-6 rounded-md border border-gray-200 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center"
+                style={{ background: b.c || '#fff' }}>
+                {!b.c && <span className="text-[13px] text-[#9098A4] leading-none">⌀</span>}
               </button>
             ))}
           </div>
@@ -365,6 +398,42 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     setClientDocs((prev) => prev.filter(d => d.id !== doc.id));
     if (view === 'cliente:' + doc.id) setView('del');
     await supabase.from('del_client_extra_docs').delete().eq('id', doc.id);
+  };
+
+  // ── GUÍAS GLOBALES: páginas del sistema que aparecen en TODOS los DEL de
+  //    TODOS los clientes (guías de grabación). Se editan acá; el portal las
+  //    muestra nativas al cliente (tabla del_guias_globales).
+  const [guias, setGuias] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    sbFetch('del_guias_globales?select=id,title,html,text,orden,activo&order=orden.asc,created_at.asc')
+      .then((rows) => { if (alive) setGuias(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (alive) setGuias([]); });
+    return () => { alive = false; };
+  }, []);
+  const guiaTimer = useRef(null);
+  const saveGuia = (g, html) => {
+    setGuias((prev) => prev.map(x => x.id === g.id ? { ...x, html } : x));
+    clearTimeout(guiaTimer.current);
+    guiaTimer.current = setTimeout(() => {
+      supabase.from('del_guias_globales')
+        .update({ html, text: htmlToText(html), updated_at: new Date().toISOString() }).eq('id', g.id);
+    }, 900);
+  };
+  const crearGuia = async () => {
+    const title = window.prompt('Nombre de la guía (la ven TODOS los clientes):', 'Guía nueva');
+    if (!title || !title.trim()) return;
+    const { data, error } = await supabase.from('del_guias_globales')
+      .insert({ title: title.trim(), html: '', text: '', orden: guias.length + 1, created_by: by }).select().single();
+    if (error) { window.alert('No pude crear la guía: ' + (error.message || '')); return; }
+    setGuias((prev) => [...prev, data]);
+    setView('guia:' + data.id); setDocEditing(true);
+  };
+  const borrarGuia = async (g) => {
+    if (!window.confirm(`¿Borrar la guía "${g.title}" para TODOS los clientes? No se puede deshacer.`)) return;
+    setGuias((prev) => prev.filter(x => x.id !== g.id));
+    if (view === 'guia:' + g.id) setView('del');
+    await supabase.from('del_guias_globales').delete().eq('id', g.id);
   };
 
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
@@ -818,6 +887,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => { setNavOpen(false); }, [view, activa, verActiva]);
 
+  // Ocultar/mostrar el menú lateral del DEL (queda guardada la preferencia).
+  const [sidebarOculta, setSidebarOculta] = useState(() => localStorage.getItem('del_menu_oculto') === '1');
+  const toggleSidebar = () => setSidebarOculta((v) => {
+    try { localStorage.setItem('del_menu_oculto', v ? '0' : '1'); } catch { /* privado */ }
+    return !v;
+  });
+
+  // Lectura cómoda: zoom del documento (solo modo Leer).
+  const [zoomDoc, setZoomDoc] = useState(() => {
+    const v = parseInt(localStorage.getItem('del_zoom_lectura') || '100', 10);
+    return Number.isFinite(v) ? Math.min(160, Math.max(80, v)) : 100;
+  });
+  const cambiarZoomDoc = (d) => setZoomDoc((z) => {
+    const n = Math.min(160, Math.max(80, z + d));
+    try { localStorage.setItem('del_zoom_lectura', String(n)); } catch { /* privado */ }
+    return n;
+  });
+
   if (err) {
     return (
       <div className="p-6"><div className="rounded-xl border p-4 text-[13px]" style={{ background: '#FEF2F2', borderColor: '#F5C2C2', color: '#B91C1C' }}>
@@ -866,6 +953,48 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const revocarDelShare = async (id) => { try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ } cargarDelShares(); };
 
   const editando = modo === 'editar';
+  // Arma una copia imprimible del documento (todas las pestañas visibles, con los
+  // estilos del panel) en un iframe oculto y abre el diálogo de impresión, donde se
+  // elige "Guardar como PDF".
+  const descargarPdfDel = () => {
+    const escapa = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    let inner = '';
+    for (const gr of groups) {
+      if (!gr.items.length) continue;
+      const gc = secOf(gr.kind);
+      inner += `<div class="pdf-cat">${escapa(gc.label)}</div>`;
+      for (const s of gr.items) {
+        inner += `<h2 class="pdf-sec">${escapa(s.title || 'Sección')}</h2>`;
+        inner += s.html ? sanitizeDelHtml(s.html) : `<p style="white-space:pre-wrap">${escapa(s.text || '')}</p>`;
+      }
+    }
+    let css = '';
+    try {
+      css = [...document.styleSheets]
+        .flatMap((ss) => { try { return [...ss.cssRules].map((r) => r.cssText); } catch { return []; } })
+        .join('\n');
+    } catch { /* hoja externa */ }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;visibility:hidden';
+    document.body.appendChild(f);
+    const d = f.contentDocument;
+    d.open();
+    d.write(`<!doctype html><html><head><meta charset="utf-8"><title>Documento del DEL · V${verActiva}</title><style>${css}</style><style>
+      html,body{background:#fff!important;margin:0;padding:0}
+      body{padding:28px 34px;font-family:Inter,system-ui,sans-serif;color:#1A1D26}
+      .pdf-doc{max-width:800px;margin:0 auto;font-size:13.5px;line-height:1.62}
+      img{max-width:100%!important;height:auto}
+      .pdf-cat{margin:22px 0 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;border-top:2px solid #E5E7EB;padding-top:12px}
+      .pdf-cat:first-child{margin-top:0;border-top:0;padding-top:0}
+      .pdf-sec{font-size:17px;font-weight:800;color:#111827;margin:10px 0 8px;letter-spacing:-.01em}
+    </style></head><body><div class="pdf-doc del-rich">${inner}</div></body></html>`);
+    d.close();
+    const listo = () => {
+      Promise.all([...d.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))))
+        .then(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch { /* */ } setTimeout(() => f.remove(), 60000); });
+    };
+    if (d.readyState === 'complete') listo(); else f.onload = listo;
+  };
   // La columna de comentarios (solo lectura) aparece SOLO si hay comentarios: si no,
   // la hoja gana esos ~300px y queda protagonista, tipo Google Docs.
   const showComments = view === 'del' && !editando && comments.length > 0;
@@ -879,14 +1008,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       `}</style>
       <div className="grid gap-5 items-start mx-auto py-5 px-6" style={isMobile
         ? { maxWidth: '100%', gridTemplateColumns: 'minmax(0,1fr)', padding: '10px 10px 48px', gap: 12 }
-        : { maxWidth: view === 'del' ? (editando ? 1520 : (showComments ? 1640 : 1360)) : 1180, gridTemplateColumns: view === 'del' ? (editando ? 'minmax(0,190px) minmax(0,1fr)' : (showComments ? 'minmax(0,190px) minmax(0,1fr) 300px' : 'minmax(0,190px) minmax(0,1fr)')) : 'minmax(0,215px) minmax(0,1fr)' }}>
+        : { maxWidth: view === 'del' ? (editando ? 1520 : (showComments ? 1640 : 1360)) : 1180, gridTemplateColumns: (() => {
+            const menu = sidebarOculta ? '' : (view === 'del' ? 'minmax(0,190px) ' : 'minmax(0,215px) ');
+            return view === 'del' && !editando && showComments ? `${menu}minmax(0,1fr) 300px` : `${menu}minmax(0,1fr)`;
+          })() }}>
 
         {/* El menú del DEL (maqueta): ESTE FUNNEL (las secciones del documento) · las dos
             pestañas Configuración/Recursos · y abajo los documentos DEL CLIENTE, que
             comparten todos sus funnels. */}
         {/* En mobile el menú vive en un cajón lateral que se abre con las tres rayitas ☰;
             en desktop es la columna fija de siempre. Mismo contenido en los dos casos. */}
-        <div className={isMobile ? (navOpen ? 'fixed inset-0 z-[75] flex' : 'hidden') : 'contents'}
+        <div className={isMobile ? (navOpen ? 'fixed inset-0 z-[75] flex' : 'hidden') : (sidebarOculta ? 'hidden' : 'contents')}
           style={isMobile && navOpen ? { background: 'rgba(15,23,42,.45)' } : undefined}
           onMouseDown={isMobile ? (e) => { if (e.target === e.currentTarget) setNavOpen(false); } : undefined}>
         <nav className={isMobile
@@ -900,7 +1032,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             </div>
           )}
           <div className="px-2 pt-1 pb-1.5">
-            <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Este funnel</span>
+            {/* Fila 1: rótulo + botón de ocultar el menú. Fila 2 (abajo): las versiones. */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF] whitespace-nowrap">Este funnel</span>
+              {!isMobile && (
+                <button onClick={toggleSidebar} title="Ocultar este menú (más espacio para el documento)"
+                  className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E7EAF0] bg-white text-[#9098A4] cursor-pointer hover:text-[#1A1D26] hover:border-[#C9D2E0] shrink-0">
+                  <PanelLeftClose size={13} />
+                </button>
+              )}
+            </div>
             {/* Selector de versión del funnel: V1 por defecto; el + agrega V2, V3… con su
                 propio juego de VSL / Anuncios / Landings. El avatar y la estrategia se ven
                 en todas. Cambiás de versión con un clic y ves solo esa. */}
@@ -1042,6 +1183,33 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               </div>
             )}
           </div>
+
+          {/* GUÍAS: páginas del sistema, iguales en TODOS los DEL de TODOS los
+              clientes (las guías de grabación que ve el cliente en su portal). */}
+          <div className="px-2 pt-3 pb-1.5">
+            <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Guías</span>
+            <div className="text-[9.5px] text-[#C3C9D4] font-medium mt-0.5 normal-case tracking-normal">Iguales para todos los clientes; el cliente las ve en su portal</div>
+          </div>
+          {guias.map(g => {
+            const on = view === 'guia:' + g.id;
+            return (
+              <div key={g.id} className="group/gg flex items-center gap-1 rounded-[9px]" style={{ background: on ? '#ECFEFF' : 'transparent' }}>
+                <button onClick={() => setView('guia:' + g.id)}
+                  className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pl-2.5 pr-1 text-left border-none cursor-pointer text-[12px] font-semibold bg-transparent"
+                  style={{ color: on ? '#0891B2' : '#6B7280' }}>
+                  <HelpCircle size={13} className="shrink-0" style={{ color: '#0891B2' }} />
+                  <span className="truncate flex-1 min-w-0">{g.title}</span>
+                </button>
+                <button onClick={() => borrarGuia(g)} title="Borrar la guía (para todos los clientes)" className="opacity-0 group-hover/gg:opacity-100 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#C3C9D4] hover:text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer shrink-0 mr-1"><X size={12} /></button>
+              </div>
+            );
+          })}
+          <div className="px-1 mt-0.5">
+            <button onClick={crearGuia}
+              className="flex items-center gap-1.5 w-full py-1.5 px-1.5 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#0891B2] hover:text-[#0891B2] bg-transparent">
+              <Plus size={12} />Agregar guía
+            </button>
+          </div>
         </nav>
         </div>
 
@@ -1049,9 +1217,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             pequeño delay para que la selección termine de asentarse (igual que /compartir). */}
         <div className="min-w-0 flex flex-col gap-3 w-full" style={editando && view === 'del' ? { maxWidth: 1040, marginInline: 'auto' } : undefined} onMouseUp={view === 'del' ? onDocMouseUp : undefined} onTouchEnd={view === 'del' ? () => setTimeout(onDocMouseUp, 80) : undefined}>
           {/* Tres rayitas para las vistas que no tienen barra propia (Estrategia, Config, Recursos, docs del cliente). */}
-          {isMobile && view !== 'del' && (
+          {(isMobile || sidebarOculta) && view !== 'del' && (
             <div className="sticky top-0 z-10 py-1.5" style={{ background: '#FBFCFD' }}>
-              <button onClick={() => setNavOpen(true)} className="inline-flex items-center gap-2 py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white text-[12.5px] font-bold text-[#1A1D26] cursor-pointer">
+              <button onClick={() => (isMobile ? setNavOpen(true) : toggleSidebar())} className="inline-flex items-center gap-2 py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white text-[12.5px] font-bold text-[#1A1D26] cursor-pointer">
                 <Menu size={16} />Menú del DEL
               </button>
             </div>
@@ -1068,12 +1236,32 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                 <Menu size={17} />
               </button>
             )}
+            {/* El botón de OCULTAR vive arriba del menú lateral; acá solo aparece el de
+                VOLVER A MOSTRARLO cuando está oculto. */}
+            {!isMobile && sidebarOculta && (
+              <button onClick={toggleSidebar} title="Mostrar el menú del DEL"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer hover:text-[#1A1D26] shrink-0">
+                <PanelLeft size={15} />
+              </button>
+            )}
             <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
               <button onClick={() => setModo('leer')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
               <button onClick={() => setModo('editar')} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none transition-colors" style={editando ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
             </div>
             <span className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[11px] font-bold shrink-0" style={{ background: '#EFEBFF', color: '#6D28D9' }} title="Estás viendo esta versión del funnel. Cambiá de versión en el menú de la izquierda.">Este funnel · V{verActiva}</span>
             <span className="text-[11px] text-[#9098A4]">{editando ? 'Los cambios se guardan solos. Este DEL pasa a vivir en el panel.' : 'Copia de lectura'}</span>
+            {/* Lectura cómoda: zoom (en Leer y en Editar) + Descargar PDF */}
+            <span className="inline-flex items-center gap-0.5 rounded-lg border border-[#E7EAF0] p-0.5" style={{ background: '#F7F8FA' }}>
+              <button onClick={() => cambiarZoomDoc(-10)} title="Achicar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A−</button>
+              <span className="text-[10.5px] font-bold text-[#6B7280] w-9 text-center tabular-nums">{zoomDoc}%</span>
+              <button onClick={() => cambiarZoomDoc(10)} title="Agrandar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A+</button>
+            </span>
+            {!editando && (
+              <button onClick={descargarPdfDel} title="Descargar el documento completo en PDF"
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
+                <FileText size={13} />Descargar PDF
+              </button>
+            )}
             {/* Compartir secciones del DEL con externos (link para comentar). */}
             <div className="relative ml-auto">
               <button onClick={abrirShareDel} title="Compartir secciones para que un externo comente"
@@ -1174,8 +1362,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             const abiertos = scomments.filter(c => !c.resolved).length;
             const threadOpen = threadFor === s.id;
             return (
-              <section key={s.id} id={'sec-' + s.id} data-secid={s.id} className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden" style={{ scrollMarginTop: 108, boxShadow: '0 1px 3px rgba(10,22,40,.06), 0 8px 24px rgba(10,22,40,.04)' }}>
-                <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[#EDF0F5]" style={{ borderLeft: `4px solid ${sc.c}` }}>
+              <section key={s.id} id={'sec-' + s.id} data-secid={s.id} className="rounded-xl border bg-white overflow-hidden" style={{ scrollMarginTop: 108, borderColor: '#D5DCE7', borderLeft: `4px solid ${sc.c}`, boxShadow: '0 2px 5px rgba(10,22,40,.09), 0 10px 28px rgba(10,22,40,.05)' }}>
+                <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[#E3E8F0]" style={{ background: sc.bg || '#F8FAFC' }}>
                   <span className="text-[9.5px] font-extrabold tracking-[0.09em] uppercase shrink-0" style={{ color: sc.c }}>{sc.label}</span>
                   {editTitle === s.id ? (
                     <input autoFocus defaultValue={s.title}
@@ -1265,7 +1453,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   </div>
                 )}
                 {editando && !lock ? (
-                  <div className="p-3">
+                  <div className="p-3" style={{ zoom: zoomDoc / 100 }}>
                     <RichTextEditor
                       key={s.id}
                       value={s.html || plainToHtml(s.text)}
@@ -1281,10 +1469,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     />
                   </div>
                 ) : s.html ? (
-                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}
+                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}
                     dangerouslySetInnerHTML={{ __html: highlightHtml(sanitizeDelHtml(s.html), scomments) }} />
                 ) : (
-                  <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
+                  <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}>
                     {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
                   </div>
                 )}
@@ -1400,6 +1588,49 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                             ? 'El cliente todavía no empezó su onboarding.'
                             : 'Este documento está vacío. Tocá “Editar” para escribirlo.'}
                         </span>}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Una GUÍA GLOBAL (igual para todos los clientes): editable. */}
+          {view.startsWith('guia:') && (() => {
+            const g = guias.find(x => 'guia:' + x.id === view);
+            if (!g) return null;
+            return (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2 py-2 px-1 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#ECFEFF', color: '#0891B2' }}><HelpCircle size={16} /></span>
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{g.title}</div>
+                      <div className="text-[11px] text-[#9098A4]">Guía global: la ven TODOS los clientes en su portal.{docEditing ? ' Se guarda solo.' : ''}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
+                      <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
+                      <button onClick={() => setDocEditing(true)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: '#fff', color: '#0891B2', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
+                    </div>
+                    <button onClick={() => borrarGuia(g)} title="Borrar esta guía (para todos los clientes)" className="inline-flex items-center justify-center w-8 h-8 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+                {docEditing ? (
+                  <RichTextEditor
+                    key={g.id}
+                    value={g.html || ''}
+                    onChange={(html) => saveGuia(g, html)}
+                    sanitize={sanitizeDelHtml}
+                    delTools
+                    minHeight={320}
+                    placeholder="Escribí acá la guía (el cliente la ve tal cual en su portal)…"
+                  />
+                ) : (
+                  <div className="del-rich rounded-xl border border-[#E7EAF0] bg-white py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
+                    {(g.html || '').trim()
+                      ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(g.html) }} />
+                      : <span className="italic text-[#C3C9D4]">Esta guía está vacía. Tocá “Editar” para escribirla.</span>}
                   </div>
                 )}
               </div>
