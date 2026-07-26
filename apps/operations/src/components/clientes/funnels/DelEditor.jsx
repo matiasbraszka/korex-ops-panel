@@ -1031,14 +1031,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               <button onClick={() => setNavOpen(false)} aria-label="Cerrar" className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer"><X size={15} /></button>
             </div>
           )}
-          <div className="px-2 pt-1 pb-1.5 flex items-center justify-between gap-2">
-            <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Este funnel</span>
-            {!isMobile && (
-              <button onClick={toggleSidebar} title="Ocultar este menú (más espacio para el documento)"
-                className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E7EAF0] bg-white text-[#9098A4] cursor-pointer hover:text-[#1A1D26] hover:border-[#C9D2E0] shrink-0">
-                <PanelLeftClose size={13} />
-              </button>
-            )}
+          <div className="px-2 pt-1 pb-1.5">
+            {/* Fila 1: rótulo + botón de ocultar el menú. Fila 2 (abajo): las versiones. */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF] whitespace-nowrap">Este funnel</span>
+              {!isMobile && (
+                <button onClick={toggleSidebar} title="Ocultar este menú (más espacio para el documento)"
+                  className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E7EAF0] bg-white text-[#9098A4] cursor-pointer hover:text-[#1A1D26] hover:border-[#C9D2E0] shrink-0">
+                  <PanelLeftClose size={13} />
+                </button>
+              )}
+            </div>
             {/* Selector de versión del funnel: V1 por defecto; el + agrega V2, V3… con su
                 propio juego de VSL / Anuncios / Landings. El avatar y la estrategia se ven
                 en todas. Cambiás de versión con un clic y ves solo esa. */}
