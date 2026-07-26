@@ -15,13 +15,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { onb } from './api';
-import { calcularProgreso, minutosRestantes, preguntasVisibles } from './progreso';
+import { calcularProgreso, minutosRestantes, nodos, statsBloque } from './progreso';
 
 const Ctx = createContext(null);
 export const useOnboarding = () => useContext(Ctx);
 
 const COLA_KEY = 'korex_onb_cola';
-const CAT_KEY = 'korex_onb_catalogo';
+const CAT_KEY = 'korex_onb_catalogo_v2';
 const DEBOUNCE_MS = 900;
 
 function leerCola() {
@@ -31,10 +31,10 @@ function escribirCola(c) {
   try { localStorage.setItem(COLA_KEY, JSON.stringify(c)); } catch { /* modo incógnito lleno */ }
 }
 
-// El catálogo (7 tramos + 66 preguntas + ejemplos) es el mismo para todos los
-// clientes y cambia solo cuando el equipo lo edita. Cachearlo evita volver a
-// pedirlo en cada recarga dura: sin esto, navegar rápido llegaba a dejar al
-// navegador sin conexiones libres (ERR_INSUFFICIENT_RESOURCES).
+// El catálogo (4 bloques + 23 pasos + 125 preguntas con sus ejemplos) es el
+// mismo para todos los clientes y cambia solo cuando el equipo lo edita desde
+// el constructor. Cachearlo hace que la primera pantalla pinte al instante;
+// sin esto, navegar rápido llegaba a dejar al navegador sin conexiones libres.
 function leerCatalogo() {
   try { return JSON.parse(localStorage.getItem(CAT_KEY) || 'null'); } catch { return null; }
 }
@@ -43,15 +43,13 @@ function escribirCatalogo(c) {
 }
 
 export function OnboardingProvider({ children }) {
-  // Arranca con el catálogo cacheado si lo hay: la primera pintura es inmediata
-  // y la versión fresca lo reemplaza cuando llega.
   const [catalogo, setCatalogo] = useState(leerCatalogo);
   const [estado, setEstado] = useState(null);
   const [respuestas, setRespuestas] = useState({});
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
 
-  // 'guardado' | 'guardando' | 'pendiente'  → el indicador gris del header
+  // 'guardado' | 'guardando' | 'pendiente'  → el indicador del header
   const [sync, setSync] = useState('guardado');
   const [subiendo, setSubiendo] = useState([]);   // subidas corriendo en background
 
@@ -103,16 +101,15 @@ export function OnboardingProvider({ children }) {
 
   // Última red: si el navegador se está cerrando, mandamos lo pendiente ya.
   useEffect(() => {
-    const flush = () => {
+    const alCerrar = () => {
       Object.values(timers.current).forEach(clearTimeout);
       timers.current = {};
       const cola = leerCola();
       if (!Object.keys(cola).length) return;
-      // `keepalive` sobrevive al unload; si igual falla, la cola queda para la próxima.
       navigator.sendBeacon?.('/noop');
     };
-    window.addEventListener('pagehide', flush);
-    return () => window.removeEventListener('pagehide', flush);
+    window.addEventListener('pagehide', alCerrar);
+    return () => window.removeEventListener('pagehide', alCerrar);
   }, []);
 
   // ── Guardado ───────────────────────────────────────────────────────────────
@@ -131,7 +128,7 @@ export function OnboardingProvider({ children }) {
           respondidas: r.respondidas, bloqueantes: r.bloqueantes ?? e.bloqueantes } : e));
       }
       return r;
-    } catch (e) {
+    } catch {
       const cola = leerCola();
       cola[qkey] = { valor, ...(opts || {}) };
       escribirCola(cola);
@@ -155,44 +152,42 @@ export function OnboardingProvider({ children }) {
 
   /** Fuerza el guardado de todo lo que esté esperando (al navegar). */
   const flush = useCallback(async () => {
-    const pend = Object.keys(timers.current);
-    pend.forEach((k) => clearTimeout(timers.current[k]));
+    Object.keys(timers.current).forEach((k) => clearTimeout(timers.current[k]));
     timers.current = {};
     await vaciarCola();
   }, [vaciarCola]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
-  const secciones = catalogo?.secciones || [];
+  const pasos = useMemo(() => catalogo?.pasos || [], [catalogo]);
+  const bloques = useMemo(() => catalogo?.bloques || [], [catalogo]);
   const bloqueantes = estado?.bloqueantes || [];
 
   const progreso = useMemo(
-    () => calcularProgreso(secciones, respuestas, bloqueantes, estado?.agenda?.estado),
-    [secciones, respuestas, bloqueantes, estado?.agenda?.estado],
+    () => calcularProgreso(pasos, respuestas, bloqueantes),
+    [pasos, respuestas, bloqueantes],
   );
 
   const minutos = useMemo(
-    () => minutosRestantes(secciones, respuestas, bloqueantes),
-    [secciones, respuestas, bloqueantes],
+    () => minutosRestantes(pasos, respuestas, bloqueantes),
+    [pasos, respuestas, bloqueantes],
   );
 
-  const tramos = useMemo(() => secciones.filter((s) => s.skey !== 'agenda'), [secciones]);
+  // La lista lineal por la que avanza el cliente. Se recalcula con cada
+  // respuesta porque una condición puede hacer aparecer o desaparecer una
+  // pantalla entera (elegir "ambas" agrega el paso 06).
+  const lista = useMemo(() => nodos(pasos, respuestas), [pasos, respuestas]);
 
-  // Respuestas cortas: las que el cliente marcó "igual quiero seguir".
-  // No bloquean, pero vuelven a aparecer en el repaso — con el ritmo ya tomado,
-  // la segunda pasada recupera la mayoría.
-  const cortas = useMemo(
-    () => preguntasVisibles(secciones, respuestas)
-      .filter((q) => respuestas[q.qkey]?.flag === 'corta'
-        || (q.minChars > 0 && q.requerida
-            && String(respuestas[q.qkey]?.valor || '').trim().length > 0
-            && String(respuestas[q.qkey]?.valor || '').trim().length < q.minChars)),
-    [secciones, respuestas],
+  // Bloques con su avance: es lo que pinta la barra lateral y lo que decide
+  // qué pestañas del portal se abren.
+  const bloquesConAvance = useMemo(
+    () => bloques.map((b) => ({ ...b, ...statsBloque(b.bkey, pasos, respuestas, bloqueantes) })),
+    [bloques, pasos, respuestas, bloqueantes],
   );
 
   // ── Subidas en background ──────────────────────────────────────────────────
   // El truco que hace que el material deje de costar tiempo: el cliente elige
-  // los archivos en el tramo 2 y sigue contestando mientras suben. El estado
-  // vive acá, no en la pantalla, así que sobrevive a la navegación.
+  // los archivos y sigue contestando mientras suben. El estado vive acá, no en
+  // la pantalla, así que sobrevive a la navegación.
   const registrarSubida = useCallback((item) => {
     setSubiendo((s) => [...s, item]);
     return (patch) => setSubiendo((s) => s.map((x) => (x.uid === item.uid ? { ...x, ...patch } : x)));
@@ -203,15 +198,15 @@ export function OnboardingProvider({ children }) {
 
   const value = {
     cargando, error, recargar: cargar,
-    catalogo, secciones, tramos, estado, respuestas, bloqueantes,
-    checklist: catalogo?.checklist || [],
-    progreso, minutos, cortas, sync,
+    catalogo, pasos, bloques: bloquesConAvance, lista,
+    estado, respuestas, bloqueantes,
+    progreso, minutos, sync,
     responder, enviar, flush,
     subiendo, registrarSubida, limpiarSubidas,
     setEstado,
     agenda: estado?.agenda || { estado: 'pendiente' },
     prefill: estado?.prefill || {},
-    completo: estado?.estado === 'completado',
+    completo: estado?.completo === true || estado?.estado === 'completado',
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

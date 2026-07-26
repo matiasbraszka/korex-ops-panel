@@ -16,12 +16,10 @@ import SubirPedidoScreen from './screens/SubirPedidoScreen';
 import AccesoMetaScreen from './screens/AccesoMetaScreen';
 import { OnboardingProvider } from './onboarding/OnboardingProvider';
 import BarraDemo from './onboarding/components/BarraDemo';
-import OnboardingIndex from './onboarding/screens/OnboardingIndex';
-import AgendarScreen from './onboarding/screens/AgendarScreen';
-import TramoScreen from './onboarding/screens/TramoScreen';
-import PreguntaScreen from './onboarding/screens/PreguntaScreen';
-import RepasoScreen from './onboarding/screens/RepasoScreen';
-import CelebracionScreen from './onboarding/screens/CelebracionScreen';
+import BienvenidaScreen from './onboarding/screens/BienvenidaScreen';
+import AvanceScreen from './onboarding/screens/AvanceScreen';
+import PasoScreen from './onboarding/screens/PasoScreen';
+import ListoScreen from './onboarding/screens/ListoScreen';
 
 export default function App() {
   const { authed, loading } = usePortalAuth();
@@ -44,17 +42,21 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
 
-        {/* Onboarding: pantalla completa, SIN tabs ni menú lateral, para que el
-            cliente no se distraiga. Es donde cae el magic link del mail. Su
-            Provider envuelve solo estas rutas: el resto del portal no necesita
-            cargar el catálogo de preguntas. */}
-        <Route path="/onboarding" element={<OnboardingProvider><PhoneFrame><BarraDemo /><Outlet /></PhoneFrame></OnboardingProvider>}>
-          <Route index element={<OnboardingIndex />} />
-          <Route path="agendar" element={<AgendarScreen />} />
-          <Route path="repaso" element={<RepasoScreen />} />
-          <Route path="listo" element={<CelebracionScreen />} />
-          <Route path=":tramo" element={<TramoScreen />} />
-          <Route path=":tramo/:qkey" element={<PreguntaScreen />} />
+        {/* Onboarding: pantalla completa con su propia barra lateral, SIN los
+            tabs del portal, para que el cliente no se distraiga. Es donde cae
+            el magic link del mail.
+            Va FUERA de <PhoneFrame>: el onboarding ocupa el ancho real del
+            navegador (240px de barra lateral + 760px de contenido), que es
+            justamente lo que el marco de teléfono impide.
+            Su Provider envuelve solo estas rutas: el resto del portal no
+            necesita cargar el catálogo de 125 preguntas.
+            Las rutas literales van ANTES que :paso, o se las come el dinámico. */}
+        <Route path="/onboarding" element={<OnboardingProvider><BarraDemo /><Outlet /></OnboardingProvider>}>
+          <Route index element={<BienvenidaScreen />} />
+          <Route path="avance" element={<AvanceScreen />} />
+          <Route path="listo" element={<ListoScreen />} />
+          <Route path=":paso" element={<PasoScreen />} />
+          <Route path=":paso/:pantalla" element={<PasoScreen />} />
         </Route>
 
         {/* Tabs con navegación inferior (menú lateral en PC): Inicio · Guiones · Embudos · Material */}

@@ -1,107 +1,272 @@
-// Campos que NO son de respuesta larga: una línea, número, fecha, opciones,
-// chips, confirmación. Sin semáforo y sin micrófono — pedirle a alguien que
-// hable para decir "42" sería ridículo, y el ruido visual cansa a las 40
-// preguntas.
+// ─────────────────────────────────────────────────────────────────────────────
+// Los tipos de campo del onboarding, calcados del HTML.
 //
-// Todos comparten alto táctil de 56px y 17px de fuente: el onboarding lo
-// completa tanto alguien de 25 desde el celular como alguien de 65 desde la
-// computadora, y el segundo es el que decide el tamaño.
-import { useState } from 'react';
-import { IcoCheck, IcoLapiz, IcoInfo } from '../../components/icons';
-import { TO, F, dsp, label } from '../tokens';
-import CampoAbierto from './CampoAbierto';
-import CampoSubida from './CampoSubida';
+// La jerarquía de una pregunta, de arriba abajo y sin excepciones:
+//
+//   1. CABECERA        separador con título, solo cuando agrupa varias
+//   2. LA PREGUNTA     Montserrat 800, lo único grande de la pantalla
+//   3. QUÉ CONTESTAR   sublabel + los chips de "acordate de contar"
+//   4. EL EJEMPLO      plegado, cerrado por defecto — es la vara del largo
+//   5. EL CAMPO        con el micrófono adentro cuando hay largo que alcanzar
+//   6. CÓMO VA         el medidor: una barra fina y una línea de texto
+//
+// El ejemplo va PLEGADO y nunca como placeholder: puesto como placeholder se
+// copia literal y contamina el documento del que sale el VSL.
+// ─────────────────────────────────────────────────────────────────────────────
+import { useEffect, useRef, useState } from 'react';
+import { T, FUENTE, kicker, input, textarea } from '../tokens';
+import { medidor } from '../progreso';
+import GrabadorVoz from './GrabadorVoz';
+import CampoArchivos from './CampoArchivos';
 
-const inputStyle = (enfocado) => ({
-  width: '100%', height: 56, borderRadius: 14,
-  border: `2px solid ${enfocado ? TO.blue : TO.lineStrong}`,
-  padding: '0 16px', fontSize: F.input, fontFamily: 'inherit',
-  color: TO.body, background: '#fff', outline: 'none', transition: 'border-color .16s',
-});
+// ── Piezas compartidas ───────────────────────────────────────────────────────
 
-function Etiqueta({ q, chico }) {
+function Cabecera({ q }) {
+  if (!q.cabecera) return null;
   return (
-    <>
-      <label htmlFor={q.qkey} style={chico
-        ? { display: 'block', fontSize: F.qChica, fontWeight: 800, color: TO.ink, lineHeight: 1.3, letterSpacing: '-0.01em' }
-        : { ...dsp(F.q, '-0.025em'), display: 'block', lineHeight: 1.22 }}>
-        {q.label}
-      </label>
-      {q.sublabel && (
-        <div style={{ fontSize: chico ? F.meta : F.sub, lineHeight: 1.5, color: TO.meta, marginTop: 7 }}>
-          {q.sublabel}
-        </div>
+    <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 22, marginBottom: 16 }}>
+      <div style={{
+        fontFamily: FUENTE.display, fontSize: 19, fontWeight: 800,
+        letterSpacing: '-.02em', marginBottom: 5,
+      }}>{q.cabecera}</div>
+      {q.cabeceraSub && (
+        <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.5 }}>{q.cabeceraSub}</div>
       )}
-    </>
-  );
-}
-
-// Un párrafo con ícono, no un recuadro de color. Los recuadros permanentes
-// debajo del enunciado compiten con la pregunta y obligan a decidir qué leer
-// primero; acá la jerarquía es título → subtítulo → ayuda → campo.
-function Ayuda({ texto }) {
-  if (!texto) return null;
-  return (
-    <div style={{
-      display: 'flex', gap: 8, marginTop: 12,
-      fontSize: F.meta, lineHeight: 1.5, color: TO.meta,
-    }}>
-      <IcoInfo size={18} stroke={TO.meta} style={{ flex: 'none', marginTop: 1 }} />
-      <div>{texto}</div>
     </div>
   );
 }
 
-function Opciones({ q, valor, onChange, multi }) {
-  const sel = multi
-    ? String(valor || '').split(',').map((s) => s.trim()).filter(Boolean)
-    : [String(valor || '').trim()];
+function Etiqueta({ q, numero }) {
+  if (!q.label) return null;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
+        {numero ? (
+          <span style={{
+            flex: '0 0 auto', minWidth: 28, height: 28, borderRadius: 9,
+            background: T.azulWash, color: T.azulTinta, display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center', fontFamily: FUENTE.display,
+            fontSize: 14, fontWeight: 800, padding: '0 7px',
+          }}>{numero}</span>
+        ) : null}
+        <label htmlFor={q.qkey} style={{
+          flex: 1, fontFamily: FUENTE.display, fontSize: 'clamp(18px,3.6vw,22px)',
+          fontWeight: 800, letterSpacing: '-.024em', lineHeight: 1.24, color: '#0A0A0A',
+        }}>{q.label}</label>
+        {!q.requerida && (
+          <span style={{ ...kicker(T.faint, 10), letterSpacing: '.07em', flex: '0 0 auto' }}>
+            Opcional
+          </span>
+        )}
+      </div>
+      {q.sublabel && (
+        <div style={{
+          fontSize: 13, color: T.muted, marginTop: 7, lineHeight: 1.5,
+          paddingLeft: numero ? 37 : 0,
+        }}>{q.sublabel}</div>
+      )}
+    </div>
+  );
+}
 
-  const toggle = (v) => {
-    if (!multi) return onChange(v);
-    const next = sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v];
-    onChange(next.join(', '));
-  };
+/** Los "acordate de contar": recordatorios, no botones. */
+function Chips({ chips }) {
+  if (!chips?.length) return null;
+  return (
+    <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {chips.map((c) => (
+        <span key={c} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          background: T.azulWash2, border: `1px solid ${T.azulLinea}`, borderRadius: 999,
+          padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: T.azulTinta,
+        }}>
+          <span style={{ width: 5, height: 5, flex: '0 0 5px', borderRadius: '50%', background: T.azul }} />
+          <span>{c}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** El ejemplo: la vara con la que el cliente calibra cuánto escribir. */
+function Ejemplo({ q }) {
+  const [abierto, setAbierto] = useState(false);
+  if (!q.ejemplo || !q.largo) return null;
+  return (
+    <div style={{
+      marginBottom: 14, border: `1px solid ${T.line}`, borderRadius: 14,
+      background: '#fff', overflow: 'hidden',
+    }}>
+      <button type="button" onClick={() => setAbierto((v) => !v)} style={{
+        width: '100%', background: 'none', border: 'none', padding: '14px 16px',
+        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+      }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.azul}
+             strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" style={{ flex: '0 0 16px' }}>
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: T.soft }}>
+          {abierto ? 'Ocultar el ejemplo' : 'Ver un ejemplo bien contestado'}
+        </span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.faint}
+             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+             style={{ transition: 'transform .2s', transform: abierto ? 'rotate(180deg)' : 'none' }}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {abierto && (
+        <div style={{ padding: '0 16px 16px 16px' }}>
+          <div style={{
+            background: T.bg, borderLeft: `3px solid ${T.azul}`, borderRadius: '0 10px 10px 0',
+            padding: '14px 15px', fontSize: 13.5, lineHeight: 1.65, color: T.soft,
+            whiteSpace: 'pre-line',
+          }}>{q.ejemplo}</div>
+          <div style={{ fontSize: 11.5, color: T.faint, marginTop: 9, lineHeight: 1.5 }}>
+            Este es el nivel de detalle que nos sirve. No copies el ejemplo: contá tu caso así.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tipos ────────────────────────────────────────────────────────────────────
+
+/** Tarjeta informativa: no se responde, explica algo antes de decidir. */
+function Info({ q }) {
+  return (
+    <div style={{ borderRadius: 16, background: T.dark, padding: '20px 22px' }}>
+      <div style={{ ...kicker(T.azulClaro, 10.5), marginBottom: 8 }}>{q.infoKicker}</div>
+      <div style={{
+        fontFamily: FUENTE.display, fontSize: 17, fontWeight: 700, color: '#fff',
+        letterSpacing: '-.02em', lineHeight: 1.3, marginBottom: 10,
+      }}>{q.infoTitulo}</div>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: T.faint }}>{q.infoCuerpo}</div>
+      {q.video && (
+        <div style={{ marginTop: 14, borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9' }}>
+          <iframe src={q.video} title={q.infoTitulo} allowFullScreen
+                  style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Respuesta larga: textarea con el micrófono adentro y el medidor debajo. */
+function Abierta({ q, valor, onChange, onVoz, onAudioPendiente, clientHint }) {
+  const ref = useRef(null);
+  const len = String(valor || '').trim().length;
+  const m = q.largo ? medidor(len, q.largo) : null;
+  const hayTexto = len > 0;
+
+  // Crece con el contenido, hasta media pantalla. Más allá de eso el campo se
+  // come la pregunta y el cliente pierde de vista qué le preguntamos.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const tope = Math.round(window.innerHeight * 0.45);
+    el.style.height = `${Math.min(el.scrollHeight, tope)}px`;
+  }, [valor]);
 
   return (
-    <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+    <div>
+      <div style={{ position: 'relative' }}>
+        <textarea
+          id={q.qkey} ref={ref} value={valor || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={q.placeholder || 'Escribí acá tu respuesta…'}
+          onFocus={(e) => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+          style={{
+            ...textarea,
+            minHeight: q.minAltura || 120,
+            paddingBottom: q.largo ? 62 : 15,
+          }}
+        />
+        {/* El micrófono aparece cuando hay un largo que alcanzar: es el mecanismo
+            que resuelve las respuestas de tres líneas, no un adorno. */}
+        {q.largo > 0 && q.voz !== false && (
+          <GrabadorVoz
+            qkey={q.qkey} clientHint={clientHint}
+            etiqueta={hayTexto ? 'Seguir hablando' : 'Contéstalo hablando'}
+            pista={`unos ${Math.round(q.largo / 14)} s`}
+            onTexto={onVoz} onAudioPendiente={onAudioPendiente}
+          />
+        )}
+      </div>
+      {m && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+          <div style={{ flex: 1, height: 5, borderRadius: 999, background: T.fill, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 999, width: m.w, background: m.color,
+              transition: 'width .3s ease, background .3s',
+            }} />
+          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: m.color }}>{m.texto}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Corta({ q, valor, onChange, autoFocus }) {
+  return (
+    <input
+      id={q.qkey} value={valor || ''} onChange={(e) => onChange(e.target.value)}
+      placeholder={q.placeholder} type="text" inputMode={q.inputMode || 'text'}
+      autoFocus={autoFocus} style={input}
+    />
+  );
+}
+
+/**
+ * Una sola opción.
+ *
+ * Guarda la ETIQUETA legible en el texto y el VALOR en el json. El texto es lo
+ * que termina en el documento del DEL —"R: Oportunidad de negocio 100%" se lee,
+ * "R: op100" no— y el valor es contra lo que se resuelven las condiciones.
+ */
+function Opcion({ q, valor, valorJson, onChange }) {
+  const actual = valorJson?.valor ?? null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       {(q.opciones || []).map((o) => {
-        const activa = sel.includes(o.value);
+        const sel = actual != null ? actual === o.value : valor === o.label;
         return (
           <button
-            key={o.value} type="button" onClick={() => toggle(o.value)}
-            aria-pressed={activa}
+            key={o.value} type="button"
+            onClick={() => onChange(o.label, { valorJson: { valor: o.value }, inmediato: true })}
             style={{
-              display: 'flex', alignItems: 'center', gap: 13, textAlign: 'left',
-              padding: '17px 16px', borderRadius: 16, cursor: 'pointer', minHeight: 60,
-              // La opción elegida se distingue por TRES cosas a la vez (borde,
-              // fondo y check), no solo por color: hay clientes que no
-              // distinguen bien el azul del gris.
-              border: `2px solid ${activa ? TO.blue : TO.lineStrong}`,
-              background: activa ? TO.blueWash : '#fff',
-              transition: 'all .16s',
-            }}
-          >
-            <span style={{
-              width: 26, height: 26, flex: 'none',
-              borderRadius: multi ? 8 : '50%',
-              border: `2px solid ${activa ? TO.blue : TO.lineStrong}`,
-              background: activa ? TO.blue : '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '100%', textAlign: 'left', cursor: 'pointer', borderRadius: 14,
+              padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 13,
+              transition: 'border-color .15s, background .15s',
+              border: `1.5px solid ${sel ? T.azul : T.line}`,
+              background: sel ? T.azulWash2 : '#fff',
             }}>
-              {activa && <IcoCheck size={15} stroke="#fff" sw={3} />}
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{
-                display: 'block', fontSize: F.input, fontWeight: 700,
-                color: activa ? TO.blue : TO.ink, lineHeight: 1.35,
-              }}>{o.label}</span>
-              {o.hint && (
-                <span style={{ display: 'block', fontSize: F.meta, color: TO.meta, marginTop: 4, lineHeight: 1.45 }}>
-                  {o.hint}
-                </span>
+            <div style={{
+              width: 21, height: 21, flex: '0 0 21px', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: `2px solid ${sel ? T.azul : T.lineFuerte}`,
+              background: sel ? T.azul : '#fff',
+            }}>
+              {sel && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff"
+                     strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
               )}
-            </span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: '-.01em', color: T.ink }}>
+                {o.label}
+              </div>
+              {o.hint && (
+                <div style={{ fontSize: 12.5, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+                  {o.hint}
+                </div>
+              )}
+            </div>
           </button>
         );
       })}
@@ -109,270 +274,138 @@ function Opciones({ q, valor, onChange, multi }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pantalla de confirmación del tramo 1.
-//
-// NO pregunta: muestra lo que el sistema ya sabe del cliente (viene de
-// crear-venta) y le pide que lo valide. Son dos minutos que en el formulario
-// viejo eran diez.
-//
-// Y si algo está mal, LO CORRIGE ACÁ MISMO. Mandarlo a WhatsApp por un teléfono
-// mal tipeado es pedirle que salga de la plataforma, espere una respuesta y
-// vuelva — con suerte. Encima ese dato es el que usamos después para escribirle.
-//
-// Lo que se corrige NO se escribe directo sobre el cliente desde el navegador:
-// se guarda como respuesta y el write-back aplica solo los campos seguros. El
-// nombre y los datos del contrato quedan para que los mire el equipo — el
-// nombre es la llave con la que la plataforma reconoce al cliente, y cambiarlo
-// solo lo dejaría afuera de su propio portal.
-// ─────────────────────────────────────────────────────────────────────────────
-const CAMPOS_CONFIRMAR = [
-  { k: 'nombre', label: 'Nombre', tipo: 'text' },
-  { k: 'empresa', label: 'Empresa', tipo: 'text' },
-  { k: 'email', label: 'Email', tipo: 'email' },
-  { k: 'telefono', label: 'Teléfono', tipo: 'tel' },
-  { k: 'pais', label: 'País', tipo: 'text' },
-  { k: 'contrato', label: 'Datos del contrato', tipo: 'textarea' },
-];
-
-// Los que el equipo revisa a mano antes de aplicarlos.
-const REVISA_EQUIPO = new Set(['nombre', 'contrato']);
-
-const textoConfirmado = (datos, cambios) => CAMPOS_CONFIRMAR
-  .filter((c) => String(datos[c.k] || '').trim())
-  .map((c) => `${c.label}: ${String(datos[c.k]).trim()}`)
-  .concat(cambios.length ? [`(El cliente corrigió: ${cambios.join(', ')})`] : [])
-  .join('\n');
-
-function Confirmar({ q, valor, valorJson, onChange, prefill }) {
-  const [editando, setEditando] = useState(null);
-  const [borrador, setBorrador] = useState('');
-
-  const guardados = valorJson?.datos || {};
-  const datos = CAMPOS_CONFIRMAR.reduce((acc, c) => {
-    acc[c.k] = guardados[c.k] ?? prefill[c.k] ?? '';
-    return acc;
-  }, {});
-
-  const cambiados = CAMPOS_CONFIRMAR
-    .filter((c) => String(datos[c.k] || '').trim() !== String(prefill[c.k] || '').trim())
-    .map((c) => c.k);
-
-  const confirmado = String(valor || '').trim() !== '';
-
-  const emitir = (proximos, confirmar) => {
-    const cambios = CAMPOS_CONFIRMAR
-      .filter((c) => String(proximos[c.k] || '').trim() !== String(prefill[c.k] || '').trim())
-      .map((c) => c.label.toLowerCase());
-    // Mientras no toque "Está todo bien" el value_text queda vacío, así que la
-    // pregunta no cuenta como respondida: corregir un campo no es confirmar.
-    onChange(
-      confirmar || confirmado ? textoConfirmado(proximos, cambios) : '',
-      { valorJson: { datos: proximos, cambios, confirmado: !!(confirmar || confirmado) }, inmediato: true },
-    );
+/** Varias opciones en pastillas. `maxOpciones` limita cuántas se pueden marcar. */
+function Chispas({ q, valor, valorJson, onChange }) {
+  const sel = Array.isArray(valorJson?.valores) ? valorJson.valores : [];
+  const alternar = (v) => {
+    let next = sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v];
+    // Con tope 1 se comporta como un selector: elegir otra reemplaza.
+    if (q.maxOpciones && next.length > q.maxOpciones) next = [v];
+    const etiquetas = (q.opciones || [])
+      .filter((o) => next.includes(o.value)).map((o) => o.label);
+    onChange(etiquetas.join(', '), { valorJson: { valores: next }, inmediato: true });
   };
-
-  const abrir = (k) => { setBorrador(String(datos[k] || '')); setEditando(k); };
-  const cerrar = () => { setEditando(null); setBorrador(''); };
-  const aplicar = (k) => { emitir({ ...datos, [k]: borrador.trim() }); cerrar(); };
-  const restaurar = (k) => { emitir({ ...datos, [k]: prefill[k] ?? '' }); cerrar(); };
-
   return (
-    <div>
-      <Etiqueta q={q} />
-      <div style={{
-        marginTop: 18, borderRadius: 18, background: '#fff',
-        border: `1px solid ${TO.line}`, overflow: 'hidden',
-      }}>
-        {CAMPOS_CONFIRMAR.map((c, i) => {
-          const enEdicion = editando === c.k;
-          const corregido = cambiados.includes(c.k);
-          const valorActual = String(datos[c.k] || '');
-          if (!valorActual && !enEdicion && !corregido && !prefill[c.k]) return null;
-
-          return (
-            <div key={c.k} style={{
-              padding: '15px 17px', borderTop: i ? `1px solid ${TO.line}` : 'none',
-              background: enEdicion ? TO.blueWash : corregido ? TO.greenWash : 'transparent',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ ...label(corregido ? TO.greenInk : TO.meta), flex: 1 }}>
-                  {c.label}{corregido && ' · corregido'}
-                </span>
-                {!enEdicion && (
-                  <button type="button" onClick={() => abrir(c.k)} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none',
-                    background: 'none', border: `1.5px solid ${TO.lineStrong}`, borderRadius: 999,
-                    padding: '7px 13px', cursor: 'pointer', color: TO.blue,
-                    fontSize: 14, fontWeight: 700, fontFamily: 'inherit',
-                  }}>
-                    <IcoLapiz size={15} stroke={TO.blue} sw={2.2} /> Corregir
-                  </button>
-                )}
-              </div>
-
-              {enEdicion ? (
-                <div style={{ marginTop: 10 }}>
-                  {c.tipo === 'textarea' ? (
-                    <textarea
-                      value={borrador} onChange={(e) => setBorrador(e.target.value)}
-                      autoFocus rows={3}
-                      style={{
-                        ...inputStyle(true), height: 'auto', minHeight: 90,
-                        padding: '13px 15px', lineHeight: 1.5, resize: 'vertical',
-                      }}
-                    />
-                  ) : (
-                    <input
-                      type={c.tipo} value={borrador} onChange={(e) => setBorrador(e.target.value)}
-                      autoFocus
-                      onKeyDown={(e) => { if (e.key === 'Enter') aplicar(c.k); if (e.key === 'Escape') cerrar(); }}
-                      style={inputStyle(true)}
-                    />
-                  )}
-
-                  {REVISA_EQUIPO.has(c.k) && (
-                    <div style={{
-                      fontSize: F.meta, lineHeight: 1.5, color: TO.amber, marginTop: 10,
-                      padding: '11px 13px', background: TO.amberWash,
-                      border: '1px solid #E0A96A', borderRadius: 12,
-                    }}>
-                      Esto lo revisa una persona del equipo antes de cambiarlo.
-                      Escribilo igual y nosotros lo corregimos.
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', gap: 9, marginTop: 12, flexWrap: 'wrap' }}>
-                    <button type="button" onClick={() => aplicar(c.k)} style={{
-                      flex: 1, minWidth: 130, height: 48, borderRadius: 999, cursor: 'pointer',
-                      border: 'none', background: TO.blueBtn, color: '#fff',
-                      fontSize: 15, fontWeight: 800, fontFamily: 'inherit',
-                    }}>Guardar</button>
-                    <button type="button" onClick={cerrar} style={botonSecundario}>Cancelar</button>
-                    {corregido && (
-                      <button type="button" onClick={() => restaurar(c.k)} style={botonSecundario}>
-                        Volver al original
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div style={{
-                  fontSize: F.input, fontWeight: 600, color: valorActual ? TO.ink : TO.meta,
-                  marginTop: 5, lineHeight: 1.45, whiteSpace: 'pre-wrap',
-                }}>
-                  {valorActual || 'Sin cargar — tocá "Corregir" y completalo'}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-        <button
-          type="button" onClick={() => emitir(datos, true)} aria-pressed={confirmado}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            height: 56, borderRadius: 999, cursor: 'pointer',
-            border: `2px solid ${confirmado ? TO.greenInk : TO.lineStrong}`,
-            background: confirmado ? TO.greenWash : '#fff',
-            color: confirmado ? TO.greenInk : TO.ink, fontSize: F.input, fontWeight: 800,
-          }}
-        >
-          <IcoCheck size={19} stroke={confirmado ? TO.greenInk : TO.body} sw={2.6} />
-          {cambiados.length ? 'Listo, ahora está bien' : 'Está todo bien'}
-        </button>
-        <div style={{ fontSize: F.meta, color: TO.meta, textAlign: 'center', lineHeight: 1.5 }}>
-          {cambiados.length
-            ? `Guardamos tus correcciones en ${cambiados.length === 1 ? 'un dato' : `${cambiados.length} datos`}.`
-            : 'Si algo cambió, tocá "Corregir" en ese dato.'}
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9 }}>
+      {(q.opciones || []).map((o) => {
+        const activa = sel.includes(o.value);
+        return (
+          <button key={o.value} type="button" onClick={() => alternar(o.value)} style={{
+            cursor: 'pointer', borderRadius: 999, padding: '12px 17px', fontSize: 13.5,
+            fontWeight: 600, transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 8,
+            border: `1.5px solid ${activa ? T.azul : T.line}`,
+            background: activa ? T.azul : '#fff',
+            color: activa ? '#fff' : T.soft,
+          }}>
+            {activa && (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            )}
+            <span>{o.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-const botonSecundario = {
-  height: 48, borderRadius: 999, padding: '0 18px', cursor: 'pointer',
-  border: `1.5px solid ${TO.lineStrong}`, background: '#fff', color: TO.body,
-  fontSize: 15, fontWeight: 700, fontFamily: 'inherit', flex: 'none',
-};
-
-function CampoTexto({ q, valor, onChange, autoFocus, chico }) {
-  const [enfocado, setEnfocado] = useState(false);
-
-  const tipoHtml = {
-    numero: 'number', fecha: 'date', url: 'url', email: 'email', telefono: 'tel', money: 'text',
-  }[q.tipo] || 'text';
-
-  // Las respuestas de una línea que pueden ser varias (competidores, alternativas
-  // de dominio) usan textarea para que no haya que meter todo en un renglón.
-  const multilinea = q.tipo === 'corta' && (q.ejemplo || '').includes('\n');
-  const foco = { onFocus: () => setEnfocado(true), onBlur: () => setEnfocado(false) };
-
+/** Presupuesto: el número grande y, debajo, cuánto es por día. */
+function Presupuesto({ q, valor, onChange }) {
+  const n = parseInt(String(valor || '').replace(/[^0-9]/g, ''), 10);
+  const diario = n > 0 ? `${Math.round(n / 30)} USD/día` : '';
   return (
     <div>
-      <Etiqueta q={q} chico={chico} />
-      <Ayuda texto={q.ayuda} />
-      {multilinea ? (
-        <textarea
-          id={q.qkey} value={valor || ''} onChange={(e) => onChange(e.target.value)}
-          autoFocus={autoFocus} placeholder={q.placeholder || q.ejemplo} rows={3} {...foco}
-          style={{
-            ...inputStyle(enfocado), height: 'auto', minHeight: 104,
-            padding: '15px 16px', lineHeight: 1.55, resize: 'vertical', marginTop: 14,
-          }}
-        />
-      ) : (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <input
-          id={q.qkey} type={tipoHtml} inputMode={q.tipo === 'numero' ? 'numeric' : undefined}
-          value={valor || ''} onChange={(e) => onChange(e.target.value)}
-          autoFocus={autoFocus} placeholder={q.placeholder || q.ejemplo} {...foco}
-          style={{ ...inputStyle(enfocado), marginTop: 14 }}
+          id={q.qkey} value={valor || ''} inputMode="numeric" placeholder="1500"
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))}
+          style={{ ...input, flex: 1, fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
         />
-      )}
-      {q.ejemplo && !multilinea && q.tipo !== 'fecha' && (
-        <div style={{ fontSize: F.meta, color: TO.meta, marginTop: 9, lineHeight: 1.45 }}>
-          Por ejemplo: {q.ejemplo}
+        <span style={{ fontSize: 13, fontWeight: 700, color: T.faint }}>USD / mes</span>
+      </div>
+      {diario && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, background: T.dark,
+          borderRadius: 14, padding: '15px 17px', marginTop: 11,
+          animation: 'mkpop .25s ease both',
+        }}>
+          <div style={{
+            fontFamily: FUENTE.display, fontSize: 24, fontWeight: 800,
+            color: T.azulMarca, letterSpacing: '-.03em',
+          }}>{diario}</div>
+          <div style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, color: T.faint }}>
+            Saldo diario recomendado. Con esto ya no adivinás cuánto invertir cada día.
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-export default function Campo({ q, valor, valorJson, flag, onChange, onVoz, onAudioPendiente,
-  clientHint, prefill, autoFocus, chico, bloqueante }) {
-  if (q.tipo === 'abierta') {
+// ── Despachador ──────────────────────────────────────────────────────────────
+
+export default function Campo({
+  q, valor, valorJson, onChange, onVoz, onAudioPendiente,
+  clientHint, bloqueante, autoFocus, numero, extras,
+}) {
+  if (q.tipo === 'info') {
+    return <><Cabecera q={q} /><Info q={q} /></>;
+  }
+
+  if (q.tipo === 'archivos' || q.tipo === 'subida') {
     return (
-      <CampoAbierto
-        q={q} valor={valor} flag={flag} onChange={onChange} onVoz={onVoz}
-        onAudioPendiente={onAudioPendiente} clientHint={clientHint} autoFocus={autoFocus}
-      />
+      <>
+        <Cabecera q={q} />
+        <Etiqueta q={q} numero={numero} />
+        <CampoArchivos q={q} bloqueante={bloqueante} />
+      </>
     );
   }
 
-  if (q.tipo === 'subida') return <CampoSubida q={q} bloqueante={bloqueante} />;
-
-  if (q.tipo === 'confirmar') {
+  // Agenda y resumen los arma la pantalla, porque necesitan el estado entero
+  // del onboarding y no solo el de su campo.
+  if (extras?.[q.tipo]) {
     return (
-      <Confirmar
-        q={q} valor={valor} valorJson={valorJson} onChange={onChange} prefill={prefill || {}}
-      />
+      <>
+        <Cabecera q={q} />
+        <Etiqueta q={q} numero={numero} />
+        {extras[q.tipo](q)}
+      </>
     );
   }
 
-  if (q.tipo === 'opciones' || q.tipo === 'chips_multi') {
-    return (
-      <div>
-        <Etiqueta q={q} chico={chico} />
-        <Ayuda texto={q.ayuda} />
-        <Opciones q={q} valor={valor} onChange={onChange} multi={q.tipo === 'chips_multi'} />
-      </div>
-    );
-  }
+  const cuerpo = (() => {
+    switch (q.tipo) {
+      case 'abierta':
+        return (
+          <Abierta
+            q={q} valor={valor} onChange={onChange} onVoz={onVoz}
+            onAudioPendiente={onAudioPendiente} clientHint={clientHint}
+          />
+        );
+      case 'opciones':
+      case 'si_no':
+        return <Opcion q={q} valor={valor} valorJson={valorJson} onChange={onChange} />;
+      case 'chips_multi':
+        return <Chispas q={q} valor={valor} valorJson={valorJson} onChange={onChange} />;
+      case 'presupuesto':
+        return <Presupuesto q={q} valor={valor} onChange={onChange} />;
+      default:
+        return <Corta q={q} valor={valor} onChange={onChange} autoFocus={autoFocus} />;
+    }
+  })();
 
   return (
-    <CampoTexto q={q} valor={valor} onChange={onChange} autoFocus={autoFocus} chico={chico} />
+    <>
+      <Cabecera q={q} />
+      <Etiqueta q={q} numero={numero} />
+      <Chips chips={q.chips} />
+      <Ejemplo q={q} />
+      {cuerpo}
+    </>
   );
 }
+
+export { Cabecera, Etiqueta, Chips, Ejemplo };

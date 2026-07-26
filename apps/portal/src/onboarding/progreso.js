@@ -1,111 +1,160 @@
-// Cálculo de progreso y visibilidad, replicado en el front para que la barra se
-// mueva en el mismo instante en que el cliente escribe, sin esperar al servidor.
-// La verdad la tiene onboarding_progreso() en la base: esto es solo el eco
-// optimista. Si difieren, gana el servidor (el Provider pisa con su respuesta).
+// ─────────────────────────────────────────────────────────────────────────────
+// Visibilidad, progreso y armado de pantallas, replicado en el front para que
+// todo se mueva en el mismo tecleo, sin esperar al servidor.
+//
+// La verdad la tiene la base (onboarding_progreso / _onboarding_lleno /
+// _onboarding_visible): esto es el eco optimista. Si difieren, gana el
+// servidor. Cada función de acá tiene su gemela en SQL y hay que moverlas
+// juntas: el número que ve el cliente y el que ve el operador tienen que ser
+// el mismo, o el equipo termina llamando para preguntar por un 40% que el
+// cliente ve como 55%.
+// ─────────────────────────────────────────────────────────────────────────────
 
-/** ¿Se ve esta pregunta con las respuestas que hay? Espeja _onboarding_visible(). */
+/** El mínimo para que una respuesta cuente: el 60% del largo pedido. */
+export const minLargo = (q) => Math.round((q?.largo || 0) * 0.6);
+
+/** ¿Se ve esta pregunta? Espeja _onboarding_visible(). */
 export function visible(q, respuestas) {
   const cond = q.visibleSi;
   if (!cond || !cond.qkey) return true;
-  const val = String(respuestas?.[cond.qkey]?.valor ?? '').trim();
-  if (cond.no_vacio) return val !== '';
-  if (!val) return false;
-  const partes = val.split(',').map((s) => s.trim().toLowerCase());
-  return (cond.in || []).some((x) => partes.includes(String(x).trim().toLowerCase()));
+  const r = respuestas?.[cond.qkey];
+  const texto = String(r?.valor ?? '').trim();
+  if (cond.no_vacio) return texto !== '';
+
+  // El valor de la opción vive en el json; el texto guarda la etiqueta legible
+  // (que es la que va al documento del DEL).
+  let partes = [];
+  if (Array.isArray(r?.valorJson?.valores)) partes = r.valorJson.valores;
+  else if (r?.valorJson?.valor) partes = [r.valorJson.valor];
+  else if (texto) partes = texto.split(',');
+  if (!partes.length) return false;
+
+  const norm = partes.map((s) => String(s).trim().toLowerCase());
+  return (cond.in || []).some((x) => norm.includes(String(x).trim().toLowerCase()));
 }
 
-/** Cuántos archivos hay subidos para una pregunta de tipo subida. */
-function subidos(q, bloqueantes) {
+/** Archivos ya subidos para una pregunta de archivos. */
+export function subidos(q, bloqueantes) {
   const b = (bloqueantes || []).find((x) => x.bucket === q.bucket);
   return b ? Number(b.subidos || 0) : 0;
 }
 
+/** ¿Está llena? Binario, como el `filled()` del HTML. Espeja _onboarding_lleno(). */
+export function lleno(q, respuestas, bloqueantes) {
+  if (q.tipo === 'info' || q.tipo === 'resumen') return true;
+  if (q.tipo === 'archivos' || q.tipo === 'subida') {
+    return subidos(q, bloqueantes) >= Math.max(q.target || 1, 1);
+  }
+  const len = String(respuestas?.[q.qkey]?.valor || '').trim().length;
+  if (q.largo > 0) return len >= minLargo(q);
+  return len > 0;
+}
+
+/** Todas las preguntas visibles, aplanadas, con su paso encima. */
+export function preguntasVisibles(pasos, respuestas) {
+  return (pasos || []).flatMap((p) =>
+    (p.preguntas || []).filter((q) => visible(q, respuestas)).map((q) => ({ ...q, skey: p.skey })));
+}
+
 /**
- * Factor de una respuesta: 1 completa · 0.6 a medio camino · 0 vacía.
- * El 45% no es arbitrario: es el punto donde una respuesta deja de ser un
- * "sí" y empieza a tener contenido con el que se puede trabajar.
+ * El porcentaje: obligatorias respondidas sobre obligatorias visibles.
+ * Sin pesos y sin techos — ver la migración v30.
  */
-export function factor(q, respuestas, bloqueantes) {
-  if (q.tipo === 'subida') {
-    const n = subidos(q, bloqueantes);
-    const meta = Math.max(q.target || 1, 1);
-    return n >= meta ? 1 : n > 0 ? 0.6 : 0;
-  }
-  const len = String(respuestas?.[q.qkey]?.valor ?? '').trim().length;
-  if (q.minChars > 0) {
-    if (len >= q.minChars) return 1;
-    if (len >= q.minChars * 0.45) return 0.6;
-    return 0;
-  }
-  return len > 0 ? 1 : 0;
-}
-
-export function preguntasVisibles(secciones, respuestas) {
-  return (secciones || []).flatMap((s) =>
-    (s.preguntas || []).filter((q) => visible(q, respuestas)).map((q) => ({ ...q, skey: s.skey })));
-}
-
-/** Progreso ponderado 0-100. Topeado en 99 mientras falte material bloqueante. */
-export function calcularProgreso(secciones, respuestas, bloqueantes, agendaEstado) {
-  const qs = preguntasVisibles(secciones, respuestas).filter((q) => q.requerida);
-  let total = 0; let ok = 0; let hechas = 0;
-  qs.forEach((q) => {
-    const p = Math.max(q.peso || 1, 1);
-    const f = factor(q, respuestas, bloqueantes);
-    total += p; ok += p * f;
-    if (f >= 1) hechas += 1;
+export function calcularProgreso(pasos, respuestas, bloqueantes) {
+  let total = 0;
+  let hechas = 0;
+  preguntasVisibles(pasos, respuestas).forEach((q) => {
+    if (!q.requerida) return;
+    total += 1;
+    if (lleno(q, respuestas, bloqueantes)) hechas += 1;
   });
-  let pct = total === 0 ? 0 : Math.round((ok / total) * 100);
-
-  // Nunca 0%: haber agendado ya es haber empezado, y arrancar en cero desanima.
-  if (pct < 3 && agendaEstado && agendaEstado !== 'pendiente') pct = 3;
-
-  const pend = (bloqueantes || []).filter((b) => !['completo', 'validado'].includes(b.estado)
-    && Number(b.subidos || 0) < Math.max(Number(b.target || 1), 1));
-  if (pend.length) pct = Math.min(pct, 99);
-
-  return { pct, requeridas: qs.length, respondidas: hechas, bloqueaPct: pend };
+  return {
+    pct: total === 0 ? 0 : Math.round((hechas / total) * 100),
+    requeridas: total,
+    respondidas: hechas,
+  };
 }
 
-/** Minutos que faltan, sumando solo lo que todavía no está respondido. */
-export function minutosRestantes(secciones, respuestas, bloqueantes) {
-  return preguntasVisibles(secciones, respuestas)
-    .filter((q) => factor(q, respuestas, bloqueantes) < 1)
-    .reduce((acc, q) => acc + (q.minutos || 1), 0);
+/** Cuenta de un paso, para el índice y el control de calidad final. */
+export function statsPaso(paso, respuestas, bloqueantes) {
+  let total = 0;
+  let hechas = 0;
+  (paso?.preguntas || []).forEach((q) => {
+    if (!q.qkey || q.tipo === 'info' || q.tipo === 'resumen') return;
+    if (!visible(q, respuestas)) return;
+    total += 1;
+    if (lleno(q, respuestas, bloqueantes)) hechas += 1;
+  });
+  return { total, hechas, completo: total > 0 && hechas === total };
 }
 
-/** ¿Está cerrado este tramo? (todas sus requeridas visibles completas) */
-export function tramoCompleto(seccion, respuestas, bloqueantes) {
-  const qs = (seccion.preguntas || []).filter((q) => q.requerida && visible(q, respuestas));
-  if (!qs.length) return true;
-  return qs.every((q) => factor(q, respuestas, bloqueantes) >= 1);
+/** Cuenta de un bloque: es lo que abre pestañas del portal. */
+export function statsBloque(bkey, pasos, respuestas, bloqueantes) {
+  let total = 0;
+  let hechas = 0;
+  (pasos || []).filter((p) => p.bkey === bkey).forEach((p) => {
+    const s = statsPaso(p, respuestas, bloqueantes);
+    total += s.total; hechas += s.hechas;
+  });
+  return { total, hechas, completo: total > 0 && hechas === total };
 }
 
 /**
- * Agrupa las preguntas de un tramo en PANTALLAS.
- * Las cortas que comparten `grupo` van juntas; las largas (minChars >= 800)
- * siempre solas — agrupar la pregunta grande con otras es exactamente lo que
- * produce respuestas de tres líneas.
+ * Las pantallas de un paso. El agrupamiento es EXPLÍCITO: dos preguntas con el
+ * mismo `pantalla` comparten pantalla, y punto. Antes se deducía con
+ * heurísticas y mover una pregunta cambiaba el agrupamiento de otra.
+ *
+ * Una pantalla que queda sin preguntas visibles no existe: si todas sus
+ * preguntas dependían de una condición que no se cumple, no hay que mostrar
+ * una pantalla vacía.
  */
-export function pantallasDe(seccion, respuestas) {
-  const qs = (seccion.preguntas || []).filter((q) => visible(q, respuestas));
+export function pantallasDe(paso, respuestas) {
+  const porPantalla = new Map();
+  (paso?.preguntas || []).forEach((q) => {
+    if (!visible(q, respuestas)) return;
+    const n = q.pantalla ?? 0;
+    if (!porPantalla.has(n)) porPantalla.set(n, []);
+    porPantalla.get(n).push(q);
+  });
+  return [...porPantalla.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([n, preguntas]) => ({ id: preguntas[0].qkey, pantalla: n, preguntas }));
+}
+
+/**
+ * La lista lineal por la que avanza el cliente: portada de paso, después sus
+ * pantallas, y así. Es lo que hace que Atrás/Continuar sepan a dónde ir.
+ */
+export function nodos(pasos, respuestas) {
   const out = [];
-  qs.forEach((q) => {
-    const solo = !q.grupo || q.minChars >= 800 || q.tipo === 'subida';
-    const ultima = out[out.length - 1];
-    if (!solo && ultima && ultima.grupo === q.grupo) ultima.preguntas.push(q);
-    else out.push({ id: q.qkey, grupo: solo ? null : q.grupo, preguntas: [q] });
+  (pasos || []).forEach((paso, i) => {
+    const pantallas = pantallasDe(paso, respuestas);
+    if (!pantallas.length) return;
+    out.push({ tipo: 'portada', i, paso });
+    pantallas.forEach((pant, j) =>
+      out.push({ tipo: 'pregunta', i, paso, pantalla: pant, j, total: pantallas.length }));
   });
   return out;
 }
 
-/** Segundos hablando que representa un minChars (≈150 palabras/min). */
-export function segundosDeVoz(minChars) {
-  return Math.max(15, Math.round((minChars || 0) / 14));
+/**
+ * El medidor de las respuestas largas. Habla en caracteres, como el HTML.
+ * Naranja, nunca rojo: rojo es "está mal", naranja es "falta".
+ */
+export function medidor(len, largo) {
+  const min = Math.round(largo * 0.6);
+  const r = largo ? len / largo : 0;
+  const w = `${Math.min(100, Math.max(len > 0 ? 5 : 0, r * 100))}%`;
+  if (len === 0) return { w: '0%', color: '#D0D5DD', texto: `Mínimo ${min} caracteres` };
+  if (len < min) return { w, color: '#EAB308', texto: `Faltan ${min - len} caracteres` };
+  if (r < 1) return { w, color: '#22C55E', texto: 'Muy buena respuesta' };
+  return { w: '100%', color: '#22C55E', texto: 'Excelente' };
 }
 
-export function textoDuracion(seg) {
-  if (seg < 60) return `${seg} segundos`;
-  const m = Math.floor(seg / 60); const s = seg % 60;
-  return s < 15 ? `${m} minuto${m > 1 ? 's' : ''}` : `${m}:${String(s).padStart(2, '0')} minutos`;
+/** Minutos que faltan, sumando los pasos que todavía no están completos. */
+export function minutosRestantes(pasos, respuestas, bloqueantes) {
+  return (pasos || []).reduce((acc, p) => {
+    const s = statsPaso(p, respuestas, bloqueantes);
+    return s.completo ? acc : acc + (p.minutos || 0);
+  }, 0);
 }

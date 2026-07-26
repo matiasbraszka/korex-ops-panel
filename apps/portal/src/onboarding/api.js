@@ -70,6 +70,14 @@ export const onb = {
     demo.demoOmitirAgenda,
   ),
 
+  // La fecha de grabación es solo un día, sin reserva de calendario: se guarda
+  // en el run para que la tarea de seguimiento del equipo nazca con esa fecha
+  // encima en vez de tener que leerla del texto de la respuesta.
+  grabacion: escribir(
+    (fecha) => call('portal_onboarding_grabacion', { p_fecha: fecha }),
+    async (fecha) => ({ ok: true, fecha, demo: true }),
+  ),
+
   completar: escribir(() => call('portal_onboarding_completar'), demo.demoCompletar),
 };
 
