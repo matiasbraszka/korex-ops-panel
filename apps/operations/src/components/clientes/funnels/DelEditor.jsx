@@ -886,6 +886,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => { setNavOpen(false); }, [view, activa, verActiva]);
 
+  // Ocultar/mostrar el menú lateral del DEL (queda guardada la preferencia).
+  const [sidebarOculta, setSidebarOculta] = useState(() => localStorage.getItem('del_menu_oculto') === '1');
+  const toggleSidebar = () => setSidebarOculta((v) => {
+    try { localStorage.setItem('del_menu_oculto', v ? '0' : '1'); } catch { /* privado */ }
+    return !v;
+  });
+
+  // Lectura cómoda: zoom del documento (solo modo Leer).
+  const [zoomDoc, setZoomDoc] = useState(() => {
+    const v = parseInt(localStorage.getItem('del_zoom_lectura') || '100', 10);
+    return Number.isFinite(v) ? Math.min(160, Math.max(80, v)) : 100;
+  });
+  const cambiarZoomDoc = (d) => setZoomDoc((z) => {
+    const n = Math.min(160, Math.max(80, z + d));
+    try { localStorage.setItem('del_zoom_lectura', String(n)); } catch { /* privado */ }
+    return n;
+  });
+
   if (err) {
     return (
       <div className="p-6"><div className="rounded-xl border p-4 text-[13px]" style={{ background: '#FEF2F2', borderColor: '#F5C2C2', color: '#B91C1C' }}>
@@ -934,24 +952,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const revocarDelShare = async (id) => { try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ } cargarDelShares(); };
 
   const editando = modo === 'editar';
-
-  // Ocultar/mostrar el menú lateral del DEL (queda guardada la preferencia).
-  const [sidebarOculta, setSidebarOculta] = useState(() => localStorage.getItem('del_menu_oculto') === '1');
-  const toggleSidebar = () => setSidebarOculta((v) => {
-    try { localStorage.setItem('del_menu_oculto', v ? '0' : '1'); } catch { /* privado */ }
-    return !v;
-  });
-
-  // ── Lectura cómoda: zoom del documento + Descargar en PDF (solo modo Leer) ──
-  const [zoomDoc, setZoomDoc] = useState(() => {
-    const v = parseInt(localStorage.getItem('del_zoom_lectura') || '100', 10);
-    return Number.isFinite(v) ? Math.min(160, Math.max(80, v)) : 100;
-  });
-  const cambiarZoomDoc = (d) => setZoomDoc((z) => {
-    const n = Math.min(160, Math.max(80, z + d));
-    try { localStorage.setItem('del_zoom_lectura', String(n)); } catch { /* privado */ }
-    return n;
-  });
   // Arma una copia imprimible del documento (todas las pestañas visibles, con los
   // estilos del panel) en un iframe oculto y abre el diálogo de impresión, donde se
   // elige "Guardar como PDF".
