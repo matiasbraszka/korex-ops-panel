@@ -48,13 +48,36 @@ se conserva y deja de contar.
 el cliente responde
      └─▶ onboarding_answers (una fila por respuesta, autosave a los 900 ms)
           ├─▶ del_sections del documento onb_<cliente>, una sección por paso
-          │    └─▶ client_brain_docs.text  ← lo que leen los agentes de IA
+          │    └─▶ client_brain_docs.text        ← lo que leen los agentes de IA
+          ├─▶ client_brain_docs.panel_html       ← la maqueta que lee el equipo
           └─▶ al 100%: columnas de clients / strategy_pages + tareas al equipo
 ```
 
 El texto se reescribe **cada 2 minutos** mientras el cliente contesta (cron
 `onboarding-sync-texto`), así que el equipo ve el avance sin esperar a que
 termine. Aparece en el DEL del cliente como un documento más.
+
+### Dos representaciones, y no son intercambiables
+
+| Columna | Forma | Quién la lee |
+|---|---|---|
+`client_brain_docs.panel_html` | maqueta: portada con el avance por bloque, encabezado por bloque, un H2 por paso, las respuestas largas en tarjeta y las cortas en tabla | las personas, en la pestaña del DEL |
+`client_brain_docs.text` | `P: …` / `R: …` plano, con los marcadores `===== paso =====` | los agentes de IA |
+`del_sections.html` | **vacío a propósito** | nadie |
+
+Lo último importa: `del_assemble_text` prefiere `html` sobre `text` cuando el
+html no está vacío, y lo aplana reemplazando cada etiqueta por un espacio. Si la
+maqueta viviera ahí, el texto que consumen los agentes se volvería una sola
+línea sin la estructura P:/R:.
+
+La plantilla **es el catálogo**: no hay HTML escrito a mano en ningún lado. Al
+guardar en el constructor se llama a `onboarding_refrescar_documentos()`, que
+marca sucios los runs en curso para que sus documentos se rearmen con la forma
+nueva. Los onboardings ya entregados no se tocan.
+
+La pestaña es de **solo lectura** en el DEL. No es una limitación: es lo que
+impide que una edición a mano quede pisada en la siguiente pasada — o peor, que
+congele la pestaña en una foto vieja mientras el cliente sigue contestando.
 
 Los archivos van a las carpetas de recursos del cliente según el `bucket` de
 cada campo: los pesados a Bunny, las imágenes y lo liviano a Supabase Storage.

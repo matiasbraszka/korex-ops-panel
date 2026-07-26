@@ -1347,14 +1347,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           {view.startsWith('cliente:') && (() => {
             const doc = clientDocs.find(d => 'cliente:' + d.id === view);
             if (!doc) return null;
-            // El onboarding de la plataforma lo ESCRIBE el cliente, y se
-            // regenera cada dos minutos desde sus respuestas. Si se editara acá,
-            // se guardaría en panel_html — que es lo que el visor muestra con
-            // prioridad — y a partir de ese momento la pestaña quedaría
-            // congelada mostrando una foto vieja mientras el cliente sigue
-            // contestando. Nadie se enteraría. Por eso es de solo lectura.
+            // El onboarding de la plataforma lo ESCRIBE el cliente. Su panel_html
+            // es la maqueta que arma `onboarding_sync_texto` cada dos minutos a
+            // partir de las respuestas: portada con el avance por bloque, un
+            // encabezado por bloque, un título por paso y las respuestas cortas
+            // en tabla. No lo escribe una persona — y por eso la pestaña es de
+            // solo lectura: una edición a mano quedaría pisada en la siguiente
+            // pasada, o peor, congelaría la pestaña en una foto vieja mientras
+            // el cliente sigue contestando, sin que nadie se entere.
             const generado = String(doc.node_id || '').startsWith('native_onb_');
-            const docHtml = (generado ? '' : doc.panel_html) || plainToHtml(doc.text);
+            const docHtml = doc.panel_html || plainToHtml(doc.text);
             return (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-2 py-2 px-1 flex-wrap">

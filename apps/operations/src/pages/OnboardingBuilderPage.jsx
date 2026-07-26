@@ -193,7 +193,21 @@ export default function OnboardingBuilderPage() {
           .update({ activa: false, ...marca }).in('qkey', borradas);
         if (r4.error) throw r4.error;
       }
-      flash('Onboarding guardado. Los clientes lo ven en cuanto recarguen.');
+      // El documento del DEL no es un texto aparte: es este catálogo con las
+      // respuestas puestas encima. Si acá se cambió una pregunta, se agregó un
+      // paso o se reordenó un bloque, los documentos de los clientes EN CURSO
+      // tienen que tomar esa forma sin esperar a que el cliente vuelva a
+      // escribir. Esto los marca sucios; el cron de dos minutos los rearma. Los
+      // onboardings ya entregados no se tocan.
+      // No va dentro del try de arriba a propósito: si el refresco falla, lo que
+      // se guardó SÍ se guardó. Decir "no se pudo guardar" sería mentira.
+      const { data: refrescados, error: eRef } = await supabase.rpc('onboarding_refrescar_documentos');
+      const n = eRef ? 0 : (refrescados?.runs || 0);
+
+      flash(eRef
+        ? `Onboarding guardado, pero no se pudieron rearmar los documentos del DEL: ${eRef.message}`
+        : `Onboarding guardado. Los clientes lo ven en cuanto recarguen`
+          + (n ? `, y se están rearmando ${n} documento${n === 1 ? '' : 's'} del DEL.` : '.'));
       await cargar();
     } catch (e) {
       flash(`No se pudo guardar: ${e.message || e}`);
