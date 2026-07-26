@@ -63,16 +63,19 @@ export default function RichTextEditor({ value, onChange, placeholder = 'EscribÃ
   };
   const setImgWidth = (pct) => {
     if (!imgSel?.el) return;
-    imgSel.el.style.width = pct + '%';
-    imgSel.el.style.maxWidth = '100%';
-    imgSel.el.removeAttribute('width');
-    handleInput();
+    mutarNodo(imgSel.el, (c) => {
+      c.classList.remove('rte-img-sel');
+      if (!c.getAttribute('class')) c.removeAttribute('class');
+      c.style.width = pct + '%';
+      c.style.maxWidth = '100%';
+      c.removeAttribute('width');
+    });
+    setImgSel(null);
   };
   const quitarImg = () => {
     if (!imgSel?.el) return;
-    imgSel.el.remove();
+    borrarNodo(imgSel.el);
     setImgSel(null);
-    handleInput();
   };
   const reemplazarImg = () => {
     if (!imgSel?.el) return;
@@ -101,6 +104,30 @@ export default function RichTextEditor({ value, onChange, placeholder = 'EscribÃ
     const clean = sanitize(raw);
     lastInjected.current = clean;
     onChange?.(clean);
+  };
+
+  // Cambiar un nodo tocando el DOM directo NO entra al historial del navegador y
+  // Ctrl+Z lo ignora. Estos dos helpers hacen el mismo cambio pero PASANDO por
+  // execCommand (seleccionan el nodo y lo reemplazan/borran), que sÃ­ es deshacible.
+  const mutarNodo = (node, mutate) => {
+    const clone = node.cloneNode(true);
+    mutate(clone);
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNode(node);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand('insertHTML', false, clone.outerHTML);
+    handleInput();
+  };
+  const borrarNodo = (node) => {
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNode(node);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand('delete');
+    handleInput();
   };
 
   const handlePaste = (e) => {
@@ -168,18 +195,24 @@ export default function RichTextEditor({ value, onChange, placeholder = 'EscribÃ
   const toggleChecklist = () => {
     let ul = closestUl();
     if (ul && ul.style.listStyleType) {
-      // Ya es checklist: el botÃ³n la saca (vuelve a texto normal).
-      ul.style.listStyleType = '';
-      document.execCommand('insertUnorderedList');
+      // Ya es checklist: el botÃ³n la saca (cada Ã­tem vuelve a pÃ¡rrafo normal).
+      const html = [...ul.children].map((li) => `<p>${li.innerHTML}</p>`).join('');
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.selectNode(ul);
+      sel.removeAllRanges();
+      sel.addRange(r);
+      document.execCommand('insertHTML', false, html);
+      handleInput();
     } else if (ul) {
       // Era lista de viÃ±etas: la convierte en checklist.
-      ul.style.listStyleType = CHECK_MARKER;
+      mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; });
     } else {
       document.execCommand('insertUnorderedList');
       ul = closestUl();
-      if (ul) ul.style.listStyleType = CHECK_MARKER;
+      if (ul) mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; });
+      else handleInput();
     }
-    handleInput();
     ref.current?.focus();
   };
 
@@ -197,18 +230,19 @@ export default function RichTextEditor({ value, onChange, placeholder = 'EscribÃ
     let block = closestBlock();
     if (!block) { document.execCommand('formatBlock', false, 'P'); block = closestBlock(); }
     if (!block) return;
-    if (bg) {
-      block.style.background = bg;
-      block.style.borderRadius = '10px';
-      block.style.padding = '12px 14px';
-    } else {
-      block.style.background = '';
-      block.style.borderRadius = '';
-      block.style.padding = '';
-      if (!block.getAttribute('style')) block.removeAttribute('style');
-    }
+    mutarNodo(block, (c) => {
+      if (bg) {
+        c.style.background = bg;
+        c.style.borderRadius = '10px';
+        c.style.padding = '12px 14px';
+      } else {
+        c.style.background = '';
+        c.style.borderRadius = '';
+        c.style.padding = '';
+        if (!c.getAttribute('style')) c.removeAttribute('style');
+      }
+    });
     setBoxOpen(false);
-    handleInput();
     ref.current?.focus();
   };
 
@@ -285,9 +319,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'EscribÃ
     if (!/^https?:\/\//i.test(safe)) { setDialog({ ...dialog, err: 'El link debe empezar con http:// o https://' }); return; }
     // Reemplazar: cambia el src de la imagen seleccionada, conservando su tamaÃ±o.
     if (dialog.replaceEl) {
-      dialog.replaceEl.src = safe;
+      mutarNodo(dialog.replaceEl, (c) => {
+        c.src = safe;
+        c.classList.remove('rte-img-sel');
+        if (!c.getAttribute('class')) c.removeAttribute('class');
+      });
       setDialog(null);
-      handleInput();
+      setImgSel(null);
       return;
     }
     setDialog(null);
