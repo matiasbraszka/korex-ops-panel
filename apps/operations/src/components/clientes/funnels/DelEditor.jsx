@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -935,6 +935,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
 
   const editando = modo === 'editar';
 
+  // Ocultar/mostrar el menú lateral del DEL (queda guardada la preferencia).
+  const [sidebarOculta, setSidebarOculta] = useState(() => localStorage.getItem('del_menu_oculto') === '1');
+  const toggleSidebar = () => setSidebarOculta((v) => {
+    try { localStorage.setItem('del_menu_oculto', v ? '0' : '1'); } catch { /* privado */ }
+    return !v;
+  });
+
   // ── Lectura cómoda: zoom del documento + Descargar en PDF (solo modo Leer) ──
   const [zoomDoc, setZoomDoc] = useState(() => {
     const v = parseInt(localStorage.getItem('del_zoom_lectura') || '100', 10);
@@ -1000,14 +1007,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       `}</style>
       <div className="grid gap-5 items-start mx-auto py-5 px-6" style={isMobile
         ? { maxWidth: '100%', gridTemplateColumns: 'minmax(0,1fr)', padding: '10px 10px 48px', gap: 12 }
-        : { maxWidth: view === 'del' ? (editando ? 1520 : (showComments ? 1640 : 1360)) : 1180, gridTemplateColumns: view === 'del' ? (editando ? 'minmax(0,190px) minmax(0,1fr)' : (showComments ? 'minmax(0,190px) minmax(0,1fr) 300px' : 'minmax(0,190px) minmax(0,1fr)')) : 'minmax(0,215px) minmax(0,1fr)' }}>
+        : { maxWidth: view === 'del' ? (editando ? 1520 : (showComments ? 1640 : 1360)) : 1180, gridTemplateColumns: (() => {
+            const menu = sidebarOculta ? '' : (view === 'del' ? 'minmax(0,190px) ' : 'minmax(0,215px) ');
+            return view === 'del' && !editando && showComments ? `${menu}minmax(0,1fr) 300px` : `${menu}minmax(0,1fr)`;
+          })() }}>
 
         {/* El menú del DEL (maqueta): ESTE FUNNEL (las secciones del documento) · las dos
             pestañas Configuración/Recursos · y abajo los documentos DEL CLIENTE, que
             comparten todos sus funnels. */}
         {/* En mobile el menú vive en un cajón lateral que se abre con las tres rayitas ☰;
             en desktop es la columna fija de siempre. Mismo contenido en los dos casos. */}
-        <div className={isMobile ? (navOpen ? 'fixed inset-0 z-[75] flex' : 'hidden') : 'contents'}
+        <div className={isMobile ? (navOpen ? 'fixed inset-0 z-[75] flex' : 'hidden') : (sidebarOculta ? 'hidden' : 'contents')}
           style={isMobile && navOpen ? { background: 'rgba(15,23,42,.45)' } : undefined}
           onMouseDown={isMobile ? (e) => { if (e.target === e.currentTarget) setNavOpen(false); } : undefined}>
         <nav className={isMobile
@@ -1197,9 +1207,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             pequeño delay para que la selección termine de asentarse (igual que /compartir). */}
         <div className="min-w-0 flex flex-col gap-3 w-full" style={editando && view === 'del' ? { maxWidth: 1040, marginInline: 'auto' } : undefined} onMouseUp={view === 'del' ? onDocMouseUp : undefined} onTouchEnd={view === 'del' ? () => setTimeout(onDocMouseUp, 80) : undefined}>
           {/* Tres rayitas para las vistas que no tienen barra propia (Estrategia, Config, Recursos, docs del cliente). */}
-          {isMobile && view !== 'del' && (
+          {(isMobile || sidebarOculta) && view !== 'del' && (
             <div className="sticky top-0 z-10 py-1.5" style={{ background: '#FBFCFD' }}>
-              <button onClick={() => setNavOpen(true)} className="inline-flex items-center gap-2 py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white text-[12.5px] font-bold text-[#1A1D26] cursor-pointer">
+              <button onClick={() => (isMobile ? setNavOpen(true) : toggleSidebar())} className="inline-flex items-center gap-2 py-2 px-3 rounded-[10px] border border-[#E7EAF0] bg-white text-[12.5px] font-bold text-[#1A1D26] cursor-pointer">
                 <Menu size={16} />Menú del DEL
               </button>
             </div>
@@ -1214,6 +1224,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               <button onClick={() => setNavOpen(true)} aria-label="Abrir el menú del DEL" title="Menú del DEL (secciones, versiones, documentos)"
                 className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[#E7EAF0] bg-white text-[#1A1D26] cursor-pointer shrink-0">
                 <Menu size={17} />
+              </button>
+            )}
+            {!isMobile && (
+              <button onClick={toggleSidebar} title={sidebarOculta ? 'Mostrar el menú del DEL' : 'Ocultar el menú del DEL (más espacio para leer)'}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer hover:text-[#1A1D26] shrink-0">
+                {sidebarOculta ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
               </button>
             )}
             <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
