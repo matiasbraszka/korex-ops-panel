@@ -57,6 +57,18 @@ El texto se reescribe **cada 2 minutos** mientras el cliente contesta (cron
 `onboarding-sync-texto`), así que el equipo ve el avance sin esperar a que
 termine. Aparece en el DEL del cliente como un documento más.
 
+### Quién ve el onboarding
+
+Solo los clientes **nuevos**. El run nace por dos caminos explícitos: el trigger
+de alta del cliente (`onboarding_preparar`) y la invitación desde el panel
+(`onboarding-invitar`). `portal_onboarding_estado` **lee** el run, no lo crea —
+antes lo creaba, y un cliente viejo abriendo su portal estrenaba un onboarding
+que ya había hecho por el camino anterior. Quien no tiene run no ve nada, y
+`portal_cliente_inicio` ya contempla ese caso (`{existe:false, completo:true}`).
+
+Para dárselo a un cliente viejo a propósito: **Invitar al onboarding** desde su
+ficha. Eso crea el run igual que antes.
+
 ### Dos representaciones, y no son intercambiables
 
 | Columna | Forma | Quién la lee |
