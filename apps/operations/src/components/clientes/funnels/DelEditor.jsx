@@ -934,6 +934,59 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const revocarDelShare = async (id) => { try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ } cargarDelShares(); };
 
   const editando = modo === 'editar';
+
+  // ── Lectura cómoda: zoom del documento + Descargar en PDF (solo modo Leer) ──
+  const [zoomDoc, setZoomDoc] = useState(() => {
+    const v = parseInt(localStorage.getItem('del_zoom_lectura') || '100', 10);
+    return Number.isFinite(v) ? Math.min(160, Math.max(80, v)) : 100;
+  });
+  const cambiarZoomDoc = (d) => setZoomDoc((z) => {
+    const n = Math.min(160, Math.max(80, z + d));
+    try { localStorage.setItem('del_zoom_lectura', String(n)); } catch { /* privado */ }
+    return n;
+  });
+  // Arma una copia imprimible del documento (todas las pestañas visibles, con los
+  // estilos del panel) en un iframe oculto y abre el diálogo de impresión, donde se
+  // elige "Guardar como PDF".
+  const descargarPdfDel = () => {
+    const escapa = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    let inner = '';
+    for (const gr of groups) {
+      if (!gr.items.length) continue;
+      const gc = secOf(gr.kind);
+      inner += `<div class="pdf-cat">${escapa(gc.label)}</div>`;
+      for (const s of gr.items) {
+        inner += `<h2 class="pdf-sec">${escapa(s.title || 'Sección')}</h2>`;
+        inner += s.html ? sanitizeDelHtml(s.html) : `<p style="white-space:pre-wrap">${escapa(s.text || '')}</p>`;
+      }
+    }
+    let css = '';
+    try {
+      css = [...document.styleSheets]
+        .flatMap((ss) => { try { return [...ss.cssRules].map((r) => r.cssText); } catch { return []; } })
+        .join('\n');
+    } catch { /* hoja externa */ }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;visibility:hidden';
+    document.body.appendChild(f);
+    const d = f.contentDocument;
+    d.open();
+    d.write(`<!doctype html><html><head><meta charset="utf-8"><title>Documento del DEL · V${verActiva}</title><style>${css}</style><style>
+      html,body{background:#fff!important;margin:0;padding:0}
+      body{padding:28px 34px;font-family:Inter,system-ui,sans-serif;color:#1A1D26}
+      .pdf-doc{max-width:800px;margin:0 auto;font-size:13.5px;line-height:1.62}
+      img{max-width:100%!important;height:auto}
+      .pdf-cat{margin:22px 0 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;border-top:2px solid #E5E7EB;padding-top:12px}
+      .pdf-cat:first-child{margin-top:0;border-top:0;padding-top:0}
+      .pdf-sec{font-size:17px;font-weight:800;color:#111827;margin:10px 0 8px;letter-spacing:-.01em}
+    </style></head><body><div class="pdf-doc del-rich">${inner}</div></body></html>`);
+    d.close();
+    const listo = () => {
+      Promise.all([...d.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))))
+        .then(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch { /* */ } setTimeout(() => f.remove(), 60000); });
+    };
+    if (d.readyState === 'complete') listo(); else f.onload = listo;
+  };
   // La columna de comentarios (solo lectura) aparece SOLO si hay comentarios: si no,
   // la hoja gana esos ~300px y queda protagonista, tipo Google Docs.
   const showComments = view === 'del' && !editando && comments.length > 0;
@@ -1169,6 +1222,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             </div>
             <span className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[11px] font-bold shrink-0" style={{ background: '#EFEBFF', color: '#6D28D9' }} title="Estás viendo esta versión del funnel. Cambiá de versión en el menú de la izquierda.">Este funnel · V{verActiva}</span>
             <span className="text-[11px] text-[#9098A4]">{editando ? 'Los cambios se guardan solos. Este DEL pasa a vivir en el panel.' : 'Copia de lectura'}</span>
+            {/* Lectura cómoda: zoom + PDF (solo en Leer) */}
+            {!editando && (<>
+              <span className="inline-flex items-center gap-0.5 rounded-lg border border-[#E7EAF0] p-0.5" style={{ background: '#F7F8FA' }}>
+                <button onClick={() => cambiarZoomDoc(-10)} title="Achicar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A−</button>
+                <span className="text-[10.5px] font-bold text-[#6B7280] w-9 text-center tabular-nums">{zoomDoc}%</span>
+                <button onClick={() => cambiarZoomDoc(10)} title="Agrandar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A+</button>
+              </span>
+              <button onClick={descargarPdfDel} title="Descargar el documento completo en PDF"
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
+                <FileText size={13} />Descargar PDF
+              </button>
+            </>)}
             {/* Compartir secciones del DEL con externos (link para comentar). */}
             <div className="relative ml-auto">
               <button onClick={abrirShareDel} title="Compartir secciones para que un externo comente"
@@ -1376,10 +1441,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     />
                   </div>
                 ) : s.html ? (
-                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}
+                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}
                     dangerouslySetInnerHTML={{ __html: highlightHtml(sanitizeDelHtml(s.html), scomments) }} />
                 ) : (
-                  <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
+                  <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}>
                     {s.text.trim() || <span className="italic text-[#C3C9D4]">Vacía</span>}
                   </div>
                 )}
