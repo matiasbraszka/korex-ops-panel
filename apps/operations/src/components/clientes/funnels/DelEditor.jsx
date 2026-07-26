@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -54,6 +54,16 @@ function useIsMobile(bp = 900) {
 // enfocada (cada sección avisa con onActive(api) al RichTextEditor). Si no hay
 // ninguna enfocada, los botones quedan atenuados.
 const TB_COLORS = ['#1F2937', '#6B7280', '#DC2626', '#EA580C', '#CA8A04', '#16A34A', '#2563EB', '#7C3AED', '#DB2777'];
+// Cajas de color (fondo del párrafo entero). La primera lo quita. Misma paleta que
+// la del editor (RichTextEditor).
+const BOX_COLORS = [
+  { c: null,      label: 'Quitar caja' },
+  { c: '#FEF3C7', label: 'Amarillo (aviso)' },
+  { c: '#E7EDFF', label: 'Azul (consejo)' },
+  { c: '#E8F7EE', label: 'Verde (bien)' },
+  { c: '#FDE8E8', label: 'Rojo (cuidado)' },
+  { c: '#F3F4F6', label: 'Gris (nota)' },
+];
 // Colores del marcador (resaltado de fondo). El primero (transparent) lo QUITA.
 const HL_COLORS = [
   { c: 'transparent', label: 'Sin marcador' },
@@ -101,6 +111,7 @@ function TbDiv() { return <div className="w-px h-5 bg-gray-200 mx-0.5" />; }
 function DelToolbar({ api }) {
   const [colorOpen, setColorOpen] = useState(false);
   const [hlOpen, setHlOpen] = useState(false);
+  const [boxOpen, setBoxOpen] = useState(false);
   const [bpOpen, setBpOpen] = useState(false);
   const off = !api;
   const call = (fn, ...a) => { if (api && typeof api[fn] === 'function') api[fn](...a); };
@@ -147,6 +158,25 @@ function DelToolbar({ api }) {
                 className="w-6 h-6 rounded-md border border-gray-200 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center"
                 style={{ background: h.c === 'transparent' ? '#fff' : h.c }}>
                 {h.c === 'transparent' && <span className="text-[13px] text-[#9098A4] leading-none">⌀</span>}
+              </button>
+            ))}
+          </div>
+        </>)}
+      </div>
+      {/* Caja de color: pinta el fondo del párrafo entero (avisos/consejos). */}
+      <div className="relative">
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setBoxOpen(v => !v)} disabled={off} title="Caja de color (fondo del párrafo)"
+          className={`w-8 h-8 flex items-center justify-center rounded-md bg-transparent border-none cursor-pointer transition-colors disabled:opacity-40 ${boxOpen ? 'bg-gray-200 text-gray-800' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
+          <PaintBucket size={15} />
+        </button>
+        {boxOpen && !off && (<>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setBoxOpen(false)} className="fixed inset-0 z-30 bg-transparent border-none cursor-default" aria-label="Cerrar" />
+          <div className="absolute left-0 top-9 z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-3 gap-1.5 w-[132px]">
+            {BOX_COLORS.map(b => (
+              <button key={b.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { call('applyBox', b.c); setBoxOpen(false); }} title={b.label}
+                className="w-6 h-6 rounded-md border border-gray-200 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center"
+                style={{ background: b.c || '#fff' }}>
+                {!b.c && <span className="text-[13px] text-[#9098A4] leading-none">⌀</span>}
               </button>
             ))}
           </div>

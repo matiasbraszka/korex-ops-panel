@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus, PaintBucket } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -16,6 +16,17 @@ import { sanitizeNoteHtml } from './sanitize';
 // porque rompe la posicion del cursor durante la escritura.
 
 // Paleta de colores de letra disponibles en la barra.
+// Caja de color: pinta el fondo de TODO el párrafo (bloque redondeado con aire),
+// para avisos y consejos. La primera opción la quita.
+const BOX_COLORS = [
+  { c: null,      label: 'Quitar caja' },
+  { c: '#FEF3C7', label: 'Amarillo (aviso)' },
+  { c: '#E7EDFF', label: 'Azul (consejo)' },
+  { c: '#E8F7EE', label: 'Verde (bien)' },
+  { c: '#FDE8E8', label: 'Rojo (cuidado)' },
+  { c: '#F3F4F6', label: 'Gris (nota)' },
+];
+
 const TEXT_COLORS = [
   { label: 'Predeterminado', value: '#1F2937' },
   { label: 'Gris',     value: '#6B7280' },
@@ -41,6 +52,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const rootRef = useRef(null);
   const lastInjected = useRef(null);
   const [colorOpen, setColorOpen] = useState(false);
+  const [boxOpen, setBoxOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // diálogo nativo (tabla/imagen/avatar/aviso)
   // Imagen seleccionada (con delTools): click en una imagen → menú de tamaño /
   // reemplazar / quitar, como cualquier otra herramienta del editor.
@@ -167,6 +179,35 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       ul = closestUl();
       if (ul) ul.style.listStyleType = CHECK_MARKER;
     }
+    handleInput();
+    ref.current?.focus();
+  };
+
+  // Caja de color: fondo pintado del párrafo entero (aviso/consejo). Va como estilo
+  // inline sobre el bloque, así sobrevive al sanitizador y se ve igual en el portal.
+  const closestBlock = () => {
+    const sel = window.getSelection();
+    const n = sel?.anchorNode;
+    if (!n) return null;
+    const el = n.nodeType === 1 ? n : n.parentElement;
+    const b = el?.closest?.('p,h1,h2,h3,h4,h5,h6,li,blockquote');
+    return (b && ref.current?.contains(b) && b !== ref.current) ? b : null;
+  };
+  const applyBox = (bg) => {
+    let block = closestBlock();
+    if (!block) { document.execCommand('formatBlock', false, 'P'); block = closestBlock(); }
+    if (!block) return;
+    if (bg) {
+      block.style.background = bg;
+      block.style.borderRadius = '10px';
+      block.style.padding = '12px 14px';
+    } else {
+      block.style.background = '';
+      block.style.borderRadius = '';
+      block.style.padding = '';
+      if (!block.getAttribute('style')) block.removeAttribute('style');
+    }
+    setBoxOpen(false);
     handleInput();
     ref.current?.focus();
   };
@@ -329,7 +370,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   // este editor toma el foco, avisa con onActive(api) y la barra opera sobre ÉL. Así la
   // barra no se repite en cada sección. Ver DelToolbar en DelEditor.
   const apiRef = useRef({});
-  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint, toggleChecklist };
+  apiRef.current = { exec, changeFontSize, openTable, openImage, openAvatar, addLink, applyColor, applyHighlight, clearFormat, insertBlueprint, toggleChecklist, applyBox };
   const handleFocus = () => onActive?.(apiRef.current);
 
   const Btn = ({ Icon, title, onClick, label }) => (
@@ -394,6 +435,44 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
                     className="w-6 h-6 rounded-full border border-gray-200 cursor-pointer hover:scale-110 transition-transform"
                     style={{ background: c.value }}
                   />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        {/* Caja de color: popover de fondos para el párrafo entero */}
+        <div className="relative">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setBoxOpen(v => !v)}
+            title="Caja de color (pinta el fondo del párrafo)"
+            className={`w-7 h-7 flex items-center justify-center rounded bg-transparent border-none cursor-pointer transition-colors ${boxOpen ? 'bg-gray-200 text-gray-800' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}
+          >
+            <PaintBucket size={14} />
+          </button>
+          {boxOpen && (
+            <>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setBoxOpen(false)}
+                className="fixed inset-0 z-30 bg-transparent border-none cursor-default"
+                aria-label="Cerrar"
+              />
+              <div className="absolute left-0 top-9 z-40 bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-3 gap-1.5 w-[132px]">
+                {BOX_COLORS.map(b => (
+                  <button
+                    key={b.label}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyBox(b.c)}
+                    title={b.label}
+                    className="w-6 h-6 rounded-md border border-gray-200 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center"
+                    style={{ background: b.c || '#fff' }}
+                  >
+                    {!b.c && <span className="text-[13px] text-[#9098A4] leading-none">⌀</span>}
+                  </button>
                 ))}
               </div>
             </>
