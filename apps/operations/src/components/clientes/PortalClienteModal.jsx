@@ -220,6 +220,24 @@ export default function PortalClienteModal({ client, onClose }) {
                     ? ' · ⚠️ no agendó la sesión' : ' · sesión sin agendar'}
                 {onbEstado.lastSeenAt && ` · última vez ${new Date(onbEstado.lastSeenAt).toLocaleDateString('es-AR')}`}
               </div>
+              {/* Dónde se trabó, sin abrir la base. Un 34% no dice nada; "cerró
+                  Arranque, va por la mitad de Estrategia" dice qué hacer. */}
+              {Array.isArray(onbEstado.bloques) && onbEstado.bloques.length > 0 && (
+                <div className="flex gap-1.5">
+                  {onbEstado.bloques.map((b) => {
+                    const pct = b.total > 0 ? Math.round((b.hechas / b.total) * 100) : 0;
+                    return (
+                      <div key={b.bkey} className="flex-1" title={`${b.corto}: ${b.hechas} de ${b.total}`}>
+                        <div className="h-1 rounded-full bg-[#F0F2F5] overflow-hidden">
+                          <div className="h-full rounded-full"
+                            style={{ width: `${pct}%`, background: pct === 100 ? '#22C55E' : '#5B7CF5' }} />
+                        </div>
+                        <div className="text-[9.5px] text-[#AEB4BF] mt-1 truncate">{b.corto}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {onbEstado.writebackWarning && (
                 <div className="text-[11px] text-[#B45309] bg-[#FEF3C7] rounded-lg py-1.5 px-2 leading-relaxed">
                   ⚠️ {onbEstado.writebackWarning}
