@@ -95,10 +95,12 @@ export default function SubirPedidoScreen() {
             <div style={{ margin: '22px 22px 0', background: '#fff', borderRadius: 22, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
               {/* Ejemplos REALES: fotos tipo stock (torso para arriba, con autoridad) y una
                   marca ficticia para el logo/paleta — sin exponer material de otros clientes. */}
-              {(esAutoridad || esLogo) && (
-                <div style={{ display: 'flex', gap: 2, height: esAutoridad ? 190 : 158, background: 'var(--mk-border-light)' }}>
+              {(esAutoridad || esEstilo || esLogo) && (
+                <div style={{ display: 'flex', gap: 2, height: esLogo ? 158 : 190, background: 'var(--mk-border-light)' }}>
                   {(esAutoridad
                     ? [['/pedidos/ejemplo-foto-1.jpg', 'Ejemplo'], ['/pedidos/ejemplo-foto-2.jpg', 'Ejemplo'], ['/pedidos/ejemplo-foto-3.jpg', 'Ejemplo']]
+                    : esEstilo
+                    ? [['/pedidos/ejemplo-estilo-1.jpg', 'Con tu equipo'], ['/pedidos/ejemplo-estilo-2.jpg', 'De viaje'], ['/pedidos/ejemplo-estilo-3.jpg', 'Entrenando']]
                     : [['/pedidos/ejemplo-logo.png', 'Tu logo'], ['/pedidos/ejemplo-colores.png', 'Tus colores']]
                   ).map(([src, label], i) => (
                     <div key={i} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
