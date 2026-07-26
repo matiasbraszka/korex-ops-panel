@@ -1,7 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // La pregunta abierta: el componente que decide si el onboarding sirve o no.
 //
-// Tres decisiones deliberadas:
+// JERARQUÍA. Antes esta pantalla tenía seis cosas tocables (tres chips, el
+// ejemplo, el micrófono, siguiente) y dos recuadros de color. Todo pesaba igual,
+// así que nada pesaba. Ahora hay UN nivel por función:
+//
+//   1. LA PREGUNTA        título grande, es lo único grande de la pantalla
+//   2. QUÉ CONTESTAR      subtítulo + una línea de "acordate de contar"
+//   3. DONDE SE CONTESTA   el campo, con el micrófono como alternativa
+//   4. CÓMO VA            una línea de estado, sin recuadro
+//   5. SI NO SABÉS        un solo enlace de texto que abre la ayuda y el ejemplo
+//
+// Los chips dejaron de ser botones y pasaron a ser una línea de texto: eran tres
+// blancos táctiles compitiendo con el campo para una función que es puramente
+// informativa (acordarse de qué contar). La información queda; la interacción se
+// va.
+//
+// La ayuda y el ejemplo salieron de la pantalla y viven en una hoja detrás de
+// "¿Cómo respondo esto?". Dos recuadros de color permanentes debajo del
+// enunciado obligaban al cliente a decidir qué leer primero.
+//
+// Tres decisiones que NO cambiaron:
 //
 //  · EL SEMÁFORO NO CUENTA CARACTERES. Dice "te falta como medio minuto
 //    hablando". Nadie sabe cuánto es 1.200 caracteres; todo el mundo sabe
@@ -11,23 +30,21 @@
 //    calibra contra un número, calibra contra lo que ve. Nunca va como
 //    placeholder — se copia literal y contamina el documento del cerebro.
 //
-//  · ÁMBAR, NUNCA ROJO. Rojo es "está mal"; ámbar es "falta". La respuesta
-//    corta no es un error del cliente, es una oportunidad de contar más.
-//    (El ámbar del texto es #8A4B08, no el naranja de marca: #F97316 sobre
-//    blanco da 3.0:1 y no se lee.)
+//  · ÁMBAR, NUNCA ROJO. Rojo es "está mal"; ámbar es "falta".
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from 'react';
-import { IcoChevR, IcoCheck } from '../../components/icons';
-import { TO, F, dsp, label } from '../tokens';
+import { IcoCheck, IcoInfo } from '../../components/icons';
+import { TO, F, dsp, btn } from '../tokens';
 import { segundosDeVoz, textoDuracion } from '../progreso';
 import GrabadorVoz from './GrabadorVoz';
+import Hoja, { BloqueHoja } from './Hoja';
 
+/** Una línea de estado, sin recuadro: la barra es fina y el texto manda. */
 function Semaforo({ len, minChars }) {
   if (!minChars) return null;
   const pct = Math.min(100, (len / minChars) * 100);
   const faltanSeg = segundosDeVoz(minChars - len);
 
-  // barra = color pleno (es un gráfico) · texto = versión oscura (hay que leerlo)
   let barra = TO.lineStrong;
   let tinta = TO.meta;
   let texto = 'Contalo con calma. Lo mejor sale hablando.';
@@ -50,7 +67,7 @@ function Semaforo({ len, minChars }) {
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ height: 7, borderRadius: 999, background: TO.fill, overflow: 'hidden' }}>
+      <div style={{ height: 6, borderRadius: 999, background: TO.fill, overflow: 'hidden' }}>
         <div style={{
           height: '100%', borderRadius: 999, background: barra,
           width: `${Math.min(100, pct)}%`, transition: 'width .3s ease, background .3s ease',
@@ -75,44 +92,14 @@ function Semaforo({ len, minChars }) {
   );
 }
 
-function Ejemplo({ texto, abierto, onToggle }) {
-  if (!texto) return null;
-  return (
-    <div style={{ marginTop: 16 }}>
-      <button type="button" onClick={onToggle} style={{
-        display: 'flex', alignItems: 'center', gap: 8, background: 'none',
-        border: `1.5px solid ${TO.blueLine}`, borderRadius: 999,
-        padding: '11px 16px', cursor: 'pointer', color: TO.blue,
-        fontSize: 15.5, fontWeight: 700,
-      }}>
-        <IcoChevR size={16} stroke={TO.blue} sw={2.5}
-          style={{ transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
-        {abierto ? 'Ocultar el ejemplo' : 'Así de largo nos sirve'}
-      </button>
-      {abierto && (
-        <div style={{
-          marginTop: 12, padding: '16px 17px', borderRadius: 16,
-          background: TO.blueWash, border: `1px solid ${TO.blueLine}`,
-          animation: 'kxUp .25s ease',
-        }}>
-          <div style={{ ...label(TO.blue), marginBottom: 9 }}>Respuesta de ejemplo</div>
-          <div style={{ fontSize: F.sub, lineHeight: 1.65, color: TO.body, whiteSpace: 'pre-wrap' }}>
-            {texto}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioPendiente, clientHint, autoFocus }) {
-  const [verEjemplo, setVerEjemplo] = useState(false);
-  const [chipsUsados, setChipsUsados] = useState([]);
+  const [verAyuda, setVerAyuda] = useState(false);
   const [enfocado, setEnfocado] = useState(false);
   const ref = useRef(null);
 
   const len = String(valor || '').trim().length;
   const chips = q.chips || [];
+  const hayAyuda = !!(q.ayuda || q.ejemplo);
 
   // El teclado del celular tapa el campo si no lo centramos al enfocar.
   const enfocar = () => {
@@ -130,51 +117,32 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
 
   return (
     <div>
+      {/* 1 · LA PREGUNTA ─ lo único grande de la pantalla */}
       <label htmlFor={q.qkey} style={{ ...dsp(F.q, '-0.025em'), display: 'block', lineHeight: 1.22 }}>
         {q.label}
       </label>
+
+      {/* 2 · QUÉ CONTESTAR ─ un párrafo y una línea. Sin recuadros. */}
       {q.sublabel && (
-        <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 9 }}>
+        <div style={{ fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 10 }}>
           {q.sublabel}
         </div>
       )}
-      {q.ayuda && (
-        <div style={{
-          fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 12,
-          padding: '13px 15px', background: TO.blueWash,
-          borderLeft: `4px solid ${TO.blue}`, borderRadius: '4px 14px 14px 4px',
-        }}>
-          {q.ayuda}
-        </div>
-      )}
 
-      {/* Chips guía: recordatorios de qué contar. NO insertan texto — si lo
-          hicieran, el cliente completaría los huecos en vez de contar su historia. */}
       {chips.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ ...label(), marginBottom: 9 }}>Acordate de contar</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {chips.map((c) => {
-              const usado = chipsUsados.includes(c);
-              return (
-                <button
-                  key={c} type="button"
-                  onClick={() => setChipsUsados((u) => (usado ? u.filter((x) => x !== c) : [...u, c]))}
-                  style={{
-                    fontSize: 14.5, fontWeight: 700, padding: '10px 14px', borderRadius: 999,
-                    border: `1.5px solid ${usado ? TO.greenInk : TO.lineStrong}`,
-                    background: usado ? TO.greenWash : '#fff',
-                    color: usado ? TO.greenInk : TO.body,
-                    textDecoration: usado ? 'line-through' : 'none',
-                    cursor: 'pointer', transition: 'all .18s',
-                  }}
-                >{c}</button>
-              );
-            })}
+        <div style={{
+          display: 'flex', gap: 8, marginTop: 12,
+          fontSize: F.meta, lineHeight: 1.5, color: TO.meta,
+        }}>
+          <IcoInfo size={18} stroke={TO.meta} style={{ flex: 'none', marginTop: 1 }} />
+          <div>
+            <span style={{ fontWeight: 700, color: TO.body }}>Acordate de contar: </span>
+            {chips.join(' · ')}
           </div>
         </div>
       )}
 
+      {/* 3 · DÓNDE SE CONTESTA */}
       <textarea
         id={q.qkey} ref={ref} value={valor || ''}
         onChange={(e) => onChange(e.target.value)}
@@ -183,7 +151,7 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
         autoFocus={autoFocus}
         placeholder={q.placeholder || 'Escribí acá, o tocá el micrófono y contalo hablando…'}
         style={{
-          width: '100%', marginTop: 16, minHeight: 150, resize: 'none',
+          width: '100%', marginTop: 18, minHeight: 150, resize: 'none',
           // Borde de 2px y color visible: con el hairline de #E2E5EB del portal,
           // en un celular al sol, no se distingue dónde empieza el campo.
           border: `2px solid ${enfocado ? TO.blue : TO.lineStrong}`,
@@ -193,32 +161,70 @@ export default function CampoAbierto({ q, valor, flag, onChange, onVoz, onAudioP
         }}
       />
 
+      {/* 4 · CÓMO VA */}
       <Semaforo len={len} minChars={q.minChars} />
 
       {flag === 'audio_pendiente' && (
         <div style={{
-          marginTop: 12, padding: '13px 15px', borderRadius: 14,
-          background: TO.amberWash, border: `1px solid #F5D9AE`,
-          fontSize: F.meta, lineHeight: 1.5, color: TO.amber, fontWeight: 600,
+          marginTop: 10, fontSize: F.meta, lineHeight: 1.5, color: TO.amber, fontWeight: 600,
         }}>
           Nos quedamos con tu audio. Lo pasamos a texto nosotros — no hace falta que lo repitas.
         </div>
       )}
 
-      <Ejemplo texto={q.ejemplo} abierto={verEjemplo} onToggle={() => setVerEjemplo((v) => !v)} />
-
+      {/* El micrófono queda a lo ancho porque es el mecanismo que resuelve el
+          problema real (respuestas de tres líneas), pero va DELINEADO y no
+          relleno: el botón relleno de la pantalla es "Siguiente". Dos botones
+          azules macizos discutiendo cuál es el principal es justo lo que hacía
+          que ninguno lo pareciera. */}
       {q.voz !== false && (
         <div style={{ marginTop: 20 }}>
           <GrabadorVoz
             qkey={q.qkey}
             clientHint={clientHint}
-            sugerencia={q.minChars >= 800
-              ? 'Esta es de las importantes. Hablando te sale en menos de dos minutos.'
-              : undefined}
+            variante="delineado"
             onTexto={(texto, meta) => onVoz(texto, meta)}
             onAudioPendiente={(path, meta) => onAudioPendiente(path, meta)}
           />
         </div>
+      )}
+
+      {/* 5 · SI NO SABÉS ─ un solo enlace, no dos cajas */}
+      {hayAyuda && (
+        <button type="button" onClick={() => setVerAyuda(true)} style={{
+          display: 'block', width: '100%', marginTop: 16, background: 'none', border: 'none',
+          padding: '10px 0', cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: F.meta, fontWeight: 700, color: TO.blue,
+          textDecoration: 'underline', textUnderlineOffset: 4,
+        }}>
+          ¿Cómo respondo esto?
+        </button>
+      )}
+
+      {verAyuda && (
+        <Hoja
+          titulo="¿Cómo respondo esto?"
+          onCerrar={() => setVerAyuda(false)}
+          pie={(
+            <button type="button" onClick={() => setVerAyuda(false)} style={btn(TO.ink, 52)}>
+              ENTENDIDO
+            </button>
+          )}
+        >
+          {q.ayuda && (
+            <BloqueHoja titulo="Por qué te preguntamos esto" primero>{q.ayuda}</BloqueHoja>
+          )}
+          {chips.length > 0 && (
+            <BloqueHoja titulo="Acordate de contar" primero={!q.ayuda}>
+              {chips.map((c) => `· ${c}`).join('\n')}
+            </BloqueHoja>
+          )}
+          {q.ejemplo && (
+            <BloqueHoja titulo="Así de largo nos sirve" primero={!q.ayuda && !chips.length}>
+              {q.ejemplo}
+            </BloqueHoja>
+          )}
+        </Hoja>
       )}
     </div>
   );

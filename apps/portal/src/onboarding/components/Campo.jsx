@@ -7,7 +7,7 @@
 // completa tanto alguien de 25 desde el celular como alguien de 65 desde la
 // computadora, y el segundo es el que decide el tamaño.
 import { useState } from 'react';
-import { IcoCheck, IcoLapiz } from '../../components/icons';
+import { IcoCheck, IcoLapiz, IcoInfo } from '../../components/icons';
 import { TO, F, dsp, label } from '../tokens';
 import CampoAbierto from './CampoAbierto';
 import CampoSubida from './CampoSubida';
@@ -36,14 +36,19 @@ function Etiqueta({ q, chico }) {
   );
 }
 
+// Un párrafo con ícono, no un recuadro de color. Los recuadros permanentes
+// debajo del enunciado compiten con la pregunta y obligan a decidir qué leer
+// primero; acá la jerarquía es título → subtítulo → ayuda → campo.
 function Ayuda({ texto }) {
   if (!texto) return null;
   return (
     <div style={{
-      fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 12,
-      padding: '13px 15px', background: TO.blueWash,
-      borderLeft: `4px solid ${TO.blue}`, borderRadius: '4px 14px 14px 4px',
-    }}>{texto}</div>
+      display: 'flex', gap: 8, marginTop: 12,
+      fontSize: F.meta, lineHeight: 1.5, color: TO.meta,
+    }}>
+      <IcoInfo size={18} stroke={TO.meta} style={{ flex: 'none', marginTop: 1 }} />
+      <div>{texto}</div>
+    </div>
   );
 }
 

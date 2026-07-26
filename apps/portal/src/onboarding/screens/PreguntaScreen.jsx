@@ -13,9 +13,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { IcoMic, IcoArrowR } from '../../components/icons';
-import { TO, F, dsp, btn, btnTexto, label } from '../tokens';
+import { TO, F, btn, btnTexto, label } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
 import { OnbShell, OnbHeader, OnbFooter } from '../components/OnbShell';
+import Hoja from '../components/Hoja';
 import Campo from '../components/Campo';
 import { pantallasDe, textoDuracion, segundosDeVoz } from '../progreso';
 
@@ -162,44 +163,29 @@ export default function PreguntaScreen() {
 function SheetCorta({ q, onCerrar, onSeguir }) {
   const seg = segundosDeVoz(q.minChars);
   return (
-    <div
-      onClick={onCerrar}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(10,22,40,.45)', zIndex: 60,
-        display: 'flex', alignItems: 'flex-end', animation: 'kxFade .2s ease',
-      }}
+    <Hoja
+      titulo="Con esto todavía no nos alcanza"
+      onCerrar={onCerrar}
+      pie={(
+        <>
+          <button type="button" onClick={onCerrar} style={btn()}>
+            <IcoMic size={19} stroke="#fff" sw={2.2} />
+            CONTARLO HABLANDO
+          </button>
+          <button type="button" onClick={onSeguir} style={btnTexto}>
+            Igual quiero seguir
+          </button>
+        </>
+      )}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="mk-sheet"
-        style={{
-          background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 22px 28px',
-          animation: 'kxUp .26s ease', marginBottom: 0,
-        }}
-      >
-        <div style={{ width: 46, height: 5, borderRadius: 999, background: TO.lineStrong, margin: '0 auto 20px' }} />
-
-        <div style={{ ...dsp(F.h2 - 2, '-0.025em'), lineHeight: 1.2 }}>
-          Con esto todavía no nos alcanza
-        </div>
-        <div style={{ fontSize: F.sub, lineHeight: 1.6, color: TO.body, marginTop: 12 }}>
-          Con lo que escribiste no podemos escribir tu video ni tus anuncios.
-          Contalo hablando: son <strong style={{ color: TO.ink }}>{textoDuracion(seg)}</strong> y
-          sale mucho más natural que escribiendo.
-        </div>
-
-        <button type="button" onClick={onCerrar} style={{ ...btn(), marginTop: 22 }}>
-          <IcoMic size={19} stroke="#fff" sw={2.2} />
-          CONTARLO HABLANDO
-        </button>
-
-        <button type="button" onClick={onSeguir} style={btnTexto}>
-          Igual quiero seguir
-        </button>
-        <div style={{ fontSize: F.meta, color: TO.meta, textAlign: 'center', marginTop: 6, lineHeight: 1.45 }}>
-          No te preocupes, te la volvemos a mostrar al final.
-        </div>
+      <div style={{ fontSize: F.sub, lineHeight: 1.65, color: TO.body }}>
+        Con lo que escribiste no podemos escribir tu video ni tus anuncios.
+        Contalo hablando: son <strong style={{ color: TO.ink }}>{textoDuracion(seg)}</strong> y
+        sale mucho más natural que escribiendo.
       </div>
-    </div>
+      <div style={{ fontSize: F.meta, color: TO.meta, marginTop: 14, lineHeight: 1.5 }}>
+        Si preferís seguir, no pasa nada: te la volvemos a mostrar al final.
+      </div>
+    </Hoja>
   );
 }

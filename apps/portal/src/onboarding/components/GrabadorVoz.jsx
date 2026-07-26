@@ -31,7 +31,7 @@ const soporta = () => typeof MediaRecorder !== 'undefined'
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendiente, sugerencia }) {
+export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendiente, sugerencia, variante }) {
   const [fase, setFase] = useState('idle');   // idle|permiso|grabando|transcribiendo|error
   const [seg, setSeg] = useState(0);
   const [err, setErr] = useState('');
@@ -261,21 +261,41 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
   }
 
   // ── Idle ───────────────────────────────────────────────────────────────────
+  // `variante="delineado"`: el micrófono sigue a lo ancho porque es el mecanismo
+  // que resuelve las respuestas de tres líneas, pero no compite con el botón de
+  // avanzar. El ícono va en un círculo relleno para que se vea igual de fuerte
+  // sin ser un segundo botón macizo.
+  const delineado = variante === 'delineado';
+
   return (
     <div>
       <button type="button" onClick={arrancar} disabled={fase === 'permiso'} style={{
-        ...botonBase, background: TO.blueBtn,
-        boxShadow: '0 8px 22px rgba(74,103,216,.26)',
+        ...botonBase,
+        background: delineado ? '#fff' : TO.blueBtn,
+        color: delineado ? TO.blue : '#fff',
+        border: delineado ? `2px solid ${TO.blue}` : 'none',
+        boxShadow: delineado ? 'none' : '0 8px 22px rgba(74,103,216,.26)',
         opacity: fase === 'permiso' ? 0.7 : 1,
       }}>
-        {fase === 'permiso' ? <Spinner size={19} color="#fff" /> : <IcoMic size={20} stroke="#fff" sw={2.2} />}
+        {fase === 'permiso'
+          ? <Spinner size={19} color={delineado ? TO.blue : '#fff'} />
+          : delineado
+            ? (
+              <span style={{
+                width: 30, height: 30, borderRadius: '50%', background: TO.blueBtn, flex: 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}><IcoMic size={17} stroke="#fff" sw={2.2} /></span>
+            )
+            : <IcoMic size={20} stroke="#fff" sw={2.2} />}
         <span>{fase === 'permiso' ? 'ABRIENDO EL MICRÓFONO…' : 'CONTALO HABLANDO'}</span>
       </button>
-      <div style={{
-        fontSize: F.meta, color: TO.body, textAlign: 'center', marginTop: 11, lineHeight: 1.5,
-      }}>
-        {sugerencia || 'Es más rápido y sale mucho más natural. Nosotros lo pasamos a texto.'}
-      </div>
+      {(sugerencia || !delineado) && (
+        <div style={{
+          fontSize: F.meta, color: TO.meta, textAlign: 'center', marginTop: 10, lineHeight: 1.5,
+        }}>
+          {sugerencia || 'Es más rápido y sale mucho más natural. Nosotros lo pasamos a texto.'}
+        </div>
+      )}
     </div>
   );
 }

@@ -18,7 +18,7 @@
 // imagen → Storage, y el registro en funnel_resources lo hace la RPC.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useMemo, useRef } from 'react';
-import { IcoUpload, IcoCheck, IcoWarn } from '../../components/icons';
+import { IcoUpload, IcoCheck, IcoWarn, IcoInfo } from '../../components/icons';
 import { Spinner } from '../../components/ui';
 import { TO, F, dsp, chip } from '../tokens';
 import { subirRecurso } from '../api';
@@ -69,10 +69,12 @@ export default function CampoSubida({ q, bloqueante }) {
       )}
       {q.ayuda && (
         <div style={{
-          fontSize: F.sub, lineHeight: 1.55, color: TO.body, marginTop: 12,
-          padding: '13px 15px', background: TO.blueWash,
-          borderLeft: `4px solid ${TO.blue}`, borderRadius: '4px 14px 14px 4px',
-        }}>{q.ayuda}</div>
+          display: 'flex', gap: 8, marginTop: 12,
+          fontSize: F.meta, lineHeight: 1.5, color: TO.meta,
+        }}>
+          <IcoInfo size={18} stroke={TO.meta} style={{ flex: 'none', marginTop: 1 }} />
+          <div>{q.ayuda}</div>
+        </div>
       )}
 
       {/* Dropzone */}
