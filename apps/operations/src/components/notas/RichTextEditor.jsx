@@ -94,6 +94,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   }, [value]);
 
   const exec = (cmd, arg = null) => {
+    snapshot(true);
     document.execCommand(cmd, false, arg);
     handleInput();
     ref.current?.focus();
@@ -107,47 +108,101 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     onChange?.(clean);
   };
 
-  // Cambiar un nodo tocando el DOM directo NO entra al historial del navegador y
-  // Ctrl+Z lo ignora. Estos dos helpers hacen el mismo cambio pero PASANDO por
-  // execCommand (seleccionan el nodo y lo reemplazan/borran), que sí es deshacible.
-  const mutarNodo = (node, mutate) => {
-    const clone = node.cloneNode(true);
-    mutate(clone);
+  // ── Historial propio de deshacer ─────────────────────────────────────────────
+  // El historial nativo del navegador no registra los cambios que las herramientas
+  // hacen sobre el DOM (cajas, imágenes, checklist), y reemplazar nodos vía
+  // execCommand para "engañarlo" rompe bloques complejos (parte párrafos y arrastra
+  // lo que sigue). Solución: el editor guarda sus propios estados y Ctrl+Z / Ctrl+Y
+  // usan SIEMPRE este historial, para el tipeo y para las herramientas por igual.
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+  const lastSnapAt = useRef(0);
+  const snapshot = (force = false) => {
+    const el = ref.current;
+    if (!el) return;
+    const now = Date.now();
+    if (!force && now - lastSnapAt.current < 700) return; // agrupa el tipeo en ráfagas
+    lastSnapAt.current = now;
+    const html = el.innerHTML;
+    if (undoStack.current[undoStack.current.length - 1] === html) return;
+    undoStack.current.push(html);
+    if (undoStack.current.length > 200) undoStack.current.shift();
+    redoStack.current = [];
+  };
+  const restaurar = (html) => {
+    const el = ref.current;
+    if (!el) return;
+    el.innerHTML = html;
+    // No sabemos dónde estaba el cursor en ese estado: lo dejamos al final.
     const sel = window.getSelection();
     const r = document.createRange();
-    r.selectNode(node);
+    r.selectNodeContents(el);
+    r.collapse(false);
     sel.removeAllRanges();
     sel.addRange(r);
-    document.execCommand('insertHTML', false, clone.outerHTML);
+    setImgSel(null);
+    lastSnapAt.current = 0;
+    handleInput();
+  };
+  const undo = () => {
+    const cur = ref.current?.innerHTML;
+    let prev;
+    while (undoStack.current.length) {
+      const t = undoStack.current.pop();
+      if (t !== cur) { prev = t; break; }
+    }
+    if (prev === undefined) return;
+    redoStack.current.push(cur);
+    restaurar(prev);
+  };
+  const redo = () => {
+    const cur = ref.current?.innerHTML;
+    let next;
+    while (redoStack.current.length) {
+      const t = redoStack.current.pop();
+      if (t !== cur) { next = t; break; }
+    }
+    if (next === undefined) return;
+    undoStack.current.push(cur);
+    restaurar(next);
+  };
+
+  // Cambios de las herramientas: estado al historial y mutación DIRECTA del nodo
+  // (sin trucos de reemplazo, que es lo que rompía los bloques).
+  const mutarNodo = (node, mutate) => {
+    snapshot(true);
+    mutate(node);
     handleInput();
   };
   const borrarNodo = (node) => {
-    const sel = window.getSelection();
-    const r = document.createRange();
-    r.selectNode(node);
-    sel.removeAllRanges();
-    sel.addRange(r);
-    document.execCommand('delete');
+    snapshot(true);
+    node.remove();
     handleInput();
   };
 
   const handlePaste = (e) => {
     // Pegar como texto plano evita arrastrar estilos raros de Word/Google Docs.
     e.preventDefault();
+    snapshot(true);
     const text = (e.clipboardData || window.clipboardData).getData('text');
     document.execCommand('insertText', false, text);
     handleInput();
   };
 
-  // Deshacer / rehacer (Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z). El contentEditable tiene
-  // historial nativo; lo enganchamos explícito para que ande siempre y refresque el
-  // guardado. (El navegador ya maneja el stack por cada tecla, no de a bloque.)
+  // Deshacer / rehacer (Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z) con el historial PROPIO del
+  // editor. Además, antes de cada tecla que modifica el contenido se guarda el
+  // estado (agrupado en ráfagas de ~1s, así un Ctrl+Z deshace de a frases, no letra
+  // por letra).
   const handleKeyDown = (e) => {
     const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return;
-    const k = e.key.toLowerCase();
-    if (k === 'z' && !e.shiftKey) { e.preventDefault(); document.execCommand('undo'); handleInput(); }
-    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); document.execCommand('redo'); handleInput(); }
+    if (mod) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); return; }
+      if (k === 'b' || k === 'i' || k === 'u' || k === 'x' || k === 'v') snapshot(true);
+      return;
+    }
+    if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter') snapshot();
   };
 
   const addLink = () => {
@@ -163,6 +218,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   const applyColor = (color) => {
     // styleWithCSS=true => foreColor genera <span style="color:..."> en vez de <font>.
+    snapshot(true);
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('foreColor', false, color);
     document.execCommand('styleWithCSS', false, false);
@@ -173,6 +229,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   // Marcador / resaltado: pinta el FONDO del texto seleccionado. 'transparent' lo quita.
   const applyHighlight = (color) => {
+    snapshot(true);
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('hiliteColor', false, color);
     document.execCommand('styleWithCSS', false, false);
@@ -197,22 +254,24 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     let ul = closestUl();
     if (ul && ul.style.listStyleType) {
       // Ya es checklist: el botón la saca (cada ítem vuelve a párrafo normal).
-      const html = [...ul.children].map((li) => `<p>${li.innerHTML}</p>`).join('');
-      const sel = window.getSelection();
-      const r = document.createRange();
-      r.selectNode(ul);
-      sel.removeAllRanges();
-      sel.addRange(r);
-      document.execCommand('insertHTML', false, html);
+      snapshot(true);
+      const frag = document.createDocumentFragment();
+      [...ul.children].forEach((li) => {
+        const p = document.createElement('p');
+        while (li.firstChild) p.appendChild(li.firstChild);
+        frag.appendChild(p);
+      });
+      ul.replaceWith(frag);
       handleInput();
     } else if (ul) {
       // Era lista de viñetas: la convierte en checklist.
       mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; });
     } else {
+      snapshot(true);
       document.execCommand('insertUnorderedList');
       ul = closestUl();
-      if (ul) mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; });
-      else handleInput();
+      if (ul) ul.style.listStyleType = CHECK_MARKER;
+      handleInput();
     }
     ref.current?.focus();
   };
@@ -299,6 +358,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       r.collapse(false);
       sel.addRange(r);
     }
+    snapshot(true);
     document.execCommand('insertHTML', false, html);
     savedRange.current = null;
     handleInput();
@@ -309,10 +369,34 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   const changeFontSize = (bigger) => {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setDialog({ type: 'aviso', msg: 'Seleccioná primero el texto que querés ' + (bigger ? 'agrandar' : 'achicar') + '.' }); return; }
-    const span = document.createElement('span');
-    span.style.fontSize = bigger ? 'larger' : 'smaller';
     const range = sel.getRangeAt(0);
-    try { span.appendChild(range.extractContents()); range.insertNode(span); } catch { return; }
+    // Envuelve cada pedazo de texto POR SEPARADO, en su lugar. Arrancar el contenido
+    // de la selección entera (extractContents) rompía las tablas cuando la selección
+    // cruzaba de una celda a otra: quedaban celdas fantasma fuera de la tabla.
+    const { startContainer, startOffset, endContainer, endOffset } = range;
+    const raiz = range.commonAncestorContainer;
+    let textos = [];
+    if (raiz.nodeType === 3) {
+      textos = [raiz];
+    } else {
+      const walker = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (range.intersectsNode(n) && n.nodeValue.trim() !== '') textos.push(n);
+      }
+    }
+    if (!textos.length) return;
+    snapshot(true);
+    for (const n of textos) {
+      if (n === endContainer && endOffset === 0) continue;
+      if (n === startContainer && startOffset >= n.length) continue;
+      let nodo = n;
+      if (n === endContainer && endOffset < n.length) n.splitText(endOffset);
+      if (n === startContainer && startOffset > 0) nodo = n.splitText(startOffset);
+      const span = document.createElement('span');
+      span.style.fontSize = bigger ? 'larger' : 'smaller';
+      nodo.parentNode.insertBefore(span, nodo);
+      span.appendChild(nodo);
+    }
     sel.removeAllRanges();
     handleInput();
     ref.current?.focus();
