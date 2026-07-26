@@ -635,10 +635,14 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         <Btn Icon={Eraser} title="Quitar formato"  onClick={clearFormat} />
       </div>
       )}
+      {/* lang="es" + spellCheck: el corrector del navegador subraya en rojo las faltas
+          en español y las corrige con click derecho → sugerencia. Gratis y offline. */}
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
+        lang="es"
+        spellCheck
         onInput={handleInput}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
