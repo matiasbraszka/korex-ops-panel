@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -129,6 +129,7 @@ function DelToolbar({ api }) {
       <TbBtn Icon={List} title="Lista con viñetas" disabled={off} onClick={() => call('exec', 'insertUnorderedList')} />
       <TbBtn Icon={ListOrdered} title="Lista numerada" disabled={off} onClick={() => call('exec', 'insertOrderedList')} />
       <TbBtn Icon={ListChecks} title="Checklist (casilleros ☐)" disabled={off} onClick={() => call('toggleChecklist')} />
+      <TbBtn Icon={Minus} title="Divisor (línea horizontal)" disabled={off} onClick={() => call('exec', 'insertHorizontalRule')} />
       <TbDiv />
       <div className="relative">
         <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setColorOpen(v => !v)} disabled={off} title="Color de letra"
@@ -1030,8 +1031,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               <button onClick={() => setNavOpen(false)} aria-label="Cerrar" className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer"><X size={15} /></button>
             </div>
           )}
-          <div className="px-2 pt-1 pb-1.5">
+          <div className="px-2 pt-1 pb-1.5 flex items-center justify-between gap-2">
             <span className="text-[9.5px] font-extrabold tracking-[0.11em] uppercase text-[#AEB4BF]">Este funnel</span>
+            {!isMobile && (
+              <button onClick={toggleSidebar} title="Ocultar este menú (más espacio para el documento)"
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E7EAF0] bg-white text-[#9098A4] cursor-pointer hover:text-[#1A1D26] hover:border-[#C9D2E0] shrink-0">
+                <PanelLeftClose size={13} />
+              </button>
+            )}
             {/* Selector de versión del funnel: V1 por defecto; el + agrega V2, V3… con su
                 propio juego de VSL / Anuncios / Landings. El avatar y la estrategia se ven
                 en todas. Cambiás de versión con un clic y ves solo esa. */}
@@ -1226,10 +1233,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                 <Menu size={17} />
               </button>
             )}
-            {!isMobile && (
-              <button onClick={toggleSidebar} title={sidebarOculta ? 'Mostrar el menú del DEL' : 'Ocultar el menú del DEL (más espacio para leer)'}
+            {/* El botón de OCULTAR vive arriba del menú lateral; acá solo aparece el de
+                VOLVER A MOSTRARLO cuando está oculto. */}
+            {!isMobile && sidebarOculta && (
+              <button onClick={toggleSidebar} title="Mostrar el menú del DEL"
                 className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-[#E7EAF0] bg-white text-[#6B7280] cursor-pointer hover:text-[#1A1D26] shrink-0">
-                {sidebarOculta ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
+                <PanelLeft size={15} />
               </button>
             )}
             <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
@@ -1238,18 +1247,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             </div>
             <span className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[11px] font-bold shrink-0" style={{ background: '#EFEBFF', color: '#6D28D9' }} title="Estás viendo esta versión del funnel. Cambiá de versión en el menú de la izquierda.">Este funnel · V{verActiva}</span>
             <span className="text-[11px] text-[#9098A4]">{editando ? 'Los cambios se guardan solos. Este DEL pasa a vivir en el panel.' : 'Copia de lectura'}</span>
-            {/* Lectura cómoda: zoom + PDF (solo en Leer) */}
-            {!editando && (<>
-              <span className="inline-flex items-center gap-0.5 rounded-lg border border-[#E7EAF0] p-0.5" style={{ background: '#F7F8FA' }}>
-                <button onClick={() => cambiarZoomDoc(-10)} title="Achicar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A−</button>
-                <span className="text-[10.5px] font-bold text-[#6B7280] w-9 text-center tabular-nums">{zoomDoc}%</span>
-                <button onClick={() => cambiarZoomDoc(10)} title="Agrandar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A+</button>
-              </span>
+            {/* Lectura cómoda: zoom (en Leer y en Editar) + Descargar PDF */}
+            <span className="inline-flex items-center gap-0.5 rounded-lg border border-[#E7EAF0] p-0.5" style={{ background: '#F7F8FA' }}>
+              <button onClick={() => cambiarZoomDoc(-10)} title="Achicar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A−</button>
+              <span className="text-[10.5px] font-bold text-[#6B7280] w-9 text-center tabular-nums">{zoomDoc}%</span>
+              <button onClick={() => cambiarZoomDoc(10)} title="Agrandar la letra del documento" className="py-1 px-2 rounded-md border-none bg-white text-[11px] font-extrabold text-[#4B5563] cursor-pointer" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}>A+</button>
+            </span>
+            {!editando && (
               <button onClick={descargarPdfDel} title="Descargar el documento completo en PDF"
                 className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
                 <FileText size={13} />Descargar PDF
               </button>
-            </>)}
+            )}
             {/* Compartir secciones del DEL con externos (link para comentar). */}
             <div className="relative ml-auto">
               <button onClick={abrirShareDel} title="Compartir secciones para que un externo comente"
@@ -1350,8 +1359,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             const abiertos = scomments.filter(c => !c.resolved).length;
             const threadOpen = threadFor === s.id;
             return (
-              <section key={s.id} id={'sec-' + s.id} data-secid={s.id} className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden" style={{ scrollMarginTop: 108, boxShadow: '0 1px 3px rgba(10,22,40,.06), 0 8px 24px rgba(10,22,40,.04)' }}>
-                <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[#EDF0F5]" style={{ borderLeft: `4px solid ${sc.c}` }}>
+              <section key={s.id} id={'sec-' + s.id} data-secid={s.id} className="rounded-xl border bg-white overflow-hidden" style={{ scrollMarginTop: 108, borderColor: '#D5DCE7', borderLeft: `4px solid ${sc.c}`, boxShadow: '0 2px 5px rgba(10,22,40,.09), 0 10px 28px rgba(10,22,40,.05)' }}>
+                <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[#E3E8F0]" style={{ background: sc.bg || '#F8FAFC' }}>
                   <span className="text-[9.5px] font-extrabold tracking-[0.09em] uppercase shrink-0" style={{ color: sc.c }}>{sc.label}</span>
                   {editTitle === s.id ? (
                     <input autoFocus defaultValue={s.title}
@@ -1441,7 +1450,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   </div>
                 )}
                 {editando && !lock ? (
-                  <div className="p-3">
+                  <div className="p-3" style={{ zoom: zoomDoc / 100 }}>
                     <RichTextEditor
                       key={s.id}
                       value={s.html || plainToHtml(s.text)}

@@ -329,6 +329,7 @@ export default function DocumentoScreen() {
                   .guia-rich ul,.guia-rich ol{margin:0 0 12px;padding-left:22px}
                   .guia-rich li{margin:4px 0}
                   .guia-rich img{max-width:100%;border-radius:12px}
+                  .guia-rich hr{border:none;border-top:2px solid var(--mk-border);margin:16px 0}
                   .guia-rich a{color:var(--mk-blue-ink);font-weight:600}
                   .guia-rich table{width:100%;border-collapse:collapse;margin:0 0 14px;font-size:13.5px}
                   .guia-rich th{text-align:left;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-text2);background:var(--mk-surface2);padding:8px 10px;border:1px solid var(--mk-border)}
