@@ -1347,7 +1347,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           {view.startsWith('cliente:') && (() => {
             const doc = clientDocs.find(d => 'cliente:' + d.id === view);
             if (!doc) return null;
-            const docHtml = doc.panel_html || plainToHtml(doc.text);
+            // El onboarding de la plataforma lo ESCRIBE el cliente, y se
+            // regenera cada dos minutos desde sus respuestas. Si se editara acá,
+            // se guardaría en panel_html — que es lo que el visor muestra con
+            // prioridad — y a partir de ese momento la pestaña quedaría
+            // congelada mostrando una foto vieja mientras el cliente sigue
+            // contestando. Nadie se enteraría. Por eso es de solo lectura.
+            const generado = String(doc.node_id || '').startsWith('native_onb_');
+            const docHtml = (generado ? '' : doc.panel_html) || plainToHtml(doc.text);
             return (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-2 py-2 px-1 flex-wrap">
@@ -1355,18 +1362,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
                     <div className="min-w-0">
                       <div className="text-[14px] font-bold text-[#1A1D26] truncate">{doc._kind === 'extra' ? doc.title : (DOC_KIND_LABEL[doc.doc_kind] || doc.title)}</div>
-                      <div className="text-[11px] text-[#9098A4]">Aparece en todos los DEL de este cliente.{docEditing ? ' Se guarda solo.' : ''}</div>
+                      <div className="text-[11px] text-[#9098A4]">
+                        {generado
+                          ? 'Lo completa el cliente en su plataforma. Se actualiza solo cada 2 minutos.'
+                          : `Aparece en todos los DEL de este cliente.${docEditing ? ' Se guarda solo.' : ''}`}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {!generado && (
                     <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
                       <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
                       <button onClick={() => setDocEditing(true)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: '#fff', color: '#7C3AED', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
                     </div>
+                    )}
                     {doc._kind === 'extra' && <button onClick={() => borrarExtraDoc(doc)} title="Borrar este documento" className="inline-flex items-center justify-center w-8 h-8 border border-[#E2E5EB] rounded-lg bg-white text-[#C3C9D4] cursor-pointer hover:bg-[#FEF2F2] hover:border-[#FECACA] hover:text-[#EF4444]"><Trash2 size={13} /></button>}
                   </div>
                 </div>
-                {docEditing ? (
+                {docEditing && !generado ? (
                   <RichTextEditor
                     key={doc.id}
                     value={docHtml}
@@ -1380,7 +1393,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   <div className="del-rich rounded-xl border border-[#E7EAF0] bg-white py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined }}>
                     {(doc.panel_html || (doc.text || '').trim())
                       ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(docHtml) }} />
-                      : <span className="italic text-[#C3C9D4]">Este documento está vacío. Tocá “Editar” para escribirlo.</span>}
+                      : <span className="italic text-[#C3C9D4]">
+                          {generado
+                            ? 'El cliente todavía no empezó su onboarding.'
+                            : 'Este documento está vacío. Tocá “Editar” para escribirlo.'}
+                        </span>}
                   </div>
                 )}
               </div>
