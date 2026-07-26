@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus, PaintBucket } from 'lucide-react';
+import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus, PaintBucket, Minus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
 // Editor WYSIWYG minimo basado en contentEditable + execCommand.
@@ -626,6 +626,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
           <Divider />
           <Btn label="A−" title="Achicar la letra seleccionada" onClick={() => changeFontSize(false)} />
           <Btn label="A+" title="Agrandar la letra seleccionada" onClick={() => changeFontSize(true)} />
+          <Btn Icon={Minus}     title="Divisor (línea horizontal)" onClick={() => exec('insertHorizontalRule')} />
           <Btn Icon={Table}     title="Insertar tabla" onClick={openTable} />
           <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={openImage} />
           <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={openAvatar} />
