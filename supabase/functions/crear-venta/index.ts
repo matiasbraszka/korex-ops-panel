@@ -505,7 +505,14 @@ async function cargarIngresoFinanzas(args: {
 
     // ── 2) BASE DE DATOS (fin_directory) ── solo si no existe ya por nombre.
     try {
-      const { data: dir } = await supabase.from("fin_directory").select("id").ilike("nombre", args.clientName).limit(1);
+      const { data: dir } = await supabase.from("fin_directory").select("id,email").ilike("nombre", args.clientName).limit(1);
+      // Si ya estaba en el directorio pero SIN email, se lo cargamos. No es un
+      // detalle cosmetico: el trigger que le crea la cuenta del portal (y la
+      // contrasena) exige email, asi que sin esto el cliente se queda sin acceso
+      // y nadie se entera hasta que lo reclama.
+      if (dir && dir.length && !str(dir[0].email) && args.email) {
+        await supabase.from("fin_directory").update({ email: args.email }).eq("id", dir[0].id);
+      }
       if (!dir || !dir.length) {
         const { data: dmax } = await supabase.from("fin_directory").select("sheet_row").order("sheet_row", { ascending: false, nullsFirst: false }).limit(1);
         await supabase.from("fin_directory").insert({
@@ -647,14 +654,83 @@ async function postSlack(webhook: string, text: string): Promise<void> {
   }
 }
 
+// Plantilla por defecto del mensaje que el closer le manda al cliente. Ya no hay
+// Google Doc: el onboarding se completa en la plataforma, asi que lo que el
+// cliente necesita es su usuario y su contrasena. Espanol neutro y sin marca de
+// genero — la mitad de los clientes son mujeres.
+const HANDOFF_DEFAULT = [
+  "Te damos la bienvenida a Korex, {NOMBRE} 🎉",
+  "",
+  "Ya tienes tu cuenta en la plataforma. Ahi vas a hacer todo: el onboarding, subir tu material y seguir tu funnel.",
+  "",
+  "🔐 *Tu acceso*",
+  "{PORTAL_URL}",
+  "Usuario: {PORTAL_EMAIL}",
+  "Contrasena: {PORTAL_PASSWORD}",
+  "",
+  "📝 *Lo primero es el onboarding*",
+  "Es donde nos cuentas tu negocio, tu historia y tu oferta. Con eso escribimos tu VSL, tus anuncios y tus paginas.",
+  "Se guarda solo, lo puedes responder hablando en vez de escribir, y puedes parar y continuar cuando quieras.",
+  "",
+  "*Dos cosas antes de empezar:*",
+  "1. Completa el onboarding entero.",
+  "2. Firma el contrato que te llega por correo.",
+  "",
+  "En cuanto tengamos eso, arrancamos. La sesion de inicio la reservas tu desde el primer paso del onboarding.",
+  "",
+  "Cualquier duda, escribenos por aqui.",
+].join("\n");
+
 // Arma el mensaje de handoff (el que el closer copia para el cliente) a partir de
-// la plantilla de la config, sustituyendo los links. Fallback minimo si no hay plantilla.
-function buildHandoff(template: string, calendarLink: string, onboardingUrl: string | null): string {
-  const tpl = template ||
-    "Acá les dejamos el *onboarding* para completar.\n\n📅 Calendario para agendar:\n{CALENDAR_LINK}\n\n📝 Documento de onboarding:\n{ONBOARDING_LINK}";
+// la plantilla de la config, sustituyendo los huecos. Fallback si no hay plantilla.
+function buildHandoff(
+  template: string,
+  calendarLink: string,
+  onboardingUrl: string | null,
+  portal: { url: string; email: string; password: string; nombre: string },
+): string {
+  const tpl = template || HANDOFF_DEFAULT;
   return tpl
+    .replaceAll("{NOMBRE}", portal.nombre)
+    .replaceAll("{PORTAL_URL}", portal.url)
+    // Si falta alguno, se dice en el mensaje en vez de dejar el hueco crudo: el
+    // closer lo ve antes de mandarlo y sabe que tiene que cargar el email.
+    .replaceAll("{PORTAL_EMAIL}", portal.email || "(falta cargar el email del cliente)")
+    .replaceAll("{PORTAL_PASSWORD}", portal.password || "(se genera al cargar el email)")
     .replaceAll("{CALENDAR_LINK}", calendarLink || "")
     .replaceAll("{ONBOARDING_LINK}", onboardingUrl || "(se generará la carpeta del cliente)");
+}
+
+// El primer nombre, para el saludo. "Maria Gonzalez Perez" -> "Maria".
+function primerNombre(nombre: string): string {
+  return (nombre || "").replace(/^\[PRUEBA\]\s*/i, "").trim().split(/\s+/)[0] || "";
+}
+
+// Lee la cuenta del portal del cliente. NO la crea: la genera el trigger
+// `fin_directory_portal_provision` en cuanto el cliente entra al directorio de
+// finanzas con email (insert o update). A esta altura ya deberia existir, pero se
+// reintenta un par de veces porque el alta en finanzas acaba de ocurrir.
+async function buscarCuentaPortal(clientName: string): Promise<{ email: string; password: string }> {
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      const { data: dir } = await supabase
+        .from("fin_directory").select("id").ilike("nombre", clientName).limit(1);
+      const personId = dir?.[0]?.id;
+      if (personId) {
+        const { data: pa } = await supabase
+          .from("portal_access").select("login_email,shared_secret")
+          .eq("person_id", personId).limit(1);
+        const row = pa?.[0];
+        if (row?.login_email) {
+          return { email: str(row.login_email), password: str(row.shared_secret) };
+        }
+      }
+    } catch (e) {
+      console.error("crear-venta: buscarCuentaPortal", e);
+    }
+    if (intento < 3) await new Promise((r) => setTimeout(r, 500));
+  }
+  return { email: "", password: "" };
 }
 
 // Convierte "Matias Braszka" + "InCruises" en "matias-braszka-incruises":
@@ -1098,11 +1174,20 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Mensaje de handoff para el cliente (plantilla editable + links).
+  // Mensaje de handoff para el cliente (plantilla editable + links + acceso).
+  // La cuenta del portal ya existe: la creo el trigger del directorio de finanzas
+  // unas lineas mas arriba. Aca solo se lee para poder pasarsela al cliente.
+  const cuentaPortal = await buscarCuentaPortal(displayName);
   const handoffMessage = buildHandoff(
     str(onboardingCfg.onboarding_handoff_msg),
     str(onboardingCfg.calendar_link),
     onboardingUrl,
+    {
+      url: str(onboardingCfg.portal_url) || "https://clientes.metodokorex.com",
+      email: cuentaPortal.email,
+      password: cuentaPortal.password,
+      nombre: primerNombre(displayName),
+    },
   );
 
   // Resumen a Slack #onboarding-clientes con todas las preguntas-respuestas del
@@ -1162,6 +1247,9 @@ Deno.serve(async (req: Request) => {
     folder_url: driveFolderUrl,
     onboarding_url: onboardingUrl,
     handoff_message: handoffMessage,
+    portal_url: str(onboardingCfg.portal_url) || "https://clientes.metodokorex.com",
+    portal_email: cuentaPortal.email,
+    portal_password: cuentaPortal.password,
     slack_channel: slackChannelName,
     finanzas_recorded: !!incomeId,
   });
