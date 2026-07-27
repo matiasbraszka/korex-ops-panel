@@ -141,8 +141,10 @@ export default function ClientsPage() {
     if (c) return <ClientDetail client={c} />;
   }
 
-  // Filter out Empresa (Korex) from the client list
+  // Korex (nuestra empresa) se muestra FIJADO arriba de la lista, con rótulo
+  // propio y fuera de las secciones de prioridad. KPIs y filtros no lo cuentan.
   const isKorexClient = (c) => /empresa|korex/i.test(c.name);
+  const korexClient = clients.find(isKorexClient) || null;
   const visibleClients = clients.filter(c => !isKorexClient(c));
 
   // Prioridades configuradas (dinámicas: se agregan/borran desde Configuración).
@@ -190,6 +192,9 @@ export default function ClientsPage() {
 
   // Filtro por fase actual (set desde el buscador global). 'all' = sin filtro.
   if (phase && phase !== 'all') cls = cls.filter(c => currentTask(c, tasks)?.phase === phase);
+
+  // Korex arriba de todo (solo en la vista "Todos", sin filtros activos).
+  if (korexClient && filter === 'all' && (!phase || phase === 'all')) cls = [korexClient, ...cls];
 
   // Resolver label/color de la fase activa para el pill
   let phaseInfo = null;
@@ -362,8 +367,17 @@ export default function ClientsPage() {
         const phaseLabel = phaseCfg?.label || 'Lanzado';
         const phaseColor = phaseCfg?.color || '#9CA3AF';
 
+        const esKorex = isKorexClient(c);
         let prioLabel = null;
-        if (p !== lastPrio) {
+        if (esKorex) {
+          // Rótulo propio: no abre sección de prioridad ni pisa lastPrio.
+          prioLabel = (
+            <div className="text-[10px] font-bold uppercase tracking-[1.5px] py-2 pb-1.5 flex items-center gap-2" style={{ color: '#2E69E0' }}>
+              Korex — Nuestra empresa
+              <span className="flex-1 h-px bg-border" />
+            </div>
+          );
+        } else if (p !== lastPrio) {
           lastPrio = p;
           const isHotDivider = isAdmin && dragOverPrio === p;
           prioLabel = (
@@ -384,12 +398,12 @@ export default function ClientsPage() {
           <div key={c.id}>
             {prioLabel}
             <div
-              draggable={isAdmin}
-              onDragStart={(e) => handleDragStart(e, c)}
-              onDragOver={(e) => handleDragOverRow(e, c)}
+              draggable={isAdmin && !esKorex}
+              onDragStart={(e) => { if (!esKorex) handleDragStart(e, c); }}
+              onDragOver={(e) => { if (!esKorex) handleDragOverRow(e, c); }}
               onDragLeave={() => setDragOverId(prev => prev === c.id ? null : prev)}
               onDragEnd={clearDrag}
-              onDrop={(e) => handleDropOnRow(e, c)}
+              onDrop={(e) => { if (!esKorex) handleDropOnRow(e, c); }}
               className={`group/row grid items-center gap-3 py-3 px-4 bg-white border rounded-xl mb-1.5 cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm grid-cols-[36px_minmax(140px,1.4fr)_140px_minmax(200px,2fr)_110px_20px] max-md:gap-2 max-md:py-2.5 max-md:px-3 max-md:grid-cols-[30px_1fr_20px] ${
                 dragId === c.id ? 'opacity-40 scale-[0.99] border-border' :
                 dragOverId === c.id ? 'border-blue-400 -translate-y-px shadow-md' : 'border-border'
@@ -409,7 +423,7 @@ export default function ClientsPage() {
               )}
               {/* Col 1: nombre + empresa */}
               <div className="min-w-0 relative">
-                {isAdmin && (
+                {isAdmin && !esKorex && (
                   <div
                     onClick={(e) => e.stopPropagation()}
                     className="absolute -left-3 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 opacity-0 group-hover/row:opacity-100 transition-opacity max-md:hidden"
