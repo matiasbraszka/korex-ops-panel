@@ -204,7 +204,7 @@ export const CLIENT_ADS_DATA = {
     metaAds: [],
     metaMetrics: { adsActive: false, lastUpdated: '2026-04-04', currency: 'USD', conversionEvent: null, totalSpend7d: 0, totalConversions7d: 0, avgCpl7d: 0, spendYesterday: 0, conversionsYesterday: 0, impressions7d: 0, clicks7d: 0, ctr7d: 0, pauseReason: 'Cuenta Meta hackeada — sin cuenta activa' }
   },
-  'Empresa (Korex)': {
+  'Korex': {
     metaAds: [
       { id: 'act_479086528217518', name: 'Metodo Korex Account', currency: 'USD', spent: '', status: 'interna' }
     ],
