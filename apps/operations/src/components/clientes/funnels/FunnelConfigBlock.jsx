@@ -1,6 +1,36 @@
-import { Globe, Film, Copy, Check, Settings2, Link2, Megaphone } from 'lucide-react';
+import { useState } from 'react';
+import { Globe, Film, Copy, Check, Settings2, Link2, Megaphone, Plus } from 'lucide-react';
 import { copyText } from '../recursosShared';
 import { useApp } from '../../../context/AppContext';
+
+// Alta con DOS campos a la vista (qué es cada cosa, sin adivinar) + botón Agregar.
+// Se usa para cuentas publicitarias (ID + nombre) y eventos (evento + nombre técnico).
+function AltaDoble({ labelA, phA, monoA, labelB, phB, monoB, cta, onAdd }) {
+  const [a, setA] = useState('');
+  const [b, setB] = useState('');
+  const mono = { fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' };
+  const agregar = () => { if (!a.trim() && !b.trim()) return; onAdd(a.trim(), b.trim()); setA(''); setB(''); };
+  const onKey = (e) => { if (e.key === 'Enter') agregar(); };
+  const inputCls = 'py-[6px] px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0] w-[190px]';
+  return (
+    <div className="flex items-end gap-2 flex-wrap mt-2.5">
+      <div>
+        <div className="text-[9.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] mb-1">{labelA}</div>
+        <input value={a} onChange={(e) => setA(e.target.value)} onKeyDown={onKey} placeholder={phA}
+          onClick={(e) => e.stopPropagation()} className={inputCls} style={monoA ? mono : undefined} />
+      </div>
+      <div>
+        <div className="text-[9.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] mb-1">{labelB}</div>
+        <input value={b} onChange={(e) => setB(e.target.value)} onKeyDown={onKey} placeholder={phB}
+          onClick={(e) => e.stopPropagation()} className={inputCls} style={monoB ? mono : undefined} />
+      </div>
+      <button onClick={agregar}
+        className="inline-flex items-center gap-1 py-[7px] px-3 border border-[#DCE3FF] rounded-md bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF]">
+        <Plus size={12} />{cta}
+      </button>
+    </div>
+  );
+}
 
 // Configuracion de Meta y Links, con los HUECOS A LA VISTA.
 //
@@ -121,13 +151,12 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
   const cliente = (clients || []).find(c => c.id === f.client_id) || null;
   const cuentas = Array.isArray(cliente?.metaAds) ? cliente.metaAds : [];
   const guardarCuentas = (arr) => cliente && updateClient(cliente.id, { metaAds: arr });
-  const agregarCuenta = (raw) => {
-    const v = (raw || '').trim(); if (!v) return;
-    const [idParte, ...resto] = v.split(/\s+/);
-    let idAcc = idParte.trim();
+  const agregarCuenta = (idRaw, nombre) => {
+    let idAcc = (idRaw || '').trim();
+    if (!idAcc) { window.alert('Falta el ID de la cuenta (act_…).'); return; }
     if (/^\d+$/.test(idAcc)) idAcc = 'act_' + idAcc;
-    if (cuentas.some(a => a.id === idAcc)) return;
-    guardarCuentas([...cuentas, { id: idAcc, name: resto.join(' ') || (cliente?.name || 'Cuenta'), currency: 'USD', spent: '', status: 'activa' }]);
+    if (cuentas.some(a => a.id === idAcc)) { window.alert('Esa cuenta ya está cargada.'); return; }
+    guardarCuentas([...cuentas, { id: idAcc, name: (nombre || '').trim() || (cliente?.name || 'Cuenta'), currency: 'USD', spent: '', status: 'activa' }]);
   };
 
   return (
@@ -162,12 +191,9 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
                     className="inline-flex items-center justify-center w-4 h-4 rounded-full border-none bg-transparent text-[#9CB8EE] hover:text-[#DC2626] cursor-pointer p-0 text-[12px] leading-none">×</button>
                 </span>
               ))}
-              <input
-                placeholder="act_123456789 Nombre… (Enter)"
-                onKeyDown={(e) => { if (e.key === 'Enter') { agregarCuenta(e.target.value); e.target.value = ''; } }}
-                onClick={(e) => e.stopPropagation()}
-                className="py-[5px] px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0] w-[220px]" />
             </div>
+            <AltaDoble labelA="ID de la cuenta" phA="act_123456789" monoA labelB="Nombre" phB="Ej: Cuenta principal"
+              cta="Agregar cuenta" onAdd={agregarCuenta} />
           </div>
         )}
 
@@ -192,17 +218,12 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
               <button key={n} onClick={() => onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: n, purpose: '', code: '' }] })}
                 className="inline-flex items-center gap-1 py-[5px] px-2.5 border border-dashed border-[#C9D6FF] rounded-md bg-white text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#F5F7FF]">+ {n}</button>
             ))}
-            <input
-              placeholder="Otro evento… (Enter)"
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                const v = e.target.value.trim(); if (!v) return;
-                onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: v, purpose: '', code: '' }] });
-                e.target.value = '';
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="py-[5px] px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0] w-[170px]" />
           </div>
+          <AltaDoble labelA="Evento" phA="Ej: Registro de lead" labelB="Nombre (en Meta)" phB="ej: registro_de_lead" monoB
+            cta="Agregar evento" onAdd={(evento, codigo) => {
+              if (!(evento || '').trim()) { window.alert('Poné qué evento es (ej: Registro de lead).'); return; }
+              onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: evento.trim(), purpose: '', code: (codigo || '').trim() }] });
+            }} />
         </div>
       </div>
     </div>
