@@ -19,10 +19,10 @@ INSERT INTO public.marketing_subagents (key, name, position, active, instruction
   ('cuenta', 'Situación del cliente', 8, false, '', '{
     "runtime": "agent-run",
     "nivel": "cliente",
-    "max_tokens": { "chat": 6000, "generate": 4096 },
-    "datasets": ["ficha", "satisfaccion", "llamadas", "trabajo", "finanzas", "entregables", "timeline"],
+    "max_tokens": { "chat": 10000, "generate": 4096 },
+    "datasets": ["ficha", "fechas", "publicidad", "calidad", "retrasos", "entregas", "cobros", "satisfaccion", "llamadas", "timeline"],
     "formato": "cuenta",
     "tool": null,
-    "presupuesto": { "dossier": 90000 }
+    "presupuesto": { "dossier": 140000 }
   }'::jsonb)
 ON CONFLICT (key) DO NOTHING;
