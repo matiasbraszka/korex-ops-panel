@@ -1,31 +1,33 @@
 import { useState } from 'react';
-import { Globe, Film, Copy, Check, Settings2, Link2, Megaphone, Plus } from 'lucide-react';
+import { Globe, Film, Copy, Check, Settings2, Link2, Megaphone, Plus, Trash2 } from 'lucide-react';
 import { copyText } from '../recursosShared';
 import { useApp } from '../../../context/AppContext';
 
-// Alta con DOS campos a la vista (qué es cada cosa, sin adivinar) + botón Agregar.
-// Se usa para cuentas publicitarias (ID + nombre) y eventos (evento + nombre técnico).
+// Pie de alta de las listas (cuentas / eventos): dos campos rotulados lado a lado
+// y el botón Agregar debajo, todo dentro de la misma tarjeta de la lista.
 function AltaDoble({ labelA, phA, monoA, labelB, phB, monoB, cta, onAdd }) {
   const [a, setA] = useState('');
   const [b, setB] = useState('');
   const mono = { fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' };
   const agregar = () => { if (!a.trim() && !b.trim()) return; onAdd(a.trim(), b.trim()); setA(''); setB(''); };
   const onKey = (e) => { if (e.key === 'Enter') agregar(); };
-  const inputCls = 'py-[6px] px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0] w-[190px]';
+  const inputCls = 'w-full py-[7px] px-2.5 border border-[#E2E5EB] rounded-md text-[12px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0]';
   return (
-    <div className="flex items-end gap-2 flex-wrap mt-2.5">
-      <div>
-        <div className="text-[9.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] mb-1">{labelA}</div>
-        <input value={a} onChange={(e) => setA(e.target.value)} onKeyDown={onKey} placeholder={phA}
-          onClick={(e) => e.stopPropagation()} className={inputCls} style={monoA ? mono : undefined} />
-      </div>
-      <div>
-        <div className="text-[9.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] mb-1">{labelB}</div>
-        <input value={b} onChange={(e) => setB(e.target.value)} onKeyDown={onKey} placeholder={phB}
-          onClick={(e) => e.stopPropagation()} className={inputCls} style={monoB ? mono : undefined} />
+    <div className="border-t border-[#F1F3F7] p-3" style={{ background: '#FBFCFE' }}>
+      <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="min-w-0">
+          <div className="text-[9.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] mb-1">{labelA}</div>
+          <input value={a} onChange={(e) => setA(e.target.value)} onKeyDown={onKey} placeholder={phA}
+            onClick={(e) => e.stopPropagation()} className={inputCls} style={monoA ? mono : undefined} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[9.5px] font-bold uppercase tracking-[0.05em] text-[#9098A4] mb-1">{labelB}</div>
+          <input value={b} onChange={(e) => setB(e.target.value)} onKeyDown={onKey} placeholder={phB}
+            onClick={(e) => e.stopPropagation()} className={inputCls} style={monoB ? mono : undefined} />
+        </div>
       </div>
       <button onClick={agregar}
-        className="inline-flex items-center gap-1 py-[7px] px-3 border border-[#DCE3FF] rounded-md bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF]">
+        className="mt-2 w-full inline-flex items-center justify-center gap-1 py-[7px] px-3 border border-[#DCE3FF] rounded-md bg-[#F5F7FF] text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#EEF2FF]">
         <Plus size={12} />{cta}
       </button>
     </div>
@@ -173,57 +175,75 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
         <Grupo titulo="Obligatorios" Icon={Link2} slots={SLOT_OBLIGATORIOS} f={f} onUpdate={onUpdate} contador={{ ok: okReq, total: SLOT_OBLIGATORIOS.length }} />
         <Grupo titulo="Configuración de Meta" Icon={Settings2} slots={SLOT_META} f={f} onUpdate={onUpdate} contador={{ ok: okMeta, total: SLOT_META.length }} />
 
-        {/* Cuentas publicitarias: son DEL CLIENTE (varias) y aplican a todos sus funnels. */}
-        {cliente && (
-          <div className="mb-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Megaphone size={13} className="text-[#AEB4BF] shrink-0" />
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Cuentas publicitarias</span>
-              <span className="text-[10px] text-[#AEB4BF]">· del cliente, valen para todos sus funnels</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {cuentas.map(a => (
-                <span key={a.id} className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-md text-[11.5px] font-semibold" style={{ background: '#EFF6FF', border: '1px solid #C7DBFB', color: '#2E69E0' }}>
-                  {a.name || 'Cuenta'}
-                  <span className="font-mono text-[10px] opacity-70">{a.id}</span>
-                  <button onClick={() => copyText(a.id)} title="Copiar el ID" className="inline-flex items-center justify-center w-4 h-4 rounded border-none bg-transparent text-[#9CB8EE] hover:text-[#2E69E0] cursor-pointer p-0"><Copy size={10} /></button>
-                  <button onClick={() => { if (window.confirm(`¿Sacar la cuenta ${a.id} del cliente?`)) guardarCuentas(cuentas.filter(x => x.id !== a.id)); }} title="Sacar esta cuenta"
-                    className="inline-flex items-center justify-center w-4 h-4 rounded-full border-none bg-transparent text-[#9CB8EE] hover:text-[#DC2626] cursor-pointer p-0 text-[12px] leading-none">×</button>
-                </span>
-              ))}
-            </div>
-            <AltaDoble labelA="ID de la cuenta" phA="act_123456789" monoA labelB="Nombre" phB="Ej: Cuenta principal"
-              cta="Agregar cuenta" onAdd={agregarCuenta} />
-          </div>
-        )}
+        {/* Cuentas y eventos: DOS COLUMNAS con listas prolijas (mismo espíritu que los
+            links de arriba: cada cosa en su fila, con su rótulo, fácil de escanear). */}
+        <div className="grid gap-x-[18px] gap-y-4 items-start" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))' }}>
 
-        {/* Eventos: se agregan y sacan ACÁ MISMO (antes solo se veían y había que ir a un
-            modal que se prestaba a confusión). El modal queda para el código de cada evento. */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Check size={13} className="text-[#AEB4BF] shrink-0" />
-            <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Eventos de conversión</span>
-            <button onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="text-[10.5px] font-semibold text-[#2E69E0] cursor-pointer border-none bg-transparent hover:underline ml-1">editar códigos</button>
+          {/* Columna 1: cuentas publicitarias (del CLIENTE, valen para todos sus funnels). */}
+          {cliente && (
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Megaphone size={13} className="text-[#AEB4BF] shrink-0" />
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Cuentas publicitarias</span>
+                <span className="text-[10px] text-[#AEB4BF]">· del cliente</span>
+              </div>
+              <div className="border border-[#E7EAF0] rounded-[10px] bg-white overflow-hidden">
+                {cuentas.length === 0 && <div className="py-3 px-3.5 text-[12px] text-[#B6BCC6]">Todavía no hay cuentas cargadas.</div>}
+                {cuentas.map((a, i) => (
+                  <div key={a.id} className={'flex items-center gap-2.5 py-2.5 px-3.5' + (i ? ' border-t border-[#F1F3F7]' : '')}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate">{a.name || 'Cuenta'}</div>
+                      <div className="text-[11px] text-[#9098A4] truncate" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' }}>{a.id}</div>
+                    </div>
+                    <button onClick={() => copyText(a.id)} title="Copiar el ID" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#9CA3AF] cursor-pointer hover:text-[#2E69E0] hover:border-[#C7D2FE] shrink-0"><Copy size={12} /></button>
+                    <button onClick={() => { if (window.confirm(`¿Sacar la cuenta ${a.id} del cliente?`)) guardarCuentas(cuentas.filter(x => x.id !== a.id)); }} title="Sacar esta cuenta"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA] shrink-0"><Trash2 size={12} /></button>
+                  </div>
+                ))}
+                <AltaDoble labelA="ID de la cuenta" phA="act_123456789" monoA labelB="Nombre" phB="Ej: Cuenta principal"
+                  cta="Agregar cuenta" onAdd={agregarCuenta} />
+              </div>
+            </div>
+          )}
+
+          {/* Columna 2: eventos de conversión (de ESTE funnel). */}
+          <div>
+            <div className="flex items-center gap-2 mb-2.5">
+              <Check size={13} className="text-[#AEB4BF] shrink-0" />
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Eventos de conversión</span>
+              <span className="text-[10px] text-[#AEB4BF]">· de este funnel</span>
+              <button onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="text-[10.5px] font-semibold text-[#2E69E0] cursor-pointer border-none bg-transparent hover:underline ml-auto">editar códigos</button>
+            </div>
+            <div className="border border-[#E7EAF0] rounded-[10px] bg-white overflow-hidden">
+              {events.length === 0 && <div className="py-3 px-3.5 text-[12px] text-[#B6BCC6]">Todavía no hay eventos.</div>}
+              {events.map((ev, i) => (
+                <div key={ev.id} className={'flex items-center gap-2.5 py-2.5 px-3.5' + (i ? ' border-t border-[#F1F3F7]' : '')}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate">{ev.name || 'sin nombre'}</div>
+                    <div className="text-[11px] truncate" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace', color: ev.code ? '#9098A4' : '#C9CED8' }}>
+                      {ev.code || 'sin nombre en Meta'}
+                    </div>
+                  </div>
+                  <button onClick={() => onUpdate(f.id, { conversion_events: events.filter(x => x.id !== ev.id) })} title="Sacar este evento"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA] shrink-0"><Trash2 size={12} /></button>
+                </div>
+              ))}
+              {EVENTOS_STD.some(n => !events.some(e => (e.name || '').trim().toLowerCase() === n.toLowerCase())) && (
+                <div className="flex items-center gap-1.5 flex-wrap py-2 px-3.5 border-t border-[#F1F3F7]">
+                  <span className="text-[10px] font-semibold text-[#AEB4BF]">Estándar:</span>
+                  {EVENTOS_STD.filter(n => !events.some(e => (e.name || '').trim().toLowerCase() === n.toLowerCase())).map(n => (
+                    <button key={n} onClick={() => onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: n, purpose: '', code: '' }] })}
+                      className="inline-flex items-center gap-1 py-1 px-2 border border-dashed border-[#C9D6FF] rounded-full bg-white text-[#2E69E0] text-[10.5px] font-semibold cursor-pointer hover:bg-[#F5F7FF]">+ {n}</button>
+                  ))}
+                </div>
+              )}
+              <AltaDoble labelA="Evento" phA="Ej: Registro de lead" labelB="Nombre (en Meta)" phB="ej: registro_de_lead" monoB
+                cta="Agregar evento" onAdd={(evento, codigo) => {
+                  if (!(evento || '').trim()) { window.alert('Poné qué evento es (ej: Registro de lead).'); return; }
+                  onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: evento.trim(), purpose: '', code: (codigo || '').trim() }] });
+                }} />
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {events.map(ev => (
-              <span key={ev.id} className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-md text-[11.5px] font-semibold" style={{ background: '#F5F3FF', border: '1px solid #E4DBFF', color: '#7C3AED' }}>
-                {ev.name || 'sin nombre'}
-                {ev.code && <span className="font-mono text-[10px] opacity-70">{ev.code}</span>}
-                <button onClick={() => onUpdate(f.id, { conversion_events: events.filter(x => x.id !== ev.id) })} title="Sacar este evento"
-                  className="inline-flex items-center justify-center w-4 h-4 rounded-full border-none bg-transparent text-[#B7A6E8] hover:text-[#DC2626] cursor-pointer p-0 text-[12px] leading-none">×</button>
-              </span>
-            ))}
-            {EVENTOS_STD.filter(n => !events.some(e => (e.name || '').trim().toLowerCase() === n.toLowerCase())).map(n => (
-              <button key={n} onClick={() => onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: n, purpose: '', code: '' }] })}
-                className="inline-flex items-center gap-1 py-[5px] px-2.5 border border-dashed border-[#C9D6FF] rounded-md bg-white text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#F5F7FF]">+ {n}</button>
-            ))}
-          </div>
-          <AltaDoble labelA="Evento" phA="Ej: Registro de lead" labelB="Nombre (en Meta)" phB="ej: registro_de_lead" monoB
-            cta="Agregar evento" onAdd={(evento, codigo) => {
-              if (!(evento || '').trim()) { window.alert('Poné qué evento es (ej: Registro de lead).'); return; }
-              onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: evento.trim(), purpose: '', code: (codigo || '').trim() }] });
-            }} />
         </div>
       </div>
     </div>
