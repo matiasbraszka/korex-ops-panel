@@ -405,14 +405,21 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
               {moveTargets?.length > 0 && (() => {
                 // Excluye la carpeta actual por identidad (id); si no viene id, cae al bucket_key.
                 const opts = moveTargets.filter(t => (t.id ? t.id !== selfId : t.key !== bucketKey));
-                const funnelOpts = opts.filter(t => t.scope === 'funnel');
+                const funnelOpts = opts.filter(t => t.scope === 'funnel' && !t.group);
                 const clientOpts = opts.filter(t => t.scope !== 'funnel');
+                // Carpetas de OTROS funnels del cliente: un grupo por funnel (t.group = su nombre).
+                const otros = new Map();
+                for (const t of opts) if (t.scope === 'funnel' && t.group) {
+                  if (!otros.has(t.group)) otros.set(t.group, []);
+                  otros.get(t.group).push(t);
+                }
                 const optEl = (t) => <option key={t.id || t.key} value={t.id || t.key} style={{ color: '#1A1D26' }}>{t.label}</option>;
                 return (
                   <select value="" onChange={(e) => { const v = e.target.value; if (!v) return; const t = moveTargets.find(x => (x.id || x.key) === v); moverIds(Array.from(selected), t || v); }}
                     className="text-[11px] font-bold rounded-md border-none px-2.5 py-1.5 cursor-pointer outline-none appearance-none" style={{ background: color, color: '#fff' }}>
                     <option value="" style={{ color: '#1A1D26' }}>📁 Mover a…</option>
                     {funnelOpts.length > 0 && <optgroup label="Este funnel">{funnelOpts.map(optEl)}</optgroup>}
+                    {[...otros.entries()].map(([g, ts]) => <optgroup key={g} label={`Funnel: ${g}`}>{ts.map(optEl)}</optgroup>)}
                     {clientOpts.length > 0 && <optgroup label="Recursos del cliente">{clientOpts.map(optEl)}</optgroup>}
                   </select>
                 );

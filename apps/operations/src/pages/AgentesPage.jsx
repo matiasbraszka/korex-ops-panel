@@ -1,6 +1,7 @@
 // AgentesPage — interfaz dedicada para chatear con los agentes especializados del cerebro
-// de Korex. v1: agente de Anuncios. Flujo: elegir agente → cliente → estrategia → funnel →
-// avatar y chatear con contexto completo (DEL/avatar/VSL/ganadores) + generar y guardar copys.
+// de Korex. v1: agente de Anuncios. Flujo: elegir agente → cliente → funnel → avatar
+// y chatear con contexto completo (DEL/avatar/VSL/ganadores) + generar y guardar copys.
+// (El strategy_id ya no se elige: se deriva del funnel — la "Estrategia" como capa murió.)
 // El historial de cada chat se guarda (agent_chats) para poder retomarlo después.
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +17,7 @@ import { chatAgents, agentMeta } from '../components/agentes/agentMeta';
 const rid = () => `ach_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 export default function AgentesPage() {
-  const { clients, strategies, strategyPages, updateStrategyPage, currentUser } = useApp();
+  const { clients, strategyPages, updateStrategyPage, currentUser } = useApp();
   const navigate = useNavigate();
   const [sel, setSel] = useState({ clientId: '', strategyId: '', funnelId: '', avatarId: '' });
   const [agentKey, setAgentKey] = useState('anuncios');
@@ -163,7 +164,7 @@ export default function AgentesPage() {
   // paso 5): le alcanza con el cliente. Los demás siguen necesitando el avatar, que es de
   // donde sacan el dolor. El flag vive en agentMeta.js y la edge fn lo replica server-side.
   const soloCliente = !!agentMeta(agentKey).nivelCliente;
-  const ready = soloCliente ? !!sel.clientId : (sel.clientId && sel.strategyId && sel.funnelId && sel.avatarId);
+  const ready = soloCliente ? !!sel.clientId : (sel.clientId && sel.funnelId && sel.avatarId);
   const chatKey = activeChatId || `new:${agentKey}:${soloCliente ? sel.clientId : `${sel.funnelId}:${sel.avatarId}`}`;
 
   return (
@@ -183,7 +184,7 @@ export default function AgentesPage() {
         </div>
 
         <div className="py-0 px-6 pb-3.5 max-md:px-3.5 max-md:pb-3">
-          <ContextBar clients={clients} strategies={strategies} strategyPages={strategyPages} sel={sel} onChange={onChange} />
+          <ContextBar clients={clients} strategyPages={strategyPages} sel={sel} onChange={onChange} />
         </div>
       </div>
 
@@ -194,7 +195,7 @@ export default function AgentesPage() {
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-16 px-5 gap-2.5">
           <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-surface2 text-text3"><MousePointerClick size={24} /></span>
           <div className="text-[13.5px] font-semibold text-[#4B5563]">
-            {soloCliente ? 'Elegí un cliente' : 'Elegí cliente, estrategia, funnel y avatar'}
+            {soloCliente ? 'Elegí un cliente' : 'Elegí cliente, funnel y avatar'}
           </div>
           <div className="text-[12px] text-text3 max-w-[420px]">
             {soloCliente
