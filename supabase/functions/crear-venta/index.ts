@@ -1129,6 +1129,13 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // Acceso del cliente a la plataforma. Se resuelve ACA, antes del canal de Slack,
+  // porque lo usan las dos salidas: el aviso al equipo y el mensaje que copia el
+  // closer. La cuenta ya existe: la creo el trigger del directorio de finanzas.
+  const portalUrl = str(onboardingCfg.portal_url) || "https://clientes.metodokorex.com";
+  const panelUrl = str(onboardingCfg.panel_url) || "https://equipo.metodokorex.com";
+  const cuentaPortal = await buscarCuentaPortal(displayName);
+
   // Canal de Slack PRIVADO del cliente (#nombre-apellido-empresa) + invitar al
   // equipo (menos los excluidos de la config). Necesita slack_bot_token configurado.
   let slackChannelName: string | null = null;
@@ -1155,12 +1162,21 @@ Deno.serve(async (req: Request) => {
         .eq("id", clientId);
       if (scErr) console.error("crear-venta: error guardando slack_channel", scErr);
       try {
+        // El aviso al equipo habla del panel, no del Drive: el funnel y el DEL ya
+        // existen nativos, y lo que hace falta para arrancar es el acceso del
+        // cliente. Los links de Drive salieron de acá a propósito — mandaban a
+        // carpetas que en los clientes nuevos ya no se usan.
         const lines = [
           `:wave: *Canal de ${displayName}* creado. Acá coordinamos el onboarding y la entrega.`,
           "",
-          `:file_folder: *Carpeta general del cliente:* ${driveFolderUrl ? `<${driveFolderUrl}|abrir carpeta>` : "—"}`,
-          `:memo: *Onboarding del cliente:* ${onboardingUrl ? `<${onboardingUrl}|abrir documento>` : "—"}`,
-          `:page_facing_up: *DEL (Documento de trabajo):* ${delDocUrl ? `<${delDocUrl}|abrir documento>` : "—"}`,
+          `:dart: *Funnel inicial* creado (reclutamiento), con su *DEL* listo para trabajar.`,
+          `:open_file_folder: *Ficha del cliente:* <${panelUrl}/operations/clients|abrir en el panel>`,
+          "",
+          `:key: *Acceso del cliente a su plataforma*`,
+          `${portalUrl}`,
+          `Usuario: \`${cuentaPortal.email || "— falta cargar el email del cliente"}\``,
+          `Contraseña: \`${cuentaPortal.password || "— se genera al cargar el email"}\``,
+          `_Ahí completa el onboarding. Las respuestas caen solas en la pestaña *Onboarding* de su DEL, y el material que sube va a las carpetas de recursos del cliente._`,
           "",
           `:lock: *Código Korex (para el contrato en DocuSign):* \`${korexCode}\``,
           `_Al armar el contrato, pegá este código en el asunto del sobre para vincularlo solo a este cliente._`,
@@ -1175,15 +1191,12 @@ Deno.serve(async (req: Request) => {
   }
 
   // Mensaje de handoff para el cliente (plantilla editable + links + acceso).
-  // La cuenta del portal ya existe: la creo el trigger del directorio de finanzas
-  // unas lineas mas arriba. Aca solo se lee para poder pasarsela al cliente.
-  const cuentaPortal = await buscarCuentaPortal(displayName);
   const handoffMessage = buildHandoff(
     str(onboardingCfg.onboarding_handoff_msg),
     str(onboardingCfg.calendar_link),
     onboardingUrl,
     {
-      url: str(onboardingCfg.portal_url) || "https://clientes.metodokorex.com",
+      url: portalUrl,
       email: cuentaPortal.email,
       password: cuentaPortal.password,
       nombre: primerNombre(displayName),
@@ -1247,7 +1260,7 @@ Deno.serve(async (req: Request) => {
     folder_url: driveFolderUrl,
     onboarding_url: onboardingUrl,
     handoff_message: handoffMessage,
-    portal_url: str(onboardingCfg.portal_url) || "https://clientes.metodokorex.com",
+    portal_url: portalUrl,
     portal_email: cuentaPortal.email,
     portal_password: cuentaPortal.password,
     slack_channel: slackChannelName,
