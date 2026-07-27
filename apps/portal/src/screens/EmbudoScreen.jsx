@@ -31,6 +31,10 @@ export default function EmbudoScreen() {
   const accesoMeta = m.accesoMeta || 'sin_pedido';
   const metaPedido = (Array.isArray(inicio?.pendientes) ? inicio.pendientes : []).find((p) => p.tipo === 'acceso_meta');
 
+  // Fechas de entrega por etapa (DD/MM, null si esa etapa no tiene material en el sistema).
+  const fe = e.fechas || {};
+  const conFecha = (texto, fecha) => fecha ? `${texto} · ${fecha}` : texto;
+
   const resumen = alAire ? 'Está al aire. Nosotros seguimos optimizando los resultados.'
     : pend ? 'Falta que grabes tus anuncios. Todo lo demás de este embudo ya lo tenemos.'
     : grabsSubidas ? 'Ya tenemos todas tus grabaciones. Estamos editando y después lo publicamos.'
@@ -92,7 +96,7 @@ export default function EmbudoScreen() {
                   {e.etapa >= 2 ? <PasoCheck /> : <PasoNum n={1} bg="var(--mk-blue-ops)" />}
                   <div style={pasoBody}>
                     <span style={pasoTitulo}>Estrategia y guiones</span>
-                    <span style={pasoEstado}>{e.etapa >= 2 ? 'Terminado' : 'Estamos con esto ahora'}</span>
+                    <span style={pasoEstado}>{e.etapa >= 2 ? conFecha('Terminado', fe.guiones) : 'Estamos con esto ahora'}</span>
                   </div>
                 </div>
                 {e.etapa >= 2 && (
@@ -109,11 +113,12 @@ export default function EmbudoScreen() {
                   {grabsSubidas || e.etapa >= 3 ? <PasoCheck /> : <PasoNum n={2} bg={pend ? 'var(--mk-blue-ops)' : 'var(--mk-surface3)'} ink={pend ? '#fff' : 'var(--mk-text2)'} />}
                   <div style={pasoBody}>
                     <span style={pasoTitulo}>Grabación</span>
-                    <span style={pasoEstado}>{grabsSubidas || e.etapa >= 3 ? 'Recibimos tus videos' : pend ? 'Te toca a ti' : 'Después de los guiones'}</span>
+                    <span style={pasoEstado}>{grabsSubidas || e.etapa >= 3 ? conFecha('Recibimos tus videos', fe.grabacion) : pend ? 'Te toca a ti' : 'Después de los guiones'}</span>
                   </div>
                 </div>
                 {(pend || grabsSubidas || e.etapa >= 3) && (
-                  <div onClick={() => nav(`/documento/${id}/ads`)} role="button" style={{ cursor: 'pointer', height: 44, borderRadius: 999, background: grabsSubidas || e.etapa >= 3 ? 'var(--mk-green)' : 'var(--mk-blue-ops)', color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  /* Ya grabó → la CARPETA de grabaciones (ver sus videos). Falta grabar → los guiones. */
+                  <div onClick={() => nav(grabsSubidas || e.etapa >= 3 ? `/entregables/${id}?tipo=grabaciones` : `/documento/${id}/ads`)} role="button" style={{ cursor: 'pointer', height: 44, borderRadius: 999, background: grabsSubidas || e.etapa >= 3 ? 'var(--mk-green)' : 'var(--mk-blue-ops)', color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {grabsSubidas || e.etapa >= 3 ? 'Ver tus grabaciones' : 'Grabar mis anuncios'}
                     <IcoChevR size={14} stroke="#fff" sw={2.4} />
                   </div>
@@ -127,11 +132,11 @@ export default function EmbudoScreen() {
                   <div style={pasoBody}>
                     <span style={pasoTitulo}>Edición</span>
                     <span style={pasoEstado}>
-                      {e.etapa >= 4 ? 'Terminada' : e.etapa >= 3 ? (devol ? 'Estamos editando · hay videos listos' : 'Estamos editando tus videos') : 'Arranca cuando recibamos tus videos'}
+                      {e.etapa >= 4 ? conFecha('Terminada', fe.edicion) : e.etapa >= 3 ? (devol ? 'Estamos editando · hay videos listos' : 'Estamos editando tus videos') : 'Arranca cuando recibamos tus videos'}
                     </span>
                   </div>
                 </div>
-                {devol && (
+                {(devol || e.etapa >= 4) && (
                   <div onClick={() => nav(`/entregables/${id}`)} role="button" style={{ cursor: 'pointer', height: 44, borderRadius: 999, background: T.ink, color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     Ver lo que editamos
                     <IcoChevR size={14} stroke="#fff" sw={2.4} />
@@ -139,13 +144,22 @@ export default function EmbudoScreen() {
                 )}
               </div>
 
-              {/* 4 · Publicado */}
-              <div style={{ ...pasoCard(), opacity: alAire ? 1 : 0.72, flexDirection: 'row', alignItems: 'center', gap: 12, display: 'flex' }}>
-                {alAire ? <PasoCheck /> : <PasoNum n={4} bg="var(--mk-surface3)" ink="var(--mk-text2)" />}
-                <div style={pasoBody}>
-                  <span style={pasoTitulo}>Publicado</span>
-                  <span style={pasoEstado}>{alAire ? (e.pagina ? String(e.pagina).replace(/^https?:\/\//, '') : 'Al aire') : 'Cuando esté al aire lo vas a ver aquí'}</span>
+              {/* 4 · Publicado — con botón directo a la landing, para que vea el trabajo terminado. */}
+              <div style={{ ...pasoCard(), opacity: alAire ? 1 : 0.72 }}>
+                <div style={pasoHead}>
+                  {alAire ? <PasoCheck /> : <PasoNum n={4} bg="var(--mk-surface3)" ink="var(--mk-text2)" />}
+                  <div style={pasoBody}>
+                    <span style={pasoTitulo}>Publicado</span>
+                    <span style={pasoEstado}>{alAire ? (fe.publicado ? `Al aire desde el ${fe.publicado}` : 'Al aire') : 'Cuando esté al aire lo vas a ver aquí'}</span>
+                  </div>
                 </div>
+                {alAire && e.pagina && (
+                  <a href={/^https?:\/\//.test(e.pagina) ? e.pagina : `https://${e.pagina}`} target="_blank" rel="noreferrer"
+                    style={{ height: 44, borderRadius: 999, background: 'var(--mk-green)', color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none' }}>
+                    Ver tu página
+                    <IcoChevR size={14} stroke="#fff" sw={2.4} />
+                  </a>
+                )}
               </div>
             </div>
           </div>
