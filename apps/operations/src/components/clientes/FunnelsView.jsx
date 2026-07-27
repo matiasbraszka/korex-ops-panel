@@ -555,6 +555,24 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
 
+  // "Activo" es lo que el cliente ve como AL AIRE en su plataforma. El link de
+  // producción es la señal de que la landing ya está diseñada y publicada: sin
+  // él, el portal le muestra "Publicado y corriendo" y ni un link para abrir.
+  // Pasó con el funnel de Ricardo Núñez. Por eso se pide antes de dejar marcarlo.
+  const cambiarEstado = (v) => {
+    const link = String(f.official_domain || '').trim() || String(f.prod_url || '').trim();
+    if (v === 'activa' && !link) {
+      window.alert(
+        'Falta el link de producción para marcarlo Activo.\n\n'
+        + 'Cargá el Dominio (o la URL de Producción) en la configuración del funnel. '
+        + 'Es lo que el cliente ve como “Tu página”: si lo marcás activo sin eso, '
+        + 'en su plataforma le aparece el embudo al aire y nada que abrir.',
+      );
+      return;
+    }
+    onUpdate(f.id, { status: v });
+  };
+
   // El primer paso PENDIENTE: es lo unico del riel que la fila cerrada necesita mostrar.
   // Si no hay ninguno, el funnel esta terminado.
   const nextStage = (stages || []).find(s => s.status === 'pendiente') || null;
@@ -1019,7 +1037,7 @@ Quedo a la espera de tu respuesta`;
             <input key={f.id + 'nametop'} defaultValue={f.name} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[19px] font-extrabold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none tracking-[-.015em]" style={{ color: '#1A1D26' }} />
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <TipoChip value={f.tipo} onChange={(v) => onUpdate(f.id, { tipo: v })} />
-              <StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} />
+              <StatusPill status={f.status || 'activa'} onChange={cambiarEstado} />
               {f.official_domain
                 ? <span onClick={() => copyText(f.official_domain)} title={`Copiar dominio: ${f.official_domain}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2E69E0] cursor-pointer hover:underline"><Globe size={11} />{f.official_domain}</span>
                 : <span className="inline-flex items-center gap-1 text-[11px] text-[#AEB4BF]"><Globe size={11} />sin dominio</span>}
@@ -1047,7 +1065,7 @@ Quedo a la espera de tu respuesta`;
             </div>
           </div>
         </div>
-        <div><StatusPill status={f.status || 'activa'} onChange={(v) => onUpdate(f.id, { status: v })} /></div>
+        <div><StatusPill status={f.status || 'activa'} onChange={cambiarEstado} /></div>
         {/* Que lo frena. Sale del motor de pasos (cerebro_pipeline_status), no de un
             texto a mano: es el primer paso pendiente y su motivo en castellano. */}
         <div className="min-w-0">

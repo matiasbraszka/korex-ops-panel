@@ -176,19 +176,30 @@ export default function DocumentoScreen() {
         .flatMap((ss) => { try { return [...ss.cssRules].map((r) => r.cssText); } catch { return []; } })
         .join('\n');
     } catch { /* hoja externa */ }
+    // Fuera de pantalla, NO `visibility:hidden`: Safari se niega a imprimir un
+    // iframe oculto y devuelve una hoja en blanco.
     const f = document.createElement('iframe');
-    f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;visibility:hidden';
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0';
     document.body.appendChild(f);
     const d = f.contentDocument;
     d.open();
+    // El envoltorio se llama `print-doc` a propósito: el CSS de la app trae un
+    // bloque @media print que esconde TODO (`body * { visibility: hidden }`) y
+    // solo vuelve a mostrar `#print-doc`. Como acá se copian las hojas de estilo
+    // enteras, ese bloque viajaba con ellas y, sin ningún `#print-doc` adentro,
+    // el PDF salía en blanco. Igual se neutraliza abajo por las dudas.
     d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${css}</style><style>
-      html,body{background:#fff!important;margin:0;padding:0}
+      @media print{ body,body *{visibility:visible!important} }
+      html,body{background:#fff!important;margin:0;padding:0;height:auto!important;overflow:visible!important}
       body{padding:26px 30px;font-family:Inter,system-ui,sans-serif}
-      body>div{max-width:780px;margin:0 auto}
+      #print-doc{max-width:780px;margin:0 auto;position:static!important;display:block!important;zoom:1!important}
       img{max-width:100%!important;height:auto}
       [data-uploader],button,[data-no-pdf]{display:none!important}
       mark[data-cmt],mark.marcando{background:transparent;border:0}
-    </style></head><body><div class="doc-sel">${nodo.innerHTML}</div></body></html>`);
+      h1,h2,h3,h4{break-after:avoid-page;page-break-after:avoid}
+      p,li,tr,img{break-inside:avoid;page-break-inside:avoid}
+      @page{margin:14mm}
+    </style></head><body><div id="print-doc" class="doc-sel">${nodo.innerHTML}</div></body></html>`);
     d.close();
     const listo = () => {
       Promise.all([...d.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))))
