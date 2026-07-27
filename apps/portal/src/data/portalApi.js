@@ -74,6 +74,10 @@ export const api = {
   comentar:  (sectionId, body, quote, parentId) =>
     rpc('portal_cliente_comentar', { p_section_id: sectionId, p_body: body, p_quote: quote || null, p_parent_id: parentId || null }, () => ({ ok: true, demo: true })),
   embudos:   () => rpc('portal_cliente_embudos',   {}, () => mock.MOCK_EMBUDOS),
+  // La carpeta de un embudo para VER el material: 'grabaciones' (lo que subió el
+  // cliente) o 'ediciones' (lo que editó el equipo). Se usa en el detalle del embudo.
+  carpetaEmbudo: (strategyId, tipo) =>
+    rpc('portal_cliente_carpeta_embudo', { p_strategy: strategyId, p_tipo: tipo }, () => ({ funnel: '', items: [] })),
   material:  () => rpc('portal_cliente_material',  {}, () => mock.MOCK_MATERIAL),
   materialVisto: () => rpc('portal_cliente_material_visto', {}, () => ({ ok: true })),
   // Config general del portal (guías de grabación, agenda, WhatsApp).
