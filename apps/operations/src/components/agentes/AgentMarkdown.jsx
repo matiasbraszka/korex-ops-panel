@@ -19,6 +19,10 @@ export const AGENT_ACCENT = {
   anuncios: { c: '#5B7CF6', bg: '#EEF2FF', bg2: '#F5F7FF' },
   vsl: { c: '#8B5CF6', bg: '#F5F3FF', bg2: '#FAF9FF' },
   landing: { c: '#06B6D4', bg: '#ECFEFF', bg2: '#F5FDFF' },
+  // Los dos de la fábrica. Sin entrada propia caían en el azul de `anuncios` y se confundían
+  // con él: son agentes de lectura, no de producción, y conviene que se distingan.
+  analista: { c: '#0D9488', bg: '#F0FDFA', bg2: '#F7FEFD' },
+  cuenta: { c: '#E11D48', bg: '#FFF1F2', bg2: '#FFF8F8' },
   formularios: { c: '#F97316', bg: '#FFF7ED', bg2: '#FFFBF5' },
   auditor: { c: '#22C55E', bg: '#ECFDF5', bg2: '#F4FEF9' },
 };
@@ -37,10 +41,15 @@ const SECCIONES_VSL = [
 ];
 
 // Etiquetas de oficio que valen como chip al principio de una línea.
+// Las cuatro últimas son etiquetas de EVIDENCIA, no de oficio: separan lo que está en el
+// dossier de lo que el agente interpreta. `confirmado`/`no verificado` las usa descubrimiento
+// y su prompt ya prometía que se pintaban, pero no estaban acá: la promesa era falsa.
+// `dato`/`lectura` son las del agente de situación del cliente.
 const ETIQUETAS = [
   'hook', 'hooks', 'gancho', 'texto base', 'titular', 'headline', 'descripcion', 'descripción',
   'angulo', 'ángulo', 'cta', 'nota creativa', 'creative', 'promesa', 'mecanismo', 'cierre',
   'objecion', 'objeción', 'duracion', 'duración', 'caso base', 'notas', 'avatar', 'dolor', 'deseo',
+  'dato', 'lectura', 'confirmado', 'no verificado',
 ];
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();

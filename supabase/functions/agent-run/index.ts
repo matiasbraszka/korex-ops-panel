@@ -21,12 +21,14 @@ import {
 } from "../_shared/agent-runtime.ts";
 import type { AgentModule } from "./agents/types.ts";
 import analista from "./agents/analista.ts";
+import cuenta from "./agents/cuenta.ts";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
 // El registro de módulos. Un agente nuevo se agrega ACÁ (una línea) y nada más del host cambia.
 const MODULES: Record<string, AgentModule> = {
   analista,
+  cuenta,
 };
 
 const FN = "agent_run";

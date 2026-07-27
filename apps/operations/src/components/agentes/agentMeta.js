@@ -4,7 +4,7 @@
 //
 // `live: true` = el backend (edge fn agent-chat) ya sabe responder por ese agente.
 // Los demás se muestran con el cartel "Pronto" y no se pueden abrir.
-import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot, Compass, LineChart } from 'lucide-react';
+import { Megaphone, Video, Route, ClipboardList, ShieldCheck, Bot, Compass, LineChart, HeartPulse } from 'lucide-react';
 
 // `general` no es un agente de chat: es la capa base (ADN Korex) que heredan
 // todos los demás. Se edita en Marketing → Configuración, no se chatea con él.
@@ -91,6 +91,23 @@ export const AGENT_META = {
       { label: '¿Dónde se caen en el VSL?', prompt: '¿En qué parte del VSL se está yendo la gente y qué dice el guión justo ahí?' },
       { label: 'Dice que no cierra', prompt: 'El cliente dice que no está cerrando ventas. Atá cabos con los datos: ¿el problema es de leads, de seguimiento o de cierre?' },
       { label: '¿Qué métricas faltan?', prompt: '¿Qué métricas nos faltan para diagnosticar bien este funnel y cómo conseguimos cada una?' },
+    ],
+  },
+  // Segundo agente de la FÁBRICA. Trabaja a nivel CLIENTE (como descubrimiento): no pide
+  // funnel ni avatar porque razona sobre la relación con el cliente, no sobre una pieza.
+  cuenta: {
+    Icon: HeartPulse,
+    desc: 'Cómo viene cada cliente: fase, cuello de botella, satisfacción, pagos y riesgos',
+    live: true,
+    runtime: 'agent-run',
+    nivelCliente: true,
+    suggestions: [
+      { label: '¿Cómo viene?', prompt: 'Haceme el repaso completo de este cliente: dónde está, qué lo frena y qué haría yo esta semana.' },
+      { label: '¿Qué lo trabó?', prompt: '¿Qué es exactamente lo que tiene trabado a este cliente, hace cuánto, y quién lo tiene que destrabar?' },
+      { label: 'Preparame la llamada', prompt: 'Tengo llamada con este cliente. ¿Qué tengo que saber antes de entrar? Qué va a traer él y qué le llevo yo.' },
+      { label: '¿Está conforme?', prompt: '¿Qué tan conforme está este cliente y cómo viene la tendencia? Distinguí lo que siente él de lo que sienten sus usuarios.' },
+      { label: '¿Se nos va?', prompt: '¿Qué riesgo hay de que este cliente se dé de baja? Rankeame las señales y decime qué las confirma o las descarta.' },
+      { label: '¿Pagaría una mensualidad?', prompt: '¿Este cliente estaría dispuesto a pagar una mensualidad? Fundamentá con cómo paga hoy y qué resultados tiene, y cerrá con tu nivel de confianza.' },
     ],
   },
   formularios: {
