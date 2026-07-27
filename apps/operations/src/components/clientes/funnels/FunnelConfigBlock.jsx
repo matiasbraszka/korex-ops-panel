@@ -53,7 +53,7 @@ const SLOT_OBLIGATORIOS = [
 // Los 3 eventos estándar de todo funnel (mismo set que STD_EVENTS de FunnelsView).
 const EVENTOS_STD = ['Visitas', 'Registro lead', 'Thank you page'];
 const SLOT_META = [
-  { k: 'pixel_id',    label: 'Facebook Pixel ID',    ph: 'Ej: 1234567890',     hint: 'Para el seguimiento de eventos. Podés pegar el código entero: extrae el ID solo.' },
+  { k: 'pixel_id',    label: 'Pixel de Meta',        ph: 'Pegá acá el código completo del pixel (o solo el ID)', hint: 'Pegá el <script> entero del Meta Pixel: el sistema guarda el código y extrae el ID solo. También sirve pegar solo el número.' },
   { k: 'clarity_id',  label: 'Microsoft Clarity ID', ph: 'Ej: wa8bmh1fnd',     hint: 'Para mapas de calor y grabaciones. Podés pegar el código entero.' },
   { k: 'pipeline_id', label: 'Pipeline ID',          ph: 'Ej: 12',             hint: 'El que se usa para armar la URL de Publicidad.' },
 ];
@@ -157,9 +157,13 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
     let idAcc = (idRaw || '').trim();
     if (!idAcc) { window.alert('Falta el ID de la cuenta (act_…).'); return; }
     if (/^\d+$/.test(idAcc)) idAcc = 'act_' + idAcc;
-    if (cuentas.some(a => a.id === idAcc)) { window.alert('Esa cuenta ya está cargada.'); return; }
-    guardarCuentas([...cuentas, { id: idAcc, name: (nombre || '').trim() || (cliente?.name || 'Cuenta'), currency: 'USD', spent: '', status: 'activa' }]);
+    if (cuentas.some(a => (a.id || ('act_' + (a.account_id || ''))) === idAcc)) { window.alert('Esa cuenta ya está cargada.'); return; }
+    // account_id (numérico) acompaña al id: es el campo que usa la sync de métricas.
+    guardarCuentas([...cuentas, { id: idAcc, account_id: idAcc.replace(/^act_/, ''), use_token: true, name: (nombre || '').trim() || (cliente?.name || 'Cuenta'), currency: 'USD', spent: '', status: 'activa' }]);
   };
+  const mono = { fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' };
+  // Campos editables en la fila misma (clic → escribís → al salir se guarda).
+  const inputFila = 'w-full border-none bg-transparent outline-none rounded px-1 -mx-1 focus:bg-[#F4F7FE]';
 
   return (
     <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
@@ -189,17 +193,26 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
               </div>
               <div className="border border-[#E7EAF0] rounded-[10px] bg-white overflow-hidden">
                 {cuentas.length === 0 && <div className="py-3 px-3.5 text-[12px] text-[#B6BCC6]">Todavía no hay cuentas cargadas.</div>}
-                {cuentas.map((a, i) => (
-                  <div key={a.id} className={'flex items-center gap-2.5 py-2.5 px-3.5' + (i ? ' border-t border-[#F1F3F7]' : '')}>
+                {cuentas.map((a, i) => {
+                  const accId = a.id || (a.account_id ? 'act_' + a.account_id : '');
+                  return (
+                  <div key={accId + '_' + i} className={'flex items-center gap-2.5 py-2.5 px-3.5' + (i ? ' border-t border-[#F1F3F7]' : '')}>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate">{a.name || 'Cuenta'}</div>
-                      <div className="text-[11px] text-[#9098A4] truncate" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace' }}>{a.id}</div>
+                      <input defaultValue={a.name || ''} placeholder="Nombre de la cuenta" title="Clic para editar el nombre"
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (a.name || '')) guardarCuentas(cuentas.map((x, j) => j === i ? { ...x, name: v } : x)); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                        className={inputFila + ' text-[12.5px] font-semibold text-[#1A1D26]'} />
+                      <input defaultValue={accId} placeholder="act_… (falta el ID)" title="Clic para editar el ID"
+                        onBlur={(e) => { let v = e.target.value.trim(); if (/^\d+$/.test(v)) v = 'act_' + v; if (v !== accId) guardarCuentas(cuentas.map((x, j) => j === i ? { ...x, id: v, account_id: v.replace(/^act_/, '') } : x)); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                        className={inputFila + ' text-[11px] text-[#9098A4]'} style={mono} />
                     </div>
-                    <button onClick={() => copyText(a.id)} title="Copiar el ID" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#9CA3AF] cursor-pointer hover:text-[#2E69E0] hover:border-[#C7D2FE] shrink-0"><Copy size={12} /></button>
-                    <button onClick={() => { if (window.confirm(`¿Sacar la cuenta ${a.id} del cliente?`)) guardarCuentas(cuentas.filter(x => x.id !== a.id)); }} title="Sacar esta cuenta"
+                    <button onClick={() => accId && copyText(accId)} title="Copiar el ID" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#9CA3AF] cursor-pointer hover:text-[#2E69E0] hover:border-[#C7D2FE] shrink-0"><Copy size={12} /></button>
+                    <button onClick={() => { if (window.confirm(`¿Sacar la cuenta "${a.name || accId}" del cliente?`)) guardarCuentas(cuentas.filter((_, j) => j !== i)); }} title="Sacar esta cuenta"
                       className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA] shrink-0"><Trash2 size={12} /></button>
                   </div>
-                ))}
+                  );
+                })}
                 <AltaDoble labelA="ID de la cuenta" phA="act_123456789" monoA labelB="Nombre" phB="Ej: Cuenta principal"
                   cta="Agregar cuenta" onAdd={agregarCuenta} />
               </div>
@@ -219,10 +232,14 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
               {events.map((ev, i) => (
                 <div key={ev.id} className={'flex items-center gap-2.5 py-2.5 px-3.5' + (i ? ' border-t border-[#F1F3F7]' : '')}>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate">{ev.name || 'sin nombre'}</div>
-                    <div className="text-[11px] truncate" style={{ fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace', color: ev.code ? '#9098A4' : '#C9CED8' }}>
-                      {ev.code || 'sin nombre en Meta'}
-                    </div>
+                    <input defaultValue={ev.name || ''} placeholder="Evento (ej: Registro de lead)" title="Clic para editar el evento"
+                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ev.name || '')) onUpdate(f.id, { conversion_events: events.map(x => x.id === ev.id ? { ...x, name: v } : x) }); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                      className={inputFila + ' text-[12.5px] font-semibold text-[#1A1D26]'} />
+                    <input defaultValue={ev.code || ''} placeholder="nombre en Meta (ej: registro_de_lead)" title="Clic para editar el nombre técnico"
+                      onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ev.code || '')) onUpdate(f.id, { conversion_events: events.map(x => x.id === ev.id ? { ...x, code: v } : x) }); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                      className={inputFila + ' text-[11px] text-[#9098A4]'} style={mono} />
                   </div>
                   <button onClick={() => onUpdate(f.id, { conversion_events: events.filter(x => x.id !== ev.id) })} title="Sacar este evento"
                     className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA] shrink-0"><Trash2 size={12} /></button>
