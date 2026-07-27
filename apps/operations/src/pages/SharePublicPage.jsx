@@ -91,6 +91,9 @@ export default function SharePublicPage() {
   if (err) return <Shell><div className="bg-white rounded-2xl border border-[#E7EAF0] p-5 sm:p-8 text-center"><div className="text-[15px] font-bold text-[#1A1D26] mb-1">Ups</div><div className="text-[13px] text-[#6B7280]">{err}</div></div></Shell>;
   if (!data) return <Shell><div className="bg-white rounded-2xl border border-[#E7EAF0] p-6 sm:p-10 text-center text-[13px] text-[#9098A4] flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />Cargando…</div></Shell>;
 
+  // Página suelta (guía o documento): solo lectura, sin pedir nombre.
+  if (data.kind === 'pagina') return <Shell><PaginaShare data={data} /></Shell>;
+
   // Gate de nombre (una vez).
   if (!nameOk) {
     return (
@@ -107,6 +110,21 @@ export default function SharePublicPage() {
   }
 
   return <Shell>{data.kind === 'folder' ? <FolderShare data={data} name={name} onReload={cargar} /> : <DelShare data={data} name={name} onReload={cargar} />}</Shell>;
+}
+
+// ── Página suelta (guía / documento del cliente): solo lectura ─────────────────
+function PaginaShare({ data }) {
+  const html = (data.html || '').trim();
+  return (
+    <div className="bg-white rounded-2xl border border-[#E7EAF0] p-5 sm:p-10">
+      <div className="text-[20px] font-extrabold text-[#1A1D26] mb-4" style={{ letterSpacing: '-0.01em' }}>{data.title || data.label || 'Documento'}</div>
+      <div className="del-rich text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words">
+        {html
+          ? <div dangerouslySetInnerHTML={{ __html: sanitizeDelHtml(html) }} />
+          : <p style={{ whiteSpace: 'pre-wrap' }}>{data.text || 'Este documento está vacío.'}</p>}
+      </div>
+    </div>
+  );
 }
 
 // ── Carpeta: subir + ver lo subido ──────────────────────────────────────────────

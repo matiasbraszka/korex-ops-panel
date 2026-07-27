@@ -238,6 +238,23 @@ const DOC_KIND_LABEL = {
   briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
 };
 
+// Título con lápiz: clic para renombrar (guías y documentos del cliente).
+function TituloEditable({ value, onSave }) {
+  const [editing, setEditing] = useState(false);
+  if (editing) return (
+    <input autoFocus defaultValue={value}
+      onBlur={(e) => { setEditing(false); onSave(e.target.value); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditing(false); }}
+      className="w-full min-w-0 text-[14px] font-bold text-[#1A1D26] border border-[#2E69E0] rounded px-1.5 py-0.5 outline-none bg-white" />
+  );
+  return (
+    <button onClick={() => setEditing(true)} title="Cambiar el nombre" className="group/te flex items-center gap-1.5 min-w-0 text-left border-none bg-transparent cursor-pointer p-0">
+      <span className="text-[14px] font-bold text-[#1A1D26] truncate">{value}</span>
+      <Pencil size={11} className="opacity-0 group-hover/te:opacity-100 text-[#C3C9D4] shrink-0 transition-opacity" />
+    </button>
+  );
+}
+
 export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
   const { currentUser, appSettings } = useApp();
   // Categorías/pestañas del DEL, configurables desde Ajustes (P9). Con fallback al default.
@@ -441,6 +458,130 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     if (view === 'guia:' + g.id) setView('del');
     await supabase.from('del_guias_globales').delete().eq('id', g.id);
   };
+
+  // ── Paridad guías/docs con las pestañas del DEL: renombrar, PDF y compartir ──
+  const renombrarGuia = async (g, title) => {
+    const t = (title || '').trim(); if (!t || t === g.title) return;
+    setGuias(prev => prev.map(x => x.id === g.id ? { ...x, title: t } : x));
+    await supabase.from('del_guias_globales').update({ title: t }).eq('id', g.id);
+  };
+  const renombrarClientDoc = async (doc, title) => {
+    const t = (title || '').trim(); if (!t || t === doc.title) return;
+    setClientDocs(prev => prev.map(d => d.id === doc.id ? { ...d, title: t } : d));
+    if (doc._kind === 'extra') await supabase.from('del_client_extra_docs').update({ title: t }).eq('id', doc.id);
+    else await supabase.from('client_brain_docs').update({ title: t, panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
+  };
+
+  // PDF de UNA página suelta (guía o documento del cliente): mismo molde que el DEL.
+  const descargarPdfPagina = (titulo, html, texto) => {
+    const escapa = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const inner = `<h2 class="pdf-sec">${escapa(titulo || 'Documento')}</h2>` +
+      ((html || '').trim() ? sanitizeDelHtml(html) : `<p style="white-space:pre-wrap">${escapa(texto || '')}</p>`);
+    let css = '';
+    try {
+      css = [...document.styleSheets]
+        .flatMap((ss) => { try { return [...ss.cssRules].map((r) => r.cssText); } catch { return []; } })
+        .join('\n');
+    } catch { /* hoja externa */ }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;visibility:hidden';
+    document.body.appendChild(f);
+    const d = f.contentDocument;
+    d.open();
+    d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapa(titulo || 'Documento')}</title><style>${css}</style><style>
+      html,body{background:#fff!important;margin:0;padding:0}
+      body{padding:28px 34px;font-family:Inter,system-ui,sans-serif;color:#1A1D26}
+      .pdf-doc{max-width:800px;margin:0 auto;font-size:13.5px;line-height:1.62}
+      img{max-width:100%!important;height:auto}
+      .pdf-sec{font-size:17px;font-weight:800;color:#111827;margin:10px 0 8px;letter-spacing:-.01em}
+    </style></head><body><div class="pdf-doc del-rich">${inner}</div></body></html>`);
+    d.close();
+    const listo = () => {
+      Promise.all([...d.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))))
+        .then(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch { /* */ } setTimeout(() => f.remove(), 60000); });
+    };
+    if (d.readyState === 'complete') listo(); else f.onload = listo;
+  };
+
+  // Compartir una página suelta: link público de SOLO LECTURA (share_get kind 'pagina').
+  const [sharePgOpen, setSharePgOpen] = useState(false);
+  const [sharePgLinks, setSharePgLinks] = useState(null);
+  const [sharePgBusy, setSharePgBusy] = useState(false);
+  const [copiedPgTok, setCopiedPgTok] = useState(null);
+  useEffect(() => { setSharePgOpen(false); }, [view]);
+  const sharePgCtx = () => {
+    if (view.startsWith('guia:')) { const g = guias.find(x => 'guia:' + x.id === view); return g ? { kind: 'guia', id: g.id, label: g.title } : null; }
+    if (view.startsWith('cliente:')) {
+      const d = clientDocs.find(x => 'cliente:' + x.id === view);
+      return d ? { kind: d._kind === 'extra' ? 'doc_extra' : 'doc_brain', id: d.id, label: d.title } : null;
+    }
+    return null;
+  };
+  const cargarSharePg = async () => {
+    const ctx = sharePgCtx(); if (!ctx) return;
+    try {
+      const rows = await sbFetch(`share_links?select=id,token,created_at&kind=eq.${ctx.kind}&doc_id=eq.${encodeURIComponent(String(ctx.id))}&revoked=eq.false&order=created_at.desc`);
+      setSharePgLinks(Array.isArray(rows) ? rows : []);
+    } catch { setSharePgLinks([]); }
+  };
+  const abrirSharePg = () => { setSharePgOpen(o => !o); if (!sharePgOpen) { setSharePgLinks(null); cargarSharePg(); } };
+  const crearSharePg = async () => {
+    const ctx = sharePgCtx(); if (!ctx) return;
+    setSharePgBusy(true);
+    try {
+      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ kind: ctx.kind, doc_id: String(ctx.id), client_id: cid || null, label: ctx.label, created_by: by }) });
+      const created = Array.isArray(res) ? res[0] : res;
+      if (created?.token) { copyClip(urlShare(created.token)); setCopiedPgTok(created.token); setTimeout(() => setCopiedPgTok(null), 1800); }
+      await cargarSharePg();
+    } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
+    setSharePgBusy(false);
+  };
+  const revocarSharePg = async (id) => {
+    try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ }
+    cargarSharePg();
+  };
+  // Botonera de las páginas sueltas (guías y docs del cliente): PDF + Compartir.
+  const accionesPagina = (titulo, html, texto) => (
+    <>
+      <button onClick={() => descargarPdfPagina(titulo, html, texto)} title="Descargar esta página en PDF"
+        className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
+        <FileText size={13} />PDF
+      </button>
+      <div className="relative">
+        <button onClick={abrirSharePg} title="Compartir esta página (link de solo lectura)"
+          className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
+          <Share2 size={13} />Compartir
+        </button>
+        {sharePgOpen && (
+          <div className="absolute z-[60] mt-1 right-0 w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Compartir esta página</span>
+              <button onClick={() => setSharePgOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
+            </div>
+            <div className="text-[11px] text-[#9098A4] mb-2 leading-snug">Cualquiera con el link la ve en solo lectura (sin cuenta).</div>
+            <button onClick={crearSharePg} disabled={sharePgBusy}
+              className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border-none text-white text-[12px] font-semibold cursor-pointer disabled:opacity-60 mb-2" style={{ background: '#2E69E0' }}>
+              {sharePgBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}Crear link y copiar
+            </button>
+            {sharePgLinks === null ? (
+              <div className="py-2 text-center text-[11px] text-[#AEB4BF] flex items-center justify-center gap-1.5"><Loader2 size={12} className="animate-spin" />Cargando…</div>
+            ) : sharePgLinks.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t border-[#F1F3F7] pt-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#AEB4BF]">Links activos</span>
+                {sharePgLinks.map(l => (
+                  <div key={l.id} className="flex items-center gap-1.5 rounded-lg border border-[#EEF0F3] bg-[#FBFCFE] px-2 py-1.5">
+                    <span className="flex-1 min-w-0 truncate text-[11px] font-mono text-[#3F4653]">/compartir/{l.token}</span>
+                    <button onClick={() => { copyClip(urlShare(l.token)); setCopiedPgTok(l.token); setTimeout(() => setCopiedPgTok(null), 1500); }} title="Copiar" className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E2E8FA] bg-white cursor-pointer" style={{ color: copiedPgTok === l.token ? '#16A34A' : '#9CA3AF' }}>{copiedPgTok === l.token ? <Check size={11} strokeWidth={3} /> : <Copy size={11} />}</button>
+                    <button onClick={() => revocarSharePg(l.id)} title="Revocar" className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA]"><Trash2 size={11} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
 
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
@@ -1564,7 +1705,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
                     <div className="min-w-0">
-                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{doc._kind === 'extra' ? doc.title : (DOC_KIND_LABEL[doc.doc_kind] || doc.title)}</div>
+                      {doc._kind === 'extra' || !DOC_KIND_LABEL[doc.doc_kind]
+                        ? <TituloEditable value={doc.title} onSave={(t) => renombrarClientDoc(doc, t)} />
+                        : <div className="text-[14px] font-bold text-[#1A1D26] truncate">{DOC_KIND_LABEL[doc.doc_kind]}</div>}
                       <div className="text-[11px] text-[#9098A4]">
                         {generado
                           ? 'Lo completa el cliente en su plataforma. Se actualiza solo cada 2 minutos.'
@@ -1573,6 +1716,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {accionesPagina(doc._kind === 'extra' ? doc.title : (DOC_KIND_LABEL[doc.doc_kind] || doc.title), docHtml, doc.text)}
                     {!generado && (
                     <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
                       <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
@@ -1617,11 +1761,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#ECFEFF', color: '#0891B2' }}><HelpCircle size={16} /></span>
                     <div className="min-w-0">
-                      <div className="text-[14px] font-bold text-[#1A1D26] truncate">{g.title}</div>
+                      <TituloEditable value={g.title} onSave={(t) => renombrarGuia(g, t)} />
                       <div className="text-[11px] text-[#9098A4]">Guía global: la ven TODOS los clientes en su portal.{docEditing ? ' Se guarda solo.' : ''}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {accionesPagina(g.title, g.html, g.text)}
                     <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
                       <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
                       <button onClick={() => setDocEditing(true)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: '#fff', color: '#0891B2', boxShadow: '0 1px 2px rgba(10,22,40,.06)' } : { background: 'transparent', color: '#6B7280' }}><PenLine size={13} />Editar</button>
