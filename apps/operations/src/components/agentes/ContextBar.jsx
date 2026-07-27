@@ -1,7 +1,10 @@
-// Barra de contexto del panel Agentes: Cliente → Estrategia → Funnel → Avatar (cascada).
-// Reusa los datos de useApp() (clients / strategies / strategyPages), igual que FunnelsView.
+// Barra de contexto del panel Agentes: Cliente → Funnel → Avatar (cascada).
+// La capa "Estrategia" ya no existe como navegación (todo va por funnels y su DEL):
+// al elegir el funnel, su strategy_id (la carpeta técnica) se completa solo, porque
+// la edge fn del agente lo sigue usando para encontrar el DEL.
+// Reusa los datos de useApp() (clients / strategyPages), igual que FunnelsView.
 import { useMemo } from 'react';
-import { UserCircle2, Layers, Filter, User, ChevronDown, Check } from 'lucide-react';
+import { UserCircle2, Filter, User, ChevronDown, Check } from 'lucide-react';
 import useDropdown from './useDropdown';
 import DropdownPanel from './DropdownPanel';
 
@@ -54,18 +57,15 @@ function ContextPicker(props) {
   );
 }
 
-export default function ContextBar({ clients, strategies, strategyPages, sel, onChange }) {
+export default function ContextBar({ clients, strategyPages, sel, onChange }) {
   const clientOpts = useMemo(
     () => (clients || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((c) => ({ value: c.id, label: c.name || c.id })),
     [clients],
   );
-  const strategyOpts = useMemo(
-    () => (strategies || []).filter((s) => s.client_id === sel.clientId).sort((a, b) => (a.position || 0) - (b.position || 0)).map((s) => ({ value: s.id, label: s.name || s.id })),
-    [strategies, sel.clientId],
-  );
+  // Funnels DIRECTO por cliente (sin pasar por la estrategia/carpeta).
   const funnelOpts = useMemo(
-    () => (strategyPages || []).filter((p) => p.strategy_id === sel.strategyId).sort((a, b) => (a.position || 0) - (b.position || 0)).map((p) => ({ value: p.id, label: p.name || p.id })),
-    [strategyPages, sel.strategyId],
+    () => (strategyPages || []).filter((p) => p.client_id === sel.clientId).sort((a, b) => (a.position || 0) - (b.position || 0)).map((p) => ({ value: p.id, label: p.name || p.id })),
+    [strategyPages, sel.clientId],
   );
   const avatarOpts = useMemo(() => {
     const f = (strategyPages || []).find((p) => p.id === sel.funnelId);
@@ -78,10 +78,12 @@ export default function ContextBar({ clients, strategies, strategyPages, sel, on
         <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-text3 pl-2.5 pr-1.5 whitespace-nowrap shrink-0">Contexto</span>
         <ContextPicker Icon={UserCircle2} label="Cliente" value={sel.clientId} options={clientOpts} placeholder="Elegí un cliente…"
           onSelect={(v) => onChange({ clientId: v, strategyId: '', funnelId: '', avatarId: '' })} />
-        <ContextPicker Icon={Layers} label="Estrategia" value={sel.strategyId} options={strategyOpts} placeholder={sel.clientId ? 'Elegí una estrategia…' : '—'} disabled={!sel.clientId}
-          onSelect={(v) => onChange({ strategyId: v, funnelId: '', avatarId: '' })} />
-        <ContextPicker Icon={Filter} label="Funnel" value={sel.funnelId} options={funnelOpts} placeholder={sel.strategyId ? 'Elegí un funnel…' : '—'} disabled={!sel.strategyId}
-          onSelect={(v) => onChange({ funnelId: v, avatarId: '' })} />
+        <ContextPicker Icon={Filter} label="Funnel" value={sel.funnelId} options={funnelOpts} placeholder={sel.clientId ? 'Elegí un funnel…' : '—'} disabled={!sel.clientId}
+          onSelect={(v) => {
+            // strategyId viaja escondido: la edge fn lo usa para ubicar el DEL del funnel.
+            const p = (strategyPages || []).find((x) => x.id === v);
+            onChange({ funnelId: v, strategyId: p?.strategy_id || '', avatarId: '' });
+          }} />
         <ContextPicker Icon={User} label="Avatar" value={sel.avatarId} options={avatarOpts} placeholder={sel.funnelId ? (avatarOpts.length ? 'Elegí un avatar…' : 'Sin avatares') : '—'} disabled={!sel.funnelId || !avatarOpts.length}
           onSelect={(v) => onChange({ avatarId: v })} />
       </div>

@@ -8,7 +8,7 @@ import StatusPill from '../components/StatusPill';
 import TeamAvatar from '../components/TeamAvatar';
 import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
-import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock, Building2, Users, Tag } from 'lucide-react';
+import { Pencil, Trash2, Inbox, Calendar, User, ChevronRight, ArrowLeft, Building2, Users, Tag } from 'lucide-react';
 import FunnelsView from '../components/clientes/FunnelsView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
@@ -215,52 +215,6 @@ export default function ClientDetail({ client: c }) {
                 );
               })}
             </div>
-
-            {activeTab === 'resumen' && (() => {
-              const m = c.metaMetrics || {};
-              const curr = m.currency || 'USD';
-              const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
-              const billCurr = ({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR'];
-              const billLabel = { al_dia: { fg: '#16A34A', t: 'Al día' }, pendiente: { fg: '#CA8A04', t: 'Pendiente' }, impago: { fg: '#EF4444', t: 'Impago' } }[c.billingStatus || 'al_dia'];
-              const pendingCount = totalRoadmap - doneRoadmap;
-              // Páginas activas (con URL en testing o prod) entre todas las estrategias del cliente
-              const myPages = myStrategies.flatMap(s => (strategyPages || []).filter(p => p.strategy_id === s.id));
-              const pagesActive = myPages.filter(p => p.testing_url || p.prod_url).length;
-              // Tareas vencidas
-              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today() && (!restricted || taskVisibleToNonAdmin(t, currentUser, TEAM, adminMembers))).length;
-              const tiles = [
-                { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${roadmapPct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
-                { icon: Layers, label: 'Estrategias', value: strategiesCount, sub: pagesActive ? `${pagesActive} página(s) activa(s)` : 'sin páginas activas', color: '#1A1D26', tab: 'trabajo' },
-                { icon: CreditCard, label: 'Importe / ciclo', value: c.billingAmount != null ? `${billCurr}${Number(c.billingAmount).toLocaleString()}` : '—', sub: billLabel.t, color: billLabel.fg, tab: 'facturacion' },
-                { icon: FileText, label: 'Facturas', value: invoicesCount, sub: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin próximo cobro', color: '#1A1D26', tab: 'facturacion' },
-                { icon: Megaphone, label: 'Inversión 7d', value: m.totalSpend7d ? `${cs}${m.totalSpend7d.toFixed(0)}` : '—', sub: m.totalConversions7d ? `${m.totalConversions7d} leads` : (m.pauseReason || 'sin actividad'), color: '#1A1D26', tab: 'publicidad' },
-                { icon: Megaphone, label: 'CPL 7d', value: m.avgCpl7d ? `${cs}${m.avgCpl7d.toFixed(2)}` : '—', sub: m.ctr7d ? `CTR ${m.ctr7d.toFixed(2)}%` : '—', color: m.avgCpl7d && m.avgCpl7d > 15 ? '#EF4444' : '#16A34A', tab: 'publicidad' },
-                { icon: Clock, label: 'Días con Korex', value: days, sub: c.startDate ? `desde ${fmtDate(c.startDate)}` : '—', color: '#1A1D26' },
-                { icon: User, label: 'Llamadas', value: clientLlamadas.length, sub: clientLlamadas.length ? `última: ${clientLlamadas[0]?.fecha ? fmtDate(clientLlamadas[0].fecha.split('T')[0]) : '—'}` : 'sin registros', color: '#1A1D26', tab: 'llamadas' },
-              ].filter(t => !(restricted && t.tab === 'facturacion'));
-              return (
-                <div className="mb-4">
-                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-                    {tiles.map((t, i) => {
-                      const Icon = t.icon;
-                      const clickable = !!t.tab;
-                      return (
-                        <div key={i}
-                          className={`bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-4 flex flex-col transition-all ${clickable ? 'cursor-pointer hover:border-[#D0D5DD] hover:shadow-md' : ''}`}
-                          onClick={clickable ? () => setActiveTab(t.tab) : undefined}
-                        >
-                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
-                            <Icon size={12} /> {t.label}
-                          </div>
-                          <div className="text-[26px] font-bold leading-none mb-1.5" style={{ color: t.color }}>{t.value}</div>
-                          <div className="text-[11px] mt-auto" style={{ color: '#6B7280' }}>{t.sub}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
 
             {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
 
