@@ -11,12 +11,13 @@ import { copyText } from '../recursosShared';
 const SLOT_OBLIGATORIOS = [
   { k: 'ads_url',         label: 'Publicidad',  ph: 'https://mi-funnel.metodokorex.com/?pipeline_id=12', link: true, hint: 'La URL armada que se pega en el anuncio de Meta, con sus parámetros.' },
   { k: 'official_domain', label: 'Dominio',     ph: 'mi-funnel.metodokorex.com',                          link: true, hint: 'El dominio oficial. Es el único link que se ve en la lista de funnels.' },
-  { k: 'testing_url',     label: 'Test',        ph: 'https://…',                                          link: true, hint: 'Dónde se prueba el funnel antes de publicarlo.' },
   { k: 'boost_url',       label: 'Boost',       ph: 'https://…',                                          link: true, hint: 'Link para hacer el boost.' },
 ];
+// "Test" y "VSL (Voomly)" se quitaron a pedido (2026-07-27): el link de test no se
+// usaba y el de Voomly ya vive en la carpeta "VSL edición" de Recursos (por archivo).
+// Los datos guardados (testing_url / vsl_url) siguen en la base, solo salen de la UI.
 const SLOT_OTROS = [
   { k: 'prod_url', label: 'Producción',   ph: 'https://…',          link: true, hint: 'La página en vivo.' },
-  { k: 'vsl_url',  label: 'VSL (Voomly)', ph: 'https://voomly.com/…', link: true, video: true, hint: 'El video de la VSL. De acá salen las métricas de retención.' },
 ];
 const SLOT_META = [
   { k: 'pixel_id',    label: 'Facebook Pixel ID',    ph: 'Ej: 1234567890',     hint: 'Para el seguimiento de eventos. Podés pegar el código entero: extrae el ID solo.' },
