@@ -66,6 +66,11 @@ console.log(`  escucha : http://localhost:${PORT}`);
 console.log(`\n  En apps/operations/.env.local:  VITE_AGENT_FN_URL=http://localhost:${PORT}`);
 console.log("  Produccion no se toca: sigue corriendo la version deployada.\n");
 
+// El puerto NO va como flag: `deno run` nunca lo aceptó (es de `deno serve`) y desde Deno 2.9
+// aborta con "unexpected argument '--port'". Quien decide el puerto es Deno.serve dentro de la
+// función, que respeta la env DENO_SERVE_ADDRESS y si no cae en 8000.
+if (PORT !== "8000") env.DENO_SERVE_ADDRESS = `http://0.0.0.0:${PORT}`;
+
 // --watch: se reinicia sola al guardar el archivo, para iterar el prompt sin frenar nada.
-const p = spawn(DENO, ["run", "--allow-all", "--watch", `--port=${PORT}`, FN], { env, stdio: "inherit", shell: process.platform === "win32" });
+const p = spawn(DENO, ["run", "--allow-all", "--watch", FN], { env, stdio: "inherit", shell: process.platform === "win32" });
 p.on("exit", (c) => process.exit(c ?? 0));
