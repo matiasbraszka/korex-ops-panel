@@ -1,5 +1,6 @@
-import { Globe, Film, Copy, Check, Settings2, Link2 } from 'lucide-react';
+import { Globe, Film, Copy, Check, Settings2, Link2, Megaphone } from 'lucide-react';
 import { copyText } from '../recursosShared';
+import { useApp } from '../../../context/AppContext';
 
 // Configuracion de Meta y Links, con los HUECOS A LA VISTA.
 //
@@ -12,19 +13,20 @@ const SLOT_OBLIGATORIOS = [
   { k: 'ads_url',         label: 'Publicidad',  ph: 'https://mi-funnel.metodokorex.com/?pipeline_id=12', link: true, hint: 'La URL armada que se pega en el anuncio de Meta, con sus parámetros.' },
   { k: 'official_domain', label: 'Dominio',     ph: 'mi-funnel.metodokorex.com',                          link: true, hint: 'El dominio oficial. Es el único link que se ve en la lista de funnels.' },
   { k: 'boost_url',       label: 'Boost',       ph: 'https://…',                                          link: true, hint: 'Link para hacer el boost.' },
+  { k: 'prod_url',        label: 'Producción',  ph: 'https://…',                                          link: true, hint: 'La página en vivo.' },
 ];
 // "Test" y "VSL (Voomly)" se quitaron a pedido (2026-07-27): el link de test no se
 // usaba y el de Voomly ya vive en la carpeta "VSL edición" de Recursos (por archivo).
-// Los datos guardados (testing_url / vsl_url) siguen en la base, solo salen de la UI.
-const SLOT_OTROS = [
-  { k: 'prod_url', label: 'Producción',   ph: 'https://…',          link: true, hint: 'La página en vivo.' },
-];
+// Producción subió al lado de Boost (misma grilla) y la sección "Otros enlaces" murió.
+// Los 3 eventos estándar de todo funnel (mismo set que STD_EVENTS de FunnelsView).
+const EVENTOS_STD = ['Visitas', 'Registro lead', 'Thank you page'];
 const SLOT_META = [
   { k: 'pixel_id',    label: 'Facebook Pixel ID',    ph: 'Ej: 1234567890',     hint: 'Para el seguimiento de eventos. Podés pegar el código entero: extrae el ID solo.' },
   { k: 'clarity_id',  label: 'Microsoft Clarity ID', ph: 'Ej: wa8bmh1fnd',     hint: 'Para mapas de calor y grabaciones. Podés pegar el código entero.' },
   { k: 'pipeline_id', label: 'Pipeline ID',          ph: 'Ej: 12',             hint: 'El que se usa para armar la URL de Publicidad.' },
-  { k: 'ad_account',  label: 'Cuenta publicitaria',  ph: 'Ej: act_1234567890', nuevo: true, hint: 'La cuenta de Meta desde la que se paga este funnel.' },
 ];
+// "Cuenta publicitaria" dejó de ser un campo del funnel (2026-07-27): las cuentas son
+// DEL CLIENTE (pueden ser varias y aplican a todos sus funnels) → clients.meta_ads.
 
 // Pegar el <script> entero en un campo que dice "ID" es lo que el equipo viene
 // haciendo (los 14 Clarity y 11 de 12 Pixel estaban asi). No se les cambia el
@@ -113,6 +115,20 @@ function Grupo({ titulo, Icon, slots, f, onUpdate, contador }) {
 export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
   const okReq = SLOT_OBLIGATORIOS.filter(s => (f[s.k] || '').trim()).length;
   const okMeta = SLOT_META.filter(s => (f[s.k] || '').trim()).length;
+  // Cuentas publicitarias: viven en el CLIENTE (clients.meta_ads) — varias, y las
+  // comparten todos sus funnels. Se editan acá mismo para no ir a otra pantalla.
+  const { clients, updateClient } = useApp();
+  const cliente = (clients || []).find(c => c.id === f.client_id) || null;
+  const cuentas = Array.isArray(cliente?.metaAds) ? cliente.metaAds : [];
+  const guardarCuentas = (arr) => cliente && updateClient(cliente.id, { metaAds: arr });
+  const agregarCuenta = (raw) => {
+    const v = (raw || '').trim(); if (!v) return;
+    const [idParte, ...resto] = v.split(/\s+/);
+    let idAcc = idParte.trim();
+    if (/^\d+$/.test(idAcc)) idAcc = 'act_' + idAcc;
+    if (cuentas.some(a => a.id === idAcc)) return;
+    guardarCuentas([...cuentas, { id: idAcc, name: resto.join(' ') || (cliente?.name || 'Cuenta'), currency: 'USD', spent: '', status: 'activa' }]);
+  };
 
   return (
     <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
@@ -126,32 +142,67 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
 
       <div className="p-[18px]">
         <Grupo titulo="Obligatorios" Icon={Link2} slots={SLOT_OBLIGATORIOS} f={f} onUpdate={onUpdate} contador={{ ok: okReq, total: SLOT_OBLIGATORIOS.length }} />
-        <Grupo titulo="Otros enlaces" Icon={Link2} slots={SLOT_OTROS} f={f} onUpdate={onUpdate} />
         <Grupo titulo="Configuración de Meta" Icon={Settings2} slots={SLOT_META} f={f} onUpdate={onUpdate} contador={{ ok: okMeta, total: SLOT_META.length }} />
 
-        {/* Los eventos se editan en su modal (tiene nombre + propósito + código por evento).
-            Acá sólo se ven, que es lo que hace falta para saber si están. */}
+        {/* Cuentas publicitarias: son DEL CLIENTE (varias) y aplican a todos sus funnels. */}
+        {cliente && (
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Megaphone size={13} className="text-[#AEB4BF] shrink-0" />
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Cuentas publicitarias</span>
+              <span className="text-[10px] text-[#AEB4BF]">· del cliente, valen para todos sus funnels</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {cuentas.map(a => (
+                <span key={a.id} className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-md text-[11.5px] font-semibold" style={{ background: '#EFF6FF', border: '1px solid #C7DBFB', color: '#2E69E0' }}>
+                  {a.name || 'Cuenta'}
+                  <span className="font-mono text-[10px] opacity-70">{a.id}</span>
+                  <button onClick={() => copyText(a.id)} title="Copiar el ID" className="inline-flex items-center justify-center w-4 h-4 rounded border-none bg-transparent text-[#9CB8EE] hover:text-[#2E69E0] cursor-pointer p-0"><Copy size={10} /></button>
+                  <button onClick={() => { if (window.confirm(`¿Sacar la cuenta ${a.id} del cliente?`)) guardarCuentas(cuentas.filter(x => x.id !== a.id)); }} title="Sacar esta cuenta"
+                    className="inline-flex items-center justify-center w-4 h-4 rounded-full border-none bg-transparent text-[#9CB8EE] hover:text-[#DC2626] cursor-pointer p-0 text-[12px] leading-none">×</button>
+                </span>
+              ))}
+              <input
+                placeholder="act_123456789 Nombre… (Enter)"
+                onKeyDown={(e) => { if (e.key === 'Enter') { agregarCuenta(e.target.value); e.target.value = ''; } }}
+                onClick={(e) => e.stopPropagation()}
+                className="py-[5px] px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0] w-[220px]" />
+            </div>
+          </div>
+        )}
+
+        {/* Eventos: se agregan y sacan ACÁ MISMO (antes solo se veían y había que ir a un
+            modal que se prestaba a confusión). El modal queda para el código de cada evento. */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Check size={13} className="text-[#AEB4BF] shrink-0" />
             <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Eventos de conversión</span>
-            <button onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="text-[10.5px] font-semibold text-[#2E69E0] cursor-pointer border-none bg-transparent hover:underline ml-1">editar</button>
+            <button onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="text-[10.5px] font-semibold text-[#2E69E0] cursor-pointer border-none bg-transparent hover:underline ml-1">editar códigos</button>
           </div>
-          {events.length ? (
-            <div className="flex flex-wrap gap-1.5">
-              {events.map(ev => (
-                <span key={ev.id} className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-md text-[11.5px] font-semibold" style={{ background: '#F5F3FF', border: '1px solid #E4DBFF', color: '#7C3AED' }}>
-                  {ev.name || 'sin nombre'}
-                  {ev.code && <span className="font-mono text-[10px] opacity-70">{ev.code}</span>}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-stretch border rounded-lg overflow-hidden bg-white max-w-[320px]" style={{ borderColor: '#E2E5EB' }}>
-              <span className="flex items-center justify-center w-[38px] shrink-0 border-r text-[#9098A4]" style={{ background: '#F4F5F7', borderColor: '#E2E5EB' }}><Check size={14} /></span>
-              <span className="flex-1 flex items-center py-2.5 px-[11px] text-[12.5px] text-[#B6BCC6]">Ej: eventos_pre-landing</span>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {events.map(ev => (
+              <span key={ev.id} className="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-md text-[11.5px] font-semibold" style={{ background: '#F5F3FF', border: '1px solid #E4DBFF', color: '#7C3AED' }}>
+                {ev.name || 'sin nombre'}
+                {ev.code && <span className="font-mono text-[10px] opacity-70">{ev.code}</span>}
+                <button onClick={() => onUpdate(f.id, { conversion_events: events.filter(x => x.id !== ev.id) })} title="Sacar este evento"
+                  className="inline-flex items-center justify-center w-4 h-4 rounded-full border-none bg-transparent text-[#B7A6E8] hover:text-[#DC2626] cursor-pointer p-0 text-[12px] leading-none">×</button>
+              </span>
+            ))}
+            {EVENTOS_STD.filter(n => !events.some(e => (e.name || '').trim().toLowerCase() === n.toLowerCase())).map(n => (
+              <button key={n} onClick={() => onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: n, purpose: '', code: '' }] })}
+                className="inline-flex items-center gap-1 py-[5px] px-2.5 border border-dashed border-[#C9D6FF] rounded-md bg-white text-[#2E69E0] text-[11.5px] font-semibold cursor-pointer hover:bg-[#F5F7FF]">+ {n}</button>
+            ))}
+            <input
+              placeholder="Otro evento… (Enter)"
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                const v = e.target.value.trim(); if (!v) return;
+                onUpdate(f.id, { conversion_events: [...events, { id: 'ev' + Math.random().toString(36).slice(2, 8), name: v, purpose: '', code: '' }] });
+                e.target.value = '';
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="py-[5px] px-2.5 border border-[#E2E5EB] rounded-md text-[11.5px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0] w-[170px]" />
+          </div>
         </div>
       </div>
     </div>
