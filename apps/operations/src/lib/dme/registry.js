@@ -114,7 +114,7 @@ const FUNNEL_INPUTS = [
 
 // Help de los derivados del embudo (formula por sufijo).
 const FUNNEL_DERIVED_HELP = {
-  pct_inversion:    '% de la inversión total de ambos embudos asignada a este embudo.',
+  pct_inversion:    '% de la inversión total de todos los embudos asignada a este embudo.',
   cpl:              'Total gastado del embudo ÷ Total de leads del embudo.',
   pct_curiosos:     'Leads curiosos ÷ Total de leads.',
   costo_curioso:    'Total gastado ÷ Leads curiosos.',
@@ -170,22 +170,47 @@ function funnelSection(prefix, title) {
   return { id: prefix, title, metrics };
 }
 
-export const EMBUDO1 = funnelSection('embudo1', 'Embudo 1');
-export const EMBUDO2 = funnelSection('embudo2', 'Embudo 2');
+// Los embudos del DME son los FUNNELS del cliente: Embudo 1 = el primer funnel
+// en la organización del cliente, Embudo 2 el segundo, etc. Se soportan hasta
+// MAX_EMBUDOS; las claves de datos siguen siendo embudoN_* (los datos ya
+// cargados como embudo1_*/embudo2_* no se tocan).
+export const MAX_EMBUDOS = 6;
+const EMBUDOS = Array.from({ length: MAX_EMBUDOS }, (_, i) => funnelSection(`embudo${i + 1}`, `Embudo ${i + 1}`));
+export const EMBUDO1 = EMBUDOS[0];
+export const EMBUDO2 = EMBUDOS[1];
 
-export const SECTIONS = [GENERAL, FINANZAS, SALDOS, LEADS, NETWORKERS, CUALITATIVO, EMBUDO1, EMBUDO2]
-  .map((s) => ({ ...s, metrics: s.metrics.map((m) => ({ ...m, section: s.id })) }));
+const BASE_SECTIONS = [GENERAL, FINANZAS, SALDOS, LEADS, NETWORKERS, CUALITATIVO];
+const stamp = (list) => list.map((s) => ({ ...s, metrics: s.metrics.map((m) => ({ ...m, section: s.id })) }));
 
-export const ALL_METRICS   = SECTIONS.flatMap((s) => s.metrics);
+// SECTIONS = la vista por defecto (2 embudos), cuando no se conocen los funnels
+// del cliente. ALL_SECTIONS incluye los 6 embudos: de acá salen las claves para
+// cargar/agregar datos, así ningún embudo alto pierde números.
+export const SECTIONS = stamp([...BASE_SECTIONS, ...EMBUDOS.slice(0, 2)]);
+export const ALL_SECTIONS = stamp([...BASE_SECTIONS, ...EMBUDOS]);
+
+// Secciones para UN cliente concreto: un embudo por funnel (en el orden de la
+// organización de sus funnels), con el nombre del funnel en el título. Siempre
+// se muestran al menos 2 (compatibilidad con lo ya cargado).
+export function sectionsForFunnels(funnels) {
+  const list = Array.isArray(funnels) ? funnels.slice(0, MAX_EMBUDOS) : [];
+  const n = Math.max(2, list.length);
+  const embudos = EMBUDOS.slice(0, n).map((s, i) => (
+    list[i]?.name ? { ...s, title: `Embudo ${i + 1} — ${list[i].name}`, funnelName: list[i].name, funnelId: list[i].id } : s
+  ));
+  return stamp([...BASE_SECTIONS, ...embudos]);
+}
+
+export const ALL_METRICS   = ALL_SECTIONS.flatMap((s) => s.metrics);
 export const METRIC_BY_KEY = Object.fromEntries(ALL_METRICS.map((m) => [m.key, m]));
 export const INPUT_METRICS = ALL_METRICS.filter((m) => m.type === 'input');
 export const INPUT_KEYS    = INPUT_METRICS.map((m) => m.key);
 export const SNAPSHOT_KEYS = INPUT_METRICS.filter((m) => m.agg === 'last').map((m) => m.key);
 export const EMPTY_ROW     = Object.fromEntries(INPUT_KEYS.map((k) => [k, 0]));
 
-export const INPUT_GROUPS = SECTIONS
+export const inputGroupsFor = (sections) => sections
   .map((s) => ({ title: s.title, adminOnly: !!s.adminOnly, fields: s.metrics.filter((m) => m.type === 'input' && !m.hidden) }))
   .filter((g) => g.fields.length > 0);
+export const INPUT_GROUPS = inputGroupsFor(SECTIONS);
 
 // metricas que solo ven los admins (bloques General y Finanzas).
 export const ADMIN_ONLY_KEYS = new Set(
@@ -228,4 +253,12 @@ export const DEFAULT_DME_CONFIG = {
   embudo2_roi:               t('Embudo 2', 'mayor', 2.00, 1.00, 0.00, 'Rentabilidad del embudo'),
 };
 
-export const CONFIG_BLOQUES = ['General', 'Finanzas', 'Saldos', 'Leads', 'Networkers', 'Cualitativo', 'Embudo 1', 'Embudo 2'];
+// Embudos 3+ heredan los umbrales del Embudo 2 (mismo tipo de funnel adicional).
+for (let i = 3; i <= MAX_EMBUDOS; i++) {
+  for (const suf of ['pct_interesados', 'pct_calificados', 'pct_registro', 'pct_vsl', 'pct_quiz', 'pct_whatsapp', 'pct_whatsapp_leads', 'pct_cierres', 'roi']) {
+    DEFAULT_DME_CONFIG[`embudo${i}_${suf}`] = { ...DEFAULT_DME_CONFIG[`embudo2_${suf}`], bloque: `Embudo ${i}` };
+  }
+}
+
+export const CONFIG_BLOQUES = ['General', 'Finanzas', 'Saldos', 'Leads', 'Networkers', 'Cualitativo',
+  ...Array.from({ length: MAX_EMBUDOS }, (_, i) => `Embudo ${i + 1}`)];

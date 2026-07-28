@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Lock } from 'lucide-react';
 import { supabase } from '@korex/db';
 import { useApp } from '../context/AppContext';
 import { useDmeData, useDmeAllClients, ALL_CLIENTS } from '../hooks/useDmeData.js';
-import { SECTIONS } from '../lib/dme/registry.js';
+import { SECTIONS, sectionsForFunnels } from '../lib/dme/registry.js';
 import {
   monthBounds, yearBounds, columnsByDay, columnsByWeek, columnsByMonth, flattenBag,
 } from '../lib/dme/aggregate.js';
@@ -21,7 +21,7 @@ const VIEWS = [
 ];
 
 export default function DmePage() {
-  const { clients, currentUser, selectedId, appSettings, updateAppSettings } = useApp();
+  const { clients, currentUser, selectedId, appSettings, updateAppSettings, strategyPages } = useApp();
   const isAdmin = !!currentUser?.isAdmin;
   const today = new Date();
 
@@ -33,8 +33,18 @@ export default function DmePage() {
   const [editDate, setEditDate] = useState(null);
   const [activeIds, setActiveIds] = useState(() => new Set());
 
+  // Embudo N del DME = N-ésimo funnel del cliente (orden de su organización).
+  // Con "Todos combinados" no hay funnels concretos → embudos genéricos.
+  const clientFunnels = useMemo(
+    () => (strategyPages || []).filter((p) => p.client_id === clientId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+    [strategyPages, clientId]
+  );
+  const allSections = useMemo(
+    () => (clientId && clientId !== ALL_CLIENTS ? sectionsForFunnels(clientFunnels) : SECTIONS),
+    [clientId, clientFunnels]
+  );
   // Bloques General/Finanzas solo para admins.
-  const sections = useMemo(() => (isAdmin ? SECTIONS : SECTIONS.filter((s) => !s.adminOnly)), [isAdmin]);
+  const sections = useMemo(() => (isAdmin ? allSections : allSections.filter((s) => !s.adminOnly)), [isAdmin, allSections]);
   // La pestaña Dashboard es solo para admins.
   const views = useMemo(() => (isAdmin ? VIEWS : VIEWS.filter((v) => v.id !== 'dashboard')), [isAdmin]);
 
@@ -114,7 +124,7 @@ export default function DmePage() {
   // Links de embudo por cliente (guardados en app_settings.dme_funnel_links).
   const funnelLinks = isCombined ? {} : (appSettings?.dme_funnel_links?.[clientId] || {});
   const onEditFunnelLink = isCombined ? undefined : (funnelId) => {
-    const label = funnelId === 'embudo1' ? 'Embudo 1' : 'Embudo 2';
+    const label = allSections.find((s) => s.id === funnelId)?.title || funnelId;
     const url = window.prompt(`Pegá el link del ${label} de ${clientName}:`, funnelLinks[funnelId] || '');
     if (url === null) return;
     const all = { ...(appSettings?.dme_funnel_links || {}) };
@@ -193,6 +203,7 @@ export default function DmePage() {
           footerLabel={clientName}
           isCombined={isCombined}
           onSelectClient={setClientId}
+          embudoNames={Object.fromEntries(allSections.filter((s) => s.id.startsWith('embudo')).map((s) => [s.id, s.title]))}
         />
       ) : (
         <DmeMetricTable
@@ -223,6 +234,7 @@ export default function DmePage() {
           config={dmeConfig}
           initialDate={editDate}
           isAdmin={isAdmin}
+          sections={allSections}
         />
       )}
     </div>

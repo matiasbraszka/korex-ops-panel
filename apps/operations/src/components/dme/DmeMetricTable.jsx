@@ -52,7 +52,7 @@ export default function DmeMetricTable({ sections, columns, totalCol, config, on
                       <span className="inline-flex items-center gap-1">
                         {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                         {sec.title}
-                        {(sec.id === 'embudo1' || sec.id === 'embudo2') && (
+                        {sec.id.startsWith('embudo') && (
                           <span className="inline-flex items-center gap-1.5 ml-1.5 normal-case" onClick={(e) => e.stopPropagation()}>
                             {funnelLinks[sec.id] && (
                               <a href={funnelLinks[sec.id]} target="_blank" rel="noreferrer"
