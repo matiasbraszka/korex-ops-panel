@@ -6,6 +6,7 @@ import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
 import { sanitizeDelHtml } from './delSanitize';
+import { getCfgJump } from './cfgJump';
 import { BLUEPRINTS } from './blueprints';
 import { resolveDelTabs } from './delTabs';
 import { publicOrigin } from '../../../utils/helpers';
@@ -269,7 +270,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
   // Qué se ve en el panel derecho: 'estrategia' | 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   // Por defecto abre en ESTRATEGIA (decisión de Matías): es la primera pestaña y la vista de arranque.
-  const [view, setView] = useState('estrategia');
+  // Excepción: si hay un salto pendiente desde el Panorama (cfgJump), arranca en CONFIGURACIÓN.
+  const [view, setView] = useState(() => (getCfgJump() ? 'config' : 'estrategia'));
   const [clientDocs, setClientDocs] = useState([]);
   // Colaboración: comentarios por sección + presencia en vivo + candado de edición.
   const [comments, setComments] = useState([]);      // todos los del DEL
