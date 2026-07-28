@@ -71,15 +71,40 @@ function isoLabel(iso: string): string {
   return `${cap(p.weekday || "")} ${p.day}-${cap(p.month || "")}-${p.year}`;
 }
 
-async function postSlack(token: string, channel: string, text: string) {
+async function postSlack(token: string, channel: string, text: string, blocks?: unknown[]) {
   const r = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ channel, text, unfurl_links: false }),
+    body: JSON.stringify({ channel, text, blocks, unfurl_links: false }),
     signal: AbortSignal.timeout(15000),
   });
   const b = await r.json().catch(() => ({}));
   if (!b?.ok) throw new Error("slack: " + JSON.stringify(b));
+}
+
+// ── Tabla monoespaciada: lo ÚNICO que Slack alinea bien es un bloque de código.
+// Columnas: cliente | gasto | leads | CPL, números a la derecha.
+const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+function tablaGasto(filas: { name: string; usd: number; leads: number }[], total: number, totalLeads: number): string {
+  const W_NAME = 19, W_USD = 10, W_LEADS = 6, W_CPL = 8;
+  const linea = (n: string, u: string, l: string, c: string) =>
+    n.padEnd(W_NAME) + u.padStart(W_USD) + l.padStart(W_LEADS) + c.padStart(W_CPL);
+  const sep = "─".repeat(W_NAME + W_USD + W_LEADS + W_CPL);
+  const out: string[] = [
+    linea("CLIENTE", "GASTO", "LEADS", "CPL"),
+    sep,
+  ];
+  for (const r of filas) {
+    out.push(linea(
+      trunc(r.name, W_NAME - 1),
+      money(r.usd),
+      r.leads > 0 ? String(r.leads) : "—",
+      r.leads > 0 ? money(r.usd / r.leads) : "—",
+    ));
+  }
+  out.push(sep);
+  out.push(linea("TOTAL", money(total), totalLeads > 0 ? String(totalLeads) : "—", totalLeads > 0 ? money(total / totalLeads) : "—"));
+  return "```" + out.join("\n") + "```";
 }
 
 interface Row { name: string; usd: number; leads: number; impressions: number; clicks: number; }
@@ -186,43 +211,59 @@ Deno.serve(async (req) => {
   const total = lista.reduce((s, r) => s + r.usd, 0);
   const totalLeads = lista.reduce((s, r) => s + r.leads, 0);
 
-  const head = `:bar_chart: *Informe Meta Ads — ${snap ? isoLabel(isoPrevDay(snap)) : bueLabel(-1)}*`;
+  // ── Mensaje visual (Block Kit): encabezado + tabla monoespaciada + pies compactos.
+  const fechaLabel = snap ? isoLabel(isoPrevDay(snap)) : bueLabel(-1);
   const sub = `USD +${String(taxPct).replace(".", ",")}% impuesto · ${Object.entries(fx).filter(([k]) => k !== "USD").map(([k, v]) => `${k}→USD ${String(v).replace(".", ",")}`).join(" · ")} · monto final único por cliente`;
 
-  const partes: string[] = [head, sub, ""];
+  const blocks: unknown[] = [
+    { type: "header", text: { type: "plain_text", text: `📊 Meta Ads — ${fechaLabel}`, emoji: true } },
+    { type: "context", elements: [{ type: "mrkdwn", text: sub }] },
+  ];
+  const partes: string[] = [`:bar_chart: *Informe Meta Ads — ${fechaLabel}*`, sub, ""]; // fallback texto plano (notificaciones)
 
   if (!snap) {
-    partes.push(":warning: *No hay datos de ayer todavía.* La sincronización por token (`meta-ads-sync-ayer`, 07:50 BUE) no dejó ninguna fila.");
+    const aviso = ":warning: *No hay datos de ayer todavía.* La sincronización por token (`meta-ads-sync-ayer`, 07:50 BUE) no dejó ninguna fila.";
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: aviso } });
+    partes.push(aviso);
   } else {
-    if (snap !== hoy) partes.push(`:warning: Datos del ${snap}, no de hoy — la sincronización no corrió esta mañana.`);
+    if (snap !== hoy) {
+      const aviso = `:warning: Datos del ${snap}, no de hoy — la sincronización no corrió esta mañana.`;
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: aviso } });
+      partes.push(aviso);
+    }
     if (!lista.length) {
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: "Ningún cliente gastó ayer." } });
       partes.push("Ningún cliente gastó ayer.");
     } else {
       const cpl = totalLeads > 0 ? total / totalLeads : 0;
-      partes.push(`*Total: ${money(total)}*` + (totalLeads > 0 ? `  ·  ${totalLeads} leads  ·  CPL ${money(cpl)}` : "  ·  sin leads"));
-      partes.push("");
-      for (const r of lista) {
-        const c = r.leads > 0 ? `  ·  ${r.leads} lead${r.leads === 1 ? "" : "s"}  ·  CPL ${money(r.usd / r.leads)}` : "";
-        partes.push(`• *${r.name}* — ${money(r.usd)}${c}`);
-      }
+      const resumen = `*Total: ${money(total)}*` + (totalLeads > 0 ? `  ·  ${totalLeads} leads  ·  CPL ${money(cpl)}` : "  ·  sin leads");
+      const tabla = tablaGasto(lista, total, totalLeads);
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: resumen } });
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: tabla } });
+      partes.push(resumen, tabla);
     }
   }
 
-  if (sinGasto.length) partes.push("", ":black_circle: *Sin gasto ayer:*", sinGasto.sort().join(" · "));
-  if (noMedible.size) {
-    partes.push("", ":red_circle: *No se pudo medir* (Meta rechazó la consulta — revisar permisos de la cuenta):", [...noMedible].sort().join(" · "));
-  }
+  const pies: string[] = [];
+  if (sinGasto.length) pies.push(`:black_circle: *Sin gasto ayer:* ${sinGasto.sort().join(" · ")}`);
+  if (noMedible.size) pies.push(`:red_circle: *No se pudo medir* (Meta rechazó la consulta): ${[...noMedible].sort().join(" · ")}`);
   for (const [cur, set] of sinTipoCambio) {
-    partes.push("", `:warning: *En ${cur}, sin tipo de cambio configurado* (quedan fuera del total):`, [...set].sort().join(" · "));
+    pies.push(`:warning: *En ${cur}, sin tipo de cambio configurado* (fuera del total): ${[...set].sort().join(" · ")}`);
   }
+  if (pies.length) {
+    blocks.push({ type: "divider" });
+    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: pies.join("\n") }] });
+    partes.push("", ...pies);
+  }
+
   const text = partes.join("\n");
-  if (dry) return j({ channel, text, clientes_con_gasto: lista.length, total_usd: Number(total.toFixed(2)), snapshot: snap });
+  if (dry) return j({ channel, text, blocks, clientes_con_gasto: lista.length, total_usd: Number(total.toFixed(2)), snapshot: snap });
 
   const { data: vf } = await supabase.from("app_settings").select("value").eq("key", "venta_form_config").maybeSingle();
   const botToken = str((vf?.value as Record<string, unknown>)?.slack_bot_token);
   if (!botToken) return j({ ok: false, error: "sin slack_bot_token" }, 500);
 
-  try { await postSlack(botToken, channel, text); }
+  try { await postSlack(botToken, channel, text, blocks); }
   catch (e) { console.error("informe-ads-diario:", e); return j({ ok: false, error: String(e) }, 502); }
 
   return j({ ok: true, sent: true, clientes_con_gasto: lista.length, total_usd: Number(total.toFixed(2)) });
