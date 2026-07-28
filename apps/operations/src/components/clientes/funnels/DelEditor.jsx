@@ -232,11 +232,8 @@ const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 const plainToHtml = (t) => String(t || '').split(/\n{2,}/).map(b => `<p>${esc(b.trim()).replace(/\n/g, '<br>')}</p>`).join('') || '<p></p>';
 
 // Los documentos del cliente que se comparten entre TODOS sus funnels (personalidad,
-// onboarding, investigación). Van al fondo del menú del DEL, bajo "DEL CLIENTE". Son
-// nativos del sistema: se editan acá mismo (panel_html), sin depender del Google Drive.
-const DOC_KIND_LABEL = {
-  briefing: 'Personalidad', extra: 'Personalidad', investigacion: 'Investigación', onboarding: 'Onboarding',
-};
+// onboarding, investigación) van al fondo del menú del DEL, bajo "DEL CLIENTE".
+// Se muestran con su título real (editable con el lápiz), no con un rótulo fijo.
 
 // Título con lápiz: clic para renombrar (guías y documentos del cliente).
 function TituloEditable({ value, onSave }) {
@@ -401,6 +398,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
           });
       // Y se mira el error: antes ni se esperaba la promesa.
       if (error) window.alert('No pude guardar el documento: ' + (error.message || ''));
+
     }, 900);
   };
 
@@ -468,8 +466,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const renombrarClientDoc = async (doc, title) => {
     const t = (title || '').trim(); if (!t || t === doc.title) return;
     setClientDocs(prev => prev.map(d => d.id === doc.id ? { ...d, title: t } : d));
-    if (doc._kind === 'extra') await supabase.from('del_client_extra_docs').update({ title: t }).eq('id', doc.id);
-    else await supabase.from('client_brain_docs').update({ title: t, panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
+    const { error } = doc._kind === 'extra'
+      ? await supabase.from('del_client_extra_docs').update({ title: t }).eq('id', doc.id)
+      : await supabase.from('client_brain_docs').update({ title: t, panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
+    if (error) {
+      setClientDocs(prev => prev.map(d => d.id === doc.id ? { ...d, title: doc.title } : d));
+      window.alert('No se pudo cambiar el nombre: ' + (error.message || ''));
+    }
   };
 
   // PDF de UNA página suelta (guía o documento del cliente): mismo molde que el DEL.
@@ -1308,7 +1311,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pl-2.5 pr-1 text-left border-none cursor-pointer text-[12px] font-semibold bg-transparent"
                   style={{ color: on ? '#1A1D26' : '#6B7280' }}>
                   {d._kind === 'extra' ? <FileText size={13} className="shrink-0 text-[#7C3AED]" /> : <Monitor size={13} className="shrink-0 text-[#9098A4]" />}
-                  <span className="truncate flex-1 min-w-0">{d._kind === 'extra' ? d.title : (DOC_KIND_LABEL[d.doc_kind] || d.title)}</span>
+                  <span className="truncate flex-1 min-w-0">{d.title}</span>
                   {d._system && <span className="text-[8px] font-bold text-[#7C3AED] bg-[#F3EFFF] rounded px-1 shrink-0 uppercase tracking-wide">venta</span>}
                 </button>
                 {d._system
@@ -1331,7 +1334,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                 {excludedDocs.length > 0 && <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1.5 pb-0.5">Restaurar quitados</div>}
                 {excludedDocs.map(d => (
                   <button key={d.key || d.id} onClick={() => restaurarClientDoc(d)} className="flex items-center gap-2 py-1.5 px-2 rounded-md text-left text-[12px] font-semibold text-[#4B5563] hover:bg-[#F4F6F9] border-none bg-transparent cursor-pointer">
-                    <Monitor size={12} className="text-[#9098A4] shrink-0" /><span className="truncate">{DOC_KIND_LABEL[d.doc_kind] || d.title}</span>
+                    <Monitor size={12} className="text-[#9098A4] shrink-0" /><span className="truncate">{d.title}</span>
                   </button>
                 ))}
               </div>
@@ -1705,9 +1708,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] shrink-0" style={{ background: '#F1F3F7', color: '#6B7280' }}><Monitor size={16} /></span>
                     <div className="min-w-0">
-                      {doc._kind === 'extra' || !DOC_KIND_LABEL[doc.doc_kind]
-                        ? <TituloEditable value={doc.title} onSave={(t) => renombrarClientDoc(doc, t)} />
-                        : <div className="text-[14px] font-bold text-[#1A1D26] truncate">{DOC_KIND_LABEL[doc.doc_kind]}</div>}
+                      <TituloEditable value={doc.title} onSave={(t) => renombrarClientDoc(doc, t)} />
                       <div className="text-[11px] text-[#9098A4]">
                         {generado
                           ? 'Lo completa el cliente en su plataforma. Se actualiza solo cada 2 minutos.'
@@ -1716,7 +1717,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {accionesPagina(doc._kind === 'extra' ? doc.title : (DOC_KIND_LABEL[doc.doc_kind] || doc.title), docHtml, doc.text)}
+                    {accionesPagina(doc.title, docHtml, doc.text)}
                     {!generado && (
                     <div className="inline-flex rounded-lg p-0.5" style={{ background: '#F1F3F7' }}>
                       <button onClick={() => setDocEditing(false)} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[12px] font-semibold cursor-pointer border-none" style={docEditing ? { background: 'transparent', color: '#6B7280' } : { background: '#fff', color: '#1A1D26', boxShadow: '0 1px 2px rgba(10,22,40,.06)' }}><Eye size={13} />Leer</button>
