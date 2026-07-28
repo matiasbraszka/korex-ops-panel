@@ -96,8 +96,10 @@ export default function OnboardingConfigEditor() {
         <Field label="Mensaje 1 · Pedir datos por WhatsApp" hint="El que el closer copia desde el formulario para pedirle los datos al cliente.">
           <textarea rows={8} value={draft.whatsapp_request_msg} onChange={(e) => update({ whatsapp_request_msg: e.target.value })} className={area} />
         </Field>
-        <Field label="Mensaje 2 · Handoff del onboarding" hint="Se muestra al terminar de cargar la venta. Usá {CALENDAR_LINK} y {ONBOARDING_LINK} donde quieras que vayan los links — se reemplazan solos.">
-          <textarea rows={10} value={draft.onboarding_handoff_msg} onChange={(e) => update({ onboarding_handoff_msg: e.target.value })} className={area} />
+        <Field
+          label="Mensaje 2 · Bienvenida a la plataforma"
+          hint="Se muestra al terminar de cargar la venta, listo para copiar. Los huecos se reemplazan solos: {NOMBRE} (primer nombre), {PORTAL_URL}, {PORTAL_EMAIL} y {PORTAL_PASSWORD} (la cuenta del cliente, que se crea sola con la venta), {CALENDAR_LINK} y {ONBOARDING_LINK}.">
+          <textarea rows={14} value={draft.onboarding_handoff_msg} onChange={(e) => update({ onboarding_handoff_msg: e.target.value })} className={area} />
         </Field>
       </Section>
 

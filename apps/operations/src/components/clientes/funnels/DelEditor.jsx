@@ -387,10 +387,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     setClientDocs((prev) => prev.map(d => d.id === doc.id ? { ...d, panel_html: html } : d));
     clearTimeout(docTimer.current);
     docTimer.current = setTimeout(async () => {
+      // `client_brain_docs` va por RPC: la tabla tiene RLS con política de SELECT
+      // nada más, así que el update directo devolvía 200 sin tocar una fila. En
+      // 185 documentos, `panel_edited_by` estaba en cero — no guardó nunca.
       const { error } = doc._kind === 'extra'
-        ? await supabase.from('del_client_extra_docs').update({ html, updated_at: new Date().toISOString() }).eq('id', doc.id)
-        : await supabase.from('client_brain_docs').update({ panel_html: html, text: htmlToText(html), panel_edited_by: by, panel_edited_at: new Date().toISOString() }).eq('id', doc.id);
-      if (error) window.alert('OJO: el documento NO se está guardando (' + (error.message || 'sin permiso') + '). Avisale al equipo antes de seguir escribiendo.');
+        ? await supabase.from('del_client_extra_docs')
+            .update({ html, updated_at: new Date().toISOString() }).eq('id', doc.id)
+        : await supabase.rpc('client_doc_save_panel', {
+            p_id: doc.id, p_html: html, p_text: htmlToText(html), p_by: by,
+          });
+      // Y se mira el error: antes ni se esperaba la promesa.
+      if (error) window.alert('No pude guardar el documento: ' + (error.message || ''));
+
     }, 900);
   };
 
@@ -942,24 +950,31 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // PORTAL DEL CLIENTE como guion a grabar. Antes se marcaba por SQL.
   // Acción del cliente + estado por pestaña (reemplazan el tilde 🎬):
   // "Grabarse" + "Terminado" ⇒ para_grabar (compatibilidad con el portal).
+  // Va por RPC, no por `supabase.from('del_sections').update(...)`. La tabla tiene
+  // RLS con política de SELECT nada más, pero el rol authenticated conserva el
+  // GRANT de UPDATE: el update se ejecuta, RLS no deja pasar ninguna fila y
+  // PostgREST responde 200 sin error. Escribiendo derecho a la tabla esto no
+  // guardaba nada y nadie se enteraba hasta recargar la página.
   const setSeccionMeta = async (s, cambios) => {
     const accion = cambios.accion ?? s.accion_cliente ?? 'solo_equipo';
     const estado = cambios.estado ?? s.estado_seccion ?? 'en_construccion';
     const paraGrabar = (s.kind === 'vsl' || s.kind === 'anuncios') && accion === 'grabarse' && estado === 'terminado';
     setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar } : x));
-    const { error } = await supabase.from('del_sections')
-      .update({ accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar, orden_grabacion: s.orden_grabacion ?? s.ord ?? null })
-      .eq('id', s.id);
-    if (error) { console.error(error); cargar(); return; }
+    const { error } = await supabase.rpc('del_section_set_meta', {
+      p_id: s.id, p_accion: accion, p_estado: estado, p_para_grabar: paraGrabar,
+      p_orden: s.orden_grabacion ?? s.ord ?? null, p_by: by,
+    });
+    if (error) { window.alert('No pude guardarlo: ' + error.message); await cargar(); return; }
     emitir('section', { row: { id: s.id, accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar } });
   };
 
   const toggleParaGrabar = async (s) => {
     const next = !s.para_grabar;
     setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, para_grabar: next } : x));
-    const { error } = await supabase.from('del_sections')
-      .update({ para_grabar: next, orden_grabacion: s.orden_grabacion ?? s.ord ?? null })
-      .eq('id', s.id);
+    const { error } = await supabase.rpc('del_section_set_meta', {
+      p_id: s.id, p_para_grabar: next,
+      p_orden: s.orden_grabacion ?? s.ord ?? null, p_by: by,
+    });
     if (error) { window.alert('No pude marcarla: ' + error.message); await cargar(); return; }
     emitir('section', { row: { id: s.id, para_grabar: next } });
   };
