@@ -225,7 +225,7 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
               <Check size={13} className="text-[#AEB4BF] shrink-0" />
               <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Eventos de conversión</span>
               <span className="text-[10px] text-[#AEB4BF]">· de este funnel</span>
-              <button onClick={(e) => { e.stopPropagation(); onTrack(f); }} className="text-[10.5px] font-semibold text-[#2E69E0] cursor-pointer border-none bg-transparent hover:underline ml-auto">editar códigos</button>
+              {/* El link "editar códigos" se sacó (2026-07-28): todo se edita en las filas. */}
             </div>
             <div className="border border-[#E7EAF0] rounded-[10px] bg-white overflow-hidden">
               {events.length === 0 && <div className="py-3 px-3.5 text-[12px] text-[#B6BCC6]">Todavía no hay eventos.</div>}
