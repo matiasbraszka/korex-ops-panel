@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Globe, Film, Copy, Check, Settings2, Link2, Megaphone, Plus, Trash2 } from 'lucide-react';
 import { copyText } from '../recursosShared';
 import { useApp } from '../../../context/AppContext';
+import { getCfgJump, clearCfgJump } from './cfgJump';
 
 // Pie de alta de las listas (cuentas / eventos): dos campos rotulados lado a lado
 // y el botón Agregar debajo, todo dentro de la misma tarjeta de la lista.
@@ -90,7 +91,7 @@ function Campo({ f, slot, onUpdate }) {
   const Icon = slot.video ? Film : Globe;
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-cfg={slot.k}>
       <div className="flex items-center gap-[7px] mb-1.5">
         <span className="text-[12.5px] font-semibold text-[#1A1D26]">{slot.label}</span>
         {slot.nuevo && <span className="text-[9px] font-bold uppercase tracking-[0.04em] py-px px-1.5 rounded-full" style={{ background: '#F5F3FF', color: '#7C3AED' }}>campo nuevo</span>}
@@ -165,6 +166,26 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
   // Campos editables en la fila misma (clic → escribís → al salir se guarda).
   const inputFila = 'w-full border-none bg-transparent outline-none rounded px-1 -mx-1 focus:bg-[#F4F7FE]';
 
+  // Último eslabón del salto Panorama → config: si la instrucción apunta a este
+  // funnel, desplazar hasta el campo, destellarlo en amarillo y enfocar su input.
+  useEffect(() => {
+    const j = getCfgJump();
+    if (!j || j.funnel !== f.id) return;
+    clearCfgJump();
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-cfg="${j.campo}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'box-shadow .3s';
+      el.style.boxShadow = '0 0 0 3px #FFD84D';
+      el.style.borderRadius = '10px';
+      setTimeout(() => { el.style.boxShadow = 'none'; }, 2600);
+      el.querySelector('input')?.focus();
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.id]);
+
   return (
     <div className="border border-[#E7EAF0] rounded-xl bg-white overflow-hidden mb-3.5">
       <div className="flex items-center gap-2.5 py-3 px-[18px] border-b border-[#EDF0F5]">
@@ -185,7 +206,7 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
 
           {/* Columna 1: cuentas publicitarias (del CLIENTE, valen para todos sus funnels). */}
           {cliente && (
-            <div>
+            <div data-cfg="cuentas">
               <div className="flex items-center gap-2 mb-2.5">
                 <Megaphone size={13} className="text-[#AEB4BF] shrink-0" />
                 <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Cuentas publicitarias</span>
@@ -220,7 +241,7 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
           )}
 
           {/* Columna 2: eventos de conversión (de ESTE funnel). */}
-          <div>
+          <div data-cfg="eventos">
             <div className="flex items-center gap-2 mb-2.5">
               <Check size={13} className="text-[#AEB4BF] shrink-0" />
               <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4]">Eventos de conversión</span>

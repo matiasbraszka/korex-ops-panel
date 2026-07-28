@@ -20,6 +20,7 @@ import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
 import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
+import { getCfgJump } from './funnels/cfgJump';
 import { openUrl, copyText } from './recursosShared';
 
 // Metadatos por tipo de documento de contexto.
@@ -550,6 +551,13 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   const [voomlyOpen, setVoomlyOpen] = useState(false);
   const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
   const [delOpen, setDelOpen] = useState(false);    // lector del DEL a pantalla completa
+  // Salto directo del Panorama: si la instrucción apunta a ESTE funnel, abrir el
+  // DEL de una (DelEditor va a arrancar en la pestaña Configuración).
+  useEffect(() => {
+    const j = getCfgJump();
+    if (forcePage && j && j.funnel === f.id) setDelOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcePage, f.id]);
   const [clientResTick, setClientResTick] = useState(0); // sube al mover un recurso → recarga todas las carpetas
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
@@ -1231,6 +1239,14 @@ export default function FunnelsView({ clientId }) {
   const [pageFunnelId, setPageFunnelId] = useState(null);
   useEffect(() => { setPageFunnelId(null); }, [clientId]); // al cambiar de cliente, volver a la lista
   const pageFunnel = useMemo(() => myFunnels.find(f => f.id === pageFunnelId) || null, [myFunnels, pageFunnelId]);
+
+  // Salto directo desde el Panorama: si hay una instrucción pendiente para este
+  // cliente, abrir de una la pantalla del funnel indicado (la cadena sigue en
+  // FunnelRow → DelEditor → FunnelConfigBlock, que resalta el campo).
+  useEffect(() => {
+    const j = getCfgJump();
+    if (j && j.client === clientId && j.funnel && myFunnels.some(f => f.id === j.funnel)) setPageFunnelId(j.funnel);
+  }, [clientId, myFunnels]);
 
   const [modal, setModal] = useState(false);
   const [trackFunnel, setTrackFunnel] = useState(null);
