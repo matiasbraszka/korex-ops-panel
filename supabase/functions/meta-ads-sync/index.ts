@@ -242,6 +242,9 @@ Deno.serve(async (req) => {
       const accId = String(a.account_id || "").replace(/^act_/, "");
       if (!accId) continue;
       if (a.status === "interna") continue;
+      // Cuentas que maneja el CLIENTE por su parte (ej. la de formularios de Mónica):
+      // no se consultan ni se suman en nada. Decisión de Matías 2026-07-28.
+      if (a.managed_by === "cliente") continue;
       const eligible = !onlyFlagged || a.use_token === true || mcpPending.has(accId) || (clientId && allAccounts);
       if (!eligible) continue;
       // Una misma cuenta cargada dos veces en meta_ads gastaba 2 llamadas al pedo.
@@ -255,6 +258,7 @@ Deno.serve(async (req) => {
 
   const snapshotDate = new Date().toISOString().slice(0, 10);
   const results: any[] = [];
+  const writeErrors: { client_id: string; table: string; error: string }[] = [];
   let calls = 0, maxUsage = 0, aborted = false;
 
   const byClient = new Map<string, typeof jobs>();
@@ -337,18 +341,33 @@ Deno.serve(async (req) => {
         effective_status: a.effective_status || null, issues: a.issues || null, permalink: a.permalink || null, country: a.country || null,
         score: (a as any).score, is_winner: (a as any).is_winner, won_at: (a as any).is_winner ? new Date().toISOString() : null,
       }));
-      await supabase.from("meta_ad_insights").upsert(insRows, { onConflict: "ad_id,time_window,snapshot_date" });
+      // Toda escritura se CHEQUEA: una corrida que no pudo guardar no puede terminar 200
+      // muda (pasó el 2026-07-28: 200 OK y cero filas escritas, invisible por días).
+      const { error: insErr } = await supabase.from("meta_ad_insights").upsert(insRows, { onConflict: "ad_id,time_window,snapshot_date" });
+      if (insErr) writeErrors.push({ client_id: cid, table: "meta_ad_insights", error: String(insErr.message || insErr).slice(0, 300) });
 
       const cpl = accLeads > 0 ? accSpend / accLeads : 0;
       const ctr = accImpr > 0 ? (accClicks / accImpr) * 100 : 0;
       const { data: cur } = await supabase.from("clients").select("meta_metrics").eq("id", cid).maybeSingle();
       const prev = (cur?.meta_metrics as Record<string, unknown>) || {};
-      const nextMetrics = {
-        ...prev, adsActive: adsActiveAny, source: "token", lastUpdated: new Date().toISOString(),
-        totalSpend7d: Number(accSpend.toFixed(2)), totalConversions7d: accLeads, avgCpl7d: Number(cpl.toFixed(2)),
-        impressions7d: accImpr, clicks7d: accClicks, ctr7d: Number(ctr.toFixed(2)),
-      };
-      await supabase.from("clients").update({ meta_metrics: nextMetrics }).eq("id", cid);
+      // Cada ventana escribe SUS claves. Antes las dos corridas del cron (last_7d y
+      // yesterday) pisaban las mismas claves *7d, y el panel mostraba 7 días o 1 día
+      // según cuál corrió última. Además "yesterday" revive los campos *Yesterday
+      // que el panel muestra y que nadie escribía desde la era del conector MCP.
+      const esAyer = window === "yesterday";
+      const nextMetrics = esAyer
+        ? {
+          ...prev, adsActive: adsActiveAny, source: "token", lastUpdatedYesterday: new Date().toISOString(),
+          spendYesterday: Number(accSpend.toFixed(2)), conversionsYesterday: accLeads,
+          cplYesterday: Number(cpl.toFixed(2)), impressionsYesterday: accImpr, clicksYesterday: accClicks,
+        }
+        : {
+          ...prev, adsActive: adsActiveAny, source: "token", lastUpdated: new Date().toISOString(),
+          totalSpend7d: Number(accSpend.toFixed(2)), totalConversions7d: accLeads, avgCpl7d: Number(cpl.toFixed(2)),
+          impressions7d: accImpr, clicks7d: accClicks, ctr7d: Number(ctr.toFixed(2)),
+        };
+      const { error: updErr } = await supabase.from("clients").update({ meta_metrics: nextMetrics }).eq("id", cid);
+      if (updErr) writeErrors.push({ client_id: cid, table: "clients.meta_metrics", error: String(updErr.message || updErr).slice(0, 300) });
     }
   }
 
@@ -358,11 +377,33 @@ Deno.serve(async (req) => {
 
   try {
     await supabase.from("api_usage").insert({
-      fn: "meta-ads-sync", model: "graph-v21", status: aborted ? "blocked" : "ok", cost_usd: 0,
+      fn: "meta-ads-sync", model: "graph-v21",
+      status: writeErrors.length ? "write_error" : (aborted ? "blocked" : "ok"), cost_usd: 0,
       client_id: clientId || null,
-      meta: { dry, window, jobs: jobs.length, calls, maxUsagePct: maxUsage, aborted, errors },
+      meta: { dry, window, jobs: jobs.length, calls, maxUsagePct: maxUsage, aborted, errors, writeErrors },
     });
   } catch { /* no romper */ }
+
+  // Si la base rechazó escrituras, la corrida NO es un éxito: 500 + aviso a Slack
+  // (mismo bot del informe), para que un fallo de guardado nunca más pase invisible.
+  if (writeErrors.length) {
+    try {
+      const { data: vf } = await supabase.from("app_settings").select("value").eq("key", "venta_form_config").maybeSingle();
+      const bot = String((vf?.value as Record<string, unknown> | null)?.slack_bot_token || "");
+      if (bot) {
+        await fetch("https://slack.com/api/chat.postMessage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${bot}` },
+          body: JSON.stringify({
+            channel: "#informe-diario-adds",
+            text: `:rotating_light: meta-ads-sync (${window}): ${writeErrors.length} escritura(s) fallaron — los datos de esta corrida pueden estar incompletos.\n` +
+              writeErrors.slice(0, 5).map((w) => `• ${w.table}: ${w.error}`).join("\n"),
+          }),
+        });
+      }
+    } catch { /* el aviso es best-effort */ }
+    return j({ ok: false, error: "write_errors", dry, window, jobs: jobs.length, calls, maxUsagePct: maxUsage, aborted, errors, writeErrors, results }, 500);
+  }
 
   return j({ ok: true, dry, window, jobs: jobs.length, calls, maxUsagePct: maxUsage, aborted, errors, results });
 });

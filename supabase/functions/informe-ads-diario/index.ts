@@ -114,7 +114,9 @@ Deno.serve(async (req) => {
   const conCuenta: { id: string; name: string }[] = [];
   for (const c of clients ?? []) {
     const accs = Array.isArray(c.meta_ads) ? c.meta_ads : [];
-    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna");
+    // Fuera las 'interna' y las que maneja el CLIENTE por su parte (managed_by='cliente',
+    // ej. la cuenta de formularios de Mónica): no cuentan en nada. Matías 2026-07-28.
+    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna" && str(a.managed_by) !== "cliente");
     if (!real.length) continue;
     nameById.set(String(c.id), str(c.name));
     conCuenta.push({ id: String(c.id), name: str(c.name) });
@@ -146,6 +148,9 @@ Deno.serve(async (req) => {
     if (!nombre) continue; // cliente inactivo, borrado o sin cuenta real
     const spend = num(r.spend);
     if (spend <= 0) continue;
+    // Filas de cuentas excluidas (interna / managed_by='cliente') que hayan quedado
+    // en snapshots viejos: no se suman.
+    if (!curByAcc.has(str(r.ad_account_id))) continue;
     const cur = curByAcc.get(str(r.ad_account_id)) || "USD";
     const rate = fx[cur];
     if (!Number.isFinite(rate)) {
