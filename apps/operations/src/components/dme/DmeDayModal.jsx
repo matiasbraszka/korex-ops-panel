@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { supabase } from '@korex/db';
-import { INPUT_GROUPS, INPUT_KEYS, SECTIONS } from '../../lib/dme/registry.js';
+import { INPUT_KEYS, SECTIONS, inputGroupsFor } from '../../lib/dme/registry.js';
 import { computeDerived } from '../../lib/dme/derive.js';
 import { metricTone } from '../../lib/dme/color.js';
 import { fmtMetric } from '../../lib/dme/format.js';
@@ -14,12 +14,13 @@ function todayISO() {
 
 // Form vacio: campos en blanco ('') -> lo que no se carga queda en blanco, no 0.
 const EMPTY_STR = Object.fromEntries(INPUT_KEYS.map((k) => [k, '']));
-// Metricas derivadas (para mostrarlas calculadas en vivo, read-only).
-const DERIVED_METRICS = SECTIONS.flatMap((s) => s.metrics.filter((m) => m.type === 'derived' && !m.hidden));
 
 // Modal para cargar / editar el DME de un dia (de un cliente fijo). Solo se cargan
 // los INPUTS; los derivados (%, CPL, ROI...) se muestran calculados en vivo.
-export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientId, clientName, config, initialDate, isAdmin = false }) {
+// `sections` viene del que llama con los embudos del cliente (uno por funnel).
+export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete, rows = [], clientId, clientName, config, initialDate, isAdmin = false, sections = SECTIONS }) {
+  const inputGroups = useMemo(() => inputGroupsFor(sections), [sections]);
+  const derivedMetrics = useMemo(() => sections.flatMap((s) => s.metrics.filter((m) => m.type === 'derived' && !m.hidden)), [sections]);
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState({ ...EMPTY_STR });
   const [note, setNote] = useState('');
@@ -136,7 +137,7 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {INPUT_GROUPS.filter((g) => isAdmin || !g.adminOnly).map((g) => (
+          {inputGroups.filter((g) => isAdmin || !g.adminOnly).map((g) => (
             <div key={g.title}>
               <div className="text-[10px] font-bold uppercase tracking-wider text-text3 mb-2">{g.title}</div>
               <div className="grid grid-cols-1 gap-1.5">
@@ -159,7 +160,7 @@ export default function DmeDayModal({ open, onClose, onSaved, saveDay, onDelete,
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-text3 mb-2">Cálculo automático (no se carga)</div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {DERIVED_METRICS.map((m) => {
+              {derivedMetrics.map((m) => {
                 const v = derived[m.key];
                 const tone = metricTone(m.key, v, config);
                 return (
