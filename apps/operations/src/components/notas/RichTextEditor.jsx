@@ -180,12 +180,43 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     handleInput();
   };
 
+  // Pegar manteniendo el formato que ESTE editor soporta. Google Docs y Word no
+  // marcan la negrita con <b>: la ponen como estilo inline (font-weight:700) en
+  // spans, así que primero convertimos esos estilos a las etiquetas propias
+  // (strong/em/u), conservamos solo color y fondo, y recién después pasa por el
+  // sanitizador del contexto (notas = angosto, DEL = con tablas). DOMParser es
+  // inerte: nada de lo pegado se ejecuta ni carga mientras se limpia.
+  const limpiarPegado = (html) => {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Google Docs envuelve TODO en <b id="docs-internal-guid…" style="font-weight:normal">.
+    doc.body.querySelectorAll('b[id^="docs-internal-guid"]').forEach(b => b.replaceWith(...b.childNodes));
+    doc.body.querySelectorAll('[style]').forEach(el => {
+      const st = el.style;
+      const wrap = (tag) => { const t = doc.createElement(tag); while (el.firstChild) t.appendChild(el.firstChild); el.appendChild(t); };
+      const peso = st.fontWeight;
+      if ((peso === 'bold' || Number(peso) >= 600) && !el.closest('b,strong,h1,h2,h3,h4,h5,h6,th')) wrap('strong');
+      if (st.fontStyle === 'italic' && !el.closest('i,em')) wrap('em');
+      if (/underline/.test(st.textDecorationLine || st.textDecoration || '') && !el.closest('u,a')) wrap('u');
+      const color = st.color, fondo = st.backgroundColor;
+      el.removeAttribute('style');
+      if (color && !/^rgb\(0,\s*0,\s*0\)$/.test(color) && color !== '#000000') el.style.color = color;
+      if (fondo && fondo !== 'transparent' && !/^rgba?\(255,\s*255,\s*255/.test(fondo)) el.style.backgroundColor = fondo;
+    });
+    // Los span/font que quedaron sin nada que aportar se desenvuelven.
+    doc.body.querySelectorAll('span,font').forEach(sp => { if (!sp.attributes.length) sp.replaceWith(...sp.childNodes); });
+    return sanitize(doc.body.innerHTML);
+  };
+
   const handlePaste = (e) => {
-    // Pegar como texto plano evita arrastrar estilos raros de Word/Google Docs.
     e.preventDefault();
     snapshot(true);
-    const text = (e.clipboardData || window.clipboardData).getData('text');
-    document.execCommand('insertText', false, text);
+    const html = e.clipboardData?.getData('text/html');
+    if (html && html.trim()) {
+      document.execCommand('insertHTML', false, limpiarPegado(html));
+    } else {
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      document.execCommand('insertText', false, text);
+    }
     handleInput();
   };
 
