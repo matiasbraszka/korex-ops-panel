@@ -64,6 +64,13 @@ export const api = {
         { p_section_id: sectionId, p_grabado: grabado },
         () => ({ ok: true, demo: true })),
 
+  // El gemelo de toggleGuion para las pestañas que el cliente tiene que LEER
+  // (accion_cliente = 'revisar'): el botón "Revisado" debajo del guion.
+  toggleRevisado: (sectionId, revisado) =>
+    rpc('portal_cliente_toggle_revisado',
+        { p_section_id: sectionId, p_revisado: revisado },
+        () => ({ ok: true, demo: true })),
+
   // Lista los archivos de una carpeta. Si la carpeta es de un funnel (vsl_rec,
   // ad_rec__<avatar>, testimonios), viaja el funnel para listar SOLO lo suyo.
   carpeta: (folderId, strategyId) =>

@@ -92,6 +92,9 @@ export default function DocumentoScreen() {
   const [localComs, setLocalComs] = useState([]);
   const [subidas, setSubidas] = useState([]);     // uploads en curso
   const [avatarSel, setAvatarSel] = useState(null);
+  // "Revisado" por sección: se pinta al instante y se guarda de fondo. Si el
+  // guardado falla se vuelve atrás, para no mentirle al cliente.
+  const [revisadas, setRevisadas] = useState({});  // {sectionId: bool}
   const scrollRef = useRef(null);
   const pdfRef = useRef(null);
   // Zoom de lectura (queda guardado en el teléfono del cliente).
@@ -106,7 +109,7 @@ export default function DocumentoScreen() {
   });
   const demo = isDemo();
 
-  useEffect(() => { setLocalComs([]); setSubidas([]); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
+  useEffect(() => { setLocalComs([]); setSubidas([]); setRevisadas({}); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
 
   // Si vienen desde "Tus guiones para grabar", saltamos al guion exacto.
   // Si vienen desde una CARPETA (Material / embudo), saltamos directo al cargador.
@@ -145,6 +148,19 @@ export default function DocumentoScreen() {
       : data.tipo === 'vsl' ? `VSL — ${data.funnel?.name || ''}`
       : data.tipo === 'avatar' ? (secciones[0]?.titulo || 'Avatares')
       : `Embudo ${data.funnel?.name || ''}`);
+
+  // "Revisar" es una acción, no una etiqueta: la pestaña se lee y se marca.
+  // `hayGrabar` viene del backend: sin un solo guion marcado para grabar, el
+  // cargador de videos al pie no tiene sentido y confunde.
+  const esRevisar = (s) => s.accion === 'revisar';
+  const estaRevisada = (s) => revisadas[s.id] ?? !!s.revisado;
+  const hayGrabar = data.hayGrabar !== false;
+  const marcarRevisada = async (s) => {
+    const v = !estaRevisada(s);
+    setRevisadas((r) => ({ ...r, [s.id]: v }));
+    const res = await api.toggleRevisado(s.id, v);
+    if (!res?.ok) setRevisadas((r) => ({ ...r, [s.id]: !v }));   // no se guardó: se vuelve atrás
+  };
 
   // ── Comentar: selección de texto → botón flotante → caja abajo ──
   const onDocMouseUp = () => {
@@ -348,7 +364,7 @@ export default function DocumentoScreen() {
             {!esGuias && secciones.length === 0 && (
               <div style={{ background: '#fff', borderRadius: 18, padding: 20, textAlign: 'center', color: T.text2, fontSize: 14, boxShadow: 'var(--shadow-md)' }}>
                 {esGuion
-                  ? <>Todavía no hay guiones de {esVsl ? 'VSL' : 'anuncios'} marcados para grabar en este embudo.</>
+                  ? <>Todavía no hay guiones de {esVsl ? 'VSL' : 'anuncios'} listos en este embudo.</>
                   : <>Este documento todavía no tiene contenido.</>}
               </div>
             )}
@@ -369,12 +385,35 @@ export default function DocumentoScreen() {
                       </div>
                     )}
                     {(data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
-                      <div style={{ fontSize: 16, fontWeight: 800, color: T.text, letterSpacing: '-0.01em', marginBottom: 12 }}>
-                        {s.titulo}{esGuion && s.grabado ? '  ✓' : ''}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: T.text, letterSpacing: '-0.01em' }}>
+                          {s.titulo}{esGuion && s.grabado ? '  ✓' : ''}
+                        </span>
+                        {esRevisar(s) && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 999, background: estaRevisada(s) ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)', color: estaRevisada(s) ? 'var(--mk-green)' : 'var(--mk-blue-ops)' }}>
+                            {estaRevisada(s) ? 'Revisado' : 'Para revisar'}
+                          </span>
+                        )}
                       </div>
                     )}
                     <div data-secid={s.id} dangerouslySetInnerHTML={{ __html: html }} />
                     {comsDe(s)}
+
+                    {/* El botón de "Revisado", justo debajo del guion que se lee.
+                        No reemplaza al comentario: si algo no encaja, el cliente
+                        selecciona el texto y comenta; esto es el "está bien". */}
+                    {esRevisar(s) && (
+                      <div
+                        onClick={() => marcarRevisada(s)} role="button"
+                        style={{ cursor: 'pointer', marginTop: 14, height: 46, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          background: estaRevisada(s) ? 'var(--mk-green-bg)' : T.primary,
+                          color: estaRevisada(s) ? 'var(--mk-green)' : '#fff',
+                          border: estaRevisada(s) ? '1px solid var(--mk-green)' : 'none' }}>
+                        <IcoCheck size={16} stroke="currentColor" sw={2.6} />
+                        {estaRevisada(s) ? 'Lo revisaste' : 'Marcar como revisado'}
+                      </div>
+                    )}
+
                     <div style={{ height: 10 }} />
                   </div>
                 );
@@ -382,8 +421,10 @@ export default function DocumentoScreen() {
             </div>
             </div>{/* fin pdfRef/zoom */}
 
-            {/* ── SUBIR LAS GRABACIONES (solo guiones, al final, todas juntas) ── */}
-            {esGuion && secciones.length > 0 && (
+            {/* ── SUBIR LAS GRABACIONES (solo guiones, al final, todas juntas) ──
+                Solo si hay algo marcado para grabar: en un documento que es solo
+                de lectura, pedirle videos es pedirle lo que nadie le pidió. */}
+            {esGuion && secciones.length > 0 && hayGrabar && (
               <div data-uploader="" style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
                 <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #EEF0F4' }}>
                   <div style={{ fontSize: 16, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', marginBottom: 4 }}>

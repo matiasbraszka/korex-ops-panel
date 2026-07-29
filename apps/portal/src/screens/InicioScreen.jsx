@@ -236,24 +236,36 @@ const chipEstado = (bg, ink, texto) => (
 function PendienteCard({ p, nav }) {
   const esGrab = String(p.tipo || '').startsWith('grabacion');
   const esMeta = p.tipo === 'acceso_meta';
+  // Lo que le toca LEER (accion "revisar" en el DEL). Va derecho al documento:
+  // acá no hay nada que elegir, es un texto y un botón.
+  const esRev = p.tipo === 'revision';
   const validando = p.estado === 'cliente_dice_listo';
-  const enProceso = !esGrab && !esMeta && p.target != null && (p.subidos ?? 0) > 0;
+  const enProceso = !esGrab && !esMeta && !esRev && p.target != null && (p.subidos ?? 0) > 0;
 
   const abrir = () => {
     if (esGrab) nav('/guiones');                 // a ELEGIR el guion, no a un documento de una
+    else if (esRev) nav(`/documento/${p.strategyId}/${p.docTipo}`);
     else if (esMeta) nav('/meta');
     else nav(`/pedido/${p.id}`, { state: { pedido: p } });
   };
-  const chip = validando ? chipEstado('var(--mk-blue-bg)', 'var(--mk-blue-ops)', 'En revisión')
+  const chip = esRev ? chipEstado('var(--mk-blue-bg)', 'var(--mk-blue-ops)', p.pendientes > 1 ? `Para revisar · ${p.pendientes}` : 'Para revisar')
+    : validando ? chipEstado('var(--mk-blue-bg)', 'var(--mk-blue-ops)', 'En revisión')
     : enProceso ? chipEstado('var(--mk-orange-bg)', 'var(--mk-orange)', `En proceso · ${p.subidos} de ${p.target}`)
     : chipEstado('var(--mk-red-bg)', 'var(--mk-red)', 'Pendiente');
   const tile = esGrab ? <div style={tileStyle('var(--mk-blue-bg)')}><IcoVideo size={22} stroke="var(--mk-blue-ops)" sw={1.9} /></div>
+    : esRev ? <div style={tileStyle('var(--mk-blue-bg)')}><IcoDoc size={22} stroke="var(--mk-blue-ops)" sw={1.9} /></div>
     : esMeta ? <div style={tileStyle('var(--mk-red-bg)')}><IcoKey size={22} stroke="var(--mk-red)" sw={1.9} /></div>
     : <div style={tileStyle('var(--mk-blue-bg)')}><IcoImage size={22} stroke="var(--mk-blue-ops)" sw={1.9} /></div>;
   const cta = esGrab ? 'Ver mis guiones'
+    : esRev ? 'Leerlo ahora'
     : esMeta ? (validando ? 'Ver el paso a paso' : 'Conectar mi Meta')
     : p.tipo === 'fotos' ? 'Subir fotos' : 'Subir material';
-  const caption = esGrab ? (
+  const caption = esRev ? (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: T.text3, textAlign: 'center' }}>
+      <IcoFile size={13} stroke="var(--mk-text3)" sw={2} />
+      Al final tocas «Marcar como revisado»
+    </div>
+  ) : esGrab ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12, color: T.text3 }}>
       <IcoFile size={13} stroke="var(--mk-text3)" sw={2} />
       Te lleva a elegir cuál grabar
