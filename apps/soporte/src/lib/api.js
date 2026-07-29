@@ -412,17 +412,11 @@ export async function patchPendingItem(id, patch) {
 }
 
 export async function fetchSeguimiento(filters = {}) {
-  let path = 'wa_conversations_seguimiento?select=*,contact:contacts(id,full_name,phone),client:clients(id,name)';
+  let path = 'wa_conversations_seguimiento?select=*';
   const conditions = [];
 
-  if (filters.columna_kanban) conditions.push(`columna_kanban=eq.${encodeURIComponent(filters.columna_kanban)}`);
   if (filters.client_id) conditions.push(`client_id=eq.${encodeURIComponent(filters.client_id)}`);
   if (filters.assigned_to) conditions.push(`assigned_to=eq.${encodeURIComponent(filters.assigned_to)}`);
-  if (filters.tipo_conversacion) conditions.push(`tipo_conversacion=eq.${encodeURIComponent(filters.tipo_conversacion)}`);
-  if (filters.tags) {
-    const tagsFilter = Array.isArray(filters.tags) ? filters.tags.map(t => `"${t}"`).join(',') : filters.tags;
-    conditions.push(`tags=cs.{${tagsFilter}}`);
-  }
 
   if (conditions.length) path += '&' + conditions.join('&');
   path += '&order=last_message_at.desc.nullslast&limit=500';

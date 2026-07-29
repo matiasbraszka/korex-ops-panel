@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronDown, Calendar, Trash2, Check } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { fetchSeguimiento, patchConversation, fetchTeamMembers } from '../lib/api.js';
 import { fmtPhone, convName } from '../lib/format.js';
 import { useSoporte } from '../context/SoporteContext.jsx';
@@ -9,7 +9,7 @@ const COLUMNAS = ['SIN RESPONDER', 'A RESPONDER HOY', 'ESPERANDO AL CONTACTO', '
 const COLUMNAS_EDITABLES = new Set(['A RESPONDER HOY', 'SEGUIMIENTO']);
 
 export default function SeguimientoPage() {
-  const { selectedId, setSelectedId } = useSoporte();
+  const { selectConversation } = useSoporte();
   const { isAdmin } = useAuth();
   const [data, setData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -151,7 +151,7 @@ export default function SeguimientoPage() {
                   columna={columna}
                   editable={COLUMNAS_EDITABLES.has(columna)}
                   onDragStart={(e) => handleDragStart(e, conv, columna)}
-                  onSelect={() => setSelectedId(conv.id)}
+                  onSelect={() => selectConversation(conv.id)}
                   isAdmin={isAdmin}
                 />
               ))}
