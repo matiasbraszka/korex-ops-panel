@@ -280,6 +280,8 @@ const SUBSTATE = {
   copy:     { label: 'copy',     dot: '#2563EB', bg: '#EEF3FF', color: '#1D4FD8', border: '#D5E1FF' },
   grabado:  { label: 'grabado',  dot: '#D97706', bg: '#FEF3E2', color: '#B45309', border: '#F6E0B8' },
   editado:  { label: 'editado',  dot: '#16A34A', bg: '#ECFDF5', color: '#15803D', border: '#C7EBD4' },
+  // Página al aire pero SIN enlace de Publicidad (ads_url): no cuenta como diseñada.
+  pagina:   { label: 'falta publicidad', dot: '#D97706', bg: '#FEF3E2', color: '#B45309', border: '#F6E0B8' },
   disenado: { label: 'diseñado', dot: '#16A34A', bg: '#ECFDF5', color: '#15803D', border: '#C7EBD4' },
 };
 function PipelineSemaforo({ stages }) {
