@@ -6,7 +6,7 @@ import { fmtNextCita } from './format.js';
 // Columnas explícitas: participants (puede tener cientos de miembros en
 // comunidades) NO viaja con la lista — se pide aparte al abrir el panel.
 // status → estado (v28: renombrado para Fase 2/3 de mejora de soporte)
-const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,custom_name,description,contact_id,client_id,estado,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at,tipo_conversacion,bloqueado_manual,bloqueado_por,bloqueado_at,seguimiento_fecha';
+const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,custom_name,description,contact_id,client_id,estado,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at,tipo_conversacion,bloqueado_manual,bloqueado_por,bloqueado_at,seguimiento_fecha,telefono_e164,client_id_source,client_id_confidence';
 const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,email),client:clients(id,name)`;
 
 export async function fetchConversations() {
@@ -53,23 +53,36 @@ export async function fetchMessages(convId, { before = null, after = null } = {}
   return Array.isArray(rows) ? rows.reverse() : []; // ASC para render
 }
 
-export async function patchConversation(id, patch, { extraFilter = '' } = {}) {
-  // Candado manual (Principio P2): cualquier patch a campos sensibles
-  // (client_id, tipo_conversacion, estado) setea el flag de bloqueo.
-  const isSensitive = patch.hasOwnProperty('client_id')
-    || patch.hasOwnProperty('tipo_conversacion')
-    || patch.hasOwnProperty('estado');
+// Campos de IDENTIDAD: a quien pertenece la conversacion. Si una persona los
+// toca, la cascada automatica (edge wa-clasificar-clientes) no vuelve a pisarlos
+// nunca mas. Es el candado del principio P2.
+//
+// OJO: 'estado' NO esta en la lista a proposito. Es flujo de trabajo, no
+// identidad: mover una tarjeta en el kanban no puede congelar la conversacion
+// para siempre frente a la vinculacion automatica.
+const CAMPOS_IDENTIDAD = ['client_id', 'tipo_conversacion'];
 
-  if (isSensitive) {
-    patch.bloqueado_manual = true;
-    patch.bloqueado_por = 'manual'; // la UI debe setearlo con el member_id real
-    patch.bloqueado_at = new Date().toISOString();
-  }
+export async function patchConversation(id, patch, { extraFilter = '', memberId = null } = {}) {
+  const tocaIdentidad = CAMPOS_IDENTIDAD.some((k) => Object.hasOwn(patch, k));
 
-  return sbFetch(`wa_conversations?id=eq.${id}${extraFilter}`, {
+  // Copia: no mutamos el patch del que llama (el contexto lo usa para pintar
+  // el estado optimista y quedaba desincronizado).
+  const body = tocaIdentidad
+    ? {
+        ...patch,
+        bloqueado_manual: true,
+        bloqueado_por: memberId || 'manual',
+        bloqueado_at: new Date().toISOString(),
+      }
+    : patch;
+
+  await sbFetch(`wa_conversations?id=eq.${id}${extraFilter}`, {
     method: 'PATCH',
-    body: JSON.stringify(patch),
+    body: JSON.stringify(body),
   });
+  // Devolvemos lo que realmente se escribio para que el llamador refleje el
+  // candado en pantalla sin esperar a un refresh completo.
+  return body;
 }
 
 export async function fetchSoporteConfig() {
@@ -409,4 +422,17 @@ export async function patchPendingItem(id, patch) {
     body: JSON.stringify(patch),
     headers: { Prefer: 'return=representation' },
   });
+}
+
+// ── Kanban de seguimiento ──
+// Lee la vista wa_conversations_seguimiento, que ya trae calculada la columna
+// del tablero (mecanica: quien mando el ultimo mensaje y hace cuanto) mas los
+// campos que necesita la tarjeta. Es security_invoker: RLS aplica igual que en
+// el inbox, cada uno ve lo mismo que ya veia.
+export async function fetchSeguimiento() {
+  const rows = await sbFetch(
+    'wa_conversations_seguimiento?select=*&order=last_message_at.asc.nullslast&limit=1000',
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return Array.isArray(rows) ? rows : [];
 }

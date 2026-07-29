@@ -17,6 +17,19 @@ export default function InboxPage() {
   // null = agendar nueva; una cita = reagendarla.
   const [editingAppt, setEditingAppt] = useState(null);
 
+  // Deep-link directo por conversación: /soporte/inbox?conv=<id>.
+  // Lo usa el tablero de Seguimiento al clickear una tarjeta.
+  const convApplied = useRef(false);
+  useEffect(() => {
+    const convId = params.get('conv');
+    if (!convId || convApplied.current) return;
+    convApplied.current = true;
+    // scope 'all' para que el chat no quede escondido detrás de un filtro previo.
+    setFilters((f) => ({ ...f, scope: 'all', search: '' }));
+    selectConversation(convId);
+    setParams((sp) => { sp.delete('conv'); return sp; }, { replace: true });
+  }, [params, selectConversation, setFilters, setParams]);
+
   // Deep-link desde otra parte del panel (ej. ficha de pago de Stripe):
   // /soporte/inbox?wa=<telefono> → filtra y abre ese contacto si existe.
   const waApplied = useRef(false);

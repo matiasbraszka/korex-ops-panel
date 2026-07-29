@@ -400,6 +400,7 @@ function MainLayout() {
   // paquete es el import() dinamico de SoporteRoutes.
   const soporteItems = [
     { id: 'inbox', label: 'WhatsApp', Icon: MessageCircle, path: '/soporte/inbox' },
+    { id: 'seguimiento', label: 'Seguimiento', Icon: ListChecks, path: '/soporte/seguimiento' },
     { id: 'citas', label: 'Citas', Icon: CalendarDays, path: '/soporte/citas' },
     { id: 'recursos', label: 'Recursos', Icon: FolderOpen, path: '/soporte/recursos' },
   ];

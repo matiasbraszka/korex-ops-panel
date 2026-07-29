@@ -358,11 +358,17 @@ export function SoporteProvider({ children }) {
     });
   }, []);
 
-  // ── Tags / notas / vinculos / status ──
+  // ── Tags / notas / vinculos / estado ──
+  // patchConversation devuelve lo que realmente escribio: si el patch tocaba la
+  // identidad (client_id / tipo_conversacion) viene con el candado puesto, y lo
+  // reflejamos en pantalla sin esperar a recargar.
   const updateConversation = useCallback(async (convId, patch) => {
     setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...patch } : c)));
-    await patchConversation(convId, patch);
-  }, []);
+    const escrito = await patchConversation(convId, patch, { memberId: currentMemberId });
+    if (escrito?.bloqueado_manual) {
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...escrito } : c)));
+    }
+  }, [currentMemberId]);
 
   const notesTimers = useRef({});
   const updateNotes = useCallback((convId, notes) => {
@@ -382,8 +388,10 @@ export function SoporteProvider({ children }) {
       if (client !== undefined) next.client = client;
       return next;
     }));
-    await patchConversation(convId, patch);
-  }, []);
+    const escrito = await patchConversation(convId, patch, { memberId: currentMemberId });
+    // Vincular a mano SI pone el candado: la cascada automatica no lo pisa nunca mas.
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...escrito } : c)));
+  }, [currentMemberId]);
 
   // Vincula la conversacion a una persona del Directorio de Finanzas (edge
   // function whatsapp-link): deriva cliente + puente CRM + Google Contacts.
