@@ -304,12 +304,19 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
 
   // ── 2. Mensaje (idempotente por wa_message_id) ──
   // Con ignoreDuplicates, .select() devuelve [] cuando el mensaje ya existia.
+  // En grupos, capturar lid (key.participant) y teléfono real (key.participantAlt).
+  const senderLid = isGroup && key.participant ? str(key.participant) : null;
+  const participantAlt = isGroup && key.participantAlt ? str(key.participantAlt) : null;
+  const senderTelefono = participantAlt ? '+' + (participantAlt.match(/\d+/g) || []).join('') : null;
+
   const { data: inserted, error: msgError } = await supabase.from("wa_messages").upsert(
     {
       conversation_id: conversationId,
       wa_message_id: waMessageId,
       direction: fromMe ? "out" : "in",
       sender_jid: str(key.participant) || (fromMe ? null : jid),
+      sender_lid: senderLid,
+      sender_telefono_e164: senderTelefono,
       msg_type: msgType,
       body: body || null,
       media_id: extractMediaId(unwrapped),

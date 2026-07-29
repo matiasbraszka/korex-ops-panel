@@ -200,7 +200,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
           <div className="text-[11px] text-text3 truncate">
             {/* El número solo lo ven los admins; el resto ve el nombre arriba. */}
             {[conv.is_group ? groupSub : (isAdmin ? fmtPhone(conv.wa_phone) : ''),
-              conv.status === 'closed' ? 'Cerrada' : '']
+              conv.estado === 'cerrado' ? 'Cerrada' : '']
               .filter(Boolean).join(' · ')}
           </div>
         </div>
