@@ -62,8 +62,8 @@ select
   end as horas_esperando,
 
   -- Deuda viva vs. cliente muerto. La interfaz filtra por esto por defecto.
-  -- De las 369 sin responder, solo 130 son deuda real: el resto son clientes
-  -- cerrados hace meses (Sergio Canovas, Martha BBC, Monica, Uni2Matrix...).
+  -- De las 369 sin responder, solo 130 son deuda real: el resto son chats de
+  -- clientes cerrados hace meses, sin una sola actividad en 30 dias.
   coalesce(c.last_message_at > now() - interval '30 days', false) as vivo,
 
   -- Nunca se abrio (nivel N2 del analisis: 45 conversaciones hoy)
