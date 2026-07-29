@@ -1,4 +1,14 @@
 -- soporte_v31: fix de RLS que estaba filtrando todas las conversaciones
+--
+-- NOTA DE RECONCILIACION (29-jul-2026)
+-- Este archivo esta en el repo pero NO figura en supabase_migrations: se aplico
+-- suelto. Lo que hay hoy en la base no es exactamente esto:
+--   * wa_conversations_read / wa_conversations_write NO se borraron (o se
+--     recrearon despues): siguen vivas. Hoy conviven las 4 politicas y, como
+--     las politicas se suman con OR, se lee bien.
+--   * la politica real usa "tm.id = a.member_id", sin el ::text de aca abajo.
+-- No se toca la base para alinearla: las 4 politicas juntas funcionan y no
+-- dejan ver de mas. Se documenta para que nadie la de por aplicada tal cual.
 -- Problema: cuando auth.uid() es NULL (sesión expirada o JWT inválido),
 -- la vieja política soporte_conv_access() devolvía false para TODO.
 -- Solución: políticas separadas para admin (ve todo) y soporte (ve sus asignadas).
