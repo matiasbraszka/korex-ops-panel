@@ -251,17 +251,17 @@ Deno.serve(async (req: Request) => {
     // ── Modo apply: escribe en la DB ──
     if (mode === "apply") {
       if (!confirm) {
+        const ruleCount: Record<string, number> = {};
+        for (const m of matches) {
+          ruleCount[m.rule] = (ruleCount[m.rule] || 0) + 1;
+        }
+
         return jsonResp(200, {
           ok: true,
           mode: "apply",
           preview: true,
           total_would_update: matches.length,
-          by_rule: Object.fromEntries(
-            matches.reduce((acc: Record<string, number>, m) => {
-              acc[m.rule] = (acc[m.rule] || 0) + 1;
-              return acc;
-            }, {})
-          ),
+          by_rule: ruleCount,
           message: "Pass confirm:true to execute. This is a dry-run.",
         });
       }
@@ -295,6 +295,11 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      const ruleCount: Record<string, number> = {};
+      for (const m of matches) {
+        ruleCount[m.rule] = (ruleCount[m.rule] || 0) + 1;
+      }
+
       return jsonResp(200, {
         ok: true,
         mode: "apply",
@@ -302,12 +307,7 @@ Deno.serve(async (req: Request) => {
         total_matched: matches.length,
         total_updated: updated,
         total_errors: errors,
-        by_rule: Object.fromEntries(
-          matches.reduce((acc: Record<string, number>, m) => {
-            acc[m.rule] = (acc[m.rule] || 0) + 1;
-            return acc;
-          }, {})
-        ),
+        by_rule: ruleCount,
       });
     }
 
