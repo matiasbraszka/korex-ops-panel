@@ -45,7 +45,10 @@ const ICONS = {
   pulse: <path d="M3 12h4l3 8 4-16 3 8h4" strokeLinecap="round" strokeLinejoin="round" />,
 };
 
-const FUNNELS = [{ key: 'embudo1', name: 'Embudo 1' }, { key: 'embudo2', name: 'Embudo 2' }];
+// Prefijos de embudo posibles (embudo N = N-ésimo funnel del cliente). En el
+// dashboard se muestran los que tengan datos en el período (mínimo 2).
+const EMBUDO_KEYS = Array.from({ length: 6 }, (_, i) => `embudo${i + 1}`);
+const sumEmb = (b, suf) => EMBUDO_KEYS.reduce((s, p) => s + num(b[`${p}_${suf}`]), 0);
 const FUNNEL_ROWS = [
   { l: 'Visitas a la landing', s: 'visitas_landing', k: 'int' },
   { l: 'Leads registrados', s: 'leads_registrados', k: 'int' },
@@ -65,12 +68,16 @@ const fcell = (k, v) => {
 
 const LB_COLS = '26px 1.35fr 0.8fr 0.65fr 0.8fr 0.85fr 0.5fr 0.8fr 0.7fr 0.6fr 0.85fr';
 
-export default function DmeDashboard({ bag = {}, dailyColumns = [], perClient = [], periodLabel = '', footerLabel = '', isCombined = false, onSelectClient }) {
+export default function DmeDashboard({ bag = {}, dailyColumns = [], perClient = [], periodLabel = '', footerLabel = '', isCombined = false, onSelectClient, embudoNames = {} }) {
   const g = (k) => bag[k];
+  // Embudos a comparar: los que tienen algún dato en el período (mínimo los 2 primeros).
+  const FUNNELS = EMBUDO_KEYS
+    .map((key, i) => ({ key, name: embudoNames[key] || `Embudo ${i + 1}` }))
+    .filter((f, i) => i < 2 || FUNNEL_ROWS.some((r) => fin(bag[`${f.key}_${r.s}`])));
 
   // ── Hero: CashCollect + actividad ──
   const ccTotal = sum2(bag, 'cashcollect_pub', 'cashcollect_setups');
-  const gastoMeta = sum2(bag, 'embudo1_total_gastado', 'embudo2_total_gastado');
+  const gastoMeta = sumEmb(bag, 'total_gastado');
 
   // Sparkline: CashCollect acumulado por día (hasta el último día con datos).
   const daily = dailyColumns.map((c) => ({ has: (c.rows?.length || 0) > 0, cc: num(c.bag?.cashcollect_pub) + num(c.bag?.cashcollect_setups) }));
@@ -103,7 +110,7 @@ export default function DmeDashboard({ bag = {}, dailyColumns = [], perClient = 
     { l: 'Nuevos testimonios', v: fmtInt(g('nuevos_testimonios')), color: '#5B7CF5' },
     { l: 'Networkers cerraron', v: fmtInt(g('networkers_cerraron')), color: '#22C55E' },
     { l: 'Primer cierre', v: fmtInt(g('networkers_primer_cierre')), color: '#EAB308' },
-    { l: 'Total cierres (1+2)', v: fmtInt(g('cierres_total')), color: '#F97316' },
+    { l: 'Total cierres (embudos)', v: fmtInt(g('cierres_total')), color: '#F97316' },
   ];
 
   // ── Leaderboard de clientes ──
@@ -113,7 +120,7 @@ export default function DmeDashboard({ bag = {}, dailyColumns = [], perClient = 
       id: c.id, name: c.name, color: PALETTE[i % PALETTE.length], ini: initials(c.name),
       ccPub: b.cashcollect_pub, ccSet: b.cashcollect_setups,
       ccTot: sum2(b, 'cashcollect_pub', 'cashcollect_setups'),
-      gasto: sum2(b, 'embudo1_total_gastado', 'embudo2_total_gastado'),
+      gasto: sumEmb(b, 'total_gastado'),
       leads: b.leads_obtenidos, cpl: b.cpl, nuevos: b.nuevos_usuarios,
       cargas: b.cargas_totales_pub, avg: b.avg_inversion_usuario,
     };

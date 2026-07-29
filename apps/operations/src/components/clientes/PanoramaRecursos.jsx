@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { Check, X, Loader2, Search, Layers, Filter, Link2 } from 'lucide-react';
+import { Check, X, Loader2, Search, Layers, Filter, Link2, KeyRound } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { setCfgJump } from './funnels/cfgJump';
+import ClientAccessModal from './ClientAccessModal';
 
 // Panorama "qué tenemos / qué falta" por cliente Y por ESTRATEGIA (sub-pestaña de
 // Clientes). Cada cliente se divide en tantas filas como estrategias tenga, para
@@ -51,16 +54,18 @@ const fmtFecha = (iso) => {
 };
 
 // Tracking por funnel: 3 chips compactos P/C/E (Pixel / Clarity / Eventos), verde si está, gris si falta.
-function TrackDots({ pixel, clarity, eventos }) {
-  const items = [['P', 'Pixel de Meta', pixel], ['C', 'Microsoft Clarity', clarity], ['E', 'Eventos de conversión', eventos]];
+// Cada chip es un botón: clic → salto directo al campo en la config del funnel.
+function TrackDots({ pixel, clarity, eventos, onGo }) {
+  const items = [['P', 'Pixel de Meta', pixel, 'pixel_id'], ['C', 'Microsoft Clarity', clarity, 'clarity_id'], ['E', 'Eventos de conversión', eventos, 'eventos']];
   return (
     <div className="flex items-center gap-1">
-      {items.map(([letra, label, ok]) => (
-        <span key={letra} title={`${label}: ${ok ? 'sí' : 'falta'}`}
-          className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-md text-[10px] font-bold leading-none"
+      {items.map(([letra, label, ok, campo]) => (
+        <button key={letra} title={`${label}: ${ok ? 'sí' : 'falta'} · clic para ir a configurarlo`}
+          onClick={() => onGo?.(campo)}
+          className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-md text-[10px] font-bold leading-none border-none cursor-pointer hover:ring-2 hover:ring-[#C7D2FE]"
           style={ok ? { background: '#E6F7EE', color: '#15803D' } : { background: '#F1F3F7', color: '#B4BAC6' }}>
           {letra}
-        </span>
+        </button>
       ))}
     </div>
   );
@@ -94,7 +99,7 @@ function ResChip({ label, ok, count }) {
 // Celda del cliente: ocupa (rowSpan) todas las filas de sus estrategias e incluye los
 // RECURSOS del cliente (branding/colores/imágenes/testimonios), que son compartidos por
 // todas las estrategias — por eso van una sola vez acá, no por estrategia.
-function ClienteCell({ r, rowSpan }) {
+function ClienteCell({ r, rowSpan, onGoCuenta, onGoCrm }) {
   return (
     <td rowSpan={rowSpan} className="py-2.5 px-3 align-top border-r border-[#EEF1F6] bg-[#FCFDFE]"
       style={{ borderTop: '2px solid #E7EAF0', minWidth: 190 }}>
@@ -108,6 +113,21 @@ function ClienteCell({ r, rowSpan }) {
         <ResChip label="Logo" ok={r.tiene_logo} />
         <ResChip label="Colores" ok={r.tiene_colores} />
         <ResChip label="Imágenes" ok={r.imagenes_files > 0} count={r.imagenes_files} />
+        {/* Cuenta publicitaria del cliente (clients.meta_ads): clic → config, columna Cuentas. */}
+        {onGoCuenta
+          ? <button onClick={onGoCuenta} title="Cuenta publicitaria del cliente · clic para ir a cargarla" className="inline-flex items-center gap-1.5 text-[10.5px] border-none bg-transparent p-0 cursor-pointer text-left hover:opacity-80">
+              <span className="w-[70px] shrink-0 text-[#9098A4] font-medium">Cuenta ads</span>
+              <Have ok={r.tiene_cuenta} />
+            </button>
+          : <ResChip label="Cuenta ads" ok={r.tiene_cuenta} />}
+        {/* Acceso al CRM Korex de PRODUCCIÓN (clients.links): es del cliente, aplica a
+            todos sus funnels. Clic → abre sus accesos para verlo o cargarlo. */}
+        {onGoCrm
+          ? <button onClick={onGoCrm} title="Acceso al CRM Korex de producción · clic para ver o cargarlo" className="inline-flex items-center gap-1.5 text-[10.5px] border-none bg-transparent p-0 cursor-pointer text-left hover:opacity-80">
+              <span className="w-[70px] shrink-0 text-[#9098A4] font-medium">CRM prod</span>
+              <Have ok={r.tiene_crm_prod} />
+            </button>
+          : <ResChip label="CRM prod" ok={r.tiene_crm_prod} />}
       </div>
     </td>
   );
@@ -117,17 +137,37 @@ export default function PanoramaRecursos() {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
   const [soloFaltantes, setSoloFaltantes] = useState(false);
+  // Cliente cuyo modal de accesos está abierto (chip "CRM prod" de su celda).
+  const [accessClient, setAccessClient] = useState(null);
+  const { setSelectedId, clients } = useApp();
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const { data } = await supabase.rpc('clients_panorama');
-        if (alive) setRows(Array.isArray(data) ? data : []);
-      } catch { if (alive) setRows([]); }
-    })();
-    return () => { alive = false; };
-  }, []);
+  // Salto directo: deja la instrucción en sessionStorage y navega al cliente.
+  // FunnelsView → FunnelRow → DelEditor → FunnelConfigBlock la van leyendo y
+  // terminan con el campo exacto resaltado (ver cfgJump.js).
+  const irA = (clientId, funnelId, campo) => {
+    if (!clientId || !funnelId) return;
+    setCfgJump({ client: clientId, funnel: funnelId, campo });
+    setSelectedId(clientId);
+  };
+  // Para el chip de cuenta (a nivel cliente): salta al PRIMER funnel que tenga.
+  const primerFunnelId = (r) => {
+    for (const e of (r.estrategias || [])) for (const f of (e.funnels || [])) if (f.id) return f.id;
+    return null;
+  };
+
+  const cargar = async () => {
+    try {
+      const { data } = await supabase.rpc('clients_panorama');
+      setRows(Array.isArray(data) ? data : []);
+    } catch { setRows(r => r || []); }
+  };
+  useEffect(() => { cargar(); }, []);
+
+  // Abre los accesos del cliente (el modal necesita el cliente completo del contexto).
+  const abrirAccesos = (clientId) => {
+    const c = (clients || []).find(x => x.id === clientId);
+    if (c) setAccessClient(c);
+  };
 
   // Falta a nivel ESTRATEGIA: DEL sin vincular, sin avatar, sin guión de VSL, o algún funnel sin dominio.
   const estrFalta = (e) => !e.del_ok || e.n_sin_dominio > 0 || !e.tiene_avatar || !e.vsl_guionado;
@@ -195,7 +235,7 @@ export default function PanoramaRecursos() {
               if (estr.length === 0) {
                 return (
                   <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
-                    <ClienteCell r={r} rowSpan={1} />
+                    <ClienteCell r={r} rowSpan={1} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} onGoCrm={() => abrirAccesos(r.client_id)} />
                     <td className={tdBase} style={cellStyle(true)} colSpan={8}>
                       <span className="text-[11.5px] text-[#C2C7D0]">— sin funnel creado —</span>
                     </td>
@@ -206,7 +246,7 @@ export default function PanoramaRecursos() {
                 const st = cellStyle(i === 0);
                 return (
                   <tr key={r.client_id + ':' + (e.id || i)} className="hover:bg-[#FBFCFE]">
-                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length} />}
+                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} onGoCrm={() => abrirAccesos(r.client_id)} />}
                     {/* DEL vinculado */}
                     <td className={tdBase} style={st}>
                       {e.del_ok
@@ -236,7 +276,7 @@ export default function PanoramaRecursos() {
                     {/* Tracking (P/C/E) — por funnel */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><TrackDots pixel={!!f.tiene_pixel} clarity={!!f.tiene_clarity} eventos={!!f.tiene_eventos} /></div>))}</div>}
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><TrackDots pixel={!!f.tiene_pixel} clarity={!!f.tiene_clarity} eventos={!!f.tiene_eventos} onGo={(campo) => irA(r.client_id, f.id, campo)} /></div>))}</div>}
                     </td>
                     {/* Funnels */}
                     <td className={tdBase} style={st}>
@@ -259,7 +299,8 @@ export default function PanoramaRecursos() {
                             {(e.funnels || []).map((f, j) => (
                               f.dominio
                                 ? <a key={j} href={/^https?:\/\//i.test(f.dominio) ? f.dominio : `https://${f.dominio}`} target="_blank" rel="noopener" className="text-[11.5px] text-[#15803D] font-medium leading-[18px] h-[18px] truncate max-w-[240px] hover:underline" title={f.dominio}>{cleanDomain(f.dominio)}</a>
-                                : <span key={j} className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#DC2626] leading-[18px] h-[18px]"><X size={11} strokeWidth={3} />Falta</span>
+                                : <button key={j} onClick={() => irA(r.client_id, f.id, 'official_domain')} title="Clic para ir a cargar el dominio"
+                                    className="inline-flex items-center gap-1 text-[10.5px] font-bold text-[#DC2626] leading-[18px] h-[18px] border-none bg-transparent p-0 cursor-pointer hover:underline"><X size={11} strokeWidth={3} />Falta</button>
                             ))}
                           </div>}
                     </td>
@@ -280,7 +321,11 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = detectado y leído por el cerebro.</span>
         <span className="inline-flex items-center gap-1"><b>Avatar</b> = avatar cargado en el DEL · <b>VSL guión</b> = guión escrito en el DEL · <b>VSL editado</b> = video listo · <b>Testimonios</b> = videos cargados en la carpeta del funnel · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
         <span className="inline-flex items-center gap-1"><Layers size={12} />Logo/colores/imágenes son del cliente (una vez); Avatar/VSL/Testimonios/Tracking/fecha son por FUNNEL, alineados con cada funnel de la columna. Los checks leen el sistema nuevo (DEL nativo + carpetas del funnel).</span>
+        <span className="inline-flex items-center gap-1"><KeyRound size={12} /><b>CRM prod</b> = acceso al CRM Korex de producción cargado en los accesos del cliente (aplica a todos sus funnels); clic para verlo o cargarlo.</span>
       </div>
+
+      {/* Modal de accesos del cliente (chip "CRM prod"); al cerrar se recarga el panorama. */}
+      {accessClient && <ClientAccessModal client={accessClient} onClose={() => { setAccessClient(null); cargar(); }} />}
     </div>
   );
 }

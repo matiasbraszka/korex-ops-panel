@@ -2,11 +2,12 @@
 // reproduzcan"). Un clic en un recurso lo abre acá: los videos se reproducen con
 // controles, las imágenes se ven a tamaño completo. Nada de abrir otra pestaña.
 import { useEffect, useState } from 'react';
-import { X, ExternalLink, Download, FileText, Copy, Check } from 'lucide-react';
+import { X, ExternalLink, Download, FileText, Copy, Check, Loader2 } from 'lucide-react';
 
 export default function ResourceLightbox({ r, onClose }) {
   const [copied, setCopied] = useState(false);
   const [showTxt, setShowTxt] = useState(false);
+  const [bajando, setBajando] = useState(false);
   useEffect(() => {
     if (!r) return;
     setCopied(false); setShowTxt(false);
@@ -31,6 +32,40 @@ export default function ResourceLightbox({ r, onClose }) {
     ? (r.storage_path || '').replace('/thumbnail.jpg', '/original')
     : r.public_url;
 
+  // DESCARGA de verdad. El atributo download de un <a> solo funciona con archivos del
+  // MISMO dominio; como los videos viven en Bunny/Storage, el navegador lo ignoraba y
+  // abría otra pestaña. Solución: bajar el archivo como blob y dispararlo como descarga
+  // con el nombre del recurso. Si el navegador lo bloquea, cae a abrir la pestaña.
+  const descargar = async () => {
+    if (bajando) return;
+    setBajando(true);
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error('http ' + res.status);
+      const blob = await res.blob();
+      const ext = (() => {
+        const m = /\.([a-z0-9]{2,5})(\?|#|$)/i.exec(downloadUrl || '');
+        if (m && m[1] !== 'original') return '.' + m[1].toLowerCase();
+        if ((blob.type || '').includes('mp4') || isVid) return '.mp4';
+        if ((blob.type || '').includes('png')) return '.png';
+        if ((blob.type || '').includes('jpeg')) return '.jpg';
+        return '';
+      })();
+      const nombre = (r.title || 'recurso').replace(/[\\/:*?"<>|]/g, '_');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = /\.[a-z0-9]{2,5}$/i.test(nombre) ? nombre : nombre + ext;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch {
+      window.open(downloadUrl, '_blank', 'noopener');
+    } finally {
+      setBajando(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 md:p-8" style={{ background: 'rgba(8,12,20,.82)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="relative flex flex-col max-w-[92vw] max-h-[92vh]">
@@ -45,7 +80,7 @@ export default function ResourceLightbox({ r, onClose }) {
             </>
           )}
           <a href={r.public_url} target="_blank" rel="noreferrer" title="Abrir en pestaña nueva" className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10"><ExternalLink size={15} /></a>
-          <a href={downloadUrl} download target="_blank" rel="noreferrer" title={r.provider === 'bunny' ? 'Descargar el original (máxima calidad)' : 'Descargar'} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10"><Download size={15} /></a>
+          <button onClick={descargar} title={r.provider === 'bunny' ? 'Descargar el original (máxima calidad)' : 'Descargar'} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10 border-none bg-transparent cursor-pointer">{bajando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}</button>
           <button onClick={onClose} title="Cerrar (Esc)" className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:text-white hover:bg-white/10 border-none bg-transparent cursor-pointer"><X size={17} /></button>
         </div>
         <div className="flex gap-3 items-stretch">
