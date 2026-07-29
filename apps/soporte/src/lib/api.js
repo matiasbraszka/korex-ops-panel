@@ -5,7 +5,8 @@ import { fmtNextCita } from './format.js';
 
 // Columnas explícitas: participants (puede tener cientos de miembros en
 // comunidades) NO viaja con la lista — se pide aparte al abrir el panel.
-const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,custom_name,description,contact_id,client_id,status,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at';
+// status → estado (v28: renombrado para Fase 2/3 de mejora de soporte)
+const CONV_COLS = 'id,wa_jid,wa_phone,is_group,wa_profile_name,custom_name,description,contact_id,client_id,estado,assigned_to,unread_count,last_message_at,last_message_preview,last_message_direction,tags,notes,archived,created_at,tipo_conversacion,bloqueado_manual,bloqueado_por,bloqueado_at,seguimiento_fecha';
 const CONV_SELECT = `select=${CONV_COLS},contact:contacts(id,full_name,phone,email),client:clients(id,name)`;
 
 export async function fetchConversations() {
@@ -53,6 +54,18 @@ export async function fetchMessages(convId, { before = null, after = null } = {}
 }
 
 export async function patchConversation(id, patch, { extraFilter = '' } = {}) {
+  // Candado manual (Principio P2): cualquier patch a campos sensibles
+  // (client_id, tipo_conversacion, estado) setea el flag de bloqueo.
+  const isSensitive = patch.hasOwnProperty('client_id')
+    || patch.hasOwnProperty('tipo_conversacion')
+    || patch.hasOwnProperty('estado');
+
+  if (isSensitive) {
+    patch.bloqueado_manual = true;
+    patch.bloqueado_por = 'manual'; // la UI debe setearlo con el member_id real
+    patch.bloqueado_at = new Date().toISOString();
+  }
+
   return sbFetch(`wa_conversations?id=eq.${id}${extraFilter}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
@@ -370,4 +383,44 @@ export async function invokeTranscribir({ base64, mimetype, filename }) {
   });
   if (error) throw error; // error de transporte/HTTP (403, 400, red)
   return data; // { ok:true, text } | { ok:false, error, detail? }
+}
+
+// ── Tickets (wa_pending_items) — Fase 3 ──
+export async function fetchPendingItems(filters = {}) {
+  let path = 'wa_pending_items?select=*,conversation:wa_conversations(id,wa_profile_name,client_id)';
+  const conditions = [];
+
+  if (filters.estado) conditions.push(`estado=eq.${filters.estado}`);
+  if (filters.assigned_to) conditions.push(`assigned_to=eq.${encodeURIComponent(filters.assigned_to)}`);
+  if (filters.urgencia) conditions.push(`urgencia=eq.${filters.urgencia}`);
+  if (filters.conversation_id) conditions.push(`conversation_id=eq.${filters.conversation_id}`);
+  if (filters.client_id) conditions.push(`client_id=eq.${encodeURIComponent(filters.client_id)}`);
+
+  if (conditions.length) path += '&' + conditions.join('&');
+  path += '&order=wa_timestamp.desc&limit=500';
+
+  const rows = await sbFetch(path, { headers: { Prefer: 'return=representation' } });
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function patchPendingItem(id, patch) {
+  return sbFetch(`wa_pending_items?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+    headers: { Prefer: 'return=representation' },
+  });
+}
+
+export async function fetchSeguimiento(filters = {}) {
+  let path = 'wa_conversations_seguimiento?select=*';
+  const conditions = [];
+
+  if (filters.client_id) conditions.push(`client_id=eq.${encodeURIComponent(filters.client_id)}`);
+  if (filters.assigned_to) conditions.push(`assigned_to=eq.${encodeURIComponent(filters.assigned_to)}`);
+
+  if (conditions.length) path += '&' + conditions.join('&');
+  path += '&order=last_message_at.desc.nullslast&limit=500';
+
+  const rows = await sbFetch(path, { headers: { Prefer: 'return=representation' } });
+  return Array.isArray(rows) ? rows : [];
 }
