@@ -128,11 +128,23 @@ export const MOCK_RECURSO_COUNTS = { productos: 3 };
 // Lista plana (para resolver el título en la pantalla de subida).
 export const RECURSO_FOLDERS = RECURSO_SECTIONS.flatMap((s) => s.items);
 
-export const MOCK_TUTORIALES = [
-  { id: 't1', titulo: 'Cómo grabarte con el celular', dur: '2 min', url: '' },
-  { id: 't2', titulo: 'Luz y encuadre en 1 minuto', dur: '1 min', url: '' },
-  { id: 't3', titulo: 'Cómo subir tus archivos aquí', dur: '90 seg', url: '' },
-  { id: 't4', titulo: 'Tips para hablar natural a cámara', dur: '3 min', url: '' },
+// Guías del equipo (en producción salen de del_guias_globales).
+export const MOCK_GUIAS = [
+  {
+    id: 'g1',
+    titulo: 'Cómo grabarte el VSL',
+    texto: 'Dónde pararte, con qué luz y cómo leer el guion sin que se note.',
+    html: '<h2>Antes de grabar</h2><p>Busca una ventana y ponte de frente a ella. '
+      + 'El teléfono en horizontal, a la altura de tus ojos.</p><h2>Mientras grabas</h2>'
+      + '<ul><li>Habla como si le explicaras a un amigo.</li><li>Si te equivocas, para y repite la frase entera.</li></ul>',
+  },
+  {
+    id: 'g2',
+    titulo: 'Qué testimonios enviarnos',
+    texto: 'Cuántos, de qué tipo y qué tienen que decir para que sirvan.',
+    html: '<h2>Mínimo tres</h2><p>Con menos de tres no alcanza para armar la sección de la landing.</p>'
+      + '<h2>Qué tienen que contar</h2><ul><li>Cómo estaban antes.</li><li>Qué cambió.</li></ul>',
+  },
 ];
 
 // ── Funnels (el eje de todo) ─────────────────────────────────────────────────

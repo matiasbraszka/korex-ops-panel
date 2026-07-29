@@ -46,7 +46,9 @@ export const api = {
   guiones:   () => rpc('portal_cliente_guiones',   {}, () => mock.MOCK_GUIONES_LISTA),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
-  tutoriales:() => rpc('portal_cliente_tutoriales',{}, () => mock.MOCK_TUTORIALES),
+  // Las guías que el equipo mantiene en el DEL (del_guias_globales). Reemplazan
+  // a los tutoriales en video, que nunca existieron.
+  guias:     () => rpc('portal_cliente_guias',     {}, () => mock.MOCK_GUIAS),
 
   // Tareas asignadas al cliente (desaparecen al validarse en ops).
   tareas:      () => rpc('portal_cliente_tareas',      {}, () => mock.MOCK_TAREAS),

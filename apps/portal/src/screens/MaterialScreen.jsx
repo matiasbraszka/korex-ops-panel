@@ -92,12 +92,24 @@ export default function MaterialScreen() {
               {marca.map((m, mi) => {
                 const completo = m.estado === 'completo' || m.estado === 'validado';
                 const n = m.subidos ?? 0;
+                // Cuando la petición pide un mínimo, decir cuántas faltan es más
+                // accionable que "1 de 3": el cliente sabe qué tiene que hacer.
+                const faltan = m.target ? Math.max(0, m.target - n) : 0;
                 return (
                   <div key={m.id} onClick={() => nav(`/pedido/${m.id}`, { state: { pedido: m } })} role="button" style={{ ...fila, padding: '14px 16px', borderTop: mi > 0 ? '1px solid #EEF0F4' : 'none' }}>
                     <CarpetaTile lleno={n > 0} />
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <span style={filaTitulo}>{String(m.titulo || '').replace(/^Sube /, '').replace(/^./, (c) => c.toUpperCase())}</span>
-                      <span style={filaSub}>{m.target ? `${Math.min(n, m.target)} de ${m.target} subidas${n > m.target ? ` (¡nos diste ${n}!)` : ''}` : `${n} ${n === 1 ? 'archivo' : 'archivos'}`}</span>
+                      {/* De qué embudo es. Sin esto, dos peticiones iguales de dos
+                          embudos distintos se ven idénticas. */}
+                      {m.funnel && <ChipEmbudo nombre={m.funnel} />}
+                      <span style={filaSub}>
+                        {faltan > 0
+                          ? `${faltan === 1 ? 'Falta' : 'Faltan'} ${faltan} ${cosa(m.bucket, faltan)}${n > 0 ? ` · llevas ${n} de ${m.target}` : ''}`
+                          : m.target
+                            ? `${Math.min(n, m.target)} de ${m.target} subidas${n > m.target ? ` (¡nos diste ${n}!)` : ''}`
+                            : `${n} ${n === 1 ? 'archivo' : 'archivos'}`}
+                      </span>
                       {!completo && m.dias != null && <span style={filaNaranja}>Pedido {m.dias === 0 ? 'hoy' : `hace ${m.dias} ${m.dias === 1 ? 'día' : 'días'}`}</span>}
                     </div>
                     {completo ? chipSubido : chipFalta}
@@ -155,6 +167,36 @@ export default function MaterialScreen() {
         ¿No sabes qué es algo de esto? Escríbenos y te lo explicamos.
       </div>
     </>
+  );
+}
+
+// "Faltan 2 testimonios" se entiende; "faltan 2 archivos", menos. El sustantivo
+// sale de la carpeta a la que va el material.
+export function cosa(bucket, n) {
+  const uno = n === 1;
+  switch (bucket) {
+    case 'testimonios': return uno ? 'testimonio' : 'testimonios';
+    case 'autoridad':
+    case 'estilo_vida':
+    case 'productos': return uno ? 'foto' : 'fotos';
+    case 'branding': return uno ? 'archivo de marca' : 'archivos de marca';
+    default: return uno ? 'archivo' : 'archivos';
+  }
+}
+
+// De qué embudo es esta petición. Solo aparece en las que son de un embudo
+// concreto; las del cliente (branding, autoridad) valen para todos y no llevan.
+export function ChipEmbudo({ nombre }) {
+  return (
+    <span style={{
+      alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '2px 8px', borderRadius: 999, background: 'var(--mk-blue-bg)',
+      color: 'var(--mk-blue-ops)', fontSize: 10.5, fontWeight: 800,
+      letterSpacing: '.03em', maxWidth: '100%', overflow: 'hidden',
+      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    }}>
+      <IcoFolder size={11} stroke="currentColor" sw={2.3} />{nombre}
+    </span>
   );
 }
 

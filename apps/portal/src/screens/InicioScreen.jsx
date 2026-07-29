@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { destinoTarea } from '../data/taskNav';
-import { PerfilSheet, AccesosSheet, TutorialesSheet } from '../components/Layout';
+import { PerfilSheet, AccesosSheet, GuiasSheet } from '../components/Layout';
 import { T, display, microLabel } from '../components/theme';
 import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile, IcoDoc } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
@@ -165,6 +165,24 @@ export default function InicioScreen() {
       </>
       )}
 
+      {/* Lo que pide el cliente no es lo único que podemos usar: si tiene más
+          fotos o videos, la puerta está abierta y conviene decirlo. */}
+      <div onClick={() => nav('/material')} role="button"
+        style={{ margin: '22px 22px 0', padding: '16px 18px', borderRadius: 18, background: 'var(--mk-blue-bg)', border: '1px solid var(--mk-blue-border, #DDE5FB)', display: 'flex', alignItems: 'center', gap: 13, cursor: 'pointer' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <IcoImage size={19} stroke="var(--mk-blue-ops)" sw={2.1} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: T.ink, lineHeight: 1.3 }}>
+            ¿Tienes más contenido para darnos?
+          </div>
+          <div style={{ fontSize: 13, color: T.text2, lineHeight: 1.45, marginTop: 2 }}>
+            Imágenes, videos, lo que sea. Entra en <b>Material</b> y súbelo a la carpeta que corresponda.
+          </div>
+        </div>
+        <IcoChevR size={17} stroke={T.text3} sw={2.2} />
+      </div>
+
       <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
         ¿Algo no se entiende?{' '}
         {wa
@@ -172,9 +190,9 @@ export default function InicioScreen() {
           : <b style={{ color: T.text2 }}>Escríbenos por WhatsApp.</b>}
       </div>
 
-      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onTutoriales={() => { setPerfil(false); setTut(true); }} />}
+      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onGuias={() => { setPerfil(false); setTut(true); }} />}
       {acc && <AccesosSheet onClose={() => setAcc(false)} />}
-      {tut && <TutorialesSheet onClose={() => setTut(false)} />}
+      {tut && <GuiasSheet onClose={() => setTut(false)} />}
     </>
   );
 }

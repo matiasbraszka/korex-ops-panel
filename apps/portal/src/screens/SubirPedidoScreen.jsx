@@ -6,6 +6,8 @@ import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
 import { supabase } from '../lib/supabase';
 import { T, display, pill } from '../components/theme';
 import { IcoChevL, IcoCheck, IcoX, IcoArrowUp } from '../components/icons';
+import { GuiasSheet } from '../components/Layout';
+import { ChipEmbudo } from './MaterialScreen';
 
 // SUBIR MATERIAL de un pedido ("Sube 5 fotos tuyas", "Tu logo y tus colores"…)
 // — exacta al prototipo: ejemplos, "Así sí, así no", subida y "Ya subiste".
@@ -22,6 +24,7 @@ export default function SubirPedidoScreen() {
     || (Array.isArray(inicioData?.pendientes) ? inicioData.pendientes.find((p) => p.id === id) : null);
 
   const [subidas, setSubidas] = useState([]);   // {uid,name,pct,done,error}
+  const [guia, setGuia] = useState(null);       // título de la guía a abrir
   const demo = isDemo();
   const _uid = useRef(0);
 
@@ -85,10 +88,26 @@ export default function SubirPedidoScreen() {
 
           <div style={{ padding: '18px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>{pedido.titulo}</div>
+            {/* De qué embudo es. Dos peticiones iguales de dos embudos distintos
+                se ven idénticas sin esto. */}
+            {pedido.funnel && <ChipEmbudo nombre={pedido.funnel} />}
             <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, textWrap: 'pretty' }}>
               {pedido.descripcion}{esAutoridad ? ' Que se te vea la cara y haya buena luz.' : ''}
             </div>
           </div>
+
+          {/* Los testimonios son lo que más se traba: el cliente no sabe a quién
+              pedírselos ni qué tiene que decir. La guía ya existe, así que se
+              ofrece justo antes de subir, no escondida en el perfil. */}
+          {esTest && (
+            <div onClick={() => setGuia('testimonios')} role="button"
+              style={{ margin: '18px 22px 0', padding: '13px 15px', borderRadius: 16, background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', gap: 11, cursor: 'pointer' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>?</div>
+              <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.ink, lineHeight: 1.35 }}>
+                ¿Dudas de cómo conseguir testimonios? <span style={{ color: 'var(--mk-blue-ops)' }}>Mira esta guía</span>
+              </div>
+            </div>
+          )}
 
           {/* Ejemplos + "Así sí, así no" — el contenido cambia según QUÉ se pide. */}
           {(esFotos || esLogo || esTest) && (
@@ -248,6 +267,8 @@ export default function SubirPedidoScreen() {
             {listo ? 'Volver al inicio' : 'Lo hago más tarde'}
           </div>
         </div>
+
+        {guia && <GuiasSheet abrir={guia} onClose={() => setGuia(null)} />}
       </KxScreen>
     </PhoneFrame>
   );

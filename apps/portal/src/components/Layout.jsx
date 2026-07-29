@@ -1,16 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { HelpCircle, X, Play, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink, LogOut, ChevronRight } from 'lucide-react';
+import { BookOpen, X, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink, LogOut, ChevronRight } from 'lucide-react';
 import PhoneFrame, { KxScreen } from './PhoneFrame';
 import BottomNav from './BottomNav';
 import { api } from '../data/portalApi';
 import { useAsync } from './ui';
 import { usePortalAuth } from '../auth/PortalAuthProvider';
 import { T } from './theme';
+import { limpiarHtml } from './richHtml';
 import CandadoSheet from '../onboarding/gate/CandadoSheet';
 
-// Hoja de PERFIL: datos + accesos + tutoriales + cerrar sesión.
-export function PerfilSheet({ clientName, onClose, onAccesos, onTutoriales }) {
+// Hoja de PERFIL: datos + accesos + guías + cerrar sesión.
+export function PerfilSheet({ clientName, onClose, onAccesos, onGuias }) {
   const { signOut, user } = usePortalAuth();
   const fila = (Icon, color, bg, titulo, sub, onClick) => (
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 4px', cursor: 'pointer', borderTop: '1px solid #F0F2F5' }}>
@@ -39,7 +40,7 @@ export function PerfilSheet({ clientName, onClose, onAccesos, onTutoriales }) {
           <button onClick={onClose} aria-label="Cerrar" style={{ width: 36, height: 36, borderRadius: 999, border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} color="#6B7280" /></button>
         </div>
         {fila(KeyRound, '#B45309', '#FEF3C7', 'Tus accesos', 'Las claves de tus plataformas, a mano', onAccesos)}
-        {fila(HelpCircle, T.primary, T.primarySoft, 'Tutoriales', 'Videos cortos para grabar como un pro', onTutoriales)}
+        {fila(BookOpen, T.primary, T.primarySoft, 'Guías', 'Cómo grabar y qué mandarnos', onGuias)}
         {fila(LogOut, T.red, T.redSoft, 'Cerrar sesión', null, () => { if (window.confirm('¿Quieres cerrar sesión?')) signOut(); })}
       </div>
     </div>
@@ -110,33 +111,72 @@ export function AccesosSheet({ onClose }) {
 
 const iconBtn = { width: 44, height: 44, borderRadius: 12, border: '1px solid #E2E5EB', background: '#F7F8FA', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 };
 
-export function TutorialesSheet({ onClose }) {
-  const { data } = useAsync(() => api.tutoriales(), []);
+// Hoja de GUÍAS. Reemplaza a la de Tutoriales, que prometía videos que no
+// existen. Las guías sí existen y son las mismas que el equipo mantiene en el
+// DEL (del_guias_globales): cómo grabarse los anuncios, cómo grabarse el VSL y
+// qué testimonios enviarnos. Dos niveles: la lista, y la guía abierta.
+export function GuiasSheet({ onClose, abrir }) {
+  const { data, loading } = useAsync(() => api.guias(), []);
   const items = data || [];
+  const [sel, setSel] = useState(null);
+  // `abrir` permite entrar directo a una guía por título (lo usa el banner de
+  // testimonios), sin obligar al cliente a buscarla en la lista.
+  useEffect(() => {
+    if (!abrir || sel || !items.length) return;
+    const q = String(abrir).toLowerCase();
+    const g = items.find((x) => String(x.titulo || '').toLowerCase().includes(q));
+    if (g) setSel(g);
+  }, [abrir, items, sel]);
+
+  const guia = sel && items.find((g) => g.id === sel.id);
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '82vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
+      <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '86vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
         <div style={{ width: 44, height: 5, borderRadius: 999, background: '#E2E5EB', margin: '10px auto 16px' }} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Tutoriales</h2>
-          <button onClick={onClose} aria-label="Cerrar" style={{ width: 38, height: 38, borderRadius: 999, border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            {guia && (
+              <button onClick={() => setSel(null)} aria-label="Volver" style={{ width: 34, height: 34, borderRadius: 999, border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 17, color: '#6B7280' }}>‹</button>
+            )}
+            <h2 style={{ margin: 0, fontSize: guia ? 19 : 22, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>
+              {guia ? guia.titulo : 'Guías'}
+            </h2>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ width: 38, height: 38, borderRadius: 999, border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <X size={20} color="#6B7280" />
           </button>
         </div>
-        <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>Videos cortos para que grabes como un profesional. Toca para ver.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {items.map((t) => (
-            <a key={t.id} href={t.url || '#'} target={t.url ? '_blank' : undefined} rel="noreferrer" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 14, background: '#F7F8FA', border: '1px solid #E2E5EB', borderRadius: 16, padding: 12, cursor: 'pointer' }}>
-              <div style={{ width: 76, height: 60, borderRadius: 12, background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Play size={26} color="#FFFFFF" fill="#FFFFFF" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26', lineHeight: 1.3 }}>{t.titulo}</div>
-                <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 3 }}>{t.dur}</div>
-              </div>
-            </a>
-          ))}
-        </div>
+
+        {guia ? (
+          <div className="guia-rich" style={{ paddingTop: 8 }}
+            dangerouslySetInnerHTML={{ __html: limpiarHtml(guia.html) }} />
+        ) : (
+          <>
+            <p style={{ margin: '0 0 18px', fontSize: 15, color: '#6B7280', lineHeight: 1.4 }}>
+              Cómo grabar y qué mandarnos, explicado paso a paso. Toca para leer.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {!loading && items.length === 0 && (
+                <div style={{ fontSize: 14, color: '#9CA3AF' }}>Todavía no hay guías cargadas.</div>
+              )}
+              {items.map((g) => (
+                <div key={g.id} onClick={() => setSel(g)} role="button" style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#F7F8FA', border: '1px solid #E2E5EB', borderRadius: 16, padding: 14, cursor: 'pointer' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <BookOpen size={20} color={T.primary} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1D26', lineHeight: 1.3 }}>{g.titulo}</div>
+                    <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {String(g.texto || '').slice(0, 70) || 'Abrir la guía'}
+                    </div>
+                  </div>
+                  <span style={{ color: '#C3C9D4', fontSize: 18, flexShrink: 0 }}>›</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

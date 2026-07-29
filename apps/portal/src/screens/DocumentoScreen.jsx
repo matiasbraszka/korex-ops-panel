@@ -5,6 +5,7 @@ import BottomNav from '../components/BottomNav';
 import { Loading, DemoBanner, Spinner, useAsync } from '../components/ui';
 import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
 import { T } from '../components/theme';
+import { limpiarHtml } from '../components/richHtml';
 import { IcoChevL, IcoChevR, IcoMenu, IcoComment, IcoCheck, IcoX, IcoUpload, IcoInfo, IcoFile, IcoPlaySoft, IcoArrowUp } from '../components/icons';
 
 // DOCUMENTO — la pantalla central del portal, exacta al prototipo:
@@ -37,13 +38,9 @@ const cargarGuias = async () => {
   } catch { return MOCK_GUIAS; }
 };
 
-// Sanitizado mínimo del HTML de las guías (lo escribe solo el equipo, pero
-// igual: sin scripts, iframes ni handlers).
-const limpiarHtml = (h) => String(h || '')
-  .replace(/<\/(?:script|style|iframe|object|embed)>/gi, '')
-  .replace(/<(?:script|style|iframe|object|embed)[^>]*>/gi, '')
-  .replace(/\son\w+="[^"]*"/gi, '').replace(/\son\w+='[^']*'/gi, '')
-  .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"');
+// El sanitizador y los estilos `.guia-rich` viven fuera (components/richHtml.js
+// e index.css): los comparte con la hoja de Guías del perfil, que se abre sin
+// pasar por esta pantalla.
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const rxEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -333,20 +330,6 @@ export default function DocumentoScreen() {
             {/* ── GUÍAS (páginas del sistema, iguales para todos los clientes) ── */}
             {esGuias && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 10 }}>
-                <style>{`
-                  .guia-rich{font-size:15px;line-height:1.62;color:var(--mk-text)}
-                  .guia-rich p{margin:0 0 12px}
-                  .guia-rich h1,.guia-rich h2,.guia-rich h3{color:var(--mk-ink);letter-spacing:-.01em;line-height:1.25;margin:18px 0 8px}
-                  .guia-rich h1{font-size:19px}.guia-rich h2{font-size:17px}.guia-rich h3{font-size:15.5px}
-                  .guia-rich ul,.guia-rich ol{margin:0 0 12px;padding-left:22px}
-                  .guia-rich li{margin:4px 0}
-                  .guia-rich img{max-width:100%;border-radius:12px}
-                  .guia-rich hr{border:none;border-top:2px solid var(--mk-border);margin:16px 0}
-                  .guia-rich a{color:var(--mk-blue-ink);font-weight:600}
-                  .guia-rich table{width:100%;border-collapse:collapse;margin:0 0 14px;font-size:13.5px}
-                  .guia-rich th{text-align:left;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-text2);background:var(--mk-surface2);padding:8px 10px;border:1px solid var(--mk-border)}
-                  .guia-rich td{padding:8px 10px;border:1px solid var(--mk-border);vertical-align:top}
-                `}</style>
                 <div style={{ fontSize: 14, lineHeight: 1.55, color: T.text2, margin: '-8px 0 2px' }}>
                   Todo lo que necesitas saber antes de ponerte frente a la cámara. Léelas una vez y graba tranquilo.
                 </div>

@@ -1,9 +1,16 @@
 // supabase/functions/portal-slack-notify/index.ts
-// Avisa al EQUIPO por Slack (canal del cliente) cuando el cliente hace algo en
-// el portal: sube material, marca grabado, comenta, dice que dio acceso a Meta.
+// Avisa al EQUIPO por Slack cuando el cliente hace algo en el portal: sube
+// material, marca un guion como grabado, comenta, dice que dio acceso a Meta.
 // La llaman las RPCs del portal vía pg_net con el secret de app_settings
 // (portal_config.slack_notify_secret). Token del bot: venta_form_config.slack_bot_token
-// (el mismo lugar que usa informe-slack). Canal: clients.slack_channel_id.
+// (el mismo lugar que usa informe-slack).
+//
+// CANAL: uno solo y central, `portal_config.slack_canal_notificaciones`
+// (#notificaciones-clientes). Antes cada aviso caía en el canal privado del
+// cliente, donde se mezclaba con la conversación del día y no había forma de ver
+// de un vistazo qué hicieron todos. Si el canal central no está configurado,
+// cae al canal del cliente como antes — así nada deja de avisar por un setting
+// que falta.
 // verify_jwt = false (autentica por x-portal-secret).
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -22,7 +29,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return j({ ok: false, error: "method" }, 405);
   try {
     const { data: cfg } = await supabase.from("app_settings").select("value").eq("key", "portal_config").maybeSingle();
-    const secret = str((cfg?.value as Record<string, unknown>)?.slack_notify_secret);
+    const portalCfg = (cfg?.value ?? {}) as Record<string, unknown>;
+    const secret = str(portalCfg.slack_notify_secret);
     if (!secret || req.headers.get("x-portal-secret") !== secret) return j({ ok: false, error: "unauthorized" }, 401);
 
     const { client_id, texto } = await req.json().catch(() => ({}));
@@ -33,7 +41,7 @@ Deno.serve(async (req) => {
     if (!token) return j({ ok: true, skipped: "no_slack_token" });
 
     const { data: cli } = await supabase.from("clients").select("name, slack_channel_id").eq("id", client_id).maybeSingle();
-    const channel = str(cli?.slack_channel_id);
+    const channel = str(portalCfg.slack_canal_notificaciones) || str(cli?.slack_channel_id);
     if (!channel) return j({ ok: true, skipped: "sin_canal", client: str(cli?.name) });
 
     const res = await fetch("https://slack.com/api/chat.postMessage", {
