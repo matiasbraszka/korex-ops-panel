@@ -34,13 +34,14 @@ const TIPO = {
 const FASES = [
   { stage: 'vsl',      n: 'VSL',      pasos: { nada: 'Sin guión', guion: 'Guionado', editado: 'Editado' } },
   { stage: 'anuncios', n: 'Anuncios', pasos: { nada: 'Sin copy', guion: 'Copy hecho', grabado: 'Grabados', editado: 'Editados' } },
-  { stage: 'landing',  n: 'Landing',  pasos: { nada: 'Sin copy', disenado: 'Diseñada' } },
+  { stage: 'landing',  n: 'Landing',  pasos: { nada: 'Sin copy', pagina: 'Falta publicidad', disenado: 'Diseñada' } },
 ];
 // 3 tonos, no uno por escalon: la palabra es la que manda, el color la refuerza de lejos.
 const TONO = {
   nada:     { c: '#9CA3AF', bg: '#F4F5F7', b: '#E7E9ED' },
   guion:    { c: '#B45309', bg: '#FFF7ED', b: '#F6E0B8' },
   grabado:  { c: '#B45309', bg: '#FFF7ED', b: '#F6E0B8' },
+  pagina:   { c: '#B45309', bg: '#FFF7ED', b: '#F6E0B8' },
   editado:  { c: '#15803D', bg: '#ECFDF5', b: '#C7EBD4' },
   disenado: { c: '#15803D', bg: '#ECFDF5', b: '#C7EBD4' },
 };
