@@ -18,9 +18,15 @@ const durLabel = (palabras) => {
   return `${m}:${String(s).padStart(2, '0')} min`;
 };
 
-// Tab GUIONES — bienvenida animada la primera vez; después, "Tus guiones para
-// grabar": una tarjeta por guion (título, resumen, duración) que lleva al
-// guion exacto dentro del documento. Los datos salen del DEL real (para_grabar).
+// Tab GUIONES — bienvenida animada la primera vez; después, "Tus guiones": una
+// tarjeta por guion (título, resumen, duración) que lleva al guion exacto dentro
+// del documento. Los datos salen del DEL real.
+//
+// Están los de GRABAR (para_grabar) y los de REVISAR (accion "revisar" en el
+// DEL, terminados). Antes solo se listaban los primeros: una pestaña puesta para
+// revisar aparecía en la Home y adentro del documento, y justo en la pantalla
+// que se llama Guiones no estaba.
+const pendiente = (g) => (g.tarea === 'revisar' ? !g.revisado : (!g.grabado && !g.entregado));
 export default function GuionesTabScreen() {
   const nav = useNavigate();
   const { data: guiones, loading } = useAsync(() => api.guiones(), []);
@@ -34,31 +40,44 @@ export default function GuionesTabScreen() {
     setIntro(false);
   };
 
-  // ── LISTA "Tus guiones para grabar" ──
+  // ── LISTA "Tus guiones" ──
   if (!intro) {
-    const pendientes = lista.filter((g) => !g.grabado && !g.entregado);
-    const hechos = lista.filter((g) => g.grabado || g.entregado);
+    const pendientes = lista.filter(pendiente);
+    const hechos = lista.filter((g) => !pendiente(g));
+    const porRevisar = pendientes.filter((g) => g.tarea === 'revisar').length;
+    const porGrabar = pendientes.length - porRevisar;
     return (
       <PhoneFrame>
         <KxScreen>
           <div className="kxs" style={{ flex: 1, overflowY: 'auto' }}>
             {isDemo() && <div style={{ padding: '12px 22px 0' }}><DemoBanner /></div>}
             <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={display(30, '-0.035em')}>Tus guiones para grabar</div>
+              <div style={display(30, '-0.035em')}>Tus guiones</div>
               <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>
-                Preparamos estos textos para que solo tengas que leer y brillar frente a la cámara.
+                {porRevisar > 0
+                  ? 'Los que tienes que grabar y los que solo tienes que leer y aprobar.'
+                  : 'Preparamos estos textos para que solo tengas que leer y brillar frente a la cámara.'}
               </div>
               {pendientes.length > 0 && (
-                <span style={{ ...pill('var(--mk-green-bg)', 'var(--mk-green)'), alignSelf: 'flex-start', marginTop: 2, gap: 6 }}>
-                  <IcoCheck size={11} stroke="var(--mk-green)" sw={3} />
-                  {pendientes.length === 1 ? '1 listo para hoy' : `${pendientes.length} listos para hoy`}
-                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 2 }}>
+                  {porGrabar > 0 && (
+                    <span style={{ ...pill('var(--mk-green-bg)', 'var(--mk-green)'), gap: 6 }}>
+                      <IcoCheck size={11} stroke="var(--mk-green)" sw={3} />
+                      {porGrabar === 1 ? '1 para grabar' : `${porGrabar} para grabar`}
+                    </span>
+                  )}
+                  {porRevisar > 0 && (
+                    <span style={{ ...pill('var(--mk-blue-bg)', 'var(--mk-blue-ops)'), gap: 6 }}>
+                      {porRevisar === 1 ? '1 para revisar' : `${porRevisar} para revisar`}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
             {lista.length === 0 && (
               <div style={{ margin: '24px 22px 0', background: '#fff', borderRadius: 20, padding: 24, textAlign: 'center', color: T.text2, fontSize: 14.5, lineHeight: 1.5, boxShadow: 'var(--shadow-md)' }}>
-                Todavía no hay guiones marcados para grabar.<br />Cuando el equipo los prepare, aparecen aquí.
+                Todavía no hay guiones listos.<br />Cuando el equipo los prepare, aparecen aquí.
               </div>
             )}
 
@@ -68,7 +87,7 @@ export default function GuionesTabScreen() {
             </div>
 
             <div style={{ padding: '24px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
-              Dentro del guion puedes comentar lo que quieras cambiar y subir tus videos al final.
+              Dentro del guion puedes comentar lo que quieras cambiar{porRevisar > 0 ? ', marcarlo como revisado' : ''} y subir tus videos al final.
             </div>
           </div>
           <BottomNav activeOverride="/guiones" />
@@ -182,6 +201,7 @@ const introCaption = { fontSize: 13, lineHeight: 1.5, color: 'var(--mk-text2)', 
 // Tarjeta de un guion: qué es, cuánto dura y ABRIR GUIÓN (va al guion exacto).
 function GuionCard({ g, nav, hecho = false }) {
   const esVsl = g.docTipo === 'vsl';
+  const esRevisar = g.tarea === 'revisar';
   const abrir = () => nav(`/documento/${g.strategyId}/${g.docTipo}`, { state: { secId: g.id } });
   return (
     <div onClick={abrir} role="button" style={{ cursor: 'pointer', background: '#fff', borderRadius: 20, padding: 18, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 12, opacity: hecho ? 0.72 : 1 }}>
@@ -191,15 +211,21 @@ function GuionCard({ g, nav, hecho = false }) {
             ? <IcoPlaySoft size={20} stroke="var(--mk-green)" sw={2} />
             : <IcoVideo size={20} stroke="var(--mk-blue-ops)" sw={1.9} />}
         </div>
-        {(g.grabado || g.entregado) && (
-          <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
-            {g.entregado ? 'Entregado' : 'Grabado'}
-          </span>
-        )}
+        {esRevisar
+          ? (
+            <span style={pill(g.revisado ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)', g.revisado ? 'var(--mk-green)' : 'var(--mk-blue-ops)')}>
+              {g.revisado ? 'Revisado' : 'Para revisar'}
+            </span>
+          )
+          : (g.grabado || g.entregado) && (
+            <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
+              {g.entregado ? 'Entregado' : 'Grabado'}
+            </span>
+          )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.18, color: T.ink, textWrap: 'balance' }}>{g.titulo}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Guion de anuncios'} · {g.funnel}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Guion de anuncios'} · {g.funnel}{esRevisar ? ' · Solo leer' : ''}</div>
         {g.snippet && (
           <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {g.snippet}{g.snippet.length >= 160 ? '…' : ''}
@@ -212,7 +238,7 @@ function GuionCard({ g, nav, hecho = false }) {
           {durLabel(g.palabras)}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.primary }}>
-          Abrir guion
+          {esRevisar ? 'Leer y revisar' : 'Abrir guion'}
           <IcoChevR size={13} stroke="var(--mk-blue-ops)" sw={2.6} />
         </span>
       </div>
