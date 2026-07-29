@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { Check, X, Loader2, Search, Layers, Filter, Link2 } from 'lucide-react';
+import { Check, X, Loader2, Search, Layers, Filter, Link2, KeyRound } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { setCfgJump } from './funnels/cfgJump';
+import ClientAccessModal from './ClientAccessModal';
 
 // Panorama "qué tenemos / qué falta" por cliente Y por ESTRATEGIA (sub-pestaña de
 // Clientes). Cada cliente se divide en tantas filas como estrategias tenga, para
@@ -98,7 +99,7 @@ function ResChip({ label, ok, count }) {
 // Celda del cliente: ocupa (rowSpan) todas las filas de sus estrategias e incluye los
 // RECURSOS del cliente (branding/colores/imágenes/testimonios), que son compartidos por
 // todas las estrategias — por eso van una sola vez acá, no por estrategia.
-function ClienteCell({ r, rowSpan, onGoCuenta }) {
+function ClienteCell({ r, rowSpan, onGoCuenta, onGoCrm }) {
   return (
     <td rowSpan={rowSpan} className="py-2.5 px-3 align-top border-r border-[#EEF1F6] bg-[#FCFDFE]"
       style={{ borderTop: '2px solid #E7EAF0', minWidth: 190 }}>
@@ -119,6 +120,14 @@ function ClienteCell({ r, rowSpan, onGoCuenta }) {
               <Have ok={r.tiene_cuenta} />
             </button>
           : <ResChip label="Cuenta ads" ok={r.tiene_cuenta} />}
+        {/* Acceso al CRM Korex de PRODUCCIÓN (clients.links): es del cliente, aplica a
+            todos sus funnels. Clic → abre sus accesos para verlo o cargarlo. */}
+        {onGoCrm
+          ? <button onClick={onGoCrm} title="Acceso al CRM Korex de producción · clic para ver o cargarlo" className="inline-flex items-center gap-1.5 text-[10.5px] border-none bg-transparent p-0 cursor-pointer text-left hover:opacity-80">
+              <span className="w-[70px] shrink-0 text-[#9098A4] font-medium">CRM prod</span>
+              <Have ok={r.tiene_crm_prod} />
+            </button>
+          : <ResChip label="CRM prod" ok={r.tiene_crm_prod} />}
       </div>
     </td>
   );
@@ -128,7 +137,9 @@ export default function PanoramaRecursos() {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
   const [soloFaltantes, setSoloFaltantes] = useState(false);
-  const { setSelectedId } = useApp();
+  // Cliente cuyo modal de accesos está abierto (chip "CRM prod" de su celda).
+  const [accessClient, setAccessClient] = useState(null);
+  const { setSelectedId, clients } = useApp();
 
   // Salto directo: deja la instrucción en sessionStorage y navega al cliente.
   // FunnelsView → FunnelRow → DelEditor → FunnelConfigBlock la van leyendo y
@@ -144,16 +155,19 @@ export default function PanoramaRecursos() {
     return null;
   };
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const { data } = await supabase.rpc('clients_panorama');
-        if (alive) setRows(Array.isArray(data) ? data : []);
-      } catch { if (alive) setRows([]); }
-    })();
-    return () => { alive = false; };
-  }, []);
+  const cargar = async () => {
+    try {
+      const { data } = await supabase.rpc('clients_panorama');
+      setRows(Array.isArray(data) ? data : []);
+    } catch { setRows(r => r || []); }
+  };
+  useEffect(() => { cargar(); }, []);
+
+  // Abre los accesos del cliente (el modal necesita el cliente completo del contexto).
+  const abrirAccesos = (clientId) => {
+    const c = (clients || []).find(x => x.id === clientId);
+    if (c) setAccessClient(c);
+  };
 
   // Falta a nivel ESTRATEGIA: DEL sin vincular, sin avatar, sin guión de VSL, o algún funnel sin dominio.
   const estrFalta = (e) => !e.del_ok || e.n_sin_dominio > 0 || !e.tiene_avatar || !e.vsl_guionado;
@@ -221,7 +235,7 @@ export default function PanoramaRecursos() {
               if (estr.length === 0) {
                 return (
                   <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
-                    <ClienteCell r={r} rowSpan={1} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} />
+                    <ClienteCell r={r} rowSpan={1} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} onGoCrm={() => abrirAccesos(r.client_id)} />
                     <td className={tdBase} style={cellStyle(true)} colSpan={8}>
                       <span className="text-[11.5px] text-[#C2C7D0]">— sin funnel creado —</span>
                     </td>
@@ -232,7 +246,7 @@ export default function PanoramaRecursos() {
                 const st = cellStyle(i === 0);
                 return (
                   <tr key={r.client_id + ':' + (e.id || i)} className="hover:bg-[#FBFCFE]">
-                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} />}
+                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} onGoCrm={() => abrirAccesos(r.client_id)} />}
                     {/* DEL vinculado */}
                     <td className={tdBase} style={st}>
                       {e.del_ok
@@ -307,7 +321,11 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = detectado y leído por el cerebro.</span>
         <span className="inline-flex items-center gap-1"><b>Avatar</b> = avatar cargado en el DEL · <b>VSL guión</b> = guión escrito en el DEL · <b>VSL editado</b> = video listo · <b>Testimonios</b> = videos cargados en la carpeta del funnel · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
         <span className="inline-flex items-center gap-1"><Layers size={12} />Logo/colores/imágenes son del cliente (una vez); Avatar/VSL/Testimonios/Tracking/fecha son por FUNNEL, alineados con cada funnel de la columna. Los checks leen el sistema nuevo (DEL nativo + carpetas del funnel).</span>
+        <span className="inline-flex items-center gap-1"><KeyRound size={12} /><b>CRM prod</b> = acceso al CRM Korex de producción cargado en los accesos del cliente (aplica a todos sus funnels); clic para verlo o cargarlo.</span>
       </div>
+
+      {/* Modal de accesos del cliente (chip "CRM prod"); al cerrar se recarga el panorama. */}
+      {accessClient && <ClientAccessModal client={accessClient} onClose={() => { setAccessClient(null); cargar(); }} />}
     </div>
   );
 }
