@@ -16,13 +16,19 @@ function Av({ m, size = 24 }) {
   return <span style={{ ...s, background: m?.color || '#9CA3AF', color: '#fff', fontSize: size * 0.4, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(m?.initials || m?.name?.slice(0, 2) || '?').toUpperCase()}</span>;
 }
 
-export default function AssigneePicker({ value, onChange, size = 24 }) {
+// `cliente` (opcional): { name, active, onSelect } — permite asignar la tarea AL
+// CLIENTE: aparece como opción arriba de la lista y, elegida, la tarea se ve en
+// la home de SU portal (tasks.asignada_cliente). Elegir a alguien del equipo la
+// devuelve al equipo (y desaparece del portal).
+export default function AssigneePicker({ value, onChange, size = 24, cliente = null }) {
   const { teamMembers } = useApp();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
   const btnRef = useRef(null);
   const cur = memberFromName(teamMembers, value);
+  const esCliente = !!cliente?.active;
+  const clienteIni = (cliente?.name || 'CL').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   useEffect(() => {
     if (!open) return;
@@ -49,22 +55,32 @@ export default function AssigneePicker({ value, onChange, size = 24 }) {
 
   return (
     <span ref={ref} style={{ position: 'relative', display: 'inline-flex' }} onClick={(e) => e.stopPropagation()}>
-      <span ref={btnRef} onClick={() => setOpen(v => !v)} title={cur ? `Responsable: ${cur.name}` : 'Asignar responsable'} style={{ cursor: 'pointer', display: 'inline-flex' }}>
-        {cur
-          ? <Av m={cur} size={size} />
-          : <span style={{ width: size, height: size, borderRadius: '50%', border: '1.5px dashed #CBD0D8', color: '#B6B9C0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><UserPlus size={size * 0.55} /></span>}
+      <span ref={btnRef} onClick={() => setOpen(v => !v)} title={esCliente ? `La hace el cliente: ${cliente.name} (la ve en su portal)` : cur ? `Responsable: ${cur.name}` : 'Asignar responsable'} style={{ cursor: 'pointer', display: 'inline-flex' }}>
+        {esCliente
+          ? <span style={{ width: size, height: size, borderRadius: '50%', background: '#059669', color: '#fff', fontSize: size * 0.38, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 0 2px #A7F3D0' }}>{clienteIni}</span>
+          : cur
+            ? <Av m={cur} size={size} />
+            : <span style={{ width: size, height: size, borderRadius: '50%', border: '1.5px dashed #CBD0D8', color: '#B6B9C0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><UserPlus size={size * 0.55} /></span>}
       </span>
       {open && pos && (
         <div data-assignee-popover style={{ position: 'fixed', left: pos.left, top: pos.top, width: pos.width, maxHeight: 300, overflowY: 'auto', zIndex: 1000, background: '#fff', border: '1px solid #E2E5EB', borderRadius: 10, boxShadow: '0 12px 32px rgba(10,22,40,.16)', padding: 6 }}>
-          <div onClick={() => { onChange(''); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: !cur ? '#F5F7FF' : 'transparent' }}>
+          <div onClick={() => { onChange(''); if (esCliente) cliente?.onSelect?.(false); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: !cur && !esCliente ? '#F5F7FF' : 'transparent' }}>
             <span style={{ width: 24, height: 24, borderRadius: '50%', border: '1.5px dashed #CBD0D8', color: '#B6B9C0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UserPlus size={13} /></span>
             <span style={{ flex: 1, fontSize: 13, color: '#6B7280' }}>Sin asignar</span>
-            {!cur && <Check size={15} stroke="#5B7CF5" strokeWidth={2.2} />}
+            {!cur && !esCliente && <Check size={15} stroke="#5B7CF5" strokeWidth={2.2} />}
           </div>
+          {/* El CLIENTE como asignado: la tarea es de él y aparece en la home de su portal. */}
+          {cliente && (
+            <div onClick={() => { cliente.onSelect?.(true); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: esCliente ? '#ECFDF5' : 'transparent', borderBottom: '1px solid #F0F2F5', marginBottom: 2 }}>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#059669', color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{clienteIni}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#065F46', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Cliente · {cliente.name}</span>
+              {esCliente ? <Check size={15} stroke="#059669" strokeWidth={2.2} /> : <span style={{ fontSize: 9, fontWeight: 800, color: '#059669', background: '#D1FAE5', borderRadius: 999, padding: '2px 6px', flexShrink: 0 }}>PORTAL</span>}
+            </div>
+          )}
           {(teamMembers || []).map(m => {
-            const active = cur?.id === m.id;
+            const active = !esCliente && cur?.id === m.id;
             return (
-              <div key={m.id} onClick={() => { onChange(m.name); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: active ? '#F5F7FF' : 'transparent' }}>
+              <div key={m.id} onClick={() => { onChange(m.name); if (esCliente) cliente?.onSelect?.(false); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 8, cursor: 'pointer', background: active ? '#F5F7FF' : 'transparent' }}>
                 <Av m={m} size={24} />
                 <span style={{ flex: 1, fontSize: 13, color: '#1A1D26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</span>
                 {active && <Check size={15} stroke="#5B7CF5" strokeWidth={2.2} />}

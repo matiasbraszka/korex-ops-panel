@@ -14,10 +14,18 @@ const ALLOWED_TAGS = [
   'table', 'thead', 'tbody', 'tr', 'td', 'th',
   'figure', 'figcaption', 'img',
 ];
-// data-drive-image marca donde va una imagen del Doc (se aloja en la Etapa C).
-// img/src permite pegar imágenes por link (y, más adelante, desde la galería de Recursos).
+// img/src permite pegar imágenes por link (y, desde la galería de Recursos).
 // DOMPurify ya bloquea javascript: y data: peligrosos en src.
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'style', 'color', 'colspan', 'rowspan', 'data-drive-image', 'src', 'alt', 'width'];
+const ALLOWED_ATTR = ['href', 'target', 'rel', 'style', 'color', 'colspan', 'rowspan', 'src', 'alt', 'width'];
+
+// El Apps Script (read_doc_rich) reemplaza cada imagen inline del Doc por un
+// placeholder <figure data-drive-image="1">[imagen del documento]</figure>: la
+// imagen real nunca se importa. En el panel/compartir eso se ve como un recuadro
+// roto. Lo sacamos acá (una sola vez, en todas las vistas del DEL) y así sobrevive
+// a los re-syncs. Las <figure> con imagen real (galería de Recursos) no llevan
+// data-drive-image, así que no se tocan.
+const stripDriveImagePlaceholders = (html) =>
+  html.replace(/<figure\b[^>]*\bdata-drive-image\b[^>]*>[\s\S]*?<\/figure>/gi, '');
 
 const enforceLinkSafety = (html) => {
   if (!html) return html;
@@ -31,6 +39,7 @@ const enforceLinkSafety = (html) => {
 
 export function sanitizeDelHtml(html) {
   if (!html) return '';
-  const clean = DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
+  const noPlaceholders = stripDriveImagePlaceholders(html);
+  const clean = DOMPurify.sanitize(noPlaceholders, { ALLOWED_TAGS, ALLOWED_ATTR });
   return enforceLinkSafety(clean);
 }

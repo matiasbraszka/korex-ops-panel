@@ -50,6 +50,7 @@ const FinanceRoutes = lazy(() =>
 const PublicKpisForm = lazy(() => import('./pages/PublicKpisForm'));
 const AgendaPublica = lazy(() => import('./pages/AgendaPublica'));
 const OnboardingForm = lazy(() => import('./pages/OnboardingForm'));
+const SharePublicPage = lazy(() => import('./pages/SharePublicPage'));
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -950,6 +951,16 @@ function App() {
     return (
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
         <AgendaPublica />
+      </Suspense>
+    );
+  }
+
+  // Ruta PUBLICA: link compartido (/compartir/<token>). Un externo sin cuenta sube archivos
+  // a una carpeta o comenta secciones del DEL. Todo va por token (share_get / share-upload).
+  if (location.pathname.startsWith('/compartir')) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-text3 text-sm">Cargando…</div>}>
+        <SharePublicPage />
       </Suspense>
     );
   }

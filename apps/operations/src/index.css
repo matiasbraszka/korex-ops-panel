@@ -54,11 +54,17 @@ html, body {
   text-transform: uppercase; letter-spacing: .07em; margin: 14px 0 4px;
 }
 .del-rich > :first-child { margin-top: 0; }
+/* Una imagen embebida en un DEL (compartido o no) escala al ancho disponible en vez de
+   recortarse: la seccion es overflow-hidden y en mobile no debe desbordar. */
+.del-rich img { max-width: 100%; height: auto; }
 .del-rich p { margin: 7px 0; }
 .del-rich strong { font-weight: 700; color: #1A1D26; }
 .del-rich em { font-style: italic; }
 .del-rich a { color: #2E69E0; text-decoration: underline; }
 .del-rich a:hover { color: #1D4FD8; }
+/* El DEL y los documentos del cliente en solo lectura DEBEN poder marcarse y copiarse.
+   Sin esto, en algunos navegadores el texto de solo lectura no se dejaba seleccionar. */
+.del-rich, .del-rich * { user-select: text !important; -webkit-user-select: text !important; cursor: auto; }
 .del-rich ul { list-style: disc; padding-left: 22px; margin: 7px 0; }
 .del-rich ol { list-style: decimal; padding-left: 22px; margin: 7px 0; }
 .del-rich li { display: list-item; margin: 3px 0; }
@@ -68,6 +74,7 @@ html, body {
   border-collapse: collapse; margin: 12px 0; font-size: 12.5px;
 }
 .del-rich td { border: 1px solid #E2E5EB; padding: 7px 10px; vertical-align: top; min-width: 90px; }
+.del-rich th { border: 1px solid #E2E5EB; padding: 7px 10px; vertical-align: top; }
 /* La imagen todavia vive adentro del Doc: alojarla es la Etapa C (Recursos). Se
    marca el hueco para que no parezca que al documento le falta un pedazo. */
 .del-rich figure[data-drive-image] {

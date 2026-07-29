@@ -6,7 +6,7 @@ import { money, ini, avatarColor, mlabel, ROLE, ROLE_LABEL } from '../lib/format
 // Acuerdos (diseño Claude Design): vista "Por cliente" (tarjetas editables de punta a
 // punta: %, valor, umbral, asignaciones) y "Por conector" (cuánto genera cada conector).
 // Lo que afecta el cálculo dispara el recálculo automático del motor (fin_recompute).
-const ROLES = ['cliente', 'conector', 'afiliado', 'consultor', 'marketing'];
+const ROLES = ['cliente', 'conector', 'afiliado', 'consultor', 'marketing', 'csm'];
 const TIPOS = ['SETUP', 'CRM', 'PUBLICIDAD'];
 const TYPE_CHIP = { SETUP: ['#e2e8f0', '#475569'], CRM: ['#dbeafe', '#1d4ed8'], PUBLICIDAD: ['#fef3c7', '#b45309'] };
 const pct = (v) => (v == null ? '—' : (Number(v) * 100).toLocaleString('es-AR', { maximumFractionDigits: 2 }) + '%');
@@ -31,7 +31,7 @@ export default function AcuerdosPage() {
 
   useEffect(() => {
     Promise.all([
-      sbFetch('fin_client_terms?select=id,sheet_client_name,client_id,service_value,umbral_base,conector_name,consultor_name,marketing_name,conector_start_date,consultor_start_date,marketing_start_date&order=agreement_date.desc.nullslast'),
+      sbFetch('fin_client_terms?select=id,sheet_client_name,client_id,service_value,umbral_base,conector_name,consultor_name,marketing_name,csm_name,conector_start_date,consultor_start_date,marketing_start_date,csm_start_date&order=agreement_date.desc.nullslast'),
       sbFetch('fin_commission_rules?select=id,sheet_client_name,client_id,income_type,role_key,pct,collected_by'),
       sbFetch('fin_directory?select=nombre,tipo,roles&limit=1000'),
       sbFetch('fin_incomes?select=conector_name_sheet,client_name_sheet,collected_by,net_usd,korex_real,fin_commission_entries(role_key,amount)&limit=6000'),
@@ -44,7 +44,7 @@ export default function AcuerdosPage() {
     // SOLO personas de la Base de datos con ese rol (principal o adicional). Nada de texto libre.
     const byRole = (role) => dir.filter((x) => x.tipo === role || (x.roles || []).includes(role)).map((x) => x.nombre);
     const uniq = (arr) => [...new Set(arr.filter(Boolean).map((s) => String(s).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    return { conector: uniq(byRole('Conector')), consultor: uniq(byRole('Consultor')), marketing: uniq(byRole('Marketing')) };
+    return { conector: uniq(byRole('Conector')), consultor: uniq(byRole('Consultor')), marketing: uniq(byRole('Marketing')), csm: uniq(byRole('CSM')) };
   }, [dir]);
 
   const cards = useMemo(() => {
@@ -214,7 +214,7 @@ function ClientCard({ c, assignOpts, onEdited }) {
   const eff = (tipo, r) => { const v = matrix[tipo]?.[r]?.pct; if (v != null) return v; return useFb(tipo) ? (fallback[tipo]?.[r]?.pct || 0) : 0; };
   const nonKorex = (tipo) => ROLES.reduce((a, r) => a + eff(tipo, r), 0);
   const korexOf = (tipo) => (tipo === 'PUBLICIDAD' ? 0.15 : 1 - nonKorex(tipo));   // automático = lo que sobra
-  const ASSIGN = [['Conector', 'conector_name', 'conector_start_date', ROLE.conector, 'conector'], ['Consultor', 'consultor_name', 'consultor_start_date', ROLE.consultor, 'consultor'], ['Marketing', 'marketing_name', 'marketing_start_date', ROLE.marketing, 'marketing']];
+  const ASSIGN = [['Conector', 'conector_name', 'conector_start_date', ROLE.conector, 'conector'], ['Consultor', 'consultor_name', 'consultor_start_date', ROLE.consultor, 'consultor'], ['Marketing', 'marketing_name', 'marketing_start_date', ROLE.marketing, 'marketing'], ['CSM', 'csm_name', 'csm_start_date', ROLE.csm, 'csm']];
 
   return (
     <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, overflow: 'hidden', boxShadow: '0 1px 2px rgba(13,17,23,.04)' }}>

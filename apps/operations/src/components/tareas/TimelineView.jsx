@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { MessageSquare, MoveHorizontal } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange, userOwnsTask } from '../../utils/helpers';
+import { today, fmtDate, fmtDayShort, getAllPhases, getEstimatedDays, daysBetween, daysAgo, isInDueRange, taskVisibleToNonAdmin } from '../../utils/helpers';
 import TeamAvatar from '../TeamAvatar';
 
 export default function TimelineView({ onGoToTaskList }) {
@@ -22,6 +22,7 @@ export default function TimelineView({ onGoToTaskList }) {
     openTaskComments,
     unreadCommentTaskIds,
     isPriorityHidden,
+    adminMembers,
   } = useApp();
   const TEAM = teamMembers || [];
   const commentCountsByTask = useMemo(() => {
@@ -111,9 +112,10 @@ export default function TimelineView({ onGoToTaskList }) {
       if (!phInfo) return;
       // Start with all tasks in this phase
       let phaseTasks = tasks.filter(t => t.clientId === c.id && t.phase === phaseKey);
-      // Usuarios restringidos (no-admin) solo ven SUS tareas, en todo cliente.
+      // Usuarios restringidos (no-admin) ven las tareas de todos menos las que
+      // tienen a un admin como encargado.
       if (restricted) {
-        phaseTasks = phaseTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
+        phaseTasks = phaseTasks.filter(t => taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers));
       }
       // Apply assignee cascade filter
       if (taskAssignee !== 'all') {

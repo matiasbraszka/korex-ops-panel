@@ -1,0 +1,251 @@
+// Portal del cliente — acceso desde la ficha del cliente en operaciones.
+// Muestra la cuenta del portal (email + contraseña generada) para pasársela al
+// cliente o entrar a su cuenta, y permite crearla si todavía no existe.
+// Backend: RPCs portal_admin_estado / portal_admin_activar (solo equipo).
+import { useEffect, useState } from 'react';
+import { supabase } from '@korex/db';
+import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Trash2, ClipboardList, BadgeCheck, Activity } from 'lucide-react';
+import Modal from '../Modal';
+
+// URL pública del portal. Configurable por env; fallback al dominio previsto.
+const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || 'https://clientes.metodokorex.com';
+
+// Carpetas del cliente donde puede caer el material de un pedido.
+const BUCKETS_PEDIDO = [
+  { key: 'autoridad', label: 'Fotos de Autoridad' },
+  { key: 'branding', label: 'Branding (logo, colores)' },
+  { key: 'productos', label: 'Foto de productos' },
+  { key: 'estilo_vida', label: 'Fotos Estilo de vida' },
+  { key: 'empresa', label: 'Material de la empresa' },
+  { key: 'testimonios_korex', label: 'Testimonios' },
+  { key: 'sin_clasif', label: 'Sin clasificar' },
+];
+const ESTADO_PEDIDO = {
+  pendiente: { label: 'Pendiente', bg: '#FEF3C7', c: '#B45309' },
+  cliente_dice_listo: { label: 'Cliente dice listo · validar', bg: '#DBEAFE', c: '#1D4FD8' },
+  completo: { label: 'Completo', bg: '#DCFCE7', c: '#15803D' },
+  validado: { label: 'Validado', bg: '#DCFCE7', c: '#15803D' },
+};
+const EVENTO_LABEL = {
+  subida: '📤 Subió material', guion_grabado: '🎬 Marcó grabado', comentario: '💬 Comentó un guion',
+  acceso_meta_listo: '✅ Dice que dio acceso a Meta', pedido_completo: '📦 Completó un pedido',
+};
+
+export default function PortalClienteModal({ client, onClose }) {
+  const [estado, setEstado] = useState(null);   // respuesta de portal_admin_estado
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState('');
+  const [showPwd, setShowPwd] = useState({});   // login_email -> bool
+  const [copied, setCopied] = useState('');     // qué se copió (feedback)
+  const [pedidos, setPedidos] = useState(null);
+  const [eventos, setEventos] = useState([]);
+  const [nuevoOpen, setNuevoOpen] = useState(false);
+  const [nuevo, setNuevo] = useState({ titulo: '', bucket: 'autoridad', target: '', bloqueante: false });
+
+  const cargar = async () => {
+    setErr('');
+    const { data, error } = await supabase.rpc('portal_admin_estado', { p_client_id: client.id });
+    if (error || !data?.ok) { setErr(data?.error || error?.message || 'No pude leer el estado.'); return; }
+    setEstado(data);
+    if (!email) setEmail(data.person?.email || data.client?.email || '');
+  };
+  const cargarPedidos = async () => {
+    const [{ data: p }, { data: ev }] = await Promise.all([
+      supabase.from('portal_pedidos').select('*').eq('client_id', client.id).eq('activo', true).order('orden'),
+      supabase.from('portal_eventos').select('tipo,payload,created_at').eq('client_id', client.id).order('created_at', { ascending: false }).limit(5),
+    ]);
+    setPedidos(Array.isArray(p) ? p : []);
+    setEventos(Array.isArray(ev) ? ev : []);
+  };
+  useEffect(() => { cargar(); cargarPedidos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [client.id]);
+
+  // ── Pedidos al cliente (lo que ve en "Lo que te falta" de su portal) ──
+  const sembrar = async () => { await supabase.rpc('portal_pedidos_seed', { p_client: client.id }); cargarPedidos(); };
+  const validarPedido = async (p) => {
+    await supabase.from('portal_pedidos').update({ estado: 'validado', completado_at: new Date().toISOString() }).eq('id', p.id);
+    cargarPedidos();
+  };
+  const quitarPedido = async (p) => {
+    if (!window.confirm(`¿Quitar el pedido "${p.titulo}"? Deja de verse en el portal.`)) return;
+    await supabase.from('portal_pedidos').update({ activo: false }).eq('id', p.id);
+    cargarPedidos();
+  };
+  const crearPedido = async () => {
+    const t = nuevo.titulo.trim();
+    if (!t) return;
+    await supabase.from('portal_pedidos').insert({
+      client_id: client.id, tipo: 'otro', titulo: t,
+      bucket_key: nuevo.bucket || null,
+      target_count: nuevo.target ? parseInt(nuevo.target, 10) || null : null,
+      bloqueante: !!nuevo.bloqueante, orden: 10, created_by: 'panel',
+    });
+    setNuevo({ titulo: '', bucket: 'autoridad', target: '', bloqueante: false });
+    setNuevoOpen(false);
+    cargarPedidos();
+  };
+
+  const activar = async () => {
+    setBusy(true); setErr('');
+    try {
+      const { data, error } = await supabase.rpc('portal_admin_activar', { p_client_id: client.id, p_email: email.trim() || null });
+      if (error || !data?.ok) { setErr(data?.detail || data?.error || error?.message || 'No pude crear el acceso.'); return; }
+      setEstado(data);
+    } finally { setBusy(false); }
+  };
+
+  const copiar = async (txt, key) => {
+    try { await navigator.clipboard.writeText(txt); setCopied(key); setTimeout(() => setCopied(''), 1500); } catch { /* nada */ }
+  };
+
+  const cuentas = estado?.cuentas || [];
+  const rowStyle = { display: 'grid', gridTemplateColumns: '96px 1fr auto', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #F0F1F4' };
+  const copyBtn = (txt, key) => (
+    <button onClick={() => copiar(txt, key)} title="Copiar" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white cursor-pointer text-[#6B7280] hover:bg-[#F4F6F9]">
+      {copied === key ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
+    </button>
+  );
+
+  return (
+    <Modal open onClose={onClose} title={`Portal del cliente · ${client.name || ''}`} maxWidth={520}
+      footer={
+        <div className="flex items-center justify-between w-full gap-2">
+          <a href={PORTAL_URL} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#2E69E0] no-underline hover:underline">
+            <ExternalLink size={14} /> Abrir el portal
+          </a>
+          <button onClick={onClose} className="text-[13px] py-2.5 px-4 rounded-[9px] border border-[#E2E5EB] bg-white text-[#6B7280] font-medium cursor-pointer hover:bg-[#F4F6F9]">Cerrar</button>
+        </div>
+      }>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start gap-2.5 rounded-xl p-3" style={{ background: '#EEF2FF', border: '1px solid #DDE5FB' }}>
+          <Smartphone size={17} color="#5B7CF5" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div className="text-[12px] leading-relaxed text-[#3B4252]">
+            Es la app donde el cliente ve sus funnels, graba los guiones y sube su material.
+            Con el email y la contraseña de abajo podés <b>entrar a su cuenta</b> o pasárselos por WhatsApp.
+          </div>
+        </div>
+
+        {err && <div className="text-[12.5px] font-semibold text-[#DC2626] bg-[#FEF2F2] rounded-lg py-2 px-3">{err}</div>}
+        {!estado && !err && <div className="text-[12.5px] text-[#9CA3AF] py-4 text-center">Cargando…</div>}
+
+        {estado && cuentas.length > 0 && (
+          <div className="rounded-xl border border-[#E2E5EB] py-1 px-3.5">
+            {cuentas.map((c) => (
+              <div key={c.login_email}>
+                <div style={rowStyle}>
+                  <span className="text-[11.5px] text-[#6B7280]">Email</span>
+                  <span className="text-[12.5px] font-semibold text-[#1A1D26] truncate">{c.login_email}</span>
+                  {copyBtn(c.login_email, 'e:' + c.login_email)}
+                </div>
+                <div style={{ ...rowStyle, borderBottom: c.notes ? '1px solid #F0F1F4' : 'none' }}>
+                  <span className="text-[11.5px] text-[#6B7280]">Contraseña</span>
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <span className="text-[12.5px] font-semibold text-[#1A1D26] truncate" style={{ fontFamily: 'ui-monospace, monospace' }}>
+                      {showPwd[c.login_email] ? (c.password || '—') : '••••••••'}
+                    </span>
+                    <button onClick={() => setShowPwd((p) => ({ ...p, [c.login_email]: !p[c.login_email] }))}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-md border-none bg-transparent cursor-pointer text-[#9CA3AF] hover:text-[#1A1D26]">
+                      {showPwd[c.login_email] ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  </span>
+                  {copyBtn(c.password || '', 'p:' + c.login_email)}
+                </div>
+                {c.notes && <div className="text-[10.5px] text-[#AEB4BF] py-1.5">{c.notes}{c.enabled ? '' : ' · DESHABILITADA'}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── PEDIDOS AL CLIENTE: lo que le aparece en "Lo que te falta" del portal ── */}
+        <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <ClipboardList size={15} color="#B45309" />
+            <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Pedidos al cliente</span>
+            {pedidos !== null && pedidos.length === 0 && (
+              <button onClick={sembrar} className="text-[11px] font-semibold text-[#2E69E0] border border-[#C7D2FE] bg-white rounded-md py-1 px-2 cursor-pointer hover:bg-[#F5F8FF]">Crear los estándar</button>
+            )}
+            <button onClick={() => setNuevoOpen(o => !o)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#6B7280] border border-[#E2E5EB] bg-white rounded-md py-1 px-2 cursor-pointer hover:bg-[#F4F6F9]">
+              <Plus size={12} />Pedido
+            </button>
+          </div>
+          <div className="text-[10.5px] text-[#9CA3AF] -mt-1">Los pedidos de GRABAR salen solos de los guiones marcados “Para grabar” en el DEL.</div>
+
+          {nuevoOpen && (
+            <div className="rounded-lg border border-dashed border-[#C7D2FE] bg-[#F8FAFF] p-2.5 flex flex-col gap-2">
+              <input value={nuevo.titulo} onChange={(e) => setNuevo(n => ({ ...n, titulo: e.target.value }))} placeholder='Ej.: "Sube 3 videos de testimonios"' autoFocus
+                className="w-full border border-[#E2E5EB] rounded-lg py-1.5 px-2.5 text-[12px] outline-none" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={nuevo.bucket} onChange={(e) => setNuevo(n => ({ ...n, bucket: e.target.value }))} className="border border-[#E2E5EB] rounded-lg py-1.5 px-2 text-[11.5px] bg-white">
+                  {BUCKETS_PEDIDO.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
+                  <option value="">Sin carpeta (solo tarea)</option>
+                </select>
+                <input value={nuevo.target} onChange={(e) => setNuevo(n => ({ ...n, target: e.target.value.replace(/\D/g, '') }))} placeholder="Cant." title="Cantidad objetivo (ej. 5)" className="w-14 border border-[#E2E5EB] rounded-lg py-1.5 px-2 text-[11.5px] outline-none" />
+                <label className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#B45309] cursor-pointer">
+                  <input type="checkbox" checked={nuevo.bloqueante} onChange={(e) => setNuevo(n => ({ ...n, bloqueante: e.target.checked }))} />Nos frena
+                </label>
+                <button onClick={crearPedido} disabled={!nuevo.titulo.trim()} className="ml-auto py-1.5 px-3 rounded-lg border-none bg-[#2E69E0] text-white text-[11.5px] font-semibold cursor-pointer disabled:opacity-50">Crear</button>
+              </div>
+            </div>
+          )}
+
+          {pedidos === null ? (
+            <div className="text-[11.5px] text-[#AEB4BF] py-1">Cargando…</div>
+          ) : pedidos.length === 0 ? (
+            <div className="text-[11.5px] text-[#AEB4BF] py-1">Sin pedidos. “Crear los estándar” arma los 3 de siempre (fotos, logo, acceso a Meta).</div>
+          ) : pedidos.map(p => {
+            const st = ESTADO_PEDIDO[p.estado] || ESTADO_PEDIDO.pendiente;
+            return (
+              <div key={p.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-semibold text-[#1A1D26] truncate">
+                    {p.titulo}{p.target_count ? <span className="text-[#9CA3AF] font-medium"> · objetivo {p.target_count}</span> : null}
+                    {p.bloqueante && <span className="ml-1.5 text-[9px] font-extrabold uppercase text-[#B45309] bg-[#FEF3C7] rounded px-1 py-px">frena</span>}
+                  </div>
+                  <div className="text-[10px] text-[#AEB4BF]">pedido {new Date(p.pedido_at).toLocaleDateString('es-AR')}</div>
+                </div>
+                <span className="text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0" style={{ background: st.bg, color: st.c }}>{st.label}</span>
+                {(p.estado === 'cliente_dice_listo' || p.estado === 'completo') && (
+                  <button onClick={() => validarPedido(p)} title="Validar (queda como hecho)" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#BBF7D0] bg-white text-[#15803D] cursor-pointer hover:bg-[#ECFDF5]"><BadgeCheck size={14} /></button>
+                )}
+                <button onClick={() => quitarPedido(p)} title="Quitar del portal" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#DC2626] hover:border-[#FECACA]"><Trash2 size={13} /></button>
+              </div>
+            );
+          })}
+
+          {eventos.length > 0 && (
+            <div className="mt-1 pt-2 border-t border-[#F1F3F7]">
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#9CA3AF] mb-1"><Activity size={11} />Último del cliente en el portal</div>
+              {eventos.map((ev, i) => (
+                <div key={i} className="text-[11px] text-[#4B5563] py-0.5">
+                  {EVENTO_LABEL[ev.tipo] || ev.tipo}
+                  {ev.payload?.titulo ? ` · ${ev.payload.titulo}` : ev.payload?.title ? ` · ${ev.payload.title}` : ''}
+                  <span className="text-[#C3C9D4]"> — {new Date(ev.created_at).toLocaleDateString('es-AR')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {estado && cuentas.length === 0 && (
+          <div className="rounded-xl border border-dashed border-[#D0D5DD] p-4 flex flex-col gap-2.5">
+            <div className="text-[12.5px] font-semibold text-[#4B5563]">Este cliente todavía no tiene cuenta del portal.</div>
+            <label className="text-[11.5px] font-semibold text-[#6B7280]">
+              Email del cliente (para su login)
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="cliente@gmail.com"
+                className="w-full mt-1 border border-[#E2E5EB] rounded-lg py-2 px-3 text-[12.5px] outline-none" />
+            </label>
+            <button onClick={activar} disabled={busy}
+              className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-[9px] border-none text-white text-[12.5px] font-semibold cursor-pointer hover:brightness-95 disabled:opacity-60"
+              style={{ background: '#2E69E0' }}>
+              {busy ? <RefreshCw size={14} className="animate-spin" /> : <Smartphone size={14} />} Crear acceso al portal
+            </button>
+            <div className="text-[11px] text-[#9CA3AF] leading-relaxed">
+              Le crea el usuario con una contraseña generada (la vas a ver acá mismo). No manda ningún email solo: se la pasás vos.
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}

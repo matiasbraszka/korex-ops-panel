@@ -47,8 +47,8 @@ export const avatarColor = (name) => {
 };
 
 // Roles que cobran comisión.
-export const ROLE = { cliente: '#2563eb', conector: '#0ea5e9', afiliado: '#f59e0b', consultor: '#8b5cf6', marketing: '#ec4899' };
-export const ROLE_LABEL = { cliente: 'Cliente', conector: 'Conector', afiliado: 'Afiliado', consultor: 'Consultor', marketing: 'Marketing' };
+export const ROLE = { cliente: '#2563eb', conector: '#0ea5e9', afiliado: '#f59e0b', consultor: '#8b5cf6', marketing: '#ec4899', csm: '#0d9488' };
+export const ROLE_LABEL = { cliente: 'Cliente', conector: 'Conector', afiliado: 'Afiliado', consultor: 'Consultor', marketing: 'Marketing', csm: 'CSM' };
 
 // Tipo de ingreso (chips).
 export const TYPE_BG = { CRM: '#dbeafe', PUBLICIDAD: '#fef3c7', SETUP: '#e2e8f0' };
@@ -71,6 +71,7 @@ export const pagoChip = (p) => {
 export const ROLE_CHIP = {
   Cliente: ['#dbeafe', '#1d4ed8'], Usuario: ['#fef3c7', '#b45309'], Conector: ['#e0f2fe', '#0369a1'],
   Consultor: ['#ede9fe', '#6d28d9'], Marketing: ['#fce7f3', '#be185d'], Afiliado: ['#fef3c7', '#b45309'],
+  CSM: ['#ccfbf1', '#0f766e'],
 };
 export const roleChip = (t) => ROLE_CHIP[t] || ['#f1f5f9', '#64748B'];
 

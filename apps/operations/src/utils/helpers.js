@@ -16,6 +16,17 @@ export function initials(n) {
   return n.split(' ').map(x => x[0]).join('').toUpperCase().substr(0, 2);
 }
 
+// Dominio para armar links PUBLICOS (compartir carpetas/DEL, onboarding, invitado).
+// Si se genera un link desde un deploy de PREVIEW (dominio efimero de Vercel), el
+// link quedaria atado a ese dominio y se rompe. Con VITE_PUBLIC_ORIGIN fijado al
+// dominio de produccion, los links siempre apuntan a prod. Sin la env var (dev),
+// cae a window.location.origin (localhost), que es lo correcto en local.
+export function publicOrigin() {
+  const env = import.meta.env.VITE_PUBLIC_ORIGIN;
+  if (env && /^https?:\/\//.test(env)) return env.replace(/\/+$/, '');
+  return (typeof window !== 'undefined' && window.location?.origin) || '';
+}
+
 export function daysBetween(a, b) {
   if (!a || !b) return null;
   return Math.round((new Date(b) - new Date(a)) / 864e5);
@@ -423,6 +434,41 @@ export function userSeesTask(task, currentUser, teamMembers = []) {
 }
 
 /**
+ * taskIsAdminOwned: ¿la tarea es "de un administrador"? Regla de negocio: una
+ * tarea es de admin cuando su ENCARGADO/responsable es admin. `adminMembers` es
+ * la lista de team_members con rol admin (id + nombre), que viene del RPC
+ * korex_admin_member_ids resuelto contra teamMembers. Se compara el `assignee`
+ * (nombres/ids separados por coma) normalizando acentos/espacios.
+ * Criterio multi-encargado: solo es "de admin" si TODOS los encargados son
+ * admin; si hay al menos un encargado NO admin, es trabajo de equipo y queda
+ * visible. Sin encargado → false (visible para todos).
+ */
+export function taskIsAdminOwned(task, adminMembers = []) {
+  if (!task?.assignee || !adminMembers?.length) return false;
+  const adminKeys = new Set();
+  for (const m of adminMembers) {
+    if (m?.id) adminKeys.add(normalizeName(m.id));
+    if (m?.name) {
+      adminKeys.add(normalizeName(m.name));
+      adminKeys.add(normalizeName(m.name.split(' ')[0]));
+    }
+  }
+  const parts = task.assignee.split(',').map(s => normalizeName(s)).filter(Boolean);
+  if (!parts.length) return false;
+  return parts.every(p => adminKeys.has(p));
+}
+
+/**
+ * taskVisibleToNonAdmin: filtro de visibilidad para usuarios NO admin bajo la
+ * regla nueva "ven las tareas de todos menos las de los administradores". Ve la
+ * tarea si NO es de admin, o si de todos modos es suya (encargado/creador/
+ * revisor, vía userSeesTask) aunque un admin también figure como encargado.
+ */
+export function taskVisibleToNonAdmin(task, currentUser, teamMembers = [], adminMembers = []) {
+  return !taskIsAdminOwned(task, adminMembers) || userSeesTask(task, currentUser, teamMembers);
+}
+
+/**
  * departmentForAssignee: área (department) por defecto según el RESPONSABLE.
  * Mira el primer responsable y devuelve su `department` (cargado en team_members).
  * Sirve para autocompletar el área de una tarea al asignarla, sin dejarla en
@@ -538,7 +584,7 @@ export function buildInitialPendingResources(template) {
   }));
 }
 
-export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier, conector, closer, contractData, niche, email, country, priority, status, notes, billingAmount, billingCurrency, billingCycle, billingInstallments, nextChargeDate, paymentMethod, billingStatus, driveFolderUrl, teamName } = {}) {
+export function mkClient(name, company, service, start, pm, clientCount = 0, { phone, slackChannel, avatarUrl, pendingResourcesTemplate, tier, conector, closer, contractData, niche, email, country, priority, status, notes, billingAmount, billingCurrency, billingCycle, billingInstallments, nextChargeDate, paymentMethod, billingStatus, teamName } = {}) {
   return {
     id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     name, company, service, startDate: start, pm,
@@ -555,7 +601,6 @@ export function mkClient(name, company, service, start, pm, clientCount = 0, { p
     paymentMethod: paymentMethod || '',
     billingStatus: billingStatus || 'al_dia',
     phone: phone || '', avatarUrl: avatarUrl || '',
-    driveFolderUrl: driveFolderUrl || '',
     slackChannel: slackChannel || '', slackChannelId: '', metaAds: [], metaMetrics: null,
     customSteps: [], customPhases: [], clientFeedbacks: [],
     stepNameOverrides: {}, phaseNameOverrides: {},
@@ -639,7 +684,7 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     stepIdx: stepIdx !== undefined && stepIdx !== null && stepIdx !== '' ? parseInt(stepIdx) : null,
     status: status || 'backlog', notes: notes || '', description: '', createdDate: today(),
     startedDate: null, completedDate: null, blockedSince: null, dueDate: null,
-    definitionOfDone: '', acceptanceCriteria: [], reviewer: null,
+    definitionOfDone: '', acceptanceCriteria: [], reviewer: null, reviewReason: '',
     validatedBy: null, validatedAt: null, sprintHistory: [], statusHistory: [],
     createdBy: null,
     // El funnel se elige después, en el detalle de la tarea. Al crearla no se pide:

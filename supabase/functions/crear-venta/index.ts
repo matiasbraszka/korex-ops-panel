@@ -304,10 +304,71 @@ function buildSlackSummary(args: {
   return L.join("\n");
 }
 
+// Resumen de la venta en HTML → se guarda como documento privado del cliente (del_client_extra_docs)
+// y aparece en el grupo "DEL CLIENTE" de todos los DEL de ese cliente. Mismo contenido que el
+// resumen de Slack, sin los links de Drive.
+function buildSummaryHtml(args: {
+  body: Record<string, unknown>;
+  billingAmount: number | null;
+  currency: string;
+  cashCollect: number | null;
+  remaining: number | null;
+  installments: number;
+  nextCharge: string | null;
+  commission: Record<string, number>;
+  receiptUrl: string | null;
+}): string {
+  const b = args.body;
+  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const row = (label: string, value: string) => `<p><strong>${label}:</strong> ${value && value.trim() ? esc(value) : "—"}</p>`;
+  const H: string[] = [];
+  H.push("<h2>👤 Cliente</h2>");
+  H.push(row("Fecha", str(b.start_date)));
+  H.push(row("Nombre", str(b.name)));
+  H.push(row("Correo Lead", str(b.email)));
+  H.push(row("Teléfono", str(b.phone)));
+  H.push(row("País", str(b.country)));
+  if (str(b.client_type)) H.push(row("Empresa o Líder", str(b.client_type)));
+  if (str(b.niche)) H.push(row("Empresa MLM", str(b.niche)));
+  H.push("<h2>💰 Venta</h2>");
+  H.push(row("Valor del servicio cerrado", fmtMoney(args.billingAmount, args.currency)));
+  H.push(row("CashCollect (cobrado)", fmtMoney(args.cashCollect, args.currency)));
+  H.push(row("Restante por cobrar", fmtMoney(args.remaining, args.currency)));
+  const pm = str(b.payment_method);
+  H.push(row("Medio de pago", PAYMENT_LABELS[pm.toLowerCase()] ?? pm));
+  H.push(row("Cuotas", String(args.installments)));
+  if (args.installments > 1) H.push(row("Próximo cobro", args.nextCharge ?? "—"));
+  H.push("<h2>📑 Contrato y soporte</h2>");
+  H.push(row("Datos del contrato", str(b.contract_data)));
+  const rec = str(b.call_recording_url);
+  H.push(`<p><strong>Grabación de llamada:</strong> ${rec ? `<a href="${esc(rec)}">ver grabación</a>` : "—"}</p>`);
+  H.push(`<p><strong>Comprobante de pago:</strong> ${args.receiptUrl ? `<a href="${esc(args.receiptUrl)}">ver comprobante</a>` : "—"}</p>`);
+  const comLines = COMMISSION_KEYS.filter((k) => (args.commission[k] ?? 0) > 0).map((k) => `<li>${esc(COMMISSION_LABELS[k] ?? k)}: ${args.commission[k]}%</li>`);
+  if (comLines.length) { H.push("<h2>📊 Reparto de comisiones</h2>"); H.push(`<ul>${comLines.join("")}</ul>`); }
+  const notes = str(b.notes);
+  if (notes) { H.push("<h2>📝 Notas internas</h2>"); H.push(`<p>${esc(notes).replace(/\n/g, "<br>")}</p>`); }
+  return H.join("\n");
+}
+
 // Convierte una fecha YYYY-MM-DD a DD-MM-AAAA para el nombre de la carpeta.
 function toDDMMYYYY(isoDate: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : isoDate;
+}
+
+// Suma meses a una fecha YYYY-MM-DD respetando fin de mes. Para el cronograma de cuotas.
+function addMonthsIso(iso: string, months: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  let y = Number(m[1]);
+  let mo = Number(m[2]) - 1 + months;
+  const d = Number(m[3]);
+  y += Math.floor(mo / 12);
+  mo = ((mo % 12) + 12) % 12;
+  const last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+  const day = Math.min(d, last);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${y}-${pad(mo + 1)}-${pad(day)}`;
 }
 
 // Llama al Apps Script (Web App) que crea la estructura de carpetas en Drive,
@@ -369,37 +430,205 @@ async function createDriveStructure(args: {
   }
 }
 
-// Llama al Apps Script (Web App) que da de alta el cliente en la planilla de finanzas:
-// agrega una fila en "Base de datos", "Acuerdos" e "Ingresos" (action: "alta_cliente").
-// Devuelve los nros de fila escritos, o null si falla/no esta configurado. Nunca lanza.
-interface FinanzasResult {
-  rows: { baseDatos: number; acuerdos: number; ingresos: number };
-}
-async function cargarEnFinanzas(args: {
-  url: string;
-  secret: string;
-  payload: Record<string, unknown>;
-}): Promise<FinanzasResult | null> {
-  if (!args.url) return null;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
+// Carga el ingreso de la venta en el ÁREA DE FINANZAS del panel (tablas fin_*).
+// Reemplaza al Google Sheet (que ya no se usa). Escribe el flujo completo:
+// 1) Ingresos (fin_incomes), 2) Base de datos (fin_directory), 3) Acuerdos
+// (fin_client_terms + fin_commission_rules), y recalcula las comisiones. Nunca lanza.
+// Devuelve el id del ingreso creado (o null si fallo / no aplica).
+async function cargarIngresoFinanzas(args: {
+  clientId: string;
+  clientName: string;
+  conector: string;
+  closer: string;
+  startDate: string;
+  billingAmount: number | null;
+  cashCollect: number | null;
+  currency: string;
+  paymentMethod: string;
+  fxRate: number | null;
+  stripeFeePct: number | null;
+  // Datos del contrato/cliente para Base de datos + Acuerdos.
+  signerType: string;        // 'persona' | 'empresa'
+  billingAddress: string;
+  fiscalId: string;
+  email: string;
+  phone: string;
+  empresa: string;           // empresa/MLM del cliente
+  commission: Record<string, number>; // % que cargó el closer
+  marketingPerson: string;
+  crmMarketingPct: number | null;
+  publiMarketingPct: number | null;
+}): Promise<string | null> {
   try {
-    const r = await fetch(args.url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: args.secret, action: "alta_cliente", ...args.payload }),
-      redirect: "follow",
-      signal: ctrl.signal,
-    });
-    const data = await r.json().catch(() => null);
-    if (data && data.ok && data.rows) return { rows: data.rows as FinanzasResult["rows"] };
-    console.error("crear-venta: finanzas sheet no ok", r.status, data);
-    return null;
+    const monto = args.cashCollect != null ? args.cashCollect : args.billingAmount;
+    if (monto == null) return null;
+    const cur = (args.currency || "USD").toUpperCase();
+    let fx = args.fxRate; if (fx == null || fx <= 0) fx = 1.08; // EUR->USD
+    const fee = args.stripeFeePct != null ? args.stripeFeePct : 4.5; // % Stripe
+    const isStripe = args.paymentMethod.toLowerCase() === "stripe";
+    let amountEur: number | null, amountUsd: number | null;
+    if (cur === "EUR") { amountEur = monto; amountUsd = monto * fx; }
+    else { amountUsd = monto; amountEur = monto / fx; }
+    // Neto = base de comisiones. Stripe descuenta su fee; otros medios (USDT, etc.) = total.
+    let netUsd = amountUsd;
+    if (amountUsd != null && isStripe) netUsd = amountUsd * (1 - fee / 100);
+    const estado = (args.billingAmount == null || (args.cashCollect != null && args.cashCollect >= args.billingAmount))
+      ? "Depositado" : "Parcial";
+    const r2 = (v: number | null) => v == null ? null : Math.round(v * 100) / 100;
+
+    // ── 1) INGRESOS (fin_incomes) ──
+    // sheet_row = max+1 (lo usa el motor para el umbral acumulado por cliente).
+    const { data: maxRows } = await supabase
+      .from("fin_incomes").select("sheet_row").order("sheet_row", { ascending: false, nullsFirst: false }).limit(1);
+    const nextRow = ((maxRows && maxRows[0]?.sheet_row) || 0) + 1;
+    const { data: incRow, error } = await supabase.from("fin_incomes").insert({
+      sheet_row: nextRow,
+      income_date: args.startDate,
+      month_date: args.startDate.slice(0, 7) + "-01",
+      client_id: args.clientId,
+      client_name_sheet: args.clientName,
+      payer_name: args.clientName,
+      conector_name_sheet: args.conector || null,
+      collected_by: "Korex",
+      income_type: "SETUP",
+      amount_eur: r2(amountEur),
+      amount_usd: r2(amountUsd),
+      net_usd: r2(netUsd),
+      payment_method: args.paymentMethod || null,
+      currency: cur,
+      status: estado,
+      closer: args.closer || null,
+      raw: { source: "onboarding", client_id: args.clientId },
+    }).select("id").single();
+    if (error) { console.error("crear-venta: error insert fin_incomes", error); return null; }
+    const incomeId: string | null = incRow?.id ?? null;
+
+    // ── 2) BASE DE DATOS (fin_directory) ── solo si no existe ya por nombre.
+    try {
+      const { data: dir } = await supabase.from("fin_directory").select("id").ilike("nombre", args.clientName).limit(1);
+      if (!dir || !dir.length) {
+        const { data: dmax } = await supabase.from("fin_directory").select("sheet_row").order("sheet_row", { ascending: false, nullsFirst: false }).limit(1);
+        await supabase.from("fin_directory").insert({
+          nombre: args.clientName,
+          tipo: "Cliente",
+          cliente: args.clientName,
+          conector: args.conector || null,
+          email: args.email || null,
+          telefono: args.phone || null,
+          empresa: args.empresa || null,
+          facturar_a: args.signerType.toLowerCase() === "empresa" ? "Empresa" : "personas",
+          id_fiscal: args.fiscalId || null,
+          dir_facturacion: args.billingAddress || null,
+          ingreso_date: args.startDate,
+          sheet_row: ((dmax && dmax[0]?.sheet_row) || 0) + 1,
+        });
+      }
+    } catch (e) { console.error("crear-venta: error fin_directory", e); }
+
+    // ── 3) ACUERDOS — config del cliente (fin_client_terms) ── uno por cliente.
+    try {
+      const { data: term } = await supabase.from("fin_client_terms").select("id").eq("client_id", args.clientId).limit(1);
+      if (!term || !term.length) {
+        await supabase.from("fin_client_terms").insert({
+          client_id: args.clientId,
+          sheet_client_name: args.clientName,
+          service_value: args.billingAmount,
+          conector_name: args.conector || null,
+          conector_start_date: args.conector ? args.startDate : null,
+          marketing_name: args.marketingPerson || null,
+          marketing_start_date: args.marketingPerson ? args.startDate : null,
+          agreement_date: args.startDate,
+        });
+      }
+    } catch (e) { console.error("crear-venta: error fin_client_terms", e); }
+
+    // ── 4) ACUERDOS — % por tipo×rol (fin_commission_rules) ── pct = fracción (20% -> 0.20). 0 se omite.
+    try {
+      const cs = args.commission || {};
+      const crmMkt = (args.crmMarketingPct != null ? args.crmMarketingPct : 5) / 100;
+      const publiMkt = (args.publiMarketingPct != null ? args.publiMarketingPct : 1) / 100;
+      const rules = [
+        { income_type: "SETUP", role_key: "conector", pct: (cs.setup_conector || 0) / 100 },
+        { income_type: "CRM", role_key: "conector", pct: (cs.crm_conector || 0) / 100 },
+        { income_type: "CRM", role_key: "cliente", pct: (cs.crm_cliente || 0) / 100 },
+        { income_type: "CRM", role_key: "afiliado", pct: (cs.crm_afiliados || 0) / 100 },
+        { income_type: "CRM", role_key: "marketing", pct: crmMkt },
+        { income_type: "PUBLICIDAD", role_key: "conector", pct: (cs.publicidad_conector || 0) / 100 },
+        { income_type: "PUBLICIDAD", role_key: "marketing", pct: publiMkt },
+      ].filter((rule) => rule.pct > 0).map((rule) => ({ ...rule, client_id: args.clientId, sheet_client_name: args.clientName }));
+      if (rules.length) {
+        await supabase.from("fin_commission_rules").delete().eq("client_id", args.clientId);
+        await supabase.from("fin_commission_rules").insert(rules);
+      }
+    } catch (e) { console.error("crear-venta: error fin_commission_rules", e); }
+
+    // ── 5) Recalcular comisiones (réplica del motor en SQL). No bloquea si falla. ──
+    const { error: rErr } = await supabase.rpc("fin_recompute");
+    if (rErr) console.error("crear-venta: fin_recompute error", rErr);
+    return incomeId;
   } catch (e) {
-    console.error("crear-venta: fallo el apps script de finanzas", e);
+    console.error("crear-venta: fallo cargando ingreso en finanzas", e);
     return null;
-  } finally {
-    clearTimeout(timer);
+  }
+}
+
+// Crea el PLAN DE PAGOS en cuotas (Seguimiento de pagos) cuando la venta es a cuotas.
+// La 1ra cuota = lo cobrado al cierre (cashCollect), ya pagada y linkeada al ingreso.
+// El resto se agenda mensual desde next_charge_date. Evita duplicar si ya hay plan.
+async function crearPlanPagos(args: {
+  clientId: string;
+  clientName: string;
+  currency: string;
+  total: number;
+  cashCollect: number | null;
+  installments: number;
+  startDate: string;
+  nextCharge: string | null;
+  paymentMethod: string;
+  incomeId: string | null;
+}): Promise<void> {
+  try {
+    const { data: ex } = await supabase.from("fin_payment_plans").select("id").eq("client_id", args.clientId).limit(1);
+    if (ex && ex.length) return; // ya tiene plan
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const { data: plan, error: pErr } = await supabase.from("fin_payment_plans").insert({
+      client_id: args.clientId,
+      client_name: args.clientName,
+      person_name: args.clientName,
+      currency: (args.currency || "USD").toUpperCase(),
+      total_amount: r2(args.total),
+      payment_method: args.paymentMethod || null,
+      status: "activo",
+      start_date: args.startDate,
+      source: "onboarding",
+    }).select("id").single();
+    if (pErr || !plan) { console.error("crear-venta: error fin_payment_plans", pErr); return; }
+    const planId = plan.id;
+    const N = Math.max(1, Math.round(args.installments));
+    const paid0 = args.cashCollect != null ? args.cashCollect : 0;
+    const cuotas: Record<string, unknown>[] = [];
+    if (paid0 > 0) {
+      cuotas.push({ plan_id: planId, n: 1, due_date: args.startDate, amount: r2(paid0), status: "pagada", paid_date: args.startDate, income_id: args.incomeId });
+      const k = Math.max(1, N - 1);
+      const rest = Math.max(0, args.total - paid0);
+      const per = r2(rest / k);
+      let due = args.nextCharge || addMonthsIso(args.startDate, 1);
+      for (let i = 0; i < k; i++) {
+        cuotas.push({ plan_id: planId, n: i + 2, due_date: due, amount: per, status: "pendiente" });
+        due = addMonthsIso(due, 1);
+      }
+    } else {
+      const per = r2(args.total / N);
+      let due = args.nextCharge || args.startDate;
+      for (let i = 0; i < N; i++) {
+        cuotas.push({ plan_id: planId, n: i + 1, due_date: due, amount: per, status: "pendiente" });
+        due = addMonthsIso(due, 1);
+      }
+    }
+    const { error: cErr } = await supabase.from("fin_payment_cuotas").insert(cuotas);
+    if (cErr) console.error("crear-venta: error fin_payment_cuotas", cErr);
+  } catch (e) {
+    console.error("crear-venta: fallo creando plan de pagos", e);
   }
 }
 
@@ -687,6 +916,54 @@ Deno.serve(async (req: Request) => {
   let driveFolderUrl: string | null = null;
   let onboardingUrl: string | null = null;
   let delDocUrl: string | null = null;
+  // Alta NATIVA: estrategia + un funnel inicial con su DEL nativo, para que el equipo arranque
+  // directo en el panel (sin depender del Drive). crear-venta corre con service-role, así que
+  // inserta strategies/strategy_pages y la fila del DEL directo en client_brain_docs (ver abajo).
+  const strategyId = `strat_${Math.floor(Date.now() / 1000)}_${rnd(6)}`;
+  const { error: sErr } = await supabase.from("strategies").insert({
+    id: strategyId,
+    client_id: clientId,
+    name: "Estrategia #1",
+    status: "borrador",
+    version: "v1",
+    position: 0,
+    start_date: startDate,
+  });
+  if (sErr) {
+    console.error("crear-venta: error creando estrategia", sErr);
+  } else {
+    // DEL nativo por INSERT DIRECTO: del_doc_create exige is_team_member() y crear-venta corre
+    // con service-role (sin auth.uid()), así que insertamos nosotros la fila del DEL (misma forma
+    // que del_doc_create: doc_kind='del', scope='funnel', text vacío).
+    let delDocId: string | null = `del_${Math.floor(Date.now() / 1000)}${rnd(10)}`;
+    const { error: ddErr } = await supabase.from("client_brain_docs").insert({
+      id: delDocId,
+      client_id: clientId,
+      node_id: `native_${delDocId}`,
+      doc_kind: "del",
+      title: "Funnel inicial — DEL",
+      text: "",
+      char_count: 0,
+      strategy_id: strategyId,
+      scope: "funnel",
+      synced_at: new Date().toISOString(),
+    });
+    if (ddErr) { console.error("crear-venta: error creando DEL nativo", ddErr); delDocId = null; }
+    const { error: pErr } = await supabase.from("strategy_pages").insert({
+      id: `spg_${Math.floor(Date.now() / 1000)}_${rnd(6)}`,
+      strategy_id: strategyId,
+      client_id: clientId,
+      name: "Funnel inicial",
+      status: "borrador",
+      del_doc_id: delDocId,
+    });
+    if (pErr) console.error("crear-venta: error creando funnel", pErr);
+  }
+
+  // Estructura de carpetas en Google Drive + onboarding duplicado + compartir con los emails
+  // (via Apps Script). Es ADITIVO al alta nativa: si Drive responde, guardamos su carpeta en el
+  // cliente y colgamos los links de las carpetas/onboarding en la estrategia nativa (acceso del
+  // equipo). Si falla o no está configurado, el cliente igual queda creado y usable (nativo).
   if (appscriptUrl) {
     const drive = await createDriveStructure({
       url: appscriptUrl,
@@ -712,74 +989,68 @@ Deno.serve(async (req: Request) => {
         .update({ drive_folder_url: driveFolderUrl })
         .eq("id", clientId);
       if (dErr) console.error("crear-venta: error guardando drive_folder_url", dErr);
-
-      // Estrategia del cliente en el panel (pestaña Estrategias) con el nombre de la
-      // carpeta de estrategia y los links de las carpetas principales del Drive, para
-      // que el equipo acceda directo. El onboarding se suma como documento.
+      // Colgar los links del Drive en la estrategia nativa ya creada (no crea otra).
       const archivos: { label: string; url: string; category: string }[] = Object.entries(
         drive.subfolders,
       ).map(([label, url]) => ({ label, url, category: "folder" }));
       if (onboardingUrl) archivos.push({ label: "Onboarding", url: onboardingUrl, category: "doc" });
-      if (drive.delDocUrl) archivos.push({ label: "DEL", url: drive.delDocUrl, category: "doc" });
+      if (drive.delDocUrl) archivos.push({ label: "DEL (Drive)", url: drive.delDocUrl, category: "doc" });
       if (archivos.length) {
-        const { error: sErr } = await supabase.from("strategies").insert({
-          id: `strat_${Math.floor(Date.now() / 1000)}_${rnd(6)}`,
-          client_id: clientId,
-          name: drive.strategyName || "Estrategia #1 | [A DEFINIR]",
-          status: "borrador",
-          version: "v1",
-          position: 0,
-          start_date: startDate,
-          archivos,
-          folders: [],
-          docs: [],
-          drive_url: null,
-          accesos: [],
-        });
-        if (sErr) console.error("crear-venta: error creando estrategia", sErr);
+        const { error: supErr } = await supabase
+          .from("strategies")
+          .update({ name: drive.strategyName || "Estrategia #1", archivos })
+          .eq("id", strategyId);
+        if (supErr) console.error("crear-venta: error colgando archivos del Drive en la estrategia", supErr);
       }
     }
   }
 
-  // Alta en la planilla de finanzas (Base de datos + Acuerdos + Ingresos) via Apps
-  // Script. Escribe el MISMO nombre en las 3 hojas para que las formulas de Ingresos /
-  // Seguimiento de Pagos resuelvan. No bloquea ni rompe la venta si falla o no esta
-  // configurado. En modo prueba escribe con el nombre [PRUEBA] (asi se identifica y borra).
-  let finanzasRows: FinanzasResult["rows"] | null = null;
-  if (finanzasUrl) {
-    const fin = await cargarEnFinanzas({
-      url: finanzasUrl,
-      secret: finanzasSecret,
-      payload: {
-        test: isTest,
-        cliente: displayName,
-        conector: str(body.conector),
-        email: str(body.email),
-        telefono: str(body.phone),
-        company: str(body.company),
-        clientType: str(body.client_type),
-        // Datos del contrato para Base de datos (I/J/K/L): persona/empresa + dirección + fiscal.
-        facturarA: str(body.signer_type).toLowerCase() === "empresa" ? "Empresa" : "personas",
-        billingAddress: str(body.billing_address),
-        fiscalId: str(body.fiscal_id),
-        service: str(body.service),
-        fecha: startDate,
-        setter: str(body.setter),
-        closer: str(body.closer),
-        billingAmount,
-        cashCollect,
-        currency: str(body.billing_currency) || "USD",
-        paymentMethod: str(body.payment_method),
-        commissions: commission_split,
-        // Defaults configurables desde admin (con fallback en el Apps Script).
-        fxRate: num(finDefaults.eur_usd_rate),
-        stripeFeePct: num(finDefaults.stripe_fee_pct),
-        marketingPerson: str(finDefaults.marketing_person),
-        crmMarketingPct: num(finDefaults.crm_marketing_pct),
-        publicidadMarketingPct: num(finDefaults.publicidad_marketing_pct),
-      },
+  // Alta del ingreso en el ÁREA DE FINANZAS del panel (tablas fin_*): flujo completo
+  // (Ingresos + Base de datos + Acuerdos). Reemplaza al Google Sheet (ya no se usa).
+  // En modo prueba NO se carga (para no ensuciar las finanzas reales). Solo si la
+  // venta tiene monto. No bloquea ni rompe la venta.
+  let incomeId: string | null = null;
+  if (!isTest && (billingAmount != null || cashCollect != null)) {
+    incomeId = await cargarIngresoFinanzas({
+      clientId,
+      clientName: displayName,
+      conector: str(body.conector),
+      closer: str(body.closer),
+      startDate,
+      billingAmount,
+      cashCollect,
+      currency: str(body.billing_currency) || "USD",
+      paymentMethod: str(body.payment_method),
+      fxRate: num(finDefaults.eur_usd_rate),
+      stripeFeePct: num(finDefaults.stripe_fee_pct),
+      signerType: str(body.signer_type),
+      billingAddress: str(body.billing_address),
+      fiscalId: str(body.fiscal_id),
+      email: str(body.email),
+      phone: str(body.phone),
+      empresa: str(body.company) || str(body.niche),
+      commission: commission_split,
+      marketingPerson: str(finDefaults.marketing_person) || "Jose Martin",
+      crmMarketingPct: num(finDefaults.crm_marketing_pct),
+      publiMarketingPct: num(finDefaults.publicidad_marketing_pct),
     });
-    if (fin) finanzasRows = fin.rows;
+  }
+
+  // Plan de pagos en cuotas (Seguimiento de pagos) — solo ventas reales a cuotas.
+  // La 1ra cuota queda pagada y linkeada al ingreso; el resto se agenda mensual.
+  if (!isTest && installments > 1 && billingAmount != null) {
+    await crearPlanPagos({
+      clientId,
+      clientName: displayName,
+      currency: str(body.billing_currency) || "USD",
+      total: billingAmount,
+      cashCollect,
+      installments,
+      startDate,
+      nextCharge,
+      paymentMethod: str(body.payment_method),
+      incomeId,
+    });
   }
 
   // Canal de Slack PRIVADO del cliente (#nombre-apellido-empresa) + invitar al
@@ -855,6 +1126,33 @@ Deno.serve(async (req: Request) => {
   });
   await postSlack(slackWebhook, slackText);
 
+  // Documento privado "Resumen de la venta": queda en del_client_extra_docs (por cliente), así
+  // aparece en el grupo "DEL CLIENTE" de TODOS los DEL de ESTE cliente. system=true → no se borra
+  // por error desde el panel.
+  try {
+    const resumenHtml = buildSummaryHtml({
+      body,
+      billingAmount,
+      currency: str(body.billing_currency) || "USD",
+      cashCollect,
+      remaining,
+      installments,
+      nextCharge,
+      commission: commission_split,
+      receiptUrl,
+    });
+    const { error: rErr } = await supabase.from("del_client_extra_docs").insert({
+      client_id: clientId,
+      title: "Resumen de la venta",
+      html: resumenHtml,
+      created_by: "sistema",
+      system: true,
+    });
+    if (rErr) console.error("crear-venta: error creando doc resumen de venta", rErr);
+  } catch (e) {
+    console.error("crear-venta: buildSummaryHtml", e);
+  }
+
   return json(200, {
     ok: true,
     client_id: clientId,
@@ -865,6 +1163,6 @@ Deno.serve(async (req: Request) => {
     onboarding_url: onboardingUrl,
     handoff_message: handoffMessage,
     slack_channel: slackChannelName,
-    finanzas_rows: finanzasRows,
+    finanzas_recorded: !!incomeId,
   });
 });

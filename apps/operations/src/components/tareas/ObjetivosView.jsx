@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Target, Clock, ArrowUpRight, Info, GripVertical, MessageSquare, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isKorexClient, userOwnsTask, userSeesTask, isReviewerOf, getAllPhases, blockingTasks, assigneeMatches } from '../../utils/helpers';
+import { isKorexClient, taskVisibleToNonAdmin, isReviewerOf, getAllPhases, blockingTasks, assigneeMatches } from '../../utils/helpers';
 import { TASK_PRIORITY } from '../../utils/constants';
 import { startDragScroll, stopDragScroll } from '../../utils/dragScroll';
 import AddToSprintButton from './AddToSprintButton';
@@ -36,7 +36,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
   const {
     clients, tasks, teamMembers, currentUser, updateTask, createTask, reorderTask, deleteTask, updateClient, activeSprint,
     taskAssignee, taskClientFilter, hideCompletedTasks, reorderClient, setSelectedId, setView,
-    taskComments, unreadCommentTaskIds, addTaskToSprint,
+    taskComments, unreadCommentTaskIds, addTaskToSprint, adminMembers,
   } = useApp();
   const restricted = !!currentUser && !currentUser.isAdmin;
   // Invitado ("mover y marcar"): puede tocar el punto de completar y arrastrar,
@@ -152,7 +152,7 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
   // El revisor ve la tarea cuando entra "en-revisión" (además del responsable).
   const matchesAssignee = (t) => assigneeMatches(t.assignee, taskAssignee) || isReviewerOf(t, taskAssignee);
   const visibleTask = (t) => {
-    if (restricted && !userSeesTask(t, currentUser, teamMembers)) return false;
+    if (restricted && !taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers)) return false;
     if (!matchesAssignee(t)) return false;
     if (hideCompletedTasks && t.status === 'done') return false;
     if (onlySprint && (!activeSprint || t.sprintId !== activeSprint.id)) return false;
@@ -401,7 +401,11 @@ export default function ObjetivosView({ onlySprint = false, clientId = null }) {
                                 <span style={{ fontSize: 11, color: '#9CA3AF' }}>h</span>
                               </span>
                               )}
-                              {!isGuest && <AssigneePicker value={t.assignee} onChange={(name) => { updateTask(t.id, { assignee: name }); setFlashTaskId(t.id); }} />}
+                              {/* Asignar al CLIENTE: la tarea aparece en la home de su portal
+                                  (asignada_cliente). Elegir a alguien del equipo la devuelve. */}
+                              {!isGuest && <AssigneePicker value={t.assignee}
+                                cliente={o.c?.name ? { name: o.c.name, active: !!t.asignadaCliente, onSelect: (v) => { updateTask(t.id, { asignadaCliente: v, ...(v ? { assignee: '' } : {}) }); setFlashTaskId(t.id); } } : null}
+                                onChange={(name) => { updateTask(t.id, { assignee: name, ...(name && t.asignadaCliente ? { asignadaCliente: false } : {}) }); setFlashTaskId(t.id); }} />}
                               {/* Columna fija para el botón de sprint: así "En sprint"/"al sprint"
                                   y las tareas terminadas (sin botón) quedan alineadas en la fila. */}
                               {!isGuest && (

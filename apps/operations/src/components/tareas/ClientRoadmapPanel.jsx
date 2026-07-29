@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { MessageSquare, Link2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PROCESS_STEPS, TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange, userOwnsTask } from '../../utils/helpers';
+import { getAllPhases, fmtDate, today, getElapsedDays, getEstimatedDays, daysBetween, daysAgo, isInDueRange, taskVisibleToNonAdmin } from '../../utils/helpers';
 import Dropdown from '../Dropdown';
 import TeamAvatar from '../TeamAvatar';
 import Modal from '../Modal';
@@ -17,7 +17,7 @@ import AddToWeeklyButton from './AddToWeeklyButton';
  * Se usa desde RoadmapView para renderizar el roadmap de cada cliente expandido.
  */
 export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', hideCompleted = false, hideBlocked = false, dueFilter = 'all' }) {
-  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, taskComments, openTaskComments, unreadCommentTaskIds, currentUser } = useApp();
+  const { tasks, createTask, updateTask, updateClient, deleteTask, reorderTask, teamMembers, adminMembers, taskComments, openTaskComments, unreadCommentTaskIds, currentUser } = useApp();
   const TEAM = teamMembers || [];
 
   // Conteo de comentarios por tarea para el badge del row.
@@ -50,10 +50,10 @@ export default function ClientRoadmapPanel({ client: c, assigneeFilter = 'all', 
   const rdDragPhaseRef = useRef(null);
   const dropdownRefs = useRef({});
 
-  // Usuarios de operaciones que NO son admin solo ven SUS tareas (en todo cliente).
+  // Los no-admin ven las tareas de todos menos las de encargado admin.
   const restricted = !!currentUser && !currentUser.isAdmin;
   let clientTasks = tasks.filter(t => t.clientId === c.id);
-  if (restricted) clientTasks = clientTasks.filter(t => userOwnsTask(t, currentUser, teamMembers));
+  if (restricted) clientTasks = clientTasks.filter(t => taskVisibleToNonAdmin(t, currentUser, teamMembers, adminMembers));
   const allPh = getAllPhases(c);
   const now = today();
 

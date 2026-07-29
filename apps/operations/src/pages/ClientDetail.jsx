@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { PROCESS_STEPS, PHASES, PRIO_CLIENT, STATUS, TASK_STATUS } from '../utils/constants';
-import { initials, progress, getAllPhases, getRoadmapTasks, daysAgo, fmtDate, clientPill, today, userOwnsTask } from '../utils/helpers';
+import { initials, progress, getAllPhases, getRoadmapTasks, daysAgo, fmtDate, clientPill, today, taskVisibleToNonAdmin } from '../utils/helpers';
 import Modal from '../components/Modal';
 import Dropdown from '../components/Dropdown';
 import StatusPill from '../components/StatusPill';
@@ -10,7 +10,6 @@ import { ResourcesPanel } from '@korex/ui';
 import { HistorialTab } from './historial/HistorialTab.jsx';
 import { Pencil, Trash2, Inbox, Calendar, User, Key, ExternalLink, Folder, FileText, CreditCard, Megaphone, Image as ImageIcon, Layers, ChevronRight, ArrowLeft, Plus, Clock, Building2, Users, Tag } from 'lucide-react';
 import FunnelsView from '../components/clientes/FunnelsView';
-import CarpetasView from '../components/clientes/CarpetasView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
@@ -22,7 +21,7 @@ const CLIENT_RESOURCE_CATEGORIES = ['folder', 'doc', 'sheet', 'landing', 'pdf', 
 
 
 export default function ClientDetail({ client: c }) {
-  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, teamMembers, strategyPages, contracts, satByClient } = useApp();
+  const { setSelectedId, setView, setTaskClientFilter, updateClient, deleteClient, tasks, updateTask, deleteTask, currentUser, getPriorityLabel, getAllPriorityLabels, getPriorityList, llamadas, teamMembers, adminMembers, strategies, strategyPages, invoices, contracts, satByClient } = useApp();
   const TEAM = teamMembers || [];
   const [editModal, setEditModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -43,11 +42,12 @@ export default function ClientDetail({ client: c }) {
   const restricted = !!currentUser && !currentUser.isAdmin;
 
   const clientTasks = tasks.filter(t => t.clientId === c.id);
-  // Los usuarios que no son admin solo ven SUS tareas (igual que la lista de la
-  // pestaña Tareas): por eso el conteo del tab y el resumen también se filtran.
+  // Los no-admin ven las tareas de todos menos las de encargado admin (igual que
+  // la lista de la pestaña Tareas): por eso el conteo del tab y el resumen también
+  // se filtran.
   const roadmapTasks = (() => {
     const all = getRoadmapTasks(c.id, tasks);
-    return restricted ? all.filter(t => userOwnsTask(t, currentUser, TEAM)) : all;
+    return restricted ? all.filter(t => taskVisibleToNonAdmin(t, currentUser, TEAM, adminMembers)) : all;
   })();
   // Use new system if client has ANY tasks (not just roadmap-flagged ones)
   const useNewSystem = clientTasks.length > 0;
@@ -180,9 +180,8 @@ export default function ClientDetail({ client: c }) {
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Funnels', count: funnelsCount },
-          // La pestaña "Carpetas" se retiró: las carpetas que se usan viven ahora en
-          // "Recursos", dentro del DEL de cada funnel. (CarpetasView.jsx queda en el
-          // repo por si hay que traerla de nuevo; el sync de Drive sigue corriendo.)
+          // La pestaña "Carpetas" (espejo de Drive) se eliminó: todo vive ahora en el
+          // sistema propio — los recursos en "Recursos" dentro del DEL de cada funnel.
           { key: 'publicidad', label: 'Publicidad', badge: hasAds ? (adsActive ? 'activa' : 'inactiva') : null },
           { key: 'facturacion', label: 'Contrato', count: contractsCount },
           { key: 'roadmap', label: 'Tareas', count: totalRoadmap - doneRoadmap },
@@ -217,9 +216,53 @@ export default function ClientDetail({ client: c }) {
               })}
             </div>
 
-            {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
+            {activeTab === 'resumen' && (() => {
+              const m = c.metaMetrics || {};
+              const curr = m.currency || 'USD';
+              const cs = curr === 'EUR' ? '€' : curr === 'MXN' ? 'MX$' : '$';
+              const billCurr = ({USD:'$',EUR:'€',ARS:'$',MXN:'MX$'})[c.billingCurrency || 'EUR'];
+              const billLabel = { al_dia: { fg: '#16A34A', t: 'Al día' }, pendiente: { fg: '#CA8A04', t: 'Pendiente' }, impago: { fg: '#EF4444', t: 'Impago' } }[c.billingStatus || 'al_dia'];
+              const pendingCount = totalRoadmap - doneRoadmap;
+              // Páginas activas (con URL en testing o prod) entre todas las estrategias del cliente
+              const myPages = myStrategies.flatMap(s => (strategyPages || []).filter(p => p.strategy_id === s.id));
+              const pagesActive = myPages.filter(p => p.testing_url || p.prod_url).length;
+              // Tareas vencidas
+              const overdueTasks = (tasks || []).filter(t => t.clientId === c.id && t.status !== 'done' && t.dueDate && t.dueDate < today() && (!restricted || taskVisibleToNonAdmin(t, currentUser, TEAM, adminMembers))).length;
+              const tiles = [
+                { icon: Inbox, label: 'Tareas pendientes', value: pendingCount, sub: overdueTasks ? `${overdueTasks} vencida(s)` : `${roadmapPct}% completado`, color: pendingCount > 5 ? '#EF4444' : '#1A1D26', tab: 'roadmap' },
+                { icon: Layers, label: 'Estrategias', value: strategiesCount, sub: pagesActive ? `${pagesActive} página(s) activa(s)` : 'sin páginas activas', color: '#1A1D26', tab: 'trabajo' },
+                { icon: CreditCard, label: 'Importe / ciclo', value: c.billingAmount != null ? `${billCurr}${Number(c.billingAmount).toLocaleString()}` : '—', sub: billLabel.t, color: billLabel.fg, tab: 'facturacion' },
+                { icon: FileText, label: 'Facturas', value: invoicesCount, sub: c.nextChargeDate ? `próx. ${fmtDate(c.nextChargeDate)}` : 'sin próximo cobro', color: '#1A1D26', tab: 'facturacion' },
+                { icon: Megaphone, label: 'Inversión 7d', value: m.totalSpend7d ? `${cs}${m.totalSpend7d.toFixed(0)}` : '—', sub: m.totalConversions7d ? `${m.totalConversions7d} leads` : (m.pauseReason || 'sin actividad'), color: '#1A1D26', tab: 'publicidad' },
+                { icon: Megaphone, label: 'CPL 7d', value: m.avgCpl7d ? `${cs}${m.avgCpl7d.toFixed(2)}` : '—', sub: m.ctr7d ? `CTR ${m.ctr7d.toFixed(2)}%` : '—', color: m.avgCpl7d && m.avgCpl7d > 15 ? '#EF4444' : '#16A34A', tab: 'publicidad' },
+                { icon: Clock, label: 'Días con Korex', value: days, sub: c.startDate ? `desde ${fmtDate(c.startDate)}` : '—', color: '#1A1D26' },
+                { icon: User, label: 'Llamadas', value: clientLlamadas.length, sub: clientLlamadas.length ? `última: ${clientLlamadas[0]?.fecha ? fmtDate(clientLlamadas[0].fecha.split('T')[0]) : '—'}` : 'sin registros', color: '#1A1D26', tab: 'llamadas' },
+              ].filter(t => !(restricted && t.tab === 'facturacion'));
+              return (
+                <div className="mb-4">
+                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                    {tiles.map((t, i) => {
+                      const Icon = t.icon;
+                      const clickable = !!t.tab;
+                      return (
+                        <div key={i}
+                          className={`bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-4 flex flex-col transition-all ${clickable ? 'cursor-pointer hover:border-[#D0D5DD] hover:shadow-md' : ''}`}
+                          onClick={clickable ? () => setActiveTab(t.tab) : undefined}
+                        >
+                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#9CA3AF' }}>
+                            <Icon size={12} /> {t.label}
+                          </div>
+                          <div className="text-[26px] font-bold leading-none mb-1.5" style={{ color: t.color }}>{t.value}</div>
+                          <div className="text-[11px] mt-auto" style={{ color: '#6B7280' }}>{t.sub}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
-            {activeTab === 'drive' && <CarpetasView client={c} />}
+            {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 

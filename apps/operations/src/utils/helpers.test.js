@@ -22,6 +22,8 @@ import {
   upcomingSprintStubs,
   computeSprintDurations,
   departmentForAssignee,
+  taskIsAdminOwned,
+  taskVisibleToNonAdmin,
 } from './helpers';
 
 const isoDaysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
@@ -392,6 +394,49 @@ describe('userSeesTask (responsable, creador o revisor)', () => {
   it('sin relación, no la ve', () => {
     expect(userSeesTask({ assignee: 'Ana', reviewer: 'Pedro', status: 'en-revision' }, rev)).toBe(false);
     expect(userSeesTask({ assignee: 'Ana', status: 'backlog' }, rev)).toBe(false);
+  });
+});
+
+describe('taskIsAdminOwned (encargado admin)', () => {
+  const admins = [{ id: 'u1', name: 'Matías Braszka' }, { id: 'u2', name: 'Marcos' }];
+  it('encargado admin → true (match por nombre completo, primer nombre o id)', () => {
+    expect(taskIsAdminOwned({ assignee: 'Matías Braszka' }, admins)).toBe(true);
+    expect(taskIsAdminOwned({ assignee: 'matias' }, admins)).toBe(true);   // sin acento, primer nombre
+    expect(taskIsAdminOwned({ assignee: 'u2' }, admins)).toBe(true);        // por id
+  });
+  it('encargado empleado → false', () => {
+    expect(taskIsAdminOwned({ assignee: 'Ana' }, admins)).toBe(false);
+  });
+  it('sin encargado → false (visible para todos)', () => {
+    expect(taskIsAdminOwned({ assignee: '' }, admins)).toBe(false);
+    expect(taskIsAdminOwned({ assignee: null }, admins)).toBe(false);
+    expect(taskIsAdminOwned({}, admins)).toBe(false);
+  });
+  it('multi-encargado admin+empleado → false (trabajo de equipo, visible)', () => {
+    expect(taskIsAdminOwned({ assignee: 'Matías, Ana' }, admins)).toBe(false);
+  });
+  it('multi-encargado todos admin → true', () => {
+    expect(taskIsAdminOwned({ assignee: 'Matías, Marcos' }, admins)).toBe(true);
+  });
+  it('sin lista de admins → false (fallback seguro)', () => {
+    expect(taskIsAdminOwned({ assignee: 'Matías Braszka' }, [])).toBe(false);
+  });
+});
+
+describe('taskVisibleToNonAdmin', () => {
+  const admins = [{ id: 'u1', name: 'Matías Braszka' }];
+  const empleado = { id: 'u5', name: 'Ana' };
+  it('tarea de empleado → visible', () => {
+    expect(taskVisibleToNonAdmin({ assignee: 'Pedro' }, empleado, [], admins)).toBe(true);
+  });
+  it('tarea sin encargado → visible', () => {
+    expect(taskVisibleToNonAdmin({ assignee: '' }, empleado, [], admins)).toBe(true);
+  });
+  it('tarea de encargado admin → oculta', () => {
+    expect(taskVisibleToNonAdmin({ assignee: 'Matías Braszka' }, empleado, [], admins)).toBe(false);
+  });
+  it('tarea de encargado admin pero creada por mí → visible (siempre veo las mías)', () => {
+    expect(taskVisibleToNonAdmin({ assignee: 'Matías Braszka', createdBy: 'u5' }, empleado, [], admins)).toBe(true);
   });
 });
 
