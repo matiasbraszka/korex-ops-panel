@@ -110,26 +110,26 @@ button { font-family: inherit; }
 /* Guías del equipo (del_guias_globales). Vivían dentro de DocumentoScreen, pero
    la hoja de Guías del perfil las abre sin pasar por esa pantalla y salían sin
    formato. Acá valen en todo el portal. */
-.guia-rich { font-size: 15px; line-height: 1.62; color: var(--mk-text); }
-.guia-rich p { margin: 0 0 12px; }
-.guia-rich h1, .guia-rich h2, .guia-rich h3 {
+.kx-rich { font-size: 15px; line-height: 1.62; color: var(--mk-text); }
+.kx-rich p { margin: 0 0 12px; }
+.kx-rich h1, .kx-rich h2, .kx-rich h3 {
   color: var(--mk-ink); letter-spacing: -.01em; line-height: 1.25; margin: 18px 0 8px;
 }
-.guia-rich h1 { font-size: 19px; }
-.guia-rich h2 { font-size: 17px; }
-.guia-rich h3 { font-size: 15.5px; }
-.guia-rich ul, .guia-rich ol { margin: 0 0 12px; padding-left: 22px; }
-.guia-rich li { margin: 4px 0; }
-.guia-rich img { max-width: 100%; border-radius: 12px; }
-.guia-rich hr { border: none; border-top: 2px solid var(--mk-border); margin: 16px 0; }
-.guia-rich a { color: var(--mk-blue-ink); font-weight: 600; }
-.guia-rich table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 13.5px; }
-.guia-rich th {
+.kx-rich h1 { font-size: 19px; }
+.kx-rich h2 { font-size: 17px; }
+.kx-rich h3 { font-size: 15.5px; }
+.kx-rich ul, .kx-rich ol { margin: 0 0 12px; padding-left: 22px; }
+.kx-rich li { margin: 4px 0; }
+.kx-rich img { max-width: 100%; border-radius: 12px; }
+.kx-rich hr { border: none; border-top: 2px solid var(--mk-border); margin: 16px 0; }
+.kx-rich a { color: var(--mk-blue-ink); font-weight: 600; }
+.kx-rich table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 13.5px; }
+.kx-rich th {
   text-align: left; font-size: 11px; font-weight: 800; letter-spacing: .06em;
   text-transform: uppercase; color: var(--mk-text2); background: var(--mk-surface2);
   padding: 8px 10px; border: 1px solid var(--mk-border);
 }
-.guia-rich td { padding: 8px 10px; border: 1px solid var(--mk-border); vertical-align: top; }
+.kx-rich td { padding: 8px 10px; border: 1px solid var(--mk-border); vertical-align: top; }
 
 /* ── Onboarding ─────────────────────────────────────────────────────────────
    El onboarding ocupa la pantalla entera con su propio armazon (barra lateral

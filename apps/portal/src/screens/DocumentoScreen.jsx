@@ -38,9 +38,9 @@ const cargarGuias = async () => {
   } catch { return MOCK_GUIAS; }
 };
 
-// El sanitizador y los estilos `.guia-rich` viven fuera (components/richHtml.js
-// e index.css): los comparte con la hoja de Guías del perfil, que se abre sin
-// pasar por esta pantalla.
+// El sanitizador y los estilos `.kx-rich` viven fuera (components/richHtml.js
+// e index.css): los comparten la hoja de Guías del perfil (que se abre sin pasar
+// por esta pantalla) y el cuerpo de cada sección del DEL.
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const rxEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -75,6 +75,17 @@ function marcarQuotes(html, cmts, marking) {
 
 // Duración estimada de lectura (~2.4 palabras/seg), redondeada de a 5 segundos.
 const segundos = (texto) => Math.max(15, Math.round(String(texto || '').split(/\s+/).filter(Boolean).length / 2.4 / 5) * 5);
+
+// El cuerpo de una sección. `del_sections` tiene DOS columnas de contenido y no
+// siempre coinciden: el panel escribe `html` (es lo que el equipo ve y edita) y
+// `text` quedó como estaba el día de la importación. Esta pantalla leía `text`,
+// así que el cliente podía estar leyendo una versión vieja del guion — o nada,
+// si la pestaña se escribió nativa en el panel. Se usa la misma precedencia que
+// el panel y que del_assemble_text: html si lo hay, si no el texto plano.
+const cuerpoHtml = (s) => (String(s.html || '').trim() ? limpiarHtml(s.html) : textoAHtml(s.texto));
+const esRico = (s) => !!String(s.html || '').trim();
+const planoDe = (s) => (String(s.texto || '').trim()
+  || String(s.html || '').replace(/<[^>]+>/g, ' '));
 
 let _uid = 0;
 
@@ -354,7 +365,7 @@ export default function DocumentoScreen() {
                     <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #EEF0F4' }}>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{g.titulo}</div>
                     </div>
-                    <div className="guia-rich" style={{ padding: '16px 18px 18px' }}
+                    <div className="kx-rich" style={{ padding: '16px 18px 18px' }}
                       dangerouslySetInnerHTML={{ __html: limpiarHtml(g.html) || '<p style="color:var(--mk-text3);font-style:italic">Muy pronto.</p>' }} />
                   </div>
                 ))}
@@ -373,7 +384,7 @@ export default function DocumentoScreen() {
             <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft, display: esGuias ? 'none' : 'block' }}>
               {secciones.map((s, i) => {
                 const coms = topComs.filter((c) => (c.sectionId || c.section_id) === s.id);
-                const html = marcarQuotes(textoAHtml(s.texto), coms, marking && marking.sectionId === s.id ? marking : null);
+                const html = marcarQuotes(cuerpoHtml(s), coms, marking && marking.sectionId === s.id ? marking : null);
                 return (
                   <div key={s.id}>
                     {/* Cada bloque es UNA PESTAÑA del DEL (hooks/textos base), no un anuncio suelto. */}
@@ -381,7 +392,7 @@ export default function DocumentoScreen() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: T.primaryInk }}>GUION {i + 1}</span>
                         <span style={{ height: 1, flex: 1, background: 'var(--mk-border)' }} />
-                        <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>~{segundos(s.texto)} seg</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>~{segundos(planoDe(s))} seg</span>
                       </div>
                     )}
                     {(data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
@@ -396,7 +407,7 @@ export default function DocumentoScreen() {
                         )}
                       </div>
                     )}
-                    <div data-secid={s.id} dangerouslySetInnerHTML={{ __html: html }} />
+                    <div data-secid={s.id} className={esRico(s) ? 'kx-rich' : undefined} dangerouslySetInnerHTML={{ __html: html }} />
                     {comsDe(s)}
 
                     {/* El botón de "Revisado", justo debajo del guion que se lee.

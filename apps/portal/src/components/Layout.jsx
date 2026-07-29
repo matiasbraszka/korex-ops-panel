@@ -149,7 +149,7 @@ export function GuiasSheet({ onClose, abrir }) {
         </div>
 
         {guia ? (
-          <div className="guia-rich" style={{ paddingTop: 8 }}
+          <div className="kx-rich" style={{ paddingTop: 8 }}
             dangerouslySetInnerHTML={{ __html: limpiarHtml(guia.html) }} />
         ) : (
           <>
