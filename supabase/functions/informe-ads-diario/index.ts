@@ -144,10 +144,14 @@ Deno.serve(async (req) => {
   const conCuenta: { id: string; name: string }[] = [];
   for (const c of clients ?? []) {
     const accs = Array.isArray(c.meta_ads) ? c.meta_ads : [];
-    // Fuera las 'interna', las que maneja el CLIENTE por su parte (managed_by='cliente',
-    // ej. la cuenta de formularios de Mónica) y las marcadas para ignorar (ignore=true,
-    // ej. la 2ª cuenta de Mónica que Korex no corre): no cuentan en nada. Matías 2026-07.
-    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna" && str(a.managed_by) !== "cliente" && a.ignore !== true && !excludeAccounts.has(str(a.account_id).replace(/^act_/, "")));
+    // Solo se trackean las cuentas CURADAS en el DEL (sección de enlaces): las que tienen
+    // use_token=true. Matías 2026-07-30: "no tomes todas las cuentas de Meta, solo las del
+    // DEL de cada cliente". Un cliente sin ninguna cuenta marcada no aparece (hay que
+    // cargarla en su DEL). Igual se descartan interna / managed_by='cliente' / ignore / excluidas.
+    const real = accs.filter((a: Record<string, unknown>) =>
+      a.use_token === true &&
+      str(a.status) !== "interna" && str(a.managed_by) !== "cliente" && a.ignore !== true &&
+      !excludeAccounts.has(str(a.account_id).replace(/^act_/, "")));
     if (!real.length) continue;
     nameById.set(String(c.id), str(c.name));
     conCuenta.push({ id: String(c.id), name: str(c.name) });
