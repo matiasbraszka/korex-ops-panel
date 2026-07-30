@@ -82,32 +82,29 @@ async function postSlack(token: string, channel: string, text: string, blocks?: 
   if (!b?.ok) throw new Error("slack: " + JSON.stringify(b));
 }
 
-// ── Tabla monoespaciada: lo ÚNICO que Slack alinea bien es un bloque de código.
-// Columnas: cliente | gasto | leads | CPL, números a la derecha.
-const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
-function tablaGasto(filas: { name: string; usd: number; leads: number }[], total: number, totalLeads: number): string {
-  const W_NAME = 19, W_USD = 10, W_LEADS = 6, W_CPL = 8;
-  const linea = (n: string, u: string, l: string, c: string) =>
-    n.padEnd(W_NAME) + u.padStart(W_USD) + l.padStart(W_LEADS) + c.padStart(W_CPL);
-  const sep = "─".repeat(W_NAME + W_USD + W_LEADS + W_CPL);
-  const out: string[] = [
-    linea("CLIENTE", "GASTO", "LEADS", "CPL"),
-    sep,
-  ];
-  for (const r of filas) {
-    out.push(linea(
-      trunc(r.name, W_NAME - 1),
-      money(r.usd),
-      r.leads > 0 ? String(r.leads) : "—",
-      r.leads > 0 ? money(r.usd / r.leads) : "—",
-    ));
-  }
-  out.push(sep);
-  out.push(linea("TOTAL", money(total), totalLeads > 0 ? String(totalLeads) : "—", totalLeads > 0 ? money(total / totalLeads) : "—"));
-  return "```" + out.join("\n") + "```";
-}
+const intMil = (n: number) => Math.round(n).toLocaleString("es-AR");
+const pctTxt = (n: number) => String(n.toFixed(1)).replace(".", ",") + "%";
 
-interface Row { name: string; usd: number; leads: number; impressions: number; clicks: number; }
+interface Row { name: string; usd: number; leads: number; impressions: number; clicks: number; visitas: number; }
+
+// Un bloque por cliente, con todas las métricas etiquetadas (se lee en el celular sin
+// depender del alineado monoespaciado). Números derivados de los totales del cliente:
+//   CTR = clicks/impresiones · CPM = gasto/impresiones·1000
+//   % carga = visitas/clicks (de los que clickearon, cuántos cargaron la landing)
+//   % registro = leads/visitas (de los que cargaron, cuántos se registraron)
+// Visitas/carga/registro caen a "—" hasta que la sincronización empiece a traer visitas.
+function bloqueCliente(r: Row): string {
+  const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
+  const cpm = r.impressions > 0 ? (r.usd / r.impressions) * 1000 : 0;
+  const carga = r.clicks > 0 && r.visitas > 0 ? (r.visitas / r.clicks) * 100 : null;
+  const registro = r.visitas > 0 ? (r.leads / r.visitas) * 100 : null;
+  const vis = r.visitas > 0 ? intMil(r.visitas) : "—";
+  const leadsTxt = r.leads > 0 ? intMil(r.leads) : "—";
+  const cplTxt = r.leads > 0 ? money(r.usd / r.leads) : "—";
+  const l2 = `Clicks ${intMil(r.clicks)} · Visitas ${vis} · Leads ${leadsTxt} · CPL ${cplTxt}`;
+  const l3 = `CTR ${pctTxt(ctr)} · CPM ${money(cpm)} · % carga ${carga === null ? "—" : pctTxt(carga)} · % registro ${registro === null ? "—" : pctTxt(registro)}`;
+  return `*${r.name}* — *${money(r.usd)}*\n${l2}\n${l3}`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -139,9 +136,10 @@ Deno.serve(async (req) => {
   const conCuenta: { id: string; name: string }[] = [];
   for (const c of clients ?? []) {
     const accs = Array.isArray(c.meta_ads) ? c.meta_ads : [];
-    // Fuera las 'interna' y las que maneja el CLIENTE por su parte (managed_by='cliente',
-    // ej. la cuenta de formularios de Mónica): no cuentan en nada. Matías 2026-07-28.
-    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna" && str(a.managed_by) !== "cliente");
+    // Fuera las 'interna', las que maneja el CLIENTE por su parte (managed_by='cliente',
+    // ej. la cuenta de formularios de Mónica) y las marcadas para ignorar (ignore=true,
+    // ej. la 2ª cuenta de Mónica que Korex no corre): no cuentan en nada. Matías 2026-07.
+    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna" && str(a.managed_by) !== "cliente" && a.ignore !== true);
     if (!real.length) continue;
     nameById.set(String(c.id), str(c.name));
     conCuenta.push({ id: String(c.id), name: str(c.name) });
@@ -160,7 +158,7 @@ Deno.serve(async (req) => {
 
   const { data: rows } = snap
     ? await supabase.from("meta_ad_insights")
-        .select("client_id, ad_account_id, spend, leads, impressions, clicks")
+        .select("client_id, ad_account_id, spend, leads, impressions, clicks, landing_page_views")
         .eq("time_window", "yesterday").eq("snapshot_date", snap)
     : { data: [] as Record<string, unknown>[] };
 
@@ -183,11 +181,12 @@ Deno.serve(async (req) => {
       set.add(nombre); sinTipoCambio.set(cur, set);
       continue;
     }
-    const prev = conGasto.get(cid) ?? { name: nombre, usd: 0, leads: 0, impressions: 0, clicks: 0 };
+    const prev = conGasto.get(cid) ?? { name: nombre, usd: 0, leads: 0, impressions: 0, clicks: 0, visitas: 0 };
     prev.usd += spend * rate * (taxAppliesTo === "all" || cur === "USD" ? 1 + taxPct / 100 : 1);
     prev.leads += num(r.leads);
     prev.impressions += num(r.impressions);
     prev.clicks += num(r.clicks);
+    prev.visitas += num(r.landing_page_views);
     conGasto.set(cid, prev);
   }
 
@@ -210,6 +209,7 @@ Deno.serve(async (req) => {
   const lista = [...conGasto.values()].sort((a, b) => b.usd - a.usd);
   const total = lista.reduce((s, r) => s + r.usd, 0);
   const totalLeads = lista.reduce((s, r) => s + r.leads, 0);
+  const totalVisitas = lista.reduce((s, r) => s + r.visitas, 0);
 
   // ── Mensaje visual (Block Kit): encabezado + tabla monoespaciada + pies compactos.
   const fechaLabel = snap ? isoLabel(isoPrevDay(snap)) : bueLabel(-1);
@@ -236,11 +236,23 @@ Deno.serve(async (req) => {
       partes.push("Ningún cliente gastó ayer.");
     } else {
       const cpl = totalLeads > 0 ? total / totalLeads : 0;
-      const resumen = `*Total: ${money(total)}*` + (totalLeads > 0 ? `  ·  ${totalLeads} leads  ·  CPL ${money(cpl)}` : "  ·  sin leads");
-      const tabla = tablaGasto(lista, total, totalLeads);
+      const resumen = `*Total: ${money(total)}*`
+        + (totalLeads > 0 ? `  ·  ${intMil(totalLeads)} leads  ·  CPL ${money(cpl)}` : "  ·  sin leads")
+        + (totalVisitas > 0 ? `  ·  ${intMil(totalVisitas)} visitas` : "");
       blocks.push({ type: "section", text: { type: "mrkdwn", text: resumen } });
-      blocks.push({ type: "section", text: { type: "mrkdwn", text: tabla } });
-      partes.push(resumen, tabla);
+      partes.push(resumen, "");
+      // Un section por cliente (evita el límite de 3000 chars de un solo bloque de Slack).
+      for (const r of lista) {
+        const bloque = bloqueCliente(r);
+        blocks.push({ type: "section", text: { type: "mrkdwn", text: bloque } });
+        partes.push(bloque, "");
+      }
+      // Primer día tras el deploy: la sync todavía no trajo visitas. Se avisa una vez.
+      if (totalVisitas === 0) {
+        const nota = "_Las Visitas (y % carga / % registro) se empiezan a medir desde la próxima sincronización de la mañana._";
+        blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: nota }] });
+        partes.push(nota);
+      }
     }
   }
 

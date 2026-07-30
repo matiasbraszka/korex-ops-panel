@@ -140,6 +140,11 @@ function videoVal(arr: any[] | undefined): number {
   const first = arr.find((a) => String(a?.action_type) === "video_view") || arr[0];
   return num(first?.value);
 }
+// Visitas a la página de destino (landing_page_view). Meta a veces lo reporta también como
+// omni_landing_page_view según el placement: se toma el MAYOR, nunca la suma (evita doble conteo).
+function pickLanding(actions: any[] | undefined): number {
+  return Math.max(actionVal(actions, ["landing_page_view"]), actionVal(actions, ["omni_landing_page_view"]));
+}
 
 const INSIGHT_FIELDS = [
   "ad_id", "ad_name", "campaign_id", "campaign_name", "adset_id", "adset_name",
@@ -152,7 +157,7 @@ const INSIGHT_FIELDS = [
 interface AdMetrics {
   ad_id: string; ad_name: string; campaign_name: string; adset_name: string;
   spend: number; impressions: number; reach: number; frequency: number; cpm: number;
-  clicks: number; inline_link_clicks: number; ctr: number; cpl: number; leads: number;
+  clicks: number; inline_link_clicks: number; ctr: number; cpl: number; leads: number; landing_page_views: number;
   engagement: number; engagement_rate: number;
   video_plays: number; thruplay: number; video_avg_time_watched: number;
   p25: number; p50: number; p75: number; p100: number;
@@ -174,6 +179,7 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
   const p75 = videoVal(row.video_p75_watched_actions);
   const p100 = videoVal(row.video_p100_watched_actions);
   const leads = pickLeads(row.actions, convEvent);
+  const landing_page_views = pickLanding(row.actions);
   const base = v3s || plays || 1;
   const pct = (v: number) => (base > 0 ? Math.round((v / base) * 100) : 0);
   const points = { p0: 100, p25: pct(p25), p50: pct(p50), p75: pct(p75), p100: pct(p100) };
@@ -183,7 +189,7 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
     spend, impressions, reach: num(row.reach), frequency: num(row.frequency),
     cpm: num(row.cpm) || (impressions > 0 ? (spend / impressions) * 1000 : 0),
     clicks: num(row.clicks), inline_link_clicks: num(row.inline_link_clicks),
-    ctr: num(row.ctr), leads, cpl: leads > 0 ? spend / leads : 0,
+    ctr: num(row.ctr), leads, landing_page_views, cpl: leads > 0 ? spend / leads : 0,
     engagement: interactions, engagement_rate: impressions > 0 ? (interactions / impressions) * 100 : 0,
     video_plays: v3s, thruplay, video_avg_time_watched: videoVal(row.video_avg_time_watched_actions),
     p25, p50, p75, p100,
@@ -245,6 +251,9 @@ Deno.serve(async (req) => {
       // Cuentas que maneja el CLIENTE por su parte (ej. la de formularios de Mónica):
       // no se consultan ni se suman en nada. Decisión de Matías 2026-07-28.
       if (a.managed_by === "cliente") continue;
+      // Cuentas marcadas para ignorar (ej. una 2ª cuenta de Mónica que Korex no corre):
+      // no se consultan ni se suman. Se marca con "ignore": true en clients.meta_ads.
+      if (a.ignore === true) continue;
       const eligible = !onlyFlagged || a.use_token === true || mcpPending.has(accId) || (clientId && allAccounts);
       if (!eligible) continue;
       // Una misma cuenta cargada dos veces en meta_ads gastaba 2 llamadas al pedo.
@@ -266,7 +275,7 @@ Deno.serve(async (req) => {
 
   for (const [cid, accJobs] of byClient) {
     if (aborted) break;
-    let accSpend = 0, accImpr = 0, accClicks = 0, accLeads = 0, adsActiveAny = false;
+    let accSpend = 0, accImpr = 0, accClicks = 0, accLeads = 0, accLanding = 0, adsActiveAny = false;
     const clientAdRows: any[] = [];
     for (const jb of accJobs) {
       if (aborted) break;
@@ -317,7 +326,7 @@ Deno.serve(async (req) => {
         const winners = new Set(ranked.slice(0, winnersTop).map((a) => a.ad_id));
         for (const a of ads) (a as any).is_winner = winners.has(a.ad_id);
         for (const a of ads) {
-          accSpend += a.spend; accImpr += a.impressions; accClicks += a.clicks; accLeads += a.leads;
+          accSpend += a.spend; accImpr += a.impressions; accClicks += a.clicks; accLeads += a.leads; accLanding += a.landing_page_views;
           if (a.spend > 0) adsActiveAny = true;
           clientAdRows.push({ ...a, ad_account_id: jb.accId });
         }
@@ -334,7 +343,7 @@ Deno.serve(async (req) => {
         client_id: cid, ad_account_id: a.ad_account_id, campaign_name: a.campaign_name, adset_name: a.adset_name,
         ad_id: a.ad_id, ad_name: a.ad_name, time_window: window, snapshot_date: snapshotDate,
         spend: a.spend, impressions: a.impressions, reach: a.reach, frequency: a.frequency, cpm: a.cpm,
-        clicks: a.clicks, inline_link_clicks: a.inline_link_clicks, ctr: a.ctr, cpl: a.cpl, leads: a.leads,
+        clicks: a.clicks, inline_link_clicks: a.inline_link_clicks, ctr: a.ctr, cpl: a.cpl, leads: a.leads, landing_page_views: a.landing_page_views,
         engagement: a.engagement, engagement_rate: a.engagement_rate,
         video_3s: a.video_plays, thruplay: a.thruplay, video_avg_time_watched: a.video_avg_time_watched,
         hook_rate: a.hook_rate, hold_rate: a.hold_rate, retention: a.retention,
@@ -348,6 +357,9 @@ Deno.serve(async (req) => {
 
       const cpl = accLeads > 0 ? accSpend / accLeads : 0;
       const ctr = accImpr > 0 ? (accClicks / accImpr) * 100 : 0;
+      // % carga = de los que clickearon, cuántos cargaron la landing. % registro = de los que cargaron, cuántos se registraron.
+      const pctCarga = accClicks > 0 ? (accLanding / accClicks) * 100 : 0;
+      const pctRegistro = accLanding > 0 ? (accLeads / accLanding) * 100 : 0;
       const { data: cur } = await supabase.from("clients").select("meta_metrics").eq("id", cid).maybeSingle();
       const prev = (cur?.meta_metrics as Record<string, unknown>) || {};
       // Cada ventana escribe SUS claves. Antes las dos corridas del cron (last_7d y
@@ -360,6 +372,8 @@ Deno.serve(async (req) => {
           ...prev, adsActive: adsActiveAny, source: "token", lastUpdatedYesterday: new Date().toISOString(),
           spendYesterday: Number(accSpend.toFixed(2)), conversionsYesterday: accLeads,
           cplYesterday: Number(cpl.toFixed(2)), impressionsYesterday: accImpr, clicksYesterday: accClicks,
+          landingPageViewsYesterday: accLanding, ctrYesterday: Number(ctr.toFixed(2)),
+          pctCargaYesterday: Number(pctCarga.toFixed(1)), pctRegistroYesterday: Number(pctRegistro.toFixed(1)),
         }
         : {
           ...prev, adsActive: adsActiveAny, source: "token", lastUpdated: new Date().toISOString(),
