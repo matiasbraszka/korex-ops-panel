@@ -7,6 +7,7 @@ import * as tus from 'tus-js-client';
 import { supabase } from '@korex/db';
 import { UploadCloud, Image as ImageIcon, Film, Loader2, Check, Send, MessageSquare, KeyRound, X, Trash2, Menu } from 'lucide-react';
 import { sanitizeDelHtml } from '../components/clientes/funnels/delSanitize';
+import ResourceLightbox from '../components/clientes/funnels/ResourceLightbox';
 
 const TOKEN = (() => { const m = window.location.pathname.match(/^\/compartir\/([A-Za-z0-9]{1,40})/); return m ? m[1] : ''; })();
 const fileToDataUrl = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
@@ -132,6 +133,7 @@ function FolderShare({ data, name, onReload }) {
   const [busy, setBusy] = useState(null);   // {label, pct}
   const [done, setDone] = useState(0);
   const [borrando, setBorrando] = useState(null);   // id del recurso que se está borrando
+  const [preview, setPreview] = useState(null);     // recurso abierto a pantalla completa
   const fileRef = useRef(null);
   const cancelRef = useRef(null);   // { canceled, tus } de la subida en curso
 
@@ -218,10 +220,22 @@ function FolderShare({ data, name, onReload }) {
                     {borrando === r.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                   </button>
                 )}
+                {/* La miniatura tiene que MOSTRAR el contenido, no una silueta: la
+                    imagen se ve (y se abre a pantalla completa), y el video se
+                    reproduce inline (embed de Bunny o <video>). */}
                 <div className="aspect-[4/3] bg-[#F1F3F7] flex items-center justify-center overflow-hidden">
-                  {r.kind === 'image'
-                    ? <img src={r.public_url} alt={r.title} loading="lazy" className="w-full h-full object-cover" />
-                    : <Film size={26} className="text-[#9098A4]" />}
+                  {r.kind === 'image' && r.public_url ? (
+                    <img src={r.public_url} alt={r.title} loading="lazy" onClick={() => setPreview(r)}
+                      className="w-full h-full object-cover cursor-zoom-in" />
+                  ) : r.kind === 'video' && r.public_url && r.provider === 'bunny' ? (
+                    <iframe src={r.public_url} loading="lazy" title={r.title}
+                      allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen
+                      className="w-full h-full block border-none" />
+                  ) : r.kind === 'video' && r.public_url ? (
+                    <video src={r.public_url} controls preload="metadata" className="w-full h-full object-cover" />
+                  ) : (
+                    <Film size={26} className="text-[#9098A4]" />
+                  )}
                 </div>
                 <div className="px-2 py-1.5 text-[11px] font-semibold text-[#3F4653] truncate flex items-center gap-1">{r.kind === 'image' ? <ImageIcon size={11} /> : <Film size={11} />}{r.title}</div>
                 {esMio(r) && <div className="px-2 pb-1.5 -mt-1 text-[10.5px] text-[#AEB4BF]">Lo subiste tú</div>}
@@ -230,6 +244,8 @@ function FolderShare({ data, name, onReload }) {
           </div>
         </div>
       )}
+
+      {preview && <ResourceLightbox r={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
