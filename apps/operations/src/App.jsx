@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, Brain, SlidersHorizontal } from 'lucide-react';
+import { Users, ClipboardList, Settings as SettingsIcon, Play, Phone, Shield, ChevronLeft, ChevronRight, ChevronDown, X, Sparkles, Headphones, MessageCircle, CalendarDays, Zap, FolderOpen, Wallet, BarChart3, LayoutDashboard, Receipt, Banknote, TrendingDown, Scale, Brain, SlidersHorizontal, Route as RouteIcon } from 'lucide-react';
 import { useAuth, useCan, signIn, sendPasswordReset, signOut } from '@korex/auth';
 import { salesNavItems } from '@korex/sales';
 import { useApp } from './context/AppContext';
@@ -13,6 +13,7 @@ const PublicidadPage = lazy(() => import('./pages/PublicidadPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const CustomerJourneyPage = lazy(() => import('./pages/CustomerJourneyPage'));
 const VideosPage = lazy(() => import('./pages/VideosPage'));
 const LlamadasPage = lazy(() => import('./pages/LlamadasPage'));
 const DmePage = lazy(() => import('./pages/DmePage'));
@@ -28,6 +29,7 @@ import CommentsSidePanel from './components/comments/CommentsSidePanel';
 import NotificationBell from './components/notifications/NotificationBell';
 import KorexAccessButton from './components/KorexAccessButton';
 import NotificationsPanel from './components/notifications/NotificationsPanel';
+import ErrorBoundary from './components/ErrorBoundary';
 import NotificationToast from './components/notifications/NotificationToast';
 
 // Lazy-load del modulo Ventas: el chunk se baja solo si el usuario entra.
@@ -391,6 +393,7 @@ function MainLayout() {
     : salesNavItems.filter((it) => it.id !== 'contacts');
   const adminItems = [
     { id: 'settings', label: 'Configuración', Icon: SettingsIcon, path: '/admin/settings' },
+    { id: 'journey', label: 'Customer Journey', Icon: RouteIcon, path: '/admin/journey' },
   ];
   // Items de Soporte definidos aca (no importados de @korex/soporte) para que
   // el modulo entero quede en su propio chunk lazy: la unica referencia al
@@ -455,6 +458,7 @@ function MainLayout() {
     videos: ['Tutoriales', 'Videos de Loom para el equipo'],
     feedback: ['Feedback', 'Feedback de todos los clientes'],
     settings: ['Configuración', 'Plantilla, equipo, servicios y prioridades'],
+    journey: ['Customer Journey', 'El paso a paso de entrega al cliente'],
     cuentas: ['Cuentas', 'Mercury, Kraken y más — control de cada cuenta'],
   };
 
@@ -513,6 +517,10 @@ function MainLayout() {
       <Route
         path="/admin/settings"
         element={currentUser?.isAdmin ? <SettingsPage /> : <Navigate to={homePath} replace />}
+      />
+      <Route
+        path="/admin/journey"
+        element={currentUser?.isAdmin ? <ErrorBoundary label="Customer Journey"><CustomerJourneyPage /></ErrorBoundary> : <Navigate to={homePath} replace />}
       />
       {/* "Cuentas" agrupa Mercury / Kraken / (Stripe) con un selector interno.
           Vive en Finanzas (datos bancarios). Va ANTES del catch-all /finance/*
