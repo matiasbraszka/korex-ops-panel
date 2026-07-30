@@ -164,6 +164,69 @@ async function fetchGroupInfo(jid: string): Promise<GroupInfo | null> {
   }
 }
 
+// ── Persistencia proactiva de media ──────────────────────────────────────────
+// WhatsApp EXPIRA los archivos: si la imagen se baja recién cuando alguien abre
+// el chat días después, Evolution ya no la puede servir y se ve "No se pudo
+// cargar". Por eso, apenas llega un mensaje con media, la bajamos y guardamos en
+// el bucket wa-media (mismo destino que whatsapp-media). Best-effort y NO
+// bloquea la respuesta al webhook (corre en waitUntil).
+const MEDIA_PERSIST_TYPES = new Set(["imageMessage", "stickerMessage", "videoMessage", "documentMessage", "audioMessage"]);
+const WA_MEDIA_BUCKET = "wa-media";
+const MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+const EXT_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+  "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac", "audio/wav": "wav",
+  "video/mp4": "mp4", "video/3gpp": "3gp", "video/quicktime": "mov", "application/pdf": "pdf",
+};
+function extForMedia(mime: string, fileName?: string): string {
+  const fromName = (fileName || "").split(".").pop();
+  if (fromName && fromName.length <= 5 && fromName !== fileName) return fromName.toLowerCase();
+  return EXT_BY_MIME[(mime || "").split(";")[0]] || "bin";
+}
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+async function evoBase64(serverUrl: string, apiKey: string, instance: string, payload: Record<string, any>): Promise<Record<string, any> | null> {
+  try {
+    const r = await fetch(`${serverUrl}/chat/getBase64FromMediaMessage/${instance}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify({ message: payload, convertToMp4: false }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const j = await r.json().catch(() => null);
+    return r.ok && j?.base64 ? j : null;
+  } catch {
+    return null;
+  }
+}
+async function persistMedia(msgRowId: string, waMessageId: string, conversationId: string, item: Record<string, any>): Promise<void> {
+  try {
+    const cfg = await getCfg();
+    const serverUrl = (cfg.server_url || "").replace(/\/+$/, "");
+    const apiKey = cfg.evolution_api_key || "";
+    const instance = cfg.instance_name || "korex-soporte";
+    if (!serverUrl || !apiKey) return;
+    let media = await evoBase64(serverUrl, apiKey, instance, { key: { id: waMessageId } });
+    if (!media && item.message) media = await evoBase64(serverUrl, apiKey, instance, { key: item.key ?? { id: waMessageId }, message: item.message });
+    if (!media?.base64) return;
+    const mime = String(media.mimetype || "application/octet-stream").split(";")[0];
+    const unwrapped = unwrapMessage(item.message);
+    const fileName = String(unwrapped?.documentMessage?.fileName || media.fileName || `${waMessageId}.${extForMedia(mime)}`);
+    const bytes = base64ToBytes(String(media.base64));
+    if (bytes.length > MEDIA_MAX_BYTES) return;
+    const path = `${conversationId}/${waMessageId}.${extForMedia(mime, fileName)}`;
+    const { error: upErr } = await supabase.storage.from(WA_MEDIA_BUCKET).upload(path, bytes, { contentType: mime, upsert: true });
+    if (upErr) { console.error("persistMedia: upload", upErr); return; }
+    await supabase.from("wa_messages").update({ media_path: path, media_mime: mime, media_filename: fileName }).eq("id", msgRowId);
+  } catch (e) {
+    console.error("persistMedia: fallo", e);
+  }
+}
+
 const TAG_PALETTE = ["#22C55E", "#F59E0B", "#4A67D8", "#E11D48", "#7C3AED", "#0E7490", "#15803D", "#B45309", "#2563EB", "#DC2626", "#8E24AA", "#0891B2"];
 
 // Catálogo de etiquetas del panel (soporte_config.tags).
@@ -332,6 +395,17 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   }
   const isNew = (inserted?.length ?? 0) > 0;
   if (!isNew) return null; // reintento del webhook: nada mas que hacer
+
+  // Bajar y guardar la media AHORA (mientras WhatsApp todavia la sirve), asi no
+  // se pierde si se abre el chat dias despues. No bloquea la respuesta.
+  const newMsgId = inserted![0].id as string;
+  if (msgType && MEDIA_PERSIST_TYPES.has(msgType)) {
+    const job = persistMedia(newMsgId, waMessageId, conversationId, item);
+    try {
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime?.waitUntil ? (globalThis as any).EdgeRuntime.waitUntil(job) : await job;
+    } catch { /* best-effort */ }
+  }
 
   // ── 3. Actualizar la conversacion (solo para mensajes nuevos) ──
   // Vinculo por telefono: 1ro contra el Directorio de Finanzas (fuente de

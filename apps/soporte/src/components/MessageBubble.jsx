@@ -1,16 +1,45 @@
-import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle, Trash2, Ban } from 'lucide-react';
-import { fmtClock, colorFromString, msgTypeLabel, initials } from '../lib/format.js';
+import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle, Trash2, Ban, User, Phone } from 'lucide-react';
+import { fmtClock, colorFromString, msgTypeLabel, initials, extractContacts } from '../lib/format.js';
 import MediaContent from './MediaContent.jsx';
 
 // Tipos que renderizan contenido multimedia real (imagen, audio, video, doc).
 const MEDIA_TYPES = new Set(['imageMessage', 'stickerMessage', 'audioMessage', 'videoMessage', 'documentMessage']);
+// Tipos de tarjeta de contacto (vCard): se pintan desde el payload, sin descarga.
+const CONTACT_TYPES = new Set(['contactMessage', 'contactsArrayMessage']);
+
+// Tarjeta de contacto compartida: nombre + teléfonos con acción de llamar.
+// Los datos ya vienen en el payload del mensaje (no hay que bajar nada).
+function ContactCard({ contacts }) {
+  if (!contacts?.length) return <div className="text-[12.5px] font-medium text-text2">👤 Contacto</div>;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {contacts.map((c, i) => (
+        <div key={i} className="flex items-center gap-2.5 bg-white border border-border rounded-xl px-3 py-2 max-w-[260px]">
+          <span className="w-8 h-8 rounded-full bg-[#EEF2FF] text-[#4A67D8] flex items-center justify-center shrink-0">
+            <User size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] font-semibold text-text truncate">{c.name}</div>
+            {c.phones.length ? c.phones.map((p, j) => (
+              <a key={j} href={`tel:${p}`} className="flex items-center gap-1 text-[11px] text-[#4A67D8] truncate hover:underline">
+                <Phone size={10} className="shrink-0" /> {p}
+              </a>
+            )) : <div className="text-[11px] text-text3">Sin número</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // Texto corto de un mensaje (para la cita / preview).
 const MEDIA_SNIPPET = { imageMessage: '📷 Imagen', stickerMessage: 'Sticker', audioMessage: '🎙 Nota de voz', videoMessage: '🎬 Video', documentMessage: '📄 Documento' };
 const snippetOf = (m) => (m?.body && m.body.trim()) || MEDIA_SNIPPET[m?.msg_type] || 'Mensaje';
 
-// Menciones coloreadas como en WhatsApp. Si la mención es un @<número> y
-// conocemos el nombre de esa persona (mapa mentions), mostramos @Nombre.
+// Menciones coloreadas como en WhatsApp. `mentions` es el índice número→
+// {name, phone} del grupo. Si la mención es un @<número> conocido mostramos el
+// nombre; si no lo hay pero sí el teléfono real, mostramos +teléfono; recién
+// como último recurso mostramos el número crudo (el "lid" opaco de WhatsApp).
 function BodyText({ text, mentions }) {
   const parts = String(text).split(/(@[0-9]{5,}|@[\wÀ-ÿ.]+)/g);
   return (
@@ -18,8 +47,9 @@ function BodyText({ text, mentions }) {
       {parts.map((p, i) => {
         if (p.startsWith('@')) {
           const key = p.slice(1);
-          const name = mentions && mentions[key];
-          return <span key={i} className="font-semibold text-[#4A67D8]">@{name || key}</span>;
+          const info = mentions && mentions[key];
+          const label = info ? (info.name || (info.phone ? '+' + info.phone : key)) : key;
+          return <span key={i} className="font-semibold text-[#4A67D8]">@{label}</span>;
         }
         return <span key={i}>{p}</span>;
       })}
@@ -34,7 +64,9 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
   const out = msg.direction === 'out';
   const deleted = !!msg.deleted_at;
   const isMedia = !deleted && MEDIA_TYPES.has(msg.msg_type);
-  const typeLabel = !isMedia && !deleted ? msgTypeLabel(msg.msg_type) : null;
+  const isContact = !deleted && CONTACT_TYPES.has(msg.msg_type);
+  const contacts = isContact ? extractContacts(msg.payload) : null;
+  const typeLabel = !isMedia && !isContact && !deleted ? msgTypeLabel(msg.msg_type) : null;
   const authorName = !out && isGroup ? (msg.payload?.pushName || (msg.sender_jid || '').split('@')[0]) : null;
   const authorColor = colorFromString(msg.sender_jid || '');
   const failed = msg.status === 'failed';
@@ -42,7 +74,7 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
 
   // Acciones (responder / reenviar / eliminar / seleccionar): en mensajes ya
   // enviados o recibidos (no en los que fallaron, están enviándose o se borraron).
-  const actionable = !failed && !sending && !msg._temp && !deleted && (msg.body || isMedia);
+  const actionable = !failed && !sending && !msg._temp && !deleted && (msg.body || isMedia || isContact);
   const canForward = onForward && actionable;
   const canReply = onReply && actionable;
   // Eliminar "para todos": solo mensajes propios (salientes).
@@ -103,6 +135,11 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
           {isMedia && (
             <div className={msg.body ? 'mb-1' : ''}>
               <MediaContent msg={msg} />
+            </div>
+          )}
+          {isContact && (
+            <div className={msg.body ? 'mb-1' : ''}>
+              <ContactCard contacts={contacts} />
             </div>
           )}
           {typeLabel && (

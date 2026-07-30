@@ -475,11 +475,18 @@ export function SoporteProvider({ children }) {
     if (!convId || groupDirInflight.current.has(convId) || groupDirByConv[convId]) return;
     groupDirInflight.current.add(convId);
     try {
-      const [participants, names] = await Promise.all([
+      const [participants, dir] = await Promise.all([
         fetchParticipants(convId),
         fetchGroupNames(convId),
       ]);
-      setGroupDirByConv((prev) => ({ ...prev, [convId]: { participants: participants || [], names } }));
+      // Sumar los teléfonos de los participantes al índice de menciones: así una
+      // mención a alguien que todavía no habló igual muestra su número real.
+      const byNum = { ...(dir.byNum || {}) };
+      for (const p of participants || []) {
+        const num = String(p.jid || '').split('@')[0].split(':')[0];
+        if (num && p.phone) { const c = byNum[num] || (byNum[num] = {}); if (!c.phone) c.phone = String(p.phone).replace(/\D/g, ''); }
+      }
+      setGroupDirByConv((prev) => ({ ...prev, [convId]: { participants: participants || [], names: dir.names || {}, byNum } }));
     } catch (e) {
       console.error('soporte: fallo el directorio del grupo', e);
     } finally {

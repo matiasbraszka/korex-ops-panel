@@ -153,17 +153,37 @@ export async function fetchParticipants(convId) {
   return rows?.[0]?.participants || null;
 }
 
-// Nombres visibles (pushName) de quienes hablaron en el grupo, por jid.
+// Directorio visible de un grupo a partir de los mensajes entrantes:
+//   - names: jid -> pushName (para el subtítulo "Pedro, Romina y 5 más").
+//   - byNum: número (lid / teléfono / jid, sin sufijo) -> { name, phone }.
+//     Sirve para resolver las menciones @<número>: WhatsApp mete en el texto el
+//     "lid" opaco de la persona, no su teléfono real. Como el webhook ya guarda
+//     el lid (sender_lid) y el teléfono real (sender_telefono_e164) de cada
+//     mensaje, indexamos por todos esos identificadores para poder mostrar el
+//     nombre — o al menos el teléfono real — en vez del lid.
+const numOf = (id) => String(id || '').split('@')[0].split(':')[0];
 export async function fetchGroupNames(convId) {
   const rows = await sbFetch(
-    `wa_messages?conversation_id=eq.${convId}&direction=eq.in&select=sender_jid,pushname:payload->>pushName&order=created_at.desc&limit=300`,
+    `wa_messages?conversation_id=eq.${convId}&direction=eq.in&select=sender_jid,sender_lid,sender_telefono_e164,pushname:payload->>pushName&order=created_at.desc&limit=400`,
     { headers: { Prefer: 'return=representation' } },
   );
-  const map = {};
+  const names = {};
+  const byNum = {};
+  const put = (num, name, phone) => {
+    if (!num) return;
+    const cur = byNum[num] || (byNum[num] = {});
+    if (name && !cur.name) cur.name = name;
+    if (phone && !cur.phone) cur.phone = phone;
+  };
   for (const r of Array.isArray(rows) ? rows : []) {
-    if (r.sender_jid && r.pushname && !map[r.sender_jid]) map[r.sender_jid] = r.pushname;
+    const nm = r.pushname || null;
+    if (r.sender_jid && nm && !names[r.sender_jid]) names[r.sender_jid] = nm;
+    const phone = r.sender_telefono_e164 ? String(r.sender_telefono_e164).replace(/\D/g, '') : null;
+    put(numOf(r.sender_jid), nm, phone);
+    put(numOf(r.sender_lid), nm, phone);
+    if (phone) put(phone, nm, phone);
   }
-  return map;
+  return { names, byNum };
 }
 
 // Miembros del equipo (selector "Asignado a", filtro de la bandeja y

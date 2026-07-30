@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { useAuth } from '@korex/auth';
-import { initials, dayKey, colorFromString, convName, fmtPhone, mentionMap } from '../lib/format.js';
+import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
 import MessageBubble from './MessageBubble.jsx';
 import Composer from './Composer.jsx';
 import ForwardModal from './ForwardModal.jsx';
@@ -117,8 +117,9 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     if (isGroup && convId) loadGroupDirectory(convId);
   }, [isGroup, convId, loadGroupDirectory]);
   const dir = isGroup && convId ? groupDirByConv[convId] : null;
-  // Mapa número→nombre para mostrar las menciones (@número) con el nombre real.
-  const mentions = useMemo(() => (isGroup ? mentionMap(dir) : null), [isGroup, dir]);
+  // Índice número→{name,phone} para mostrar las menciones (@número) con el
+  // nombre real (o el teléfono real) en vez del "lid" opaco de WhatsApp.
+  const mentions = useMemo(() => (isGroup ? (dir?.byNum || {}) : null), [isGroup, dir]);
   let groupSub = 'Grupo';
   if (dir?.participants?.length) {
     const names = dir.participants

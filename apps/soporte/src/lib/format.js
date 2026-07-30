@@ -121,6 +121,47 @@ export function mentionMap(dir) {
   return map;
 }
 
+// Desenvuelve el `message` crudo de Baileys (ver-una-vez / efímero / documento
+// con texto) para llegar al contenido real. Espeja unwrapMessage del webhook.
+export function unwrapWaMessage(payload) {
+  let m = payload?.message || {};
+  for (let i = 0; i < 3; i++) {
+    const inner = m.viewOnceMessage?.message || m.viewOnceMessageV2?.message ||
+      m.viewOnceMessageV2Extension?.message || m.ephemeralMessage?.message ||
+      m.documentWithCaptionMessage?.message;
+    if (!inner) break;
+    m = inner;
+  }
+  return m;
+}
+
+// Nombre + teléfonos de una tarjeta de contacto (vCard) compartida.
+function parseVcard(vcard) {
+  const text = String(vcard || '');
+  const fn = (text.match(/^FN:(.*)$/m) || [])[1];
+  const name = (fn || '').trim();
+  // waid= trae el número real de WhatsApp; si no, el valor crudo del TEL.
+  const waids = [...text.matchAll(/waid=(\d+)/g)].map((x) => '+' + x[1]);
+  const tels = [...text.matchAll(/TEL[^:\n]*:([+\d][\d\s().-]+)/g)]
+    .map((x) => x[1].replace(/[^\d+]/g, '')).filter(Boolean);
+  const phones = [...new Set([...waids, ...tels])];
+  return { name, phones };
+}
+
+// Contactos adjuntos de un mensaje (contactMessage / contactsArrayMessage).
+export function extractContacts(payload) {
+  const m = unwrapWaMessage(payload);
+  const out = [];
+  if (m?.contactMessage?.vcard) {
+    out.push({ ...parseVcard(m.contactMessage.vcard), display: m.contactMessage.displayName });
+  }
+  const arr = m?.contactsArrayMessage?.contacts;
+  if (Array.isArray(arr)) {
+    for (const c of arr) if (c?.vcard) out.push({ ...parseVcard(c.vcard), display: c.displayName });
+  }
+  return out.map((c) => ({ name: c.name || c.display || 'Contacto', phones: c.phones || [] }));
+}
+
 // Resuelve la plantilla de confirmación: {{nombre}}, {{fecha}}, {{hora}}.
 export function resolveTemplate(template, { nombre, fecha, hora }) {
   return String(template || '')
