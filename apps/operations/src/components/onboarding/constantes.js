@@ -96,7 +96,7 @@ export const vacia = (skey, pantalla, orden) => ({
   max_opciones: null, input_mode: '', min_altura: null,
   info_kicker: '', info_titulo: '', info_cuerpo: '',
   archivo_cta: '', archivo_hint: '', archivo_accept: '', archivo_multiple: true,
-  solo_dia: false, visible_si: null,
+  solo_dia: false, dias_minimos: 7, visible_si: null,
   bucket_key: null, target_count: null,
   target_kind: null, target_column: null, target_mode: 'fill',
   peso: 1, minutos: 1, plantilla_ord: 999, plantilla_ref: '',
@@ -107,4 +107,8 @@ export const vacioPaso = (bkey, orden) => ({
   bkey, orden, badge: '', eyebrow: '', titulo: 'Paso nuevo', subtitulo: '',
   para_que: '', icono: '', una_por_pantalla: false, minutos: 3,
   checkpoint: false, promesa: '', intro_md: '', video_url: null, activa: true,
+});
+
+export const vacioBloque = (bkey, orden) => ({
+  bkey, orden, nombre: 'Fase nueva', corto: 'NUEVA', titulo: '', descripcion: '', activa: true,
 });

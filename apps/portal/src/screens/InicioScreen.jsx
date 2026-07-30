@@ -166,7 +166,10 @@ export default function InicioScreen() {
       )}
 
       {/* Lo que pide el cliente no es lo único que podemos usar: si tiene más
-          fotos o videos, la puerta está abierta y conviene decirlo. */}
+          fotos o videos, la puerta está abierta y conviene decirlo. PERO no
+          mientras está completando el onboarding: ahí lo único que tiene que
+          hacer es terminarlo, y este cartel lo dispersa hacia Material. */}
+      {!onbPendiente && (
       <div onClick={() => nav('/material')} role="button"
         style={{ margin: '22px 22px 0', padding: '16px 18px', borderRadius: 18, background: 'var(--mk-blue-bg)', border: '1px solid var(--mk-blue-border, #DDE5FB)', display: 'flex', alignItems: 'center', gap: 13, cursor: 'pointer' }}>
         <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -182,6 +185,7 @@ export default function InicioScreen() {
         </div>
         <IcoChevR size={17} stroke={T.text3} sw={2.2} />
       </div>
+      )}
 
       <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
         ¿Algo no se entiende?{' '}

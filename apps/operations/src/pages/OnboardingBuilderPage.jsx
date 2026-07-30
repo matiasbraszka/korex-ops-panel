@@ -36,7 +36,7 @@ import { useApp } from '../context/AppContext';
 import SaveBar from '../components/settings/SaveBar';
 import VistaPreviaPregunta from '../components/onboarding/VistaPreviaPregunta';
 import {
-  TIPOS, COLUMNAS_DESTINO, BUCKETS, ICONOS, slugQkey, vacia, vacioPaso,
+  TIPOS, COLUMNAS_DESTINO, BUCKETS, ICONOS, slugQkey, vacia, vacioPaso, vacioBloque,
 } from '../components/onboarding/constantes';
 
 const input = 'w-full py-2 px-3 text-[13px] border border-gray-200 rounded outline-none focus:border-blue-500 bg-white';
@@ -61,6 +61,8 @@ export default function OnboardingBuilderPage() {
   const [pasos, setPasos] = useState([]);
   const [preguntas, setPreguntas] = useState([]);
   const [borradas, setBorradas] = useState([]);       // qkeys a desactivar al guardar
+  const [borradasSecc, setBorradasSecc] = useState([]);   // skeys a desactivar
+  const [borradasBloque, setBorradasBloque] = useState([]); // bkeys a desactivar
   const [dirty, setDirty] = useState(false);
   const [cargando, setCargando] = useState(true);
 
@@ -82,6 +84,8 @@ export default function OnboardingBuilderPage() {
     const vivos = new Set((s.data || []).map((x) => x.skey));
     setPreguntas((q.data || []).filter((x) => vivos.has(x.skey)));
     setBorradas([]);
+    setBorradasSecc([]);
+    setBorradasBloque([]);
     setDirty(false);
     setCargando(false);
   }, []);
@@ -156,6 +160,58 @@ export default function OnboardingBuilderPage() {
     tocar();
   };
 
+  // ── Alta / baja de secciones (pasos) y fases (bloques) ──────────────────────
+  // Mismo criterio que las preguntas: desactivar, nunca borrar (conserva lo que
+  // el cliente ya respondió). Borrar una sección/fase arrastra a sus hijos.
+  const nuevaKey = (prefijo, usadas) => {
+    let n = usadas.size + 1;
+    let k = `${prefijo}_${n}`;
+    while (usadas.has(k)) { n += 1; k = `${prefijo}_${n}`; }
+    return k;
+  };
+
+  const agregarPaso = (bkey) => {
+    const orden = Math.max(0, ...pasos.filter((p) => p.bkey === bkey).map((p) => p.orden || 0)) + 10;
+    const skey = nuevaKey('paso', new Set(pasos.map((p) => p.skey)));
+    setPasos((ps) => [...ps, { ...vacioPaso(bkey, orden), skey, badge: 'NUEVO', nueva: true }]);
+    setParams({ paso: skey });
+    tocar();
+  };
+
+  const quitarPaso = (p) => {
+    if (!window.confirm(`¿Quitar la sección "${p.titulo || p.skey}" y sus preguntas del onboarding? Lo que los clientes ya respondieron se conserva.`)) return;
+    const suyas = preguntas.filter((q) => q.skey === p.skey && !q.nueva).map((q) => q.qkey);
+    setPasos((ps) => ps.filter((x) => x.skey !== p.skey));
+    setPreguntas((qs) => qs.filter((x) => x.skey !== p.skey));
+    if (!p.nueva) setBorradasSecc((b) => [...b, p.skey]);
+    if (suyas.length) setBorradas((b) => [...b, ...suyas]);
+    if (skeySel === p.skey) setParams({});
+    tocar();
+  };
+
+  const agregarBloque = () => {
+    const orden = Math.max(0, ...bloques.map((b) => b.orden || 0)) + 10;
+    const bkey = nuevaKey('bloque', new Set(bloques.map((b) => b.bkey)));
+    setBloques((bs) => [...bs, { ...vacioBloque(bkey, orden), nueva: true }]);
+    setParams({ bloque: bkey });
+    tocar();
+  };
+
+  const quitarBloque = (b) => {
+    const delBloque = pasos.filter((p) => p.bkey === b.bkey);
+    if (!window.confirm(`¿Quitar la fase "${b.nombre || b.bkey}"${delBloque.length ? ` y sus ${delBloque.length} secciones` : ''} del onboarding? Lo que los clientes ya respondieron se conserva.`)) return;
+    const skeys = delBloque.map((p) => p.skey);
+    const qkeys = preguntas.filter((q) => skeys.includes(q.skey) && !q.nueva).map((q) => q.qkey);
+    setPasos((ps) => ps.filter((p) => p.bkey !== b.bkey));
+    setPreguntas((qs) => qs.filter((q) => !skeys.includes(q.skey)));
+    if (!b.nueva) setBorradasBloque((x) => [...x, b.bkey]);
+    const secciones = delBloque.filter((p) => !p.nueva).map((p) => p.skey);
+    if (secciones.length) setBorradasSecc((x) => [...x, ...secciones]);
+    if (qkeys.length) setBorradas((x) => [...x, ...qkeys]);
+    setParams({});
+    tocar();
+  };
+
   // ── Guardado ───────────────────────────────────────────────────────────────
   const guardar = async () => {
     const marca = { updated_at: new Date().toISOString(), updated_by: user?.id || null };
@@ -193,6 +249,19 @@ export default function OnboardingBuilderPage() {
           .update({ activa: false, ...marca }).in('qkey', borradas);
         if (r4.error) throw r4.error;
       }
+      // Secciones y fases quitadas: se desactivan (nunca se borran). Al desactivar
+      // una sección, sus preguntas ya viajaron en `borradas`; al desactivar una
+      // fase, sus secciones viajaron en `borradasSecc`.
+      if (borradasSecc.length) {
+        const r5 = await supabase.from('onboarding_sections')
+          .update({ activa: false, ...marca }).in('skey', borradasSecc);
+        if (r5.error) throw r5.error;
+      }
+      if (borradasBloque.length) {
+        const r6 = await supabase.from('onboarding_bloques')
+          .update({ activa: false, ...marca }).in('bkey', borradasBloque);
+        if (r6.error) throw r6.error;
+      }
       // El documento del DEL no es un texto aparte: es este catálogo con las
       // respuestas puestas encima. Si acá se cambió una pregunta, se agregó un
       // paso o se reordenó un bloque, los documentos de los clientes EN CURSO
@@ -215,6 +284,8 @@ export default function OnboardingBuilderPage() {
   };
 
   // ── Selección ──────────────────────────────────────────────────────────────
+  const bkeySel = params.get('bloque') || '';
+  const bloque = bloques.find((b) => b.bkey === bkeySel) || null;
   const paso = pasos.find((p) => p.skey === skeySel) || null;
   const pregunta = preguntas.find((q) => q.qkey === qkeySel) || null;
   const delPaso = useMemo(
@@ -245,23 +316,27 @@ export default function OnboardingBuilderPage() {
 
         {bloques.map((b) => (
           <div key={b.bkey} className="mb-4">
-            <button
-              type="button"
-              onClick={() => setParams({ bloque: b.bkey })}
-              className="w-full text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1.5 hover:text-gray-800 cursor-pointer bg-transparent border-none px-0"
-            >
-              {b.corto}
-            </button>
+            <div className="group flex items-center gap-1 mb-1.5">
+              <button
+                type="button"
+                onClick={() => setParams({ bloque: b.bkey })}
+                className="flex-1 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-800 cursor-pointer bg-transparent border-none px-0"
+              >
+                {b.corto || b.nombre}
+              </button>
+              <button type="button" title="Quitar esta fase (y sus secciones)" onClick={() => quitarBloque(b)}
+                className="px-1 text-[12px] text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 bg-transparent border-none cursor-pointer">✕</button>
+            </div>
             {pasos.filter((p) => p.bkey === b.bkey).sort((a, c) => a.orden - c.orden).map((p) => {
               const activo = p.skey === skeySel;
               const n = preguntas.filter((q) => q.skey === p.skey).length;
               return (
                 <div key={p.skey}>
-                  <div className={`flex items-center gap-1 rounded ${activo ? 'bg-blue-50' : ''}`}>
+                  <div className={`group flex items-center gap-1 rounded ${activo ? 'bg-blue-50' : ''}`}>
                     <button
                       type="button"
                       onClick={() => setParams({ paso: p.skey })}
-                      className="flex-1 text-left py-1.5 px-2 text-[12.5px] cursor-pointer bg-transparent border-none"
+                      className="flex-1 text-left py-1.5 px-2 text-[12.5px] cursor-pointer bg-transparent border-none min-w-0 truncate"
                     >
                       <span className="font-mono text-[11px] text-gray-400 mr-1.5">{p.badge}</span>
                       <span className={activo ? 'font-semibold text-gray-900' : 'text-gray-700'}>
@@ -273,6 +348,8 @@ export default function OnboardingBuilderPage() {
                       className="px-1 text-[11px] text-gray-300 hover:text-gray-700 bg-transparent border-none cursor-pointer">↑</button>
                     <button type="button" title="Bajar" onClick={() => mover(pasos, setPasos, (x) => x.bkey === b.bkey, p.skey, 1, 'skey')}
                       className="px-1 text-[11px] text-gray-300 hover:text-gray-700 bg-transparent border-none cursor-pointer">↓</button>
+                    <button type="button" title="Quitar esta sección (y sus preguntas)" onClick={() => quitarPaso(p)}
+                      className="px-1 text-[11px] text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 bg-transparent border-none cursor-pointer">✕</button>
                   </div>
 
                   {activo && (
@@ -309,13 +386,24 @@ export default function OnboardingBuilderPage() {
                 </div>
               );
             })}
+            <button
+              type="button"
+              onClick={() => agregarPaso(b.bkey)}
+              className="mt-1 text-[11px] text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer px-0"
+            >+ sección</button>
           </div>
         ))}
+
+        <button
+          type="button"
+          onClick={agregarBloque}
+          className="mt-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-transparent border border-dashed border-blue-200 rounded px-2 py-1.5 cursor-pointer w-full"
+        >+ agregar fase</button>
       </div>
 
       {/* ── Editor ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-w-0 overflow-y-auto relative">
-        {!paso && (
+        {!paso && !bloque && (
           <div className="bg-white border border-gray-200 rounded-xl p-5 max-w-[860px]">
             <h2 className="text-[14px] font-bold text-gray-800 mb-1">Constructor del onboarding</h2>
             <p className="text-[11px] text-gray-400 leading-relaxed">
@@ -324,6 +412,10 @@ export default function OnboardingBuilderPage() {
               cuanto recarguen. Los que ya lo entregaron no se tocan.
             </p>
           </div>
+        )}
+
+        {bloque && !paso && !pregunta && (
+          <EditorBloque bloque={bloque} onEditar={editarBloque} />
         )}
 
         {paso && !pregunta && (
@@ -339,6 +431,31 @@ export default function OnboardingBuilderPage() {
 
         <SaveBar dirty={dirty} onSave={guardar} onCancel={cargar} />
       </div>
+    </div>
+  );
+}
+
+// ── Editor de fase (bloque) ──────────────────────────────────────────────────
+
+function EditorBloque({ bloque, onEditar }) {
+  const set = (k) => (e) => onEditar(bloque.bkey, { [k]: e.target.value });
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 max-w-[860px] space-y-1">
+      <h2 className="text-[14px] font-bold text-gray-800 mb-3">Fase · {bloque.nombre}</h2>
+      <div className="grid grid-cols-2 gap-3">
+        <Campo titulo="Nombre" hint="El nombre largo de la fase (lo ve el cliente en la portada).">
+          <input className={input} value={bloque.nombre || ''} onChange={set('nombre')} />
+        </Campo>
+        <Campo titulo="Nombre corto" hint="La versión corta para pantallas chicas.">
+          <input className={input} value={bloque.corto || ''} onChange={set('corto')} />
+        </Campo>
+      </div>
+      <Campo titulo="Título">
+        <input className={input} value={bloque.titulo || ''} onChange={set('titulo')} />
+      </Campo>
+      <Campo titulo="Descripción">
+        <textarea className={input} rows={2} value={bloque.descripcion || ''} onChange={set('descripcion')} />
+      </Campo>
     </div>
   );
 }
@@ -543,6 +660,14 @@ function EditorPregunta({ q, paso, preguntas, onEditar, onDuplicar, onQuitar }) 
             </div>
           )}
         </div>
+      )}
+
+      {q.qtype === 'agenda' && (
+        <Campo titulo="Antelación mínima (días)"
+               hint="Para «reservá tu fecha de grabación»: la primera fecha que se le ofrece al cliente es a estos días desde que completa. Por defecto 7.">
+          <input type="number" min={0} className={`${input} w-[140px]`} value={q.dias_minimos ?? 7}
+                 onChange={(e) => onEditar(q.qkey, { dias_minimos: Number(e.target.value) })} />
+        </Campo>
       )}
 
       {(q.qtype === 'archivos' || q.qtype === 'subida') && (

@@ -279,10 +279,14 @@ export function CampoSesion({ q, valor, onChange }) {
 export function CampoGrabacion({ q, valor, onChange }) {
   const { setEstado } = useOnboarding();
 
-  // Los próximos días hábiles. Grabar un domingo no es realista y ofrecerlo
-  // solo hace que el cliente elija una fecha que después no cumple.
+  // Los próximos días hábiles, con una antelación mínima: la primera fecha que
+  // se ofrece es a `diasMinimos` días desde hoy (por defecto 7, configurable por
+  // pregunta desde la administración del onboarding). Grabar un domingo no es
+  // realista y ofrecerlo solo hace que el cliente elija una fecha que no cumple.
+  const antelacion = Number.isFinite(q?.diasMinimos) ? q.diasMinimos : 7;
   const dias = [];
   const d = new Date();
+  d.setDate(d.getDate() + Math.max(0, antelacion - 1)); // el bucle suma 1 antes de empujar la primera
   while (dias.length < 10) {
     d.setDate(d.getDate() + 1);
     if (d.getDay() !== 0 && d.getDay() !== 6) dias.push(iso(d));

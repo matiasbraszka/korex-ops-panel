@@ -19,7 +19,7 @@ import OnbShell, { Pie, usaAncho } from '../components/OnbShell';
 import Campo from '../components/Campo';
 import { CampoSesion, CampoGrabacion } from '../components/CampoAgenda';
 import Resumen from '../components/Resumen';
-import { lleno, minLargo, visible } from '../progreso';
+import { lleno, minLargo, visible, calcularProgreso } from '../progreso';
 
 function Pastilla({ children }) {
   return (
@@ -188,6 +188,22 @@ export default function PasoScreen() {
   const puede = obligatorias.every((q) => lleno(q, respuestas, bloqueantes));
   const falta = obligatorias.find((q) => !lleno(q, respuestas, bloqueantes));
 
+  // Control de calidad final: la ÚNICA pantalla que bloquea a propósito (ver la
+  // cabecera del archivo). Acá el cliente confirma que terminó; dejarlo finalizar
+  // con obligatorias vacías rompe la promesa. Si falta algo, el botón se desactiva
+  // y "Continuar" lo lleva a la primera obligatoria sin completar.
+  const esControl = preguntas.some((q) => q.tipo === 'resumen');
+  const prog = esControl ? calcularProgreso(pasos, respuestas, bloqueantes) : null;
+  const faltanObl = esControl ? Math.max(0, prog.requeridas - prog.respondidas) : 0;
+  const primerFaltante = (esControl && faltanObl > 0)
+    ? lista.find((n) => n.tipo === 'pregunta'
+        && n.pantalla.preguntas.some((q) => q.requerida && visible(q, respuestas) && !lleno(q, respuestas, bloqueantes)))
+    : null;
+  const onSeguir = () => {
+    if (esControl && faltanObl > 0) return primerFaltante ? ir(rutaDe(primerFaltante)) : undefined;
+    return siguiente();
+  };
+
   let pista = '';
   if (!puede && falta) {
     if (falta.largo) {
@@ -203,6 +219,10 @@ export default function PasoScreen() {
     } else {
       pista = 'Completá lo que falta para seguir. Si no lo sabés con certeza, decinos lo que sepas.';
     }
+  }
+  if (esControl && faltanObl > 0) {
+    pista = `Te ${faltanObl === 1 ? 'falta 1 respuesta obligatoria' : `faltan ${faltanObl} respuestas obligatorias`} para finalizar. `
+          + 'Tocá «Completar» en la sección que las tenga en rojo.';
   }
 
   const etiquetaPie = idx === lista.length - 1
@@ -232,8 +252,8 @@ export default function PasoScreen() {
   return (
     <OnbShell
       contador={contador}
-      pie={<Pie onAtras={atras} onSeguir={siguiente} etiqueta={etiquetaPie}
-                activo={puede} pista={pista} />}>
+      pie={<Pie onAtras={atras} onSeguir={onSeguir} etiqueta={etiquetaPie}
+                activo={esControl ? faltanObl === 0 : puede} pista={pista} />}>
       <div style={{ animation: 'mkrise .3s ease both' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <div style={{
