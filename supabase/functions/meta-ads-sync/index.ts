@@ -231,6 +231,9 @@ Deno.serve(async (req) => {
   // las mostraba como $0 sin haberle preguntado a Meta. Por defecto entran todas.
   // Con only_flagged=true en meta_ads_sync_config se vuelve al criterio viejo.
   const onlyFlagged = cfg.only_flagged === true;
+  // Cuentas que Korex NO corre (ej. la 2ª de Mónica): no se consultan ni se guardan.
+  // Fuente robusta en la config (no un flag de meta_ads, que se pisa). Ver informe-ads-diario.
+  const excludeAccounts = new Set(((cfg.exclude_accounts as unknown[]) ?? []).map((x) => String(x).replace(/^act_/, "")));
 
   const token = await getToken();
   if (!token) return j({ ok: false, error: "missing_token", detail: "Falta el token de Meta (fbcrm_settings.meta_user_token o secreto META_ADS_TOKEN)." }, 400);
@@ -254,6 +257,7 @@ Deno.serve(async (req) => {
       // Cuentas marcadas para ignorar (ej. una 2ª cuenta de Mónica que Korex no corre):
       // no se consultan ni se suman. Se marca con "ignore": true en clients.meta_ads.
       if (a.ignore === true) continue;
+      if (excludeAccounts.has(accId)) continue;
       const eligible = !onlyFlagged || a.use_token === true || mcpPending.has(accId) || (clientId && allAccounts);
       if (!eligible) continue;
       // Una misma cuenta cargada dos veces en meta_ads gastaba 2 llamadas al pedo.

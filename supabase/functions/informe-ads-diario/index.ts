@@ -127,6 +127,14 @@ Deno.serve(async (req) => {
   if (!cronSecret || got !== cronSecret) return j({ ok: false, error: "unauthorized" }, 401);
   if (!enabled && !dry) return j({ ok: true, skipped: "deshabilitado" });
 
+  // Cuentas que Korex NO corre y no deben contar (ej. la 2ª de Mónica). Fuente ÚNICA y
+  // robusta: meta_ads_sync_config.exclude_accounts. Un flag dentro de clients.meta_ads lo
+  // pisaba el sync / el editor de clientes; esta lista solo la toca este feature.
+  const { data: syncCfgRow } = await supabase.from("app_settings").select("value").eq("key", "meta_ads_sync_config").maybeSingle();
+  const excludeAccounts = new Set(
+    (((syncCfgRow?.value as Record<string, unknown>)?.exclude_accounts as unknown[]) ?? []).map((x) => str(x).replace(/^act_/, "")),
+  );
+
   // Universo del informe: clientes activos CON al menos una cuenta de anuncios real.
   // Los que no tienen ninguna (o solo cuentas 'interna') no hacen publicidad y no se
   // nombran: listarlos era ruido — el mensaje viejo arrastraba hasta "Prueba Onboarding".
@@ -139,7 +147,7 @@ Deno.serve(async (req) => {
     // Fuera las 'interna', las que maneja el CLIENTE por su parte (managed_by='cliente',
     // ej. la cuenta de formularios de Mónica) y las marcadas para ignorar (ignore=true,
     // ej. la 2ª cuenta de Mónica que Korex no corre): no cuentan en nada. Matías 2026-07.
-    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna" && str(a.managed_by) !== "cliente" && a.ignore !== true);
+    const real = accs.filter((a: Record<string, unknown>) => str(a.status) !== "interna" && str(a.managed_by) !== "cliente" && a.ignore !== true && !excludeAccounts.has(str(a.account_id).replace(/^act_/, "")));
     if (!real.length) continue;
     nameById.set(String(c.id), str(c.name));
     conCuenta.push({ id: String(c.id), name: str(c.name) });
