@@ -1005,7 +1005,8 @@ Quedo a la espera de tu respuesta`;
         </div>
         <div className="p-2.5">
           <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} bucketKey="testimonios"
-            label="Testimonios" color="#DB2777" bg="#FDF2F8" by={meId}
+            label="Testimonios" color="#DB2777" bg="#FDF2F8" by={meId} voomly
+            extra={<span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span>}
             moveTargets={moveTargets} selfId="f:testimonios" reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
         </div>
       </div>
