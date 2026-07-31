@@ -4,7 +4,7 @@
 // Backend: RPCs portal_admin_estado / portal_admin_activar (solo equipo).
 import { useEffect, useState } from 'react';
 import { supabase } from '@korex/db';
-import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Trash2, ClipboardList, BadgeCheck, Activity, Users, Link2, Power } from 'lucide-react';
+import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Trash2, ClipboardList, BadgeCheck, Activity, Users, Link2, Power, Film } from 'lucide-react';
 import Modal from '../Modal';
 
 // URL pública del portal. Configurable por env; fallback al dominio previsto.
@@ -49,6 +49,7 @@ export default function PortalClienteModal({ client, onClose }) {
 
   const [collabToken, setCollabToken] = useState(null); // token del link de colaboradores
   const [collabs, setCollabs] = useState([]);           // colaboradores registrados
+  const [grab, setGrab] = useState(null);               // resumen de grabaciones
 
   const cargar = async () => {
     setErr('');
@@ -117,7 +118,11 @@ export default function PortalClienteModal({ client, onClose }) {
     setPedidos(Array.isArray(p) ? p : []);
     setEventos(Array.isArray(ev) ? ev : []);
   };
-  useEffect(() => { cargar(); cargarPedidos(); cargarOnb(); cargarCollab(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [client.id]);
+  const cargarGrab = async () => {
+    const { data } = await supabase.rpc('del_grab_resumen_cliente', { p_client_id: client.id });
+    if (data?.ok) setGrab(data);
+  };
+  useEffect(() => { cargar(); cargarPedidos(); cargarOnb(); cargarCollab(); cargarGrab(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [client.id]);
 
   // ── Pedidos al cliente (lo que ve en "Lo que te falta" de su portal) ──
   const sembrar = async () => { await supabase.rpc('portal_pedidos_seed', { p_client: client.id }); cargarPedidos(); };
@@ -214,6 +219,61 @@ export default function PortalClienteModal({ client, onClose }) {
                 {c.notes && <div className="text-[10.5px] text-[#AEB4BF] py-1.5">{c.notes}{c.enabled ? '' : ' · DESHABILITADA'}</div>}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── GRABACIONES: tracking de tiempos por estado + por guión ────── */}
+        {grab && ((grab.guiones || []).length > 0 || (grab.recursosDiasSinSubir ?? 0) > 0) && (
+          <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <Film size={15} color="#5B7CF5" />
+              <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Grabaciones</span>
+              {typeof grab.recursosDiasSinSubir === 'number' && grab.recursosDiasSinSubir > 3 && (
+                <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: '#FEF3C7', color: '#B45309' }}>
+                  sin subir material hace {grab.recursosDiasSinSubir}d
+                </span>
+              )}
+            </div>
+
+            {/* Resumen por estado (cuántos + el más viejo) */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { k: 'revision', t: 'Esperando revisión', c: '#1D4FD8', b: '#EEF3FF' },
+                { k: 'grabacion', t: 'Esperando grabación', c: '#15803D', b: '#DCFCE7' },
+                { k: 'correccion', t: 'En corrección (Korex)', c: '#B45309', b: '#FEF6E7' },
+              ].map((x) => {
+                const r = grab.resumen?.[x.k];
+                return (
+                  <div key={x.k} className="rounded-lg p-2" style={{ background: x.b }}>
+                    <div className="text-[18px] font-extrabold leading-none" style={{ color: x.c }}>{r?.n || 0}</div>
+                    <div className="text-[9.5px] font-semibold mt-1 leading-tight" style={{ color: x.c }}>{x.t}</div>
+                    {r?.n > 0 && <div className="text-[9px] mt-0.5" style={{ color: x.c, opacity: 0.8 }}>el más viejo: {r.dias}d</div>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Por guión */}
+            {(grab.guiones || []).length > 0 && (
+              <div className="flex flex-col">
+                {grab.guiones.map((g) => {
+                  const est = { revision: { t: '👀 Revisión', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
+                  return (
+                    <div key={g.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[9px] font-extrabold text-white shrink-0" style={{ background: g.responsable?.color || '#5B7CF5' }} title={g.responsable?.nombre}>
+                        {g.responsable?.iniciales || '·'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-[#1A1D26] truncate">{g.titulo}</div>
+                        <div className="text-[10px] text-[#AEB4BF] truncate">{g.funnel || ''} · {g.responsable?.nombre}</div>
+                      </div>
+                      <span className="text-[10px] font-bold shrink-0" style={{ color: est.c }}>{est.t}</span>
+                      <span className="text-[10px] text-[#9CA3AF] shrink-0 tabular-nums w-8 text-right">{g.dias}d</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -342,6 +342,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // primer del_section (todas comparten doc_id por estrategia).
   const [resolvedDoc, setResolvedDoc] = useState(docId || null);
   const [resolvedClient, setResolvedClient] = useState(clientId || null);
+  // Personas a las que se puede asignar la grabación de un guión: el cliente +
+  // sus colaboradores "Encargado de grabarse".
+  const [asignables, setAsignables] = useState([{ id: '', nombre: 'Cliente' }]);
 
   // Carga las secciones del DEL de ESTE funnel. Si el funnel tiene su DEL propio
   // (docId, viene de del_doc_id), filtra por doc_id → ve SOLO su documento, aunque
@@ -351,7 +354,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     try {
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion&${filtro}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
         // servía una versión vieja cacheada del documento tras reorganizarlo.
         { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
@@ -368,6 +371,34 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       setErr(String(e?.message || e));
     }
   }, [strategyId, docId]);
+
+  // Carga las personas asignables (cliente + Encargados de grabarse) del cliente.
+  useEffect(() => {
+    if (!resolvedClient) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const [cli, colabs] = await Promise.all([
+          sbFetch(`clients?select=name&id=eq.${resolvedClient}`),
+          sbFetch(`portal_collaborators?select=id,full_name,email,role&client_id=eq.${resolvedClient}&enabled=eq.true&role=ilike.Encargado*`),
+        ]);
+        if (!vivo) return;
+        const nombreCli = (Array.isArray(cli) && cli[0]?.name) || 'Cliente';
+        const lista = [{ id: '', nombre: `${nombreCli} (cliente)` }];
+        (Array.isArray(colabs) ? colabs : []).forEach((c) => lista.push({ id: c.id, nombre: c.full_name || c.email || 'Encargado' }));
+        setAsignables(lista);
+      } catch { /* deja solo Cliente */ }
+    })();
+    return () => { vivo = false; };
+  }, [resolvedClient]);
+
+  // Asigna el responsable de grabación de un guión (cliente o colaborador).
+  const asignarGrabador = async (s, colabId) => {
+    const val = colabId || null;
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_colab_id: val } : x));
+    const { data, error } = await supabase.rpc('del_section_asignar_grabador', { p_id: s.id, p_colab_id: val, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude asignar el responsable' + (data?.error ? ': ' + data.error : '')); await cargar(); }
+  };
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -1647,6 +1678,34 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     <option value="en_construccion">🔨 En construcción</option>
                     <option value="terminado">✔ Terminado</option>
                   </select>
+                  {/* RESPONSABLE de grabación (cliente o Encargado) + estado del flujo */}
+                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (
+                    <>
+                      <select
+                        value={s.grab_colab_id || ''}
+                        onChange={(e) => asignarGrabador(s, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Quién graba este guión"
+                        className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-bold border cursor-pointer outline-none bg-white text-[#4B5563] border-[#E2E5EB] max-w-[130px] truncate">
+                        {asignables.map((a) => <option key={a.id || 'cliente'} value={a.id}>🎥 {a.nombre}</option>)}
+                      </select>
+                      {s.grab_flujo && (() => {
+                        const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
+                        const m = {
+                          revision:   { t: '👀 Revisión', c: '#1D4FD8', b: '#EEF3FF' },
+                          correccion: { t: '✏️ Corrección', c: '#B45309', b: '#FEF6E7' },
+                          grabacion:  { t: '🎬 Grabación', c: '#15803D', b: '#DCFCE7' },
+                        }[s.grab_flujo];
+                        if (!m) return null;
+                        return (
+                          <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: m.b, color: m.c }}
+                            title={dias != null ? `Hace ${dias} día(s) en este estado` : ''}>
+                            {m.t}{dias != null ? ` · ${dias}d` : ''}
+                          </span>
+                        );
+                      })()}
+                    </>
+                  )}
                   {/* Qué ve el cliente, dicho en palabras. Los dos selectores de
                       arriba no lo dejan claro: "Revisar + Terminado" en un guion
                       de VSL o anuncios NO lo manda a grabar, y eso se descubría
