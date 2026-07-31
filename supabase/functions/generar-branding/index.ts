@@ -157,12 +157,19 @@ async function elegirFicha(niche: string): Promise<{ id: string; content: string
 /** Lo que sabemos del cliente, en texto, para el director de arte. */
 async function armarContexto(cliente: Record<string, unknown>): Promise<string> {
   const clientId = str(cliente.id);
-  const [{ data: docs }, { data: funnels }] = await Promise.all([
-    supabase.from("client_brain_docs").select("doc_kind,title,text,char_count")
-      .eq("client_id", clientId).in("doc_kind", ["briefing", "onboarding", "investigacion"])
-      .order("char_count", { ascending: false }),
+  // Un documento por tipo, el más largo, y nada más. Traer todos salía carísimo: un cliente con
+  // material completo tiene ~165.000 caracteres repartidos en varios docs, que viajaban enteros
+  // para después recortarlos a 9.000. Ocho segundos de espera tirados en cada corrida.
+  const unDoc = (kind: string) =>
+    supabase.from("client_brain_docs").select("doc_kind,title,text")
+      .eq("client_id", clientId).eq("doc_kind", kind)
+      .order("char_count", { ascending: false }).limit(1).maybeSingle();
+
+  const [rBrief, rOnb, rInv, { data: funnels }] = await Promise.all([
+    unDoc("briefing"), unDoc("onboarding"), unDoc("investigacion"),
     supabase.from("strategy_pages").select("name,tipo,avatars").eq("client_id", clientId),
   ]);
+  const docs = [rBrief.data, rOnb.data, rInv.data].filter(Boolean) as Record<string, unknown>[];
 
   const partes: string[] = [];
   partes.push(
@@ -187,9 +194,9 @@ async function armarContexto(cliente: Record<string, unknown>): Promise<string> 
   }
 
   // El briefing de personalidad es la fuente más valiosa; el onboarding es el respaldo.
-  const briefing = (docs || []).find((d) => d.doc_kind === "briefing");
-  const onboarding = (docs || []).find((d) => d.doc_kind === "onboarding");
-  const investigacion = (docs || []).find((d) => d.doc_kind === "investigacion");
+  const briefing = docs.find((d) => d.doc_kind === "briefing");
+  const onboarding = docs.find((d) => d.doc_kind === "onboarding");
+  const investigacion = docs.find((d) => d.doc_kind === "investigacion");
 
   if (briefing?.text) partes.push(`===== PERSONALIDAD Y TONO DEL LÍDER (briefing) =====\n${clip(str(briefing.text), 4000)}`);
   if (onboarding?.text) partes.push(`===== ONBOARDING =====\n${clip(str(onboarding.text), briefing?.text ? 2500 : 5000)}`);
@@ -450,8 +457,15 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
   const quality = ["low", "medium", "high"].includes(str(body.quality)) ? str(body.quality) : "medium";
   const modoForzado = ["persona", "equipo"].includes(str(body.modo_marca_forzado)) ? str(body.modo_marca_forzado) : "";
 
-  const { data: cliente } = await supabase.from("clients")
-    .select("id,name,team_name,company,niche,service,country,brand_colors,brand_font").eq("id", clientId).maybeSingle();
+  // Todo lo que no depende de nada más, junto. Contra esta base cada consulta cuesta varios
+  // segundos (medido: entre 3 y 11 cada una), así que encadenarlas sumaba ~30 segundos de espera
+  // antes siquiera de empezar a pensar el branding.
+  const [{ data: cliente }, { data: keyRow }, freno] = await Promise.all([
+    supabase.from("clients")
+      .select("id,name,team_name,company,niche,service,country,brand_colors,brand_font").eq("id", clientId).maybeSingle(),
+    supabase.from("secure_config").select("value").eq("key", "anthropic_api_key").maybeSingle(),
+    chequearTopes(cfg, 0.03),
+  ]);
   if (!cliente) return j({ ok: false, error: "cliente_inexistente", detail: "No encontré ese cliente." }, 404);
 
   // Validación dura. Sin estos cuatro datos el branding sale genérico, así que se frena acá y se
@@ -466,14 +480,12 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
     });
   }
 
-  const { data: keyRow } = await supabase.from("secure_config").select("value").eq("key", "anthropic_api_key").maybeSingle();
   const apiKey = str(keyRow?.value);
   if (!apiKey) return j({ ok: false, error: "missing_api_key", detail: "Falta configurar la API key de Anthropic." }, 500);
 
   const model = str((cfg.chat_models as Record<string, string>)?.branding) || str(cfg.chat_model) || "claude-sonnet-5";
   const price = ((cfg.prices as Record<string, { in: number; out: number }>) || {})[model] || PRECIOS_LISTA[model] || { in: 5, out: 25 };
 
-  const freno = await chequearTopes(cfg, 0.03);
   if (freno) {
     await supabase.from("api_usage").insert({ fn: "generar_branding", model, status: "blocked", client_id: clientId, error: freno.error, meta: { action: "plan" } });
     return j({ ok: false, ...freno }, 429);

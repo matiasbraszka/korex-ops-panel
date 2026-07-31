@@ -9,9 +9,9 @@
 // function expone tres pasos —plan, render (una imagen), palettes— y acá se encadenan, así los
 // logos aparecen de a uno y un fallo en el logo 3 no se lleva puestos los logos 1 y 2.
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { supabase } from '@korex/db';
 import { Sparkles, RefreshCw, X, Pencil, AlertTriangle } from 'lucide-react';
+import Modal from '../../Modal';
 
 // Estimación para mostrar antes de gastar. Va conservadora a propósito: que la cuenta real dé
 // menos de lo anunciado es mejor que al revés.
@@ -53,42 +53,13 @@ async function invocar(body, signal) {
 export default function BrandingGenerator({ clientId, color, hayGenerados, onDone, onEditarCliente }) {
   const [gen, setGen] = useState({ status: 'idle' });
   const [abierto, setAbierto] = useState(false);
-  const [pos, setPos] = useState(null);
   const [opts, setOpts] = useState({ nLogos: 1, quality: 'medium', modo: 'variar' });
-  const btnRef = useRef(null);
   const vivo = useRef(true);
   useEffect(() => () => { vivo.current = false; }, []);
 
   const corriendo = gen.status === 'planning' || gen.status === 'rendering';
 
-  useEffect(() => {
-    if (!abierto) return;
-    const cerrar = () => setAbierto(false);
-    window.addEventListener('scroll', cerrar, true);
-    window.addEventListener('resize', cerrar);
-    return () => { window.removeEventListener('scroll', cerrar, true); window.removeEventListener('resize', cerrar); };
-  }, [abierto]);
-
-  // El botón vive al final de la carpeta, así que casi siempre queda cerca del borde de abajo de
-  // la pantalla. Abrir el panel siempre hacia abajo lo dejaba fuera de la vista: apretabas y
-  // parecía que no pasaba nada. Si no entra abajo, se da vuelta y se abre hacia arriba; si no
-  // entra en ningún lado, se pega al borde y scrollea adentro.
-  const ALTO = 380, ANCHO = 328, MARGEN = 8;
-  const abrir = () => {
-    const rect = btnRef.current?.getBoundingClientRect();
-    if (rect) {
-      const abajo = window.innerHeight - rect.bottom;
-      const top = abajo >= ALTO + MARGEN
-        ? rect.bottom + 6
-        : Math.max(MARGEN, Math.min(rect.top - ALTO - 6, window.innerHeight - ALTO - MARGEN));
-      setPos({
-        top,
-        left: Math.max(MARGEN, Math.min(rect.left, window.innerWidth - ANCHO - MARGEN)),
-        maxHeight: window.innerHeight - top - MARGEN,
-      });
-    }
-    setAbierto(o => !o);
-  };
+  const abrir = () => setAbierto(true);
 
   const fallo = (r, hechos) => {
     if (r?.error === 'datos_incompletos') {
@@ -148,8 +119,10 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
 
   return (
     <>
+      {/* El tiempo estimado va explícito: en un cliente con mucho material esto tarda más de un
+          minuto, y sin el número la espera se lee como "se colgó" y el equipo recarga la página. */}
       {gen.status === 'planning' && aviso('#FDF2F8', '#FBCFE8', '#BE185D', (
-        <><RefreshCw size={13} className="animate-spin mt-px shrink-0" /><span>La IA está leyendo lo que hay del cliente y definiendo la dirección de arte… unos segundos.</span></>
+        <><RefreshCw size={13} className="animate-spin mt-px shrink-0" /><span>Leyendo el onboarding, la investigación y la personalidad del cliente para definir la dirección de arte. <b>Puede tardar 1 o 2 minutos</b> — no cierres la pestaña.</span></>
       ))}
 
       {gen.status === 'rendering' && (
@@ -200,61 +173,61 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
         </div>
       )}
 
-      <button ref={btnRef} onClick={abrir} disabled={corriendo}
+      <button onClick={abrir} disabled={corriendo}
         className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border-none text-white text-[11.5px] font-semibold cursor-pointer disabled:opacity-60"
         style={{ background: color }}>
         {corriendo ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
         {corriendo ? 'Generando…' : hayGenerados ? 'Regenerar branding' : 'Generar branding'}
       </button>
 
-      {abierto && pos && createPortal(
-        <>
-          <div className="fixed inset-0 z-[65]" onClick={() => setAbierto(false)} />
-          <div className="fixed z-[70] w-[328px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left overflow-y-auto"
-            style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Generar branding</span>
-              <button onClick={() => setAbierto(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
-            </div>
-            <div className="text-[11px] text-[#9098A4] mb-2.5 leading-snug">
-              La IA lee el onboarding, la investigación y la personalidad del cliente, decide si la marca va por su nombre o por el del equipo, y deja acá los logos (en color, negro y blanco) y 3 paletas.
-            </div>
-
-            <Grupo titulo="¿Cuántos logos?">
-              <Opcion activo={opts.nLogos === 1} onClick={() => setOpts(o => ({ ...o, nLogos: 1 }))} color={color}
-                titulo="Prueba · 1 logo" nota="Para probar sin gastar" />
-              <Opcion activo={opts.nLogos === 3} onClick={() => setOpts(o => ({ ...o, nLogos: 3 }))} color={color}
-                titulo="Completo · 3 logos" nota="Marca personal, equipo y una segunda versión" />
-            </Grupo>
-
-            <Grupo titulo="Calidad de imagen">
-              <Opcion activo={opts.quality === 'medium'} onClick={() => setOpts(o => ({ ...o, quality: 'medium' }))} color={color}
-                titulo="Media" nota="Suficiente para elegir" />
-              <Opcion activo={opts.quality === 'high'} onClick={() => setOpts(o => ({ ...o, quality: 'high' }))} color={color}
-                titulo="Alta" nota="Más definición, casi 4 veces más cara" />
-            </Grupo>
-
-            {hayGenerados && (
-              <Grupo titulo="Ya hay material en la carpeta">
-                <Opcion activo={opts.modo === 'variar'} onClick={() => setOpts(o => ({ ...o, modo: 'variar' }))} color={color}
-                  titulo="Variar sobre lo que quedó" nota="Sigue la línea de lo que no borraste" />
-                <Opcion activo={opts.modo === 'otra_direccion'} onClick={() => setOpts(o => ({ ...o, modo: 'otra_direccion' }))} color={color}
-                  titulo="Cambiar de dirección" nota="Empieza de cero, otra familia visual" />
-              </Grupo>
-            )}
-
-            <div className="flex items-center justify-between gap-2 mt-3">
-              <span className="text-[11px] text-[#9098A4]">Costo estimado: <b className="text-[#3F4653]">US${estimar(opts.nLogos, opts.quality)}</b></span>
+      <Modal
+        open={abierto}
+        onClose={() => setAbierto(false)}
+        title="Generar branding"
+        maxWidth={460}
+        footer={
+          <div className="flex items-center justify-between w-full gap-3">
+            <span className="text-[11.5px] text-[#9098A4]">Costo estimado: <b className="text-[#3F4653]">US${estimar(opts.nLogos, opts.quality)}</b></span>
+            <div className="flex gap-2">
+              <button onClick={() => setAbierto(false)}
+                className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#6B7280] font-medium cursor-pointer">Cancelar</button>
               <button onClick={generar}
-                className="inline-flex items-center gap-1.5 py-2 px-4 rounded-lg border-none text-white text-[12px] font-semibold cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-[12.5px] py-2 px-4 rounded-lg border-none text-white font-semibold cursor-pointer"
                 style={{ background: color }}>
                 <Sparkles size={13} />Generar
               </button>
             </div>
           </div>
-        </>,
-        document.body,
-      )}
+        }>
+        <div className="text-[12.5px] text-[#6B7280] mb-4 leading-relaxed">
+          La IA lee el onboarding, la investigación y la personalidad del cliente, decide si la marca
+          va por su nombre o por el del equipo, y deja en esta carpeta los logos (cada uno en color,
+          negro y blanco, con fondo transparente) y 3 paletas de colores.
+        </div>
+
+        <Grupo titulo="¿Cuántos logos?">
+          <Opcion activo={opts.nLogos === 1} onClick={() => setOpts(o => ({ ...o, nLogos: 1 }))} color={color}
+            titulo="Prueba · 1 logo" nota="Para ver la calidad sin gastar de más" />
+          <Opcion activo={opts.nLogos === 3} onClick={() => setOpts(o => ({ ...o, nLogos: 3 }))} color={color}
+            titulo="Completo · 3 logos" nota="Marca personal, nombre del equipo y una segunda versión del más sólido" />
+        </Grupo>
+
+        <Grupo titulo="Calidad de imagen">
+          <Opcion activo={opts.quality === 'medium'} onClick={() => setOpts(o => ({ ...o, quality: 'medium' }))} color={color}
+            titulo="Media" nota="Suficiente para elegir cuál te gusta" />
+          <Opcion activo={opts.quality === 'high'} onClick={() => setOpts(o => ({ ...o, quality: 'high' }))} color={color}
+            titulo="Alta" nota="Más definición, cuatro veces más cara" />
+        </Grupo>
+
+        {hayGenerados && (
+          <Grupo titulo="Ya hay material en esta carpeta">
+            <Opcion activo={opts.modo === 'variar'} onClick={() => setOpts(o => ({ ...o, modo: 'variar' }))} color={color}
+              titulo="Variar sobre lo que quedó" nota="Sigue la línea de lo que no borraste" />
+            <Opcion activo={opts.modo === 'otra_direccion'} onClick={() => setOpts(o => ({ ...o, modo: 'otra_direccion' }))} color={color}
+              titulo="Cambiar de dirección" nota="Empieza de cero, con otra familia visual" />
+          </Grupo>
+        )}
+      </Modal>
     </>
   );
 }

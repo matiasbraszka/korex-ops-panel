@@ -27,7 +27,9 @@ import { join } from "node:path";
 const ENV_FILE = join(process.cwd(), "scripts", "agent-fn-local.env");
 // Que funcion levantar. Por defecto agent-chat (es para lo que nacio esto), pero cualquier
 // edge fn sirve: node scripts/agent-fn-local.mjs generar-branding
-const FN_NAME = process.argv[2] || "agent-chat";
+const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const watch = !process.argv.includes("--no-watch");
+const FN_NAME = args[0] || "agent-chat";
 const FN = join(process.cwd(), "supabase", "functions", FN_NAME, "index.ts");
 const DENO = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "deno.cmd" : "deno");
 const PORT = "8000"; // lo fija Deno.serve() dentro de la edge fn
@@ -70,6 +72,11 @@ console.log("  Produccion no se toca: sigue corriendo la version deployada.\n");
 
 // --watch: se reinicia sola al guardar el archivo, para iterar el prompt sin frenar nada.
 //
+// Con --no-watch se levanta FIJA. Sirve cuando alguien esta probando desde el panel: cada
+// reinicio del watcher corta las peticiones en curso, y si justo habia una (una imagen tarda
+// 40-90 s) el proceso puede quedar tomando el puerto sin responder — desde el panel se ve como
+// "el boton no hace nada", que es el peor sintoma posible porque no dice nada.
+//
 // El puerto NO se pasa por flag: `--port` es de `deno serve`, no de `deno run`, y las versiones
 // actuales de Deno lo rechazan de plano. Lo fija Deno.serve() dentro de la propia edge fn, que
 // sin opciones escucha en 8000 — el mismo default que usa Supabase.
@@ -81,5 +88,6 @@ console.log("  Produccion no se toca: sigue corriendo la version deployada.\n");
 // intenta resolver ahi las dependencias npm de la edge fn (@supabase/realtime-js, upng-js) y
 // falla. Con "auto" se las baja y maneja el solo, igual que hace el runtime de Supabase.
 const q = (s) => (process.platform === "win32" ? `"${s}"` : s);
-const p = spawn(q(DENO), ["run", "--allow-all", "--node-modules-dir=auto", "--watch", q(FN)], { env, stdio: "inherit", shell: process.platform === "win32" });
+const flags = ["run", "--allow-all", "--node-modules-dir=auto", ...(watch ? ["--watch"] : []), q(FN)];
+const p = spawn(q(DENO), flags, { env, stdio: "inherit", shell: process.platform === "win32" });
 p.on("exit", (c) => process.exit(c ?? 0));
