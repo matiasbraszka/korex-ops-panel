@@ -83,6 +83,90 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     setDialog({ type: 'image', url: '', replaceEl: imgSel.el });
   };
 
+  // ── Edición de tablas (herramienta del DEL) ──────────────────────────────────
+  // Al hacer click en una celda aparece una barra flotante para agregar/borrar
+  // filas y columnas, ajustar el ancho (el texto se reacomoda solo) y borrar la
+  // tabla. Todo muta el DOM directo con el historial propio (mutarNodo/borrarNodo).
+  const [tblSel, setTblSel] = useState(null); // { cell, top, left }
+  const posicionarTblSel = (cell) => {
+    if (!rootRef.current || !cell) return;
+    const rRoot = rootRef.current.getBoundingClientRect();
+    const rCell = cell.getBoundingClientRect();
+    setTblSel({ cell, top: rCell.top - rRoot.top - 40, left: Math.max(8, rCell.left - rRoot.left) });
+  };
+  const celdaInfo = (cell) => {
+    const row = cell.parentElement;                       // <tr>
+    const table = cell.closest('table');
+    const colIndex = Array.prototype.indexOf.call(row.children, cell);
+    return { row, table, colIndex };
+  };
+  const nuevaCelda = (tag) => { const c = document.createElement(tag); c.innerHTML = '<br>'; return c; };
+
+  const insertarFila = (abajo) => {
+    if (!tblSel?.cell) return;
+    const { row } = celdaInfo(tblSel.cell);
+    const nCols = row.children.length;
+    mutarNodo(row, (r) => {
+      const tr = document.createElement('tr');
+      for (let i = 0; i < nCols; i++) tr.appendChild(nuevaCelda('td'));
+      if (abajo) r.after(tr); else r.before(tr);
+    });
+    setTblSel(null);
+  };
+  const insertarColumna = (derecha) => {
+    if (!tblSel?.cell) return;
+    const { table, colIndex } = celdaInfo(tblSel.cell);
+    mutarNodo(table, (t) => {
+      t.querySelectorAll('tr').forEach((tr) => {
+        const ref = tr.children[colIndex];
+        const esHead = tr.parentElement.tagName === 'THEAD' || (ref && ref.tagName === 'TH');
+        const celda = nuevaCelda(esHead ? 'th' : 'td');
+        if (!ref) tr.appendChild(celda);
+        else if (derecha) ref.after(celda); else ref.before(celda);
+      });
+    });
+    setTblSel(null);
+  };
+  const borrarFila = () => {
+    if (!tblSel?.cell) return;
+    const { row, table } = celdaInfo(tblSel.cell);
+    if (table.querySelectorAll('tr').length <= 1) { borrarNodo(table); setTblSel(null); return; }
+    borrarNodo(row); setTblSel(null);
+  };
+  const borrarColumna = () => {
+    if (!tblSel?.cell) return;
+    const { table, colIndex } = celdaInfo(tblSel.cell);
+    const primera = table.querySelector('tr');
+    if (primera && primera.children.length <= 1) { borrarNodo(table); setTblSel(null); return; }
+    mutarNodo(table, (t) => t.querySelectorAll('tr').forEach((tr) => { const c = tr.children[colIndex]; if (c) c.remove(); }));
+    setTblSel(null);
+  };
+  const borrarTabla = () => {
+    if (!tblSel?.cell) return;
+    const table = tblSel.cell.closest('table');
+    if (table) borrarNodo(table);
+    setTblSel(null);
+  };
+  // Ajusta el ancho de la columna en pasos; el texto de las celdas se reacomoda.
+  const ajustarColumna = (delta) => {
+    if (!tblSel?.cell) return;
+    const { table, colIndex } = celdaInfo(tblSel.cell);
+    mutarNodo(table, (t) => {
+      t.querySelectorAll('tr').forEach((tr) => {
+        const c = tr.children[colIndex];
+        if (!c) return;
+        const actual = parseInt(c.style.width, 10) || Math.round(c.getBoundingClientRect().width) || 120;
+        const nuevo = Math.max(48, actual + delta);
+        c.style.width = nuevo + 'px';
+        c.style.minWidth = nuevo + 'px';
+        c.style.maxWidth = nuevo + 'px';
+        c.style.whiteSpace = 'normal';
+        c.style.overflowWrap = 'break-word';
+      });
+    });
+    // No cerramos la barra: se puede ajustar varias veces seguidas.
+  };
+
   useEffect(() => {
     if (!ref.current) return;
     // Inicializamos contenido SOLO si cambia respecto a la ultima inyeccion,
@@ -141,6 +225,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     sel.removeAllRanges();
     sel.addRange(r);
     setImgSel(null);
+    setTblSel(null);
     lastSnapAt.current = 0;
     handleInput();
   };
@@ -197,10 +282,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       if ((peso === 'bold' || Number(peso) >= 600) && !el.closest('b,strong,h1,h2,h3,h4,h5,h6,th')) wrap('strong');
       if (st.fontStyle === 'italic' && !el.closest('i,em')) wrap('em');
       if (/underline/.test(st.textDecorationLine || st.textDecoration || '') && !el.closest('u,a')) wrap('u');
-      const color = st.color, fondo = st.backgroundColor;
+      const color = st.color, fondo = st.backgroundColor, alin = st.textAlign;
       el.removeAttribute('style');
       if (color && !/^rgb\(0,\s*0,\s*0\)$/.test(color) && color !== '#000000') el.style.color = color;
       if (fondo && fondo !== 'transparent' && !/^rgba?\(255,\s*255,\s*255/.test(fondo)) el.style.backgroundColor = fondo;
+      // Alineación: Google Docs/Word la traen como text-align inline en el párrafo.
+      // Se conserva (izquierda/centro/derecha/justificado) para respetar el diseño pegado.
+      if (/^(center|right|justify|left)$/.test(alin)) el.style.textAlign = alin;
     });
     // Los span/font que quedaron sin nada que aportar se desenvuelven.
     doc.body.querySelectorAll('span,font').forEach(sp => { if (!sp.attributes.length) sp.replaceWith(...sp.childNodes); });
@@ -537,6 +625,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       return;
     }
     if (imgSel) cerrarImgSel();
+    // Celda de tabla (herramienta del DEL): click dentro de td/th → barra de tabla.
+    // No frena el click: el cursor se ubica normal en la celda para escribir.
+    if (delTools) {
+      const cell = e.target.closest?.('td,th');
+      if (cell && ref.current?.contains(cell)) posicionarTblSel(cell);
+      else if (tblSel) setTblSel(null);
+    }
     const h = e.target.closest?.('h1,h2,h3');
     if (!h || !ref.current?.contains(h)) return;
     // Solo togglear si el click cae en la "canaleta" izquierda donde vive la flecha.
@@ -704,6 +799,26 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
           <button type="button" onClick={reemplazarImg} className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">Reemplazar</button>
           <button type="button" onClick={quitarImg} className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer">Quitar</button>
           <button type="button" onClick={cerrarImgSel} className="py-1 px-1 rounded text-[10.5px] font-bold text-[#9CA3AF] hover:text-[#4B5563] border-none bg-transparent cursor-pointer">✕</button>
+        </div>
+      )}
+
+      {/* Barra flotante de tabla: filas, columnas, ancho y borrar (herramienta del DEL). */}
+      {tblSel && (
+        <div className="absolute z-30 flex items-center gap-0.5 bg-white border border-[#E2E5EB] rounded-lg px-1 py-0.5 flex-wrap max-w-[calc(100%-16px)]" style={{ top: Math.max(2, tblSel.top), left: tblSel.left, boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}
+          onMouseDown={(e) => e.preventDefault()}>
+          <button type="button" onClick={() => insertarFila(false)} title="Insertar fila arriba" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">↑ Fila</button>
+          <button type="button" onClick={() => insertarFila(true)} title="Insertar fila abajo" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">↓ Fila</button>
+          <button type="button" onClick={borrarFila} title="Borrar esta fila" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer">Fila ✕</button>
+          <div className="w-px h-4 bg-gray-200" />
+          <button type="button" onClick={() => insertarColumna(false)} title="Insertar columna a la izquierda" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">← Col</button>
+          <button type="button" onClick={() => insertarColumna(true)} title="Insertar columna a la derecha" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">Col →</button>
+          <button type="button" onClick={borrarColumna} title="Borrar esta columna" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer">Col ✕</button>
+          <div className="w-px h-4 bg-gray-200" />
+          <button type="button" onClick={() => ajustarColumna(-40)} title="Columna más angosta" className="py-1 px-1.5 rounded text-[11px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">Ancho −</button>
+          <button type="button" onClick={() => ajustarColumna(40)} title="Columna más ancha" className="py-1 px-1.5 rounded text-[11px] font-bold text-[#4B5563] hover:bg-[#EEF2FF] hover:text-[#2E69E0] border-none bg-transparent cursor-pointer">Ancho +</button>
+          <div className="w-px h-4 bg-gray-200" />
+          <button type="button" onClick={borrarTabla} title="Borrar toda la tabla" className="py-1 px-1.5 rounded text-[10.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] border-none bg-transparent cursor-pointer">Tabla ✕</button>
+          <button type="button" onClick={() => setTblSel(null)} className="py-1 px-1 rounded text-[10.5px] font-bold text-[#9CA3AF] hover:text-[#4B5563] border-none bg-transparent cursor-pointer">✕</button>
         </div>
       )}
 
