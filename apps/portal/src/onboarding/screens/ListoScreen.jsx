@@ -178,7 +178,7 @@ export default function ListoScreen() {
         </div>
 
         <div style={{ marginBottom: 30 }}>
-          <Roadmap variant="cierre" grabacion={grabacion} sesion={sesion} />
+          <Roadmap grabacion={grabacion} heading="Así avanza tu proyecto desde ahora" />
         </div>
 
         <div style={{ background: T.dark, borderRadius: 18, padding: 24, marginBottom: 26 }}>
