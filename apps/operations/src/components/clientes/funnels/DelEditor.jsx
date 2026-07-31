@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus, ChevronRight, ChevronLeft } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus, ChevronRight, ChevronLeft, FolderDown } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -101,6 +101,27 @@ function agruparImagenes(list) {
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
 }
+// Carpetas destino del importador de Drive (= bucket_key de funnel_resources).
+// scope 'funnel' → usa el strategy_id del funnel; 'cliente' → carpeta general (strategy_id null).
+const IMPORT_DESTINOS = [
+  { grupo: 'De este funnel', opciones: [
+    { key: 'ad_rec', label: 'Anuncios — grabados', scope: 'funnel' },
+    { key: 'ad_edit', label: 'Anuncios — editados', scope: 'funnel' },
+    { key: 'vsl_rec', label: 'VSL — grabados', scope: 'funnel' },
+    { key: 'vsl_edit', label: 'VSL — editados', scope: 'funnel' },
+    { key: 'testimonios', label: 'Testimonios', scope: 'funnel' },
+  ] },
+  { grupo: 'Generales del cliente', opciones: [
+    { key: 'branding', label: 'Branding', scope: 'cliente' },
+    { key: 'productos', label: 'Productos', scope: 'cliente' },
+    { key: 'estilo_vida', label: 'Estilo de vida', scope: 'cliente' },
+    { key: 'autoridad', label: 'Autoridad', scope: 'cliente' },
+    { key: 'empresa', label: 'Empresa', scope: 'cliente' },
+    { key: 'testimonios_korex', label: 'Testimonios Korex', scope: 'cliente' },
+  ] },
+];
+const IMPORT_OPT = (k) => IMPORT_DESTINOS.flatMap((g) => g.opciones).find((o) => o.key === k);
+
 function TbBtn({ Icon, label, title, onClick, disabled }) {
   return (
     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick} disabled={disabled} title={title}
@@ -110,7 +131,7 @@ function TbBtn({ Icon, label, title, onClick, disabled }) {
   );
 }
 function TbDiv() { return <div className="w-px h-5 bg-gray-200 mx-0.5" />; }
-function DelToolbar({ api }) {
+function DelToolbar({ api, onImportDrive }) {
   const [colorOpen, setColorOpen] = useState(false);
   const [hlOpen, setHlOpen] = useState(false);
   const [boxOpen, setBoxOpen] = useState(false);
@@ -214,6 +235,12 @@ function DelToolbar({ api }) {
       </div>
       <TbBtn Icon={ImageIcon} title="Insertar imagen" disabled={off} onClick={() => call('openImage')} />
       <TbBtn Icon={UserPlus} title="Insertar un avatar" disabled={off} onClick={() => call('openAvatar')} />
+      {onImportDrive && (
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onImportDrive} title="Importar archivos de una carpeta de Drive"
+          className="w-8 h-8 flex items-center justify-center rounded-md text-[#0891B2] hover:bg-[#ECFEFF] hover:text-[#0E7490] bg-transparent border-none cursor-pointer transition-colors">
+          <FolderDown size={15} />
+        </button>
+      )}
       <TbDiv />
       <TbBtn Icon={Link2} title="Insertar link" disabled={off} onClick={() => call('addLink')} />
       <TbBtn Icon={Eraser} title="Quitar formato" disabled={off} onClick={() => call('clearFormat')} />
@@ -267,6 +294,12 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
   const [moveTo, setMoveTo] = useState(null); // submenu "mover a otro embudo": { docId, name } elegido (falta la categoria)
   const [moveRect, setMoveRect] = useState(null); // posicion (fixed) del menu de mover, para que no lo recorte el contenedor
+  // Importador de archivos de Drive (one-shot): link + carpeta destino → funnel_resources.
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importBucket, setImportBucket] = useState('ad_rec');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importRes, setImportRes] = useState(null);
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
@@ -1008,6 +1041,26 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     emitir('section-add', {}); // que el DEL destino (y este) se refresquen
   };
 
+  // Importar una carpeta de Drive a los recursos (one-shot). Reusa la edge fn importar-drive.
+  const ejecutarImportDrive = async () => {
+    const url = (importUrl || '').trim();
+    if (!url) return;
+    const opt = IMPORT_OPT(importBucket);
+    const esFunnel = opt?.scope === 'funnel';
+    if (esFunnel && !strategyId) { setImportRes({ error: 'Este funnel todavía no tiene su carpeta de recursos. Elegí una carpeta general o creá el funnel primero.' }); return; }
+    setImportBusy(true); setImportRes(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('importar-drive', {
+        body: { folderUrl: url, clientId, strategyId: esFunnel ? strategyId : null, bucketKey: importBucket },
+      });
+      if (error) setImportRes({ error: 'No se pudo importar. Revisá el link y probá de nuevo.' });
+      else if (data && data.ok === false) setImportRes({ error: data.error || 'No se pudo importar.' });
+      else setImportRes(data || { ok: true });
+    } catch (e) {
+      setImportRes({ error: String(e?.message || e) });
+    } finally { setImportBusy(false); }
+  };
+
   // ── Versionado a nivel funnel ─────────────────────────────────────────────────
   // "+" abre un modal que pregunta qué cambia en la versión nueva: solo las páginas
   // (VSL/anuncios se comparten, sin carpetas nuevas) o un relanzamiento completo
@@ -1494,7 +1547,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
             )}
           </div>
           {/* La barra única: una sola, fija arriba, opera sobre la sección enfocada. */}
-          {editando && <DelToolbar api={activeApi} />}
+          {editando && <DelToolbar api={activeApi} onImportDrive={() => { setImportRes(null); setImportOpen(true); }} />}
           </div>
 
 
@@ -2026,6 +2079,70 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
               <button onClick={() => setNewDocOpen(false)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
               <button onClick={crearDocNuevo} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer">Crear</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Importador de archivos de Drive: pegás el link de una carpeta pública y elegís
+          la carpeta destino; sube todo a Recursos (videos → Bunny, imágenes → almacenamiento),
+          saltea duplicados y se transcribe/ordena solo con el flujo de siempre. */}
+      {importOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !importBusy) setImportOpen(false); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[460px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <FolderDown size={17} className="text-[#0891B2]" />
+              <div className="text-[15px] font-bold text-[#1A1D26] flex-1">Importar archivos de Drive</div>
+              {!importBusy && <button onClick={() => setImportOpen(false)} className="w-7 h-7 inline-flex items-center justify-center rounded-lg text-[#9098A4] hover:bg-[#F4F5F7] border-none bg-transparent cursor-pointer"><X size={15} /></button>}
+            </div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3.5 leading-snug">Pegá el link de una carpeta de Drive y elegí dónde guardarla. Los videos se suben y se transcriben solos; los duplicados se saltean.</div>
+
+            {!importRes?.ok ? (<>
+              <label className="block text-[12px] font-semibold text-[#6B7280] mb-1">Link de la carpeta de Drive</label>
+              <input type="url" value={importUrl} autoFocus disabled={importBusy}
+                onChange={e => { setImportUrl(e.target.value); if (importRes?.error) setImportRes(null); }}
+                placeholder="https://drive.google.com/drive/folders/…"
+                className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#0891B2] disabled:opacity-60" />
+
+              <label className="block text-[12px] font-semibold text-[#6B7280] mt-3 mb-1">Carpeta destino</label>
+              <select value={importBucket} disabled={importBusy} onChange={e => setImportBucket(e.target.value)}
+                className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#0891B2] bg-white disabled:opacity-60">
+                {IMPORT_DESTINOS.map(g => (
+                  <optgroup key={g.grupo} label={g.grupo}>
+                    {g.opciones.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+
+              {importRes?.error && <div className="text-[11.5px] text-[#DC2626] mt-2.5 leading-snug">{importRes.error}</div>}
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button disabled={importBusy} onClick={() => setImportOpen(false)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer disabled:opacity-50">Cancelar</button>
+                <button disabled={importBusy || !importUrl.trim()} onClick={ejecutarImportDrive} className="py-2 px-4 rounded-lg border-none bg-[#0891B2] text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5">
+                  {importBusy ? <><Loader2 size={13} className="animate-spin" />Importando…</> : 'Importar'}
+                </button>
+              </div>
+              {importBusy && <div className="text-[11px] text-[#9098A4] mt-2 text-center">Puede tardar un rato si hay muchos videos. No cierres esta ventana.</div>}
+            </>) : (<>
+              {/* Resultado */}
+              <div className="rounded-xl border border-[#D9F2E5] bg-[#F0FBF5] p-3.5 mb-1">
+                <div className="text-[13px] font-bold text-[#15803D] mb-1.5">Importación lista ✓</div>
+                <div className="text-[12.5px] text-[#3F4653] leading-relaxed">
+                  <b>{importRes.importados || 0}</b> recurso{(importRes.importados === 1) ? '' : 's'} importado{(importRes.importados === 1) ? '' : 's'}
+                  {` (${importRes.videos || 0} video${importRes.videos === 1 ? '' : 's'}, ${importRes.imagenes || 0} imagen${importRes.imagenes === 1 ? '' : 'es'}${importRes.otros ? `, ${importRes.otros} otros` : ''}).`}
+                  {importRes.duplicados > 0 && <><br /><b>{importRes.duplicados}</b> saltado{importRes.duplicados === 1 ? '' : 's'} por estar repetido{importRes.duplicados === 1 ? '' : 's'}.</>}
+                  {importRes.restantes > 0 && <><br />Quedan <b>{importRes.restantes}</b> archivo{importRes.restantes === 1 ? '' : 's'} sin procesar: volvé a importar la misma carpeta para seguir.</>}
+                  {importRes.bunny === 'daily_cap' && <><br /><span className="text-[#B45309]">Se alcanzó el tope diario de gasto de video: los videos que faltan no se subieron.</span></>}
+                  {importRes.bunny === 'frozen' && <><br /><span className="text-[#B45309]">La subida de video está en pausa por el candado de gasto: los videos no se subieron.</span></>}
+                  {importRes.videos_saltados_por_tope > 0 && <><br /><b>{importRes.videos_saltados_por_tope}</b> video{importRes.videos_saltados_por_tope === 1 ? '' : 's'} no se subieron por el tope de gasto.</>}
+                  {importRes.errores?.length > 0 && <><br /><span className="text-[#DC2626]">{importRes.errores.length} con error.</span></>}
+                </div>
+                <div className="text-[11px] text-[#6B7280] mt-2">Los videos se transcriben solos en los próximos minutos y el título/avatar se afinan con el flujo de siempre.</div>
+              </div>
+              <div className="flex justify-end gap-2 mt-3">
+                <button onClick={() => { setImportRes(null); setImportUrl(''); }} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Importar otra</button>
+                <button onClick={() => { setImportOpen(false); setImportUrl(''); setImportRes(null); }} className="py-2 px-4 rounded-lg border-none bg-[#0891B2] text-white text-[13px] font-semibold cursor-pointer">Listo</button>
+              </div>
+            </>)}
           </div>
         </div>
       )}
