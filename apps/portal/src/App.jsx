@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { usePortalAuth } from './auth/PortalAuthProvider';
 import Layout from './components/Layout';
 import PhoneFrame from './components/PhoneFrame';
+import CollabGate from './components/CollabGate';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Loading } from './components/ui';
 import LoginScreen from './screens/LoginScreen';
@@ -58,6 +59,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <CollabGate>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
         {/* Si un colaborador ya logueado abre el link, va directo a su espacio. */}
@@ -102,6 +104,7 @@ export default function App() {
         <Route path="/funnel/:id" element={<Navigate to="/embudos" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </CollabGate>
     </ErrorBoundary>
   );
 }
