@@ -30,7 +30,7 @@ const ENV_FILE = join(process.cwd(), "scripts", "agent-fn-local.env");
 const FN_NAME = process.argv[2] || "agent-chat";
 const FN = join(process.cwd(), "supabase", "functions", FN_NAME, "index.ts");
 const DENO = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "deno.cmd" : "deno");
-const PORT = process.env.PORT || "8000";
+const PORT = "8000"; // lo fija Deno.serve() dentro de la edge fn
 
 // Las 3 que Supabase le inyecta a toda edge fn. Sin la service_role, la funcion no puede
 // leer las tablas (RLS) y todo responde vacio, que es peor que fallar: parece que anda.
@@ -59,13 +59,27 @@ if (faltan.length) {
   process.exit(1);
 }
 
-console.log("agent-chat LOCAL");
+const VITE_VAR = FN_NAME === "generar-branding" ? "VITE_BRANDING_FN_URL" : "VITE_AGENT_FN_URL";
+
+console.log(`${FN_NAME} LOCAL`);
 console.log(`  runtime : Deno (el mismo de Supabase)`);
 console.log(`  DB      : ${env.SUPABASE_URL}  ← la REAL: el corpus, el gate y los clientes son los de verdad`);
 console.log(`  escucha : http://localhost:${PORT}`);
-console.log(`\n  En apps/operations/.env.local:  VITE_AGENT_FN_URL=http://localhost:${PORT}`);
+console.log(`\n  En apps/operations/.env.local:  ${VITE_VAR}=http://localhost:${PORT}`);
 console.log("  Produccion no se toca: sigue corriendo la version deployada.\n");
 
 // --watch: se reinicia sola al guardar el archivo, para iterar el prompt sin frenar nada.
-const p = spawn(DENO, ["run", "--allow-all", "--watch", `--port=${PORT}`, FN], { env, stdio: "inherit", shell: process.platform === "win32" });
+//
+// El puerto NO se pasa por flag: `--port` es de `deno serve`, no de `deno run`, y las versiones
+// actuales de Deno lo rechazan de plano. Lo fija Deno.serve() dentro de la propia edge fn, que
+// sin opciones escucha en 8000 — el mismo default que usa Supabase.
+//
+// En Windows spawn corre con shell:true, asi que las rutas con espacios (C:\Users\Mati Braska\...)
+// hay que comillarlas a mano o el shell las parte al primer espacio y no encuentra el ejecutable.
+//
+// --node-modules-dir=auto: el repo es un monorepo con node_modules propio, y sin esto Deno
+// intenta resolver ahi las dependencias npm de la edge fn (@supabase/realtime-js, upng-js) y
+// falla. Con "auto" se las baja y maneja el solo, igual que hace el runtime de Supabase.
+const q = (s) => (process.platform === "win32" ? `"${s}"` : s);
+const p = spawn(q(DENO), ["run", "--allow-all", "--node-modules-dir=auto", "--watch", q(FN)], { env, stdio: "inherit", shell: process.platform === "win32" });
 p.on("exit", (c) => process.exit(c ?? 0));
