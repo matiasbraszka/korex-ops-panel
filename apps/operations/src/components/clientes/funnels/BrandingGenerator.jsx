@@ -69,9 +69,24 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
     return () => { window.removeEventListener('scroll', cerrar, true); window.removeEventListener('resize', cerrar); };
   }, [abierto]);
 
+  // El botón vive al final de la carpeta, así que casi siempre queda cerca del borde de abajo de
+  // la pantalla. Abrir el panel siempre hacia abajo lo dejaba fuera de la vista: apretabas y
+  // parecía que no pasaba nada. Si no entra abajo, se da vuelta y se abre hacia arriba; si no
+  // entra en ningún lado, se pega al borde y scrollea adentro.
+  const ALTO = 380, ANCHO = 328, MARGEN = 8;
   const abrir = () => {
     const rect = btnRef.current?.getBoundingClientRect();
-    if (rect) setPos({ top: rect.bottom + 6, left: Math.min(rect.left, window.innerWidth - 336) });
+    if (rect) {
+      const abajo = window.innerHeight - rect.bottom;
+      const top = abajo >= ALTO + MARGEN
+        ? rect.bottom + 6
+        : Math.max(MARGEN, Math.min(rect.top - ALTO - 6, window.innerHeight - ALTO - MARGEN));
+      setPos({
+        top,
+        left: Math.max(MARGEN, Math.min(rect.left, window.innerWidth - ANCHO - MARGEN)),
+        maxHeight: window.innerHeight - top - MARGEN,
+      });
+    }
     setAbierto(o => !o);
   };
 
@@ -195,8 +210,8 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
       {abierto && pos && createPortal(
         <>
           <div className="fixed inset-0 z-[65]" onClick={() => setAbierto(false)} />
-          <div className="fixed z-[70] w-[328px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
-            style={{ top: pos.top, left: pos.left, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+          <div className="fixed z-[70] w-[328px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left overflow-y-auto"
+            style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Generar branding</span>
               <button onClick={() => setAbierto(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
