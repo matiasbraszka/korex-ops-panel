@@ -101,20 +101,30 @@ export function analizarLogo({ w, h, rgba }: Rgba): { mono: boolean; whiteKnocko
 }
 
 /**
- * Devuelve el logo en un solo tono, conservando el alfa (o sea, el antialiasing).
+ * Devuelve el logo en un solo color, conservando el alfa (o sea, el antialiasing).
  *
- * @param valor  0 = negro, 255 = blanco.
- * @param keepKnockout  si el logo tiene blanco interior (ver analizarLogo), en vez de aplastar
- *   todo a un tono se reduce a DOS tonos: lo claro toma el valor opuesto. Así la letra recortada
+ * Se usa para las TRES versiones, no sólo para negro y blanco: el generador de imágenes elige
+ * el color por su cuenta y sale cualquiera (se pidió #2F6B3C y devolvió #385C57), así que la
+ * versión "a color" también se pinta acá, con el hex exacto de la paleta. Pintar es determinista;
+ * pedirle un color al generador, no.
+ *
+ * @param rgb  el color de la tinta.
+ * @param keepKnockout  si el logo tiene blanco OPACO interior (ver analizarLogo), en vez de
+ *   aplastar todo a un tono se reduce a DOS: lo claro toma `rgbClaro`. Así una letra recortada
  *   en blanco sigue leyéndose en la versión negra en vez de desaparecer.
+ * @param rgbClaro  el segundo tono para el caso de arriba.
  */
-export function recolorear(src: Uint8Array, valor: 0 | 255, keepKnockout: boolean): Uint8Array {
+export function recolorear(
+  src: Uint8Array,
+  rgb: [number, number, number],
+  keepKnockout: boolean,
+  rgbClaro: [number, number, number] = [255, 255, 255],
+): Uint8Array {
   const out = new Uint8Array(src);
-  const opuesto = valor === 0 ? 255 : 0;
   for (let i = 0; i < out.length; i += 4) {
     if (out[i + 3] === 0) continue;
-    const v = keepKnockout && luma(out[i], out[i + 1], out[i + 2]) > 0.9 ? opuesto : valor;
-    out[i] = v; out[i + 1] = v; out[i + 2] = v;
+    const c = keepKnockout && luma(out[i], out[i + 1], out[i + 2]) > 0.9 ? rgbClaro : rgb;
+    out[i] = c[0]; out[i + 1] = c[1]; out[i + 2] = c[2];
   }
   return out;
 }

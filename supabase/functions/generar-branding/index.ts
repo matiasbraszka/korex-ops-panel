@@ -26,7 +26,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { analizarLogo, decodePng, dibujarPaleta, encodePng, limpiarAlfa, recolorear } from "./png.ts";
+import { analizarLogo, decodePng, dibujarPaleta, encodePng, hexARgb, limpiarAlfa, recolorear } from "./png.ts";
 import { BRANDING_TOOL, construirPedido, construirPromptImagen, INSTRUCCIONES_DIRECTOR } from "./prompts.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -619,7 +619,6 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
   const original = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) original[i] = bin.charCodeAt(i);
 
-  // Las 3 versiones. La de color es el archivo original tal cual: cero re-encodeo, cero pérdida.
   const img = decodePng(original);
   limpiarAlfa(img.rgba);
   const { mono, whiteKnockout } = analizarLogo(img);
@@ -634,10 +633,15 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
   };
 
   const rotuloBase = str(logo.base) === "equipo" ? "equipo" : "marca personal";
+  // Las TRES versiones se pintan acá, incluida la de color: el generador elige el color por su
+  // cuenta y no respeta el de la paleta (se pidió #2F6B3C y devolvió #385C57). Pintarlo garantiza
+  // que el logo salga en el color exacto que la paleta declara, y que las tres versiones sean
+  // literalmente la misma forma.
+  const tinta = hexARgb(str(logo.hex)) as [number, number, number];
   const versiones: { key: string; bytes: Uint8Array }[] = [
-    { key: "color", bytes: original },
-    { key: "negro", bytes: encodePng(recolorear(img.rgba, 0, whiteKnockout), img.w, img.h) },
-    { key: "blanco", bytes: encodePng(recolorear(img.rgba, 255, whiteKnockout), img.w, img.h) },
+    { key: "color", bytes: encodePng(recolorear(img.rgba, tinta, whiteKnockout), img.w, img.h) },
+    { key: "negro", bytes: encodePng(recolorear(img.rgba, [0, 0, 0], whiteKnockout), img.w, img.h) },
+    { key: "blanco", bytes: encodePng(recolorear(img.rgba, [255, 255, 255], whiteKnockout, [0, 0, 0]), img.w, img.h) },
   ];
 
   const recursos = [];
