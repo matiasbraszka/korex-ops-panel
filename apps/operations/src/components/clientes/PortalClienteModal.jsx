@@ -4,7 +4,7 @@
 // Backend: RPCs portal_admin_estado / portal_admin_activar (solo equipo).
 import { useEffect, useState } from 'react';
 import { supabase } from '@korex/db';
-import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Trash2, ClipboardList, BadgeCheck, Activity } from 'lucide-react';
+import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Trash2, ClipboardList, BadgeCheck, Activity, Users, Link2, Power } from 'lucide-react';
 import Modal from '../Modal';
 
 // URL pública del portal. Configurable por env; fallback al dominio previsto.
@@ -47,6 +47,9 @@ export default function PortalClienteModal({ client, onClose }) {
   const [invitando, setInvitando] = useState(false);
   const [invitacion, setInvitacion] = useState(null);   // { magic_link, mensaje_whatsapp, warnings }
 
+  const [collabToken, setCollabToken] = useState(null); // token del link de colaboradores
+  const [collabs, setCollabs] = useState([]);           // colaboradores registrados
+
   const cargar = async () => {
     setErr('');
     const { data, error } = await supabase.rpc('portal_admin_estado', { p_client_id: client.id });
@@ -58,6 +61,28 @@ export default function PortalClienteModal({ client, onClose }) {
   const cargarOnb = async () => {
     const { data } = await supabase.rpc('onboarding_admin_estado', { p_client_id: client.id });
     setOnbEstado(data || null);
+  };
+
+  // ── Colaboradores del cliente (link auto-servicio + lista) ──
+  const cargarCollab = async () => {
+    const [{ data: link }, { data: lista }] = await Promise.all([
+      supabase.rpc('portal_collab_link', { p_client_id: client.id }),
+      supabase.rpc('portal_collab_list', { p_client_id: client.id }),
+    ]);
+    if (link?.ok) setCollabToken(link.token);
+    if (lista?.ok) setCollabs(lista.colaboradores || []);
+  };
+  const collabUrl = collabToken ? `${PORTAL_URL}/colaborador?t=${collabToken}` : '';
+  const rotarCollab = async () => {
+    if (!window.confirm('¿Generar un enlace nuevo? El enlace anterior deja de funcionar (los que ya se sumaron siguen entrando).')) return;
+    const { data } = await supabase.rpc('portal_collab_rotate', { p_client_id: client.id });
+    if (data?.ok) setCollabToken(data.token);
+  };
+  const toggleCollab = async (c) => {
+    const nuevo = !c.enabled;
+    if (!nuevo && !window.confirm(`¿Quitar el acceso de ${c.full_name || c.email}? No podrá entrar hasta que lo vuelvas a habilitar.`)) return;
+    const { data } = await supabase.rpc('portal_collab_set_enabled', { p_id: c.id, p_enabled: nuevo });
+    if (data?.ok) setCollabs((prev) => prev.map((x) => x.id === c.id ? { ...x, enabled: nuevo } : x));
   };
 
   // Invita (o reenvía). La edge function verifica PRIMERO que el vínculo
@@ -92,7 +117,7 @@ export default function PortalClienteModal({ client, onClose }) {
     setPedidos(Array.isArray(p) ? p : []);
     setEventos(Array.isArray(ev) ? ev : []);
   };
-  useEffect(() => { cargar(); cargarPedidos(); cargarOnb(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [client.id]);
+  useEffect(() => { cargar(); cargarPedidos(); cargarOnb(); cargarCollab(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [client.id]);
 
   // ── Pedidos al cliente (lo que ve en "Lo que te falta" de su portal) ──
   const sembrar = async () => { await supabase.rpc('portal_pedidos_seed', { p_client: client.id }); cargarPedidos(); };
@@ -132,7 +157,8 @@ export default function PortalClienteModal({ client, onClose }) {
     try { await navigator.clipboard.writeText(txt); setCopied(key); setTimeout(() => setCopied(''), 1500); } catch { /* nada */ }
   };
 
-  const cuentas = estado?.cuentas || [];
+  // Cuentas del cliente en sí (excluye las de colaboradores, que van en su propia sección).
+  const cuentas = (estado?.cuentas || []).filter((c) => !String(c.notes || '').toLowerCase().startsWith('colaborador'));
   const rowStyle = { display: 'grid', gridTemplateColumns: '96px 1fr auto', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #F0F1F4' };
   const copyBtn = (txt, key) => (
     <button onClick={() => copiar(txt, key)} title="Copiar" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white cursor-pointer text-[#6B7280] hover:bg-[#F4F6F9]">
@@ -190,6 +216,57 @@ export default function PortalClienteModal({ client, onClose }) {
             ))}
           </div>
         )}
+
+        {/* ── COLABORADORES DEL CLIENTE: link auto-servicio + lista ───────── */}
+        <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
+            <Users size={15} color="#5B7CF5" />
+            <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Colaboradores del cliente</span>
+            {collabs.length > 0 && <span className="text-[10.5px] text-[#AEB4BF]">{collabs.filter(c => c.enabled).length} con acceso</span>}
+          </div>
+          <div className="text-[11px] text-[#6B7280] leading-relaxed -mt-1">
+            Compartí este enlace con el equipo del cliente (asistente, quien graba, etc.).
+            Cada uno crea su cuenta y ve <b>lo mismo que el cliente</b>: onboarding, guiones y material.
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 rounded-lg border border-[#E2E5EB] bg-[#F8FAFF] py-1.5 px-2.5">
+              <Link2 size={13} className="text-[#9CA3AF] shrink-0" />
+              <span className="text-[11.5px] text-[#4B5563] truncate" style={{ fontFamily: 'ui-monospace, monospace' }}>
+                {collabUrl || 'Generando enlace…'}
+              </span>
+            </div>
+            <button onClick={() => copiar(collabUrl, 'collab')} disabled={!collabUrl} title="Copiar enlace"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-[#C7D2FE] bg-white cursor-pointer text-[#2E69E0] hover:bg-[#F5F8FF] disabled:opacity-50 shrink-0">
+              {copied === 'collab' ? <Check size={14} color="#16A34A" /> : <Copy size={14} />}
+            </button>
+            <button onClick={rotarCollab} disabled={!collabToken} title="Generar un enlace nuevo (invalida el anterior)"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-[#E2E5EB] bg-white cursor-pointer text-[#9CA3AF] hover:text-[#1A1D26] disabled:opacity-50 shrink-0">
+              <RefreshCw size={13} />
+            </button>
+          </div>
+
+          {collabs.length > 0 && (
+            <div className="flex flex-col">
+              {collabs.map((c) => (
+                <div key={c.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-semibold text-[#1A1D26] truncate">
+                      {c.full_name || c.email}
+                      <span className="ml-1.5 text-[9px] font-bold uppercase text-[#5B7CF5] bg-[#EEF2FF] rounded px-1 py-px">{c.role || 'Otro'}</span>
+                      {!c.enabled && <span className="ml-1.5 text-[9px] font-bold uppercase text-[#B45309] bg-[#FEF3C7] rounded px-1 py-px">sin acceso</span>}
+                    </div>
+                    <div className="text-[10px] text-[#AEB4BF] truncate">{c.email}{c.phone ? ` · ${c.phone}` : ''}</div>
+                  </div>
+                  <button onClick={() => toggleCollab(c)} title={c.enabled ? 'Quitar acceso' : 'Volver a dar acceso'}
+                    className={`inline-flex items-center justify-center w-7 h-7 rounded-md border bg-white cursor-pointer shrink-0 ${c.enabled ? 'border-[#E2E5EB] text-[#C3C9D4] hover:text-[#DC2626] hover:border-[#FECACA]' : 'border-[#BBF7D0] text-[#15803D] hover:bg-[#ECFDF5]'}`}>
+                    <Power size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── ONBOARDING: invitación + avance ─────────────────────────────── */}
         <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">

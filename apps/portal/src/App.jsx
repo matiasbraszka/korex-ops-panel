@@ -5,6 +5,7 @@ import PhoneFrame from './components/PhoneFrame';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Loading } from './components/ui';
 import LoginScreen from './screens/LoginScreen';
+import ColaboradorScreen from './screens/ColaboradorScreen';
 import InicioScreen from './screens/InicioScreen';
 import GuionesTabScreen from './screens/GuionesTabScreen';
 import DocumentoScreen from './screens/DocumentoScreen';
@@ -33,6 +34,8 @@ export default function App() {
     return (
       <Routes>
         <Route path="/login" element={<LoginScreen />} />
+        {/* Alta auto-servicio de un colaborador del cliente (link compartible). */}
+        <Route path="/colaborador" element={<ColaboradorScreen />} />
         {/* El onboarding en MODO PRUEBA, sin cuenta.
             Sin esto, la única forma de mirarlo era entrar con las credenciales
             de un cliente real — es decir, mirando SUS respuestas. Acá el
@@ -57,6 +60,8 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
+        {/* Si un colaborador ya logueado abre el link, va directo a su espacio. */}
+        <Route path="/colaborador" element={<Navigate to="/" replace />} />
 
         {/* Onboarding: pantalla completa con su propia barra lateral, SIN los
             tabs del portal, para que el cliente no se distraiga. Es donde cae
