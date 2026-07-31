@@ -165,7 +165,13 @@ export default function DocumentoScreen() {
   const comentarios = [...(Array.isArray(data.comentarios) ? data.comentarios : []), ...localComs];
   const topComs = comentarios.filter((c) => !c.parentId);
   const avatars = Array.isArray(data.avatars) ? data.avatars : [];
-  const avatarActivo = avatarSel || avatars[0]?.id || 'general';
+  // Si el equipo ya asignó un avatar a los guiones (y es uno solo), lo usamos y no
+  // le preguntamos al cliente al subir.
+  const avatarAsignado = (() => {
+    const set = new Set(secciones.map((s) => grabMap[s.id]?.avatar).filter(Boolean));
+    return set.size === 1 ? [...set][0] : null;
+  })();
+  const avatarActivo = avatarSel || avatarAsignado || avatars[0]?.id || 'general';
   const subidosOk = (data.subidas?.count || 0) + subidas.filter((u) => u.done).length;
   const listos = subidosOk > 0;
   const docs = data.docs || {};
@@ -594,7 +600,7 @@ export default function DocumentoScreen() {
                       {!u.done && !u.error && <span style={{ fontSize: 12, color: T.text3 }}>{u.pct}%</span>}
                     </div>
                   ))}
-                  {!esVsl && avatars.length > 1 && !listos && (
+                  {!esVsl && avatars.length > 1 && !listos && !avatarAsignado && (
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3, marginBottom: 6 }}>¿De qué avatar son estos videos?</div>
                       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>

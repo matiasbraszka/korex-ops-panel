@@ -345,6 +345,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // Personas a las que se puede asignar la grabación de un guión: el cliente +
   // sus colaboradores "Encargado de grabarse".
   const [asignables, setAsignables] = useState([{ id: '', nombre: 'Cliente' }]);
+  // Avatares del funnel (para asignar a qué avatar es cada guión de anuncios).
+  const [avatarsFunnel, setAvatarsFunnel] = useState([]);
 
   // Carga las secciones del DEL de ESTE funnel. Si el funnel tiene su DEL propio
   // (docId, viene de del_doc_id), filtra por doc_id → ve SOLO su documento, aunque
@@ -354,7 +356,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     try {
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at&${filtro}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at,grab_avatar_id&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
         // servía una versión vieja cacheada del documento tras reorganizarlo.
         { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
@@ -398,6 +400,34 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_colab_id: val } : x));
     const { data, error } = await supabase.rpc('del_section_asignar_grabador', { p_id: s.id, p_colab_id: val, p_by: by });
     if (error || !data?.ok) { window.alert('No pude asignar el responsable' + (data?.error ? ': ' + data.error : '')); await cargar(); }
+  };
+
+  // Avatares del funnel (para el selector de avatar por guión de anuncios).
+  useEffect(() => {
+    if (!strategyId) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const rows = await sbFetch(`strategy_pages?select=avatars&strategy_id=eq.${strategyId}`);
+        if (!vivo) return;
+        const vistos = new Map();
+        (Array.isArray(rows) ? rows : []).forEach((r) => {
+          (Array.isArray(r.avatars) ? r.avatars : []).forEach((a) => {
+            if (a?.id && !vistos.has(a.id)) vistos.set(a.id, a.name || a.id);
+          });
+        });
+        setAvatarsFunnel([...vistos].map(([id, name]) => ({ id, name })));
+      } catch { /* sin avatares */ }
+    })();
+    return () => { vivo = false; };
+  }, [strategyId]);
+
+  // Asigna a qué avatar es un guión de anuncios (para que el cliente no lo elija al subir).
+  const asignarAvatar = async (s, avatarId) => {
+    const val = avatarId || null;
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_avatar_id: val } : x));
+    const { data, error } = await supabase.rpc('del_section_set_grab_avatar', { p_id: s.id, p_avatar: val, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude asignar el avatar'); await cargar(); }
   };
 
   useEffect(() => { cargar(); }, [cargar]);
@@ -1689,6 +1719,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                         className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-bold border cursor-pointer outline-none bg-white text-[#4B5563] border-[#E2E5EB] max-w-[130px] truncate">
                         {asignables.map((a) => <option key={a.id || 'cliente'} value={a.id}>🎥 {a.nombre}</option>)}
                       </select>
+                      {/* Avatar del guión (solo anuncios y si el funnel tiene más de uno):
+                          así el cliente no elige avatar al subir la grabación. */}
+                      {s.kind === 'anuncios' && avatarsFunnel.length > 1 && (
+                        <select
+                          value={s.grab_avatar_id || ''}
+                          onChange={(e) => asignarAvatar(s, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="A qué avatar es este guión"
+                          className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-bold border cursor-pointer outline-none bg-white text-[#4B5563] border-[#E2E5EB] max-w-[120px] truncate">
+                          <option value="">👤 Elegir avatar…</option>
+                          {avatarsFunnel.map((a) => <option key={a.id} value={a.id}>👤 {a.name}</option>)}
+                        </select>
+                      )}
                       {s.grab_flujo && (() => {
                         const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
                         const m = {
