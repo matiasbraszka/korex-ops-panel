@@ -283,7 +283,7 @@ function PendienteCard({ p, nav }) {
   ) : null;
 
   // Meta es a nivel cuenta (no de un embudo): ahí no mostramos chip de embudo.
-  const funnelChip = esMeta ? null : <ChipEmbudo nombre={p.funnel} general={!p.funnel} />;
+  const funnelChip = esMeta ? null : <ChipEmbudo nombre={p.funnel} num={p.funnelNum} general={!p.funnel} />;
   return <CardBase onClick={abrir} tile={tile} chip={chip} funnelChip={funnelChip} dias={p.dias} titulo={p.titulo} descripcion={p.descripcion} cta={cta} caption={caption} />;
 }
 

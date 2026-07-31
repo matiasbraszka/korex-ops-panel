@@ -103,7 +103,7 @@ export default function SubirPedidoScreen() {
             <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>{pedido.titulo}</div>
             {/* De qué embudo es (o General). Dos peticiones iguales de dos embudos
                 distintos se ven idénticas sin esto. */}
-            <ChipEmbudo nombre={pedido.funnel} general={!pedido.funnel} />
+            <ChipEmbudo nombre={pedido.funnel} num={pedido.funnelNum} general={!pedido.funnel} />
             <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, textWrap: 'pretty' }}>
               {pedido.descripcion}{esAutoridad ? ' Que se te vea la cara y haya buena luz.' : ''}
             </div>
@@ -171,8 +171,8 @@ export default function SubirPedidoScreen() {
                     <Regla texto="Fotos del logo impreso o capturas borrosas y chiquitas" />
                   </>
                 )}
-                {esTest && pedido.strategyId && (
-                  <div onClick={() => nav(`/documento/${pedido.strategyId}/guias`)} role="button"
+                {esTest && (
+                  <div onClick={() => setGuia('testimonios')} role="button"
                     style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, background: 'var(--mk-blue-bg)', fontSize: 13.5, fontWeight: 700, color: T.primaryInk }}>
                     <span style={{ width: 22, height: 22, flex: 'none', borderRadius: '50%', background: 'var(--mk-blue-ops)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800 }}>?</span>
                     Mira la guía: qué testimonios sirven más

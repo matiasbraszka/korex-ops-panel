@@ -186,20 +186,35 @@ export function cosa(bucket, n) {
 
 // De qué embudo es esta petición. Solo aparece en las que son de un embudo
 // concreto; las del cliente (branding, autoridad) valen para todos y no llevan.
-// Chip del embudo al que pertenece una petición. Si no tiene embudo (general),
-// se muestra "General" en gris, para que el cliente siempre sepa de qué es.
-export function ChipEmbudo({ nombre, general = false }) {
+// Chip del embudo al que pertenece una petición. Tres formas:
+//  · general  → "General" en gris.
+//  · con num  → badge de dos tonos "FUNNEL N · Nombre", con color propio por funnel
+//               (para distinguir de un vistazo de qué embudo es cada petición).
+//  · sin num  → solo el nombre (compatibilidad con pantallas que no numeran).
+const FUNNEL_COLORS = ['#5B7CF5', '#22C55E', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4', '#EF4444', '#0EA5E9'];
+export function ChipEmbudo({ nombre, num = null, general = false }) {
   const esGen = general || !nombre;
+  if (esGen) {
+    return (
+      <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, background: 'var(--mk-border-light)', color: 'var(--mk-text2)', fontSize: 10.5, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+        <IcoFolder size={11} stroke="currentColor" sw={2.3} />General
+      </span>
+    );
+  }
+  if (num == null) {
+    return (
+      <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, background: 'var(--mk-blue-bg)', color: 'var(--mk-blue-ops)', fontSize: 10.5, fontWeight: 800, letterSpacing: '.03em', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <IcoFolder size={11} stroke="currentColor" sw={2.3} />{nombre}
+      </span>
+    );
+  }
+  const color = FUNNEL_COLORS[(num - 1) % FUNNEL_COLORS.length];
   return (
-    <span style={{
-      alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '2px 8px', borderRadius: 999,
-      background: esGen ? 'var(--mk-border-light)' : 'var(--mk-blue-bg)',
-      color: esGen ? 'var(--mk-text2)' : 'var(--mk-blue-ops)', fontSize: 10.5, fontWeight: 800,
-      letterSpacing: '.03em', maxWidth: '100%', overflow: 'hidden',
-      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-    }}>
-      <IcoFolder size={11} stroke="currentColor" sw={2.3} />{esGen ? 'General' : nombre}
+    <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'stretch', borderRadius: 999, overflow: 'hidden', maxWidth: '100%', boxShadow: '0 1px 2px rgba(10,22,40,.10)' }}>
+      <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 900, letterSpacing: '.06em', padding: '4px 9px', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+        <IcoFolder size={11} stroke="currentColor" sw={2.6} />FUNNEL {num}
+      </span>
+      <span style={{ background: '#F3F5F9', color: 'var(--mk-ink)', fontSize: 11, fontWeight: 800, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{nombre}</span>
     </span>
   );
 }

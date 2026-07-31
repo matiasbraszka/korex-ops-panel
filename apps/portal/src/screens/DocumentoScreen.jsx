@@ -180,6 +180,8 @@ export default function DocumentoScreen() {
   // "Revisar" es una acción, no una etiqueta: la pestaña se lee y se marca.
   // `hayGrabar` viene del backend: sin un solo guion marcado para grabar, el
   // cargador de videos al pie no tiene sentido y confunde.
+  // Baja directo al cargador de grabaciones (mismo target que el deep-link).
+  const irASubir = () => scrollRef.current?.querySelector?.('[data-uploader]')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   const esRevisar = (s) => s.accion === 'revisar';
   const estaRevisada = (s) => revisadas[s.id] ?? !!s.revisado;
   const hayGrabar = data.hayGrabar !== false;
@@ -361,14 +363,20 @@ export default function DocumentoScreen() {
           )}
 
           <div style={{ padding: '16px 16px 0' }}>
-            {/* Lectura cómoda: zoom (A− / A+) y Descargar PDF */}
-            <div data-no-pdf="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            {/* Lectura cómoda: zoom (A− / A+) · Subir grabación · Descargar PDF */}
+            <div data-no-pdf="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid var(--mk-border)', borderRadius: 10, background: 'var(--mk-bg-panel)', padding: 2 }}>
                 <div onClick={() => cambiarZoom(-10)} role="button" aria-label="Achicar la letra" style={{ cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: T.textSoft, background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>A−</div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.text2, minWidth: 38, textAlign: 'center' }}>{zoom}%</div>
                 <div onClick={() => cambiarZoom(10)} role="button" aria-label="Agrandar la letra" style={{ cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: T.textSoft, background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>A+</div>
               </div>
-              <div onClick={descargarPdf} role="button" style={{ cursor: 'pointer', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 10, border: '1px solid var(--mk-border)', background: '#fff', fontSize: 12, fontWeight: 700, color: T.primaryInk }}>
+              {/* Solo cuando este guion se tiene que grabar: baja directo al cargador. */}
+              {esGuion && hayGrabar && (
+                <div onClick={irASubir} role="button" style={{ cursor: 'pointer', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 10, border: 'none', background: T.primary, fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                  <IcoArrowUp size={13} stroke="currentColor" sw={2.6} />Subir grabación
+                </div>
+              )}
+              <div onClick={descargarPdf} role="button" style={{ cursor: 'pointer', marginLeft: (esGuion && hayGrabar) ? 0 : 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 10, border: '1px solid var(--mk-border)', background: '#fff', fontSize: 12, fontWeight: 700, color: T.primaryInk }}>
                 <IcoArrowUp size={13} stroke="currentColor" sw={2.4} style={{ transform: 'rotate(180deg)' }} />Descargar PDF
               </div>
             </div>
