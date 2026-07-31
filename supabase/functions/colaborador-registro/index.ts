@@ -89,34 +89,47 @@ Deno.serve(async (req) => {
       detail: "El cliente todavía no tiene su cuenta lista. Pídele al equipo Korex que active su acceso primero." }, 200);
 
   try {
-    // Crear el usuario de Auth (o error claro si el email ya existe).
+    // Crear el usuario de Auth. Si el email ya existe puede ser: (a) una cuenta
+    // real (ya tiene portal_access) → "email en uso"; o (b) un huérfano de un
+    // intento previo que falló a mitad → lo reusamos para que el reintento cierre.
     let userId: string;
     const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     if (created.error) {
       const existing = await findUserByEmail(admin, email);
-      if (existing) {
+      if (!existing) return json({ ok: false, error: "auth_create_failed", detail: created.error.message }, 500);
+      const { data: yaTiene } = await admin.from("portal_access").select("login_email").ilike("login_email", email).maybeSingle();
+      if (yaTiene) {
         return json({ ok: false, error: "email_en_uso",
           detail: "Ese email ya tiene una cuenta. Entra con tu contraseña o recupérala desde el login." }, 200);
       }
-      return json({ ok: false, error: "auth_create_failed", detail: created.error.message }, 500);
+      userId = existing.id;
+      const upd = await admin.auth.admin.updateUserById(userId, { password });
+      if (upd.error) return json({ ok: false, error: "auth_update_failed", detail: upd.error.message }, 500);
+    } else {
+      userId = created.data.user.id;
     }
-    userId = created.data.user.id;
 
     // Su fila portal_access, colgada de la MISMA persona que el cliente.
-    const { error: paErr } = await admin.from("portal_access").upsert(
-      {
-        person_id: personId,
-        login_email: email,
-        auth_user_id: userId,
-        enabled: true,
-        shared_secret: password,
-        notes: "colaborador: " + role,
-      },
-      { onConflict: "login_email" },
-    );
-    if (paErr) return json({ ok: false, error: "portal_access_failed", detail: paErr.message }, 500);
+    // Upsert manual: el índice único es sobre lower(login_email) (no sobre la
+    // columna), así que onConflict de PostgREST no aplica.
+    const paRow = {
+      person_id: personId,
+      login_email: email,
+      auth_user_id: userId,
+      enabled: true,
+      shared_secret: password,
+      notes: "colaborador: " + role,
+    };
+    const upd = await admin.from("portal_access").update(paRow).ilike("login_email", email).select("login_email");
+    if (upd.error) return json({ ok: false, error: "portal_access_failed", detail: upd.error.message }, 500);
+    if (!upd.data || upd.data.length === 0) {
+      const ins = await admin.from("portal_access").insert(paRow);
+      if (ins.error) return json({ ok: false, error: "portal_access_failed", detail: ins.error.message }, 500);
+    }
 
-    // Registro para que Operaciones lo vea/controle.
+    // Registro para que Operaciones lo vea/controle (idempotente: si reintenta,
+    // no duplicamos la fila del colaborador).
+    await admin.from("portal_collaborators").delete().eq("client_id", clientId).ilike("email", email);
     const { error: cErr } = await admin.from("portal_collaborators").insert({
       client_id: clientId, person_id: personId, full_name: fullName,
       phone, email, role, auth_user_id: userId,
