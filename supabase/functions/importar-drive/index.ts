@@ -31,7 +31,7 @@ const BUCKET = "funnel-recursos";
 const V = "https://video.bunnycdn.com/library";
 const MAX_FILES = 60; // tope por llamada (para no exceder el tiempo de la función)
 
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Nombre de archivo seguro para Storage; título = nombre sin extensión.
