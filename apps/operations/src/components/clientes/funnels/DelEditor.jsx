@@ -266,6 +266,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
   const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
   const [moveTo, setMoveTo] = useState(null); // submenu "mover a otro embudo": { docId, name } elegido (falta la categoria)
+  const [moveRect, setMoveRect] = useState(null); // posicion (fixed) del menu de mover, para que no lo recorte el contenedor
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
@@ -1616,10 +1617,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
                       <button onClick={() => agregar(s.ord, s.kind)} title="Agregar sección debajo (misma categoría)" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
                       <span className="relative inline-flex">
-                        <button onClick={() => { setMoveTo(null); setMoveMenu(moveMenu === s.id ? null : s.id); }} title="Mover a otra categoría o a otro embudo" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
+                        <button onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMoveTo(null); setMoveMenu(moveMenu === s.id ? null : s.id); setMoveRect({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }); }} title="Mover a otra categoría o a otro embudo" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
                         {moveMenu === s.id && (<>
                           <span className="fixed inset-0 z-30" onClick={() => { setMoveMenu(null); setMoveTo(null); }} />
-                          <div className="absolute right-0 top-8 z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[188px] max-h-[340px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
+                          <div className="fixed z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[188px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)', top: moveRect?.top ?? 0, right: moveRect?.right ?? 8, maxHeight: `calc(100vh - ${(moveRect?.top ?? 0) + 12}px)` }}>
                             {!moveTo ? (<>
                               {/* Dentro de ESTE embudo: cambia la categoría */}
                               <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a una categoría</div>
