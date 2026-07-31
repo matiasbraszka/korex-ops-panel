@@ -1077,6 +1077,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     emitir('section', { row: { id: s.id, para_grabar: next } });
   };
 
+  // Enviar UNA categoría de página (Pre-landing/Landing/Formulario/Thank you) al
+  // cliente para revisar: marca todas sus secciones como Revisar + Terminado de un
+  // clic. Así el cliente ve la tarjeta "Revisar el copy del funnel" sin tocar los
+  // desplegables sección por sección.
+  const PAGINAS_COPY = ['pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou'];
+  const enviarPaginasARevisar = async (items) => {
+    const objetivo = (items || []).filter(s => (s.accion_cliente !== 'revisar' || s.estado_seccion !== 'terminado'));
+    for (const s of objetivo) await setSeccionMeta(s, { accion: 'revisar', estado: 'terminado' });
+  };
+
   // Mover una sección a otra categoría (cambia su `kind` → aparece en otro grupo).
   const moverACategoria = async (id, kind) => {
     setMoveMenu(null);
@@ -1624,6 +1634,21 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     <span className="w-[7px] h-[7px] rounded-full" style={{ background: gc.c }} />{gc.label}
                   </span>
                   <span className="h-px flex-1" style={{ background: '#EDF0F5' }} />
+                  {/* Páginas del funnel: botón de un clic para mandarlas a revisar al cliente. */}
+                  {editando && PAGINAS_COPY.includes(gr.kind) && gr.items.length > 0 && (() => {
+                    const todasEnRevision = gr.items.every(s => s.accion_cliente === 'revisar' && s.estado_seccion === 'terminado');
+                    return todasEnRevision ? (
+                      <span className="inline-flex items-center gap-1 py-1 px-2 rounded-full text-[10px] font-bold uppercase tracking-[0.04em] shrink-0" style={{ background: '#DCFCE7', color: '#15803D' }}>
+                        <Check size={11} strokeWidth={3} />El cliente la ve para revisar
+                      </span>
+                    ) : (
+                      <button onClick={() => enviarPaginasARevisar(gr.items)} title="Marcar esta página como Revisar + Terminado para que el cliente la revise en su portal"
+                        className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full text-[10px] font-bold uppercase tracking-[0.04em] border cursor-pointer shrink-0 hover:brightness-95"
+                        style={{ background: '#EEF3FF', color: '#1D4FD8', borderColor: '#C7D2FE' }}>
+                        <Send size={11} />Enviar a revisar
+                      </button>
+                    );
+                  })()}
                 </div>
                 {/* Estrategia incrustada (decisión de Matías): el bloque del funnel
                     (tipo · punto diferencial · fecha) es el ENCABEZADO de la primera
@@ -1761,6 +1786,21 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       : acc === 'grabarse'
                         ? { t: 'Le aparece para grabar', c: '#15803D' }
                         : { t: 'La ve, pero no para grabar', c: '#1D4FD8' };
+                    return (
+                      <span className="hidden lg:inline shrink-0 text-[10px] font-semibold whitespace-nowrap" style={{ color: v.c }}>
+                        {v.t}
+                      </span>
+                    );
+                  })()}
+                  {/* Páginas del funnel: mismo cartelito de "qué ve el cliente". */}
+                  {PAGINAS_COPY.includes(s.kind) && (() => {
+                    const acc = s.accion_cliente || 'solo_equipo';
+                    const fin = (s.estado_seccion || 'en_construccion') === 'terminado';
+                    const v = !fin || acc === 'solo_equipo'
+                      ? { t: 'El cliente no la ve', c: '#7A8290' }
+                      : acc === 'revisar'
+                        ? { t: 'La ve para revisar el copy', c: '#1D4FD8' }
+                        : { t: 'La ve (solo lectura)', c: '#0891B2' };
                     return (
                       <span className="hidden lg:inline shrink-0 text-[10px] font-semibold whitespace-nowrap" style={{ color: v.c }}>
                         {v.t}
