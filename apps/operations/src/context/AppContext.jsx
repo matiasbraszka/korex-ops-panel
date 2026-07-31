@@ -241,7 +241,7 @@ export function AppProvider({ children }) {
   // armar el PATCH puntual de updateClient (solo las columnas que cambiaron).
   const clientRow = (c) => ({
     id: c.id, name: c.name, company: c.company, service: c.service,
-    start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
+    start_date: c.startDate, service_ends_at: c.serviceEndsAt || null, pm: c.pm, color: c.color, status: c.status,
     priority: c.priority, position: typeof c.position === 'number' ? c.position : 0, bottleneck: c.bottleneck, notes: c.notes,
     steps: c.steps, feedback: c.feedback, history: c.history,
     phone: c.phone || '',
@@ -287,7 +287,7 @@ export function AppProvider({ children }) {
   // reescriba la fila entera con estado local viejo (bug: guardar un campo pisaba
   // los demás con datos desactualizados de otra pestaña/persona).
   const CLIENT_FIELD_TO_COL = {
-    name: 'name', company: 'company', service: 'service', startDate: 'start_date',
+    name: 'name', company: 'company', service: 'service', startDate: 'start_date', serviceEndsAt: 'service_ends_at',
     pm: 'pm', color: 'color', status: 'status', priority: 'priority', position: 'position',
     bottleneck: 'bottleneck', notes: 'notes', steps: 'steps', feedback: 'feedback', history: 'history',
     phone: 'phone', avatarUrl: 'avatar_url', slackChannel: 'slack_channel', slackChannelId: 'slack_channel_id',
@@ -2220,7 +2220,7 @@ export function AppProvider({ children }) {
     try {
       // Columnas explícitas para evitar traer payloads enormes (meta_ads, client_feedbacks, etc.).
       // Los arrays grandes (meta_ads, client_feedbacks) se cargan on-demand al abrir el detalle del cliente.
-      const CLIENT_COLS = 'id,name,company,service,start_date,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,contract_signer_email,korex_code';
+      const CLIENT_COLS = 'id,name,company,service,start_date,service_ends_at,pm,color,status,priority,position,bottleneck,notes,steps,feedback,history,phone,avatar_url,slack_channel,slack_channel_id,meta_ads,custom_steps,custom_phases,client_feedbacks,step_name_overrides,phase_name_overrides,phase_deadlines,links,pending_resources,meta_metrics,billing_amount,billing_currency,billing_cycle,billing_installments,next_charge_date,payment_method,billing_status,visual_resources,niche,email,country,timezone,contract_url,contract_signed_date,contract_renewal_date,tier,conector,closer,contract_data,cash_collect,remaining_to_collect,call_recording_url,payment_receipt_url,commission_split,client_type,contract_signer_email,korex_code';
       const TASK_COLS = 'id,title,client_id,funnel_id,assignee,priority,status,notes,description,step_idx,created_date,started_date,completed_date,blocked_since,phase,depends_on,is_roadmap_task,template_id,estimated_days,is_client_task,days_from_unblock,due_date,accumulated_days,timer_started_at,enabled_date,position,sprint_id,sprint_priority,estimated_hours,department,checklist,definition_of_done,acceptance_criteria,reviewer,validated_by,validated_at,sprint_history,sprint_events,status_history,review_reason,updated_at,created_by';
       const [sbClients, sbTasks, briefings, feedbacks, proposals, alerts, sbSettings, sbTeam, sbSprints] = await Promise.all([
         sbFetch(`clients?select=${CLIENT_COLS}&order=position.asc`, { headers: { 'Prefer': 'return=representation' } }),
@@ -2397,7 +2397,7 @@ export function AppProvider({ children }) {
       if (sbClients && sbClients.length > 0) {
         const mappedClients = sbClients.map(c => ({
           id: c.id, name: c.name, company: c.company, service: c.service,
-          startDate: c.start_date, pm: c.pm, color: c.color, status: c.status,
+          startDate: c.start_date, serviceEndsAt: c.service_ends_at || '', pm: c.pm, color: c.color, status: c.status,
           priority: normalizePriority(c.priority),
           position: typeof c.position === 'number' ? c.position : (Number(c.position) || 0),
           bottleneck: c.bottleneck, notes: c.notes,

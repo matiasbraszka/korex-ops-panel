@@ -26,6 +26,7 @@ export default function InicioScreen() {
   const clientName = me?.name || me?.clientName || d.name;
   const iniciales = String(clientName || '·').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const nombre = String(d.name || '').split(' ')[0];
+  const serv = d.servicio || {};
   const pendientes = Array.isArray(d.pendientes) ? d.pendientes : [];
   const tareas = (Array.isArray(tareasData) ? tareasData : []).map((t) => ({ ...t, _tarea: true }));
   const completados = Array.isArray(d.completados) ? d.completados : [];
@@ -64,6 +65,28 @@ export default function InicioScreen() {
         <div style={display(30, '-0.035em')}>Hola{nombre ? `, ${nombre}` : ''}</div>
         <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
+
+      {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte */}
+      {(serv.diasRestantes != null || (serv.diasAtraso ?? 0) > 0) && (
+        <div style={{ padding: '14px 22px 0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {serv.diasRestantes != null && (() => {
+            const dr = serv.diasRestantes;
+            const c = dr < 0 ? ['var(--mk-red-bg)', 'var(--mk-red)']
+              : dr <= 14 ? ['var(--mk-orange-bg)', 'var(--mk-orange)']
+              : ['var(--mk-green-bg)', 'var(--mk-green)'];
+            const txt = dr < 0 ? `Servicio vencido hace ${-dr} ${-dr === 1 ? 'día' : 'días'}`
+              : dr === 0 ? 'Tu servicio vence hoy'
+              : `Te quedan ${dr} ${dr === 1 ? 'día' : 'días'} de servicio`;
+            return <span style={servPill(c[0], c[1])}><IcoClock size={13} stroke="currentColor" sw={2.3} />{txt}</span>;
+          })()}
+          {(serv.diasAtraso ?? 0) > 0 && (
+            <span style={servPill('var(--mk-red-bg)', 'var(--mk-red)')} title="Días que el trabajo está frenado esperando tus grabaciones, revisiones o material">
+              <IcoInfo size={13} stroke="currentColor" sw={2.3} />
+              Frenado por tu parte: {serv.diasAtraso} {serv.diasAtraso === 1 ? 'día' : 'días'}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Onboarding sin terminar: reemplaza TODO el bloque de pendientes por una
           sola tarjeta grande. Mientras no lo complete, no hay nada más que
@@ -236,6 +259,7 @@ function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption
   );
 }
 
+const servPill = (bg, fg) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 999, background: bg, color: fg });
 const tileStyle = (bg) => ({ width: 46, height: 46, flex: 'none', borderRadius: 15, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' });
 const chipEstado = (bg, ink, texto) => (
   <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, background: bg, color: ink }}>{texto}</span>
