@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus, ChevronRight, ChevronLeft } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -253,7 +253,7 @@ function TituloEditable({ value, onSave }) {
   );
 }
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, siblingDels = [], estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
   const { currentUser, appSettings } = useApp();
   // Categorías/pestañas del DEL, configurables desde Ajustes (P9). Con fallback al default.
   const { SEC, secOf, KIND_ORDER, kindRank, STANDARD_KINDS, MOVE_KINDS, VERSIONABLE_KINDS, kindCat } =
@@ -265,6 +265,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [saveState, setSaveState] = useState({}); // id -> 'saving'|'saved'|'error'
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
   const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
+  const [moveTo, setMoveTo] = useState(null); // submenu "mover a otro embudo": { docId, name } elegido (falta la categoria)
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
@@ -992,6 +993,20 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     emitir('section', { row: { id, kind } });
   };
 
+  // Mover una sección a OTRO embudo (otro DEL) del MISMO cliente, cayendo en la
+  // categoría elegida. La sección desaparece de este DEL y aparece en el de destino.
+  const moverAEmbudo = async (id, targetDocId, kind) => {
+    setMoveMenu(null); setMoveTo(null);
+    const s = secs.find(x => x.id === id);
+    if (!s || !targetDocId || targetDocId === resolvedDoc) return;
+    setSecs((prev) => prev.filter(x => x.id !== id)); // se va de este DEL
+    const { error } = await supabase.rpc('del_section_move_doc', {
+      p_id: id, p_target_doc_id: targetDocId, p_kind: kind || s.kind, p_by: by,
+    });
+    if (error) { window.alert('No pude mover a otro embudo: ' + error.message); await cargar(); return; }
+    emitir('section-add', {}); // que el DEL destino (y este) se refresquen
+  };
+
   // ── Versionado a nivel funnel ─────────────────────────────────────────────────
   // "+" abre un modal que pregunta qué cambia en la versión nueva: solo las páginas
   // (VSL/anuncios se comparten, sin carpetas nuevas) o un relanzamiento completo
@@ -1601,18 +1616,47 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
                       <button onClick={() => agregar(s.ord, s.kind)} title="Agregar sección debajo (misma categoría)" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
                       <span className="relative inline-flex">
-                        <button onClick={() => setMoveMenu(moveMenu === s.id ? null : s.id)} title="Mover a otra categoría" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
+                        <button onClick={() => { setMoveTo(null); setMoveMenu(moveMenu === s.id ? null : s.id); }} title="Mover a otra categoría o a otro embudo" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
                         {moveMenu === s.id && (<>
-                          <span className="fixed inset-0 z-30" onClick={() => setMoveMenu(null)} />
-                          <div className="absolute right-0 top-8 z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[172px] max-h-[320px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
-                            <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a…</div>
-                            {MOVE_KINDS.map(k => { const mc = secOf(k); const cur = k === s.kind; return (
-                              <button key={k} onClick={() => moverACategoria(s.id, k)} disabled={cur}
-                                className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:bg-[#F4F6F9]"
-                                style={{ color: mc.c }}>
-                                <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}{cur && <Check size={12} className="ml-auto" />}
+                          <span className="fixed inset-0 z-30" onClick={() => { setMoveMenu(null); setMoveTo(null); }} />
+                          <div className="absolute right-0 top-8 z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[188px] max-h-[340px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
+                            {!moveTo ? (<>
+                              {/* Dentro de ESTE embudo: cambia la categoría */}
+                              <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a una categoría</div>
+                              {MOVE_KINDS.map(k => { const mc = secOf(k); const cur = k === s.kind; return (
+                                <button key={k} onClick={() => moverACategoria(s.id, k)} disabled={cur}
+                                  className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:bg-[#F4F6F9]"
+                                  style={{ color: mc.c }}>
+                                  <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}{cur && <Check size={12} className="ml-auto" />}
+                                </button>
+                              ); })}
+                              {/* A OTRO embudo del mismo cliente */}
+                              {siblingDels.length > 0 && (<>
+                                <div className="h-px bg-[#EDF0F5] my-1" />
+                                <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a otro embudo</div>
+                                {siblingDels.map(d => (
+                                  <button key={d.docId} onClick={() => setMoveTo(d)}
+                                    className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer text-[#3F4653] hover:bg-[#F4F6F9]">
+                                    <FolderInput size={12} className="shrink-0 text-[#9098A4]" />
+                                    <span className="truncate">{d.name}</span>
+                                    <ChevronRight size={13} className="ml-auto shrink-0 text-[#C3C9D4]" />
+                                  </button>
+                                ))}
+                              </>)}
+                            </>) : (<>
+                              {/* Elegir la categoría de destino en el embudo elegido */}
+                              <button onClick={() => setMoveTo(null)} className="flex items-center gap-1.5 w-full py-1.5 px-2 rounded-md text-left text-[11px] font-bold border-none bg-transparent cursor-pointer text-[#6B7280] hover:bg-[#F4F6F9]">
+                                <ChevronLeft size={13} className="shrink-0" />Volver
                               </button>
-                            ); })}
+                              <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-0.5">En «{moveTo.name}», categoría:</div>
+                              {MOVE_KINDS.map(k => { const mc = secOf(k); return (
+                                <button key={k} onClick={() => moverAEmbudo(s.id, moveTo.docId, k)}
+                                  className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer hover:bg-[#F4F6F9]"
+                                  style={{ color: mc.c }}>
+                                  <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}
+                                </button>
+                              ); })}
+                            </>)}
                           </div>
                         </>)}
                       </span>

@@ -204,6 +204,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     });
     // Los span/font que quedaron sin nada que aportar se desenvuelven.
     doc.body.querySelectorAll('span,font').forEach(sp => { if (!sp.attributes.length) sp.replaceWith(...sp.childNodes); });
+    // En el DEL: al pegar desde Google Docs/Word las imágenes llegan como <img>
+    // con URLs de Google que no cargan (salen "imágenes cualquiera") y cuelgan el
+    // editor. Se descartan al pegar; el texto y su estructura quedan intactos. Para
+    // poner una imagen a propósito está el botón de imagen / la galería de Recursos.
+    if (delTools) {
+      doc.body.querySelectorAll('img,figure,picture,svg,object,canvas,video,iframe').forEach(n => n.remove());
+    }
     return sanitize(doc.body.innerHTML);
   };
 
