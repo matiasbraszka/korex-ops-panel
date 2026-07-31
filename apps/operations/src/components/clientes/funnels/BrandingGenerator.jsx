@@ -83,34 +83,45 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
     setGen({ status: 'error', detail: r?.detail || 'No pude generar el branding.', hechos });
   };
 
+  // Todo el loop va dentro de un try. Sin esto, cualquier excepción (el caso típico: el servidor
+  // no responde, así que el fetch tira) deja el botón colgado en "Generando…" para siempre y sin
+  // ningún cartel: el equipo se queda mirando un spinner eterno sin saber que algo se rompió.
   const generar = async () => {
     setAbierto(false);
     const { nLogos, quality } = opts;
     const modo = hayGenerados ? opts.modo : 'nuevo';
+    let hechos = 0;
 
-    setGen({ status: 'planning' });
-    const plan = await invocar({ action: 'plan', client_id: clientId, modo, n_logos: nLogos, quality });
-    if (!vivo.current) return;
-    if (!plan?.ok) return fallo(plan, 0);
-
-    const total = (plan.n_logos || nLogos);
-    setGen({ status: 'rendering', hecho: 0, total, marca: plan.plan?.nombre_marca, modoMarca: plan.plan?.modo_marca });
-
-    for (let i = 1; i <= total; i++) {
-      const r = await invocar({ action: 'render', client_id: clientId, run_id: plan.run_id, idx: i });
+    try {
+      setGen({ status: 'planning' });
+      const plan = await invocar({ action: 'plan', client_id: clientId, modo, n_logos: nLogos, quality });
       if (!vivo.current) return;
-      if (!r?.ok) { await onDone?.(); return fallo(r, i - 1); }
-      setGen(g => ({ ...g, hecho: i }));
-      await onDone?.();   // los logos aparecen de a uno, no todos juntos al final
+      if (!plan?.ok) return fallo(plan, 0);
+
+      const total = (plan.n_logos || nLogos);
+      setGen({ status: 'rendering', hecho: 0, total, marca: plan.plan?.nombre_marca, modoMarca: plan.plan?.modo_marca });
+
+      for (let i = 1; i <= total; i++) {
+        const r = await invocar({ action: 'render', client_id: clientId, run_id: plan.run_id, idx: i });
+        if (!vivo.current) return;
+        if (!r?.ok) { await onDone?.(); return fallo(r, i - 1); }
+        hechos = i;
+        setGen(g => ({ ...g, hecho: i }));
+        await onDone?.();   // los logos aparecen de a uno, no todos juntos al final
+      }
+
+      const pal = await invocar({ action: 'palettes', client_id: clientId, run_id: plan.run_id });
+      if (!vivo.current) return;
+      if (!pal?.ok) { await onDone?.(); return fallo(pal, total); }
+
+      await onDone?.();
+      setGen({ status: 'done', n: total, paletas: (pal.resources || []).length });
+      setTimeout(() => vivo.current && setGen({ status: 'idle' }), 9000);
+    } catch (e) {
+      if (!vivo.current) return;
+      await onDone?.().catch(() => {});
+      setGen({ status: 'error', detail: `No pude comunicarme con el servidor: ${e?.message || e}`, hechos });
     }
-
-    const pal = await invocar({ action: 'palettes', client_id: clientId, run_id: plan.run_id });
-    if (!vivo.current) return;
-    if (!pal?.ok) { await onDone?.(); return fallo(pal, total); }
-
-    await onDone?.();
-    setGen({ status: 'done', n: total, paletas: (pal.resources || []).length });
-    setTimeout(() => vivo.current && setGen({ status: 'idle' }), 9000);
   };
 
   const aviso = (fondo, borde, texto, contenido) => (
