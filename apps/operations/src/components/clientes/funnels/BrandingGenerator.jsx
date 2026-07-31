@@ -30,8 +30,8 @@ const FORMATOS = {
 // Qué se está generando en cada paso, para que el cartel diga algo útil en vez de 'logo 2 de 3'.
 const ROTULO_PIEZA = {
   3: ['el isotipo', 'el logotipo', 'el isotipo + la tipografía'],
-  6: ['el isotipo (nombre del líder)', 'el logotipo (nombre del líder)', 'el isotipo + tipografía (nombre del líder)',
-      'el isotipo (nombre del equipo)', 'el logotipo (nombre del equipo)', 'el isotipo + tipografía (nombre del equipo)'],
+  6: ['el logotipo (nombre del líder)', 'el monograma (nombre del líder)', 'el conjunto (nombre del líder)',
+      'el logotipo (nombre del equipo)', 'el monograma (nombre del equipo)', 'el conjunto (nombre del equipo)'],
 };
 
 /**

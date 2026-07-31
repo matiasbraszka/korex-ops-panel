@@ -374,7 +374,7 @@ function sanearPlan(plan: Record<string, unknown>, cliente: Record<string, unkno
   // Corta en el primer "<" que abra un tag: todo lo que sigue es derrame, no contenido.
   const limpiar = (v: unknown) => str(v).replace(/<\/?[a-z_][^>]*>[\s\S]*$/i, "").trim();
 
-  for (const k of ["modo_marca_motivo", "nombre_marca", "iniciales", "territorio", "notas"]) {
+  for (const k of ["modo_marca_motivo", "nombre_marca", "iniciales", "territorio", "tipografia", "notas"]) {
     if (typeof plan[k] === "string") plan[k] = limpiar(plan[k]);
   }
   plan.modo_marca_motivo = clip(str(plan.modo_marca_motivo), 600);
@@ -421,19 +421,16 @@ function sanearPlan(plan: Record<string, unknown>, cliente: Record<string, unkno
  * desde la primera: que el logotipo salga de otro color que el isotipo no es una variante, es un
  * error que se paga en imágenes.
  */
-const ORDEN_PIEZAS = ["isotipo", "logotipo", "lockup"] as const;
+const ORDEN_PIEZAS = ["logotipo", "isotipo", "lockup"] as const;
 
-function normalizarSistemas(plan: Record<string, unknown>, formato: string): Record<string, unknown> {
+function normalizarSistemas(plan: Record<string, unknown>, formato: string, cliente: Record<string, unknown>): Record<string, unknown> {
+  // Las iniciales del monograma salen del nombre sobre el que está construido ESE sistema: con dos
+  // direcciones, el sistema del equipo lleva las del equipo, no las del líder.
+  const inicialesDe = (base: string) => {
+    const nombre = base === "equipo" ? str(cliente.team_name) : str(cliente.name);
+    return nombre.split(/\s+/).filter(Boolean).map((p) => p[0]).join("").slice(0, 3).toUpperCase();
+  };
   const logos = ((plan.logos as Record<string, unknown>[]) || []).slice();
-
-  if (formato === "prueba") {
-    const l = logos[0];
-    if (!l) return plan;
-    l.pieza = "lockup";
-    l.sist = 1;
-    plan.logos = [l];
-    return plan;
-  }
 
   const nSist = formato === "dos_direcciones" ? 2 : 1;
   const salida: Record<string, unknown>[] = [];
@@ -449,7 +446,7 @@ function normalizarSistemas(plan: Record<string, unknown>, formato: string): Rec
     }
     const sobrantes = grupo.filter((l) => ![...porPieza.values()].includes(l));
 
-    const cabeza = porPieza.get("isotipo") || grupo[0];
+    const cabeza = porPieza.get("logotipo") || grupo[0];
     for (const pieza of ORDEN_PIEZAS) {
       const l = porPieza.get(pieza) || sobrantes.shift();
       if (!l) continue;
@@ -461,6 +458,8 @@ function normalizarSistemas(plan: Record<string, unknown>, formato: string): Rec
       l.paleta_idx = Number(cabeza.paleta_idx) || Number(l.paleta_idx) || 1;
       l.base = str(cabeza.base) || str(l.base) || "persona";
       l.style_tags = (cabeza.style_tags as string[]) || (l.style_tags as string[]) || [];
+      l.iniciales = inicialesDe(str(l.base));
+      l.iniciales = inicialesDe(str(l.base));
       if (pieza !== "logotipo") l.tagline = "";
       if (pieza !== "lockup") l.bajada = "";
       salida.push(l);
@@ -636,7 +635,7 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
   // Recorte defensivo: el modelo a veces devuelve de más.
   plan.logos = (plan.logos as unknown[]).slice(0, nPiezas);
   plan.paletas = (plan.paletas as unknown[]).slice(0, 3);
-  plan = normalizarSistemas(plan, formato);
+  plan = normalizarSistemas(plan, formato, cliente as Record<string, unknown>);
   plan.formato = formato;
   if (!(plan.logos as unknown[]).length || !(plan.paletas as unknown[]).length) {
     await supabase.from("api_usage").insert({ fn: "generar_branding", model, status: "error", client_id: clientId, cost_usd: cost, error: "plan incompleto tras sanear", meta: { action: "plan" } });
@@ -704,7 +703,7 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
     return j({ ok: false, error: "missing_openai_key", detail: "Falta cargar la API key de OpenAI (secure_config.openai_api_key). Sin eso no se pueden generar los logos." });
   }
 
-  const prompt = construirPromptImagen(logo, nombreMarca);
+  const prompt = construirPromptImagen(logo, nombreMarca, str(plan.tipografia));
   let res: Response;
   try {
     res = await fetch("https://api.openai.com/v1/images/generations", {
