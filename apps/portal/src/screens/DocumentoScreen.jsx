@@ -22,6 +22,7 @@ const DOCS = {
   vsl: { eyebrow: 'VSL', accent: 'var(--mk-green)' },
   avatar: { eyebrow: 'AVATARES', accent: 'var(--mk-orange)' },
   estrategia: { eyebrow: 'ESTRATEGIA', accent: 'var(--mk-purple)' },
+  copy: { eyebrow: 'COPY DEL FUNNEL', accent: 'var(--mk-purple)' },
   guias: { eyebrow: 'GUÍAS', accent: 'var(--mk-cyan)' },
 };
 
@@ -161,6 +162,8 @@ export default function DocumentoScreen() {
   const doc = esGuias ? DOCS.guias : (DOCS[data.tipo] || DOCS.ads);
   const esVsl = !esGuias && data.tipo === 'vsl';
   const esGuion = !esGuias && (data.tipo === 'ads' || data.tipo === 'vsl');
+  // "Copy del funnel": las 4 páginas (Pre-landing…Thank you) para leer y aprobar.
+  const esCopy = !esGuias && data.tipo === 'copy';
   const secciones = Array.isArray(data.secciones) ? data.secciones : [];
   const comentarios = [...(Array.isArray(data.comentarios) ? data.comentarios : []), ...localComs];
   const topComs = comentarios.filter((c) => !c.parentId);
@@ -201,15 +204,16 @@ export default function DocumentoScreen() {
     setRevisadas((r) => ({ ...r, [s.id]: true }));
     const res = await api.toggleRevisado(s.id, true);
     if (!res?.ok) { setRevisadas((r) => ({ ...r, [s.id]: false })); return; }
+    const enCopy = data?.tipo === 'copy';
     setRevAviso(res.resultado === 'correccion'
       ? { tipo: 'correccion', txt: 'Enviamos tus correcciones al equipo. Lo revisan y te lo vuelven a habilitar.' }
-      : { tipo: 'aprobado', txt: 'Aprobado. Ya puedes grabarlo cuando quieras.' });
+      : { tipo: 'aprobado', txt: enCopy ? 'Aprobada. Dejamos esta página lista.' : 'Aprobado. Ya puedes grabarlo cuando quieras.' });
     setReloadKey((k) => k + 1);                  // refrescar: aprobado pasa a grabar
   };
 
   // ── Comentar: selección de texto → botón flotante → caja abajo ──
   const onDocMouseUp = () => {
-    if (!esGuion && data.tipo !== 'avatar' && data.tipo !== 'estrategia') return;
+    if (!esGuion && data.tipo !== 'avatar' && data.tipo !== 'estrategia' && data.tipo !== 'copy') return;
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
     if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
@@ -444,7 +448,20 @@ export default function DocumentoScreen() {
                         <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>~{segundos(planoDe(s))} seg</span>
                       </div>
                     )}
-                    {(data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
+                    {/* COPY DEL FUNNEL: cada página con su cabecera numerada del embudo. */}
+                    {esCopy && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', margin: '2px 0 14px', padding: '12px 14px', background: 'var(--mk-purple-bg, #F5F3FF)', border: '1px solid var(--mk-purple-border, #E5DEFB)', borderRadius: 14 }}>
+                        <span style={{ width: 30, height: 30, flex: 'none', borderRadius: 10, background: 'var(--mk-purple)', color: '#fff', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.paginaNum || i + 1}</span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--mk-purple)' }}>Página {s.paginaNum || i + 1} de 4</div>
+                          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', color: T.ink, lineHeight: 1.15 }}>{s.pagina || s.titulo}</div>
+                        </div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, background: estaRevisada(s) ? 'var(--mk-green-bg)' : '#fff', color: estaRevisada(s) ? 'var(--mk-green)' : 'var(--mk-purple)', border: estaRevisada(s) ? 'none' : '1px solid var(--mk-purple-border, #E5DEFB)' }}>
+                          {estaRevisada(s) ? 'Revisada ✓' : 'Para revisar'}
+                        </span>
+                      </div>
+                    )}
+                    {!esCopy && (data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
                         <span style={{ fontSize: 16, fontWeight: 800, color: T.text, letterSpacing: '-0.01em' }}>
                           {s.titulo}{esGuion && s.grabado ? '  ✓' : ''}
@@ -472,8 +489,9 @@ export default function DocumentoScreen() {
                     {esRevisar(s) && (() => {
                       const rev = estaRevisada(s);
                       const cambios = pideCambios(s);
-                      const label = rev ? 'Lo revisaste'
+                      const label = rev ? (esCopy ? 'La revisaste' : 'Lo revisaste')
                         : cambios ? 'Enviar mis correcciones al equipo'
+                        : esCopy ? 'Aprobar esta página'
                         : 'Aprobar y pasar a grabación';
                       const bg = rev ? 'var(--mk-green-bg)' : cambios ? 'var(--mk-orange)' : T.primary;
                       const col = rev ? 'var(--mk-green)' : '#fff';
@@ -483,6 +501,8 @@ export default function DocumentoScreen() {
                             <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.5, color: T.text2 }}>
                               {cambios
                                 ? 'Dejaste comentarios. Al enviar, el equipo los corrige y te lo vuelve a habilitar.'
+                                : esCopy
+                                ? 'Si el copy de esta página está bien, apruébalo. Si algo no encaja, selecciona el texto y deja un comentario primero.'
                                 : 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, selecciona el texto y deja un comentario primero.'}
                             </div>
                           )}
@@ -667,6 +687,11 @@ export default function DocumentoScreen() {
                   <FilaDoc dot="var(--mk-purple)" nombre="Estrategia del embudo" activo={data.tipo === 'estrategia'}
                     onClick={() => { setDrawer(false); nav(`/documento/${sid}/estrategia`); }} />
                 )}
+                {docs.copy?.existe && (
+                  <FilaDoc dot="var(--mk-pink, #EC4899)" nombre="Copy del funnel" activo={data.tipo === 'copy'}
+                    derecha={docs.copy?.pendiente ? 'revisar' : null}
+                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/copy`); }} />
+                )}
               </div>
 
               {/* AYUDA: las guías de grabación, iguales para todos los DEL. */}
@@ -740,6 +765,9 @@ function FilaDoc({ dot, nombre, activo, derecha, onClick }) {
       <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
       {derecha === 'por_grabar' && (
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#fff', background: 'var(--mk-red)', padding: '4px 8px', borderRadius: 999 }}>POR GRABAR</span>
+      )}
+      {derecha === 'revisar' && (
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#fff', background: 'var(--mk-pink, #EC4899)', padding: '4px 8px', borderRadius: 999 }}>REVISAR</span>
       )}
       {derecha === 'check' && <IcoCheck size={16} stroke="var(--mk-green)" sw={2.6} />}
     </div>
