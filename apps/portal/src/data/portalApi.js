@@ -44,6 +44,9 @@ export const api = {
 
   // Lista 'Tus guiones para grabar' (v14): una tarjeta por guion para_grabar.
   guiones:   () => rpc('portal_cliente_guiones',   {}, () => mock.MOCK_GUIONES_LISTA),
+  // Responsable + estado de flujo por guión (para pintar la inicial del responsable
+  // y el estado). Devuelve un mapa { sectionId: { flujo, responsable } }.
+  grabInfo:  (ids) => rpc('portal_cliente_grab_info', { p_section_ids: ids || [] }, () => ({})),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   // Las guías que el equipo mantiene en el DEL (del_guias_globales). Reemplazan

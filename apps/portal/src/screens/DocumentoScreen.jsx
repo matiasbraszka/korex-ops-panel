@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import BottomNav from '../components/BottomNav';
+import Avatar from '../components/Avatar';
 import { Loading, DemoBanner, Spinner, useAsync } from '../components/ui';
 import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
 import { T } from '../components/theme';
@@ -92,8 +93,11 @@ let _uid = 0;
 export default function DocumentoScreen() {
   const { sid, tipo } = useParams();
   const nav = useNavigate();
-  const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo, reloadKey]);
   const { data: guias } = useAsync(() => cargarGuias(), []);
+  const [grabMap, setGrabMap] = useState({});
+  const [revAviso, setRevAviso] = useState(null);   // feedback tras aprobar/corregir
 
   const [drawer, setDrawer] = useState(false);
   const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
@@ -121,6 +125,19 @@ export default function DocumentoScreen() {
   const demo = isDemo();
 
   useEffect(() => { setLocalComs([]); setSubidas([]); setRevisadas({}); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
+
+  // Responsable + estado de flujo de cada sección (inicial de quien graba).
+  useEffect(() => {
+    const ids = (Array.isArray(data?.secciones) ? data.secciones : []).map((s) => s.id);
+    if (ids.length) api.grabInfo(ids).then((m) => setGrabMap(m || {}));
+    else setGrabMap({});
+  }, [data]);
+
+  useEffect(() => {
+    if (!revAviso) return;
+    const t = setTimeout(() => setRevAviso(null), 4500);
+    return () => clearTimeout(t);
+  }, [revAviso]);
 
   // Si vienen desde "Tus guiones para grabar", saltamos al guion exacto.
   // Si vienen desde una CARPETA (Material / embudo), saltamos directo al cargador.
@@ -166,11 +183,20 @@ export default function DocumentoScreen() {
   const esRevisar = (s) => s.accion === 'revisar';
   const estaRevisada = (s) => revisadas[s.id] ?? !!s.revisado;
   const hayGrabar = data.hayGrabar !== false;
+  // ¿El cliente dejó comentarios sin resolver en esta sección? Entonces "revisar"
+  // significa PEDIR CAMBIOS (vuelve a Korex); si no, APROBAR (pasa a grabación).
+  const comsClienteDe = (s) => comentarios.filter(
+    (c) => (c.sectionId || c.section_id) === s.id && (c.isCliente || c.isTeam === false) && !c.resolved);
+  const pideCambios = (s) => comsClienteDe(s).length > 0;
   const marcarRevisada = async (s) => {
-    const v = !estaRevisada(s);
-    setRevisadas((r) => ({ ...r, [s.id]: v }));
-    const res = await api.toggleRevisado(s.id, v);
-    if (!res?.ok) setRevisadas((r) => ({ ...r, [s.id]: !v }));   // no se guardó: se vuelve atrás
+    if (estaRevisada(s)) return;                 // acción de una sola vía
+    setRevisadas((r) => ({ ...r, [s.id]: true }));
+    const res = await api.toggleRevisado(s.id, true);
+    if (!res?.ok) { setRevisadas((r) => ({ ...r, [s.id]: false })); return; }
+    setRevAviso(res.resultado === 'correccion'
+      ? { tipo: 'correccion', txt: 'Enviamos tus correcciones al equipo. Lo revisan y te lo vuelven a habilitar.' }
+      : { tipo: 'aprobado', txt: 'Aprobado. Ya puedes grabarlo cuando quieras.' });
+    setReloadKey((k) => k + 1);                  // refrescar: aprobado pasa a grabar
   };
 
   // ── Comentar: selección de texto → botón flotante → caja abajo ──
@@ -380,6 +406,15 @@ export default function DocumentoScreen() {
               </div>
             )}
 
+            {/* Aviso tras aprobar / enviar correcciones */}
+            {revAviso && (
+              <div style={{ margin: '0 0 14px', padding: '12px 15px', borderRadius: 14, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45,
+                background: revAviso.tipo === 'aprobado' ? 'var(--mk-green-bg)' : '#FEF3C7',
+                color: revAviso.tipo === 'aprobado' ? 'var(--mk-green)' : '#B45309' }}>
+                {revAviso.tipo === 'aprobado' ? '✅ ' : '✏️ '}{revAviso.txt}
+              </div>
+            )}
+
             {/* Secciones */}
             <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft, display: esGuias ? 'none' : 'block' }}>
               {secciones.map((s, i) => {
@@ -405,6 +440,13 @@ export default function DocumentoScreen() {
                             {estaRevisada(s) ? 'Revisado' : 'Para revisar'}
                           </span>
                         )}
+                        {grabMap[s.id]?.responsable && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                            <span style={{ fontSize: 11, color: T.text3 }}>Graba:</span>
+                            <Avatar resp={grabMap[s.id].responsable} size={22} />
+                            <span style={{ fontSize: 12, fontWeight: 700, color: T.textSoft }}>{grabMap[s.id].responsable.nombre}</span>
+                          </span>
+                        )}
                       </div>
                     )}
                     <div data-secid={s.id} className={esRico(s) ? 'kx-rich' : undefined} dangerouslySetInnerHTML={{ __html: html }} />
@@ -413,17 +455,32 @@ export default function DocumentoScreen() {
                     {/* El botón de "Revisado", justo debajo del guion que se lee.
                         No reemplaza al comentario: si algo no encaja, el cliente
                         selecciona el texto y comenta; esto es el "está bien". */}
-                    {esRevisar(s) && (
-                      <div
-                        onClick={() => marcarRevisada(s)} role="button"
-                        style={{ cursor: 'pointer', marginTop: 14, height: 46, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
-                          background: estaRevisada(s) ? 'var(--mk-green-bg)' : T.primary,
-                          color: estaRevisada(s) ? 'var(--mk-green)' : '#fff',
-                          border: estaRevisada(s) ? '1px solid var(--mk-green)' : 'none' }}>
-                        <IcoCheck size={16} stroke="currentColor" sw={2.6} />
-                        {estaRevisada(s) ? 'Lo revisaste' : 'Marcar como revisado'}
-                      </div>
-                    )}
+                    {esRevisar(s) && (() => {
+                      const rev = estaRevisada(s);
+                      const cambios = pideCambios(s);
+                      const label = rev ? 'Lo revisaste'
+                        : cambios ? 'Enviar mis correcciones al equipo'
+                        : 'Aprobar y pasar a grabación';
+                      const bg = rev ? 'var(--mk-green-bg)' : cambios ? 'var(--mk-orange)' : T.primary;
+                      const col = rev ? 'var(--mk-green)' : '#fff';
+                      return (
+                        <>
+                          {!rev && (
+                            <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.5, color: T.text2 }}>
+                              {cambios
+                                ? 'Dejaste comentarios. Al enviar, el equipo los corrige y te lo vuelve a habilitar.'
+                                : 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, selecciona el texto y deja un comentario primero.'}
+                            </div>
+                          )}
+                          <div onClick={() => marcarRevisada(s)} role="button"
+                            style={{ cursor: rev ? 'default' : 'pointer', marginTop: 10, height: 46, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+                              background: bg, color: col, border: rev ? '1px solid var(--mk-green)' : 'none' }}>
+                            <IcoCheck size={16} stroke="currentColor" sw={2.6} />
+                            {label}
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     <div style={{ height: 10 }} />
                   </div>

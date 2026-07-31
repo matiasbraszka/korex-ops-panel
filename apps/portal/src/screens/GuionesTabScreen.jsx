@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import BottomNav from '../components/BottomNav';
+import Avatar from '../components/Avatar';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
@@ -31,6 +32,13 @@ export default function GuionesTabScreen() {
   const nav = useNavigate();
   const { data: guiones, loading } = useAsync(() => api.guiones(), []);
   const [intro, setIntro] = useState(() => { try { return !localStorage.getItem(WELCOME_KEY); } catch { return false; } });
+  const [grabMap, setGrabMap] = useState({});
+
+  // Responsable de cada guión (inicial de quien graba). Una sola llamada con los ids.
+  useEffect(() => {
+    const ids = (Array.isArray(guiones) ? guiones : []).map((g) => g.id);
+    if (ids.length) api.grabInfo(ids).then((m) => setGrabMap(m || {}));
+  }, [guiones]);
 
   if (loading) return <PhoneFrame><Loading label="Buscando tus guiones…" /></PhoneFrame>;
   const lista = Array.isArray(guiones) ? guiones : [];
@@ -82,8 +90,8 @@ export default function GuionesTabScreen() {
             )}
 
             <div style={{ padding: '20px 20px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-              {pendientes.map((g) => <GuionCard key={g.id} g={g} nav={nav} />)}
-              {hechos.map((g) => <GuionCard key={g.id} g={g} nav={nav} hecho />)}
+              {pendientes.map((g) => <GuionCard key={g.id} g={g} nav={nav} resp={grabMap[g.id]?.responsable} />)}
+              {hechos.map((g) => <GuionCard key={g.id} g={g} nav={nav} hecho resp={grabMap[g.id]?.responsable} />)}
             </div>
 
             <div style={{ padding: '24px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
@@ -199,7 +207,7 @@ const introTitle = { fontSize: 16, fontWeight: 800, color: 'var(--mk-ink)' };
 const introCaption = { fontSize: 13, lineHeight: 1.5, color: 'var(--mk-text2)', margin: '12px 2px 0' };
 
 // Tarjeta de un guion: qué es, cuánto dura y ABRIR GUIÓN (va al guion exacto).
-function GuionCard({ g, nav, hecho = false }) {
+function GuionCard({ g, nav, hecho = false, resp = null }) {
   const esVsl = g.docTipo === 'vsl';
   const esRevisar = g.tarea === 'revisar';
   const abrir = () => nav(`/documento/${g.strategyId}/${g.docTipo}`, { state: { secId: g.id } });
@@ -232,6 +240,14 @@ function GuionCard({ g, nav, hecho = false }) {
           </div>
         )}
       </div>
+      {resp && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -2 }}>
+          <Avatar resp={resp} size={24} />
+          <span style={{ fontSize: 12, color: T.text2 }}>
+            <span style={{ color: T.text3 }}>Graba: </span><b style={{ color: T.textSoft }}>{resp.nombre}</b>
+          </span>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #EEF0F4' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: T.textSoft }}>
           <IcoClock size={13} stroke="currentColor" sw={2.2} />
