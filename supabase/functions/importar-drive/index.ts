@@ -31,7 +31,7 @@ const BUCKET = "funnel-recursos";
 const V = "https://video.bunnycdn.com/library";
 const MAX_FILES = 60; // tope por llamada (para no exceder el tiempo de la función)
 
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Max-Age": "0" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Nombre de archivo seguro para Storage; título = nombre sin extensión.
@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("authorization") || "";
     const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
     const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return json({ ok: false, error: "no autorizado" }, 401);
+    if (!user) { console.error("IMPDRIVE: sin usuario (401)"); return json({ ok: false, error: "no autorizado" }, 401); }
+    console.log("IMPDRIVE: user ok", user.id);
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
     const body = await req.json().catch(() => ({}));
@@ -89,6 +90,7 @@ Deno.serve(async (req) => {
     const files = nodes.filter((n) => n.mimeType && !String(n.mimeType).startsWith("application/vnd.google-apps"));
     const total = files.length;
     const lote = files.slice(0, MAX_FILES);
+    console.log("IMPDRIVE: folder", folderId, "archivos", total, "bucket", bucketKey);
 
     // 3) Candado de gasto de Bunny (solo importa si hay videos). Comparte el tope con migrar-videos.
     const videos = lote.filter((n) => String(n.mimeType || "").startsWith("video/"));
@@ -165,8 +167,9 @@ Deno.serve(async (req) => {
           if (isImage) imgs++; else otros++;
           importados++;
         }
-      } catch (e) { err++; errores.push(`${n.name}: ${String((e as Error)?.message || e)}`); }
+      } catch (e) { err++; const em = `${n.name}: ${String((e as Error)?.message || e)}`; errores.push(em); console.error("IMPDRIVE file:", em); }
     }
+    console.log("IMPDRIVE: fin", { importados, vids, imgs, otros, dup, err });
 
     // Registrar el gasto estimado de Bunny (alimenta el candado + el panel "Gasto de API").
     if (vids > 0) {
@@ -184,6 +187,7 @@ Deno.serve(async (req) => {
       errores: errores.slice(0, 5),
     });
   } catch (e) {
+    console.error("IMPDRIVE fatal:", String((e as Error)?.message || e));
     return json({ ok: false, error: String((e as Error)?.message || e) }, 500);
   }
 });
