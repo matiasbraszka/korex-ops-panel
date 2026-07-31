@@ -21,6 +21,30 @@ export async function fetchConversations() {
   return convs.map((c) => ({ ...c, next_appointment: citas[c.id] || null }));
 }
 
+// Menciones a NUESTRA cuenta: en qué conversaciones nos etiquetaron.
+// "Nuestra cuenta" = quien manda los salientes (su lid). A uno lo etiquetan con ese
+// lid y en el texto aparece como @<lid>. Acotado a 21 días (usa el índice de fecha,
+// no escanea toda la tabla) para no pesar. Devuelve { lids, map: conv_id -> {id, at} }.
+export async function fetchMentionState() {
+  try {
+    const desde = new Date(Date.now() - 21 * 864e5).toISOString();
+    const outs = await sbFetch(`wa_messages?direction=eq.out&select=sender_jid&order=created_at.desc&limit=400`);
+    const lids = [...new Set((Array.isArray(outs) ? outs : [])
+      .map((r) => String(r.sender_jid || '').split('@')[0].split(':')[0])
+      .filter((n) => n && n.length >= 6))];
+    if (lids.length === 0) return { lids: [], map: {} };
+    const orExpr = `or=(${lids.map((l) => `body.ilike.*@${l}*`).join(',')})`;
+    const rows = await sbFetch(
+      `wa_messages?direction=eq.in&created_at=gt.${encodeURIComponent(desde)}&${orExpr}&select=id,conversation_id,created_at&order=created_at.desc&limit=1000`,
+    );
+    const map = {};
+    for (const r of Array.isArray(rows) ? rows : []) {
+      if (r.conversation_id && !map[r.conversation_id]) map[r.conversation_id] = { id: r.id, at: r.created_at };
+    }
+    return { lids, map };
+  } catch { return { lids: [], map: {} }; }
+}
+
 // Próxima cita por conversación (para el chip "vie 10:00" de la lista).
 async function fetchNextAppointments() {
   const rows = await sbFetch(

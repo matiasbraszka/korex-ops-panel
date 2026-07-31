@@ -6,6 +6,7 @@ import {
   patchSoporteConfig, fetchAppointments, fetchParticipants, fetchGroupNames,
   invokeSend, invokeCita, invokeMedia, invokeGroup, invokeLink,
   invokeAgendar, invokeDeleteForEveryone, fetchAllAssignees, PAGE_SIZE,
+  fetchMentionState,
 } from '../lib/api.js';
 import { fmtNextCita } from '../lib/format.js';
 
@@ -39,6 +40,7 @@ export function SoporteProvider({ children }) {
 
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState([]);
+  const [ourLids, setOurLids] = useState([]);   // lids de nuestra propia cuenta (para detectar menciones)
   const [selectedId, setSelectedId] = useState(null);
   const [filters, setFilters] = useState({ scope: 'all', tagId: null, assigneeId: null, clientId: null, search: '' });
   // Mapa conversación → [member_id...] (asignación múltiple). Alimenta el filtro
@@ -68,14 +70,30 @@ export function SoporteProvider({ children }) {
     if (cfg) setConfig(cfg);
     setAssigneesMap(buildAssigneesMap(asg));
     setLoading(false);
+    // Menciones a nuestra cuenta (aparte, no bloquea la bandeja). Pinta la tarjeta
+    // cuando nos etiquetaron y el chat sigue sin leer.
+    fetchMentionState().then(({ lids, map }) => {
+      setOurLids(lids || []);
+      if (!map) return;
+      setConversations((prev) => prev.map((c) => ({
+        ...c,
+        mention_msg_id: map[c.id]?.id || null,
+        mention_unread: (c.unread_count > 0) && !!map[c.id],
+      })));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ── markRead: clamp local + PATCH condicional (solo si unread > 0) ──
+  // Al abrir el chat tambien apagamos el aviso de mencion (se interpreta como leido).
   const markRead = useCallback((convId) => {
     if (!convId) return;
-    setConversations((prev) => prev.map((c) => (c.id === convId && c.unread_count > 0 ? { ...c, unread_count: 0 } : c)));
+    setConversations((prev) => prev.map((c) => (
+      c.id === convId && (c.unread_count > 0 || c.mention_unread)
+        ? { ...c, unread_count: 0, mention_unread: false }
+        : c
+    )));
     patchConversation(convId, { unread_count: 0 }, { extraFilter: '&unread_count=gt.0' });
   }, []);
 
@@ -725,8 +743,10 @@ export function SoporteProvider({ children }) {
     groupDirByConv, loadGroupDirectory,
     setGroupSubject, setGroupDescription, addParticipant, removeParticipant, setGroupPicture,
     mediaByMsg, loadMedia,
+    ourLids,
     getDraft, setDraft, refresh,
   }), [
+    ourLids,
     loading, realtimeOk, visibleConversations, conversations, unreadTotal, selectedId,
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, assigneeCounts, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X } from 'lucide-react';
+import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X, AtSign } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { useAuth } from '@korex/auth';
 import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
@@ -19,10 +19,12 @@ const WALLPAPER = {
 };
 
 export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
-  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, deleteForEveryone, groupDirByConv, loadGroupDirectory } = useSoporte();
+  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, deleteForEveryone, groupDirByConv, loadGroupDirectory, ourLids } = useSoporte();
   const { isAdmin } = useAuth();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
+  const [hideMentionJump, setHideMentionJump] = useState(false);  // ocultar el aviso "te etiquetaron" tras verlo
+  const [flashId, setFlashId] = useState(null);                   // mensaje resaltado al saltar
   const [forwardMsgs, setForwardMsgs] = useState(null); // array de mensajes a reenviar (null = modal cerrado)
   const [selectMode, setSelectMode] = useState(false);  // selección múltiple para reenviar
   const [selected, setSelected] = useState(() => new Set());
@@ -49,6 +51,28 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
 
   const thread = threads[selectedId] || { items: [], hasMore: false, loadingOlder: false, loaded: false };
   const conv = selectedConversation;
+
+  // Ultimo mensaje entrante que menciona a nuestra cuenta (@lid en el texto).
+  const mentionMsgId = useMemo(() => {
+    if (!Array.isArray(ourLids) || ourLids.length === 0) return null;
+    for (let i = thread.items.length - 1; i >= 0; i--) {
+      const m = thread.items[i];
+      if (m.direction !== 'in' || !m.body) continue;
+      if (ourLids.some((l) => m.body.includes('@' + l))) return m.id;
+    }
+    return null;
+  }, [thread.items, ourLids]);
+  useEffect(() => { setHideMentionJump(false); setFlashId(null); }, [selectedId]);
+  const jumpToMention = useCallback(() => {
+    if (!mentionMsgId) return;
+    const el = document.getElementById('m-' + mentionMsgId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setFlashId(mentionMsgId);
+      setTimeout(() => setFlashId((f) => (f === mentionMsgId ? null : f)), 2200);
+    }
+    setHideMentionJump(true);
+  }, [mentionMsgId]);
 
   const groups = useMemo(() => {
     // "Contenido protegido" (secretEncryptedMessage): wrapper E2E que WhatsApp no
@@ -218,6 +242,16 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
         </button>
       </div>
 
+      {/* Aviso "te etiquetaron": salta al mensaje exacto (como en WhatsApp). */}
+      {mentionMsgId && !hideMentionJump && (
+        <div className="px-3 pt-1.5">
+          <button onClick={jumpToMention}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#7C3AED] text-white text-[11.5px] font-semibold px-3 py-1.5 cursor-pointer shadow-[0_2px_8px_rgba(124,58,237,.3)] hover:bg-[#6D28D9]">
+            <AtSign size={13} /> Te etiquetaron — ver mensaje
+          </button>
+        </div>
+      )}
+
       {/* Hilo sobre wallpaper */}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto min-h-0 py-3.5 relative" style={WALLPAPER}>
         {thread.loadingOlder && (
@@ -237,8 +271,9 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   </span>
                 </div>
               ) : (
+                <div key={g.key} id={'m-' + g.msg.id}
+                  className={flashId === g.msg.id ? 'rounded-lg ring-2 ring-[#A855F7] ring-offset-2 transition-shadow' : ''}>
                 <MessageBubble
-                  key={g.key}
                   msg={g.msg}
                   isGroup={conv.is_group}
                   showAuthor={g.showAuthor}
@@ -253,6 +288,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   quotedMsg={g.msg.reply_to ? byWaId[g.msg.reply_to] : null}
                   mentions={mentions}
                 />
+                </div>
               )
             )}
           </div>

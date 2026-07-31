@@ -1,4 +1,4 @@
-import { Users, Calendar, Link2, CheckCheck, Building2 } from 'lucide-react';
+import { Users, Calendar, Link2, CheckCheck, Building2, AtSign } from 'lucide-react';
 import { useAuth } from '@korex/auth';
 import { initials, fmtTime, colorFromString, convName, prettyPreview } from '../lib/format.js';
 
@@ -10,6 +10,7 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
   const name = convName(conv, !isAdmin);
   const color = colorFromString(conv.wa_jid);
   const unread = isSelected ? 0 : conv.unread_count || 0;
+  const mentioned = !isSelected && !!conv.mention_unread;   // te etiquetaron y sigue sin leer
   // Sin nombre conocido (solo teléfono) → avatar "?" punteado, como el diseño.
   const unknown = !conv.is_group && !conv.contact?.full_name && !conv.wa_profile_name;
   const lastIsOurs = conv.last_message_direction === 'out';
@@ -35,7 +36,9 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
       className={`w-full text-left p-2.5 rounded-xl border cursor-pointer flex items-start gap-2.5 transition-all duration-150 mb-1.5 ${
         active
           ? 'border-[#F59E0B]/65 bg-[#FFFBF2] shadow-[0_2px_10px_rgba(245,158,11,0.12)]'
-          : 'border-border/70 bg-white hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)]'
+          : mentioned
+            ? 'border-[#A855F7]/70 bg-[#FAF5FF] shadow-[0_2px_10px_rgba(168,85,247,0.14)]'
+            : 'border-border/70 bg-white hover:border-[#F59E0B]/45 hover:shadow-[0_2px_8px_rgba(10,22,40,0.06)]'
       }`}
     >
       {/* Avatar + mini-badge del canal */}
@@ -76,6 +79,11 @@ export default function ConversationItem({ conv, active, isSelected, tagsCatalog
         {/* Fila 3: CLIENTE vinculado (para identificar de quién es) + etiquetas + cita + no leídos.
             El nombre de la persona ya va arriba; no lo repetimos como pastilla. */}
         <div className="flex items-center gap-1 mt-1">
+          {mentioned && (
+            <span className="text-[9.5px] font-bold px-1.5 py-px rounded-full bg-[#F3E8FF] text-[#7C3AED] flex items-center gap-0.5 shrink-0">
+              <AtSign size={9} className="shrink-0" /> Te etiquetaron
+            </span>
+          )}
           {conv.client?.name ? (
             <span className="text-[9.5px] font-semibold px-1.5 py-px rounded-full bg-[#EEF2FF] text-[#4A67D8] truncate max-w-[140px] shrink-0 flex items-center gap-0.5">
               <Building2 size={9} className="shrink-0" /> {conv.client.name}
