@@ -58,12 +58,24 @@ async function appScript(url: string, payload: Record<string, unknown>): Promise
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    // 1) Verificar que llame un usuario logueado del panel.
+    // 1) Verificar que llame un usuario logueado del panel (o el service_role, para
+    //    llamadas internas/diagnóstico, igual que migrar-videos).
     const authHeader = req.headers.get("authorization") || "";
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) { console.error("IMPDRIVE: sin usuario (401)"); return json({ ok: false, error: "no autorizado" }, 401); }
-    console.log("IMPDRIVE: user ok", user.id);
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    let userId: string | null = null;
+    let esServiceRole = bearer && SERVICE_ROLE && bearer === SERVICE_ROLE;
+    if (!esServiceRole && bearer) { // fallback: rol del propio JWT
+      try { esServiceRole = JSON.parse(atob(bearer.split(".")[1] || "")).role === "service_role"; } catch { /* no es jwt */ }
+    }
+    if (esServiceRole) {
+      console.log("IMPDRIVE: llamada interna (service_role)");
+    } else {
+      const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) { console.error("IMPDRIVE: sin usuario (401)"); return json({ ok: false, error: "no autorizado" }, 401); }
+      userId = user.id;
+      console.log("IMPDRIVE: user ok", user.id);
+    }
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
     const body = await req.json().catch(() => ({}));
@@ -145,7 +157,7 @@ Deno.serve(async (req) => {
             title, provider: "bunny", kind: "video", bunny_id: guid,
             public_url: `https://iframe.mediadelivery.net/embed/${BUNNY_LIB}/${guid}`,
             storage_path: BUNNY_HOST ? `https://${BUNNY_HOST}/${guid}/thumbnail.jpg` : null,
-            mime_type: mime || "video/mp4", size_bytes: n.size || null, created_by: user.id,
+            mime_type: mime || "video/mp4", size_bytes: n.size || null, created_by: userId,
           });
           vids++; importados++; videosLeft--;
           await sleep(1200); // Bunny bloquea en ráfaga
@@ -162,7 +174,7 @@ Deno.serve(async (req) => {
             strategy_id: strategyId, client_id: clientId, avatar_id: null, bucket_key: bucketKey,
             title, provider: "supabase", storage_path: path, public_url: pub,
             mime_type: mime || "application/octet-stream", kind: isImage ? "image" : "other",
-            size_bytes: buf.byteLength, created_by: user.id,
+            size_bytes: buf.byteLength, created_by: userId,
           });
           if (isImage) imgs++; else otros++;
           importados++;
@@ -173,11 +185,13 @@ Deno.serve(async (req) => {
 
     // Registrar el gasto estimado de Bunny (alimenta el candado + el panel "Gasto de API").
     if (vids > 0) {
-      await sb.from("api_usage").insert({
-        fn: "importar-drive", model: "bunny-migracion", status: "ok",
-        cost_usd: Number((vids * PER_VIDEO).toFixed(4)), client_id: clientId,
-        meta: { videos: vids, per_video_usd: PER_VIDEO, nota: "importador de Drive del DEL" },
-      }).catch(() => {});
+      try {
+        await sb.from("api_usage").insert({
+          fn: "importar-drive", model: "bunny-migracion", status: "ok",
+          cost_usd: Number((vids * PER_VIDEO).toFixed(4)), client_id: clientId,
+          meta: { videos: vids, per_video_usd: PER_VIDEO, nota: "importador de Drive del DEL" },
+        });
+      } catch (_e) { /* el registro de gasto no debe romper la importación */ }
     }
 
     return json({
