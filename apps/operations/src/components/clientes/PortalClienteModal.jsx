@@ -122,6 +122,12 @@ export default function PortalClienteModal({ client, onClose }) {
     const { data } = await supabase.rpc('del_grab_resumen_cliente', { p_client_id: client.id });
     if (data?.ok) setGrab(data);
   };
+  // El equipo aprueba (o desmarca) que un guión ya está grabado, tras verificarlo.
+  const marcarGrabado = async (g, val) => {
+    if (val && !window.confirm(`¿Confirmás que "${g.titulo}" ya está grabado y completo?`)) return;
+    const { data } = await supabase.rpc('del_grab_marcar_grabado', { p_section_id: g.id, p_grabado: val });
+    if (data?.ok) cargarGrab();
+  };
   useEffect(() => { cargar(); cargarPedidos(); cargarOnb(); cargarCollab(); cargarGrab(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [client.id]);
 
   // ── Pedidos al cliente (lo que ve en "Lo que te falta" de su portal) ──
@@ -257,7 +263,7 @@ export default function PortalClienteModal({ client, onClose }) {
             {(grab.guiones || []).length > 0 && (
               <div className="flex flex-col">
                 {grab.guiones.map((g) => {
-                  const est = { revision: { t: '👀 Revisión', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
+                  const est = { revision: { t: '👀 Revisión', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' }, grabado: { t: '✅ Grabado', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
                   return (
                     <div key={g.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
                       <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[9px] font-extrabold text-white shrink-0" style={{ background: g.responsable?.color || '#5B7CF5' }} title={g.responsable?.nombre}>
@@ -267,7 +273,21 @@ export default function PortalClienteModal({ client, onClose }) {
                         <div className="text-[12px] font-semibold text-[#1A1D26] truncate">{g.titulo}</div>
                         <div className="text-[10px] text-[#AEB4BF] truncate">{g.funnel || ''} · {g.responsable?.nombre}</div>
                       </div>
-                      <span className="text-[10px] font-bold shrink-0" style={{ color: est.c }}>{est.t}</span>
+                      {/* Aprobación del equipo: en "Grabación" se puede marcar grabado;
+                          en "Grabado" se puede deshacer. */}
+                      {g.flujo === 'grabacion' ? (
+                        <button onClick={() => marcarGrabado(g, true)} title="Marcar como grabado (ya verificado)"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-[#15803D] border border-[#BBF7D0] bg-white rounded-md py-1 px-1.5 cursor-pointer hover:bg-[#ECFDF5] shrink-0">
+                          <BadgeCheck size={12} />Grabado
+                        </button>
+                      ) : g.flujo === 'grabado' ? (
+                        <button onClick={() => marcarGrabado(g, false)} title="Deshacer (volver a grabación)"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold shrink-0 rounded-md py-1 px-1.5" style={{ background: '#DCFCE7', color: '#15803D' }}>
+                          <BadgeCheck size={12} />Grabado
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold shrink-0" style={{ color: est.c }}>{est.t}</span>
+                      )}
                       <span className="text-[10px] text-[#9CA3AF] shrink-0 tabular-nums w-8 text-right">{g.dias}d</span>
                     </div>
                   );

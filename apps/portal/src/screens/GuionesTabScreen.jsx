@@ -28,7 +28,9 @@ const durLabel = (palabras) => {
 // DEL, terminados). Antes solo se listaban los primeros: una pestaña puesta para
 // revisar aparecía en la Home y adentro del documento, y justo en la pantalla
 // que se llama Guiones no estaba.
-const pendiente = (g) => (g.tarea === 'revisar' ? !g.revisado : (!g.grabado && !g.entregado));
+// Una de grabar queda pendiente hasta que el EQUIPO la aprueba (g.grabado); haber
+// subido el video (g.entregado) no alcanza — el equipo verifica que esté completa.
+const pendiente = (g) => (g.tarea === 'revisar' ? !g.revisado : !g.grabado);
 export default function GuionesTabScreen() {
   const nav = useNavigate();
   const { data: guiones, loading } = useAsync(() => api.guiones(), []);
@@ -253,15 +255,17 @@ function GuionCard({ g, nav, hecho = false, resp = null }) {
               {g.revisado ? 'Revisado' : 'Para revisar'}
             </span>
           )
-          : (g.grabado || g.entregado)
+          : g.grabado
             ? (
-              <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
-                {g.entregado ? 'Entregado' : 'Grabado'}
-              </span>
+              <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>Grabado</span>
             )
-            : (
-              <span style={pill('var(--mk-orange-bg)', 'var(--mk-orange)')}>Para grabar</span>
-            )}
+            : g.entregado
+              ? (
+                <span style={pill('var(--mk-blue-bg)', 'var(--mk-blue-ops)')}>Enviado · validando</span>
+              )
+              : (
+                <span style={pill('var(--mk-orange-bg)', 'var(--mk-orange)')}>Para grabar</span>
+              )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.18, color: T.ink, textWrap: 'balance' }}>{g.titulo}</div>
