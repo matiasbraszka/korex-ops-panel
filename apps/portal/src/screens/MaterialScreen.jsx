@@ -186,16 +186,20 @@ export function cosa(bucket, n) {
 
 // De qué embudo es esta petición. Solo aparece en las que son de un embudo
 // concreto; las del cliente (branding, autoridad) valen para todos y no llevan.
-export function ChipEmbudo({ nombre }) {
+// Chip del embudo al que pertenece una petición. Si no tiene embudo (general),
+// se muestra "General" en gris, para que el cliente siempre sepa de qué es.
+export function ChipEmbudo({ nombre, general = false }) {
+  const esGen = general || !nombre;
   return (
     <span style={{
       alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '2px 8px', borderRadius: 999, background: 'var(--mk-blue-bg)',
-      color: 'var(--mk-blue-ops)', fontSize: 10.5, fontWeight: 800,
+      padding: '2px 8px', borderRadius: 999,
+      background: esGen ? 'var(--mk-border-light)' : 'var(--mk-blue-bg)',
+      color: esGen ? 'var(--mk-text2)' : 'var(--mk-blue-ops)', fontSize: 10.5, fontWeight: 800,
       letterSpacing: '.03em', maxWidth: '100%', overflow: 'hidden',
       textOverflow: 'ellipsis', whiteSpace: 'nowrap',
     }}>
-      <IcoFolder size={11} stroke="currentColor" sw={2.3} />{nombre}
+      <IcoFolder size={11} stroke="currentColor" sw={2.3} />{esGen ? 'General' : nombre}
     </span>
   );
 }

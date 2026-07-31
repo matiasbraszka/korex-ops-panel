@@ -4,6 +4,7 @@ import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { destinoTarea } from '../data/taskNav';
 import { PerfilSheet, AccesosSheet, GuiasSheet, ReglasServicioSheet } from '../components/Layout';
+import { ChipEmbudo } from './MaterialScreen';
 import { T, display, microLabel } from '../components/theme';
 import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile, IcoDoc } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
@@ -206,11 +207,12 @@ export default function InicioScreen() {
 // ── Tarjeta UNIFORME de pendiente (misma estructura para todas, mobile-first):
 //    chip de estado + "hace N días" · icono + título + descripción · botón azul
 //    grande IGUAL en todas. El cliente nunca tiene que adivinar dónde tocar.
-function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption }) {
+function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption, funnelChip }) {
   return (
     <div onClick={onClick} style={{ cursor: 'pointer', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: 'var(--shadow-md)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
         {chip}
+        {funnelChip}
         {dias != null && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: T.text3 }}>
             <IcoClock size={12} stroke="currentColor" sw={2.3} />
@@ -280,7 +282,9 @@ function PendienteCard({ p, nav }) {
     <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--mk-red)' }}>Nos está frenando</div>
   ) : null;
 
-  return <CardBase onClick={abrir} tile={tile} chip={chip} dias={p.dias} titulo={p.titulo} descripcion={p.descripcion} cta={cta} caption={caption} />;
+  // Meta es a nivel cuenta (no de un embudo): ahí no mostramos chip de embudo.
+  const funnelChip = esMeta ? null : <ChipEmbudo nombre={p.funnel} general={!p.funnel} />;
+  return <CardBase onClick={abrir} tile={tile} chip={chip} funnelChip={funnelChip} dias={p.dias} titulo={p.titulo} descripcion={p.descripcion} cta={cta} caption={caption} />;
 }
 
 // Tarea del sistema de operaciones asignada al cliente (misma tarjeta uniforme).

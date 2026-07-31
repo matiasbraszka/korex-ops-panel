@@ -25,6 +25,7 @@ export default function SubirPedidoScreen() {
 
   const [subidas, setSubidas] = useState([]);   // {uid,name,pct,done,error}
   const [guia, setGuia] = useState(null);       // título de la guía a abrir
+  const [contenido, setContenido] = useState([]); // lo que YA hay en esta carpeta
   const demo = isDemo();
   const _uid = useRef(0);
 
@@ -46,6 +47,16 @@ export default function SubirPedidoScreen() {
     setFotos((prev) => prev.map((x) => ({ ...x, favorita: x.id === f.id })));
     try { await supabase.rpc('portal_cliente_foto_favorita', { p_id: f.id }); } finally { setMarcando(null); }
   };
+
+  // Lo que YA hay en esta carpeta (para que el cliente siempre lo vea). Se refresca
+  // cuando termina una subida.
+  useEffect(() => {
+    if (demo || !pedido?.bucket) { setContenido([]); return; }
+    let alive = true;
+    api.carpeta(pedido.bucket, pedido.strategyId || null)
+      .then((d) => { if (alive) setContenido(Array.isArray(d?.items) ? d.items : []); });
+    return () => { alive = false; };
+  }, [pedido?.bucket, pedido?.strategyId, demo, doneCount]);
 
   if (!pedido) {
     return (
@@ -88,26 +99,13 @@ export default function SubirPedidoScreen() {
 
           <div style={{ padding: '18px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ ...display(29, '-0.035em'), textWrap: 'balance' }}>{pedido.titulo}</div>
-            {/* De qué embudo es. Dos peticiones iguales de dos embudos distintos
-                se ven idénticas sin esto. */}
-            {pedido.funnel && <ChipEmbudo nombre={pedido.funnel} />}
+            {/* De qué embudo es (o General). Dos peticiones iguales de dos embudos
+                distintos se ven idénticas sin esto. */}
+            <ChipEmbudo nombre={pedido.funnel} general={!pedido.funnel} />
             <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, textWrap: 'pretty' }}>
               {pedido.descripcion}{esAutoridad ? ' Que se te vea la cara y haya buena luz.' : ''}
             </div>
           </div>
-
-          {/* Los testimonios son lo que más se traba: el cliente no sabe a quién
-              pedírselos ni qué tiene que decir. La guía ya existe, así que se
-              ofrece justo antes de subir, no escondida en el perfil. */}
-          {esTest && (
-            <div onClick={() => setGuia('testimonios')} role="button"
-              style={{ margin: '18px 22px 0', padding: '13px 15px', borderRadius: 16, background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', gap: 11, cursor: 'pointer' }}>
-              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>?</div>
-              <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.ink, lineHeight: 1.35 }}>
-                ¿Dudas de cómo conseguir testimonios? <span style={{ color: 'var(--mk-blue-ops)' }}>Mira esta guía</span>
-              </div>
-            </div>
-          )}
 
           {/* Ejemplos + "Así sí, así no" — el contenido cambia según QUÉ se pide. */}
           {(esFotos || esLogo || esTest) && (
@@ -258,6 +256,38 @@ export default function SubirPedidoScreen() {
               </div>
             </div>
           )}
+
+          {/* Lo que YA hay en esta carpeta — siempre visible, así el cliente ve lo
+              que subió (o lo que el equipo puso ahí). En autoridad ya se ve arriba. */}
+          {!esAutoridad && contenido.length > 0 && (
+            <div style={{ padding: '24px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', color: T.ink }}>Lo que hay en esta carpeta</div>
+                <span style={pill('var(--mk-blue-bg)', 'var(--mk-blue-ops)')}>{contenido.length}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {contenido.map((it) => {
+                  const esImg = it.kind === 'image' && it.public_url;
+                  const esVideo = it.kind === 'video';
+                  return (
+                    <div key={it.id} title={it.title}
+                      style={{ position: 'relative', aspectRatio: '1/1', borderRadius: 14, overflow: 'hidden', background: '#EEF1F6', border: '1px solid var(--mk-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {esImg ? (
+                        <img src={it.public_url} alt={it.title || ''} loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 8, textAlign: 'center' }}>
+                          <span style={{ fontSize: 22 }}>{esVideo ? '🎬' : '📄'}</span>
+                          <span style={{ fontSize: 10, lineHeight: 1.25, color: T.text2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{it.title || 'Archivo'}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 12, color: T.text3, lineHeight: 1.4 }}>Es lo que tenemos guardado en esta carpeta. Si algo no debería estar, avísanos por WhatsApp.</div>
+            </div>
+          )}
+
           <div style={{ height: 26 }} />
         </div>
 
