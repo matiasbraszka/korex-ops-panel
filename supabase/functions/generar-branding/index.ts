@@ -260,8 +260,14 @@ async function bloqueAprendizaje(clientId: string, modo: string): Promise<string
    de un DESCARTADO. Si dos de tus tres tags coinciden con un descartado, no vale: cambialo.
 2. IGNORÁ los conservados. El equipo pidió explícitamente otra dirección: cambiá de familia
    visual entera aunque algo haya sobrevivido.
-3. Las paletas nuevas tienen que ser distinguibles a simple vista de TODAS las anteriores
-   (distinto matiz dominante, no el mismo azul dos tonos más claro).`
+3. PODÉS APARTARTE DE LAS FAMILIAS CROMÁTICAS DE LA FICHA DEL NICHO. Ese catálogo es la
+   recomendación por defecto, y ya se probó: si te quedás adentro vas a devolver lo mismo con
+   otro nombre. Buscá una familia distinta que igual le sirva a este líder y explicá en "razon"
+   por qué funciona. Lo que NO se relaja nunca: los símbolos prohibidos, el registro del nicho
+   y la regla de que el logo sea monocromático.
+4. Las paletas nuevas tienen que ser distinguibles A SIMPLE VISTA de TODAS las anteriores: otro
+   matiz dominante, no la misma paleta con el acento cambiado. Si al describirla te sale un
+   nombre parecido a uno anterior, es señal de que no cambiaste lo suficiente.`
     : `1. Ningún concepto nuevo puede repetir el concepto ni la combinación dominante de style_tags
    de un DESCARTADO. Si dos de tus tres tags coinciden con un descartado, no vale: cambialo.
 2. Si hay CONSERVADOS: quedate en su familia visual y variá DENTRO de ella (misma familia de
@@ -401,6 +407,39 @@ function sanearPlan(plan: Record<string, unknown>, cliente: Record<string, unkno
   plan.logos = ((plan.logos as Record<string, unknown>[]) || []).filter((l) => str(l.prompt_imagen));
 
   return plan;
+}
+
+/**
+ * ¿Dos paletas son la misma para el ojo?
+ *
+ * Comparar los hex tal cual no alcanza: al pedirle "otra dirección" devolvió las mismas tres
+ * paletas con un color de acento cambiado y el mismo nombre. Formalmente distintas, en pantalla
+ * idénticas — y encima ocupando el lugar de una propuesta nueva.
+ *
+ * Pero comparar los CUATRO colores tampoco sirve, y esto costó una prueba fallida: el neutro
+ * claro (crema) y el oscuro (carbón) son casi los mismos en toda paleta del mismo nicho, así que
+ * inflaban la coincidencia y daban por repetidas paletas obviamente distintas — una terracota y
+ * una grafito+turquesa contaban 3 de 4 "cerca" sólo por los neutros.
+ *
+ * Lo que define el carácter de una paleta es el PRINCIPAL y el SECUNDARIO. Si esos dos están
+ * cerca, es la misma paleta por más que cambie el acento. Umbral 60 sobre un máximo de 441:
+ * tolera el mismo color un poco más claro, no un matiz distinto.
+ */
+function caracterDePaleta(colors: string[], roles: Record<string, string> | null): string[] {
+  const p = str(roles?.principal), s = str(roles?.secundario);
+  // Sin roles se cae al orden del contrato: principal, secundario, acento, neutro.
+  return [p || colors[0] || "", s || colors[1] || ""].filter(Boolean);
+}
+
+function paletasParecidas(a: string[], b: string[]): boolean {
+  if (a.length < 2 || b.length < 2) return false;
+  const [a0, a1] = a.map(hexARgb), [b0, b1] = b.map(hexARgb);
+  const d = (x: number[], y: number[]) => Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+  // El emparejamiento tiene que ser UNO A UNO. Si sólo se pide "que cada color tenga alguno
+  // cerca", los dos colores de una paleta pueden mapear al MISMO color de la otra y da falso
+  // positivo: pasó con grafito+turquesa contra azul+cobre, donde el grafito y el turquesa caían
+  // los dos cerca del azul y se descartó una paleta que era claramente distinta.
+  return (d(a0, b0) < 60 && d(a1, b1) < 60) || (d(a0, b1) < 60 && d(a1, b0) < 60);
 }
 
 /** Agrega lo renderizado al plan de la corrida, para poder comparar en la próxima regeneración. */
@@ -710,9 +749,11 @@ async function accionPalettes(body: Record<string, unknown>, clientId: string, b
   const { data: vivas } = await supabase.from("funnel_resources").select("meta")
     .eq("client_id", clientId).is("strategy_id", null).eq("bucket_key", "branding")
     .eq("meta->>kind", "palette");
-  const yaEnLaCarpeta = new Set(
-    (vivas || []).map((r) => ((((r.meta as Record<string, unknown>)?.colors as string[]) || []).join(",").toUpperCase())).filter(Boolean),
-  );
+  const yaEnLaCarpeta = (vivas || []).map((r) => {
+    const m = (r.meta as Record<string, unknown>) || {};
+    const colors = ((m.colors as string[]) || []).map((h) => str(h).toUpperCase());
+    return caracterDePaleta(colors, (m.roles as Record<string, string>) || null);
+  }).filter((c) => c.length >= 2);
 
   const recursos = [];
   let repetidas = 0;
@@ -722,10 +763,15 @@ async function accionPalettes(body: Record<string, unknown>, clientId: string, b
       hex: str(c.hex).toUpperCase(), rol: str(c.rol), nombre: str(c.nombre),
     })).filter((c) => /^#[0-9A-F]{6}$/.test(c.hex));
     if (!colores.length) continue;
-    if (yaEnLaCarpeta.has(colores.map((c) => c.hex).join(","))) { repetidas++; continue; }
+    const hexes = colores.map((c) => c.hex);
+    const roles = Object.fromEntries(colores.map((c) => [c.rol || "otro", c.hex]));
+    // Contra lo que ya está en la carpeta Y contra lo que se acaba de subir en esta misma
+    // corrida: si no, dos de las tres paletas nuevas pueden ser casi la misma entre sí.
+    const caracter = caracterDePaleta(hexes, roles);
+    if (yaEnLaCarpeta.some((v) => paletasParecidas(caracter, v))) { repetidas++; continue; }
+    yaEnLaCarpeta.push(caracter);
 
     const groupId = "pl_" + crypto.randomUUID().slice(0, 8);
-    const hexes = colores.map((c) => c.hex);
     const bytes = dibujarPaleta(str(p.nombre), colores);
 
     recursos.push(await subirPng(
@@ -735,8 +781,7 @@ async function accionPalettes(body: Record<string, unknown>, clientId: string, b
       `Paleta ${i + 1} · ${str(p.nombre)} · ${hexes.join(" ")}`,
       {
         gen: "branding", run_id: runId, kind: "palette", group_id: groupId, idx: i + 1,
-        palette_name: str(p.nombre), razon: str(p.razon), colors: hexes,
-        roles: Object.fromEntries(colores.map((c) => [c.rol || "otro", c.hex])),
+        palette_name: str(p.nombre), razon: str(p.razon), colors: hexes, roles,
       },
       by,
     ));

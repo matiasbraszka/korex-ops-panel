@@ -111,7 +111,7 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
       if (!pal?.ok) { await onDone?.(); return fallo(pal, total); }
 
       await onDone?.();
-      setGen({ status: 'done', n: total, paletas: (pal.resources || []).length });
+      setGen({ status: 'done', n: total, paletas: (pal.resources || []).length, repetidas: pal.repetidas || 0 });
       setTimeout(() => vivo.current && setGen({ status: 'idle' }), 9000);
     } catch (e) {
       if (!vivo.current) return;
@@ -153,7 +153,10 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
       )}
 
       {gen.status === 'done' && aviso('#ECFDF5', '#A7F3D0', '#15803D', (
-        <span>Listo: {gen.n} logo{gen.n === 1 ? '' : 's'} (cada uno en color, negro y blanco) y {gen.paletas} paleta{gen.paletas === 1 ? '' : 's'}. Borrá lo que no te guste y quedate con lo bueno.</span>
+        <span>
+          Listo: {gen.n} logo{gen.n === 1 ? '' : 's'} (cada uno en color, negro y blanco) y {gen.paletas} paleta{gen.paletas === 1 ? '' : 's'}. Borrá lo que no te guste y quedate con lo bueno.
+          {gen.repetidas > 0 && <><br />Descarté {gen.repetidas} paleta{gen.repetidas === 1 ? '' : 's'} por ser casi igual{gen.repetidas === 1 ? '' : 'es'} a {gen.repetidas === 1 ? 'una' : 'otras'} que ya estaba{gen.repetidas === 1 ? '' : 'n'} en la carpeta.</>}
+        </span>
       ))}
 
       {gen.status === 'error' && aviso('#FEF2F2', '#FECACA', '#B91C1C', (
