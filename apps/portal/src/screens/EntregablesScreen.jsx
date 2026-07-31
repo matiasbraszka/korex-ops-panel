@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import BottomNav from '../components/BottomNav';
 import { Loading, useAsync } from '../components/ui';
+import MediaViewer from '../components/MediaViewer';
 import { api } from '../data/portalApi';
 import { T, display } from '../components/theme';
 import { IcoChevL, IcoPlay, IcoComment } from '../components/icons';
@@ -18,6 +20,7 @@ export default function EntregablesScreen() {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const esGrab = params.get('tipo') === 'grabaciones';
+  const [ver, setVer] = useState(null);
   const { data, loading } = useAsync(() => api.carpetaEmbudo(id, esGrab ? 'grabaciones' : 'ediciones'), [id, esGrab]);
 
   if (loading) return <PhoneFrame><Loading label="Buscando tus videos…" /></PhoneFrame>;
@@ -27,7 +30,8 @@ export default function EntregablesScreen() {
   const funnel = data?.funnel || 'Tu embudo';
 
   const card = (it, i) => (
-    <a key={i} href={it.url || '#'} target={it.url ? '_blank' : undefined} rel="noreferrer" style={{ display: 'block', background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-md)', textDecoration: 'none' }}>
+    <div key={i} role="button" onClick={() => it.url && setVer({ url: it.url, kind: it.kind || 'video', provider: it.provider, title: it.titulo })}
+      style={{ display: 'block', cursor: it.url ? 'pointer' : 'default', background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-md)', textDecoration: 'none' }}>
       <div style={{ height: 184, background: it.thumb ? `#0F1116 url(${it.thumb}) center/cover no-repeat` : gradientes[i % gradientes.length], display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         <div style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <IcoPlay size={24} />
@@ -43,7 +47,7 @@ export default function EntregablesScreen() {
           </span>
         </div>
       </div>
-    </a>
+    </div>
   );
 
   return (
@@ -97,6 +101,7 @@ export default function EntregablesScreen() {
         </div>
 
         <BottomNav activeOverride="/embudos" />
+        {ver && <MediaViewer item={ver} onClose={() => setVer(null)} />}
       </KxScreen>
     </PhoneFrame>
   );

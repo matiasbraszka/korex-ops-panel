@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { T, display, pill } from '../components/theme';
 import { IcoChevL, IcoCheck, IcoX, IcoArrowUp } from '../components/icons';
 import { GuiasSheet } from '../components/Layout';
+import MediaViewer from '../components/MediaViewer';
 import { ChipEmbudo } from './MaterialScreen';
 
 // SUBIR MATERIAL de un pedido ("Sube 5 fotos tuyas", "Tu logo y tus colores"…)
@@ -26,6 +27,7 @@ export default function SubirPedidoScreen() {
   const [subidas, setSubidas] = useState([]);   // {uid,name,pct,done,error}
   const [guia, setGuia] = useState(null);       // título de la guía a abrir
   const [contenido, setContenido] = useState([]); // lo que YA hay en esta carpeta
+  const [ver, setVer] = useState(null);            // item que se está reproduciendo
   const demo = isDemo();
   const _uid = useRef(0);
 
@@ -270,8 +272,8 @@ export default function SubirPedidoScreen() {
                   const esImg = it.kind === 'image' && it.public_url;
                   const esVideo = it.kind === 'video';
                   return (
-                    <div key={it.id} title={it.title}
-                      style={{ position: 'relative', aspectRatio: '1/1', borderRadius: 14, overflow: 'hidden', background: '#EEF1F6', border: '1px solid var(--mk-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div key={it.id} title={it.title} onClick={() => setVer({ url: it.public_url, kind: it.kind, provider: it.provider, title: it.title })} role="button"
+                      style={{ position: 'relative', aspectRatio: '1/1', borderRadius: 14, overflow: 'hidden', cursor: 'pointer', background: '#EEF1F6', border: '1px solid var(--mk-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {esImg ? (
                         <img src={it.public_url} alt={it.title || ''} loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
@@ -280,6 +282,10 @@ export default function SubirPedidoScreen() {
                           <span style={{ fontSize: 10, lineHeight: 1.25, color: T.text2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{it.title || 'Archivo'}</span>
                         </div>
                       )}
+                      {/* Botón de play sobre imágenes y videos, para que se vea que abre */}
+                      <span style={{ position: 'absolute', right: 6, bottom: 6, width: 26, height: 26, borderRadius: 999, background: 'rgba(15,17,22,.62)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
+                      </span>
                     </div>
                   );
                 })}
@@ -299,6 +305,7 @@ export default function SubirPedidoScreen() {
         </div>
 
         {guia && <GuiasSheet abrir={guia} onClose={() => setGuia(null)} />}
+        {ver && <MediaViewer item={ver} onClose={() => setVer(null)} />}
       </KxScreen>
     </PhoneFrame>
   );
