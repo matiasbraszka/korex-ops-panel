@@ -16,7 +16,7 @@ import { useOnboarding } from '../OnboardingProvider';
 import OnbShell from '../components/OnbShell';
 import Roadmap from '../components/Roadmap';
 
-const CHIPS = ['≈ 45 minutos', 'Se guarda solo', 'Podés volver cuando quieras'];
+const CHIPS = ['≈ 45 minutos', 'Se guarda solo', 'Puedes volver cuando quieras'];
 
 // Fila de pie con Atrás + acción principal.
 function PieGate({ onAtras, etiqueta, activo = true, onSeguir, pista }) {
@@ -93,7 +93,7 @@ export default function BienvenidaScreen() {
           </h1>
 
           <p style={{ fontSize: 'clamp(15px,2.2vw,17px)', lineHeight: 1.6, color: T.soft, margin: '0 0 26px 0' }}>
-            Esto no es un formulario más. Cada respuesta que dejes acá se convierte directamente en
+            Esto no es un formulario más. Cada respuesta que dejes aquí se convierte directamente en
             tus anuncios, tu video de ventas y tu embudo.{' '}
             <strong style={{ color: T.ink }}>Cuanto más te abras, más lejos llegamos juntos.</strong>
           </p>
@@ -161,7 +161,7 @@ export default function BienvenidaScreen() {
           Reglas del servicio
         </h1>
         <p style={{ fontSize: 15, lineHeight: 1.6, color: T.soft, margin: '0 0 20px 0' }}>
-          Leé cómo trabajamos juntos. Para arrancar necesitamos que estés de acuerdo.
+          Lee cómo trabajamos juntos. Para empezar necesitamos que estés de acuerdo.
         </p>
 
         <div className="kx-rich" style={{ background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16, padding: '18px 20px', marginBottom: 18 }}
@@ -187,7 +187,7 @@ export default function BienvenidaScreen() {
           etiqueta="Empezar"
           activo={acepto}
           onSeguir={irAlFormulario}
-          pista={acepto ? '' : 'Marcá que leíste y estás de acuerdo para empezar.'}
+          pista={acepto ? '' : 'Marca que leíste y estás de acuerdo para empezar.'}
         />
       </div>
     </OnbShell>

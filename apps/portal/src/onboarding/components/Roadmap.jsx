@@ -88,7 +88,7 @@ export default function Roadmap({ grabacion, heading }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Nota icono={<IcoClock size={17} stroke={T.azulTinta} sw={2.1} />} titulo="Cronómetro de grabación" fecha={grabacion}>
-          Tenés <strong style={{ color: T.ink }}>10 días</strong> para grabarte desde que te entregamos todos los materiales
+          Tienes <strong style={{ color: T.ink }}>10 días</strong> para grabarte desde que te entregamos todos los materiales
           creativos (guiones, VSL, estructura de la landing y copy).
         </Nota>
         <Nota icono={<IcoCalendar size={17} stroke={T.azulTinta} sw={2.1} />} titulo="Días hábiles y pausas">
