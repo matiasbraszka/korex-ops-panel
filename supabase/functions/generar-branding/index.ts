@@ -259,9 +259,12 @@ async function bloqueAprendizaje(clientId: string, modo: string): Promise<string
    de un DESCARTADO. Si dos de tus tres tags coinciden con un descartado, no vale: cambialo.
 2. Si hay CONSERVADOS: quedate en su familia visual y variá DENTRO de ella (misma familia de
    forma, distinta ejecución). El equipo ya te dijo por dónde va.
-3. Si NO hay ningún conservado: cambiá de familia entera. Lo que venías haciendo no funciona;
+3. Pero NO devuelvas un CONSERVADO tal cual. Ya está en la carpeta: repetirlo deja dos copias
+   iguales y le hace perder un lugar a una propuesta nueva. Cada paleta y cada logo que
+   devuelvas tiene que ser algo que el equipo todavía no vio.
+4. Si NO hay ningún conservado: cambiá de familia entera. Lo que venías haciendo no funciona;
    no lo ajustes, cambialo.
-4. Las paletas nuevas tienen que ser distinguibles a simple vista de las descartadas (distinto
+5. Las paletas nuevas tienen que ser distinguibles a simple vista de las descartadas (distinto
    matiz dominante, no el mismo azul dos tonos más claro).`;
 
   return `===== LO QUE YA SE PROBÓ CON ESTE CLIENTE =====
@@ -684,13 +687,26 @@ async function accionPalettes(body: Record<string, unknown>, clientId: string, b
     return j({ ok: true, run_id: runId, ya_estaba: true, cost_usd: 0, resources: [] });
   }
 
+  // Al regenerar, la IA tiende a devolver de nuevo la paleta que el equipo CONSERVÓ (y hace bien:
+  // es la señal de que le gustó). Pero volver a subirla deja dos filas idénticas en la carpeta.
+  // Se le pide que no lo haga en el prompt, y además se chequea acá: el prompt convence, esto
+  // garantiza.
+  const { data: vivas } = await supabase.from("funnel_resources").select("meta")
+    .eq("client_id", clientId).is("strategy_id", null).eq("bucket_key", "branding")
+    .eq("meta->>kind", "palette");
+  const yaEnLaCarpeta = new Set(
+    (vivas || []).map((r) => ((((r.meta as Record<string, unknown>)?.colors as string[]) || []).join(",").toUpperCase())).filter(Boolean),
+  );
+
   const recursos = [];
+  let repetidas = 0;
   for (let i = 0; i < paletas.length; i++) {
     const p = paletas[i];
     const colores = ((p.colores as Record<string, unknown>[]) || []).map((c) => ({
       hex: str(c.hex).toUpperCase(), rol: str(c.rol), nombre: str(c.nombre),
     })).filter((c) => /^#[0-9A-F]{6}$/.test(c.hex));
     if (!colores.length) continue;
+    if (yaEnLaCarpeta.has(colores.map((c) => c.hex).join(","))) { repetidas++; continue; }
 
     const groupId = "pl_" + crypto.randomUUID().slice(0, 8);
     const hexes = colores.map((c) => c.hex);
@@ -715,5 +731,5 @@ async function accionPalettes(body: Record<string, unknown>, clientId: string, b
   await supabase.from("client_branding_runs")
     .update({ status: "done", updated_at: new Date().toISOString() }).eq("id", runId);
 
-  return j({ ok: true, run_id: runId, cost_usd: 0, resources: recursos });
+  return j({ ok: true, run_id: runId, cost_usd: 0, resources: recursos, repetidas });
 }
