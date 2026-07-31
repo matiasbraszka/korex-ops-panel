@@ -540,7 +540,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
       )}
       <ResourceLightbox r={preview} onClose={() => setPreview(null)} />
       {pickerFor && createPortal(
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(10,22,40,.45)' }} onClick={() => setPickerFor(null)}>
+        <div className="fixed inset-0 z-[240] flex items-center justify-center p-4" style={{ background: 'rgba(10,22,40,.45)' }} onClick={() => setPickerFor(null)}>
           <div className="w-full max-w-[560px] max-h-[82vh] flex flex-col rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(10,22,40,.28)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#EEF0F3]">
               <div className="min-w-0">
