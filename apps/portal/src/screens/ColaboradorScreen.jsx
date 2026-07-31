@@ -12,7 +12,7 @@ import logo from '../assets/logo-korex.svg';
 // colaborador con el link que el equipo comparte desde Operaciones. Completa un
 // mini formulario y elige su contraseña; queda con acceso al mismo espacio que
 // el cliente. Redacción en español neutro.
-const ROLES = ['Asistente', 'Encargado de grabarse', 'Líder Principal', 'Otro'];
+const ROLES = ['Asistente', 'Encargado de grabarse', 'Líder Principal', 'Socio', 'Otro'];
 
 export default function ColaboradorScreen() {
   const [params] = useSearchParams();
