@@ -54,8 +54,18 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
   const [gen, setGen] = useState({ status: 'idle' });
   const [abierto, setAbierto] = useState(false);
   const [opts, setOpts] = useState({ nLogos: 1, quality: 'medium', modo: 'variar' });
+  // Bandera para no tocar el estado si el componente ya se fue (la corrida dura minutos y el
+  // equipo puede cerrar la carpeta en el medio).
+  //
+  // El `vivo.current = true` del setup NO es decorativo: en desarrollo StrictMode monta, desmonta
+  // y vuelve a montar cada componente. Sin esa línea, la limpieza del primer montaje dejaba la
+  // bandera apagada PARA SIEMPRE, y entonces el análisis corría y se guardaba en la base pero el
+  // paso siguiente se cortaba en seco: el botón quedaba girando eternamente sin generar nada.
   const vivo = useRef(true);
-  useEffect(() => () => { vivo.current = false; }, []);
+  useEffect(() => {
+    vivo.current = true;
+    return () => { vivo.current = false; };
+  }, []);
 
   const corriendo = gen.status === 'planning' || gen.status === 'rendering';
 
