@@ -235,54 +235,103 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── DB Save Functions ──
+  // clientRow: traduce el modelo del cliente (camelCase) a la fila de la DB
+  // (snake_case), aplicando los mismos defaults en un solo lugar. Se usa tanto
+  // para el guardado de fila completa (crear cliente / sync inicial) como para
+  // armar el PATCH puntual de updateClient (solo las columnas que cambiaron).
+  const clientRow = (c) => ({
+    id: c.id, name: c.name, company: c.company, service: c.service,
+    start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
+    priority: c.priority, position: typeof c.position === 'number' ? c.position : 0, bottleneck: c.bottleneck, notes: c.notes,
+    steps: c.steps, feedback: c.feedback, history: c.history,
+    phone: c.phone || '',
+    avatar_url: c.avatarUrl || '',
+    slack_channel: c.slackChannel || '', slack_channel_id: c.slackChannelId || '',
+    meta_ads: c.metaAds || [], custom_steps: c.customSteps || [],
+    custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
+    step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
+    phase_deadlines: c.phaseDeadlines || {},
+    links: c.links || [],
+    pending_resources: c.pendingResources || [],
+    meta_metrics: c.metaMetrics || null,
+    billing_amount: c.billingAmount ?? null,
+    billing_currency: c.billingCurrency || 'EUR',
+    billing_cycle: c.billingCycle || 'mensual',
+    billing_installments: c.billingInstallments ?? 1,
+    next_charge_date: c.nextChargeDate || null,
+    payment_method: c.paymentMethod || null,
+    billing_status: c.billingStatus || 'al_dia',
+    visual_resources: Array.isArray(c.visualResources) ? c.visualResources : [],
+    niche: c.niche || null,
+    team_name: c.teamName || null,
+    email: c.email || null,
+    country: c.country || null,
+    timezone: c.timezone || null,
+    contract_url: c.contractUrl || null,
+    contract_signed_date: c.contractSignedDate || null,
+    contract_renewal_date: c.contractRenewalDate || null,
+    tier: c.tier || null,
+    conector: c.conector || null,
+    closer: c.closer || null,
+    contract_data: c.contractData || null,
+    cash_collect: c.cashCollect ?? null,
+    remaining_to_collect: c.remainingToCollect ?? null,
+    call_recording_url: c.callRecordingUrl || null,
+    payment_receipt_url: c.paymentReceiptUrl || null,
+    commission_split: c.commissionSplit || {},
+    client_type: c.clientType || null,
+  });
+
+  // Mapa campo del modelo (camelCase) → columna en la DB. Sirve para que
+  // updateClient escriba SOLO las columnas que cambiaron (PATCH puntual) y no
+  // reescriba la fila entera con estado local viejo (bug: guardar un campo pisaba
+  // los demás con datos desactualizados de otra pestaña/persona).
+  const CLIENT_FIELD_TO_COL = {
+    name: 'name', company: 'company', service: 'service', startDate: 'start_date',
+    pm: 'pm', color: 'color', status: 'status', priority: 'priority', position: 'position',
+    bottleneck: 'bottleneck', notes: 'notes', steps: 'steps', feedback: 'feedback', history: 'history',
+    phone: 'phone', avatarUrl: 'avatar_url', slackChannel: 'slack_channel', slackChannelId: 'slack_channel_id',
+    metaAds: 'meta_ads', customSteps: 'custom_steps', customPhases: 'custom_phases',
+    clientFeedbacks: 'client_feedbacks', stepNameOverrides: 'step_name_overrides',
+    phaseNameOverrides: 'phase_name_overrides', phaseDeadlines: 'phase_deadlines',
+    links: 'links', pendingResources: 'pending_resources', metaMetrics: 'meta_metrics',
+    billingAmount: 'billing_amount', billingCurrency: 'billing_currency', billingCycle: 'billing_cycle',
+    billingInstallments: 'billing_installments', nextChargeDate: 'next_charge_date',
+    paymentMethod: 'payment_method', billingStatus: 'billing_status', visualResources: 'visual_resources',
+    niche: 'niche', teamName: 'team_name', email: 'email', country: 'country', timezone: 'timezone',
+    contractUrl: 'contract_url', contractSignedDate: 'contract_signed_date', contractRenewalDate: 'contract_renewal_date',
+    tier: 'tier', conector: 'conector', closer: 'closer', contractData: 'contract_data',
+    cashCollect: 'cash_collect', remainingToCollect: 'remaining_to_collect',
+    callRecordingUrl: 'call_recording_url', paymentReceiptUrl: 'payment_receipt_url',
+    commissionSplit: 'commission_split', clientType: 'client_type',
+  };
+
   const dbSaveClient = useCallback(async (c) => {
     return sbFetch('clients', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
-      body: JSON.stringify({
-        id: c.id, name: c.name, company: c.company, service: c.service,
-        start_date: c.startDate, pm: c.pm, color: c.color, status: c.status,
-        priority: c.priority, position: typeof c.position === 'number' ? c.position : 0, bottleneck: c.bottleneck, notes: c.notes,
-        steps: c.steps, feedback: c.feedback, history: c.history,
-        phone: c.phone || '',
-        avatar_url: c.avatarUrl || '',
-        slack_channel: c.slackChannel || '', slack_channel_id: c.slackChannelId || '',
-        meta_ads: c.metaAds || [], custom_steps: c.customSteps || [],
-        custom_phases: c.customPhases || [], client_feedbacks: c.clientFeedbacks || [],
-        step_name_overrides: c.stepNameOverrides || {}, phase_name_overrides: c.phaseNameOverrides || {},
-        phase_deadlines: c.phaseDeadlines || {},
-        links: c.links || [],
-        pending_resources: c.pendingResources || [],
-        meta_metrics: c.metaMetrics || null,
-        billing_amount: c.billingAmount ?? null,
-        billing_currency: c.billingCurrency || 'EUR',
-        billing_cycle: c.billingCycle || 'mensual',
-        billing_installments: c.billingInstallments ?? 1,
-        next_charge_date: c.nextChargeDate || null,
-        payment_method: c.paymentMethod || null,
-        billing_status: c.billingStatus || 'al_dia',
-        visual_resources: Array.isArray(c.visualResources) ? c.visualResources : [],
-        niche: c.niche || null,
-        team_name: c.teamName || null,
-        email: c.email || null,
-        country: c.country || null,
-        timezone: c.timezone || null,
-        contract_url: c.contractUrl || null,
-        contract_signed_date: c.contractSignedDate || null,
-        contract_renewal_date: c.contractRenewalDate || null,
-        tier: c.tier || null,
-        conector: c.conector || null,
-        closer: c.closer || null,
-        contract_data: c.contractData || null,
-        cash_collect: c.cashCollect ?? null,
-        remaining_to_collect: c.remainingToCollect ?? null,
-        call_recording_url: c.callRecordingUrl || null,
-        payment_receipt_url: c.paymentReceiptUrl || null,
-        commission_split: c.commissionSplit || {},
-        client_type: c.clientType || null,
-      })
+      body: JSON.stringify(clientRow(c)),
     });
   }, []);
+
+  // Guarda SOLO las columnas que cambiaron (deriva las columnas de las claves de
+  // `updates`). Evita que un guardado pise campos que esta pestaña no tocó. Si
+  // aparece un campo sin mapear, cae al guardado de fila completa para no perder
+  // ese dato jamás. Devuelve la promesa de persistencia (o null en fallo).
+  const dbPatchClient = useCallback(async (c, updates) => {
+    const keys = Object.keys(updates || {});
+    if (keys.length === 0) return true; // nada que guardar (no es error)
+    // Resguardo: si algún campo no está en el mapa, no arriesgamos perderlo → fila completa.
+    if (keys.some(k => !CLIENT_FIELD_TO_COL[k])) return dbSaveClient(c);
+    const full = clientRow(c);
+    const patch = {};
+    for (const k of keys) patch[CLIENT_FIELD_TO_COL[k]] = full[CLIENT_FIELD_TO_COL[k]];
+    return sbFetch('clients?id=eq.' + encodeURIComponent(c.id), {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify(patch),
+    });
+  }, [dbSaveClient]);
 
   // Manda un POST de tarea detectando el error (throwOnError). En éxito marca el
   // write como confirmado y lo saca de la cola; en fallo guarda el payload MÁS
@@ -651,13 +700,13 @@ export function AppProvider({ children }) {
     // avisamos si el guardado no llegó a la base (dbSaveClient devuelve null),
     // para que un cambio de cliente no falle en silencio.
     if (updated && dbReady.current) {
-      return dbSaveClient(updated).then(res => {
+      return dbPatchClient(updated, updates).then(res => {
         if (res === null) flash('No se pudo guardar el cambio del cliente. Revisá tu conexión y volvé a intentar.');
         return res;
       });
     }
     return Promise.resolve();
-  }, [save, dbSaveClient, flash]);
+  }, [save, dbPatchClient, flash]);
 
   // Borra un cliente y TODAS sus tareas (incluido fases custom y deadlines).
   // Operacion irreversible. Persiste en Supabase y limpia el state local.
