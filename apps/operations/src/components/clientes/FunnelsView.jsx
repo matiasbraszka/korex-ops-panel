@@ -1025,6 +1025,7 @@ Quedo a la espera de tu respuesta`;
           {CLIENT_CATS.map(cat => (
             <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
               label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
+              {...((cat.key === 'testimonios' || cat.key === 'testimonios_korex') ? { voomly: true, voomlyKind: 'Testimonio' } : {})}
               reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
           ))}
         </div>
