@@ -12,8 +12,10 @@
  * Uso:
  *   1. Copiar scripts/agent-fn-local.env.example a scripts/agent-fn-local.env y completarlo
  *      (el SERVICE_ROLE_KEY sale del dashboard: Project Settings -> API -> service_role).
- *   2. node scripts/agent-fn-local.mjs
+ *   2. node scripts/agent-fn-local.mjs               (agent-chat, el default)
+ *      node scripts/agent-fn-local.mjs generar-branding   (cualquier otra edge fn)
  *   3. En apps/operations/.env.local:  VITE_AGENT_FN_URL=http://localhost:8000
+ *      (generar-branding usa su propia: VITE_BRANDING_FN_URL)
  *   4. npm run dev  (en apps/operations) y probar el agente en /marketing/agentes
  *
  * Para volver a produccion: sacar VITE_AGENT_FN_URL del .env.local y reiniciar el dev server.
@@ -23,7 +25,10 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const ENV_FILE = join(process.cwd(), "scripts", "agent-fn-local.env");
-const FN = join(process.cwd(), "supabase", "functions", "agent-chat", "index.ts");
+// Que funcion levantar. Por defecto agent-chat (es para lo que nacio esto), pero cualquier
+// edge fn sirve: node scripts/agent-fn-local.mjs generar-branding
+const FN_NAME = process.argv[2] || "agent-chat";
+const FN = join(process.cwd(), "supabase", "functions", FN_NAME, "index.ts");
 const DENO = join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "deno.cmd" : "deno");
 const PORT = process.env.PORT || "8000";
 
