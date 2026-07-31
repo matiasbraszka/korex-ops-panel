@@ -133,13 +133,13 @@ Deno.serve(async (req) => {
         if (isVideo) {
           if (bunnyBlock || videosLeft < 1) { videosSaltados++; continue; }
           const cr = await fetch(`${V}/${BUNNY_LIB}/videos`, { method: "POST", headers: H, body: JSON.stringify({ title: n.name || "video" }) });
-          if (!cr.ok) throw new Error("bunny create " + cr.status);
+          if (!cr.ok) throw new Error("Bunny rechazó el alta (" + cr.status + "): " + (await cr.text()).slice(0, 140));
           const guid = String((await cr.json())?.guid || "");
-          if (!guid) throw new Error("bunny sin guid");
+          if (!guid) throw new Error("Bunny no devolvió id de video");
           const driveUrl = `https://www.googleapis.com/drive/v3/files/${n.id}?alt=media&supportsAllDrives=true`;
           const fe = await fetch(`${V}/${BUNNY_LIB}/videos/${guid}/fetch`, { method: "POST", headers: H, body: JSON.stringify({ url: driveUrl, headers: { Authorization: "Bearer " + TOKEN } }) });
           const feBody = await fe.json().catch(() => ({}));
-          if (!feBody?.success && !fe.ok) throw new Error("bunny fetch " + fe.status);
+          if (!feBody?.success && !fe.ok) throw new Error("Bunny no pudo traer el video (" + fe.status + "): " + JSON.stringify(feBody).slice(0, 140));
           await sb.from("funnel_resources").insert({
             strategy_id: strategyId, client_id: clientId, avatar_id: null, bucket_key: bucketKey,
             title, provider: "bunny", kind: "video", bunny_id: guid,

@@ -2134,8 +2134,15 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                   {importRes.bunny === 'daily_cap' && <><br /><span className="text-[#B45309]">Se alcanzó el tope diario de gasto de video: los videos que faltan no se subieron.</span></>}
                   {importRes.bunny === 'frozen' && <><br /><span className="text-[#B45309]">La subida de video está en pausa por el candado de gasto: los videos no se subieron.</span></>}
                   {importRes.videos_saltados_por_tope > 0 && <><br /><b>{importRes.videos_saltados_por_tope}</b> video{importRes.videos_saltados_por_tope === 1 ? '' : 's'} no se subieron por el tope de gasto.</>}
-                  {importRes.errores?.length > 0 && <><br /><span className="text-[#DC2626]">{importRes.errores.length} con error.</span></>}
                 </div>
+                {importRes.errores?.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-[12px] font-bold text-[#B91C1C] mb-0.5">{importRes.errores.length} con error:</div>
+                    <ul className="ml-3.5 list-disc text-[11.5px] text-[#B91C1C] leading-snug">
+                      {importRes.errores.map((m, i) => <li key={i} className="break-words">{m}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div className="text-[11px] text-[#6B7280] mt-2">Los videos se transcriben solos en los próximos minutos y el título/avatar se afinan con el flujo de siempre.</div>
               </div>
               <div className="flex justify-end gap-2 mt-3">
