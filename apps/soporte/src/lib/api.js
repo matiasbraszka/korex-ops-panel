@@ -163,8 +163,12 @@ export async function fetchParticipants(convId) {
 //     nombre — o al menos el teléfono real — en vez del lid.
 const numOf = (id) => String(id || '').split('@')[0].split(':')[0];
 export async function fetchGroupNames(convId) {
+  // OJO: pedimos entrantes Y salientes. A uno lo etiquetan con el "lid" de su PROPIA
+  // cuenta, y ese lid solo aparece en los mensajes salientes (los que mandó uno). Si
+  // filtraramos direction=in, la cuenta propia nunca entraria al directorio y la
+  // mencion quedaria como numero crudo (ej. @53481670996055 en vez de "Metodo Korex").
   const rows = await sbFetch(
-    `wa_messages?conversation_id=eq.${convId}&direction=eq.in&select=sender_jid,sender_lid,sender_telefono_e164,pushname:payload->>pushName&order=created_at.desc&limit=400`,
+    `wa_messages?conversation_id=eq.${convId}&select=direction,sender_jid,sender_lid,sender_telefono_e164,pushname:payload->>pushName&order=created_at.desc&limit=600`,
     { headers: { Prefer: 'return=representation' } },
   );
   const names = {};
@@ -177,7 +181,9 @@ export async function fetchGroupNames(convId) {
   };
   for (const r of Array.isArray(rows) ? rows : []) {
     const nm = r.pushname || null;
-    if (r.sender_jid && nm && !names[r.sender_jid]) names[r.sender_jid] = nm;
+    // El subtitulo del grupo ("Pedro, Romina y 5 mas") son SOLO los que escriben (in).
+    // El directorio de menciones (byNum) incluye a todos, tambien la cuenta propia (out).
+    if (r.direction === 'in' && r.sender_jid && nm && !names[r.sender_jid]) names[r.sender_jid] = nm;
     const phone = r.sender_telefono_e164 ? String(r.sender_telefono_e164).replace(/\D/g, '') : null;
     put(numOf(r.sender_jid), nm, phone);
     put(numOf(r.sender_lid), nm, phone);

@@ -5,6 +5,7 @@
 // Cada carpeta es (avatar_id + bucket_key). Se abre/cierra como en el Drive, dice
 // cuántos elementos tiene, y adentro están los recursos subidos con su miniatura.
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as tus from 'tus-js-client';
 import { supabase, sbFetch } from '@korex/db';
 import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil, ClipboardList, Check, Share2, Copy, X } from 'lucide-react';
@@ -38,7 +39,7 @@ async function subirABunny(file, title, onProgress) {
 }
 
 const VOOMLY_URL = 'https://app.voomly.com/';   // dashboard de Voombly (buscar el VSL y copiar su link)
-function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds, publicable = false, onVisibleCliente }) {
+function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds, publicable = false, onVisibleCliente }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [voomEdit, setVoomEdit] = useState(false);
@@ -121,8 +122,8 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSe
                 className="flex-1 min-w-0 text-[9.5px] border border-[#E2E5EB] rounded px-1 py-0.5 outline-none focus:border-[#2E69E0]" />
             </div>
           )}
-          {onOpenVoombly ? (
-            <button type="button" onClick={onOpenVoombly} title="Abrir la lista de VSL (Voombly) del sistema de operaciones"
+          {(onBuscarVoomly || onOpenVoombly) ? (
+            <button type="button" onClick={() => onBuscarVoomly ? onBuscarVoomly(r) : onOpenVoombly()} title="Elegir el video de Voombly de la lista del sistema"
               className="inline-flex items-center justify-center gap-1 py-0.5 rounded border border-dashed border-[#C7DBFB] text-[9px] font-bold text-[#2E69E0] bg-white cursor-pointer hover:bg-[#EFF6FF]">
               🔍 Buscar en Voombly
             </button>
@@ -138,7 +139,7 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, selected, onToggleSe
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly, voomlyKind }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -152,7 +153,27 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const [shareLinks, setShareLinks] = useState(null);  // links activos de esta carpeta
   const [shareBusy, setShareBusy] = useState(false);
   const [copiedTok, setCopiedTok] = useState(null);
+  const [sharePos, setSharePos] = useState(null);      // posicion del popover (portal, para que no lo corte ningun scroll)
+  const [pickerFor, setPickerFor] = useState(null);    // testimonio (fila) para el que se abrio el picker de Voomly
+  const [pickerRows, setPickerRows] = useState(null);  // videos de Voomly del kind (ej. Testimonio)
+  const [pickerQ, setPickerQ] = useState('');
   const fileRef = useRef(null);
+  const shareBtnRef = useRef(null);
+
+  // ── Picker de Voomly por kind (ej. Testimonios): trae los videos ya cargados en
+  //    vsl_voomly (los sube la corrida diaria) y al elegir uno guarda su link embed. ──
+  const abrirPickerVoomly = async (r) => {
+    setPickerFor(r); setPickerQ(''); setPickerRows(null);
+    try {
+      const rows = await sbFetch(`vsl_voomly?select=voomly_id,name,kind,embed_id,total_plays,uploaded_at&kind=eq.${encodeURIComponent(voomlyKind)}&embed_id=not.is.null&order=uploaded_at.desc.nullslast`);
+      setPickerRows(Array.isArray(rows) ? rows : []);
+    } catch { setPickerRows([]); }
+  };
+  const elegirVoomly = (row) => {
+    const url = row?.embed_id ? `https://embed.voomly.com/b/${row.embed_id}` : '';
+    if (pickerFor && url) guardarVoomly(pickerFor, url);
+    setPickerFor(null);
+  };
 
   // ── Compartir carpeta con externos (link público de subida) ──
   const shareScope = () => (clientScope
@@ -165,7 +186,25 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
       setShareLinks(list);
     } catch { setShareLinks([]); }
   };
-  const abrirShare = () => { setShareOpen(o => !o); if (!shareOpen) { setShareLinks(null); cargarShares(); } };
+  const abrirShare = () => {
+    setShareOpen(o => {
+      const next = !o;
+      if (next) {
+        const rect = shareBtnRef.current?.getBoundingClientRect();
+        if (rect) setSharePos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+        setShareLinks(null); cargarShares();
+      }
+      return next;
+    });
+  };
+  // Si se hace scroll con el popover abierto, se cierra (asi no queda flotando en el aire).
+  useEffect(() => {
+    if (!shareOpen) return;
+    const cerrar = () => setShareOpen(false);
+    window.addEventListener('scroll', cerrar, true);
+    window.addEventListener('resize', cerrar);
+    return () => { window.removeEventListener('scroll', cerrar, true); window.removeEventListener('resize', cerrar); };
+  }, [shareOpen]);
   const urlDe = (tok) => `${publicOrigin()}/compartir/${tok}`;
   const crearShare = async () => {
     setShareBusy(true);
@@ -360,12 +399,17 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
         </button>
         {/* Compartir carpeta: SIEMPRE visible en la cabecera (como en el DEL). */}
         <div className="relative shrink-0">
-          <button onClick={abrirShare} title="Compartir esta carpeta con un externo (link para subir archivos)"
+          <button ref={shareBtnRef} onClick={abrirShare} title="Compartir esta carpeta con un externo (link para subir archivos)"
             className="inline-flex items-center gap-1 py-1 px-2 rounded-md border text-[11px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
             <Share2 size={12} />Compartir
           </button>
-          {shareOpen && (
-            <div className="absolute z-[60] mt-1 right-0 w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left" style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+          {shareOpen && sharePos && createPortal(
+            <>
+              {/* fondo invisible: un click afuera cierra el popover */}
+              <div className="fixed inset-0 z-[65]" onClick={() => setShareOpen(false)} />
+              {/* popover en portal + position:fixed -> ningun contenedor con scroll lo recorta */}
+              <div className="fixed z-[70] w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
+                style={{ top: sharePos.top, right: sharePos.right, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Link para subir a “{label}”</span>
                 <button onClick={() => setShareOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
@@ -389,7 +433,9 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
                 className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border-none text-white text-[12px] font-semibold cursor-pointer disabled:opacity-60" style={{ background: '#2E69E0' }}>
                 {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}Crear link y copiar
               </button>
-            </div>
+              </div>
+            </>,
+            document.body
           )}
         </div>
         <button onClick={() => setOpen(o => !o)} className="border-none bg-transparent cursor-pointer p-0 shrink-0">
@@ -454,7 +500,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             )}
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} publicable={bucketKey === 'ad_edit' || bucketKey === 'vsl_edit'} onVisibleCliente={toggleVisibleCliente} />)}
+                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} onBuscarVoomly={voomlyKind ? abrirPickerVoomly : undefined} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} publicable={bucketKey === 'ad_edit' || bucketKey === 'vsl_edit'} onVisibleCliente={toggleVisibleCliente} />)}
               </div>
             )}
             {/* Paginado: mostramos de a 10 para que la carpeta abra fluida aunque tenga cientos. */}
@@ -493,6 +539,50 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
         </div>
       )}
       <ResourceLightbox r={preview} onClose={() => setPreview(null)} />
+      {pickerFor && createPortal(
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(10,22,40,.45)' }} onClick={() => setPickerFor(null)}>
+          <div className="w-full max-w-[560px] max-h-[82vh] flex flex-col rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(10,22,40,.28)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#EEF0F3]">
+              <div className="min-w-0">
+                <div className="text-[13.5px] font-bold text-[#1A1D26]">Elegí el {String(voomlyKind || '').toLowerCase()} de Voombly</div>
+                <div className="text-[11px] text-[#9098A4] truncate">Se guarda en «{pickerFor.title || 'este recurso'}»</div>
+              </div>
+              <button onClick={() => setPickerFor(null)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={16} /></button>
+            </div>
+            <div className="px-4 pt-3">
+              <input value={pickerQ} onChange={e => setPickerQ(e.target.value)} autoFocus placeholder="Buscar por nombre…"
+                className="w-full py-2 px-3 border border-[#E2E5EB] rounded-[9px] text-[13px] text-[#1A1D26] bg-white outline-none focus:border-[#2E69E0]" />
+            </div>
+            <div className="flex-1 overflow-auto p-3 flex flex-col gap-1.5">
+              {pickerRows === null
+                ? <div className="text-[12.5px] text-[#9098A4] py-8 text-center">Cargando videos de Voombly…</div>
+                : (() => {
+                    const ql = pickerQ.trim().toLowerCase();
+                    const list = (pickerRows || []).filter(r => !ql || (r.name || '').toLowerCase().includes(ql));
+                    if (list.length === 0) return <div className="text-[12.5px] text-[#9098A4] py-8 text-center">No hay {String(voomlyKind || '').toLowerCase()}s{ql ? ' para esa búsqueda' : ''}.</div>;
+                    const actual = pickerFor.voomly_url || '';
+                    return list.map(row => {
+                      const url = row.embed_id ? `https://embed.voomly.com/b/${row.embed_id}` : '';
+                      const isCur = url && url === actual;
+                      return (
+                        <div key={row.voomly_id} className="flex items-center gap-2.5 border rounded-[10px] py-2.5 px-3" style={{ borderColor: isCur ? '#C9F0D8' : '#EDF0F5', background: isCur ? '#F4FDF7' : '#fff' }}>
+                          <Play size={14} className="shrink-0" style={{ color: '#DB2777' }} fill="currentColor" />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12.5px] font-semibold text-[#1A1D26] truncate" title={row.name}>{row.name || 'Sin nombre'}</div>
+                            <div className="text-[10.5px] text-[#9098A4]">{(row.total_plays || 0).toLocaleString()} plays</div>
+                          </div>
+                          {isCur
+                            ? <span className="inline-flex items-center gap-1 py-1.5 px-3 rounded-lg text-[11px] font-bold shrink-0" style={{ background: '#ECFDF3', color: '#15803D' }}><Check size={12} strokeWidth={3} />Actual</span>
+                            : <button onClick={() => elegirVoomly(row)} disabled={!url} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[11.5px] font-semibold cursor-pointer shrink-0 disabled:opacity-40 border-none text-white" style={{ background: '#DB2777' }}>Usar este</button>}
+                        </div>
+                      );
+                    });
+                  })()}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
