@@ -13,6 +13,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { T, FUENTE, kicker, btn } from '../tokens';
 import { useOnboarding } from '../OnboardingProvider';
+import { IcoDoc } from '../../components/icons';
+import ReglasSheet from './ReglasSheet';
 
 const ANCHO_PC = 900;
 
@@ -140,7 +142,10 @@ function BarraLateral() {
 export default function OnbShell({ children, contador = '', pie = null, mostrarProgreso = true }) {
   const ancho = usaAncho();
   const navigate = useNavigate();
-  const { progreso, sync, estado, prefill, subiendo } = useOnboarding();
+  const { progreso, sync, estado, prefill, subiendo, reglas, catalogo } = useOnboarding();
+  const [verReglas, setVerReglas] = useState(false);
+  const video = catalogo?.videoBienvenida || '';
+  const hayReglas = !!String(reglas || '').trim() || !!video;
 
   const nombre = prefill?.nombre || '';
   const iniciales = nombre.split(' ').filter(Boolean).map((x) => x[0]).join('').slice(0, 2).toUpperCase() || '—';
@@ -174,6 +179,19 @@ export default function OnbShell({ children, contador = '', pie = null, mostrarP
             )}
             <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-.01em' }}>Tu onboarding</div>
             <div style={{ flex: 1 }} />
+            {hayReglas && (
+              <button
+                type="button" onClick={() => setVerReglas(true)} title="Reglas del servicio"
+                style={{
+                  border: `1px solid ${T.line}`, background: '#fff', color: T.soft,
+                  fontSize: 12, fontWeight: 600, padding: '8px 13px',
+                  borderRadius: 999, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                <IcoDoc size={14} stroke={T.soft} sw={2.1} />
+                <span style={{ ...(ancho ? {} : { display: 'none' }) }}>Reglas</span>
+              </button>
+            )}
             <button
               type="button" onClick={() => navigate('/onboarding/avance')}
               style={{
@@ -244,6 +262,8 @@ export default function OnbShell({ children, contador = '', pie = null, mostrarP
           </div>
         )}
       </main>
+
+      {verReglas && <ReglasSheet html={reglas} video={video} onCerrar={() => setVerReglas(false)} />}
     </div>
   );
 }

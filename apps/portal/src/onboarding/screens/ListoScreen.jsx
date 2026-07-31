@@ -16,6 +16,7 @@ import { T, FUENTE, btn, kicker } from '../tokens';
 import { onb } from '../api';
 import { useOnboarding } from '../OnboardingProvider';
 import OnbShell from '../components/OnbShell';
+import Roadmap from '../components/Roadmap';
 
 const HECHO = [
   { t: 'Tu alta quedó registrada', d: 'tu proyecto ya existe en nuestro sistema con tu equipo asignado' },
@@ -24,14 +25,6 @@ const HECHO = [
   { t: 'Tu dominio entró en proceso', d: 'la URL de tu funnel se congela hoy' },
   { t: 'Tus claims prohibidos ya son un filtro activo', d: 'ningún anuncio saldrá fuera de norma' },
   { t: 'Si tu empresa exige compliance, el trámite arrancó hoy', d: 'en paralelo, sin frenar nada' },
-];
-
-const FASES = [
-  { cuando: 'Días 1-3 · ya en marcha', titulo: 'Estrategia y guiones', desc: 'Definimos tus avatares, tu oferta y escribimos tus anuncios y tu VSL.', color: '#5B7CF5' },
-  { cuando: 'Días 3-5 · tu parte', titulo: 'Tu grabación', desc: 'El único paso que depende de vos. Ya está agendado. Todo lo demás avanza en paralelo.', color: '#F97316' },
-  { cuando: 'Días 1-7 · en paralelo', titulo: 'Construcción de tu embudo', desc: 'Tu landing se monta mientras grabás — no espera a nada.', color: '#8B5CF6' },
-  { cuando: 'Días 8-10 · lanzamiento', titulo: 'Salimos a pauta', desc: 'Ensamblamos, probamos todo de punta a punta y encendemos las campañas.', color: '#06B6D4' },
-  { cuando: 'Días 10-15 · crecimiento', titulo: 'Optimización y resultados', desc: 'Monitoreamos, ajustamos y te reportamos. Acá empieza lo bueno.', color: '#22C55E' },
 ];
 
 export default function ListoScreen() {
@@ -184,22 +177,8 @@ export default function ListoScreen() {
           ))}
         </div>
 
-        <div style={{ ...kicker(T.faint, 11), marginBottom: 13 }}>Así serán tus próximos 15 días</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 30 }}>
-          {FASES.map((f) => (
-            <div key={f.titulo} style={{
-              background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14,
-              padding: '17px 19px', borderLeft: `4px solid ${f.color}`,
-            }}>
-              <div style={{ ...kicker(f.color, 10.5), letterSpacing: '.1em', fontWeight: 800, marginBottom: 6 }}>
-                {f.cuando}
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.015em', marginBottom: 4 }}>
-                {f.titulo}
-              </div>
-              <div style={{ fontSize: 13, lineHeight: 1.55, color: T.muted }}>{f.desc}</div>
-            </div>
-          ))}
+        <div style={{ marginBottom: 30 }}>
+          <Roadmap variant="cierre" grabacion={grabacion} sesion={sesion} />
         </div>
 
         <div style={{ background: T.dark, borderRadius: 18, padding: 24, marginBottom: 26 }}>

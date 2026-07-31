@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { destinoTarea } from '../data/taskNav';
-import { PerfilSheet, AccesosSheet, GuiasSheet } from '../components/Layout';
+import { PerfilSheet, AccesosSheet, GuiasSheet, ReglasServicioSheet } from '../components/Layout';
 import { T, display, microLabel } from '../components/theme';
 import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile, IcoDoc } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
@@ -18,6 +18,7 @@ export default function InicioScreen() {
   const [perfil, setPerfil] = useState(false);
   const [acc, setAcc] = useState(false);
   const [tut, setTut] = useState(false);
+  const [reg, setReg] = useState(false);
 
   if (loading) return <Loading label="Cargando tu proyecto…" />;
   const d = data || {};
@@ -194,9 +195,10 @@ export default function InicioScreen() {
           : <b style={{ color: T.text2 }}>Escríbenos por WhatsApp.</b>}
       </div>
 
-      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onGuias={() => { setPerfil(false); setTut(true); }} />}
+      {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onGuias={() => { setPerfil(false); setTut(true); }} onReglas={() => { setPerfil(false); setReg(true); }} />}
       {acc && <AccesosSheet onClose={() => setAcc(false)} />}
       {tut && <GuiasSheet onClose={() => setTut(false)} />}
+      {reg && <ReglasServicioSheet onClose={() => setReg(false)} />}
     </>
   );
 }

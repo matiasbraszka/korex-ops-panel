@@ -207,6 +207,10 @@ export function OnboardingProvider({ children }) {
     agenda: estado?.agenda || { estado: 'pendiente' },
     prefill: estado?.prefill || {},
     completo: estado?.completo === true || estado?.estado === 'completado',
+    // Reglas del servicio (documento + versión editables desde la administración).
+    reglas: catalogo?.reglas || '',
+    reglasVersion: catalogo?.reglasVersion || '1',
+    aceptarReglas: (v) => onb.aceptarReglas(v),
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

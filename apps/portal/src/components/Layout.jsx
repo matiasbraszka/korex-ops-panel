@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { BookOpen, X, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink, LogOut, ChevronRight } from 'lucide-react';
+import { BookOpen, X, KeyRound, Copy, Check, Eye, EyeOff, ExternalLink, LogOut, ChevronRight, FileText } from 'lucide-react';
 import PhoneFrame, { KxScreen } from './PhoneFrame';
 import BottomNav from './BottomNav';
 import { api } from '../data/portalApi';
@@ -11,7 +11,7 @@ import { limpiarHtml } from './richHtml';
 import CandadoSheet from '../onboarding/gate/CandadoSheet';
 
 // Hoja de PERFIL: datos + accesos + guías + cerrar sesión.
-export function PerfilSheet({ clientName, onClose, onAccesos, onGuias }) {
+export function PerfilSheet({ clientName, onClose, onAccesos, onGuias, onReglas }) {
   const { signOut, user } = usePortalAuth();
   const fila = (Icon, color, bg, titulo, sub, onClick) => (
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 4px', cursor: 'pointer', borderTop: '1px solid #F0F2F5' }}>
@@ -41,6 +41,7 @@ export function PerfilSheet({ clientName, onClose, onAccesos, onGuias }) {
         </div>
         {fila(KeyRound, '#B45309', '#FEF3C7', 'Tus accesos', 'Las claves de tus plataformas, a mano', onAccesos)}
         {fila(BookOpen, T.primary, T.primarySoft, 'Guías', 'Cómo grabar y qué mandarnos', onGuias)}
+        {onReglas && fila(FileText, '#4A67D8', '#EEF2FF', 'Reglas del servicio', 'Cómo trabajamos juntos', onReglas)}
         {fila(LogOut, T.red, T.redSoft, 'Cerrar sesión', null, () => { if (window.confirm('¿Quieres cerrar sesión?')) signOut(); })}
       </div>
     </div>
@@ -103,6 +104,32 @@ export function AccesosSheet({ onClose }) {
               </div>
             ))}
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Hoja de "Reglas del servicio": el documento editable desde la administración,
+// disponible para releer siempre. Durante el onboarding vive en el header del
+// onboarding; acá, una vez terminado, se llega desde el perfil.
+export function ReglasServicioSheet({ onClose }) {
+  const { data, loading } = useAsync(() => api.reglasServicio(), []);
+  const html = data?.html || '';
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="mk-sheet" style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '86vh', overflowY: 'auto', padding: '8px 18px 28px' }}>
+        <div style={{ width: 44, height: 5, borderRadius: 999, background: '#E2E5EB', margin: '10px auto 16px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>Reglas del servicio</h2>
+          <button onClick={onClose} aria-label="Cerrar" style={{ width: 38, height: 38, borderRadius: 999, border: 'none', background: '#F0F2F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} color="#6B7280" /></button>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 14, padding: '24px 0' }}>Cargando…</div>
+        ) : html ? (
+          <div className="kx-rich" style={{ paddingTop: 4 }} dangerouslySetInnerHTML={{ __html: limpiarHtml(html) }} />
+        ) : (
+          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 14, padding: '24px 0' }}>Todavía no se cargaron las reglas del servicio.</div>
         )}
       </div>
     </div>

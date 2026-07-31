@@ -115,6 +115,13 @@ export const onb = {
   ),
 
   completar: escribir(() => call('portal_onboarding_completar'), demo.demoCompletar),
+
+  // El cliente tildó "leí y acepto las Reglas del servicio". Deja constancia
+  // (fecha + versión) en su corrida de onboarding.
+  aceptarReglas: escribir(
+    (version) => call('portal_onboarding_aceptar_reglas', { p_version: String(version || '1') }),
+    async (version) => ({ ok: true, demo: true, version }),
+  ),
 };
 
 /**

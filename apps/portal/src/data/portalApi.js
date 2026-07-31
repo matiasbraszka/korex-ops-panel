@@ -50,6 +50,11 @@ export const api = {
   // a los tutoriales en video, que nunca existieron.
   guias:     () => rpc('portal_cliente_guias',     {}, () => mock.MOCK_GUIAS),
 
+  // Reglas del servicio: documento editable desde la administración. Vive en el
+  // catálogo del onboarding y queda disponible siempre (perfil), no solo durante.
+  reglasServicio: () => rpc('portal_onboarding_catalogo', {}, () => ({}))
+    .then((c) => ({ html: c?.reglas || '', version: c?.reglasVersion || '1' })),
+
   // Tareas asignadas al cliente (desaparecen al validarse en ops).
   tareas:      () => rpc('portal_cliente_tareas',      {}, () => mock.MOCK_TAREAS),
   // Conteo de archivos por carpeta a nivel cliente (tab Recursos).

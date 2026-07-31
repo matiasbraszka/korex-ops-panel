@@ -12,24 +12,44 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { T, FUENTE, btn } from '../tokens';
+import { IcoDoc, IcoCheck } from '../../components/icons';
 import { useOnboarding } from '../OnboardingProvider';
 import OnbShell from '../components/OnbShell';
+import Roadmap from '../components/Roadmap';
+import ReglasSheet from '../components/ReglasSheet';
 
 const CHIPS = ['≈ 45 minutos', 'Se guarda solo', 'Podés volver cuando quieras'];
 
 export default function BienvenidaScreen() {
   const navigate = useNavigate();
-  const { lista, progreso, catalogo, cargando, completo } = useOnboarding();
+  const {
+    lista, progreso, catalogo, cargando, completo,
+    reglas, reglasVersion, aceptarReglas, agenda, respuestas,
+  } = useOnboarding();
   const [vio, setVio] = useState(false);
+  const [verReglas, setVerReglas] = useState(false);
+  const [acepto, setAcepto] = useState(false);
 
   const video = catalogo?.videoBienvenida || '';
+  const hayReglas = !!String(reglas || '').trim();
+  const yaEmpezo = (progreso?.pct || 0) > 0;   // si ya avanzó, ya pasó el gate antes
+  const puedeEmpezar = !hayReglas || acepto || yaEmpezo;
+  const grabacion = respuestas?.grabacion?.valor || agenda?.grabacion;
+  const sesion = respuestas?.sesion?.valor;
 
   // Si ya terminó, no tiene sentido volver a mostrarle la bienvenida.
   useEffect(() => {
     if (completo) navigate('/onboarding/listo', { replace: true });
   }, [completo, navigate]);
+  // Cliente que ya arrancó: no volvemos a exigirle el check.
+  useEffect(() => { if (yaEmpezo) setAcepto(true); }, [yaEmpezo]);
 
-  const arrancar = () => {
+  const arrancar = async () => {
+    if (!puedeEmpezar) return;
+    // Deja constancia de la aceptación la primera vez (no frena el arranque si falla).
+    if (hayReglas && acepto && !yaEmpezo) {
+      try { await aceptarReglas(reglasVersion); } catch { /* la constancia no bloquea */ }
+    }
     // Al primer nodo sin completar; si está todo, a la portada del primer paso.
     const n = lista[0];
     navigate(n ? `/onboarding/${n.paso.skey}` : '/onboarding/avance');
@@ -131,20 +151,78 @@ export default function BienvenidaScreen() {
           </div>
         )}
 
-        <button type="button" onClick={arrancar} style={{
-          ...btn(true), height: 'auto', padding: '19px 24px', fontSize: 14,
-          letterSpacing: '.06em', boxShadow: '0 4px 12px rgba(91,124,245,.28)',
+        {/* Roadmap: que vea el plan de 15 días apenas entra. */}
+        <div style={{ margin: '4px 0 26px' }}>
+          <Roadmap variant="preview" grabacion={grabacion} sesion={sesion} />
+        </div>
+
+        {/* Reglas del servicio: leer + aceptar (obligatorio para empezar). */}
+        {hayReglas && (
+          <div style={{
+            background: '#fff', border: `1px solid ${T.line}`, borderRadius: 16,
+            padding: 18, marginBottom: 22,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <div style={{
+                width: 42, height: 42, borderRadius: 12, background: T.azulWash,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <IcoDoc size={20} stroke={T.azulTinta} sw={2.1} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-.01em' }}>Reglas del servicio</div>
+                <div style={{ fontSize: 13, color: T.muted }}>Cómo trabajamos juntos. Leelas antes de empezar.</div>
+              </div>
+            </div>
+
+            <button type="button" onClick={() => setVerReglas(true)} style={{
+              width: '100%', border: `1px solid ${T.azulLinea}`, background: T.azulWash2,
+              color: T.azulTinta, borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
+              fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: 7, marginBottom: 14,
+            }}>
+              <IcoDoc size={15} stroke={T.azulTinta} sw={2.2} /> Leer las reglas
+            </button>
+
+            <button type="button" onClick={() => setAcepto((v) => !v)} style={{
+              width: '100%', textAlign: 'left', display: 'flex', alignItems: 'flex-start', gap: 11,
+              background: acepto ? T.azulWash2 : '#fff',
+              border: `1.5px solid ${acepto ? T.azul : T.line}`,
+              borderRadius: 12, padding: '13px 14px', cursor: 'pointer',
+            }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: 7, flexShrink: 0, marginTop: 1,
+                border: `1.5px solid ${acepto ? T.azul : T.lineFuerte}`,
+                background: acepto ? T.azul : '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {acepto && <IcoCheck size={13} stroke="#fff" sw={3} />}
+              </span>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: T.ink, lineHeight: 1.45 }}>
+                Leí y estoy de acuerdo con las Reglas del servicio.
+              </span>
+            </button>
+          </div>
+        )}
+
+        <button type="button" onClick={arrancar} disabled={!puedeEmpezar} style={{
+          ...btn(puedeEmpezar), height: 'auto', padding: '19px 24px', fontSize: 14,
+          letterSpacing: '.06em', cursor: puedeEmpezar ? 'pointer' : 'not-allowed',
+          boxShadow: puedeEmpezar ? '0 4px 12px rgba(91,124,245,.28)' : 'none',
         }}>
-          <span>{progreso.pct > 0 ? 'Seguir donde quedé' : 'Empezar'}</span>
+          <span>{yaEmpezo ? 'Seguir donde quedé' : 'Empezar'}</span>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
           </svg>
         </button>
         <div style={{ textAlign: 'center', fontSize: 12, color: T.faint, marginTop: 13 }}>
-          Empezamos reservando tu sesión de onboarding. Dos minutos.
+          {hayReglas && !puedeEmpezar
+            ? 'Marcá que leíste las reglas para empezar.'
+            : 'Empezamos reservando tu sesión de onboarding. Dos minutos.'}
         </div>
       </div>
+      {verReglas && <ReglasSheet html={reglas} onCerrar={() => setVerReglas(false)} />}
     </OnbShell>
   );
 }

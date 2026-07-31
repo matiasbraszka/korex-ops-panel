@@ -35,6 +35,7 @@ import { useAuth } from '@korex/auth';
 import { useApp } from '../context/AppContext';
 import SaveBar from '../components/settings/SaveBar';
 import VistaPreviaPregunta from '../components/onboarding/VistaPreviaPregunta';
+import BienvenidaReglasEditor from '../components/onboarding/BienvenidaReglasEditor';
 import {
   TIPOS, COLUMNAS_DESTINO, BUCKETS, ICONOS, slugQkey, vacia, vacioPaso, vacioBloque,
 } from '../components/onboarding/constantes';
@@ -68,6 +69,7 @@ export default function OnboardingBuilderPage() {
 
   const skeySel = params.get('paso') || '';
   const qkeySel = params.get('q') || '';
+  const [verBienvenida, setVerBienvenida] = useState(false);
 
   // ── Carga ──────────────────────────────────────────────────────────────────
   const cargar = useCallback(async () => {
@@ -314,6 +316,16 @@ export default function OnboardingBuilderPage() {
           {totales.obligatorias} obligatorias · {totales.minutos} min declarados
         </div>
 
+        {/* Nodo fijo: lo que el cliente ve al INICIO (video + reglas del servicio). */}
+        <button type="button" onClick={() => setVerBienvenida(true)}
+          className="w-full flex items-center gap-2 mb-4 py-2 px-2.5 rounded-lg border border-blue-100 bg-blue-50 text-left cursor-pointer hover:bg-blue-100">
+          <span className="text-[15px]">📄</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[12.5px] font-bold text-blue-900">Bienvenida y Reglas del servicio</span>
+            <span className="block text-[10.5px] text-blue-700">Video + documento que el cliente acepta al inicio</span>
+          </span>
+        </button>
+
         {bloques.map((b) => (
           <div key={b.bkey} className="mb-4">
             <div className="group flex items-center gap-1 mb-1.5">
@@ -431,6 +443,8 @@ export default function OnboardingBuilderPage() {
 
         <SaveBar dirty={dirty} onSave={guardar} onCancel={cargar} />
       </div>
+
+      {verBienvenida && <BienvenidaReglasEditor onClose={() => setVerBienvenida(false)} />}
     </div>
   );
 }
