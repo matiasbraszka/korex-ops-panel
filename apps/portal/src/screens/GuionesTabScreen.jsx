@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import BottomNav from '../components/BottomNav';
 import Avatar from '../components/Avatar';
+import { ChipEmbudo } from './MaterialScreen';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
@@ -48,12 +49,24 @@ export default function GuionesTabScreen() {
     setIntro(false);
   };
 
-  // ── LISTA "Tus guiones" ──
+  // ── LISTA "Tus guiones" — solo los PENDIENTES (revisar / grabar), agrupados por
+  //    embudo, con el encargado a la vista. Los que ya están hechos no ensucian. ──
   if (!intro) {
     const pendientes = lista.filter(pendiente);
-    const hechos = lista.filter((g) => !pendiente(g));
+    const hechos = lista.length - pendientes.length;
     const porRevisar = pendientes.filter((g) => g.tarea === 'revisar').length;
     const porGrabar = pendientes.length - porRevisar;
+
+    // Agrupar por funnel (orden por número de funnel).
+    const grupos = {};
+    pendientes.forEach((g) => {
+      const info = grabMap[g.id] || {};
+      const key = g.strategyId || 'sin';
+      if (!grupos[key]) grupos[key] = { key, funnel: info.funnel || g.funnel, num: info.funnelNum ?? null, items: [] };
+      grupos[key].items.push(g);
+    });
+    const gruposArr = Object.values(grupos).sort((a, b) => (a.num ?? 99) - (b.num ?? 99));
+
     return (
       <PhoneFrame>
         <KxScreen>
@@ -62,15 +75,14 @@ export default function GuionesTabScreen() {
             <div style={{ padding: '22px 22px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={display(30, '-0.035em')}>Tus guiones</div>
               <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>
-                {porRevisar > 0
-                  ? 'Los que tienes que grabar y los que solo tienes que leer y aprobar.'
-                  : 'Preparamos estos textos para que solo tengas que leer y brillar frente a la cámara.'}
+                {pendientes.length === 0 ? '¡Estás al día! No tienes guiones pendientes.'
+                  : 'Esto es lo que te falta grabar o revisar. Cada uno con su embudo y quién lo graba.'}
               </div>
               {pendientes.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 2 }}>
                   {porGrabar > 0 && (
                     <span style={{ ...pill('var(--mk-green-bg)', 'var(--mk-green)'), gap: 6 }}>
-                      <IcoCheck size={11} stroke="var(--mk-green)" sw={3} />
+                      <IcoVideo size={12} stroke="var(--mk-green)" sw={2.2} />
                       {porGrabar === 1 ? '1 para grabar' : `${porGrabar} para grabar`}
                     </span>
                   )}
@@ -83,20 +95,36 @@ export default function GuionesTabScreen() {
               )}
             </div>
 
-            {lista.length === 0 && (
-              <div style={{ margin: '24px 22px 0', background: '#fff', borderRadius: 20, padding: 24, textAlign: 'center', color: T.text2, fontSize: 14.5, lineHeight: 1.5, boxShadow: 'var(--shadow-md)' }}>
-                Todavía no hay guiones listos.<br />Cuando el equipo los prepare, aparecen aquí.
+            {pendientes.length === 0 && (
+              <div style={{ margin: '24px 22px 0', background: '#fff', borderRadius: 20, padding: 26, textAlign: 'center', color: T.text2, fontSize: 14.5, lineHeight: 1.5, boxShadow: 'var(--shadow-md)' }}>
+                <div style={{ fontSize: 34, marginBottom: 8 }}>✅</div>
+                {hechos > 0
+                  ? <>Ya tienes <b>{hechos}</b> {hechos === 1 ? 'guion resuelto' : 'guiones resueltos'}. No queda nada pendiente.</>
+                  : <>Todavía no hay guiones para ti.<br />Cuando el equipo los prepare, aparecen aquí.</>}
               </div>
             )}
 
-            <div style={{ padding: '20px 20px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-              {pendientes.map((g) => <GuionCard key={g.id} g={g} nav={nav} resp={grabMap[g.id]?.responsable} />)}
-              {hechos.map((g) => <GuionCard key={g.id} g={g} nav={nav} hecho resp={grabMap[g.id]?.responsable} />)}
-            </div>
+            {/* Grupos por embudo */}
+            {gruposArr.map((grp) => (
+              <div key={grp.key} style={{ padding: '22px 20px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+                  <ChipEmbudo nombre={grp.funnel} num={grp.num} general={!grp.funnel} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: T.text3 }}>
+                    {grp.items.length} {grp.items.length === 1 ? 'guion' : 'guiones'}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                  {grp.items.map((g) => <GuionCard key={g.id} g={g} nav={nav} resp={grabMap[g.id]?.responsable} />)}
+                </div>
+              </div>
+            ))}
 
-            <div style={{ padding: '24px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
-              Dentro del guion puedes comentar lo que quieras cambiar{porRevisar > 0 ? ', marcarlo como revisado' : ''} y subir tus videos al final.
-            </div>
+            {pendientes.length > 0 && hechos > 0 && (
+              <div style={{ padding: '20px 22px 4px', fontSize: 12.5, color: T.text3, textAlign: 'center' }}>
+                Ya tienes {hechos} {hechos === 1 ? 'guion resuelto' : 'guiones resueltos'} (no los mostramos para no estorbar).
+              </div>
+            )}
+            <div style={{ height: 22 }} />
           </div>
           <BottomNav activeOverride="/guiones" />
         </KxScreen>
@@ -225,15 +253,19 @@ function GuionCard({ g, nav, hecho = false, resp = null }) {
               {g.revisado ? 'Revisado' : 'Para revisar'}
             </span>
           )
-          : (g.grabado || g.entregado) && (
-            <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
-              {g.entregado ? 'Entregado' : 'Grabado'}
-            </span>
-          )}
+          : (g.grabado || g.entregado)
+            ? (
+              <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>
+                {g.entregado ? 'Entregado' : 'Grabado'}
+              </span>
+            )
+            : (
+              <span style={pill('var(--mk-orange-bg)', 'var(--mk-orange)')}>Para grabar</span>
+            )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.18, color: T.ink, textWrap: 'balance' }}>{g.titulo}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Guion de anuncios'} · {g.funnel}{esRevisar ? ' · Solo leer' : ''}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.text3 }}>{esVsl ? 'VSL' : 'Guion de anuncios'}{esRevisar ? ' · Solo leer' : ''}</div>
         {g.snippet && (
           <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {g.snippet}{g.snippet.length >= 160 ? '…' : ''}
