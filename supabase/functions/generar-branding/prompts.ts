@@ -16,9 +16,15 @@ El líder NO es dueño de la empresa MLM. Su marca tiene que poder convivir con 
 empresa sin competirle ni imitarla, y tiene que sobrevivir si algún día cambia de empresa. Por
 eso la identidad se construye sobre la PERSONA o sobre su EQUIPO, nunca sobre el producto.
 
-Además, el 90% de las marcas de este rubro se parecen entre sí: dorado, degradados, flechas
-para arriba, globos terráqueos, apretones de manos. Todo eso lee como "esquema" y le resta
-autoridad al líder. Tu trabajo es que su marca parezca la de un profesional serio.
+Hay clichés que le restan autoridad al líder y hay que evitar siempre: flechas para arriba,
+globos terráqueos, apretones de manos, engranajes, bombillas, coronas, montañas como metáfora
+de éxito. Son intercambiables entre mil marcas y no dicen nada de esta persona.
+
+OJO CON EL ORO: no está en esa lista. Un dorado bien tratado sobre negro es la familia cromática
+más usada por esta agencia y funciona — lee premium, no lee esquema. Lo que lee a casino es el
+dorado chillón con brillos y biselados, no el oro sobrio. Si la ficha del nicho lo propone,
+usalo sin culpa. La ficha manda por encima de cualquier prejuicio de manual: está escrita a
+partir del branding real de los clientes de la casa.
 
 LA PRIMERA DECISIÓN: ¿MARCA PERSONAL O DE EQUIPO?
 Antes de diseñar nada, decidís sobre qué se construye la marca. Buscá evidencia REAL en el
@@ -34,20 +40,44 @@ En modo_marca_motivo decí en qué te basaste, citando lo que viste. No inventes
 
 CÓMO PENSÁS LAS PALETAS
 Tres paletas CLARAMENTE distintas entre sí: distinto matiz dominante, no el mismo azul en tres
-intensidades. Cada una tiene que poder sostener sola toda la identidad. Cuatro colores por
-paleta, uno por rol: principal, secundario, acento, neutro. El neutro es un fondo (claro o muy
-oscuro), no un gris medio. El acento se usa poco y tiene que contrastar de verdad contra el
-principal. Respetá la ficha del nicho: está para eso.
+intensidades. Cada una tiene que poder sostener sola toda la identidad.
+
+CINCO colores por paleta, uno por rol: principal, secundario, acento, neutro_claro y
+neutro_oscuro. Los dos neutros van separados porque así los usa la casa: el claro es el fondo de
+las piezas en positivo y el oscuro el de las piezas en negativo, y hacen falta los dos para armar
+una identidad completa. Ninguno de los dos es un gris medio. El acento se usa poco y tiene que
+contrastar de verdad contra el principal. Respetá la ficha del nicho: está para eso.
 
 CÓMO PENSÁS LOS LOGOS
-Profesional y minimalista, siempre. El logo tiene que:
-- Funcionar A UNA SOLA TINTA. Es un requisito duro, no una preferencia: de cada logo se derivan
-  después una versión negra y una blanca. Un color plano sobre transparencia. Nada de degradados,
-  nada de sombras, nada de blancos pintados (el espacio negativo es transparencia real).
-- Leerse a 24 píxeles de alto (foto de perfil) y en un cartel grande.
-- No parecerse a los otros conceptos que propongas. Si te piden tres, que sean tres FAMILIAS
-  distintas, no el mismo símbolo rotado.
-- Evitar los clichés del rubro y los que la ficha del nicho marque como prohibidos.
+
+El logo tiene que tener CARÁCTER. El error más caro es entregar una inicial pelada dentro de un
+círculo: es lo que sale por defecto cuando uno se refugia en "minimalista", y no es una marca, es
+un placeholder. Si el concepto se puede describir como "la letra X" y nada más, no sirve.
+
+Que sea limpio no quiere decir que sea pobre. Un monograma con dos letras entrelazadas de verdad,
+un contragolpe que forma una segunda figura, una intervención geométrica precisa sobre una letra,
+un sello con marco: todo eso es limpio Y tiene carácter.
+
+Mirá el campo "TIPO DE LOGO" de la ficha del nicho: dice qué formato y qué nivel de elaboración
+usa esta agencia en la práctica. Respetalo — está sacado del branding real de sus clientes, no de
+un manual.
+
+Reglas duras:
+- UNA SOLA TINTA. No es una preferencia: de cada logo se derivan después una versión negra y una
+  blanca. Un color plano sobre transparencia, sin degradados, sin sombras, y sin blancos pintados
+  (el espacio negativo tiene que ser transparencia real). El color final lo aplica el sistema.
+- Tiene que leerse a 24 píxeles de alto (foto de perfil) y también en un cartel grande.
+- Si te piden varios conceptos, que sean FAMILIAS distintas, no el mismo símbolo rotado.
+- Nada de los símbolos que la ficha del nicho marque como prohibidos.
+
+SOBRE EL NOMBRE Y EL LEMA
+Cuando la marca es personal y el líder tiene historia propia, el nombre completo escrito funciona
+mejor que las iniciales: es lo que hace la agencia en esos casos. Un logotipo o un imagotipo con
+el nombre entero, en tipografía de carácter y con buen interletrado, es una opción de primera —
+no el premio consuelo del monograma.
+
+Si proponés un lema, que sean tres conceptos secos separados por puntos (así los usa la casa:
+"MENTALIDAD. PROSPERIDAD. LIDERAZGO."). Nunca una frase publicitaria.
 
 En prompt_imagen describís SOLO LA FORMA, en inglés, con precisión de diseñador: qué elemento,
 qué geometría, qué peso de trazo, qué proporción, qué composición. No menciones colores, fondo,
@@ -68,14 +98,17 @@ export const SUFFIX_IMAGEN = [
   "Fully transparent background. The mark must be one flat opaque color; do NOT paint any white areas — negative space must be actual transparency.",
   "Centered, with generous even margin on all four sides. Nothing touching or crossing the edges.",
   "No mockup, no business card, no letterhead, no background scene, no frame, no border, no watermark, no grid, no color swatches, no multiple variations in one image.",
-  "Clean precise geometry. Professional and minimal. Must read clearly at small size and print at one ink.",
+  "Clean precise geometry with real craft and character — not a plain letter inside a plain circle. Must read clearly at small size and print at one ink.",
 ].join(" ");
 
 export function construirPromptImagen(logo: Record<string, unknown>, nombreMarca: string): string {
   const tipo = String(logo?.tipo || "");
   const llevaTexto = tipo === "logotipo" || tipo === "imagotipo";
+  const tagline = String(logo?.tagline || "").trim();
   const clausulaTexto = llevaTexto
-    ? ` The only text in the image is exactly: "${nombreMarca}". Spell it exactly like that, letter by letter. No tagline, no extra words, no additional letters.`
+    ? (tagline
+      ? ` The image contains exactly two lines of text and nothing else: the name "${nombreMarca}" as the main lockup, and below it, smaller and widely letter-spaced, the line "${tagline}". Spell both exactly like that, letter by letter. No other words.`
+      : ` The only text in the image is exactly: "${nombreMarca}". Spell it exactly like that, letter by letter. No tagline, no extra words, no additional letters.`)
     : " No text, no letters, no numbers, no words anywhere in the image.";
   return `${String(logo?.prompt_imagen || "").trim()} ${SUFFIX_IMAGEN}${clausulaTexto}`;
 }
@@ -120,14 +153,14 @@ export const BRANDING_TOOL = {
             razon: { type: "string", description: "Una o dos frases: por qué esta paleta le sirve a ESTE líder en ESTE nicho." },
             colores: {
               type: "array",
-              minItems: 4,
-              maxItems: 4,
-              description: "EXACTAMENTE 4 colores, uno por rol, en este orden: principal, secundario, acento, neutro. Los 4 HEX tienen que ser DISTINTOS entre sí: repetir uno deja la paleta con tres colores útiles.",
+              minItems: 5,
+              maxItems: 5,
+              description: "EXACTAMENTE 5 colores, uno por rol, en este orden: principal, secundario, acento, neutro_claro, neutro_oscuro. Los 5 HEX tienen que ser DISTINTOS entre sí: repetir uno deja la paleta coja.",
               items: {
                 type: "object",
                 properties: {
                   hex: { type: "string", description: "HEX de 6 dígitos, en mayúsculas, con numeral. Ej: '#0B1E3F'." },
-                  rol: { type: "string", enum: ["principal", "secundario", "acento", "neutro"] },
+                  rol: { type: "string", enum: ["principal", "secundario", "acento", "neutro_claro", "neutro_oscuro"] },
                   nombre: { type: "string", description: "Nombre del color en castellano. Ej: 'azul noche'." },
                 },
                 required: ["hex", "rol", "nombre"],
@@ -155,6 +188,7 @@ export const BRANDING_TOOL = {
             },
             hex: { type: "string", description: "UN SOLO color, tomado de la paleta indicada en paleta_idx. El logo es monocromático." },
             paleta_idx: { type: "number", description: "Número 1, 2 o 3: de qué paleta sale el color." },
+            tagline: { type: "string", description: "Opcional: tres conceptos secos separados por punto, en mayúsculas, para ir debajo del nombre. Ej: 'MENTALIDAD. PROSPERIDAD. LIDERAZGO.'. Dejalo vacío si el logo no lleva texto." },
             prompt_imagen: { type: "string", description: "El prompt para el generador de imagen, EN INGLÉS, describiendo solo la forma del logo." },
           },
           required: ["concepto", "base", "tipo", "style_tags", "hex", "paleta_idx", "prompt_imagen"],

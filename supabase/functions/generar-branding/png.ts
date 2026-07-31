@@ -219,7 +219,8 @@ export function dibujarPaleta(nombre: string, colores: ColorPaleta[]): Uint8Arra
   if (!lista.length) { rect(L, 0, 0, W, H, [245, 242, 236]); return encodePng(L.px, W, H); }
 
   // La cabecera usa el color neutro si hay uno declarado; si no, el más claro de la paleta.
-  const neutro = lista.find((c) => String(c.rol || "").toLowerCase() === "neutro") ||
+  const neutro = lista.find((c) => String(c.rol || "").toLowerCase() === "neutro_claro") ||
+    lista.find((c) => String(c.rol || "").toLowerCase() === "neutro") ||
     [...lista].sort((a, b) => {
       const A = hexARgb(a.hex), B = hexARgb(b.hex);
       return luma(B[0], B[1], B[2]) - luma(A[0], A[1], A[2]);
