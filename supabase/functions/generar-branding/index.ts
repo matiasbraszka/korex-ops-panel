@@ -26,8 +26,8 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { analizarLogo, decodePng, dibujarPaleta, encodePng, hexARgb, limpiarAlfa, recolorear } from "./png.ts";
-import { BRANDING_TOOL, construirPedido, construirPromptImagen, INSTRUCCIONES_DIRECTOR } from "./prompts.ts";
+import { analizarLogo, componerLockup, decodePng, dibujarPaleta, encodePng, hexARgb, limpiarAlfa, recolorear } from "./png.ts";
+import { BRANDING_TOOL, construirPedido, construirPromptImagen, FORMATOS, INSTRUCCIONES_DIRECTOR, PIEZAS } from "./prompts.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -354,7 +354,7 @@ async function subirPng(
     provider: "supabase", storage_path: path, public_url: pub,
     mime_type: "image/png", kind: "image", size_bytes: bytes.byteLength,
     created_by: by, meta,
-  }).select("id,title,public_url,meta").single();
+  }).select("id,title,public_url,storage_path,meta").single();
   if (error) throw new Error(`no pude registrar ${nombre}: ${error.message}`);
   return data;
 }
@@ -402,10 +402,72 @@ function sanearPlan(plan: Record<string, unknown>, cliente: Record<string, unkno
   plan.paletas = ((plan.paletas as Record<string, unknown>[]) || []).filter((p) => ((p.colores as unknown[]) || []).length >= 2);
 
   for (const l of (plan.logos as Record<string, unknown>[]) || []) {
-    for (const k of ["concepto", "prompt_imagen", "tipo", "base", "hex"]) if (typeof l[k] === "string") l[k] = limpiar(l[k]);
+    for (const k of ["concepto", "prompt_imagen", "pieza", "base", "hex", "tagline", "bajada"]) {
+      if (typeof l[k] === "string") l[k] = limpiar(l[k]);
+    }
   }
-  plan.logos = ((plan.logos as Record<string, unknown>[]) || []).filter((l) => str(l.prompt_imagen));
+  // El lockup no necesita prompt (se arma pegando las otras dos); las demás piezas sin prompt no sirven.
+  plan.logos = ((plan.logos as Record<string, unknown>[]) || []).filter((l) => str(l.prompt_imagen) || str(l.pieza) === "lockup");
 
+  return plan;
+}
+
+/**
+ * Ordena las piezas en sistemas coherentes.
+ *
+ * El orden no es cosmético: el lockup se construye a PARTIR del isotipo ya renderizado, así que si
+ * el modelo devuelve las piezas cambiadas de lugar, el lockup llega antes que su símbolo y la
+ * cadena se corta. Y como las tres piezas son la misma marca, el color y la familia se fuerzan
+ * desde la primera: que el logotipo salga de otro color que el isotipo no es una variante, es un
+ * error que se paga en imágenes.
+ */
+const ORDEN_PIEZAS = ["isotipo", "logotipo", "lockup"] as const;
+
+function normalizarSistemas(plan: Record<string, unknown>, formato: string): Record<string, unknown> {
+  const logos = ((plan.logos as Record<string, unknown>[]) || []).slice();
+
+  if (formato === "prueba") {
+    const l = logos[0];
+    if (!l) return plan;
+    l.pieza = "lockup";
+    l.sist = 1;
+    plan.logos = [l];
+    return plan;
+  }
+
+  const nSist = formato === "dos_direcciones" ? 2 : 1;
+  const salida: Record<string, unknown>[] = [];
+
+  for (let s = 0; s < nSist; s++) {
+    const grupo = logos.slice(s * 3, s * 3 + 3);
+    if (!grupo.length) break;
+    // Si el modelo rotuló bien las piezas se respeta ese rótulo; si no, manda la posición.
+    const porPieza = new Map<string, Record<string, unknown>>();
+    for (const l of grupo) {
+      const p = str(l.pieza);
+      if (ORDEN_PIEZAS.includes(p as typeof ORDEN_PIEZAS[number]) && !porPieza.has(p)) porPieza.set(p, l);
+    }
+    const sobrantes = grupo.filter((l) => ![...porPieza.values()].includes(l));
+
+    const cabeza = porPieza.get("isotipo") || grupo[0];
+    for (const pieza of ORDEN_PIEZAS) {
+      const l = porPieza.get(pieza) || sobrantes.shift();
+      if (!l) continue;
+      l.pieza = pieza;
+      l.sist = s + 1;
+      // Una marca, un color, una familia. El lockup además nunca lleva lema (el generador escribe
+      // mal las frases largas) y el isotipo nunca lleva texto de ningún tipo.
+      l.hex = str(cabeza.hex) || str(l.hex);
+      l.paleta_idx = Number(cabeza.paleta_idx) || Number(l.paleta_idx) || 1;
+      l.base = str(cabeza.base) || str(l.base) || "persona";
+      l.style_tags = (cabeza.style_tags as string[]) || (l.style_tags as string[]) || [];
+      if (pieza !== "logotipo") l.tagline = "";
+      if (pieza !== "lockup") l.bajada = "";
+      salida.push(l);
+    }
+  }
+
+  plan.logos = salida;
   return plan;
 }
 
@@ -492,7 +554,9 @@ Deno.serve(async (req) => {
 
 async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: Cfg, by: string) {
   const modo = ["nuevo", "variar", "otra_direccion"].includes(str(body.modo)) ? str(body.modo) : "nuevo";
-  const nLogos = Math.max(1, Math.min(5, Number(body.n_logos) || 1));
+  const formato = FORMATOS[str(body.formato)] ? str(body.formato) : "sistema";
+  const nPiezas = FORMATOS[formato].piezas;
+  const nImagenes = FORMATOS[formato].imagenes;
   const quality = ["low", "medium", "high"].includes(str(body.quality)) ? str(body.quality) : "medium";
   const modoForzado = ["persona", "equipo"].includes(str(body.modo_marca_forzado)) ? str(body.modo_marca_forzado) : "";
 
@@ -546,7 +610,7 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
     ...(aprendizaje ? [{ type: "text", text: aprendizaje }] : []),
   ];
 
-  const r = await llamarClaude(apiKey, model, system, construirPedido(nLogos, modoForzado));
+  const r = await llamarClaude(apiKey, model, system, construirPedido(formato, modoForzado));
   if (!r.ok) {
     await supabase.from("api_usage").insert({ fn: "generar_branding", model, status: "error", client_id: clientId, error: clip(r.detail, 500), meta: { action: "plan", modo } });
     return j({ ok: false, error: "api_error", detail: clip(r.detail, 400) }, 502);
@@ -570,8 +634,10 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
 
   plan = sanearPlan(plan, cliente as Record<string, unknown>);
   // Recorte defensivo: el modelo a veces devuelve de más.
-  plan.logos = (plan.logos as unknown[]).slice(0, nLogos);
+  plan.logos = (plan.logos as unknown[]).slice(0, nPiezas);
   plan.paletas = (plan.paletas as unknown[]).slice(0, 3);
+  plan = normalizarSistemas(plan, formato);
+  plan.formato = formato;
   if (!(plan.logos as unknown[]).length || !(plan.paletas as unknown[]).length) {
     await supabase.from("api_usage").insert({ fn: "generar_branding", model, status: "error", client_id: clientId, cost_usd: cost, error: "plan incompleto tras sanear", meta: { action: "plan" } });
     return j({ ok: false, error: "plan_vacio", detail: "La IA devolvió un plan incompleto. Probá de nuevo." });
@@ -588,10 +654,10 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
   await supabase.from("api_usage").insert({
     fn: "generar_branding", model, input_tokens: fresh + cacheRead + cacheWrite, output_tokens: outTok,
     cost_usd: cost, client_id: clientId, status: "ok",
-    meta: { action: "plan", run_id: run.id, modo, n_logos: (plan.logos as unknown[]).length, quality, modo_marca: str(plan.modo_marca), style_ref: ficha?.id, cache_read_tokens: cacheRead, cache_write_tokens: cacheWrite, fresh_tokens: fresh },
+    meta: { action: "plan", run_id: run.id, modo, formato, n_logos: (plan.logos as unknown[]).length, quality, modo_marca: str(plan.modo_marca), style_ref: ficha?.id, cache_read_tokens: cacheRead, cache_write_tokens: cacheWrite, fresh_tokens: fresh },
   });
 
-  return j({ ok: true, run_id: run.id, plan, cost_usd: cost, n_logos: (plan.logos as unknown[]).length });
+  return j({ ok: true, run_id: run.id, plan, cost_usd: cost, formato, n_imagenes: nImagenes, n_logos: (plan.logos as unknown[]).length });
 }
 
 // ── Acción: render (una imagen) ──────────────────────────────────────────────
@@ -613,6 +679,17 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
   if (yaHecho) return j({ ok: true, run_id: runId, idx, ya_estaba: true, cost_usd: 0, resources: [] });
 
   const quality = str(run.quality) || "medium";
+  const pieza = str(logo.pieza) || "isotipo";
+  const nombreMarca = str(run.nombre_marca);
+  const rendered = (plan.rendered as Record<string, unknown>[]) || [];
+  const sist = Number(logo.sist) || 1;
+
+  // El lockup no se pide: se arma pegando el isotipo y el logotipo de su mismo sistema, que ya
+  // están generados. No cuesta nada y sale exacto — ver componerLockup en png.ts.
+  if (pieza === "lockup") {
+    return await ensamblarLockup({ runId, idx, clientId, run, plan, logo, rendered, sist, quality, by });
+  }
+
   const precio = precioImagen(cfg, quality);
 
   const freno = await chequearTopes(cfg, precio);
@@ -627,7 +704,7 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
     return j({ ok: false, error: "missing_openai_key", detail: "Falta cargar la API key de OpenAI (secure_config.openai_api_key). Sin eso no se pueden generar los logos." });
   }
 
-  const prompt = construirPromptImagen(logo, str(run.nombre_marca));
+  const prompt = construirPromptImagen(logo, nombreMarca);
   let res: Response;
   try {
     res = await fetch("https://api.openai.com/v1/images/generations", {
@@ -674,16 +751,43 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
   limpiarAlfa(img.rgba);
   const { mono, whiteKnockout } = analizarLogo(img);
 
+  const recursos = await publicarPieza({ img, mono, whiteKnockout, runId, idx, clientId, run, logo, pieza, sist, quality, nombreMarca, by });
+
+  await supabase.from("client_branding_runs")
+    .update({ status: "rendering", cost_usd: Number(run.cost_usd || 0) + precio, updated_at: new Date().toISOString() })
+    .eq("id", runId);
+
+  await supabase.from("api_usage").insert({
+    fn: "generar_branding_img", model: "gpt-image-1", input_tokens: 0, output_tokens: 0,
+    cost_usd: precio, client_id: clientId, status: "ok",
+    meta: { action: "render", run_id: runId, idx, pieza, quality, size: "1024x1024", mono, white_knockout: whiteKnockout },
+  });
+
+  return j({ ok: true, run_id: runId, idx, pieza, mono, white_knockout: whiteKnockout, cost_usd: precio, resources: recursos });
+}
+
+/**
+ * Sube las tres versiones de una pieza (color, negro, blanco) y la anota en la corrida.
+ * Es el tramo común entre las piezas que vienen del generador y el lockup, que se arma acá.
+ */
+async function publicarPieza(a: {
+  img: { w: number; h: number; rgba: Uint8Array }; mono: boolean; whiteKnockout: boolean;
+  runId: string; idx: number; clientId: string; run: Record<string, unknown>;
+  logo: Record<string, unknown>; pieza: string; sist: number; quality: string; nombreMarca: string; by: string;
+}) {
+  const { img, mono, whiteKnockout, logo, pieza } = a;
   const groupId = "lg_" + crypto.randomUUID().slice(0, 8);
   const metaBase = {
-    gen: "branding", run_id: runId, kind: "logo", group_id: groupId, idx,
-    concepto: str(logo.concepto), base: str(logo.base), tipo: str(logo.tipo),
+    gen: "branding", run_id: a.runId, kind: "logo", group_id: groupId, idx: a.idx,
+    pieza, sist: a.sist, ensamblado: pieza === "lockup",
+    concepto: str(logo.concepto), base: str(logo.base),
     style_tags: (logo.style_tags as string[]) || [], hex: str(logo.hex), paleta_idx: Number(logo.paleta_idx) || 1,
-    nombre_marca: str(run.nombre_marca), modo_marca: str(run.modo_marca),
-    image_model: "gpt-image-1", quality, mono, white_knockout: whiteKnockout,
+    nombre_marca: a.nombreMarca, modo_marca: str(a.run.modo_marca),
+    image_model: pieza === "lockup" ? "ensamblado" : "gpt-image-1", quality: a.quality, mono, white_knockout: whiteKnockout,
   };
 
   const rotuloBase = str(logo.base) === "equipo" ? "equipo" : "marca personal";
+  const rotuloPieza = PIEZAS[pieza]?.rotulo || pieza;
   // Las TRES versiones se pintan acá, incluida la de color: el generador elige el color por su
   // cuenta y no respeta el de la paleta (se pidió #2F6B3C y devolvió #385C57). Pintarlo garantiza
   // que el logo salga en el color exacto que la paleta declara, y que las tres versiones sean
@@ -699,30 +803,69 @@ async function accionRender(body: Record<string, unknown>, clientId: string, cfg
   for (let i = 0; i < versiones.length; i++) {
     const v = versiones[i];
     recursos.push(await subirPng(
-      clientId, `logo${idx}_${v.key}`, v.bytes,
+      a.clientId, `logo${a.idx}_${pieza}_${v.key}`, v.bytes,
       // El "1/2/3" mantiene el trío ordenado color→negro→blanco con el sort alfabético que ya usa
       // la carpeta; sin él quedaría blanco, color, negro.
-      `Logo ${idx} · ${rotuloBase} · ${i + 1} ${v.key}`,
+      `${a.idx}. ${rotuloPieza} · ${rotuloBase} · ${i + 1} ${v.key}`,
       { ...metaBase, variant: v.key },
-      by,
+      a.by,
     ));
   }
 
-  await anotarRendered(runId, {
-    group_id: groupId, kind: "logo", idx, concepto: str(logo.concepto),
+  await anotarRendered(a.runId, {
+    group_id: groupId, kind: "logo", idx: a.idx, pieza, sist: a.sist, concepto: str(logo.concepto),
     style_tags: (logo.style_tags as string[]) || [], hex: str(logo.hex), base: str(logo.base),
+    white_knockout: whiteKnockout,
+    // Con esto el lockup encuentra las piezas de su sistema para ensamblarlas.
+    ref_path: str(recursos[1]?.storage_path),
   });
+  return recursos;
+}
+
+/**
+ * El lockup: isotipo + logotipo, pegados. Cero llamadas a la API, cero espera, y el símbolo y la
+ * tipografía son exactamente los de las otras dos piezas — que es lo que un lockup tiene que ser.
+ */
+async function ensamblarLockup(a: {
+  runId: string; idx: number; clientId: string; run: Record<string, unknown>; plan: Record<string, unknown>;
+  logo: Record<string, unknown>; rendered: Record<string, unknown>[]; sist: number; quality: string; by: string;
+}) {
+  const buscar = (p: string) => a.rendered.find((g) => g.kind === "logo" && g.pieza === p && (Number(g.sist) || 1) === a.sist);
+  const iso = buscar("isotipo"), texto = buscar("logotipo");
+  if (!iso || !texto) {
+    return j({
+      ok: false, error: "faltan_piezas",
+      detail: "El lockup se arma juntando el isotipo y el logotipo, y todavía falta generar alguno de los dos. Generá primero las piezas 1 y 2.",
+    }, 400);
+  }
+
+  // Se usan las versiones NEGRAS: es la silueta limpia, y el color se aplica igual al publicar.
+  const bajar = async (path: string) => {
+    const dl = await supabase.storage.from(BUCKET).download(path);
+    if (!dl.data) throw new Error(`no pude bajar ${path}: ${dl.error?.message}`);
+    return decodePng(new Uint8Array(await dl.data.arrayBuffer()));
+  };
+  const isoImg = await bajar(str(iso.ref_path));
+  const textoImg = await bajar(str(texto.ref_path));
+
+  const img = componerLockup(isoImg, textoImg);
+  if (!img) return j({ ok: false, error: "lockup_vacio", detail: "Una de las dos piezas salió vacía y no pude armar el lockup." });
+  limpiarAlfa(img.rgba);
+
+  // El knockout no se recalcula: la imagen ya viene aplanada a negro, así que el detector no lo
+  // vería. Se hereda de las piezas de origen, que es donde se midió sobre el original.
+  const whiteKnockout = !!iso.white_knockout || !!texto.white_knockout;
+
+  const recursos = await publicarPieza({
+    img, mono: true, whiteKnockout, runId: a.runId, idx: a.idx, clientId: a.clientId, run: a.run,
+    logo: a.logo, pieza: "lockup", sist: a.sist, quality: a.quality,
+    nombreMarca: str(a.run.nombre_marca), by: a.by,
+  });
+
   await supabase.from("client_branding_runs")
-    .update({ status: "rendering", cost_usd: Number(run.cost_usd || 0) + precio, updated_at: new Date().toISOString() })
-    .eq("id", runId);
+    .update({ status: "rendering", updated_at: new Date().toISOString() }).eq("id", a.runId);
 
-  await supabase.from("api_usage").insert({
-    fn: "generar_branding_img", model: "gpt-image-1", input_tokens: 0, output_tokens: 0,
-    cost_usd: precio, client_id: clientId, status: "ok",
-    meta: { action: "render", run_id: runId, group_id: groupId, idx, quality, size: "1024x1024", mono, white_knockout: whiteKnockout },
-  });
-
-  return j({ ok: true, run_id: runId, idx, group_id: groupId, mono, white_knockout: whiteKnockout, cost_usd: precio, resources: recursos });
+  return j({ ok: true, run_id: a.runId, idx: a.idx, pieza: "lockup", ensamblado: true, mono: true, cost_usd: 0, resources: recursos });
 }
 
 // ── Acción: palettes ─────────────────────────────────────────────────────────

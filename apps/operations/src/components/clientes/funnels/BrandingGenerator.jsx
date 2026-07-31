@@ -19,6 +19,21 @@ const PRECIO_IMG = { medium: 0.05, high: 0.18 };
 const PRECIO_PLAN = 0.06;
 const estimar = (n, q) => (PRECIO_PLAN + n * (PRECIO_IMG[q] || PRECIO_IMG.medium)).toFixed(2);
 
+// Piezas que se entregan y, aparte, imágenes que se PAGAN: el lockup de cada identidad lo arma el
+// sistema pegando las otras dos, así que no cuesta nada. Tiene que coincidir con FORMATOS de la
+// edge function.
+const FORMATOS = {
+  sistema: { piezas: 3, imagenes: 2 },
+  dos_direcciones: { piezas: 6, imagenes: 4 },
+};
+
+// Qué se está generando en cada paso, para que el cartel diga algo útil en vez de 'logo 2 de 3'.
+const ROTULO_PIEZA = {
+  3: ['el isotipo', 'el logotipo', 'el isotipo + la tipografía'],
+  6: ['el isotipo (nombre del líder)', 'el logotipo (nombre del líder)', 'el isotipo + tipografía (nombre del líder)',
+      'el isotipo (nombre del equipo)', 'el logotipo (nombre del equipo)', 'el isotipo + tipografía (nombre del equipo)'],
+};
+
 /**
  * Llama a la edge function. Si está definida VITE_BRANDING_FN_URL, va contra la que corre en
  * local (ver DESARROLLO-AGENTES.md) — así se prueba sin deployar. En cualquier build de
@@ -53,7 +68,7 @@ async function invocar(body, signal) {
 export default function BrandingGenerator({ clientId, color, hayGenerados, onDone, onEditarCliente }) {
   const [gen, setGen] = useState({ status: 'idle' });
   const [abierto, setAbierto] = useState(false);
-  const [opts, setOpts] = useState({ nLogos: 1, quality: 'medium', modo: 'variar' });
+  const [opts, setOpts] = useState({ formato: 'sistema', quality: 'medium', modo: 'variar' });
   // Bandera para no tocar el estado si el componente ya se fue (la corrida dura minutos y el
   // equipo puede cerrar la carpeta en el medio).
   //
@@ -84,17 +99,17 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
   // ningún cartel: el equipo se queda mirando un spinner eterno sin saber que algo se rompió.
   const generar = async () => {
     setAbierto(false);
-    const { nLogos, quality } = opts;
+    const { formato, quality } = opts;
     const modo = hayGenerados ? opts.modo : 'nuevo';
     let hechos = 0;
 
     try {
       setGen({ status: 'planning' });
-      const plan = await invocar({ action: 'plan', client_id: clientId, modo, n_logos: nLogos, quality });
+      const plan = await invocar({ action: 'plan', client_id: clientId, modo, formato, quality });
       if (!vivo.current) return;
       if (!plan?.ok) return fallo(plan, 0);
 
-      const total = (plan.n_logos || nLogos);
+      const total = (plan.n_logos || FORMATOS[formato]?.piezas || 3);
       setGen({ status: 'rendering', hecho: 0, total, marca: plan.plan?.nombre_marca, modoMarca: plan.plan?.modo_marca });
 
       for (let i = 1; i <= total; i++) {
@@ -139,7 +154,7 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
         <div className="py-2 px-2.5 rounded-lg mb-2" style={{ background: '#FDF2F8', border: '1px solid #FBCFE8' }}>
           <div className="flex items-center gap-2 text-[11.5px] font-semibold" style={{ color: '#BE185D' }}>
             <RefreshCw size={13} className="animate-spin shrink-0" />
-            Generando logo {Math.min(gen.hecho + 1, gen.total)} de {gen.total}… puede tardar un minuto por logo.
+            Generando {ROTULO_PIEZA[gen.total]?.[gen.hecho] || `pieza ${gen.hecho + 1}`} ({Math.min(gen.hecho + 1, gen.total)} de {gen.total})… puede tardar un minuto por pieza.
           </div>
           <div className="h-1 rounded-full bg-white mt-1.5 overflow-hidden">
             <div className="h-full rounded-full transition-all" style={{ width: `${(gen.hecho / gen.total) * 100}%`, background: '#BE185D' }} />
@@ -154,7 +169,7 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
 
       {gen.status === 'done' && aviso('#ECFDF5', '#A7F3D0', '#15803D', (
         <span>
-          Listo: {gen.n} logo{gen.n === 1 ? '' : 's'} (cada uno en color, negro y blanco) y {gen.paletas} paleta{gen.paletas === 1 ? '' : 's'}. Borrá lo que no te guste y quedate con lo bueno.
+          Listo: {gen.n} pieza{gen.n === 1 ? '' : 's'} (cada una en color, negro y blanco) y {gen.paletas} paleta{gen.paletas === 1 ? '' : 's'}. Borrá lo que no te guste y quedate con lo bueno.
           {gen.repetidas > 0 && <><br />Descarté {gen.repetidas} paleta{gen.repetidas === 1 ? '' : 's'} por ser casi igual{gen.repetidas === 1 ? '' : 'es'} a {gen.repetidas === 1 ? 'una' : 'otras'} que ya estaba{gen.repetidas === 1 ? '' : 'n'} en la carpeta.</>}
         </span>
       ))}
@@ -164,7 +179,7 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
           <X size={13} className="mt-px shrink-0" />
           <span>
             {gen.detail}
-            {gen.hechos > 0 && <><br />Se alcanzaron a generar {gen.hechos} logo{gen.hechos === 1 ? '' : 's'}, que quedan guardados. Si volvés a intentar, se agregan a los que ya están.</>}
+            {gen.hechos > 0 && <><br />Se alcanzaron a generar {gen.hechos} pieza{gen.hechos === 1 ? '' : 's'}, que quedan guardadas. Si volvés a intentar, se agregan a los que ya están.</>}
           </span>
         </>
       ))}
@@ -200,7 +215,7 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
         maxWidth={460}
         footer={
           <div className="flex items-center justify-between w-full gap-3">
-            <span className="text-[11.5px] text-[#9098A4]">Costo estimado: <b className="text-[#3F4653]">US${estimar(opts.nLogos, opts.quality)}</b></span>
+            <span className="text-[11.5px] text-[#9098A4]">Costo estimado: <b className="text-[#3F4653]">US${estimar(FORMATOS[opts.formato].imagenes, opts.quality)}</b></span>
             <div className="flex gap-2">
               <button onClick={() => setAbierto(false)}
                 className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#6B7280] font-medium cursor-pointer">Cancelar</button>
@@ -214,15 +229,17 @@ export default function BrandingGenerator({ clientId, color, hayGenerados, onDon
         }>
         <div className="text-[12.5px] text-[#6B7280] mb-4 leading-relaxed">
           La IA lee el onboarding, la investigación y la personalidad del cliente, decide si la marca
-          va por su nombre o por el del equipo, y deja en esta carpeta los logos (cada uno en color,
-          negro y blanco, con fondo transparente) y 3 paletas de colores.
+          va por su nombre o por el del equipo, y deja en esta carpeta la identidad completa (cada
+          pieza en color, negro y blanco, con fondo transparente) y 3 paletas de colores.
         </div>
 
-        <Grupo titulo="¿Cuántos logos?">
-          <Opcion activo={opts.nLogos === 1} onClick={() => setOpts(o => ({ ...o, nLogos: 1 }))} color={color}
-            titulo="Prueba · 1 logo" nota="Para ver la calidad sin gastar de más" />
-          <Opcion activo={opts.nLogos === 3} onClick={() => setOpts(o => ({ ...o, nLogos: 3 }))} color={color}
-            titulo="Completo · 3 logos" nota="Marca personal, nombre del equipo y una segunda versión del más sólido" />
+        <Grupo titulo="¿Qué generar?">
+          <Opcion activo={opts.formato === 'sistema'} onClick={() => setOpts(o => ({ ...o, formato: 'sistema' }))} color={color}
+            titulo="Identidad completa · 3 piezas"
+            nota="El isotipo solo, el nombre solo, y los dos juntos — la misma marca en los tres formatos" />
+          <Opcion activo={opts.formato === 'dos_direcciones'} onClick={() => setOpts(o => ({ ...o, formato: 'dos_direcciones' }))} color={color}
+            titulo="Las dos direcciones · 6 piezas"
+            nota="Una identidad con el nombre del líder y otra con el del equipo, para elegir borrando" />
         </Grupo>
 
         <Grupo titulo="Calidad de imagen">

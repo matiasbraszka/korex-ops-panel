@@ -46,7 +46,30 @@ CINCO colores por paleta, uno por rol: principal, secundario, acento, neutro_cla
 neutro_oscuro. Los dos neutros van separados porque así los usa la casa: el claro es el fondo de
 las piezas en positivo y el oscuro el de las piezas en negativo, y hacen falta los dos para armar
 una identidad completa. Ninguno de los dos es un gris medio. El acento se usa poco y tiene que
-contrastar de verdad contra el principal. Respetá la ficha del nicho: está para eso.
+contrastar de verdad contra el principal.
+
+LA PALETA 1 SALE DEL ESTÁNDAR DEL NICHO. Si la ficha trae un bloque "ESTÁNDAR DE LA CASA" con
+paleta base, la paleta 1 usa esos cinco HEX tal cual. Solo te podés desviar (y como mucho un tono)
+si el líder tiene un motivo real: colores que ya viene usando, la marca de la empresa MLM, su
+rubro puntual. Si te desviás, explicá por qué en "razon". Las paletas 2 y 3 son tuyas.
+
+LAS TRES PIEZAS DE UNA IDENTIDAD
+No entregás logos sueltos que compiten: entregás UNA marca en tres piezas que conviven. Es el
+mismo símbolo y el mismo nombre vistos en los tres formatos que se usan en la práctica.
+
+1. ISOTIPO — el símbolo solo, sin una sola letra. Es la foto de perfil, el favicon, el sello.
+   Tiene que funcionar solo, encerrado en un círculo de 24 píxeles.
+2. LOGOTIPO — el nombre escrito, con carácter tipográfico. Es la firma, el cierre de video.
+   Acá SÍ puede ir un lema de tres conceptos.
+3. LOCKUP — el isotipo y la tipografía juntos, en horizontal: símbolo a la izquierda, nombre a la
+   derecha. Es el formato más versátil (web, landing, tarjeta, anuncio) y el que más se usa.
+
+LA PIEZA 3 NO SE DIBUJA: el sistema la arma pegando la 1 y la 2, a la misma altura y con el aire
+justo. O sea que el lockup va a ser literalmente tu símbolo al lado de tu tipografía. Dos
+consecuencias para vos:
+ · El símbolo tiene que aguantar las dos escalas: grande y solo, y chico al lado de un nombre.
+ · El logotipo tiene que poder convivir con el símbolo a su izquierda. Si el logotipo ya trae un
+   adorno a la izquierda del nombre, el lockup queda cargado.
 
 CÓMO PENSÁS LOS LOGOS
 
@@ -67,22 +90,25 @@ Reglas duras:
   blanca. Un color plano sobre transparencia, sin degradados, sin sombras, y sin blancos pintados
   (el espacio negativo tiene que ser transparencia real). El color final lo aplica el sistema.
 - Tiene que leerse a 24 píxeles de alto (foto de perfil) y también en un cartel grande.
-- Si te piden varios conceptos, que sean FAMILIAS distintas, no el mismo símbolo rotado.
+- Si te piden DOS sistemas (uno por nombre), que sean familias visuales distintas entre sí. Dentro
+  de un mismo sistema, en cambio, las tres piezas son la MISMA marca: no varíes el símbolo.
 - Nada de los símbolos que la ficha del nicho marque como prohibidos.
 
 SOBRE EL NOMBRE Y EL LEMA
 Cuando la marca es personal y el líder tiene historia propia, el nombre completo escrito funciona
-mejor que las iniciales: es lo que hace la agencia en esos casos. Un logotipo o un imagotipo con
-el nombre entero, en tipografía de carácter y con buen interletrado, es una opción de primera —
-no el premio consuelo del monograma.
+mejor que las iniciales: es lo que hace la agencia en esos casos. El logotipo con el nombre entero,
+en tipografía de carácter y con buen interletrado, es una opción de primera — no el premio consuelo
+del monograma.
 
 Si proponés un lema, que sean tres conceptos secos separados por puntos (así los usa la casa:
-"MENTALIDAD. PROSPERIDAD. LIDERAZGO."). Nunca una frase publicitaria.
+"MENTALIDAD. PROSPERIDAD. LIDERAZGO."). Nunca una frase publicitaria. El lema va en el logotipo
+(pieza 2) y de ahí se arrastra solo al lockup, así que pensalo sabiendo que va a convivir con el
+símbolo al lado. Si dudás, no pongas lema: el nombre solo casi siempre queda mejor.
 
 En prompt_imagen describís SOLO LA FORMA, en inglés, con precisión de diseñador: qué elemento,
 qué geometría, qué peso de trazo, qué proporción, qué composición. No menciones colores, fondo,
-transparencia, formato ni mockups: todo eso lo agrega el sistema después. No pidas texto salvo
-que el tipo de logo lo lleve.
+transparencia, formato ni mockups: todo eso lo agrega el sistema después. Tampoco escribas el
+nombre ni el lema en prompt_imagen: el sistema los inserta solo, con la ortografía exacta.
 
 Escribí todo lo demás en castellano rioplatense, claro y sin adornos.`;
 
@@ -101,16 +127,30 @@ export const SUFFIX_IMAGEN = [
   "Clean precise geometry with real craft and character — not a plain letter inside a plain circle. Must read clearly at small size and print at one ink.",
 ].join(" ");
 
+/** Rótulos de las tres piezas, para títulos de recurso y para la UI. */
+export const PIEZAS: Record<string, { rotulo: string; orden: number }> = {
+  isotipo: { rotulo: "Isotipo", orden: 1 },
+  logotipo: { rotulo: "Logotipo", orden: 2 },
+  lockup: { rotulo: "Isotipo + tipografía", orden: 3 },
+};
+
+/**
+ * Prompt de imagen de una pieza. Solo aplica al isotipo y al logotipo: el lockup no se le pide al
+ * generador, se arma pegando esos dos (ver componerLockup en png.ts).
+ */
 export function construirPromptImagen(logo: Record<string, unknown>, nombreMarca: string): string {
-  const tipo = String(logo?.tipo || "");
-  const llevaTexto = tipo === "logotipo" || tipo === "imagotipo";
-  const tagline = String(logo?.tagline || "").trim();
-  const clausulaTexto = llevaTexto
-    ? (tagline
-      ? ` The image contains exactly two lines of text and nothing else: the name "${nombreMarca}" as the main lockup, and below it, smaller and widely letter-spaced, the line "${tagline}". Spell both exactly like that, letter by letter. No other words.`
-      : ` The only text in the image is exactly: "${nombreMarca}". Spell it exactly like that, letter by letter. No tagline, no extra words, no additional letters.`)
-    : " No text, no letters, no numbers, no words anywhere in the image.";
-  return `${String(logo?.prompt_imagen || "").trim()} ${SUFFIX_IMAGEN}${clausulaTexto}`;
+  const pieza = String(logo?.pieza || "isotipo");
+  const forma = String(logo?.prompt_imagen || "").trim();
+
+  if (pieza === "logotipo") {
+    const tagline = String(logo?.tagline || "").trim();
+    const texto = tagline
+      ? ` The image contains exactly two lines of text and nothing else: the name "${nombreMarca}" as the main wordmark, and below it, much smaller and widely letter-spaced, the line "${tagline}". Spell both exactly like that, letter by letter, including every accent and every period. No other words, no trailing punctuation.`
+      : ` The only text in the image is exactly: "${nombreMarca}". Spell it exactly like that, letter by letter, including every accent. No tagline, no extra words, no additional letters.`;
+    return `Typographic wordmark logo. ${forma} ${SUFFIX_IMAGEN}${texto}`;
+  }
+
+  return `${forma} The symbol is centered and fills most of the square canvas. ${SUFFIX_IMAGEN} No text, no letters, no numbers, no words anywhere in the image.`;
 }
 
 /** Contrato de salida del director de arte. Se fuerza con tool_choice. */
@@ -172,26 +212,34 @@ export const BRANDING_TOOL = {
       },
       logos: {
         type: "array",
-        description: "Un concepto por cada logo pedido, en el orden en que se pidieron. Cada uno de una familia visual distinta.",
+        description: "Las piezas pedidas, EN EL ORDEN PEDIDO. Un sistema son tres piezas de la MISMA marca: isotipo, logotipo y lockup. Si te piden dos sistemas, van los tres del primero y después los tres del segundo.",
         items: {
           type: "object",
           properties: {
-            concepto: { type: "string", description: "Qué es el logo, en castellano y en una frase concreta. Ej: 'monograma MK donde la K se forma con el contragolpe de la M, trazo continuo de peso uniforme'." },
-            base: { type: "string", enum: ["persona", "equipo"], description: "Sobre qué nombre está construido ESTE logo." },
-            tipo: { type: "string", enum: ["monograma", "logotipo", "isotipo", "imagotipo"], description: "monograma = iniciales. logotipo = el nombre escrito. isotipo = símbolo sin texto. imagotipo = símbolo + nombre." },
+            pieza: {
+              type: "string",
+              enum: ["isotipo", "logotipo", "lockup"],
+              description: "isotipo = el símbolo solo, sin letras. logotipo = el nombre escrito, sin símbolo. lockup = el símbolo del isotipo + el nombre, en horizontal.",
+            },
+            concepto: { type: "string", description: "Qué es esta pieza, en castellano y en una frase concreta. Ej: 'dos hojas lanceoladas que giran sobre un eje común y dejan una gota en el contragolpe'." },
+            base: { type: "string", enum: ["persona", "equipo"], description: "Sobre qué nombre está construida ESTA pieza. Las tres piezas de un mismo sistema comparten base." },
             style_tags: {
               type: "array",
               minItems: 3,
               maxItems: 6,
               items: { type: "string" },
-              description: "Etiquetas cortas en minúscula que describan la familia visual, para poder comparar entre corridas. Ej: ['monograma','geometrico','trazo-fino','angulo-recto'].",
+              description: "Etiquetas cortas en minúscula que describan la familia visual, para poder comparar entre corridas. Ej: ['organico','trazo-variable','giro','contragolpe']. Las tres piezas de un sistema llevan las mismas.",
             },
-            hex: { type: "string", description: "UN SOLO color, tomado de la paleta indicada en paleta_idx. El logo es monocromático." },
-            paleta_idx: { type: "number", description: "Número 1, 2 o 3: de qué paleta sale el color." },
-            tagline: { type: "string", description: "Opcional: tres conceptos secos separados por punto, en mayúsculas, para ir debajo del nombre. Ej: 'MENTALIDAD. PROSPERIDAD. LIDERAZGO.'. Dejalo vacío si el logo no lleva texto." },
-            prompt_imagen: { type: "string", description: "El prompt para el generador de imagen, EN INGLÉS, describiendo solo la forma del logo." },
+            hex: { type: "string", description: "UN SOLO color, tomado de la paleta indicada en paleta_idx. La pieza es monocromática. Las tres piezas de un sistema llevan el mismo." },
+            paleta_idx: { type: "number", description: "Número 1, 2 o 3: de qué paleta sale el color. Las tres piezas de un sistema llevan el mismo." },
+            tagline: { type: "string", description: "SOLO para la pieza 'logotipo': tres conceptos secos separados por punto, en mayúsculas. Ej: 'MENTALIDAD. PROSPERIDAD. LIDERAZGO.'. Vacío en las otras piezas." },
+            
+            prompt_imagen: {
+              type: "string",
+              description: "EN INGLÉS, solo la forma. En 'isotipo': describí el símbolo. En 'logotipo': describí el tratamiento tipográfico del nombre (qué familia, qué peso, qué intervención). En 'lockup': dejá una nota corta de cómo ves la relación entre símbolo y nombre; es solo documentación, el sistema arma la pieza pegando las otras dos.",
+            },
           },
-          required: ["concepto", "base", "tipo", "style_tags", "hex", "paleta_idx", "prompt_imagen"],
+          required: ["pieza", "concepto", "base", "style_tags", "hex", "paleta_idx", "prompt_imagen"],
         },
       },
       notas: { type: "string", description: "Qué información del cliente te faltó y qué asumiste. No inventes datos." },
@@ -201,34 +249,50 @@ export const BRANDING_TOOL = {
 } as const;
 
 /**
- * El pedido del turno. Define cuántos logos y, sobre todo, CÓMO se reparten cuando no está claro
- * si el cliente quiere marca personal o de equipo: en ese caso el equipo de Korex quiere ver las
- * dos opciones sobre la mesa para poder elegir borrando.
+ * Los formatos de corrida. `piezas` es cuántas se entregan; `imagenes` es cuántas se PAGAN — el
+ * lockup de cada sistema se arma pegando las otras dos, así que sale gratis y al instante.
  */
-export function construirPedido(nLogos: number, modoForzado: string): string {
+export const FORMATOS: Record<string, { piezas: number; imagenes: number; rotulo: string }> = {
+  sistema: { piezas: 3, imagenes: 2, rotulo: "Identidad completa (3 piezas)" },
+  dos_direcciones: { piezas: 6, imagenes: 4, rotulo: "Las dos direcciones (2 identidades)" },
+};
+
+/**
+ * El pedido del turno. Define qué piezas se piden y en qué orden — el orden importa de verdad,
+ * porque el lockup se arma con las dos piezas que se generaron antes.
+ */
+export function construirPedido(formato: string, modoForzado: string): string {
   const base = modoForzado
     ? `El equipo ya decidió que la marca va por ${modoForzado === "equipo" ? "el NOMBRE DEL EQUIPO" : "la MARCA PERSONAL del líder"}. Usá ese modo_marca y no lo discutas.`
     : `Decidí vos si la marca va por marca personal o por nombre de equipo, según la evidencia.`;
 
-  if (nLogos <= 1) {
+  if (formato === "dos_direcciones") {
     return `${base}
 
-Proponé UN solo concepto de logo: el que veas más sólido para este cliente. Y las 3 paletas.`;
+No está claro sobre qué nombre quiere construir, así que proponé DOS SISTEMAS COMPLETOS para que el
+equipo elija borrando, seis piezas en este orden exacto:
+
+  1. isotipo   ┐
+  2. logotipo  ├─ sistema A, base="persona" (el nombre del líder)
+  3. lockup    ┘  (la arma el sistema, no la generes)
+  4. isotipo   ┐
+  5. logotipo  ├─ sistema B, base="equipo" (el nombre del equipo)
+  6. lockup    ┘
+
+Dentro de cada sistema las tres piezas son LA MISMA marca: mismo símbolo, mismo color, mismas
+style_tags. Entre los dos sistemas, en cambio, que sean familias visuales bien distintas.
+Y las 3 paletas.`;
   }
 
   return `${base}
 
-Proponé ${nLogos} conceptos de logo, repartidos así:
+Proponé UN sistema de identidad completo: tres piezas de la misma marca, en este orden exacto:
 
-- Si tenés CLARO sobre qué quiere construir la marca (porque lo dijo o porque la evidencia es
-  contundente), los ${nLogos} conceptos van todos en esa dirección, explorando familias visuales
-  distintas entre sí.
+  1. pieza="isotipo"  → el símbolo solo, sin una letra
+  2. pieza="logotipo" → el nombre escrito, sin símbolo (acá puede ir el lema)
+  3. pieza="lockup"   → el símbolo de la pieza 1 + el nombre, en horizontal (esta la arma el
+                        sistema pegando las dos de arriba: no se genera, no hay que describirla)
 
-- Si NO está claro, mostrale las dos opciones al equipo para que elija:
-  · logo 1 → construido sobre la MARCA PERSONAL (el nombre del líder)
-  · logo 2 → construido sobre el NOMBRE DEL EQUIPO
-  · logo ${nLogos > 2 ? "3" : "3"} → una segunda versión, en otra familia visual, del que vos veas más sólido de los dos.
-  ${nLogos > 3 ? `· los conceptos restantes → seguí alternando, priorizando el más sólido.` : ""}
-
-Marcá en el campo "base" de cada logo sobre qué nombre está construido. Y las 3 paletas.`;
+Las tres comparten base, hex, paleta_idx y style_tags: es una sola marca vista de tres maneras.
+Y las 3 paletas.`;
 }

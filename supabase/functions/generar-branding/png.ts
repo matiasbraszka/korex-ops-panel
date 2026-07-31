@@ -33,6 +33,117 @@ export function encodePng(rgba: Uint8Array, w: number, h: number): Uint8Array {
 /** Luminancia percibida, 0..1. */
 const luma = (r: number, g: number, b: number) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 
+// ── Armado del lockup ────────────────────────────────────────────────────────
+//
+// El lockup (símbolo + nombre, uno al lado del otro) NO se le pide al generador de imágenes: se
+// arma acá, pegando el isotipo y el logotipo que ya se generaron.
+//
+// Se intentó por el otro camino y falló: pasándole el isotipo como imagen de entrada a
+// /images/edits y pidiéndole "conservá este símbolo exactamente", el modelo devolvió un monograma
+// "S" en lugar de la llave que se le había dado. A veces lo respeta y a veces no, y un lockup con
+// otro símbolo no es una variante: es otra marca. Pegándolo por código el símbolo y la tipografía
+// son literalmente los mismos que las otras dos piezas, siempre. Encima sale gratis y al instante.
+
+/** Caja que encierra todo lo que no es transparente. Devuelve null si la imagen está vacía. */
+function caja(img: Rgba): { x0: number; y0: number; x1: number; y1: number } | null {
+  let x0 = img.w, y0 = img.h, x1 = -1, y1 = -1;
+  for (let y = 0; y < img.h; y++) {
+    for (let x = 0; x < img.w; x++) {
+      if (img.rgba[(y * img.w + x) * 4 + 3] < 8) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+}
+
+/**
+ * Recorta a la caja y escala a una altura dada, promediando por área.
+ *
+ * Se promedia el RGB PONDERADO POR ALFA: si se promediara plano, los píxeles transparentes (que
+ * suelen venir en negro) ensuciarían el color de los bordes. Igual el color se sobrescribe después
+ * al pintar las tres versiones, pero un alfa bien remuestreado es lo que da el borde suave.
+ */
+function recortarYEscalar(img: Rgba, alturaDestino: number): Rgba | null {
+  const c = caja(img);
+  if (!c) return null;
+  const cw = c.x1 - c.x0 + 1, ch = c.y1 - c.y0 + 1;
+  const esc = alturaDestino / ch;
+  const nw = Math.max(1, Math.round(cw * esc)), nh = Math.max(1, Math.round(alturaDestino));
+  const out = new Uint8Array(nw * nh * 4);
+
+  for (let y = 0; y < nh; y++) {
+    const sy0 = c.y0 + (y * ch) / nh, sy1 = c.y0 + ((y + 1) * ch) / nh;
+    for (let x = 0; x < nw; x++) {
+      const sx0 = c.x0 + (x * cw) / nw, sx1 = c.x0 + ((x + 1) * cw) / nw;
+      let sr = 0, sg = 0, sb = 0, sa = 0, peso = 0;
+      for (let yy = Math.floor(sy0); yy < Math.min(img.h, Math.ceil(sy1)); yy++) {
+        for (let xx = Math.floor(sx0); xx < Math.min(img.w, Math.ceil(sx1)); xx++) {
+          const i = (yy * img.w + xx) * 4, a = img.rgba[i + 3];
+          sr += img.rgba[i] * a; sg += img.rgba[i + 1] * a; sb += img.rgba[i + 2] * a;
+          sa += a; peso++;
+        }
+      }
+      const o = (y * nw + x) * 4;
+      if (peso && sa) {
+        out[o] = Math.round(sr / sa); out[o + 1] = Math.round(sg / sa); out[o + 2] = Math.round(sb / sa);
+        out[o + 3] = Math.round(sa / peso);
+      }
+    }
+  }
+  return { w: nw, h: nh, rgba: out };
+}
+
+/** Pega `src` sobre `dst` en (dx,dy). Las piezas no se solapan, así que copiar alcanza. */
+function pegar(dst: Rgba, src: Rgba, dx: number, dy: number): void {
+  for (let y = 0; y < src.h; y++) {
+    const ty = dy + y;
+    if (ty < 0 || ty >= dst.h) continue;
+    for (let x = 0; x < src.w; x++) {
+      const tx = dx + x;
+      if (tx < 0 || tx >= dst.w) continue;
+      const s = (y * src.w + x) * 4, t = (ty * dst.w + tx) * 4;
+      if (src.rgba[s + 3] === 0) continue;
+      dst.rgba[t] = src.rgba[s]; dst.rgba[t + 1] = src.rgba[s + 1];
+      dst.rgba[t + 2] = src.rgba[s + 2]; dst.rgba[t + 3] = src.rgba[s + 3];
+    }
+  }
+}
+
+/**
+ * Arma el lockup horizontal: símbolo a la izquierda, nombre a la derecha, centrados en el mismo
+ * eje óptico.
+ *
+ * Las proporciones son las de la práctica: el símbolo a la misma altura que el bloque de texto, y
+ * un aire entre los dos de un tercio de esa altura (menos que eso se lee como una sola pieza
+ * pegada; más, como dos cosas sueltas). Si el símbolo es ancho se lo achica para que no le gane al
+ * nombre — el nombre es lo que tiene que leerse primero.
+ */
+export function componerLockup(isotipo: Rgba, logotipo: Rgba): Rgba | null {
+  const ALTO = 380;
+  const texto = recortarYEscalar(logotipo, ALTO);
+  let simbolo = recortarYEscalar(isotipo, ALTO);
+  if (!texto || !simbolo) return null;
+
+  const anchoMax = texto.w * 0.85;
+  if (simbolo.w > anchoMax) {
+    const reescalado = recortarYEscalar(simbolo, Math.round(simbolo.h * (anchoMax / simbolo.w)));
+    if (reescalado) simbolo = reescalado;
+  }
+
+  const aire = Math.round(ALTO * 0.33);
+  const margen = Math.round(ALTO * 0.18);
+  const w = margen * 2 + simbolo.w + aire + texto.w;
+  const h = margen * 2 + Math.max(simbolo.h, texto.h);
+  const out: Rgba = { w, h, rgba: new Uint8Array(w * h * 4) };
+
+  pegar(out, simbolo, margen, Math.round((h - simbolo.h) / 2));
+  pegar(out, texto, margen + simbolo.w + aire, Math.round((h - texto.h) / 2));
+  return out;
+}
+
 /**
  * Mata el polvillo casi invisible (alfa < 8). Sin esto, la versión BLANCA sobre un fondo oscuro
  * muestra una caja gris fantasma alrededor del logo.
