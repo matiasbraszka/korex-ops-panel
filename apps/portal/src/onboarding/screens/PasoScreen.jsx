@@ -145,7 +145,7 @@ export default function PasoScreen() {
                   background: 'rgba(72,120,255,.18)', border: '1px solid rgba(123,154,255,.3)',
                   borderRadius: 999, padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
                   color: '#9DB4FF',
-                }}>Podés contestarlo hablando</div>
+                }}>Puedes contestarlo hablando</div>
               )}
             </div>
 
@@ -209,20 +209,20 @@ export default function PasoScreen() {
     if (falta.largo) {
       const cuantos = minLargo(falta) - String(respuestas[falta.qkey]?.valor || '').trim().length;
       pista = `Necesitamos un poco más de detalle: faltan ${cuantos} caracteres. `
-            + 'Contestalo hablando y lo resolvés en 30 segundos.';
+            + 'Contéstalo hablando y lo resuelves en 30 segundos.';
     } else if (falta.tipo === 'opciones' || falta.tipo === 'chips_multi') {
-      pista = 'Elegí una opción para seguir. Si no lo sabés, marcá la de «no lo sé»: nos sirve igual.';
+      pista = 'Elige una opción para seguir. Si no lo sabes, marca la de «no lo sé»: nos sirve igual.';
     } else if (falta.tipo === 'archivos') {
-      pista = 'Podés seguir y subirlo después: te lo volvemos a pedir al final.';
+      pista = 'Puedes seguir y subirlo después: te lo volvemos a pedir al final.';
     } else if (falta.tipo === 'agenda') {
-      pista = 'Elegí una fecha, o marcá que ya lo agendaste por otro lado.';
+      pista = 'Elige una fecha, o marca que ya lo agendaste por otro lado.';
     } else {
-      pista = 'Completá lo que falta para seguir. Si no lo sabés con certeza, decinos lo que sepas.';
+      pista = 'Completa lo que falta para seguir. Si no lo sabes con certeza, dinos lo que sepas.';
     }
   }
   if (esControl && faltanObl > 0) {
     pista = `Te ${faltanObl === 1 ? 'falta 1 respuesta obligatoria' : `faltan ${faltanObl} respuestas obligatorias`} para finalizar. `
-          + 'Tocá «Completar» en la sección que las tenga en rojo.';
+          + 'Toca «Completar» en la sección que las tenga en rojo.';
   }
 
   const etiquetaPie = idx === lista.length - 1

@@ -123,7 +123,7 @@ function Ejemplo({ q }) {
             whiteSpace: 'pre-line',
           }}>{q.ejemplo}</div>
           <div style={{ fontSize: 11.5, color: T.faint, marginTop: 9, lineHeight: 1.5 }}>
-            Este es el nivel de detalle que nos sirve. No copies el ejemplo: contá tu caso así.
+            Este es el nivel de detalle que nos sirve. No copies el ejemplo: cuenta tu caso así.
           </div>
         </div>
       )}
@@ -176,7 +176,7 @@ function Abierta({ q, valor, onChange, onVoz, onAudioPendiente, clientHint }) {
         <textarea
           id={q.qkey} ref={ref} value={valor || ''}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={q.placeholder || 'Escribí acá tu respuesta…'}
+          placeholder={q.placeholder || 'Escribe aquí tu respuesta…'}
           onFocus={(e) => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
           style={{
             ...textarea,

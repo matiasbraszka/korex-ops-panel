@@ -51,7 +51,7 @@ export default function BarraDemo() {
 
       <span style={{ flex: 1, minWidth: 180 }}>
         {on
-          ? 'Tocá lo que quieras: no se reserva nada, no se manda ningún WhatsApp y no se guarda en el cliente.'
+          ? 'Toca lo que quieras: no se reserva nada, no se envía ningún WhatsApp y no se guarda en el cliente.'
           : 'CUIDADO: reservar agenda de verdad, terminar escribe el cerebro y avisa por Slack.'}
       </span>
 
@@ -88,7 +88,7 @@ export default function BarraDemo() {
           <div>
             <div style={titulo}>Cómo se prende y se apaga</div>
             <div style={cuerpo}>
-              Con los botones de acá, o agregando <code>?demo=1</code> /
+              Con los botones de aquí, o agregando <code>?demo=1</code> /
               <code> ?demo=0</code> a la URL. Queda guardado en este navegador.
               En producción este cartel no existe.
             </div>

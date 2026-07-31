@@ -81,7 +81,7 @@ export default function CampoArchivos({ q, bloqueante }) {
           </svg>
         </div>
         <div style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: '-.01em' }}>
-          {q.archivoCta || 'Subí tus archivos'}
+          {q.archivoCta || 'Sube tus archivos'}
         </div>
         <div style={{ fontSize: 12.5, color: T.faint, lineHeight: 1.5, maxWidth: 340 }}>
           {q.archivoHint || ''}

@@ -38,9 +38,9 @@ export default function InicioScreen() {
   // El texto tiene que corresponderse con el número de la barra: decir "te
   // falta poco" con un 5% hace que el cliente deje de creerle a la pantalla.
   const intro = onbPendiente
-    ? (onb.pct >= 70 ? 'Te falta poco para que arranquemos. Seguí donde quedaste.'
-      : onb.pct > 0 ? 'Vas bien. Seguí donde quedaste, se guardó todo.'
-      : 'Antes de arrancar necesitamos que nos cuentes sobre tu negocio.')
+    ? (onb.pct >= 70 ? 'Te falta poco para que empecemos. Sigue donde quedaste.'
+      : onb.pct > 0 ? 'Vas bien. Sigue donde quedaste, se guardó todo.'
+      : 'Antes de empezar necesitamos que nos cuentes sobre tu negocio.')
     : total === 0
       ? 'Nos entregaste todo lo que necesitábamos. Ahora seguimos nosotros.'
       : `Necesitamos ${total === 1 ? '1 cosa tuya' : `${total} cosas tuyas`} para seguir avanzando. Empieza por la primera.`;
@@ -86,11 +86,11 @@ export default function InicioScreen() {
               </span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.16, color: T.ink }}>
-                  {onb.pct > 0 ? 'Seguí con tu onboarding' : 'Completá tu onboarding'}
+                  {onb.pct > 0 ? 'Sigue con tu onboarding' : 'Completa tu onboarding'}
                 </div>
                 <div style={{ fontSize: 15, lineHeight: 1.5, color: '#252B36', marginTop: 7 }}>
                   {onb.agendaEstado === 'pendiente'
-                    ? 'Primero reservá el día de tu sesión, y después contanos sobre tu negocio.'
+                    ? 'Primero reserva el día de tu sesión, y después cuéntanos sobre tu negocio.'
                     : 'Es de donde sacamos tu estrategia, tus anuncios y tu video de ventas.'}
                 </div>
               </div>

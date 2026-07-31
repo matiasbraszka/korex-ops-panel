@@ -95,7 +95,7 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
         onAudioPendiente?.(path, { ms: seg * 1000 });
         setFase('idle'); setSeg(0); setParcial('');
       } catch {
-        setErr('No pudimos guardar el audio. Probá de nuevo, o escribí la respuesta.');
+        setErr('No pudimos guardar el audio. Prueba de nuevo, o escribe la respuesta.');
         setFase('error');
       }
     }
@@ -155,7 +155,7 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
       setFase('error');
       setErr(e?.name === 'NotAllowedError'
         ? 'permiso'
-        : 'No pudimos usar el micrófono. Podés escribir la respuesta, también está bien.');
+        : 'No pudimos usar el micrófono. Puedes escribir la respuesta, también está bien.');
     }
   }, [limpiar, procesar]);
 
@@ -255,7 +255,7 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
 
         <div style={{ fontSize: 12.5, lineHeight: 1.5, color: T.faint, marginBottom: 18 }}>
           {seg >= AVISO_SEG
-            ? 'Se corta en un momento, andá cerrando.'
+            ? 'Se corta en un momento, ve cerrando.'
             : 'Habla tranquilo, como si te estuvieran entrevistando. Los «eh» y las repeticiones las limpiamos nosotros.'}
         </div>
 
@@ -289,8 +289,8 @@ export default function GrabadorVoz({ qkey, clientHint, onTexto, onAudioPendient
       }}>
         <div style={{ fontSize: 14, lineHeight: 1.55, color: T.ambarTinta }}>
           <strong>El navegador bloqueó el micrófono.</strong><br />
-          Tocá el candado en la barra de direcciones y permití el micrófono para
-          este sitio. O escribí la respuesta, también está bien.
+          Toca el candado en la barra de direcciones y permite el micrófono para
+          este sitio. O escribe la respuesta, también está bien.
         </div>
         <button type="button" onClick={arrancar} style={{
           ...barraMic, position: 'static', marginTop: 14,

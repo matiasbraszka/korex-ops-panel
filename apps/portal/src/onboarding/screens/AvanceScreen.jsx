@@ -32,8 +32,8 @@ export default function AvanceScreen() {
         }}>Tu avance</h1>
         <p style={{ fontSize: 15, lineHeight: 1.6, color: T.muted, margin: '0 0 26px 0' }}>
           {progreso.pct === 100
-            ? 'Está todo respondido. Podés finalizar el onboarding.'
-            : `Vas ${progreso.pct}% y todo quedó guardado. Entrá al paso que quieras.`}
+            ? 'Está todo respondido. Puedes finalizar el onboarding.'
+            : `Vas ${progreso.pct}% y todo quedó guardado. Entra al paso que quieras.`}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 26 }}>
