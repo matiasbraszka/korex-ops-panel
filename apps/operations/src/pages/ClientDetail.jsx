@@ -216,7 +216,7 @@ export default function ClientDetail({ client: c }) {
               })}
             </div>
 
-            {activeTab === 'trabajo' && <FunnelsView clientId={c.id} />}
+            {activeTab === 'trabajo' && <FunnelsView clientId={c.id} onEditarCliente={openEditModal} />}
 
             {activeTab === 'dme' && <DmeClientPanel clientId={c.id} clientName={c.name} />}
 

@@ -544,7 +544,7 @@ function EditorMessageModal({ initial, onClose }) {
 //    desplegable — al clickear se va a la pantalla del funnel.
 //  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
 //    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [] }) {
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [], onEditarCliente }) {
   const { currentUser } = useApp();
   const meId = currentUser?.id || null;
   const [note, setNote] = useState(null);
@@ -1025,7 +1025,12 @@ Quedo a la espera de tu respuesta`;
           {CLIENT_CATS.map(cat => (
             <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
               label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
-              reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
+              reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+              // Branding es la única con botón de generar: la IA arma logos y paletas y los deja
+              // acá mismo. onEditarCliente es lo que hace usable el error de datos faltantes —
+              // sin eso, "completá la tarjeta del cliente" obliga a salir y volver a navegar.
+              branding={cat.key === 'branding'}
+              onEditarCliente={cat.key === 'branding' ? onEditarCliente : undefined} />
           ))}
         </div>
         <div className="px-4 pb-3 -mt-1 text-[11px] text-[#AEB4BF] flex items-center gap-1.5">
@@ -1168,7 +1173,7 @@ Quedo a la espera de tu respuesta`;
 // Tampoco existe mas el boton "Borrar estrategia": era un gatillo de ON DELETE CASCADE
 // que se llevaba puestos los funnels con sus avatares y guiones adentro, y encima
 // drive-sync recreaba la carpeta vacia en el sync de las 06:00.
-export default function FunnelsView({ clientId }) {
+export default function FunnelsView({ clientId, onEditarCliente }) {
   const { clients, strategies, strategyPages, addStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage, updateClient } = useApp();
   const [accessOpen, setAccessOpen] = useState(false);   // panel de accesos del cliente
   const [portalOpen, setPortalOpen] = useState(false);   // portal del cliente (cuenta + credenciales)
@@ -1345,7 +1350,7 @@ export default function FunnelsView({ clientId }) {
     return (
       <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onBack={() => setPageFunnelId(null)} forcePage last siblings={myFunnels} />
+          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} onBack={() => setPageFunnelId(null)} forcePage last siblings={myFunnels} />
         </div>
       </div>
     );
@@ -1412,7 +1417,7 @@ export default function FunnelsView({ clientId }) {
                           </div>
                           {group.map((f, i) => {
                             const del = delOf(f);
-                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} siblings={myFunnels} />;
+                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} siblings={myFunnels} />;
                           })}
                         </div>
                       </div>

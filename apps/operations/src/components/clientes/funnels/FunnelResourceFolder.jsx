@@ -10,6 +10,7 @@ import * as tus from 'tus-js-client';
 import { supabase, sbFetch } from '@korex/db';
 import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil, ClipboardList, Check, Share2, Copy, X } from 'lucide-react';
 import ResourceLightbox from './ResourceLightbox';
+import BrandingGenerator from './BrandingGenerator';
 import { copyText } from '../recursosShared';
 import { publicOrigin } from '../../../utils/helpers';
 
@@ -38,6 +39,16 @@ async function subirABunny(file, title, onProgress) {
   return { videoId, embedUrl, thumbUrl: `https://${hostname}/${videoId}/thumbnail.jpg` };
 }
 
+// Fondo de la miniatura. Los logos generados vienen con transparencia real, así que el fondo no
+// es decoración: es lo que permite ver el archivo (una versión blanca sobre gris claro no se ve)
+// y verificar de un vistazo que el PNG es transparente y no tiene fondo blanco pintado.
+const TABLERO = 'repeating-conic-gradient(#EDEFF3 0% 25%, #FFFFFF 0% 50%) 0 0 / 14px 14px';
+function fondoMiniatura(r) {
+  if (r?.meta?.gen !== 'branding' || r?.meta?.kind !== 'logo') return { background: '#F4F5F7' };
+  if (r.meta.variant === 'blanco') return { background: '#1A1D26' };
+  return { background: TABLERO };
+}
+
 const VOOMLY_URL = 'https://app.voomly.com/';   // dashboard de Voombly (buscar el VSL y copiar su link)
 function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds, publicable = false, onVisibleCliente }) {
   const [failed, setFailed] = useState(false);
@@ -63,6 +74,16 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, sele
             <Pencil size={9} className="opacity-0 group-hover:opacity-100 text-[#C3C9D4] shrink-0 transition-opacity" />
           </button>
         )}
+        {/* Generado por IA. El ⚠ sale cuando el logo tiene más de un color: ahí las versiones
+            negro y blanco pueden perder detalle, y conviene mirarlas antes de aprobar. */}
+        {r.meta?.gen === 'branding' && (
+          <span title={r.meta.concepto || 'Generado con IA'} className="shrink-0 text-[8.5px] font-extrabold uppercase tracking-[0.03em] rounded px-1 py-0.5"
+            style={{ background: '#F3EFFF', color: '#7C3AED' }}>IA</span>
+        )}
+        {r.meta?.mono === false && (
+          <span title="Este logo tiene más de un color: las versiones negro y blanco pueden perder detalle. Miralas antes de aprobarlo."
+            className="shrink-0 text-[10px] leading-none cursor-help">⚠</span>
+        )}
         {/* Edición publicada al PORTAL del cliente ("Lo que te devolvemos"). */}
         {publicable && (
           <button onClick={() => onVisibleCliente?.(r)}
@@ -73,10 +94,21 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, sele
           </button>
         )}
       </div>
-      {/* Miniatura (clic = abrir/reproducir) */}
-      <button onClick={() => onOpen(r)} title={isVid ? `Reproducir: ${r.title}` : `Ver: ${r.title}`} className="relative w-full aspect-[4/3] bg-[#F4F5F7] flex items-center justify-center overflow-hidden cursor-pointer border-none p-0">
+      {/* Miniatura (clic = abrir/reproducir).
+          Los logos generados son PNG con fondo TRANSPARENTE, así que el fondo de la miniatura
+          importa: la versión blanca sobre el gris claro de siempre se ve como una tarjeta vacía
+          y el equipo cree que el archivo salió roto. Por eso va sobre oscuro. Y para las otras
+          versiones, un tablero de ajedrez suave, que es como se muestra la transparencia en
+          cualquier editor: de un vistazo se distingue "PNG transparente" de "PNG con fondo
+          blanco", que es justo lo que hay que poder verificar acá. */}
+      <button onClick={() => onOpen(r)} title={isVid ? `Reproducir: ${r.title}` : `Ver: ${r.title}`}
+        className="relative w-full aspect-[4/3] flex items-center justify-center overflow-hidden cursor-pointer border-none p-0"
+        style={fondoMiniatura(r)}>
         {isImg && r.public_url && !failed ? (
-          <img src={r.public_url} alt={r.title} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
+          // Un logo se muestra entero (contain): con cover se le recortan los bordes y no se
+          // puede juzgar la marca, que es justo para lo que se está mirando la miniatura.
+          <img src={r.public_url} alt={r.title} loading="lazy" onError={() => setFailed(true)}
+            className={`w-full h-full ${r.meta?.gen === 'branding' ? 'object-contain p-1.5' : 'object-cover'}`} />
         ) : isVid && r.provider === 'bunny' && r.storage_path && !failed ? (
           // Bunny genera la miniatura del video (puede tardar unos segundos tras subir).
           <img src={r.storage_path} alt={r.title} loading="lazy" onError={() => setFailed(true)} className="w-full h-full object-cover" />
@@ -139,7 +171,7 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, sele
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly, voomlyKind }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly, voomlyKind, branding = false, onEditarCliente }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -249,7 +281,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente,favorita&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente,favorita,meta&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
       // Orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10" quedan en secuencia
       // (localeCompare con numeric respeta los números dentro del texto).
@@ -309,15 +341,76 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  // Borra el recurso. Si es algo generado, se lleva TODO su grupo: un logo son 3 archivos (color,
+  // negro y blanco) y son la misma decisión — borrarlos de a uno serían 3 confirmaciones para
+  // descartar un solo logo, y con 3 logos + 3 paletas en la carpeta eso no lo hace nadie.
   const borrar = async (r) => {
-    if (!window.confirm(`¿Borrar "${r.title}"? No se puede deshacer.`)) return;
-    setItems((prev) => (prev || []).filter(x => x.id !== r.id));
-    if (r.provider === 'bunny') {
-      await supabase.functions.invoke('bunny-video', { body: { action: 'delete', videoId: r.bunny_id } }).catch(() => {});
-    } else {
-      await supabase.storage.from(BUCKET).remove([r.storage_path]).catch(() => {});
+    const gid = r.meta?.group_id;
+    const grupo = gid ? (items || []).filter(x => x.meta?.group_id === gid) : [r];
+    const que = r.meta?.kind === 'logo' ? `el logo "${r.meta.concepto || r.title}"` : `"${r.title}"`;
+    const msg = grupo.length > 1
+      ? `¿Borrar ${que} con sus ${grupo.length} versiones (color, negro y blanco)?\nNo se puede deshacer.`
+      : `¿Borrar "${r.title}"? No se puede deshacer.`;
+    if (!window.confirm(msg)) return;
+
+    const ids = grupo.map(x => x.id);
+    setItems((prev) => (prev || []).filter(x => !ids.includes(x.id)));
+
+    const paths = grupo.filter(x => x.provider !== 'bunny' && x.storage_path).map(x => x.storage_path);
+    if (paths.length) await supabase.storage.from(BUCKET).remove(paths).catch(() => {});
+    for (const x of grupo.filter(x => x.provider === 'bunny' && x.bunny_id)) {
+      await supabase.functions.invoke('bunny-video', { body: { action: 'delete', videoId: x.bunny_id } }).catch(() => {});
     }
-    await supabase.from('funnel_resources').delete().eq('id', r.id);
+    await supabase.from('funnel_resources').delete().in('id', ids);
+
+    if (bucketKey === 'branding' && clientScope) await revisarPaletaUnica();
+  };
+
+  // Cuando en Branding queda UNA sola paleta, esa es la elegida: se guarda en la ficha del
+  // cliente (clients.brand_colors), que es de donde la lee el portal. Si vuelve a haber 0 o 2+,
+  // ya no hay decisión tomada y se limpia lo que habíamos guardado nosotros.
+  //
+  // Se cuenta contra la base y no contra el estado local a propósito: una paleta se pudo mover a
+  // otra carpeta con "Mover a…", y eso el estado local no lo refleja.
+  const revisarPaletaUnica = async () => {
+    try {
+      const rows = await sbFetch(
+        `funnel_resources?select=id,meta&client_id=eq.${encodeURIComponent(clientId)}` +
+        `&strategy_id=is.null&bucket_key=eq.branding&meta->>kind=eq.palette`,
+      );
+      const paletas = Array.isArray(rows) ? rows : [];
+      const actual = (await sbFetch(`clients?id=eq.${encodeURIComponent(clientId)}&select=brand_colors`))?.[0]?.brand_colors || null;
+
+      if (paletas.length === 1) {
+        const m = paletas[0].meta || {};
+        const hex = m.colors || [];
+        if (!hex.length) return;
+        // Guarda: si los colores los declaró el cliente en el onboarding, no se pisan sin avisar.
+        if (actual?.hex?.length && actual?.source !== 'branding_generado') {
+          const ok = window.confirm(
+            `Este cliente ya tiene colores cargados del onboarding (${actual.hex.join(', ')}).\n\n` +
+            `¿Reemplazarlos por la paleta "${m.palette_name}"?`);
+          if (!ok) return;
+        }
+        // Se conservan `raw` y `hex` con la misma semántica de siempre para no romper a quien ya
+        // los lee (el portal); lo nuestro se agrega al lado. `source` es lo que después permite
+        // distinguir "lo dijo el cliente" de "lo generamos nosotros".
+        await supabase.from('clients').update({
+          brand_colors: {
+            raw: `${m.palette_name || 'Paleta'} — ${hex.join(', ')}`,
+            hex,
+            roles: m.roles || null,
+            palette_name: m.palette_name || null,
+            source: 'branding_generado',
+            resource_id: paletas[0].id,
+            run_id: m.run_id || null,
+            set_at: new Date().toISOString(),
+          },
+        }).eq('id', clientId);
+      } else if (actual?.source === 'branding_generado') {
+        await supabase.from('clients').update({ brand_colors: null }).eq('id', clientId);
+      }
+    } catch { /* que no rompa el borrado */ }
   };
 
   const renombrar = async (r, title) => {
@@ -530,9 +623,17 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
               )}
             </div>
           )}
+          {branding && (
+            <BrandingGenerator
+              clientId={clientId} color={color}
+              hayGenerados={(items || []).some(r => r.meta?.gen === 'branding')}
+              onDone={cargar}
+              onEditarCliente={onEditarCliente}
+            />
+          )}
           <input ref={fileRef} type="file" accept={accept} multiple className="hidden" onChange={e => subir(e.target.files)} />
           <button onClick={() => fileRef.current?.click()} disabled={!!busy}
-            className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-dashed text-[11.5px] font-semibold cursor-pointer disabled:opacity-60 bg-white"
+            className={`inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-dashed text-[11.5px] font-semibold cursor-pointer disabled:opacity-60 bg-white ${branding ? 'ml-2' : ''}`}
             style={{ borderColor: color + '66', color }}>
             <Plus size={13} />Subir archivo
           </button>
