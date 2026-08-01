@@ -8,9 +8,13 @@
 //   - Moneda         -> clients.meta_ads[].currency (meta_ad_insights no guarda moneda).
 //   - Cuentas fallidas -> api_usage.meta.errors de la ultima corrida.
 //
-// Cuentas: se convierte todo a USD con el tipo de cambio de la config y se suma el
-// impuesto. Una moneda sin tipo de cambio configurado NO se inventa: se reporta aparte.
+// Cuentas: TODAS las cargadas en la ficha del cliente (clients.meta_ads). Se convierte
+// todo a USD con el tipo de cambio de la config; el 7,625% es un recargo de Meta sobre las
+// cuentas en dolares y solo se aplica ahi (tax_applies_to='USD'). Una moneda sin tipo de
+// cambio configurado NO se inventa: se reporta aparte.
 // Una cuenta que Meta rechazo tampoco se da por $0: va en su propia seccion.
+// Lo que queda afuera (interna / la gestiona el cliente / ignore / exclude_accounts) se
+// lista al pie: nada se descarta en silencio.
 //
 // Modos (query params):
 //   ?dry=true  -> devuelve el mensaje en la respuesta, sin postear a Slack.
@@ -21,8 +25,8 @@
 //
 // Config editable en app_settings.informe_ads_config:
 //   { "enabled": true, "slack_channel": "#informe-diario-adds",
-//     "tax_pct": 7.625, "tax_applies_to": "all" | "USD",
-//     "fx": { "USD": 1, "EUR": 1.08 }, "cron_secret": "..." }
+//     "tax_pct": 7.625, "tax_applies_to": "USD" | "all",
+//     "fx": { "USD": 1, "EUR": 1.08, "MXN": 0.058, "ARS": 0.000909 }, "cron_secret": "..." }
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -87,23 +91,56 @@ const pctTxt = (n: number) => String(n.toFixed(1)).replace(".", ",") + "%";
 
 interface Row { name: string; usd: number; leads: number; impressions: number; clicks: number; visitas: number; }
 
-// Un bloque por cliente, con todas las métricas etiquetadas (se lee en el celular sin
-// depender del alineado monoespaciado). Números derivados de los totales del cliente:
-//   CTR = clicks/impresiones · CPM = gasto/impresiones·1000
-//   % carga = visitas/clicks (de los que clickearon, cuántos cargaron la landing)
-//   % registro = leads/visitas (de los que cargaron, cuántos se registraron)
-// Visitas/carga/registro caen a "—" hasta que la sincronización empiece a traer visitas.
-function bloqueCliente(r: Row): string {
-  const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
-  const cpm = r.impressions > 0 ? (r.usd / r.impressions) * 1000 : 0;
-  const carga = r.clicks > 0 && r.visitas > 0 ? (r.visitas / r.clicks) * 100 : null;
-  const registro = r.visitas > 0 ? (r.leads / r.visitas) * 100 : null;
-  const vis = r.visitas > 0 ? intMil(r.visitas) : "—";
-  const leadsTxt = r.leads > 0 ? intMil(r.leads) : "—";
-  const cplTxt = r.leads > 0 ? money(r.usd / r.leads) : "—";
-  const l2 = `Clicks ${intMil(r.clicks)} · Visitas ${vis} · Leads ${leadsTxt} · CPL ${cplTxt}`;
-  const l3 = `CTR ${pctTxt(ctr)} · CPM ${money(cpm)} · % carga ${carga === null ? "—" : pctTxt(carga)} · % registro ${registro === null ? "—" : pctTxt(registro)}`;
-  return `*${r.name}* — *${money(r.usd)}*\n${l2}\n${l3}`;
+// UNA sola tabla con todas las métricas. Va dentro de un bloque de código porque es lo
+// único que Slack alinea bien: en cualquier otro formato las columnas se descuadran.
+// Contra conocida: en el celular la tabla se scrollea de costado. En escritorio entra.
+//   CTR  = clicks / impresiones
+//   %CRG = visitas / clicks   (de los que clickearon, cuántos cargaron la landing)
+//   %REG = leads / visitas    (de los que cargaron, cuántos se registraron)
+// %REG > 100% es dato REAL, no un error: el evento de registro dispara en placements
+// donde la landing view no llega a contarse. No "corregirlo".
+const COLS = ["CLIENTE", "GASTO", "CLK", "VIS", "LEAD", "CPL", "CTR", "%CRG", "%REG"];
+const SEP_COL = 2; // espacios mínimos entre columnas
+
+// Métricas derivadas de los totales del cliente (no promedio de promedios).
+function carga(r: Row): number | null { return r.clicks > 0 && r.visitas > 0 ? (r.visitas / r.clicks) * 100 : null; }
+function cplDe(r: Row): number | null { return r.leads > 0 ? r.usd / r.leads : null; }
+
+function celdasDe(r: Row): string[] {
+  const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null;
+  const crg = carga(r);
+  const reg = r.visitas > 0 ? (r.leads / r.visitas) * 100 : null;
+  const cpl = cplDe(r);
+  return [
+    r.name.slice(0, 20),
+    money(r.usd),
+    intMil(r.clicks),
+    r.visitas > 0 ? intMil(r.visitas) : "—",
+    r.leads > 0 ? intMil(r.leads) : "—",
+    cpl === null ? "—" : money(cpl),
+    ctr === null ? "—" : pctTxt(ctr),
+    crg === null ? "—" : pctTxt(crg),
+    reg === null ? "—" : pctTxt(reg),
+  ];
+}
+
+function tablaAncha(lista: Row[]): string {
+  const total = lista.reduce((a, r) => ({
+    name: "TOTAL", usd: a.usd + r.usd, leads: a.leads + r.leads,
+    impressions: a.impressions + r.impressions, clicks: a.clicks + r.clicks, visitas: a.visitas + r.visitas,
+  }), { name: "TOTAL", usd: 0, leads: 0, impressions: 0, clicks: 0, visitas: 0 } as Row);
+
+  const filas = [COLS, ...lista.map(celdasDe), celdasDe(total)];
+  // El ancho de cada columna se mide en CADA corrida, sobre el contenido real. Con anchos
+  // fijos dos columnas terminan pegadas el día que aparece un "197,8%" o un total de
+  // cuatro cifras ("$323,681.013"), y la tabla deja de leerse. Así queda lo más angosta
+  // posible sin que dos valores se toquen nunca.
+  const anchos = COLS.map((_, i) => Math.max(...filas.map((f) => f[i].length)));
+  const linea = (f: string[]) =>
+    f.map((v, i) => (i === 0 ? v.padEnd(anchos[i]) : v.padStart(anchos[i] + SEP_COL))).join("").trimEnd();
+  const sep = "─".repeat(anchos.reduce((a, b) => a + b, 0) + (COLS.length - 1) * SEP_COL);
+
+  return "```" + [linea(COLS), sep, ...lista.map((r) => linea(celdasDe(r))), sep, linea(celdasDe(total))].join("\n") + "```";
 }
 
 Deno.serve(async (req) => {
@@ -117,7 +154,9 @@ Deno.serve(async (req) => {
   const enabled = cfg.enabled !== false;
   const channel = str(cfg.slack_channel) || "#informe-diario-adds";
   const taxPct = cfg.tax_pct === undefined ? 7.625 : num(cfg.tax_pct);
-  const taxAppliesTo = str(cfg.tax_applies_to) || "all";
+  // El recargo del 7,625% es de Meta sobre las cuentas en dólares. A una cuenta en EUR
+  // solo se le aplica la conversión a USD (×1,08), sin recargo.
+  const taxAppliesTo = str(cfg.tax_applies_to) || "USD";
   const fx = (cfg.fx as Record<string, number>) ?? { USD: 1, EUR: 1.08 };
   const cronSecret = str(cfg.cron_secret);
 
@@ -142,22 +181,33 @@ Deno.serve(async (req) => {
   const curByAcc = new Map<string, string>();
   const nameById = new Map<string, string>();
   const conCuenta: { id: string; name: string }[] = [];
+  const noIncluidas = new Set<string>();
   for (const c of clients ?? []) {
     const accs = Array.isArray(c.meta_ads) ? c.meta_ads : [];
-    // Solo se trackean las cuentas CURADAS en el DEL (sección de enlaces): las que tienen
-    // use_token=true. Matías 2026-07-30: "no tomes todas las cuentas de Meta, solo las del
-    // DEL de cada cliente". Un cliente sin ninguna cuenta marcada no aparece (hay que
-    // cargarla en su DEL). Igual se descartan interna / managed_by='cliente' / ignore / excluidas.
-    const real = accs.filter((a: Record<string, unknown>) =>
-      a.use_token === true &&
-      str(a.status) !== "interna" && str(a.managed_by) !== "cliente" && a.ignore !== true &&
-      !excludeAccounts.has(str(a.account_id).replace(/^act_/, "")));
+    // Entra TODA cuenta cargada en la ficha del cliente. Matías 2026-08-01: el informe
+    // tiene que mostrar toda la plata que se gasta, no la que alguien se acordó de tildar.
+    // (Hasta hoy filtraba por use_token=true y escondía el 71% del gasto: solo 7 de 27
+    // cuentas lo tenían marcado, así que Marta, Summit y Aldazabal no aparecían.)
+    //
+    // Quedan afuera tres casos, que además el meta-ads-sync tampoco consulta
+    // (meta-ads-sync/index.ts:253-259) — no habría datos aunque los pidiéramos. Se listan
+    // al pie del informe: si algo no se está midiendo tiene que verse, no desaparecer.
+    const real: Record<string, unknown>[] = [];
+    for (const a of accs as Record<string, unknown>[]) {
+      const motivo = str(a.status) === "interna" ? "interna"
+        : str(a.managed_by) === "cliente" ? "la gestiona el cliente"
+        : a.ignore === true ? "marcada para ignorar"
+        : excludeAccounts.has(str(a.account_id).replace(/^act_/, "")) ? "excluida a mano"
+        : "";
+      if (motivo) noIncluidas.add(`${str(c.name)} (${motivo})`);
+      else real.push(a);
+    }
     if (!real.length) continue;
     nameById.set(String(c.id), str(c.name));
     conCuenta.push({ id: String(c.id), name: str(c.name) });
     for (const a of real) {
-      const id = str((a as Record<string, unknown>).account_id).replace(/^act_/, "");
-      if (id) curByAcc.set(id, str((a as Record<string, unknown>).currency) || "USD");
+      const id = str(a.account_id).replace(/^act_/, "");
+      if (id) curByAcc.set(id, str(a.currency) || "USD");
     }
   }
 
@@ -177,6 +227,7 @@ Deno.serve(async (req) => {
   // Agregado por cliente, convertido a USD.
   const conGasto = new Map<string, Row>();
   const sinTipoCambio = new Map<string, Set<string>>(); // moneda -> clientes
+  const monedasUsadas = new Set<string>(); // para el subtítulo: solo lo que se usó hoy
   for (const r of rows ?? []) {
     const cid = str(r.client_id);
     const nombre = nameById.get(cid);
@@ -193,6 +244,7 @@ Deno.serve(async (req) => {
       set.add(nombre); sinTipoCambio.set(cur, set);
       continue;
     }
+    monedasUsadas.add(cur);
     const prev = conGasto.get(cid) ?? { name: nombre, usd: 0, leads: 0, impressions: 0, clicks: 0, visitas: 0 };
     prev.usd += spend * rate * (taxAppliesTo === "all" || cur === "USD" ? 1 + taxPct / 100 : 1);
     prev.leads += num(r.leads);
@@ -225,7 +277,10 @@ Deno.serve(async (req) => {
 
   // ── Mensaje visual (Block Kit): encabezado + tabla monoespaciada + pies compactos.
   const fechaLabel = snap ? isoLabel(isoPrevDay(snap)) : bueLabel(-1);
-  const sub = `USD +${String(taxPct).replace(".", ",")}% impuesto · ${Object.entries(fx).filter(([k]) => k !== "USD").map(([k, v]) => `${k}→USD ${String(v).replace(".", ",")}`).join(" · ")} · monto final único por cliente`;
+  // Solo se nombran las monedas que aparecieron hoy: listar las cuatro del config era ruido.
+  const otrasMonedas = [...monedasUsadas].filter((k) => k !== "USD").sort()
+    .map((k) => `${k}→USD ${String(fx[k]).replace(".", ",")} (sin impuesto)`);
+  const sub = [`USD +${String(taxPct).replace(".", ",")}% impuesto`, ...otrasMonedas, "monto final único por cliente"].join(" · ");
 
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: `📊 Meta Ads — ${fechaLabel}`, emoji: true } },
@@ -253,12 +308,12 @@ Deno.serve(async (req) => {
         + (totalVisitas > 0 ? `  ·  ${intMil(totalVisitas)} visitas` : "");
       blocks.push({ type: "section", text: { type: "mrkdwn", text: resumen } });
       partes.push(resumen, "");
-      // Un section por cliente (evita el límite de 3000 chars de un solo bloque de Slack).
-      for (const r of lista) {
-        const bloque = bloqueCliente(r);
-        blocks.push({ type: "section", text: { type: "mrkdwn", text: bloque } });
-        partes.push(bloque, "");
-      }
+      const tabla = tablaAncha(lista);
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: tabla } });
+      partes.push(tabla, "");
+      const leyenda = "CLK = clicks del anuncio · VIS = visitas a la landing · %CRG = visitas/clicks · %REG = leads/visitas";
+      blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: leyenda }] });
+      partes.push(leyenda);
       // Primer día tras el deploy: la sync todavía no trajo visitas. Se avisa una vez.
       if (totalVisitas === 0) {
         const nota = "_Las Visitas (y % carga / % registro) se empiezan a medir desde la próxima sincronización de la mañana._";
@@ -268,12 +323,41 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── Alertas accionables de RENDIMIENTO. Las de cuenta bloqueada / sin tarjeta / deuda
+  // NO van acá: ya las cubren ads-runway-alert y las notificaciones meta_account_error.
+  const CHRISTIAN = "<@U0AFZF3CK8X>";
+  const alertas: string[] = [];
+  const cplProm = totalLeads > 0 ? total / totalLeads : 0;
+  for (const r of lista) {
+    const cpl = cplDe(r);
+    if (cpl === null) {
+      alertas.push(`*${r.name}* gastó ${money(r.usd)} y no registró ni un lead — ${CHRISTIAN} revisar pixel/evento`);
+    } else if (cplProm > 0 && cpl > 2 * cplProm) {
+      alertas.push(`*${r.name}* CPL ${money(cpl)}, más del doble del promedio del día (${money(cplProm)}) — ${CHRISTIAN} revisar`);
+    }
+  }
+  // El % carga bajo suele afectar a varios el mismo día: va en una línea, no en cinco.
+  const cargaBaja = lista
+    .map((r) => ({ name: r.name, pct: carga(r) }))
+    .filter((x): x is { name: string; pct: number } => x.pct !== null && x.pct < 80)
+    .sort((a, b) => a.pct - b.pct);
+  if (cargaBaja.length) {
+    alertas.push(`% carga < 80% (clicks que no llegan a cargar la landing): ${cargaBaja.map((x) => `${x.name} ${pctTxt(x.pct)}`).join(" · ")} — ${CHRISTIAN} revisar landing`);
+  }
+  if (alertas.length) {
+    const texto = [":warning: *Atención:*", ...alertas.map((a) => `• ${a}`)].join("\n");
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: texto } });
+    partes.push("", texto);
+  }
+
   const pies: string[] = [];
   if (sinGasto.length) pies.push(`:black_circle: *Sin gasto ayer:* ${sinGasto.sort().join(" · ")}`);
   if (noMedible.size) pies.push(`:red_circle: *No se pudo medir* (Meta rechazó la consulta): ${[...noMedible].sort().join(" · ")}`);
   for (const [cur, set] of sinTipoCambio) {
     pies.push(`:warning: *En ${cur}, sin tipo de cambio configurado* (fuera del total): ${[...set].sort().join(" · ")}`);
   }
+  // Qué cuentas quedaron fuera del informe y por qué. Nada se descarta en silencio.
+  if (noIncluidas.size) pies.push(`_No incluidas: ${[...noIncluidas].sort().join(" · ")}_`);
   if (pies.length) {
     blocks.push({ type: "divider" });
     blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: pies.join("\n") }] });
