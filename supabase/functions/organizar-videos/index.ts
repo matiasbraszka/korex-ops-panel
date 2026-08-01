@@ -91,16 +91,36 @@ function familia(bucket: string): "ad" | "vsl" | null {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    const auth = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
-    if (!((DETECT_TOKEN && auth === DETECT_TOKEN) || (SERVICE_ROLE && auth === SERVICE_ROLE))) return json({ ok: false, error: "no autorizado" }, 401);
-
-    const body = await req.json().catch(() => ({}));
-    const CID = String(body.client_id || "");
-    const dry = body.dry_run !== false;
-    const LIMIT = Math.max(1, Math.min(50, Number(body.limit) || 10));
-    if (!CID) return json({ ok: false, error: "falta client_id" }, 400);
-
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
+    const body = await req.json().catch(() => ({}));
+    // Modo cron (auto): titula solo, SIN visión (confía en la carpeta ya elegida) y
+    // SALTEA los ya titulados. El uso manual del panel queda igual.
+    const auto = body.auto === true;
+
+    // Auth: token del panel/interno, o x-cron-secret (para el cron automático).
+    const authTok = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
+    const gotCron = req.headers.get("x-cron-secret") || "";
+    let cronOk = false;
+    if (gotCron) {
+      const { data: mc } = await sb.from("motor_config").select("value").eq("key", "cron_secret").maybeSingle();
+      const secret = mc?.value == null ? "" : String(mc.value).replace(/^"|"$/g, "");
+      cronOk = !!secret && gotCron === secret;
+    }
+    if (!(cronOk || (DETECT_TOKEN && authTok === DETECT_TOKEN) || (SERVICE_ROLE && authTok === SERVICE_ROLE))) return json({ ok: false, error: "no autorizado" }, 401);
+
+    const dry = auto ? false : body.dry_run !== false;
+    const LIMIT = Math.max(1, Math.min(50, Number(body.limit) || 10));
+
+    // Cliente objetivo. En auto, si no viene, se toma el próximo con videos transcritos y sin titular.
+    let CID = String(body.client_id || "");
+    if (!CID && auto) {
+      const { data: pend } = await sb.from("funnel_resources")
+        .select("client_id").eq("provider", "bunny").eq("kind", "video")
+        .eq("transcript_status", "ok").is("titulado_at", null).limit(1);
+      CID = pend && pend.length ? String((pend[0] as { client_id: string }).client_id) : "";
+      if (!CID) return json({ ok: true, done: 0, msg: "no hay videos pendientes de titular" });
+    }
+    if (!CID) return json({ ok: false, error: "falta client_id" }, 400);
 
     // Avatares del cliente: palabras del guion (para el avatar) + segmentos (para el título).
     const { data: sps } = await sb.from("strategy_pages").select("strategy_id,avatars").eq("client_id", CID);
@@ -137,10 +157,20 @@ Deno.serve(async (req) => {
     let q = sb.from("funnel_resources")
       .select("id,bunny_id,strategy_id,avatar_id,bucket_key,transcript,title")
       .eq("client_id", CID).eq("provider", "bunny").eq("kind", "video");
+    if (auto) q = q.eq("transcript_status", "ok").is("titulado_at", null); // solo transcritos y sin titular
     if (!dry) q = q.limit(LIMIT);
     const { data: vids } = await q;
 
     const adCounter: Record<string, number> = {}; // AD n por avatar (ediciones)
+    if (auto) {
+      // Continúa la numeración "· AD n" desde lo que ya existe (no reinicia en 1).
+      const { data: prev } = await sb.from("funnel_resources").select("title")
+        .eq("client_id", CID).eq("provider", "bunny").eq("kind", "video").like("title", "% · AD %");
+      for (const p of (prev || [])) {
+        const m = String((p as { title: string }).title || "").match(/^(.*) · AD (\d+)$/);
+        if (m) { const k = m[1], nn = Number(m[2]); if (!adCounter[k] || nn > adCounter[k]) adCounter[k] = nn; }
+      }
+    }
     const plan: Record<string, unknown>[] = [];
     let avatarCambia = 0, bucketCambia = 0, subtituloCorridos = 0, paraRevisar = 0;
 
@@ -163,7 +193,7 @@ Deno.serve(async (req) => {
       // ── 3) Grabación vs edición (subtítulos, solo al aplicar y solo familias ad/vsl) ──
       const fam = familia(row.bucket_key || "");
       let subtitulado: boolean | null = null, nuevoBucket: string | null = null;
-      if (!dry && fam && row.bunny_id) {
+      if (!dry && !auto && fam && row.bunny_id) {
         try {
           const r = await fetch(`${SUPABASE_URL}/functions/v1/detectar-subtitulos`, {
             method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
@@ -184,8 +214,8 @@ Deno.serve(async (req) => {
       const segAv = elegido?.segs || cands.find((a) => a.avatar_id === avatarUsado)?.segs || [];
       const presentes = tw.size ? segAv.filter((s) => containment(s.words, tw) >= UMBRAL_SEG) : [];
       if (esEdicion && avatarName) {
-        adCounter[avatarUsado || avatarName] = (adCounter[avatarUsado || avatarName] || 0) + 1;
-        titulo = `${avatarName} · AD ${adCounter[avatarUsado || avatarName]}`;
+        adCounter[avatarName] = (adCounter[avatarName] || 0) + 1;
+        titulo = `${avatarName} · AD ${adCounter[avatarName]}`;
       } else if (presentes.length && avatarName) {
         titulo = tituloGrabacion(avatarName, presentes);
       }
@@ -193,7 +223,8 @@ Deno.serve(async (req) => {
 
       // ── Escribir (solo al aplicar) ──
       if (!dry) {
-        const upd: Record<string, unknown> = { title: titulo };
+        // titulado_at marca el video como ya procesado → el cron no lo vuelve a tocar.
+        const upd: Record<string, unknown> = { title: titulo, titulado_at: new Date().toISOString() };
         if (avatarChange) { upd.avatar_id = elegido!.avatar_id; upd.avatar_auto = true; }
         if (bucketChange) upd.bucket_key = nuevoBucket;
         await sb.from("funnel_resources").update(upd).eq("id", row.id);

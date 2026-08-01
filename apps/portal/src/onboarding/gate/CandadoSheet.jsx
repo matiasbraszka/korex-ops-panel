@@ -9,15 +9,15 @@ import { T, FUENTE, btn } from '../tokens';
 const QUE_HAY = {
   '/guiones': {
     titulo: 'Tus guiones',
-    texto: 'Acá van a estar los textos que escribimos para tus videos y tus anuncios, listos para que los grabes.',
+    texto: 'Aquí van a estar los textos que escribimos para tus videos y tus anuncios, listos para que los grabes.',
   },
   '/embudos': {
     titulo: 'Tus embudos',
-    texto: 'Acá vas a ver cómo avanza cada campaña: la estrategia, las páginas y cuándo sale al aire.',
+    texto: 'Aquí vas a ver cómo avanza cada campaña: la estrategia, las páginas y cuándo sale al aire.',
   },
   '/material': {
     titulo: 'Tu material',
-    texto: 'Acá vas a tener todo junto: lo que nos mandaste y lo que te devolvemos editado.',
+    texto: 'Aquí vas a tener todo junto: lo que nos enviaste y lo que te devolvemos editado.',
   },
 };
 

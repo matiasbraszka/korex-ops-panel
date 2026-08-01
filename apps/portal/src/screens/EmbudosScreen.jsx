@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display } from '../components/theme';
-import { IcoCheck, IcoWarn, IcoChevR, IcoExternal } from '../components/icons';
+import { IcoChevR, IcoExternal } from '../components/icons';
 
 // TUS EMBUDOS — exacta al prototipo: tarjetas numeradas con barra de color,
 // etiqueta de estado, avance grande, el aviso de qué falta y TU PÁGINA.
@@ -18,7 +18,7 @@ export default function EmbudosScreen() {
 
   if (loading) return <Loading label="Cargando tus embudos…" />;
   const embudos = Array.isArray(data) ? data : [];
-  const alAire = embudos.filter((e) => e.etiqueta === 'al_aire').length;
+  const alAire = embudos.filter((e) => ['al_aire', 'completo', 'activo'].includes(e.etiqueta)).length;
   const resto = embudos.length - alAire;
   const intro = embudos.length === 0 ? 'Cuando armemos tu primera campaña, aparece aquí.'
     : resto === 0 ? `Tienes ${embudos.length === 1 ? '1 campaña y ya está al aire' : `${embudos.length} campañas y ya están todas al aire`}.`
@@ -46,19 +46,22 @@ export default function EmbudosScreen() {
 
 function EmbudoCard({ e, n, nav }) {
   const alAire = e.etiqueta === 'al_aire';
+  const completo = e.etiqueta === 'completo';   // embudo viejo/entregado
+  const activo = e.etiqueta === 'activo';        // corriendo (puede NO estar al 100%)
+  const lleno = (e.progreso ?? 0) >= 100;
+  const verde = completo || alAire || (activo && lleno);   // 100% real → verde
   const pend = !!e.grabPendiente?.pend;
-  const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
-  const acentoSuave = alAire ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
-  const etiqueta = alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
-  const sub = alAire
-    ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
+  const acento = verde ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
+  const acentoSuave = verde ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
+  const etiqueta = completo ? 'Completo' : activo ? 'Activo' : alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
+  const sub = completo ? 'Embudo terminado'
+    : activo ? (e.startDate ? `Activo desde el ${fmt(e.startDate)}` : 'Activo')
+    : alAire ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
     : (e.startDate ? `Empezado el ${fmt(e.startDate)}` : 'En curso');
-  const aviso = alAire ? 'Está corriendo. No necesitas hacer nada.'
-    : pend ? 'Falta que grabes tus anuncios'
-    : e.razon;
-  const avisoDetalle = alAire ? null
-    : pend ? (e.grabPendiente?.dias > 0 ? `Te lo pedimos hace ${e.grabPendiente.dias} ${e.grabPendiente.dias === 1 ? 'día' : 'días'}.` : 'Te lo pedimos hoy.')
-    : e.etapa === 3 ? 'Te avisamos cuando estén editados.' : 'Estamos con esto. No necesitas hacer nada.';
+  // Todo lo que falta DE TU PARTE en este embudo (rojo, lista). Si no hay nada
+  // del cliente, mostramos el estado de nuestro lado (razón) en gris.
+  const pendientes = verde ? [] : (Array.isArray(e.pendientes) ? e.pendientes : []);
+  const falta = (verde || pendientes.length) ? null : (e.razon || null);
   const pagina = e.pagina;
 
   return (
@@ -74,46 +77,50 @@ function EmbudoCard({ e, n, nav }) {
           <div style={{ fontSize: 12.5, color: T.text3 }}>{sub}</div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textSoft }}>{e.razon}</span>
-            </div>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
             <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
           </div>
+          {/* Una sola barra: simple y clara. El detalle vive dentro del embudo. */}
           <div style={{ height: 9, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
             <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
           </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: alAire ? 'var(--mk-green-bg)' : pend ? 'var(--mk-red-bg)' : 'var(--mk-blue-bg2)' }}>
-          {alAire || !pend
-            ? <IcoCheck size={16} stroke={alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)'} sw={2.6} style={{ flex: 'none' }} />
-            : <IcoWarn size={16} stroke="var(--mk-red)" sw={2.3} style={{ flex: 'none' }} />}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.textSoft }}>{aviso}</span>
-            {avisoDetalle && <span style={{ fontSize: 12, color: T.text2 }}>{avisoDetalle}</span>}
-          </div>
-        </div>
-
-        {alAire ? (
-          <>
-            {pagina && (
-              <a href={/^https?:\/\//.test(pagina) ? pagina : 'https://' + pagina} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-bg-panel)', border: '1px solid var(--mk-border)', textDecoration: 'none' }}>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Tu página</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(pagina).replace(/^https?:\/\//, '')}</span>
-                </div>
-                <div style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <IcoExternal size={15} stroke="#fff" sw={2.4} />
-                </div>
-              </a>
-            )}
-            <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.text3 }}>
-              Ver el detalle
+          {pendientes.length > 0 && (
+            <div onClick={() => nav('/')} role="button" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, padding: '13px 14px', borderRadius: 14, background: 'var(--mk-red-bg)', border: '1px solid color-mix(in srgb, var(--mk-red) 22%, transparent)' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--mk-red)' }}>Falta de tu parte</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {pendientes.map((p, i) => (
+                  <span key={i} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--mk-red)', background: '#fff', border: '1px solid color-mix(in srgb, var(--mk-red) 24%, transparent)', padding: '5px 10px', borderRadius: 999 }}>{p.label}</span>
+                ))}
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: 'var(--mk-red)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Ir a completarlo <IcoChevR size={13} stroke="var(--mk-red)" sw={2.6} />
+              </span>
             </div>
-          </>
+          )}
+          {falta && (
+            <div style={{ fontSize: 13, lineHeight: 1.4, fontWeight: 600, color: T.text2 }}>{falta}</div>
+          )}
+        </div>
+
+        {/* La página se muestra siempre que exista (un embudo activo ya está online,
+            aunque todavía no esté al 100%). */}
+        {pagina && (
+          <a href={/^https?:\/\//.test(pagina) ? pagina : 'https://' + pagina} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-bg-panel)', border: '1px solid var(--mk-border)', textDecoration: 'none' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Tu página</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(pagina).replace(/^https?:\/\//, '')}</span>
+            </div>
+            <div style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IcoExternal size={15} stroke="#fff" sw={2.4} />
+            </div>
+          </a>
+        )}
+        {verde ? (
+          <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.text3 }}>
+            Ver el detalle
+          </div>
         ) : (
           <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', height: 46, borderRadius: 999, background: acento, color: '#fff', fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
             Abrir este embudo

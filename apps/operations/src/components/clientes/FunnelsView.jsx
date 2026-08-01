@@ -544,7 +544,7 @@ function EditorMessageModal({ initial, onClose }) {
 //    desplegable — al clickear se va a la pantalla del funnel.
 //  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
 //    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [], onEditarCliente }) {
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [], siblingDels = [], onEditarCliente }) {
   const { currentUser } = useApp();
   const meId = currentUser?.id || null;
   const [note, setNote] = useState(null);
@@ -1025,6 +1025,7 @@ Quedo a la espera de tu respuesta`;
           {CLIENT_CATS.map(cat => (
             <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
               label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
+              {...((cat.key === 'testimonios' || cat.key === 'testimonios_korex') ? { voomly: true, voomlyKind: 'Testimonio' } : {})}
               reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
               // Branding es la única con botón de generar: la IA arma logos y paletas y los deja
               // acá mismo. onEditarCliente es lo que hace usable el error de datos faltantes —
@@ -1158,7 +1159,7 @@ Quedo a la espera de tu respuesta`;
       {/* El lector va a pantalla completa: un DEL promedia 56.000 caracteres —
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
-        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId}
+        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId} siblingDels={siblingDels}
           estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} onVersionComplete={onVersionComplete} onVersionDelete={onVersionDelete} />
       </Modal>
     </div>
@@ -1242,6 +1243,25 @@ export default function FunnelsView({ clientId, onEditarCliente }) {
     // Funnels viejos (sin del_doc_id): comportamiento de antes, fallback por carpeta.
     return docs.find(d => d.strategy_id === f.strategy_id && d.doc_kind === 'del') || null;
   }, [docs]);
+
+  // Destinos para "mover una hoja a otro embudo": los OTROS funnels del cliente cuyo
+  // DEL existe de verdad (fila en client_brain_docs; un doc sintético no sirve como
+  // destino, el RPC lo rechaza). Se deduplica por doc_id (dos funnels que comparten
+  // carpeta comparten DEL) y se excluye el DEL del propio funnel.
+  const delTargetsFor = useCallback((f) => {
+    const selfDel = delOf(f);
+    const selfId = selfDel && docs.some(d => d.id === selfDel.id) ? selfDel.id : null;
+    const seen = new Set(), out = [];
+    for (const sf of myFunnels) {
+      if (sf.id === f.id) continue;
+      const d = delOf(sf);
+      const id = d && docs.some(x => x.id === d.id) ? d.id : null;
+      if (!id || id === selfId || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ docId: id, name: (sf.name || '').trim() || 'Funnel sin nombre' });
+    }
+    return out;
+  }, [myFunnels, delOf, docs]);
 
   // Navegacion por funnel: al abrir uno se entra a SU pantalla, no un desplegable.
   const [pageFunnelId, setPageFunnelId] = useState(null);
@@ -1350,7 +1370,7 @@ export default function FunnelsView({ clientId, onEditarCliente }) {
     return (
       <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} onBack={() => setPageFunnelId(null)} forcePage last siblings={myFunnels} />
+          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} onBack={() => setPageFunnelId(null)} forcePage last siblings={myFunnels} siblingDels={delTargetsFor(pageFunnel)} />
         </div>
       </div>
     );
@@ -1417,7 +1437,7 @@ export default function FunnelsView({ clientId, onEditarCliente }) {
                           </div>
                           {group.map((f, i) => {
                             const del = delOf(f);
-                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} siblings={myFunnels} />;
+                            return <FunnelRow key={f.id} f={f} stages={pipeline?.[f.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={deleteStrategyPage} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} last={i === group.length - 1} navigate onOpen={() => setPageFunnelId(f.id)} siblings={myFunnels} siblingDels={delTargetsFor(f)} />;
                           })}
                         </div>
                       </div>

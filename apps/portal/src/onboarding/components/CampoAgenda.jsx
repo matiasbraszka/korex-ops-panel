@@ -146,10 +146,10 @@ export function CampoSesion({ q, valor, onChange }) {
     } catch (e) {
       const cod = e?.message || '';
       setError(cod.includes('slot_taken')
-        ? 'Justo te ganaron ese horario. Elegí otro, por favor.'
+        ? 'Justo te ganaron ese horario. Elige otro, por favor.'
         : cod.includes('too_many')
-          ? 'Ya tenés varias reuniones reservadas con ese teléfono. Escribinos por WhatsApp y lo resolvemos.'
-          : 'No pudimos reservar. Probá de nuevo en un momento.');
+          ? 'Ya tienes varias reuniones reservadas con ese teléfono. Escríbenos por WhatsApp y lo resolvemos.'
+          : 'No pudimos reservar. Prueba de nuevo en un momento.');
     } finally { setReservando(false); }
   };
 
@@ -204,8 +204,8 @@ export function CampoSesion({ q, valor, onChange }) {
         }}>
           <div style={{ fontSize: 13.5, lineHeight: 1.6, color: T.ambarTinta }}>
             {problema === 'sin_config'
-              ? 'Todavía no hay horarios publicados. Seguí con el onboarding: te escribimos para coordinar la sesión.'
-              : 'No pudimos cargar la agenda ahora. Seguí con el onboarding y lo coordinamos por WhatsApp.'}
+              ? 'Todavía no hay horarios publicados. Sigue con el onboarding: te escribimos para coordinar la sesión.'
+              : 'No pudimos cargar la agenda ahora. Sigue con el onboarding y lo coordinamos por WhatsApp.'}
           </div>
           <button type="button" onClick={() => omitir(problema === 'sin_config' ? 'sin_disponibilidad' : 'calendario_caido')}
             style={{
@@ -216,17 +216,17 @@ export function CampoSesion({ q, valor, onChange }) {
         </div>
       ) : listaDias.length === 0 ? (
         <div style={{ fontSize: 13.5, color: T.muted }}>
-          No hay fechas disponibles en las próximas semanas. Seguí y lo coordinamos por WhatsApp.
+          No hay fechas disponibles en las próximas semanas. Sigue y lo coordinamos por WhatsApp.
         </div>
       ) : (
         <>
-          <div style={{ ...kicker(T.faint, 10.5), marginBottom: 10 }}>Elegí el día</div>
+          <div style={{ ...kicker(T.faint, 10.5), marginBottom: 10 }}>Elige el día</div>
           <TiraDias dias={listaDias} sel={sel.dia}
                     onElegir={(d) => setSel({ dia: d, hora: null })} />
 
           {sel.dia && (
             <>
-              <div style={{ ...kicker(T.faint, 10.5), marginBottom: 10 }}>Elegí el horario</div>
+              <div style={{ ...kicker(T.faint, 10.5), marginBottom: 10 }}>Elige el horario</div>
               <div style={{
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(96px,1fr))', gap: 9,
               }}>
@@ -304,7 +304,7 @@ export function CampoGrabacion({ q, valor, onChange }) {
 
   return (
     <div>
-      <div style={{ ...kicker(T.faint, 10.5), marginBottom: 10 }}>Elegí el día</div>
+      <div style={{ ...kicker(T.faint, 10.5), marginBottom: 10 }}>Elige el día</div>
       <TiraDias dias={dias} sel={actual} onElegir={elegir} />
       {valor && <Confirmado texto={`Fecha reservada: ${valor}`} />}
       <div style={{ fontSize: 12.5, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>

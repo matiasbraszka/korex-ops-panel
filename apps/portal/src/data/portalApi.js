@@ -44,6 +44,17 @@ export const api = {
 
   // Lista 'Tus guiones para grabar' (v14): una tarjeta por guion para_grabar.
   guiones:   () => rpc('portal_cliente_guiones',   {}, () => mock.MOCK_GUIONES_LISTA),
+  // Responsable + estado de flujo por guión (para pintar la inicial del responsable
+  // y el estado). Devuelve un mapa { sectionId: { flujo, responsable } }.
+  grabInfo:  (ids) => rpc('portal_cliente_grab_info', { p_section_ids: ids || [] }, () => ({})),
+  // Pasos del pipeline por funnel (Estrategia·Avatares·VSL·Anuncios·Landing) con
+  // su estado: { sid: [{key,label,done,estado}] }. Para la barra segmentada y el timeline.
+  embudoPasos: () => rpc('portal_cliente_embudo_pasos', {}, () => ({})),
+  // Fase de optimización por funnel lanzado: { sid: {entregados,target,extras,pendientes} }.
+  optimizacion: () => rpc('portal_cliente_optimizacion', {}, () => ({})),
+  // Piezas del embudo divididas en sub-fases (VSL/Anuncios/Landing) por responsabilidad:
+  // { sid: {lanzado, simples:[...], tracks:[{label, fases:[{label,estado}]}]} }.
+  embudoTracks: () => rpc('portal_cliente_embudo_tracks', {}, () => ({})),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   // Las guías que el equipo mantiene en el DEL (del_guias_globales). Reemplazan

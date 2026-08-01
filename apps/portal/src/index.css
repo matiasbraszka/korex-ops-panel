@@ -118,8 +118,9 @@ button { font-family: inherit; }
 .kx-rich h1 { font-size: 19px; }
 .kx-rich h2 { font-size: 17px; }
 .kx-rich h3 { font-size: 15.5px; }
-.kx-rich ul, .kx-rich ol { margin: 0 0 12px; padding-left: 22px; }
-.kx-rich li { margin: 4px 0; }
+.kx-rich ul { margin: 0 0 12px; padding-left: 22px; list-style: disc outside; }
+.kx-rich ol { margin: 0 0 12px; padding-left: 22px; list-style: decimal outside; }
+.kx-rich li { margin: 4px 0; display: list-item; }
 .kx-rich img { max-width: 100%; border-radius: 12px; }
 .kx-rich hr { border: none; border-top: 2px solid var(--mk-border); margin: 16px 0; }
 .kx-rich a { color: var(--mk-blue-ink); font-weight: 600; }

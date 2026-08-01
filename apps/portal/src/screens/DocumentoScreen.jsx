@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import PhoneFrame, { KxScreen } from '../components/PhoneFrame';
 import BottomNav from '../components/BottomNav';
+import Avatar from '../components/Avatar';
 import { Loading, DemoBanner, Spinner, useAsync } from '../components/ui';
 import { api, isDemo, uploadRecurso, simulateUpload } from '../data/portalApi';
 import { T } from '../components/theme';
@@ -21,6 +22,7 @@ const DOCS = {
   vsl: { eyebrow: 'VSL', accent: 'var(--mk-green)' },
   avatar: { eyebrow: 'AVATARES', accent: 'var(--mk-orange)' },
   estrategia: { eyebrow: 'ESTRATEGIA', accent: 'var(--mk-purple)' },
+  copy: { eyebrow: 'COPY DEL FUNNEL', accent: 'var(--mk-purple)' },
   guias: { eyebrow: 'GUÍAS', accent: 'var(--mk-cyan)' },
 };
 
@@ -92,8 +94,11 @@ let _uid = 0;
 export default function DocumentoScreen() {
   const { sid, tipo } = useParams();
   const nav = useNavigate();
-  const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { data, loading } = useAsync(() => api.documento(sid, tipo), [sid, tipo, reloadKey]);
   const { data: guias } = useAsync(() => cargarGuias(), []);
+  const [grabMap, setGrabMap] = useState({});
+  const [revAviso, setRevAviso] = useState(null);   // feedback tras aprobar/corregir
 
   const [drawer, setDrawer] = useState(false);
   const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
@@ -122,6 +127,19 @@ export default function DocumentoScreen() {
 
   useEffect(() => { setLocalComs([]); setSubidas([]); setRevisadas({}); setDrawer(false); scrollRef.current?.scrollTo?.(0, 0); }, [sid, tipo]);
 
+  // Responsable + estado de flujo de cada sección (inicial de quien graba).
+  useEffect(() => {
+    const ids = (Array.isArray(data?.secciones) ? data.secciones : []).map((s) => s.id);
+    if (ids.length) api.grabInfo(ids).then((m) => setGrabMap(m || {}));
+    else setGrabMap({});
+  }, [data]);
+
+  useEffect(() => {
+    if (!revAviso) return;
+    const t = setTimeout(() => setRevAviso(null), 4500);
+    return () => clearTimeout(t);
+  }, [revAviso]);
+
   // Si vienen desde "Tus guiones para grabar", saltamos al guion exacto.
   // Si vienen desde una CARPETA (Material / embudo), saltamos directo al cargador.
   const { state: navState } = useLocation();
@@ -144,11 +162,19 @@ export default function DocumentoScreen() {
   const doc = esGuias ? DOCS.guias : (DOCS[data.tipo] || DOCS.ads);
   const esVsl = !esGuias && data.tipo === 'vsl';
   const esGuion = !esGuias && (data.tipo === 'ads' || data.tipo === 'vsl');
+  // "Copy del funnel": las 4 páginas (Pre-landing…Thank you) para leer y aprobar.
+  const esCopy = !esGuias && data.tipo === 'copy';
   const secciones = Array.isArray(data.secciones) ? data.secciones : [];
   const comentarios = [...(Array.isArray(data.comentarios) ? data.comentarios : []), ...localComs];
   const topComs = comentarios.filter((c) => !c.parentId);
   const avatars = Array.isArray(data.avatars) ? data.avatars : [];
-  const avatarActivo = avatarSel || avatars[0]?.id || 'general';
+  // Si el equipo ya asignó un avatar a los guiones (y es uno solo), lo usamos y no
+  // le preguntamos al cliente al subir.
+  const avatarAsignado = (() => {
+    const set = new Set(secciones.map((s) => grabMap[s.id]?.avatar).filter(Boolean));
+    return set.size === 1 ? [...set][0] : null;
+  })();
+  const avatarActivo = avatarSel || avatarAsignado || avatars[0]?.id || 'general';
   const subidosOk = (data.subidas?.count || 0) + subidas.filter((u) => u.done).length;
   const listos = subidosOk > 0;
   const docs = data.docs || {};
@@ -163,19 +189,31 @@ export default function DocumentoScreen() {
   // "Revisar" es una acción, no una etiqueta: la pestaña se lee y se marca.
   // `hayGrabar` viene del backend: sin un solo guion marcado para grabar, el
   // cargador de videos al pie no tiene sentido y confunde.
+  // Baja directo al cargador de grabaciones (mismo target que el deep-link).
+  const irASubir = () => scrollRef.current?.querySelector?.('[data-uploader]')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   const esRevisar = (s) => s.accion === 'revisar';
   const estaRevisada = (s) => revisadas[s.id] ?? !!s.revisado;
   const hayGrabar = data.hayGrabar !== false;
+  // ¿El cliente dejó comentarios sin resolver en esta sección? Entonces "revisar"
+  // significa PEDIR CAMBIOS (vuelve a Korex); si no, APROBAR (pasa a grabación).
+  const comsClienteDe = (s) => comentarios.filter(
+    (c) => (c.sectionId || c.section_id) === s.id && (c.isCliente || c.isTeam === false) && !c.resolved);
+  const pideCambios = (s) => comsClienteDe(s).length > 0;
   const marcarRevisada = async (s) => {
-    const v = !estaRevisada(s);
-    setRevisadas((r) => ({ ...r, [s.id]: v }));
-    const res = await api.toggleRevisado(s.id, v);
-    if (!res?.ok) setRevisadas((r) => ({ ...r, [s.id]: !v }));   // no se guardó: se vuelve atrás
+    if (estaRevisada(s)) return;                 // acción de una sola vía
+    setRevisadas((r) => ({ ...r, [s.id]: true }));
+    const res = await api.toggleRevisado(s.id, true);
+    if (!res?.ok) { setRevisadas((r) => ({ ...r, [s.id]: false })); return; }
+    const enCopy = data?.tipo === 'copy';
+    setRevAviso(res.resultado === 'correccion'
+      ? { tipo: 'correccion', txt: 'Enviamos tus correcciones al equipo. Lo revisan y te lo vuelven a habilitar.' }
+      : { tipo: 'aprobado', txt: enCopy ? 'Aprobada. Dejamos esta página lista.' : 'Aprobado. Ya puedes grabarlo cuando quieras.' });
+    setReloadKey((k) => k + 1);                  // refrescar: aprobado pasa a grabar
   };
 
   // ── Comentar: selección de texto → botón flotante → caja abajo ──
   const onDocMouseUp = () => {
-    if (!esGuion && data.tipo !== 'avatar' && data.tipo !== 'estrategia') return;
+    if (!esGuion && data.tipo !== 'avatar' && data.tipo !== 'estrategia' && data.tipo !== 'copy') return;
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
     if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
@@ -335,14 +373,20 @@ export default function DocumentoScreen() {
           )}
 
           <div style={{ padding: '16px 16px 0' }}>
-            {/* Lectura cómoda: zoom (A− / A+) y Descargar PDF */}
-            <div data-no-pdf="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            {/* Lectura cómoda: zoom (A− / A+) · Subir grabación · Descargar PDF */}
+            <div data-no-pdf="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid var(--mk-border)', borderRadius: 10, background: 'var(--mk-bg-panel)', padding: 2 }}>
                 <div onClick={() => cambiarZoom(-10)} role="button" aria-label="Achicar la letra" style={{ cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: T.textSoft, background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>A−</div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.text2, minWidth: 38, textAlign: 'center' }}>{zoom}%</div>
                 <div onClick={() => cambiarZoom(10)} role="button" aria-label="Agrandar la letra" style={{ cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: T.textSoft, background: '#fff', boxShadow: '0 1px 2px rgba(10,22,40,.05)' }}>A+</div>
               </div>
-              <div onClick={descargarPdf} role="button" style={{ cursor: 'pointer', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 10, border: '1px solid var(--mk-border)', background: '#fff', fontSize: 12, fontWeight: 700, color: T.primaryInk }}>
+              {/* Solo cuando este guion se tiene que grabar: baja directo al cargador. */}
+              {esGuion && hayGrabar && (
+                <div onClick={irASubir} role="button" style={{ cursor: 'pointer', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 10, border: 'none', background: T.primary, fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                  <IcoArrowUp size={13} stroke="currentColor" sw={2.6} />Subir grabación
+                </div>
+              )}
+              <div onClick={descargarPdf} role="button" style={{ cursor: 'pointer', marginLeft: (esGuion && hayGrabar) ? 0 : 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 10, border: '1px solid var(--mk-border)', background: '#fff', fontSize: 12, fontWeight: 700, color: T.primaryInk }}>
                 <IcoArrowUp size={13} stroke="currentColor" sw={2.4} style={{ transform: 'rotate(180deg)' }} />Descargar PDF
               </div>
             </div>
@@ -380,6 +424,15 @@ export default function DocumentoScreen() {
               </div>
             )}
 
+            {/* Aviso tras aprobar / enviar correcciones */}
+            {revAviso && (
+              <div style={{ margin: '0 0 14px', padding: '12px 15px', borderRadius: 14, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45,
+                background: revAviso.tipo === 'aprobado' ? 'var(--mk-green-bg)' : '#FEF3C7',
+                color: revAviso.tipo === 'aprobado' ? 'var(--mk-green)' : '#B45309' }}>
+                {revAviso.tipo === 'aprobado' ? '✅ ' : '✏️ '}{revAviso.txt}
+              </div>
+            )}
+
             {/* Secciones */}
             <div style={{ fontSize: 15, lineHeight: 1.62, color: T.textSoft, display: esGuias ? 'none' : 'block' }}>
               {secciones.map((s, i) => {
@@ -395,7 +448,20 @@ export default function DocumentoScreen() {
                         <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>~{segundos(planoDe(s))} seg</span>
                       </div>
                     )}
-                    {(data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
+                    {/* COPY DEL FUNNEL: cada página con su cabecera numerada del embudo. */}
+                    {esCopy && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', margin: '2px 0 14px', padding: '12px 14px', background: 'var(--mk-purple-bg, #F5F3FF)', border: '1px solid var(--mk-purple-border, #E5DEFB)', borderRadius: 14 }}>
+                        <span style={{ width: 30, height: 30, flex: 'none', borderRadius: 10, background: 'var(--mk-purple)', color: '#fff', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.paginaNum || i + 1}</span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--mk-purple)' }}>Página {s.paginaNum || i + 1} de 4</div>
+                          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', color: T.ink, lineHeight: 1.15 }}>{s.pagina || s.titulo}</div>
+                        </div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, background: estaRevisada(s) ? 'var(--mk-green-bg)' : '#fff', color: estaRevisada(s) ? 'var(--mk-green)' : 'var(--mk-purple)', border: estaRevisada(s) ? 'none' : '1px solid var(--mk-purple-border, #E5DEFB)' }}>
+                          {estaRevisada(s) ? 'Revisada ✓' : 'Para revisar'}
+                        </span>
+                      </div>
+                    )}
+                    {!esCopy && (data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
                         <span style={{ fontSize: 16, fontWeight: 800, color: T.text, letterSpacing: '-0.01em' }}>
                           {s.titulo}{esGuion && s.grabado ? '  ✓' : ''}
@@ -403,6 +469,13 @@ export default function DocumentoScreen() {
                         {esRevisar(s) && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 999, background: estaRevisada(s) ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)', color: estaRevisada(s) ? 'var(--mk-green)' : 'var(--mk-blue-ops)' }}>
                             {estaRevisada(s) ? 'Revisado' : 'Para revisar'}
+                          </span>
+                        )}
+                        {grabMap[s.id]?.responsable && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                            <span style={{ fontSize: 11, color: T.text3 }}>Graba:</span>
+                            <Avatar resp={grabMap[s.id].responsable} size={22} />
+                            <span style={{ fontSize: 12, fontWeight: 700, color: T.textSoft }}>{grabMap[s.id].responsable.nombre}</span>
                           </span>
                         )}
                       </div>
@@ -413,17 +486,35 @@ export default function DocumentoScreen() {
                     {/* El botón de "Revisado", justo debajo del guion que se lee.
                         No reemplaza al comentario: si algo no encaja, el cliente
                         selecciona el texto y comenta; esto es el "está bien". */}
-                    {esRevisar(s) && (
-                      <div
-                        onClick={() => marcarRevisada(s)} role="button"
-                        style={{ cursor: 'pointer', marginTop: 14, height: 46, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
-                          background: estaRevisada(s) ? 'var(--mk-green-bg)' : T.primary,
-                          color: estaRevisada(s) ? 'var(--mk-green)' : '#fff',
-                          border: estaRevisada(s) ? '1px solid var(--mk-green)' : 'none' }}>
-                        <IcoCheck size={16} stroke="currentColor" sw={2.6} />
-                        {estaRevisada(s) ? 'Lo revisaste' : 'Marcar como revisado'}
-                      </div>
-                    )}
+                    {esRevisar(s) && (() => {
+                      const rev = estaRevisada(s);
+                      const cambios = pideCambios(s);
+                      const label = rev ? (esCopy ? 'La revisaste' : 'Lo revisaste')
+                        : cambios ? 'Enviar mis correcciones al equipo'
+                        : esCopy ? 'Aprobar esta página'
+                        : 'Aprobar y pasar a grabación';
+                      const bg = rev ? 'var(--mk-green-bg)' : cambios ? 'var(--mk-orange)' : T.primary;
+                      const col = rev ? 'var(--mk-green)' : '#fff';
+                      return (
+                        <>
+                          {!rev && (
+                            <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.5, color: T.text2 }}>
+                              {cambios
+                                ? 'Dejaste comentarios. Al enviar, el equipo los corrige y te lo vuelve a habilitar.'
+                                : esCopy
+                                ? 'Si el copy de esta página está bien, apruébalo. Si algo no encaja, selecciona el texto y deja un comentario primero.'
+                                : 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, selecciona el texto y deja un comentario primero.'}
+                            </div>
+                          )}
+                          <div onClick={() => marcarRevisada(s)} role="button"
+                            style={{ cursor: rev ? 'default' : 'pointer', marginTop: 10, height: 46, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+                              background: bg, color: col, border: rev ? '1px solid var(--mk-green)' : 'none' }}>
+                            <IcoCheck size={16} stroke="currentColor" sw={2.6} />
+                            {label}
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     <div style={{ height: 10 }} />
                   </div>
@@ -529,7 +620,7 @@ export default function DocumentoScreen() {
                       {!u.done && !u.error && <span style={{ fontSize: 12, color: T.text3 }}>{u.pct}%</span>}
                     </div>
                   ))}
-                  {!esVsl && avatars.length > 1 && !listos && (
+                  {!esVsl && avatars.length > 1 && !listos && !avatarAsignado && (
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3, marginBottom: 6 }}>¿De qué avatar son estos videos?</div>
                       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
@@ -595,6 +686,11 @@ export default function DocumentoScreen() {
                 {docs.estrategia?.existe !== false && (
                   <FilaDoc dot="var(--mk-purple)" nombre="Estrategia del embudo" activo={data.tipo === 'estrategia'}
                     onClick={() => { setDrawer(false); nav(`/documento/${sid}/estrategia`); }} />
+                )}
+                {docs.copy?.existe && (
+                  <FilaDoc dot="var(--mk-pink, #EC4899)" nombre="Copy del funnel" activo={data.tipo === 'copy'}
+                    derecha={docs.copy?.pendiente ? 'revisar' : null}
+                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/copy`); }} />
                 )}
               </div>
 
@@ -669,6 +765,9 @@ function FilaDoc({ dot, nombre, activo, derecha, onClick }) {
       <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
       {derecha === 'por_grabar' && (
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#fff', background: 'var(--mk-red)', padding: '4px 8px', borderRadius: 999 }}>POR GRABAR</span>
+      )}
+      {derecha === 'revisar' && (
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#fff', background: 'var(--mk-pink, #EC4899)', padding: '4px 8px', borderRadius: 999 }}>REVISAR</span>
       )}
       {derecha === 'check' && <IcoCheck size={16} stroke="var(--mk-green)" sw={2.6} />}
     </div>

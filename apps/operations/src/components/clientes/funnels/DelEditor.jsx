@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus, ChevronRight, ChevronLeft, FolderDown } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -101,6 +101,27 @@ function agruparImagenes(list) {
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
 }
+// Carpetas destino del importador de Drive (= bucket_key de funnel_resources).
+// scope 'funnel' → usa el strategy_id del funnel; 'cliente' → carpeta general (strategy_id null).
+const IMPORT_DESTINOS = [
+  { grupo: 'De este funnel', opciones: [
+    { key: 'ad_rec', label: 'Anuncios — grabados', scope: 'funnel' },
+    { key: 'ad_edit', label: 'Anuncios — editados', scope: 'funnel' },
+    { key: 'vsl_rec', label: 'VSL — grabados', scope: 'funnel' },
+    { key: 'vsl_edit', label: 'VSL — editados', scope: 'funnel' },
+    { key: 'testimonios', label: 'Testimonios', scope: 'funnel' },
+  ] },
+  { grupo: 'Generales del cliente', opciones: [
+    { key: 'branding', label: 'Branding', scope: 'cliente' },
+    { key: 'productos', label: 'Productos', scope: 'cliente' },
+    { key: 'estilo_vida', label: 'Estilo de vida', scope: 'cliente' },
+    { key: 'autoridad', label: 'Autoridad', scope: 'cliente' },
+    { key: 'empresa', label: 'Empresa', scope: 'cliente' },
+    { key: 'testimonios_korex', label: 'Testimonios Korex', scope: 'cliente' },
+  ] },
+];
+const IMPORT_OPT = (k) => IMPORT_DESTINOS.flatMap((g) => g.opciones).find((o) => o.key === k);
+
 function TbBtn({ Icon, label, title, onClick, disabled }) {
   return (
     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick} disabled={disabled} title={title}
@@ -110,7 +131,7 @@ function TbBtn({ Icon, label, title, onClick, disabled }) {
   );
 }
 function TbDiv() { return <div className="w-px h-5 bg-gray-200 mx-0.5" />; }
-function DelToolbar({ api }) {
+function DelToolbar({ api, onImportDrive }) {
   const [colorOpen, setColorOpen] = useState(false);
   const [hlOpen, setHlOpen] = useState(false);
   const [boxOpen, setBoxOpen] = useState(false);
@@ -214,6 +235,12 @@ function DelToolbar({ api }) {
       </div>
       <TbBtn Icon={ImageIcon} title="Insertar imagen" disabled={off} onClick={() => call('openImage')} />
       <TbBtn Icon={UserPlus} title="Insertar un avatar" disabled={off} onClick={() => call('openAvatar')} />
+      {onImportDrive && (
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onImportDrive} title="Importar archivos de una carpeta de Drive"
+          className="w-8 h-8 flex items-center justify-center rounded-md text-[#0891B2] hover:bg-[#ECFEFF] hover:text-[#0E7490] bg-transparent border-none cursor-pointer transition-colors">
+          <FolderDown size={15} />
+        </button>
+      )}
       <TbDiv />
       <TbBtn Icon={Link2} title="Insertar link" disabled={off} onClick={() => call('addLink')} />
       <TbBtn Icon={Eraser} title="Quitar formato" disabled={off} onClick={() => call('clearFormat')} />
@@ -253,7 +280,7 @@ function TituloEditable({ value, onSave }) {
   );
 }
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
+export default function DelEditor({ strategyId, docId, docUrl, clientId, siblingDels = [], estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
   const { currentUser, appSettings } = useApp();
   // Categorías/pestañas del DEL, configurables desde Ajustes (P9). Con fallback al default.
   const { SEC, secOf, KIND_ORDER, kindRank, STANDARD_KINDS, MOVE_KINDS, VERSIONABLE_KINDS, kindCat } =
@@ -265,6 +292,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const [saveState, setSaveState] = useState({}); // id -> 'saving'|'saved'|'error'
   const [editTitle, setEditTitle] = useState(null); // id de la seccion con el titulo en edicion
   const [moveMenu, setMoveMenu] = useState(null); // id de la seccion con el menu "mover a categoria" abierto
+  const [moveTo, setMoveTo] = useState(null); // submenu "mover a otro embudo": { docId, name } elegido (falta la categoria)
+  const [moveRect, setMoveRect] = useState(null); // posicion (fixed) del menu de mover, para que no lo recorte el contenedor
+  // Importador de archivos de Drive (one-shot): link + carpeta destino → funnel_resources.
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importBucket, setImportBucket] = useState('ad_rec');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importRes, setImportRes] = useState(null);
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
@@ -307,6 +342,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   // primer del_section (todas comparten doc_id por estrategia).
   const [resolvedDoc, setResolvedDoc] = useState(docId || null);
   const [resolvedClient, setResolvedClient] = useState(clientId || null);
+  // Personas a las que se puede asignar la grabación de un guión: el cliente +
+  // sus colaboradores "Encargado de grabarse".
+  const [asignables, setAsignables] = useState([{ id: '', nombre: 'Cliente' }]);
+  // Avatares del funnel (para asignar a qué avatar es cada guión de anuncios).
+  const [avatarsFunnel, setAvatarsFunnel] = useState([]);
 
   // Carga las secciones del DEL de ESTE funnel. Si el funnel tiene su DEL propio
   // (docId, viene de del_doc_id), filtra por doc_id → ve SOLO su documento, aunque
@@ -316,7 +356,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     try {
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion&${filtro}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at,grab_avatar_id,fase&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
         // servía una versión vieja cacheada del documento tras reorganizarlo.
         { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
@@ -333,6 +373,80 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
       setErr(String(e?.message || e));
     }
   }, [strategyId, docId]);
+
+  // Carga las personas asignables (cliente + Encargados de grabarse) del cliente.
+  useEffect(() => {
+    if (!resolvedClient) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const [cli, colabs] = await Promise.all([
+          sbFetch(`clients?select=name&id=eq.${resolvedClient}`),
+          sbFetch(`portal_collaborators?select=id,full_name,email,role&client_id=eq.${resolvedClient}&enabled=eq.true&role=ilike.Encargado*`),
+        ]);
+        if (!vivo) return;
+        const nombreCli = (Array.isArray(cli) && cli[0]?.name) || 'Cliente';
+        const lista = [{ id: '', nombre: `${nombreCli} (cliente)` }];
+        (Array.isArray(colabs) ? colabs : []).forEach((c) => lista.push({ id: c.id, nombre: c.full_name || c.email || 'Encargado' }));
+        setAsignables(lista);
+      } catch { /* deja solo Cliente */ }
+    })();
+    return () => { vivo = false; };
+  }, [resolvedClient]);
+
+  // Asigna el responsable de grabación de un guión (cliente o colaborador).
+  const asignarGrabador = async (s, colabId) => {
+    const val = colabId || null;
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_colab_id: val } : x));
+    const { data, error } = await supabase.rpc('del_section_asignar_grabador', { p_id: s.id, p_colab_id: val, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude asignar el responsable' + (data?.error ? ': ' + data.error : '')); await cargar(); }
+  };
+
+  // Avatares del funnel (para el selector de avatar por guión de anuncios).
+  useEffect(() => {
+    if (!strategyId) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const rows = await sbFetch(`strategy_pages?select=avatars&strategy_id=eq.${strategyId}`);
+        if (!vivo) return;
+        const vistos = new Map();
+        (Array.isArray(rows) ? rows : []).forEach((r) => {
+          (Array.isArray(r.avatars) ? r.avatars : []).forEach((a) => {
+            if (a?.id && !vistos.has(a.id)) vistos.set(a.id, a.name || a.id);
+          });
+        });
+        setAvatarsFunnel([...vistos].map(([id, name]) => ({ id, name })));
+      } catch { /* sin avatares */ }
+    })();
+    return () => { vivo = false; };
+  }, [strategyId]);
+
+  // Asigna a qué avatar es un guión de anuncios (para que el cliente no lo elija al subir).
+  const asignarAvatar = async (s, avatarId) => {
+    const val = avatarId || null;
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_avatar_id: val } : x));
+    const { data, error } = await supabase.rpc('del_section_set_grab_avatar', { p_id: s.id, p_avatar: val, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude asignar el avatar'); await cargar(); }
+  };
+
+  // Fase del guión: 'lanzamiento' (se requiere para llegar al 100% del embudo) u
+  // 'optimizacion' (adicional, después del 100%: no frena el avance).
+  const setFase = async (s, fase) => {
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, fase } : x));
+    const { data, error } = await supabase.rpc('del_section_set_fase', { p_id: s.id, p_fase: fase, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude cambiar la fase' + (data?.error ? ': ' + data.error : '')); await cargar(); }
+  };
+
+  // APROBAR grabado: el equipo confirma que el guión REALMENTE se grabó. Solo esto
+  // lo da por grabado (no que el cliente diga que grabó o suba videos). Mueve el
+  // flujo a 'grabado' y es lo que cuenta para el 100% del embudo.
+  const setGrabado = async (s, grabado) => {
+    const flujo = grabado ? 'grabado' : 'grabacion';
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_flujo: flujo, grab_flujo_at: new Date().toISOString() } : x));
+    const { data, error } = await supabase.rpc('del_grab_marcar_grabado', { p_section_id: s.id, p_grabado: grabado, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude marcar Grabado' + (data?.error ? ': ' + data.error : '')); await cargar(); }
+  };
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -525,8 +639,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const cargarSharePg = async () => {
     const ctx = sharePgCtx(); if (!ctx) return;
     try {
-      const rows = await sbFetch(`share_links?select=id,token,created_at&kind=eq.${ctx.kind}&doc_id=eq.${encodeURIComponent(String(ctx.id))}&revoked=eq.false&order=created_at.desc`);
-      setSharePgLinks(Array.isArray(rows) ? rows : []);
+      const { data, error } = await supabase.rpc('share_link_list', { p: { kind: ctx.kind, doc_id: String(ctx.id) } });
+      if (error) throw error;
+      setSharePgLinks(Array.isArray(data) ? data : []);
     } catch { setSharePgLinks([]); }
   };
   const abrirSharePg = () => { setSharePgOpen(o => !o); if (!sharePgOpen) { setSharePgLinks(null); cargarSharePg(); } };
@@ -534,15 +649,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     const ctx = sharePgCtx(); if (!ctx) return;
     setSharePgBusy(true);
     try {
-      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ kind: ctx.kind, doc_id: String(ctx.id), client_id: cid || null, label: ctx.label, created_by: by }) });
-      const created = Array.isArray(res) ? res[0] : res;
-      if (created?.token) { copyClip(urlShare(created.token)); setCopiedPgTok(created.token); setTimeout(() => setCopiedPgTok(null), 1800); }
+      const { data, error } = await supabase.rpc('share_link_create', { p: { kind: ctx.kind, doc_id: String(ctx.id), client_id: cid || null, label: ctx.label, created_by: by } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo crear el link');
+      if (data.token) { copyClip(urlShare(data.token)); setCopiedPgTok(data.token); setTimeout(() => setCopiedPgTok(null), 1800); }
       await cargarSharePg();
     } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
     setSharePgBusy(false);
   };
   const revocarSharePg = async (id) => {
-    try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ }
+    try { await supabase.rpc('share_link_revoke', { p_id: id }); } catch { /* */ }
     cargarSharePg();
   };
   // Botonera de las páginas sueltas (guías y docs del cliente): PDF + Compartir.
@@ -992,6 +1108,40 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     emitir('section', { row: { id, kind } });
   };
 
+  // Mover una sección a OTRO embudo (otro DEL) del MISMO cliente, cayendo en la
+  // categoría elegida. La sección desaparece de este DEL y aparece en el de destino.
+  const moverAEmbudo = async (id, targetDocId, kind) => {
+    setMoveMenu(null); setMoveTo(null);
+    const s = secs.find(x => x.id === id);
+    if (!s || !targetDocId || targetDocId === resolvedDoc) return;
+    setSecs((prev) => prev.filter(x => x.id !== id)); // se va de este DEL
+    const { error } = await supabase.rpc('del_section_move_doc', {
+      p_id: id, p_target_doc_id: targetDocId, p_kind: kind || s.kind, p_by: by,
+    });
+    if (error) { window.alert('No pude mover a otro embudo: ' + error.message); await cargar(); return; }
+    emitir('section-add', {}); // que el DEL destino (y este) se refresquen
+  };
+
+  // Importar una carpeta de Drive a los recursos (one-shot). Reusa la edge fn importar-drive.
+  const ejecutarImportDrive = async () => {
+    const url = (importUrl || '').trim();
+    if (!url) return;
+    const opt = IMPORT_OPT(importBucket);
+    const esFunnel = opt?.scope === 'funnel';
+    if (esFunnel && !strategyId) { setImportRes({ error: 'Este funnel todavía no tiene su carpeta de recursos. Elegí una carpeta general o creá el funnel primero.' }); return; }
+    setImportBusy(true); setImportRes(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('importar-drive', {
+        body: { folderUrl: url, clientId, strategyId: esFunnel ? strategyId : null, bucketKey: importBucket },
+      });
+      if (error) setImportRes({ error: 'No se pudo importar. Revisá el link y probá de nuevo.' });
+      else if (data && data.ok === false) setImportRes({ error: data.error || 'No se pudo importar.' });
+      else setImportRes(data || { ok: true });
+    } catch (e) {
+      setImportRes({ error: String(e?.message || e) });
+    } finally { setImportBusy(false); }
+  };
+
   // ── Versionado a nivel funnel ─────────────────────────────────────────────────
   // "+" abre un modal que pregunta qué cambia en la versión nueva: solo las páginas
   // (VSL/anuncios se comparten, sin carpetas nuevas) o un relanzamiento completo
@@ -1090,8 +1240,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
   const cargarDelShares = async () => {
     if (!resolvedDoc) { setShareDelLinks([]); return; }
     try {
-      const rows = await sbFetch(`share_links?select=id,token,section_ids,created_at&kind=eq.del&doc_id=eq.${encodeURIComponent(resolvedDoc)}&revoked=eq.false&order=created_at.desc`);
-      setShareDelLinks(Array.isArray(rows) ? rows : []);
+      const { data, error } = await supabase.rpc('share_link_list', { p: { kind: 'del', doc_id: resolvedDoc } });
+      if (error) throw error;
+      setShareDelLinks(Array.isArray(data) ? data : []);
     } catch { setShareDelLinks([]); }
   };
   const abrirShareDel = () => { const next = !shareDelOpen; setShareDelOpen(next); if (next) { setShareDelLinks(null); setShareSel(new Set()); cargarDelShares(); } };
@@ -1100,16 +1251,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
     if (!shareSel.size || !resolvedDoc) return;
     setShareDelBusy(true);
     try {
-      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ kind: 'del', doc_id: resolvedDoc, strategy_id: strategyId || null, client_id: cid || null, section_ids: Array.from(shareSel), label: 'Comentarios del DEL', created_by: by }) });
-      const created = Array.isArray(res) ? res[0] : res;
-      if (created?.token) { copyClip(urlShare(created.token)); setCopiedDelTok(created.token); setTimeout(() => setCopiedDelTok(null), 1800); }
+      const { data, error } = await supabase.rpc('share_link_create', { p: { kind: 'del', doc_id: resolvedDoc, strategy_id: strategyId || null, client_id: cid || null, section_ids: Array.from(shareSel), label: 'Comentarios del DEL', created_by: by } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo crear el link');
+      if (data.token) { copyClip(urlShare(data.token)); setCopiedDelTok(data.token); setTimeout(() => setCopiedDelTok(null), 1800); }
       setShareSel(new Set());
       await cargarDelShares();
     } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
     setShareDelBusy(false);
   };
   const copiarDelShare = (tok) => { copyClip(urlShare(tok)); setCopiedDelTok(tok); setTimeout(() => setCopiedDelTok(null), 1500); };
-  const revocarDelShare = async (id) => { try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ } cargarDelShares(); };
+  const revocarDelShare = async (id) => { try { await supabase.rpc('share_link_revoke', { p_id: id }); } catch { /* */ } cargarDelShares(); };
 
   const editando = modo === 'editar';
   // Arma una copia imprimible del documento (todas las pestañas visibles, con los
@@ -1478,7 +1630,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
             )}
           </div>
           {/* La barra única: una sola, fija arriba, opera sobre la sección enfocada. */}
-          {editando && <DelToolbar api={activeApi} />}
+          {editando && <DelToolbar api={activeApi} onImportDrive={() => { setImportRes(null); setImportOpen(true); }} />}
           </div>
 
 
@@ -1578,41 +1730,122 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
                     <option value="en_construccion">🔨 En construcción</option>
                     <option value="terminado">✔ Terminado</option>
                   </select>
-                  {/* Qué ve el cliente, dicho en palabras. Los dos selectores de
-                      arriba no lo dejan claro: "Revisar + Terminado" en un guion
-                      de VSL o anuncios NO lo manda a grabar, y eso se descubría
-                      recién al abrir el portal del cliente. */}
-                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (() => {
-                    const acc = s.accion_cliente || 'solo_equipo';
-                    const fin = (s.estado_seccion || 'en_construccion') === 'terminado';
-                    const v = !fin || acc === 'solo_equipo'
-                      ? { t: 'El cliente no la ve', c: '#7A8290' }
-                      : acc === 'grabarse'
-                        ? { t: 'Le aparece para grabar', c: '#15803D' }
-                        : { t: 'La ve, pero no para grabar', c: '#1D4FD8' };
-                    return (
-                      <span className="hidden lg:inline shrink-0 text-[10px] font-semibold whitespace-nowrap" style={{ color: v.c }}>
-                        {v.t}
-                      </span>
-                    );
-                  })()}
+                  {/* RESPONSABLE de grabación (cliente o Encargado) + estado del flujo */}
+                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (
+                    <>
+                      <select
+                        value={s.grab_colab_id || ''}
+                        onChange={(e) => asignarGrabador(s, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Quién graba este guión"
+                        className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-bold border cursor-pointer outline-none bg-white text-[#4B5563] border-[#E2E5EB] max-w-[130px] truncate">
+                        {asignables.map((a) => <option key={a.id || 'cliente'} value={a.id}>🎥 {a.nombre}</option>)}
+                      </select>
+                      {/* Avatar del guión (solo anuncios y si el funnel tiene más de uno):
+                          así el cliente no elige avatar al subir la grabación. */}
+                      {s.kind === 'anuncios' && avatarsFunnel.length > 1 && (
+                        <select
+                          value={s.grab_avatar_id || ''}
+                          onChange={(e) => asignarAvatar(s, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="A qué avatar es este guión"
+                          className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-bold border cursor-pointer outline-none bg-white text-[#4B5563] border-[#E2E5EB] max-w-[120px] truncate">
+                          <option value="">👤 Elegir avatar…</option>
+                          {avatarsFunnel.map((a) => <option key={a.id} value={a.id}>👤 {a.name}</option>)}
+                        </select>
+                      )}
+                      {/* FASE del guión: lanzamiento (cuenta para el 100%) u
+                          optimización (adicional, no frena el avance). */}
+                      <select
+                        value={s.fase || 'lanzamiento'}
+                        onChange={(e) => setFase(s, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Lanzamiento = se necesita para llegar al 100%. Optimización = adicional, después del 100% (no frena el avance)."
+                        className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none"
+                        style={(s.fase || 'lanzamiento') === 'optimizacion'
+                          ? { background: '#ECFEFF', color: '#0E7490', borderColor: '#A5F3FC' }
+                          : { background: '#FFF1E7', color: '#C2410C', borderColor: '#FED7AA' }}>
+                        <option value="lanzamiento">🚀 Lanzamiento</option>
+                        <option value="optimizacion">✨ Optimización</option>
+                      </select>
+                      {/* Estado del flujo (revisión/corrección/grabación). 'grabado'
+                          se muestra en el botón de aprobar de al lado. */}
+                      {s.grab_flujo && s.grab_flujo !== 'grabado' && (() => {
+                        const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
+                        const m = {
+                          revision:   { t: '👀 Revisión', c: '#1D4FD8', b: '#EEF3FF' },
+                          correccion: { t: '✏️ Corrección', c: '#B45309', b: '#FEF6E7' },
+                          grabacion:  { t: '🎬 Grabación', c: '#15803D', b: '#DCFCE7' },
+                        }[s.grab_flujo];
+                        if (!m) return null;
+                        return (
+                          <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: m.b, color: m.c }}
+                            title={dias != null ? `Hace ${dias} día(s) en este estado` : ''}>
+                            {m.t}{dias != null ? ` · ${dias}d` : ''}
+                          </span>
+                        );
+                      })()}
+                      {/* APROBAR GRABADO (solo el equipo). Es lo único que da el guión
+                          por grabado para el 100% — no que el cliente diga que grabó. */}
+                      {s.para_grabar && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setGrabado(s, s.grab_flujo !== 'grabado'); }}
+                          title={s.grab_flujo === 'grabado' ? 'Grabado y aprobado por el equipo (clic para desmarcar)' : 'Marcar como grabado: confirmás que el cliente realmente lo grabó'}
+                          className="shrink-0 inline-flex items-center gap-1 py-1 px-2 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none"
+                          style={s.grab_flujo === 'grabado'
+                            ? { background: '#16A34A', color: '#fff', borderColor: '#16A34A' }
+                            : { background: '#fff', color: '#15803D', borderColor: '#BBF7D0' }}>
+                          {s.grab_flujo === 'grabado' ? <><Check size={11} strokeWidth={3} /> Grabado</> : '✅ Marcar grabado'}
+                        </button>
+                      )}
+                    </>
+                  )}
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
                       <button onClick={() => agregar(s.ord, s.kind)} title="Agregar sección debajo (misma categoría)" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#7C3AED] border-none bg-transparent cursor-pointer"><Plus size={14} /></button>
                       <span className="relative inline-flex">
-                        <button onClick={() => setMoveMenu(moveMenu === s.id ? null : s.id)} title="Mover a otra categoría" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
+                        <button onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMoveTo(null); setMoveMenu(moveMenu === s.id ? null : s.id); setMoveRect({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }); }} title="Mover a otra categoría o a otro embudo" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#0891B2] border-none bg-transparent cursor-pointer"><FolderInput size={13} /></button>
                         {moveMenu === s.id && (<>
-                          <span className="fixed inset-0 z-30" onClick={() => setMoveMenu(null)} />
-                          <div className="absolute right-0 top-8 z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[172px] max-h-[320px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)' }}>
-                            <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a…</div>
-                            {MOVE_KINDS.map(k => { const mc = secOf(k); const cur = k === s.kind; return (
-                              <button key={k} onClick={() => moverACategoria(s.id, k)} disabled={cur}
-                                className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:bg-[#F4F6F9]"
-                                style={{ color: mc.c }}>
-                                <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}{cur && <Check size={12} className="ml-auto" />}
+                          <span className="fixed inset-0 z-30" onClick={() => { setMoveMenu(null); setMoveTo(null); }} />
+                          <div className="fixed z-40 bg-white border border-[#E2E5EB] rounded-lg p-1 min-w-[188px] overflow-y-auto" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.14)', top: moveRect?.top ?? 0, right: moveRect?.right ?? 8, maxHeight: `calc(100vh - ${(moveRect?.top ?? 0) + 12}px)` }}>
+                            {!moveTo ? (<>
+                              {/* Dentro de ESTE embudo: cambia la categoría */}
+                              <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a una categoría</div>
+                              {MOVE_KINDS.map(k => { const mc = secOf(k); const cur = k === s.kind; return (
+                                <button key={k} onClick={() => moverACategoria(s.id, k)} disabled={cur}
+                                  className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default hover:bg-[#F4F6F9]"
+                                  style={{ color: mc.c }}>
+                                  <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}{cur && <Check size={12} className="ml-auto" />}
+                                </button>
+                              ); })}
+                              {/* A OTRO embudo del mismo cliente */}
+                              {siblingDels.length > 0 && (<>
+                                <div className="h-px bg-[#EDF0F5] my-1" />
+                                <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-1">Mover a otro embudo</div>
+                                {siblingDels.map(d => (
+                                  <button key={d.docId} onClick={() => setMoveTo(d)}
+                                    className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer text-[#3F4653] hover:bg-[#F4F6F9]">
+                                    <FolderInput size={12} className="shrink-0 text-[#9098A4]" />
+                                    <span className="truncate">{d.name}</span>
+                                    <ChevronRight size={13} className="ml-auto shrink-0 text-[#C3C9D4]" />
+                                  </button>
+                                ))}
+                              </>)}
+                            </>) : (<>
+                              {/* Elegir la categoría de destino en el embudo elegido */}
+                              <button onClick={() => setMoveTo(null)} className="flex items-center gap-1.5 w-full py-1.5 px-2 rounded-md text-left text-[11px] font-bold border-none bg-transparent cursor-pointer text-[#6B7280] hover:bg-[#F4F6F9]">
+                                <ChevronLeft size={13} className="shrink-0" />Volver
                               </button>
-                            ); })}
+                              <div className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#C3C9D4] px-2 pt-1 pb-0.5">En «{moveTo.name}», categoría:</div>
+                              {MOVE_KINDS.map(k => { const mc = secOf(k); return (
+                                <button key={k} onClick={() => moverAEmbudo(s.id, moveTo.docId, k)}
+                                  className="flex items-center gap-2 w-full py-1.5 px-2 rounded-md text-left text-[12px] font-semibold border-none bg-transparent cursor-pointer hover:bg-[#F4F6F9]"
+                                  style={{ color: mc.c }}>
+                                  <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: mc.c }} />{mc.label}
+                                </button>
+                              ); })}
+                            </>)}
                           </div>
                         </>)}
                       </span>
@@ -1981,6 +2214,77 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, estrate
               <button onClick={() => setNewDocOpen(false)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
               <button onClick={crearDocNuevo} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer">Crear</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Importador de archivos de Drive: pegás el link de una carpeta pública y elegís
+          la carpeta destino; sube todo a Recursos (videos → Bunny, imágenes → almacenamiento),
+          saltea duplicados y se transcribe/ordena solo con el flujo de siempre. */}
+      {importOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !importBusy) setImportOpen(false); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[460px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <FolderDown size={17} className="text-[#0891B2]" />
+              <div className="text-[15px] font-bold text-[#1A1D26] flex-1">Importar archivos de Drive</div>
+              {!importBusy && <button onClick={() => setImportOpen(false)} className="w-7 h-7 inline-flex items-center justify-center rounded-lg text-[#9098A4] hover:bg-[#F4F5F7] border-none bg-transparent cursor-pointer"><X size={15} /></button>}
+            </div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3.5 leading-snug">Pegá el link de una carpeta de Drive y elegí dónde guardarla. Los videos se suben y se transcriben solos; los duplicados se saltean.</div>
+
+            {!importRes?.ok ? (<>
+              <label className="block text-[12px] font-semibold text-[#6B7280] mb-1">Link de la carpeta de Drive</label>
+              <input type="url" value={importUrl} autoFocus disabled={importBusy}
+                onChange={e => { setImportUrl(e.target.value); if (importRes?.error) setImportRes(null); }}
+                placeholder="https://drive.google.com/drive/folders/…"
+                className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#0891B2] disabled:opacity-60" />
+
+              <label className="block text-[12px] font-semibold text-[#6B7280] mt-3 mb-1">Carpeta destino</label>
+              <select value={importBucket} disabled={importBusy} onChange={e => setImportBucket(e.target.value)}
+                className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#0891B2] bg-white disabled:opacity-60">
+                {IMPORT_DESTINOS.map(g => (
+                  <optgroup key={g.grupo} label={g.grupo}>
+                    {g.opciones.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+
+              {importRes?.error && <div className="text-[11.5px] text-[#DC2626] mt-2.5 leading-snug">{importRes.error}</div>}
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button disabled={importBusy} onClick={() => setImportOpen(false)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer disabled:opacity-50">Cancelar</button>
+                <button disabled={importBusy || !importUrl.trim()} onClick={ejecutarImportDrive} className="py-2 px-4 rounded-lg border-none bg-[#0891B2] text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5">
+                  {importBusy ? <><Loader2 size={13} className="animate-spin" />Importando…</> : 'Importar'}
+                </button>
+              </div>
+              {importBusy && <div className="text-[11px] text-[#9098A4] mt-2 text-center">Puede tardar un rato si hay muchos videos. No cierres esta ventana.</div>}
+            </>) : (<>
+              {/* Resultado */}
+              <div className="rounded-xl border border-[#D9F2E5] bg-[#F0FBF5] p-3.5 mb-1">
+                <div className="text-[13px] font-bold text-[#15803D] mb-1.5">Importación lista ✓</div>
+                <div className="text-[12.5px] text-[#3F4653] leading-relaxed">
+                  <b>{importRes.importados || 0}</b> recurso{(importRes.importados === 1) ? '' : 's'} importado{(importRes.importados === 1) ? '' : 's'}
+                  {` (${importRes.videos || 0} video${importRes.videos === 1 ? '' : 's'}, ${importRes.imagenes || 0} imagen${importRes.imagenes === 1 ? '' : 'es'}${importRes.otros ? `, ${importRes.otros} otros` : ''}).`}
+                  {importRes.duplicados > 0 && <><br /><b>{importRes.duplicados}</b> saltado{importRes.duplicados === 1 ? '' : 's'} por estar repetido{importRes.duplicados === 1 ? '' : 's'}.</>}
+                  {importRes.restantes > 0 && <><br />Quedan <b>{importRes.restantes}</b> archivo{importRes.restantes === 1 ? '' : 's'} sin procesar: volvé a importar la misma carpeta para seguir.</>}
+                  {importRes.bunny === 'daily_cap' && <><br /><span className="text-[#B45309]">Se alcanzó el tope diario de gasto de video: los videos que faltan no se subieron.</span></>}
+                  {importRes.bunny === 'frozen' && <><br /><span className="text-[#B45309]">La subida de video está en pausa por el candado de gasto: los videos no se subieron.</span></>}
+                  {importRes.videos_saltados_por_tope > 0 && <><br /><b>{importRes.videos_saltados_por_tope}</b> video{importRes.videos_saltados_por_tope === 1 ? '' : 's'} no se subieron por el tope de gasto.</>}
+                </div>
+                {importRes.errores?.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-[12px] font-bold text-[#B91C1C] mb-0.5">{importRes.errores.length} con error:</div>
+                    <ul className="ml-3.5 list-disc text-[11.5px] text-[#B91C1C] leading-snug">
+                      {importRes.errores.map((m, i) => <li key={i} className="break-words">{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <div className="text-[11px] text-[#6B7280] mt-2">Los videos se transcriben solos en los próximos minutos y el título/avatar se afinan con el flujo de siempre.</div>
+              </div>
+              <div className="flex justify-end gap-2 mt-3">
+                <button onClick={() => { setImportRes(null); setImportUrl(''); }} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Importar otra</button>
+                <button onClick={() => { setImportOpen(false); setImportUrl(''); setImportRes(null); }} className="py-2 px-4 rounded-lg border-none bg-[#0891B2] text-white text-[13px] font-semibold cursor-pointer">Listo</button>
+              </div>
+            </>)}
           </div>
         </div>
       )}

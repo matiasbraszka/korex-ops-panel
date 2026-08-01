@@ -4,6 +4,7 @@ import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { destinoTarea } from '../data/taskNav';
 import { PerfilSheet, AccesosSheet, GuiasSheet, ReglasServicioSheet } from '../components/Layout';
+import { ChipEmbudo } from './MaterialScreen';
 import { T, display, microLabel } from '../components/theme';
 import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile, IcoDoc } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
@@ -25,6 +26,7 @@ export default function InicioScreen() {
   const clientName = me?.name || me?.clientName || d.name;
   const iniciales = String(clientName || '·').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const nombre = String(d.name || '').split(' ')[0];
+  const serv = d.servicio || {};
   const pendientes = Array.isArray(d.pendientes) ? d.pendientes : [];
   const tareas = (Array.isArray(tareasData) ? tareasData : []).map((t) => ({ ...t, _tarea: true }));
   const completados = Array.isArray(d.completados) ? d.completados : [];
@@ -38,9 +40,9 @@ export default function InicioScreen() {
   // El texto tiene que corresponderse con el número de la barra: decir "te
   // falta poco" con un 5% hace que el cliente deje de creerle a la pantalla.
   const intro = onbPendiente
-    ? (onb.pct >= 70 ? 'Te falta poco para que arranquemos. Seguí donde quedaste.'
-      : onb.pct > 0 ? 'Vas bien. Seguí donde quedaste, se guardó todo.'
-      : 'Antes de arrancar necesitamos que nos cuentes sobre tu negocio.')
+    ? (onb.pct >= 70 ? 'Te falta poco para que empecemos. Sigue donde quedaste.'
+      : onb.pct > 0 ? 'Vas bien. Sigue donde quedaste, se guardó todo.'
+      : 'Antes de empezar necesitamos que nos cuentes sobre tu negocio.')
     : total === 0
       ? 'Nos entregaste todo lo que necesitábamos. Ahora seguimos nosotros.'
       : `Necesitamos ${total === 1 ? '1 cosa tuya' : `${total} cosas tuyas`} para seguir avanzando. Empieza por la primera.`;
@@ -64,6 +66,28 @@ export default function InicioScreen() {
         <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
 
+      {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte */}
+      {(serv.diasRestantes != null || (serv.diasAtraso ?? 0) > 0) && (
+        <div style={{ padding: '14px 22px 0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {serv.diasRestantes != null && (() => {
+            const dr = serv.diasRestantes;
+            const c = dr < 0 ? ['var(--mk-red-bg)', 'var(--mk-red)']
+              : dr <= 14 ? ['var(--mk-orange-bg)', 'var(--mk-orange)']
+              : ['var(--mk-green-bg)', 'var(--mk-green)'];
+            const txt = dr < 0 ? `Servicio vencido hace ${-dr} ${-dr === 1 ? 'día' : 'días'}`
+              : dr === 0 ? 'Tu servicio vence hoy'
+              : `Te quedan ${dr} ${dr === 1 ? 'día' : 'días'} de servicio`;
+            return <span style={servPill(c[0], c[1])}><IcoClock size={13} stroke="currentColor" sw={2.3} />{txt}</span>;
+          })()}
+          {(serv.diasAtraso ?? 0) > 0 && (
+            <span style={servPill('var(--mk-red-bg)', 'var(--mk-red)')} title="Días que el trabajo está frenado esperando tus grabaciones, revisiones o material">
+              <IcoInfo size={13} stroke="currentColor" sw={2.3} />
+              Frenado por tu parte: {serv.diasAtraso} {serv.diasAtraso === 1 ? 'día' : 'días'}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Onboarding sin terminar: reemplaza TODO el bloque de pendientes por una
           sola tarjeta grande. Mientras no lo complete, no hay nada más que
           hacer en la plataforma — mostrarle pendientes de material mezclados
@@ -86,11 +110,11 @@ export default function InicioScreen() {
               </span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 21, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.16, color: T.ink }}>
-                  {onb.pct > 0 ? 'Seguí con tu onboarding' : 'Completá tu onboarding'}
+                  {onb.pct > 0 ? 'Sigue con tu onboarding' : 'Completa tu onboarding'}
                 </div>
                 <div style={{ fontSize: 15, lineHeight: 1.5, color: '#252B36', marginTop: 7 }}>
                   {onb.agendaEstado === 'pendiente'
-                    ? 'Primero reservá el día de tu sesión, y después contanos sobre tu negocio.'
+                    ? 'Primero reserva el día de tu sesión, y después cuéntanos sobre tu negocio.'
                     : 'Es de donde sacamos tu estrategia, tus anuncios y tu video de ventas.'}
                 </div>
               </div>
@@ -206,11 +230,12 @@ export default function InicioScreen() {
 // ── Tarjeta UNIFORME de pendiente (misma estructura para todas, mobile-first):
 //    chip de estado + "hace N días" · icono + título + descripción · botón azul
 //    grande IGUAL en todas. El cliente nunca tiene que adivinar dónde tocar.
-function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption }) {
+function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption, funnelChip }) {
   return (
     <div onClick={onClick} style={{ cursor: 'pointer', background: '#fff', borderRadius: 22, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: 'var(--shadow-md)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
         {chip}
+        {funnelChip}
         {dias != null && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: T.text3 }}>
             <IcoClock size={12} stroke="currentColor" sw={2.3} />
@@ -234,6 +259,7 @@ function CardBase({ onClick, tile, chip, dias, titulo, descripcion, cta, caption
   );
 }
 
+const servPill = (bg, fg) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 999, background: bg, color: fg });
 const tileStyle = (bg) => ({ width: 46, height: 46, flex: 'none', borderRadius: 15, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' });
 const chipEstado = (bg, ink, texto) => (
   <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, background: bg, color: ink }}>{texto}</span>
@@ -280,7 +306,9 @@ function PendienteCard({ p, nav }) {
     <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--mk-red)' }}>Nos está frenando</div>
   ) : null;
 
-  return <CardBase onClick={abrir} tile={tile} chip={chip} dias={p.dias} titulo={p.titulo} descripcion={p.descripcion} cta={cta} caption={caption} />;
+  // Meta es a nivel cuenta (no de un embudo): ahí no mostramos chip de embudo.
+  const funnelChip = esMeta ? null : <ChipEmbudo nombre={p.funnel} num={p.funnelNum} general={!p.funnel} />;
+  return <CardBase onClick={abrir} tile={tile} chip={chip} funnelChip={funnelChip} dias={p.dias} titulo={p.titulo} descripcion={p.descripcion} cta={cta} caption={caption} />;
 }
 
 // Tarea del sistema de operaciones asignada al cliente (misma tarjeta uniforme).

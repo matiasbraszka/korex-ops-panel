@@ -66,6 +66,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       slackChannel: c.slackChannel || '',
       service: c.service || (isCreate ? 'Funnel completo + Ads' : ''),
       startDate: c.startDate || (isCreate ? todayStr() : ''),
+      serviceEndsAt: c.serviceEndsAt || '',
       priority: c.priority || 5,
       status: c.status || 'active',
       billingAmount: c.billingAmount ?? '',
@@ -116,6 +117,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
         conector: form.conector.trim(),
         closer: form.closer.trim(),
         contractData: form.contractData.trim(),
+        serviceEndsAt: form.serviceEndsAt || null,
         notes: form.notes,
       });
       onClose();
@@ -137,6 +139,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
       slackChannel: form.slackChannel.trim(),
       service: form.service.trim(),
       startDate: form.startDate || null,
+      serviceEndsAt: form.serviceEndsAt || null,
       priority: Number(form.priority) || 5,
       status: form.status,
       billingAmount: form.billingAmount === '' ? null : Number(form.billingAmount),
@@ -233,6 +236,9 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
             </Field>
             <Field label="Fecha de ingreso" required>
               <input type="date" value={form.startDate || ''} onChange={e => set('startDate', e.target.value)} className={inputClass} />
+            </Field>
+            <Field label="Fin del servicio" hint="Cuándo vence el servicio. En su plataforma ve los días que le quedan.">
+              <input type="date" value={form.serviceEndsAt || ''} onChange={e => set('serviceEndsAt', e.target.value)} className={inputClass} />
             </Field>
             <Field label="Estado del proyecto">
               <select value={form.status} onChange={e => set('status', e.target.value)} className={inputClass}>

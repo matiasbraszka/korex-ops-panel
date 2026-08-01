@@ -4,7 +4,7 @@
 //
 // La celebración es INFORMACIÓN, no palmadita: en vez de "¡felicitaciones!",
 // una lista de lo que acaba de pasar sin que el cliente hiciera nada más, y el
-// cronograma de sus próximos 15 días. Un adulto que acaba de trabajar una hora
+// cronograma de las próximas semanas. Un adulto que acaba de trabajar una hora
 // y media quiere ver qué compró con ese esfuerzo.
 //
 // Si el cierre falla —la guarda anti-catástrofe frenó el documento, falta algo—
@@ -44,9 +44,9 @@ export default function ListoScreen() {
         if (!vivo) return;
         if (r?.ok) { await recargar(); }
         else if (r?.error === 'faltan') setFaltan(r.faltan || []);
-        else setError('No pudimos cerrar el onboarding. Escribinos y lo resolvemos en el momento.');
+        else setError('No pudimos cerrar el onboarding. Escríbenos y lo resolvemos en el momento.');
       } catch {
-        if (vivo) setError('No pudimos cerrar el onboarding. Probá de nuevo en un momento.');
+        if (vivo) setError('No pudimos cerrar el onboarding. Prueba de nuevo en un momento.');
       } finally {
         if (vivo) setCerrando(false);
       }
@@ -76,7 +76,7 @@ export default function ListoScreen() {
         }}>Nos falta poco</h1>
         <p style={{ fontSize: 15, lineHeight: 1.6, color: T.muted, margin: '0 0 22px 0' }}>
           Quedaron {faltan.length} {faltan.length === 1 ? 'respuesta' : 'respuestas'} sin completar.
-          Tocá cualquiera y te llevamos ahí.
+          Toca cualquiera y te llevamos ahí.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {faltan.map((f) => (
@@ -141,13 +141,13 @@ export default function ListoScreen() {
             fontFamily: FUENTE.display, fontSize: 'clamp(28px,6.5vw,44px)', fontWeight: 800,
             letterSpacing: '-.035em', lineHeight: 1.05, margin: '0 auto 14px auto', maxWidth: 560,
           }}>
-            Tu reloj de 15 días{' '}
+            Tu proyecto{' '}
             <em style={{ fontStyle: 'normal', color: T.azulMarca }}>empieza a correr</em>
           </h1>
           <p style={{
             fontSize: 16, lineHeight: 1.6, color: T.soft, margin: '0 auto', maxWidth: 470,
           }}>
-            Ya tenemos lo que necesitamos para arrancar. Mientras seguís con lo tuyo,
+            Ya tenemos lo que necesitamos para empezar. Mientras sigues con lo tuyo,
             esto ya se puso en marcha.
           </p>
         </div>
@@ -178,7 +178,7 @@ export default function ListoScreen() {
         </div>
 
         <div style={{ marginBottom: 30 }}>
-          <Roadmap variant="cierre" grabacion={grabacion} sesion={sesion} />
+          <Roadmap grabacion={grabacion} heading="Así avanza tu proyecto desde ahora" />
         </div>
 
         <div style={{ background: T.dark, borderRadius: 18, padding: 24, marginBottom: 26 }}>
@@ -191,8 +191,8 @@ export default function ListoScreen() {
           </div>
           <div style={{ fontSize: 13.5, lineHeight: 1.6, color: T.faint }}>
             {grabacion
-              ? `Tu grabación quedó firme para el ${grabacion}. Necesitás una hora y un lugar con buena luz — el resto lo hacemos nosotros.`
-              : 'Tu grabación quedó agendada. Necesitás una hora y un lugar con buena luz — el resto lo hacemos nosotros.'}
+              ? `Tu grabación quedó firme para el ${grabacion}. Necesitas una hora y un lugar con buena luz — el resto lo hacemos nosotros.`
+              : 'Tu grabación quedó agendada. Necesitas una hora y un lugar con buena luz — el resto lo hacemos nosotros.'}
           </div>
         </div>
 

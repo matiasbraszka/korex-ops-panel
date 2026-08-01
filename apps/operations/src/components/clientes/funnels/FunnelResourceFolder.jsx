@@ -213,44 +213,48 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     : { kind: 'folder', client_id: clientId, strategy_id: strategyId, avatar_id: avatarId || null, bucket_key: bucketKey, version });
   const cargarShares = async () => {
     try {
-      const rows = await sbFetch(`share_links?select=id,token,revoked,created_at,strategy_id,avatar_id&kind=eq.folder&client_id=eq.${encodeURIComponent(clientId)}&bucket_key=eq.${encodeURIComponent(bucketKey)}&revoked=eq.false&order=created_at.desc`);
-      const list = (Array.isArray(rows) ? rows : []).filter(r => (r.strategy_id || null) === (clientScope ? null : strategyId) && (r.avatar_id || null) === (clientScope ? null : (avatarId || null)));
+      const { data, error } = await supabase.rpc('share_link_list', { p: { kind: 'folder', client_id: clientId, bucket_key: bucketKey } });
+      if (error) throw error;
+      const rows = Array.isArray(data) ? data : [];
+      const list = rows.filter(r => (r.strategy_id || null) === (clientScope ? null : strategyId) && (r.avatar_id || null) === (clientScope ? null : (avatarId || null)));
       setShareLinks(list);
     } catch { setShareLinks([]); }
   };
   const abrirShare = () => {
-    setShareOpen(o => {
-      const next = !o;
-      if (next) {
-        const rect = shareBtnRef.current?.getBoundingClientRect();
-        if (rect) setSharePos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
-        setShareLinks(null); cargarShares();
+    const next = !shareOpen;
+    setShareOpen(next);
+    if (next) {
+      // position:fixed (no lo recorta ningún scroll) calculado desde el botón,
+      // dibujado inline (queda delante del modal). Se abre hacia arriba si abajo
+      // no entra, para no cortarse contra el borde de la pantalla.
+      const rect = shareBtnRef.current?.getBoundingClientRect();
+      if (rect) {
+        const haciaArriba = (window.innerHeight - rect.bottom) < 270;
+        setSharePos({
+          right: Math.max(8, window.innerWidth - rect.right),
+          ...(haciaArriba ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+        });
+      } else {
+        setSharePos({ top: 90, right: 16 });
       }
-      return next;
-    });
+      setShareLinks(null); cargarShares();
+    }
   };
-  // Si se hace scroll con el popover abierto, se cierra (asi no queda flotando en el aire).
-  useEffect(() => {
-    if (!shareOpen) return;
-    const cerrar = () => setShareOpen(false);
-    window.addEventListener('scroll', cerrar, true);
-    window.addEventListener('resize', cerrar);
-    return () => { window.removeEventListener('scroll', cerrar, true); window.removeEventListener('resize', cerrar); };
-  }, [shareOpen]);
   const urlDe = (tok) => `${publicOrigin()}/compartir/${tok}`;
   const crearShare = async () => {
     setShareBusy(true);
     try {
-      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ ...shareScope(), label, created_by: by || null }) });
-      const created = Array.isArray(res) ? res[0] : res;
-      if (created?.token) { copyText(urlDe(created.token)); setCopiedTok(created.token); setTimeout(() => setCopiedTok(null), 1800); }
+      const { data, error } = await supabase.rpc('share_link_create', { p: { ...shareScope(), label, created_by: by || null } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo crear el link');
+      if (data.token) { copyText(urlDe(data.token)); setCopiedTok(data.token); setTimeout(() => setCopiedTok(null), 1800); }
       await cargarShares();
     } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
     setShareBusy(false);
   };
   const copiarShare = (tok) => { copyText(urlDe(tok)); setCopiedTok(tok); setTimeout(() => setCopiedTok(null), 1500); };
   const revocarShare = async (id) => {
-    try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ }
+    try { await supabase.rpc('share_link_revoke', { p_id: id }); } catch { /* */ }
     cargarShares();
   };
 
@@ -496,13 +500,12 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             className="inline-flex items-center gap-1 py-1 px-2 rounded-md border text-[11px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
             <Share2 size={12} />Compartir
           </button>
-          {shareOpen && sharePos && createPortal(
-            <>
-              {/* fondo invisible: un click afuera cierra el popover */}
-              <div className="fixed inset-0 z-[65]" onClick={() => setShareOpen(false)} />
-              {/* popover en portal + position:fixed -> ningun contenedor con scroll lo recorta */}
-              <div className="fixed z-[70] w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
-                style={{ top: sharePos.top, right: sharePos.right, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+          {/* Popover INLINE (queda delante del modal) + position:fixed (no lo
+              recorta el scroll de Recursos). Antes: absolute → se cortaba; portal
+              → quedaba detrás del modal. */}
+          {shareOpen && sharePos && (
+            <div className="w-[300px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
+              style={{ position: 'fixed', zIndex: 80, ...sharePos, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Link para subir a “{label}”</span>
                 <button onClick={() => setShareOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
@@ -526,9 +529,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
                 className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border-none text-white text-[12px] font-semibold cursor-pointer disabled:opacity-60" style={{ background: '#2E69E0' }}>
                 {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}Crear link y copiar
               </button>
-              </div>
-            </>,
-            document.body
+            </div>
           )}
         </div>
         <button onClick={() => setOpen(o => !o)} className="border-none bg-transparent cursor-pointer p-0 shrink-0">
@@ -641,7 +642,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
       )}
       <ResourceLightbox r={preview} onClose={() => setPreview(null)} />
       {pickerFor && createPortal(
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(10,22,40,.45)' }} onClick={() => setPickerFor(null)}>
+        <div className="fixed inset-0 z-[240] flex items-center justify-center p-4" style={{ background: 'rgba(10,22,40,.45)' }} onClick={() => setPickerFor(null)}>
           <div className="w-full max-w-[560px] max-h-[82vh] flex flex-col rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 24px 60px rgba(10,22,40,.28)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#EEF0F3]">
               <div className="min-w-0">
