@@ -169,16 +169,29 @@ function customEvents(actions: any[] | undefined): { event: string; value: numbe
 // gana ese; si no, el de mayor volumen — que es al que la campaña está optimizada.
 // No depender del campo cargado a mano importa: Antonio lo tenía como "Leads (form)", que
 // no es un evento del píxel, y corre campañas de los dos tipos con eventos distintos.
-function pickWeb(conversions: any[] | undefined, actions: any[] | undefined, convEvent: string): { value: number; event: string } {
+// Eventos que NO son un registro: los que miden la VISITA a la prelanding / pre-registro,
+// o sea el paso ANTERIOR al alta. Matias 2026-08-01: "no uses visitas-prelanding".
+// Ajustable sin tocar codigo en meta_ads_sync_config.web_event_exclude (coincidencia por
+// substring, sin distinguir mayusculas).
+const WEB_EVENT_EXCLUDE = ["prelanding", "pre-landing", "preregistro", "pre-registro"];
+function esEventoDeVisita(nombre: string, extra: string[]): boolean {
+  const n = nombre.toLowerCase();
+  return [...WEB_EVENT_EXCLUDE, ...extra].some((p) => p && n.includes(p.toLowerCase()));
+}
+function pickWeb(conversions: any[] | undefined, actions: any[] | undefined, convEvent: string, excluir: string[] = []): { value: number; event: string } {
   // El nombre del evento SOLO viene en `conversions`. En `actions` Meta publica nada mas
   // el agregado `offsite_conversion.fb_pixel_custom`, que suma todos los eventos custom
   // de la cuenta — usarlo daba 18 donde el evento de registro eran 12.
-  const evs = customEvents(conversions).length ? customEvents(conversions) : customEvents(actions);
+  const todos = customEvents(conversions).length ? customEvents(conversions) : customEvents(actions);
+  const evs = todos.filter((e) => !esEventoDeVisita(e.event, excluir));
   if (evs.length) {
     const elegido = (convEvent && evs.find((e) => e.event === convEvent)) || evs[0];
     return { value: elegido.value, event: elegido.event };
   }
-  // Sin evento custom: los buckets estándar de lead web del píxel.
+  // El anuncio TENÍA eventos custom pero eran todos de visita: son 0 registros, y no se
+  // cae al bucket genérico — hacerlo volvería a contar la visita como si fuera un alta.
+  if (todos.length) return { value: 0, event: "" };
+  // Sin ningún evento custom: los buckets estándar de lead web del píxel.
   const std = Math.max(
     actionVal(actions, ["offsite_conversion.fb_pixel_lead"]),
     actionVal(actions, ["onsite_web_lead"]),
@@ -218,7 +231,7 @@ interface AdMetrics {
   raw_conversions?: any[];
 }
 
-function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
+function deriveAd(row: any, convEvent: string, includeRaw: boolean, excluir: string[] = []): AdMetrics {
   const impressions = num(row.impressions);
   const spend = num(row.spend);
   // Interacción social (sin clics ni video): reacciones + comentarios + compartidos + guardados.
@@ -236,7 +249,7 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
   // es formulario; uno que registró el evento de la landing es web. Sin ninguna de las dos
   // señales queda en null y despues hereda el tipo de su campaña.
   const leads_form = pickLeadsForm(row.actions);
-  const web = pickWeb(row.conversions, row.actions, convEvent);
+  const web = pickWeb(row.conversions, row.actions, convEvent, excluir);
   const leads_web = web.value;
   const web_event = web.event || null;
   // El total es la SUMA de los dos: son cosas distintas, no dos vistas del mismo lead.
@@ -300,6 +313,8 @@ Deno.serve(async (req) => {
   // Cuentas que Korex NO corre (ej. la 2ª de Mónica): no se consultan ni se guardan.
   // Fuente robusta en la config (no un flag de meta_ads, que se pisa). Ver informe-ads-diario.
   const excludeAccounts = new Set(((cfg.exclude_accounts as unknown[]) ?? []).map((x) => String(x).replace(/^act_/, "")));
+  // Patrones extra de eventos que no cuentan como registro (ver WEB_EVENT_EXCLUDE).
+  const webEventExclude = ((cfg.web_event_exclude as unknown[]) ?? []).map((x) => String(x));
 
   const token = await getToken();
   if (!token) return j({ ok: false, error: "missing_token", detail: "Falta el token de Meta (fbcrm_settings.meta_user_token o secreto META_ADS_TOKEN)." }, 400);
@@ -357,7 +372,7 @@ Deno.serve(async (req) => {
         );
         calls++;
         maxUsage = Math.max(maxUsage, usagePct);
-        const ads = rows.map((r) => deriveAd(r, jb.convEvent, dry));
+        const ads = rows.map((r) => deriveAd(r, jb.convEvent, dry, webEventExclude));
 
         // Un anuncio sin leads ni visitas ese día no tiene evidencia para clasificarse
         // (recién arrancado, o con el píxel roto). Hereda el tipo de su campaña. Si la
