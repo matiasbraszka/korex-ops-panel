@@ -47,6 +47,9 @@ export const api = {
   // Responsable + estado de flujo por guión (para pintar la inicial del responsable
   // y el estado). Devuelve un mapa { sectionId: { flujo, responsable } }.
   grabInfo:  (ids) => rpc('portal_cliente_grab_info', { p_section_ids: ids || [] }, () => ({})),
+  // Pasos del pipeline por funnel (Estrategia·Avatares·VSL·Anuncios·Landing) con
+  // su estado: { sid: [{key,label,done,estado}] }. Para la barra segmentada y el timeline.
+  embudoPasos: () => rpc('portal_cliente_embudo_pasos', {}, () => ({})),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   // Las guías que el equipo mantiene en el DEL (del_guias_globales). Reemplazan

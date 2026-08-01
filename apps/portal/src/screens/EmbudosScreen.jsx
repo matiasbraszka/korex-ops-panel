@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display } from '../components/theme';
+import { PipelineBar } from '../components/PipelineSteps';
 import { IcoCheck, IcoWarn, IcoChevR, IcoExternal } from '../components/icons';
 
 // TUS EMBUDOS — exacta al prototipo: tarjetas numeradas con barra de color,
@@ -15,6 +16,7 @@ const fmt = (d) => {
 export default function EmbudosScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.embudos(), []);
+  const { data: pasosMap } = useAsync(() => api.embudoPasos(), []);
 
   if (loading) return <Loading label="Cargando tus embudos…" />;
   const embudos = Array.isArray(data) ? data : [];
@@ -34,7 +36,7 @@ export default function EmbudosScreen() {
       </div>
 
       <div style={{ padding: '24px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {embudos.map((e, i) => <EmbudoCard key={e.id} e={e} n={i + 1} nav={nav} />)}
+        {embudos.map((e, i) => <EmbudoCard key={e.id} e={e} n={i + 1} nav={nav} pasos={pasosMap?.[e.id]} />)}
       </div>
 
       <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
@@ -44,7 +46,7 @@ export default function EmbudosScreen() {
   );
 }
 
-function EmbudoCard({ e, n, nav }) {
+function EmbudoCard({ e, n, nav, pasos }) {
   const alAire = e.etiqueta === 'al_aire';
   const pend = !!e.grabPendiente?.pend;
   const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
@@ -74,7 +76,7 @@ function EmbudoCard({ e, n, nav }) {
           <div style={{ fontSize: 12.5, color: T.text3 }}>{sub}</div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
@@ -82,9 +84,14 @@ function EmbudoCard({ e, n, nav }) {
             </div>
             <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
           </div>
-          <div style={{ height: 9, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
-          </div>
+          {/* Pasos del pipeline: lo que YA entregamos (verde) vs lo que sigue. */}
+          {Array.isArray(pasos) && pasos.length > 0
+            ? <PipelineBar pasos={pasos} acento={acento} />
+            : (
+              <div style={{ height: 9, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
+              </div>
+            )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: alAire ? 'var(--mk-green-bg)' : pend ? 'var(--mk-red-bg)' : 'var(--mk-blue-bg2)' }}>
