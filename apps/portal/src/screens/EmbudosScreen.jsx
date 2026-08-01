@@ -18,7 +18,7 @@ export default function EmbudosScreen() {
 
   if (loading) return <Loading label="Cargando tus embudos…" />;
   const embudos = Array.isArray(data) ? data : [];
-  const alAire = embudos.filter((e) => e.etiqueta === 'al_aire').length;
+  const alAire = embudos.filter((e) => e.etiqueta === 'al_aire' || e.etiqueta === 'completo').length;
   const resto = embudos.length - alAire;
   const intro = embudos.length === 0 ? 'Cuando armemos tu primera campaña, aparece aquí.'
     : resto === 0 ? `Tienes ${embudos.length === 1 ? '1 campaña y ya está al aire' : `${embudos.length} campañas y ya están todas al aire`}.`
@@ -46,15 +46,17 @@ export default function EmbudosScreen() {
 
 function EmbudoCard({ e, n, nav }) {
   const alAire = e.etiqueta === 'al_aire';
+  const completo = e.etiqueta === 'completo';   // embudo viejo/entregado
+  const terminado = alAire || completo;
   const pend = !!e.grabPendiente?.pend;
-  const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
-  const acentoSuave = alAire ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
-  const etiqueta = alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
-  const sub = alAire
-    ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
+  const acento = terminado ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
+  const acentoSuave = terminado ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
+  const etiqueta = completo ? 'Completo' : alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
+  const sub = completo ? 'Embudo terminado'
+    : alAire ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
     : (e.startDate ? `Empezado el ${fmt(e.startDate)}` : 'En curso');
   // Una sola línea de "qué falta": lo del cliente en rojo, el resto suave.
-  const falta = alAire ? null : pend ? 'Falta que grabes tus anuncios' : (e.razon || null);
+  const falta = terminado ? null : pend ? 'Falta que grabes tus anuncios' : (e.razon || null);
   const pagina = e.pagina;
 
   return (
@@ -84,7 +86,7 @@ function EmbudoCard({ e, n, nav }) {
           )}
         </div>
 
-        {alAire ? (
+        {terminado ? (
           <>
             {pagina && (
               <a href={/^https?:\/\//.test(pagina) ? pagina : 'https://' + pagina} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-bg-panel)', border: '1px solid var(--mk-border)', textDecoration: 'none' }}>

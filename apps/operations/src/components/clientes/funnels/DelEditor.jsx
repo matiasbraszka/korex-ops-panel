@@ -356,7 +356,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     try {
       const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
       const rows = await sbFetch(
-        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at,grab_avatar_id&${filtro}&order=ord.asc`,
+        `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at,grab_avatar_id,fase&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
         // servía una versión vieja cacheada del documento tras reorganizarlo.
         { headers: { Prefer: 'return=representation' }, cache: 'no-store' },
@@ -428,6 +428,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_avatar_id: val } : x));
     const { data, error } = await supabase.rpc('del_section_set_grab_avatar', { p_id: s.id, p_avatar: val, p_by: by });
     if (error || !data?.ok) { window.alert('No pude asignar el avatar'); await cargar(); }
+  };
+
+  // Fase del guión: 'lanzamiento' (se requiere para llegar al 100% del embudo) u
+  // 'optimizacion' (adicional, después del 100%: no frena el avance).
+  const setFase = async (s, fase) => {
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, fase } : x));
+    const { data, error } = await supabase.rpc('del_section_set_fase', { p_id: s.id, p_fase: fase, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude cambiar la fase' + (data?.error ? ': ' + data.error : '')); await cargar(); }
   };
 
   useEffect(() => { cargar(); }, [cargar]);
@@ -1732,6 +1740,20 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                           {avatarsFunnel.map((a) => <option key={a.id} value={a.id}>👤 {a.name}</option>)}
                         </select>
                       )}
+                      {/* FASE del guión: lanzamiento (cuenta para el 100%) u
+                          optimización (adicional, no frena el avance). */}
+                      <select
+                        value={s.fase || 'lanzamiento'}
+                        onChange={(e) => setFase(s, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Lanzamiento = se necesita para llegar al 100%. Optimización = adicional, después del 100% (no frena el avance)."
+                        className="shrink-0 py-1 px-1.5 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none"
+                        style={(s.fase || 'lanzamiento') === 'optimizacion'
+                          ? { background: '#ECFEFF', color: '#0E7490', borderColor: '#A5F3FC' }
+                          : { background: '#FFF1E7', color: '#C2410C', borderColor: '#FED7AA' }}>
+                        <option value="lanzamiento">🚀 Lanzamiento</option>
+                        <option value="optimizacion">✨ Optimización</option>
+                      </select>
                       {s.grab_flujo && (() => {
                         const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
                         const m = {
