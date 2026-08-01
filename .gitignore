@@ -13,3 +13,6 @@ scripts/agent-fn-local.env
 # regenera el CLI al deployar. El repo nunca los tuvo.
 supabase/.temp/
 deno.lock
+
+# Cache del analizador de branding (se regenera solo, pesa y no aporta al repo)
+scripts/.branding-corpus-cache.json
