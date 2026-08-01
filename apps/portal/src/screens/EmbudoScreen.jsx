@@ -16,6 +16,7 @@ export default function EmbudoScreen() {
   const { data: material, loading: l2 } = useAsync(() => api.material(), [id]);
   const { data: inicio } = useAsync(() => api.inicio(), [id]);
   const { data: pasosMap } = useAsync(() => api.embudoPasos(), [id]);
+  const { data: optMap } = useAsync(() => api.optimizacion(), [id]);
 
   if (l1 || l2) return <PhoneFrame><Loading label="Abriendo el embudo…" /></PhoneFrame>;
   const e = (Array.isArray(embudos) ? embudos : []).find((x) => x.id === id);
@@ -25,6 +26,7 @@ export default function EmbudoScreen() {
   const pend = !!e.grabPendiente?.pend;
   const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
   const pasos = pasosMap?.[id];
+  const opt = optMap?.[id];
   const m = material || {};
   const grabs = (Array.isArray(m.grabaciones) ? m.grabaciones : []).filter((g) => g.strategyId === id);
   const grabsSubidas = grabs.length > 0 && grabs.every((g) => g.estado === 'subido');
@@ -119,6 +121,10 @@ export default function EmbudoScreen() {
             </div>
           </div>
 
+          {/* Optimización — solo cuando el embudo está lanzado: el trabajo DE MÁS
+              (anuncios extra) y lo nuevo que le pedimos, sin tocar el 100%. */}
+          {opt && <Optimizacion opt={opt} id={id} nav={nav} />}
+
           {/* Lo que necesitamos de este embudo */}
           {(grabs.length > 0 || fotos || accesoMeta !== 'sin_pedido') && (
             <div style={{ padding: '30px 22px 0' }}>
@@ -172,6 +178,57 @@ export default function EmbudoScreen() {
         <BottomNav activeOverride="/embudos" />
       </KxScreen>
     </PhoneFrame>
+  );
+}
+
+// ── Fase de optimización (embudo ya lanzado): anuncios de más + lo nuevo que
+//    le pedimos, con sus demoras. No toca el 100%. ──
+const statTile = { background: '#fff', borderRadius: 16, padding: '14px 16px', boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 3 };
+const statNum = { fontFamily: "'Montserrat', sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--mk-ink)' };
+const statLbl = { fontSize: 11.5, fontWeight: 600, color: 'var(--mk-text3)', lineHeight: 1.3 };
+
+function Optimizacion({ opt, id, nav }) {
+  const pend = Array.isArray(opt.pendientes) ? opt.pendientes : [];
+  const atraso = pend.reduce((m, p) => Math.max(m, p.dias || 0), 0);
+  return (
+    <div style={{ padding: '30px 22px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
+        <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 19, fontWeight: 800, letterSpacing: '-0.028em', color: T.ink }}>Optimización</div>
+        <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>Al aire</span>
+      </div>
+      <div style={{ fontSize: 13, lineHeight: 1.5, color: T.text2, marginBottom: 14 }}>Tu embudo ya está entregado al 100%. En esta fase lo seguimos mejorando con anuncios nuevos.</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: pend.length ? 16 : 0 }}>
+        <div style={statTile}>
+          <span style={statNum}>{opt.entregados ?? 0}</span>
+          <span style={statLbl}>anuncios entregados{opt.target ? ` de ${opt.target}` : ''}</span>
+        </div>
+        <div style={{ ...statTile, background: 'var(--mk-green-bg)' }}>
+          <span style={{ ...statNum, color: 'var(--mk-green)' }}>+{opt.extras ?? 0}</span>
+          <span style={statLbl}>de más (optimización)</span>
+        </div>
+      </div>
+
+      {pend.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 18, padding: '6px 4px', boxShadow: 'var(--shadow-md)' }}>
+          <div style={{ padding: '12px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Lo nuevo que te pedimos</span>
+            {atraso > 0 && <span style={pill('var(--mk-red-bg)', 'var(--mk-red)')}>Demora {atraso} {atraso === 1 ? 'día' : 'días'}</span>}
+          </div>
+          {pend.map((p, i) => (
+            <div key={i} onClick={() => nav('/guiones')} role="button" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.titulo}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: (p.dias > 3) ? 'var(--mk-red)' : 'var(--mk-orange)' }}>
+                  {p.tipo === 'revisar' ? 'Revisar' : 'Grabar'} · {p.dias === 0 ? 'pedido hoy' : `hace ${p.dias} ${p.dias === 1 ? 'día' : 'días'}`}
+                </span>
+              </div>
+              <IcoChevR size={16} stroke={T.text3} sw={2.2} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

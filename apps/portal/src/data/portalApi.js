@@ -50,6 +50,8 @@ export const api = {
   // Pasos del pipeline por funnel (Estrategia·Avatares·VSL·Anuncios·Landing) con
   // su estado: { sid: [{key,label,done,estado}] }. Para la barra segmentada y el timeline.
   embudoPasos: () => rpc('portal_cliente_embudo_pasos', {}, () => ({})),
+  // Fase de optimización por funnel lanzado: { sid: {entregados,target,extras,pendientes} }.
+  optimizacion: () => rpc('portal_cliente_optimizacion', {}, () => ({})),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   // Las guías que el equipo mantiene en el DEL (del_guias_globales). Reemplazan
