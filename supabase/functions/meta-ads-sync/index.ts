@@ -280,6 +280,7 @@ Deno.serve(async (req) => {
   for (const [cid, accJobs] of byClient) {
     if (aborted) break;
     let accSpend = 0, accImpr = 0, accClicks = 0, accLeads = 0, accLanding = 0, adsActiveAny = false;
+    const spendPorMoneda = new Map<string, number>(); // para saber qué moneda muestra el panel
     const clientAdRows: any[] = [];
     for (const jb of accJobs) {
       if (aborted) break;
@@ -331,6 +332,7 @@ Deno.serve(async (req) => {
         for (const a of ads) (a as any).is_winner = winners.has(a.ad_id);
         for (const a of ads) {
           accSpend += a.spend; accImpr += a.impressions; accClicks += a.clicks; accLeads += a.leads; accLanding += a.landing_page_views;
+          spendPorMoneda.set(jb.currency, (spendPorMoneda.get(jb.currency) ?? 0) + a.spend);
           if (a.spend > 0) adsActiveAny = true;
           clientAdRows.push({ ...a, ad_account_id: jb.accId });
         }
@@ -371,16 +373,22 @@ Deno.serve(async (req) => {
       // según cuál corrió última. Además "yesterday" revive los campos *Yesterday
       // que el panel muestra y que nadie escribía desde la era del conector MCP.
       const esAyer = window === "yesterday";
+      // La moneda que muestra el panel. El sync NUNCA la escribía: quedaba la que hubiera
+      // dejado la rutina vieja de la nube y no la corregía nadie — Mónica figuraba en EUR
+      // (la moneda de una cuenta ajena) teniendo una sola cuenta en USD. Con varias cuentas
+      // gana la que más gastó; si nadie gastó, la primera cargada en la ficha.
+      const topMoneda = [...spendPorMoneda.entries()].sort((a, b) => b[1] - a[1])[0];
+      const moneda = (topMoneda && topMoneda[1] > 0 ? topMoneda[0] : accJobs[0]?.currency) || "USD";
       const nextMetrics = esAyer
         ? {
-          ...prev, adsActive: adsActiveAny, source: "token", lastUpdatedYesterday: new Date().toISOString(),
+          ...prev, adsActive: adsActiveAny, source: "token", currency: moneda, lastUpdatedYesterday: new Date().toISOString(),
           spendYesterday: Number(accSpend.toFixed(2)), conversionsYesterday: accLeads,
           cplYesterday: Number(cpl.toFixed(2)), impressionsYesterday: accImpr, clicksYesterday: accClicks,
           landingPageViewsYesterday: accLanding, ctrYesterday: Number(ctr.toFixed(2)),
           pctCargaYesterday: Number(pctCarga.toFixed(1)), pctRegistroYesterday: Number(pctRegistro.toFixed(1)),
         }
         : {
-          ...prev, adsActive: adsActiveAny, source: "token", lastUpdated: new Date().toISOString(),
+          ...prev, adsActive: adsActiveAny, source: "token", currency: moneda, lastUpdated: new Date().toISOString(),
           totalSpend7d: Number(accSpend.toFixed(2)), totalConversions7d: accLeads, avgCpl7d: Number(cpl.toFixed(2)),
           impressions7d: accImpr, clicks7d: accClicks, ctr7d: Number(ctr.toFixed(2)),
         };
