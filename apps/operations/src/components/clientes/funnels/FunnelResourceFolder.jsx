@@ -189,15 +189,19 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     } catch { setShareLinks([]); }
   };
   const abrirShare = () => {
-    setShareOpen(o => {
-      const next = !o;
-      if (next) {
-        const rect = shareBtnRef.current?.getBoundingClientRect();
-        if (rect) setSharePos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
-        setShareLinks(null); cargarShares();
-      }
-      return next;
-    });
+    const next = !shareOpen;
+    setShareOpen(next);
+    if (next) {
+      // Ojo: calcular la posición y disparar la carga FUERA del updater de
+      // setShareOpen (hacerlo adentro dejaba sharePos sin setear → el popover,
+      // que necesita `shareOpen && sharePos`, nunca aparecía = "clic sin efecto").
+      const rect = shareBtnRef.current?.getBoundingClientRect();
+      setSharePos(rect
+        ? { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) }
+        : { top: 90, right: 16 });
+      setShareLinks(null);
+      cargarShares();
+    }
   };
   // Si se hace scroll con el popover abierto, se cierra (asi no queda flotando en el aire).
   useEffect(() => {
