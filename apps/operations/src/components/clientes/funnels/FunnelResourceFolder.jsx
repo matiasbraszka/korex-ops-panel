@@ -191,26 +191,8 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const abrirShare = () => {
     const next = !shareOpen;
     setShareOpen(next);
-    if (next) {
-      // Ojo: calcular la posición y disparar la carga FUERA del updater de
-      // setShareOpen (hacerlo adentro dejaba sharePos sin setear → el popover,
-      // que necesita `shareOpen && sharePos`, nunca aparecía = "clic sin efecto").
-      const rect = shareBtnRef.current?.getBoundingClientRect();
-      setSharePos(rect
-        ? { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) }
-        : { top: 90, right: 16 });
-      setShareLinks(null);
-      cargarShares();
-    }
+    if (next) { setShareLinks(null); cargarShares(); }
   };
-  // Si se hace scroll con el popover abierto, se cierra (asi no queda flotando en el aire).
-  useEffect(() => {
-    if (!shareOpen) return;
-    const cerrar = () => setShareOpen(false);
-    window.addEventListener('scroll', cerrar, true);
-    window.addEventListener('resize', cerrar);
-    return () => { window.removeEventListener('scroll', cerrar, true); window.removeEventListener('resize', cerrar); };
-  }, [shareOpen]);
   const urlDe = (tok) => `${publicOrigin()}/compartir/${tok}`;
   const crearShare = async () => {
     setShareBusy(true);
@@ -410,13 +392,11 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             className="inline-flex items-center gap-1 py-1 px-2 rounded-md border text-[11px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
             <Share2 size={12} />Compartir
           </button>
-          {shareOpen && sharePos && createPortal(
-            <>
-              {/* fondo invisible: un click afuera cierra el popover */}
-              <div className="fixed inset-0 z-[65]" onClick={() => setShareOpen(false)} />
-              {/* popover en portal + position:fixed -> ningun contenedor con scroll lo recorta */}
-              <div className="fixed z-[70] w-[320px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
-                style={{ top: sharePos.top, right: sharePos.right, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+          {/* Popover INLINE (no portal): así queda dentro del stacking del modal de
+              Recursos y no se dibuja detrás de él (era el motivo de "no aparece"). */}
+          {shareOpen && (
+            <div className="absolute right-0 top-full mt-1 z-[80] w-[300px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
+              style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Link para subir a “{label}”</span>
                 <button onClick={() => setShareOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
@@ -440,9 +420,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
                 className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border-none text-white text-[12px] font-semibold cursor-pointer disabled:opacity-60" style={{ background: '#2E69E0' }}>
                 {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}Crear link y copiar
               </button>
-              </div>
-            </>,
-            document.body
+            </div>
           )}
         </div>
         <button onClick={() => setOpen(o => !o)} className="border-none bg-transparent cursor-pointer p-0 shrink-0">
