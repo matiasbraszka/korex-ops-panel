@@ -58,8 +58,10 @@ function EmbudoCard({ e, n, nav }) {
     : activo ? (e.startDate ? `Activo desde el ${fmt(e.startDate)}` : 'Activo')
     : alAire ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
     : (e.startDate ? `Empezado el ${fmt(e.startDate)}` : 'En curso');
-  // Una sola línea de "qué falta": lo del cliente en rojo, el resto suave.
-  const falta = verde ? null : pend ? 'Falta que grabes tus anuncios' : (e.razon || null);
+  // Todo lo que falta DE TU PARTE en este embudo (rojo, lista). Si no hay nada
+  // del cliente, mostramos el estado de nuestro lado (razón) en gris.
+  const pendientes = verde ? [] : (Array.isArray(e.pendientes) ? e.pendientes : []);
+  const falta = (verde || pendientes.length) ? null : (e.razon || null);
   const pagina = e.pagina;
 
   return (
@@ -84,8 +86,21 @@ function EmbudoCard({ e, n, nav }) {
           <div style={{ height: 9, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
             <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
           </div>
+          {pendientes.length > 0 && (
+            <div onClick={() => nav('/')} role="button" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, padding: '13px 14px', borderRadius: 14, background: 'var(--mk-red-bg)', border: '1px solid color-mix(in srgb, var(--mk-red) 22%, transparent)' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--mk-red)' }}>Falta de tu parte</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {pendientes.map((p, i) => (
+                  <span key={i} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--mk-red)', background: '#fff', border: '1px solid color-mix(in srgb, var(--mk-red) 24%, transparent)', padding: '5px 10px', borderRadius: 999 }}>{p.label}</span>
+                ))}
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', color: 'var(--mk-red)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Ir a completarlo <IcoChevR size={13} stroke="var(--mk-red)" sw={2.6} />
+              </span>
+            </div>
+          )}
           {falta && (
-            <div style={{ fontSize: 13, lineHeight: 1.4, fontWeight: 600, color: pend ? 'var(--mk-red)' : T.text2 }}>{falta}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.4, fontWeight: 600, color: T.text2 }}>{falta}</div>
           )}
         </div>
 
