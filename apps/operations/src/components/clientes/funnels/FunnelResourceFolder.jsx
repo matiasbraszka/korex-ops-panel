@@ -191,7 +191,22 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const abrirShare = () => {
     const next = !shareOpen;
     setShareOpen(next);
-    if (next) { setShareLinks(null); cargarShares(); }
+    if (next) {
+      // position:fixed (no lo recorta ningún scroll) calculado desde el botón,
+      // dibujado inline (queda delante del modal). Se abre hacia arriba si abajo
+      // no entra, para no cortarse contra el borde de la pantalla.
+      const rect = shareBtnRef.current?.getBoundingClientRect();
+      if (rect) {
+        const haciaArriba = (window.innerHeight - rect.bottom) < 270;
+        setSharePos({
+          right: Math.max(8, window.innerWidth - rect.right),
+          ...(haciaArriba ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+        });
+      } else {
+        setSharePos({ top: 90, right: 16 });
+      }
+      setShareLinks(null); cargarShares();
+    }
   };
   const urlDe = (tok) => `${publicOrigin()}/compartir/${tok}`;
   const crearShare = async () => {
@@ -392,11 +407,12 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             className="inline-flex items-center gap-1 py-1 px-2 rounded-md border text-[11px] font-semibold cursor-pointer bg-white text-[#6B7280] border-[#E2E5EB] hover:text-[#2E69E0] hover:border-[#C7D2FE]">
             <Share2 size={12} />Compartir
           </button>
-          {/* Popover INLINE (no portal): así queda dentro del stacking del modal de
-              Recursos y no se dibuja detrás de él (era el motivo de "no aparece"). */}
-          {shareOpen && (
-            <div className="absolute right-0 top-full mt-1 z-[80] w-[300px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
-              style={{ boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
+          {/* Popover INLINE (queda delante del modal) + position:fixed (no lo
+              recorta el scroll de Recursos). Antes: absolute → se cortaba; portal
+              → quedaba detrás del modal. */}
+          {shareOpen && sharePos && (
+            <div className="w-[300px] rounded-xl border border-[#E7EAF0] bg-white p-3 text-left"
+              style={{ position: 'fixed', zIndex: 80, ...sharePos, boxShadow: '0 12px 32px rgba(10,22,40,.16)' }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#9098A4]">Link para subir a “{label}”</span>
                 <button onClick={() => setShareOpen(false)} className="text-[#C3C9D4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer"><X size={14} /></button>
