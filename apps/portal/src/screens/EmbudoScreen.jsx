@@ -5,7 +5,7 @@ import { Loading, useAsync } from '../components/ui';
 import { api } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
 import { PipelineBar } from '../components/PipelineSteps';
-import { IcoChevL, IcoChevR, IcoCheck, IcoInfo } from '../components/icons';
+import { IcoChevL, IcoChevR, IcoCheck } from '../components/icons';
 
 // EMBUDO (detalle) — exacta al prototipo: "Cómo va" con los 4 pasos y
 // "Lo que necesitamos de este embudo" con el estado de cada cosa.
@@ -102,18 +102,12 @@ export default function EmbudoScreen() {
                 <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
               </div>
               {Array.isArray(pasos) && pasos.length > 0
-                ? <PipelineBar pasos={pasos} acento={acento} />
+                ? <PipelineBar pasos={pasos} />
                 : (
                   <div style={{ height: 10, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
                     <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
                   </div>
                 )}
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '12px 14px', borderRadius: 14, background: pend ? 'var(--mk-red-bg)' : 'var(--mk-green-bg)' }}>
-                <IcoInfo size={16} stroke="var(--mk-text2)" sw={2.1} style={{ flex: 'none', marginTop: 1 }} />
-                <span style={{ fontSize: 12.5, lineHeight: 1.45, color: T.textSoft, flex: 1 }}>
-                  {pend ? 'Este número sube cuando subes el material que falta. Sin eso no podemos seguir.' : 'Ya entregaste todo lo de este embudo. De aquí en adelante avanzamos nosotros.'}
-                </span>
-              </div>
             </div>
           </div>
 

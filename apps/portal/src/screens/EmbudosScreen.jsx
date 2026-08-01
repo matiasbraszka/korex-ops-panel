@@ -3,7 +3,7 @@ import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display } from '../components/theme';
 import { PipelineBar } from '../components/PipelineSteps';
-import { IcoCheck, IcoWarn, IcoChevR, IcoExternal } from '../components/icons';
+import { IcoChevR, IcoExternal } from '../components/icons';
 
 // TUS EMBUDOS — exacta al prototipo: tarjetas numeradas con barra de color,
 // etiqueta de estado, avance grande, el aviso de qué falta y TU PÁGINA.
@@ -48,19 +48,12 @@ export default function EmbudosScreen() {
 
 function EmbudoCard({ e, n, nav, pasos }) {
   const alAire = e.etiqueta === 'al_aire';
-  const pend = !!e.grabPendiente?.pend;
   const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
   const acentoSuave = alAire ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
   const etiqueta = alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
   const sub = alAire
     ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
     : (e.startDate ? `Empezado el ${fmt(e.startDate)}` : 'En curso');
-  const aviso = alAire ? 'Está corriendo. No necesitas hacer nada.'
-    : pend ? 'Falta que grabes tus anuncios'
-    : e.razon;
-  const avisoDetalle = alAire ? null
-    : pend ? (e.grabPendiente?.dias > 0 ? `Te lo pedimos hace ${e.grabPendiente.dias} ${e.grabPendiente.dias === 1 ? 'día' : 'días'}.` : 'Te lo pedimos hoy.')
-    : e.etapa === 3 ? 'Te avisamos cuando estén editados.' : 'Estamos con esto. No necesitas hacer nada.';
   const pagina = e.pagina;
 
   return (
@@ -92,16 +85,6 @@ function EmbudoCard({ e, n, nav, pasos }) {
                 <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
               </div>
             )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: alAire ? 'var(--mk-green-bg)' : pend ? 'var(--mk-red-bg)' : 'var(--mk-blue-bg2)' }}>
-          {alAire || !pend
-            ? <IcoCheck size={16} stroke={alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)'} sw={2.6} style={{ flex: 'none' }} />
-            : <IcoWarn size={16} stroke="var(--mk-red)" sw={2.3} style={{ flex: 'none' }} />}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.textSoft }}>{aviso}</span>
-            {avisoDetalle && <span style={{ fontSize: 12, color: T.text2 }}>{avisoDetalle}</span>}
-          </div>
         </div>
 
         {alAire ? (
