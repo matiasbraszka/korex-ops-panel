@@ -4,7 +4,6 @@ import BottomNav from '../components/BottomNav';
 import { Loading, useAsync } from '../components/ui';
 import { api } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
-import { EmbudoTracks } from '../components/PipelineSteps';
 import { IcoChevL, IcoChevR, IcoCheck } from '../components/icons';
 
 // EMBUDO (detalle) — exacta al prototipo: "Cómo va" con los 4 pasos y
@@ -15,7 +14,6 @@ export default function EmbudoScreen() {
   const { data: embudos, loading: l1 } = useAsync(() => api.embudos(), [id]);
   const { data: material, loading: l2 } = useAsync(() => api.material(), [id]);
   const { data: inicio } = useAsync(() => api.inicio(), [id]);
-  const { data: tracksMap } = useAsync(() => api.embudoTracks(), [id]);
   const { data: optMap } = useAsync(() => api.optimizacion(), [id]);
 
   if (l1 || l2) return <PhoneFrame><Loading label="Abriendo el embudo…" /></PhoneFrame>;
@@ -25,7 +23,6 @@ export default function EmbudoScreen() {
   const alAire = e.etiqueta === 'al_aire';
   const pend = !!e.grabPendiente?.pend;
   const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
-  const tracks = tracksMap?.[id];
   const opt = optMap?.[id];
   const m = material || {};
   const grabs = (Array.isArray(m.grabaciones) ? m.grabaciones : []).filter((g) => g.strategyId === id);
@@ -53,15 +50,17 @@ export default function EmbudoScreen() {
 
   // Los 4 pasos del recorrido del cliente (para el timeline vertical): qué hicimos
   // (Estrategia/guiones · Grabación · Edición · Publicado), en qué estamos y el botón.
+  // Todos los botones del recorrido van del MISMO color (el acento del embudo),
+  // para no ensuciar la pantalla con negro/azul/blanco mezclados.
   const btnGrab = (grabsSubidas || e.etapa >= 3)
-    ? { label: 'Ver tus grabaciones', bg: 'var(--mk-green)', color: '#fff', onClick: () => nav(`/entregables/${id}?tipo=grabaciones`) }
-    : pend ? { label: 'Grabar mis anuncios', bg: 'var(--mk-blue-ops)', color: '#fff', onClick: () => nav(`/documento/${id}/ads`) }
+    ? { label: 'Ver tus grabaciones', onClick: () => nav(`/entregables/${id}?tipo=grabaciones`) }
+    : pend ? { label: 'Grabar mis anuncios', onClick: () => nav(`/documento/${id}/ads`) }
     : null;
   const timelineSteps = [
     { num: 1, titulo: 'Estrategia y guiones',
       estado: e.etapa >= 2 ? conFecha('Terminado', fe.guiones) : 'Estamos con esto ahora',
       state: e.etapa >= 2 ? 'done' : 'current',
-      boton: e.etapa >= 2 ? { label: 'Ver la estrategia y los guiones', variant: 'ghost', onClick: () => nav(`/documento/${id}/estrategia`) } : null },
+      boton: e.etapa >= 2 ? { label: 'Ver la estrategia y los guiones', onClick: () => nav(`/documento/${id}/estrategia`) } : null },
     { num: 2, titulo: 'Grabación',
       estado: (grabsSubidas || e.etapa >= 3) ? conFecha('Recibimos tus videos', fe.grabacion) : pend ? 'Te toca a ti' : 'Después de los guiones',
       state: (grabsSubidas || e.etapa >= 3) ? 'done' : (e.etapa >= 2 ? 'current' : 'pending'),
@@ -69,12 +68,12 @@ export default function EmbudoScreen() {
     { num: 3, titulo: 'Edición',
       estado: e.etapa >= 4 ? conFecha('Terminada', fe.edicion) : e.etapa >= 3 ? (devol ? 'Estamos editando · hay videos listos' : 'Estamos editando tus videos') : 'Arranca cuando recibamos tus videos',
       state: e.etapa >= 4 ? 'done' : (e.etapa >= 3 ? 'current' : 'pending'),
-      boton: (devol || e.etapa >= 4) ? { label: 'Ver lo que editamos', bg: 'var(--mk-ink)', color: '#fff', onClick: () => nav(`/entregables/${id}`) } : null },
+      boton: (devol || e.etapa >= 4) ? { label: 'Ver lo que editamos', onClick: () => nav(`/entregables/${id}`) } : null },
     { num: 4, titulo: 'Publicado',
       estado: alAire ? (fe.publicado ? `Al aire desde el ${fe.publicado}` : 'Al aire') : 'Cuando esté al aire lo vas a ver aquí',
       state: alAire ? 'done' : 'pending',
-      boton: (alAire && e.pagina) ? { label: 'Ver tu página', bg: 'var(--mk-green)', color: '#fff', href: /^https?:\/\//.test(e.pagina) ? e.pagina : `https://${e.pagina}` } : null },
-  ];
+      boton: (alAire && e.pagina) ? { label: 'Ver tu página', href: /^https?:\/\//.test(e.pagina) ? e.pagina : `https://${e.pagina}` } : null },
+  ].map((s) => s.boton ? { ...s, boton: { ...s.boton, bg: acento, color: '#fff' } } : s);
 
   return (
     <PhoneFrame>
@@ -100,13 +99,9 @@ export default function EmbudoScreen() {
                 <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance de este embudo</span>
                 <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
               </div>
-              {tracks
-                ? <EmbudoTracks data={tracks} />
-                : (
-                  <div style={{ height: 10, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
-                  </div>
-                )}
+              <div style={{ height: 10, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />
+              </div>
             </div>
           </div>
 

@@ -29,25 +29,27 @@ export default function EntregablesScreen() {
   const vsl = items.filter((it) => it.bucket === 'vsl_edit' || it.bucket === 'vsl_rec');
   const funnel = data?.funnel || 'Tu embudo';
 
+  // Miniatura compacta tipo Google Drive: varias por fila en una grilla.
   const card = (it, i) => (
     <div key={i} role="button" onClick={() => it.url && setVer({ url: it.url, kind: it.kind || 'video', provider: it.provider, title: it.titulo })}
-      style={{ display: 'block', cursor: it.url ? 'pointer' : 'default', background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: 'var(--shadow-md)', textDecoration: 'none' }}>
-      <div style={{ height: 184, background: it.thumb ? `#0F1116 url(${it.thumb}) center/cover no-repeat` : gradientes[i % gradientes.length], display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <div style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <IcoPlay size={24} />
+      style={{ cursor: it.url ? 'pointer' : 'default', background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+      <div style={{ height: 104, background: it.thumb ? `#0F1116 url(${it.thumb}) center/cover no-repeat` : gradientes[i % gradientes.length], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <IcoPlay size={16} />
         </div>
       </div>
-      <div style={{ padding: '15px 17px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.titulo}</span>
-          <span style={{ fontSize: 12.5, color: T.text3 }}>
-            {esGrab
-              ? (it.fecha ? `Lo recibimos el ${it.fecha}` : 'Recibido')
-              : (it.fecha ? `Editado el ${it.fecha}` : 'Editado por el equipo')}
-          </span>
-        </div>
+      <div style={{ padding: '9px 11px 11px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.titulo}</span>
+        <span style={{ fontSize: 11, color: T.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {esGrab
+            ? (it.fecha ? `Recibido ${it.fecha}` : 'Recibido')
+            : (it.fecha ? `Editado ${it.fecha}` : 'Editado')}
+        </span>
       </div>
     </div>
+  );
+  const grilla = (list) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{list.map(card)}</div>
   );
 
   return (
@@ -80,13 +82,13 @@ export default function EntregablesScreen() {
             {ads.length > 0 && (
               <>
                 <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>{funnel} · Anuncios</div>
-                {ads.map(card)}
+                {grilla(ads)}
               </>
             )}
             {vsl.length > 0 && (
               <>
                 <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3, paddingTop: ads.length > 0 ? 6 : 0 }}>{funnel} · VSL</div>
-                {vsl.map(card)}
+                {grilla(vsl)}
               </>
             )}
 
