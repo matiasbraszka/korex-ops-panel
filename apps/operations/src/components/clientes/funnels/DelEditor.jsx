@@ -438,6 +438,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (error || !data?.ok) { window.alert('No pude cambiar la fase' + (data?.error ? ': ' + data.error : '')); await cargar(); }
   };
 
+  // APROBAR grabado: el equipo confirma que el guión REALMENTE se grabó. Solo esto
+  // lo da por grabado (no que el cliente diga que grabó o suba videos). Mueve el
+  // flujo a 'grabado' y es lo que cuenta para el 100% del embudo.
+  const setGrabado = async (s, grabado) => {
+    const flujo = grabado ? 'grabado' : 'grabacion';
+    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, grab_flujo: flujo, grab_flujo_at: new Date().toISOString() } : x));
+    const { data, error } = await supabase.rpc('del_grab_marcar_grabado', { p_section_id: s.id, p_grabado: grabado, p_by: by });
+    if (error || !data?.ok) { window.alert('No pude marcar Grabado' + (data?.error ? ': ' + data.error : '')); await cargar(); }
+  };
+
   useEffect(() => { cargar(); }, [cargar]);
 
   // Documentos del cliente (aparecen en todos sus DEL), para el grupo "DEL CLIENTE".
@@ -1754,7 +1764,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                         <option value="lanzamiento">🚀 Lanzamiento</option>
                         <option value="optimizacion">✨ Optimización</option>
                       </select>
-                      {s.grab_flujo && (() => {
+                      {/* Estado del flujo (revisión/corrección/grabación). 'grabado'
+                          se muestra en el botón de aprobar de al lado. */}
+                      {s.grab_flujo && s.grab_flujo !== 'grabado' && (() => {
                         const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
                         const m = {
                           revision:   { t: '👀 Revisión', c: '#1D4FD8', b: '#EEF3FF' },
@@ -1769,6 +1781,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                           </span>
                         );
                       })()}
+                      {/* APROBAR GRABADO (solo el equipo). Es lo único que da el guión
+                          por grabado para el 100% — no que el cliente diga que grabó. */}
+                      {s.para_grabar && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setGrabado(s, s.grab_flujo !== 'grabado'); }}
+                          title={s.grab_flujo === 'grabado' ? 'Grabado y aprobado por el equipo (clic para desmarcar)' : 'Marcar como grabado: confirmás que el cliente realmente lo grabó'}
+                          className="shrink-0 inline-flex items-center gap-1 py-1 px-2 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none"
+                          style={s.grab_flujo === 'grabado'
+                            ? { background: '#16A34A', color: '#fff', borderColor: '#16A34A' }
+                            : { background: '#fff', color: '#15803D', borderColor: '#BBF7D0' }}>
+                          {s.grab_flujo === 'grabado' ? <><Check size={11} strokeWidth={3} /> Grabado</> : '✅ Marcar grabado'}
+                        </button>
+                      )}
                     </>
                   )}
                   {editando && (
