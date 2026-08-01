@@ -183,11 +183,14 @@ function pickWeb(conversions: any[] | undefined, actions: any[] | undefined, con
   // el agregado `offsite_conversion.fb_pixel_custom`, que suma todos los eventos custom
   // de la cuenta — usarlo daba 18 donde el evento de registro eran 12.
   const todos = customEvents(conversions).length ? customEvents(conversions) : customEvents(actions);
+  // El evento principal cargado en la ficha del cliente MANDA sobre la heurística: si está
+  // en los datos, se usa aunque el nombre parezca de visita. Corina registra con
+  // `completo-registro-travorium-preregistro`, que es un alta de verdad pese a decir
+  // "preregistro" — sin esta precedencia el filtro de abajo se lo comía.
+  const principal = convEvent ? todos.find((e) => e.event === convEvent) : undefined;
+  if (principal) return { value: principal.value, event: principal.event };
   const evs = todos.filter((e) => !esEventoDeVisita(e.event, excluir));
-  if (evs.length) {
-    const elegido = (convEvent && evs.find((e) => e.event === convEvent)) || evs[0];
-    return { value: elegido.value, event: elegido.event };
-  }
+  if (evs.length) return { value: evs[0].value, event: evs[0].event };
   // El anuncio TENÍA eventos custom pero eran todos de visita: son 0 registros, y no se
   // cae al bucket genérico — hacerlo volvería a contar la visita como si fuera un alta.
   if (todos.length) return { value: 0, event: "" };
