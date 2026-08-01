@@ -145,15 +145,45 @@ function pickLeadsForm(actions: any[] | undefined): number {
     actionVal(actions, ["leadgen.other"]),
   );
 }
-// Leads de la PÁGINA WEB del cliente: el evento de conversión del píxel en su landing.
-function pickLeadsWeb(actions: any[] | undefined, convEvent: string): number {
-  const custom = actionVal(actions, ["offsite_conversion.fb_pixel_custom"]);
-  if (convEvent && custom > 0) return custom;
-  return Math.max(
+// Eventos custom del píxel. Meta los reporta con el NOMBRE pegado al action_type:
+//   offsite_conversion.fb_pixel_custom.visita-pagina-vsl-madeleine
+// y ADEMÁS publica un agregado `offsite_conversion.fb_pixel_custom` que SUMA todos los
+// eventos custom de la cuenta. Usar el agregado sobrecontaba feo: la campaña de Madeleine
+// daba 18 registros cuando el evento real eran ~12. NUNCA usar el agregado si hay eventos
+// con nombre. (Algunas cuentas los publican como `offsite_conversion.custom.<id>`.)
+const CUSTOM_PREFIXES = ["offsite_conversion.fb_pixel_custom.", "offsite_conversion.custom."];
+function customEvents(actions: any[] | undefined): { event: string; value: number }[] {
+  if (!Array.isArray(actions)) return [];
+  const out: { event: string; value: number }[] = [];
+  for (const a of actions) {
+    const t = String(a?.action_type || "");
+    const pref = CUSTOM_PREFIXES.find((p) => t.startsWith(p));
+    if (!pref) continue;
+    const v = num(a?.value);
+    if (v > 0) out.push({ event: t.slice(pref.length), value: v });
+  }
+  return out.sort((x, y) => y.value - x.value);
+}
+// Registro en la PÁGINA WEB del cliente. Se detecta solo: se toma el evento custom del
+// píxel al que apunta el anuncio. Si el cliente tiene uno cargado en el panel y aparece,
+// gana ese; si no, el de mayor volumen — que es al que la campaña está optimizada.
+// No depender del campo cargado a mano importa: Antonio lo tenía como "Leads (form)", que
+// no es un evento del píxel, y corre campañas de los dos tipos con eventos distintos.
+function pickWeb(conversions: any[] | undefined, actions: any[] | undefined, convEvent: string): { value: number; event: string } {
+  // El nombre del evento SOLO viene en `conversions`. En `actions` Meta publica nada mas
+  // el agregado `offsite_conversion.fb_pixel_custom`, que suma todos los eventos custom
+  // de la cuenta — usarlo daba 18 donde el evento de registro eran 12.
+  const evs = customEvents(conversions).length ? customEvents(conversions) : customEvents(actions);
+  if (evs.length) {
+    const elegido = (convEvent && evs.find((e) => e.event === convEvent)) || evs[0];
+    return { value: elegido.value, event: elegido.event };
+  }
+  // Sin evento custom: los buckets estándar de lead web del píxel.
+  const std = Math.max(
     actionVal(actions, ["offsite_conversion.fb_pixel_lead"]),
     actionVal(actions, ["onsite_web_lead"]),
-    custom,
   );
+  return { value: std, event: std > 0 ? "lead" : "" };
 }
 function videoVal(arr: any[] | undefined): number {
   if (!Array.isArray(arr) || !arr.length) return 0;
@@ -169,7 +199,7 @@ function pickLanding(actions: any[] | undefined): number {
 const INSIGHT_FIELDS = [
   "ad_id", "ad_name", "campaign_id", "campaign_name", "adset_id", "adset_name",
   "spend", "impressions", "reach", "frequency", "clicks", "inline_link_clicks", "ctr", "cpc", "cpm",
-  "actions", "action_values", "cost_per_action_type",
+  "actions", "action_values", "cost_per_action_type", "conversions",
   "video_play_actions", "video_thruplay_watched_actions", "video_avg_time_watched_actions",
   "video_p25_watched_actions", "video_p50_watched_actions", "video_p75_watched_actions", "video_p100_watched_actions",
 ].join(",");
@@ -178,13 +208,14 @@ interface AdMetrics {
   ad_id: string; ad_name: string; campaign_name: string; adset_name: string;
   spend: number; impressions: number; reach: number; frequency: number; cpm: number;
   clicks: number; inline_link_clicks: number; ctr: number; cpl: number; leads: number; landing_page_views: number;
-  leads_form: number; leads_web: number; campaign_type: string | null;
+  leads_form: number; leads_web: number; campaign_type: string | null; web_event: string | null;
   engagement: number; engagement_rate: number;
   video_plays: number; thruplay: number; video_avg_time_watched: number;
   p25: number; p50: number; p75: number; p100: number;
   hook_rate: number; hold_rate: number; retention: Record<string, unknown>;
   effective_status?: string; issues?: string; permalink?: string; country?: string;
   raw_actions?: any[];
+  raw_conversions?: any[];
 }
 
 function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
@@ -199,14 +230,18 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
   const p50 = videoVal(row.video_p50_watched_actions);
   const p75 = videoVal(row.video_p75_watched_actions);
   const p100 = videoVal(row.video_p100_watched_actions);
-  const leads = pickLeads(row.actions, convEvent);
   const landing_page_views = pickLanding(row.actions);
   // Desglose formulario de Meta vs página web. La clasificación sale de la EVIDENCIA del
   // anuncio, no de cómo esté configurada la campaña: un anuncio que trajo leads de leadgen
-  // es formulario; uno que registró visitas a la landing es web. Sin ninguna de las dos
+  // es formulario; uno que registró el evento de la landing es web. Sin ninguna de las dos
   // señales queda en null y despues hereda el tipo de su campaña.
   const leads_form = pickLeadsForm(row.actions);
-  const leads_web = pickLeadsWeb(row.actions, convEvent);
+  const web = pickWeb(row.conversions, row.actions, convEvent);
+  const leads_web = web.value;
+  const web_event = web.event || null;
+  // El total es la SUMA de los dos: son cosas distintas, no dos vistas del mismo lead.
+  // Si no se detectó ninguno, red de seguridad con el bucket `lead` unificado de Meta.
+  const leads = (leads_form + leads_web) || pickLeads(row.actions, convEvent);
   const campaign_type = leads_form > 0
     ? "formulario"
     : (leads_web > 0 || landing_page_views > 0 ? "web" : null);
@@ -219,7 +254,7 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
     spend, impressions, reach: num(row.reach), frequency: num(row.frequency),
     cpm: num(row.cpm) || (impressions > 0 ? (spend / impressions) * 1000 : 0),
     clicks: num(row.clicks), inline_link_clicks: num(row.inline_link_clicks),
-    ctr: num(row.ctr), leads, leads_form, leads_web, campaign_type, landing_page_views, cpl: leads > 0 ? spend / leads : 0,
+    ctr: num(row.ctr), leads, leads_form, leads_web, campaign_type, web_event, landing_page_views, cpl: leads > 0 ? spend / leads : 0,
     engagement: interactions, engagement_rate: impressions > 0 ? (interactions / impressions) * 100 : 0,
     video_plays: v3s, thruplay, video_avg_time_watched: videoVal(row.video_avg_time_watched_actions),
     p25, p50, p75, p100,
@@ -227,6 +262,7 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
     hold_rate: impressions > 0 ? (thruplay / impressions) * 100 : 0,
     retention: { points, base, plays_3s: v3s, plays_raw: plays, thruplay, p25, p50, p75, p100, duration: 100 },
     raw_actions: includeRaw ? (row.actions || []) : undefined,
+    raw_conversions: includeRaw ? (row.conversions || []) : undefined,
   };
 }
 
@@ -382,7 +418,7 @@ Deno.serve(async (req) => {
           if (a.spend > 0) adsActiveAny = true;
           clientAdRows.push({ ...a, ad_account_id: jb.accId });
         }
-        results.push({ client: jb.clientName, accId: jb.accId, ads: ads.length, usagePct, winners: [...winners], sample: dry ? ads.map((a) => ({ ad_name: a.ad_name, status: a.effective_status, country: a.country, issues: a.issues, impressions: a.impressions, reach: a.reach, cpm: Number(a.cpm.toFixed(2)), eng: Number(a.engagement_rate.toFixed(2)), leads: a.leads, cpl: Number(a.cpl.toFixed(2)), ctr: Number(a.ctr.toFixed(2)), hook: Number(a.hook_rate.toFixed(1)), hold: Number(a.hold_rate.toFixed(1)), link: a.permalink, score: (a as any).score, win: (a as any).is_winner })) : undefined });
+        results.push({ client: jb.clientName, accId: jb.accId, ads: ads.length, usagePct, winners: [...winners], sample: dry ? ads.map((a) => ({ ad_name: a.ad_name, status: a.effective_status, country: a.country, issues: a.issues, impressions: a.impressions, reach: a.reach, cpm: Number(a.cpm.toFixed(2)), eng: Number(a.engagement_rate.toFixed(2)), leads: a.leads, tipo: a.campaign_type, leads_form: a.leads_form, leads_web: a.leads_web, web_event: a.web_event, customs: (a.raw_conversions || []).map((x: any) => `${x.action_type}=${x.value}`), cpl: Number(a.cpl.toFixed(2)), ctr: Number(a.ctr.toFixed(2)), hook: Number(a.hook_rate.toFixed(1)), hold: Number(a.hold_rate.toFixed(1)), link: a.permalink, score: (a as any).score, win: (a as any).is_winner })) : undefined });
         if (usagePct >= abortAtPct) { aborted = true; results.push({ note: `Uso de Meta al ${usagePct}% — corte preventivo.` }); break; }
         await sleep(throttleMs);
       } catch (e) {
@@ -396,7 +432,7 @@ Deno.serve(async (req) => {
         ad_id: a.ad_id, ad_name: a.ad_name, time_window: window, snapshot_date: snapshotDate,
         spend: a.spend, impressions: a.impressions, reach: a.reach, frequency: a.frequency, cpm: a.cpm,
         clicks: a.clicks, inline_link_clicks: a.inline_link_clicks, ctr: a.ctr, cpl: a.cpl, leads: a.leads, landing_page_views: a.landing_page_views,
-        leads_form: a.leads_form, leads_web: a.leads_web, campaign_type: a.campaign_type,
+        leads_form: a.leads_form, leads_web: a.leads_web, campaign_type: a.campaign_type, web_event: a.web_event,
         engagement: a.engagement, engagement_rate: a.engagement_rate,
         video_3s: a.video_plays, thruplay: a.thruplay, video_avg_time_watched: a.video_avg_time_watched,
         hook_rate: a.hook_rate, hold_rate: a.hold_rate, retention: a.retention,
