@@ -639,8 +639,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const cargarSharePg = async () => {
     const ctx = sharePgCtx(); if (!ctx) return;
     try {
-      const rows = await sbFetch(`share_links?select=id,token,created_at&kind=eq.${ctx.kind}&doc_id=eq.${encodeURIComponent(String(ctx.id))}&revoked=eq.false&order=created_at.desc`);
-      setSharePgLinks(Array.isArray(rows) ? rows : []);
+      const { data, error } = await supabase.rpc('share_link_list', { p: { kind: ctx.kind, doc_id: String(ctx.id) } });
+      if (error) throw error;
+      setSharePgLinks(Array.isArray(data) ? data : []);
     } catch { setSharePgLinks([]); }
   };
   const abrirSharePg = () => { setSharePgOpen(o => !o); if (!sharePgOpen) { setSharePgLinks(null); cargarSharePg(); } };
@@ -648,15 +649,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     const ctx = sharePgCtx(); if (!ctx) return;
     setSharePgBusy(true);
     try {
-      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ kind: ctx.kind, doc_id: String(ctx.id), client_id: cid || null, label: ctx.label, created_by: by }) });
-      const created = Array.isArray(res) ? res[0] : res;
-      if (created?.token) { copyClip(urlShare(created.token)); setCopiedPgTok(created.token); setTimeout(() => setCopiedPgTok(null), 1800); }
+      const { data, error } = await supabase.rpc('share_link_create', { p: { kind: ctx.kind, doc_id: String(ctx.id), client_id: cid || null, label: ctx.label, created_by: by } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo crear el link');
+      if (data.token) { copyClip(urlShare(data.token)); setCopiedPgTok(data.token); setTimeout(() => setCopiedPgTok(null), 1800); }
       await cargarSharePg();
     } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
     setSharePgBusy(false);
   };
   const revocarSharePg = async (id) => {
-    try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ }
+    try { await supabase.rpc('share_link_revoke', { p_id: id }); } catch { /* */ }
     cargarSharePg();
   };
   // Botonera de las páginas sueltas (guías y docs del cliente): PDF + Compartir.
@@ -1238,8 +1240,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const cargarDelShares = async () => {
     if (!resolvedDoc) { setShareDelLinks([]); return; }
     try {
-      const rows = await sbFetch(`share_links?select=id,token,section_ids,created_at&kind=eq.del&doc_id=eq.${encodeURIComponent(resolvedDoc)}&revoked=eq.false&order=created_at.desc`);
-      setShareDelLinks(Array.isArray(rows) ? rows : []);
+      const { data, error } = await supabase.rpc('share_link_list', { p: { kind: 'del', doc_id: resolvedDoc } });
+      if (error) throw error;
+      setShareDelLinks(Array.isArray(data) ? data : []);
     } catch { setShareDelLinks([]); }
   };
   const abrirShareDel = () => { const next = !shareDelOpen; setShareDelOpen(next); if (next) { setShareDelLinks(null); setShareSel(new Set()); cargarDelShares(); } };
@@ -1248,16 +1251,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (!shareSel.size || !resolvedDoc) return;
     setShareDelBusy(true);
     try {
-      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ kind: 'del', doc_id: resolvedDoc, strategy_id: strategyId || null, client_id: cid || null, section_ids: Array.from(shareSel), label: 'Comentarios del DEL', created_by: by }) });
-      const created = Array.isArray(res) ? res[0] : res;
-      if (created?.token) { copyClip(urlShare(created.token)); setCopiedDelTok(created.token); setTimeout(() => setCopiedDelTok(null), 1800); }
+      const { data, error } = await supabase.rpc('share_link_create', { p: { kind: 'del', doc_id: resolvedDoc, strategy_id: strategyId || null, client_id: cid || null, section_ids: Array.from(shareSel), label: 'Comentarios del DEL', created_by: by } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo crear el link');
+      if (data.token) { copyClip(urlShare(data.token)); setCopiedDelTok(data.token); setTimeout(() => setCopiedDelTok(null), 1800); }
       setShareSel(new Set());
       await cargarDelShares();
     } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
     setShareDelBusy(false);
   };
   const copiarDelShare = (tok) => { copyClip(urlShare(tok)); setCopiedDelTok(tok); setTimeout(() => setCopiedDelTok(null), 1500); };
-  const revocarDelShare = async (id) => { try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ } cargarDelShares(); };
+  const revocarDelShare = async (id) => { try { await supabase.rpc('share_link_revoke', { p_id: id }); } catch { /* */ } cargarDelShares(); };
 
   const editando = modo === 'editar';
   // Arma una copia imprimible del documento (todas las pestañas visibles, con los

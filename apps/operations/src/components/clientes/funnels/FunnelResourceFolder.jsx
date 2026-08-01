@@ -181,8 +181,10 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     : { kind: 'folder', client_id: clientId, strategy_id: strategyId, avatar_id: avatarId || null, bucket_key: bucketKey, version });
   const cargarShares = async () => {
     try {
-      const rows = await sbFetch(`share_links?select=id,token,revoked,created_at,strategy_id,avatar_id&kind=eq.folder&client_id=eq.${encodeURIComponent(clientId)}&bucket_key=eq.${encodeURIComponent(bucketKey)}&revoked=eq.false&order=created_at.desc`);
-      const list = (Array.isArray(rows) ? rows : []).filter(r => (r.strategy_id || null) === (clientScope ? null : strategyId) && (r.avatar_id || null) === (clientScope ? null : (avatarId || null)));
+      const { data, error } = await supabase.rpc('share_link_list', { p: { kind: 'folder', client_id: clientId, bucket_key: bucketKey } });
+      if (error) throw error;
+      const rows = Array.isArray(data) ? data : [];
+      const list = rows.filter(r => (r.strategy_id || null) === (clientScope ? null : strategyId) && (r.avatar_id || null) === (clientScope ? null : (avatarId || null)));
       setShareLinks(list);
     } catch { setShareLinks([]); }
   };
@@ -209,16 +211,17 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const crearShare = async () => {
     setShareBusy(true);
     try {
-      const res = await sbFetch('share_links', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ ...shareScope(), label, created_by: by || null }) });
-      const created = Array.isArray(res) ? res[0] : res;
-      if (created?.token) { copyText(urlDe(created.token)); setCopiedTok(created.token); setTimeout(() => setCopiedTok(null), 1800); }
+      const { data, error } = await supabase.rpc('share_link_create', { p: { ...shareScope(), label, created_by: by || null } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo crear el link');
+      if (data.token) { copyText(urlDe(data.token)); setCopiedTok(data.token); setTimeout(() => setCopiedTok(null), 1800); }
       await cargarShares();
     } catch (e) { window.alert('No pude crear el link: ' + (e?.message || e)); }
     setShareBusy(false);
   };
   const copiarShare = (tok) => { copyText(urlDe(tok)); setCopiedTok(tok); setTimeout(() => setCopiedTok(null), 1500); };
   const revocarShare = async (id) => {
-    try { await sbFetch(`share_links?id=eq.${id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ revoked: true }) }); } catch { /* */ }
+    try { await supabase.rpc('share_link_revoke', { p_id: id }); } catch { /* */ }
     cargarShares();
   };
 
