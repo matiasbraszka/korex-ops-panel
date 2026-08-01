@@ -4,7 +4,7 @@ import BottomNav from '../components/BottomNav';
 import { Loading, useAsync } from '../components/ui';
 import { api } from '../data/portalApi';
 import { T, display, pill } from '../components/theme';
-import { PipelineBar } from '../components/PipelineSteps';
+import { EmbudoTracks } from '../components/PipelineSteps';
 import { IcoChevL, IcoChevR, IcoCheck } from '../components/icons';
 
 // EMBUDO (detalle) — exacta al prototipo: "Cómo va" con los 4 pasos y
@@ -15,7 +15,7 @@ export default function EmbudoScreen() {
   const { data: embudos, loading: l1 } = useAsync(() => api.embudos(), [id]);
   const { data: material, loading: l2 } = useAsync(() => api.material(), [id]);
   const { data: inicio } = useAsync(() => api.inicio(), [id]);
-  const { data: pasosMap } = useAsync(() => api.embudoPasos(), [id]);
+  const { data: tracksMap } = useAsync(() => api.embudoTracks(), [id]);
   const { data: optMap } = useAsync(() => api.optimizacion(), [id]);
 
   if (l1 || l2) return <PhoneFrame><Loading label="Abriendo el embudo…" /></PhoneFrame>;
@@ -25,7 +25,7 @@ export default function EmbudoScreen() {
   const alAire = e.etiqueta === 'al_aire';
   const pend = !!e.grabPendiente?.pend;
   const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
-  const pasos = pasosMap?.[id];
+  const tracks = tracksMap?.[id];
   const opt = optMap?.[id];
   const m = material || {};
   const grabs = (Array.isArray(m.grabaciones) ? m.grabaciones : []).filter((g) => g.strategyId === id);
@@ -100,8 +100,8 @@ export default function EmbudoScreen() {
                 <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance de este embudo</span>
                 <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
               </div>
-              {Array.isArray(pasos) && pasos.length > 0
-                ? <PipelineBar pasos={pasos} />
+              {tracks
+                ? <EmbudoTracks data={tracks} />
                 : (
                   <div style={{ height: 10, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
                     <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />

@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loading, DemoBanner, useAsync } from '../components/ui';
 import { api, isDemo } from '../data/portalApi';
 import { T, display } from '../components/theme';
-import { PipelineBar } from '../components/PipelineSteps';
+import { EmbudoTracks } from '../components/PipelineSteps';
 import { IcoChevR, IcoExternal } from '../components/icons';
 
 // TUS EMBUDOS — exacta al prototipo: tarjetas numeradas con barra de color,
@@ -16,7 +16,7 @@ const fmt = (d) => {
 export default function EmbudosScreen() {
   const nav = useNavigate();
   const { data, loading } = useAsync(() => api.embudos(), []);
-  const { data: pasosMap } = useAsync(() => api.embudoPasos(), []);
+  const { data: tracksMap } = useAsync(() => api.embudoTracks(), []);
 
   if (loading) return <Loading label="Cargando tus embudos…" />;
   const embudos = Array.isArray(data) ? data : [];
@@ -36,7 +36,7 @@ export default function EmbudosScreen() {
       </div>
 
       <div style={{ padding: '24px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {embudos.map((e, i) => <EmbudoCard key={e.id} e={e} n={i + 1} nav={nav} pasos={pasosMap?.[e.id]} />)}
+        {embudos.map((e, i) => <EmbudoCard key={e.id} e={e} n={i + 1} nav={nav} tracks={tracksMap?.[e.id]} />)}
       </div>
 
       <div style={{ padding: '26px 22px 20px', fontSize: 12.5, lineHeight: 1.5, color: T.text3, textAlign: 'center' }}>
@@ -46,7 +46,7 @@ export default function EmbudosScreen() {
   );
 }
 
-function EmbudoCard({ e, n, nav, pasos }) {
+function EmbudoCard({ e, n, nav, tracks }) {
   const alAire = e.etiqueta === 'al_aire';
   const acento = alAire ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
   const acentoSuave = alAire ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
@@ -74,9 +74,9 @@ function EmbudoCard({ e, n, nav, pasos }) {
             <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
             <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
           </div>
-          {/* Pasos del pipeline: lo que YA entregamos (verde) vs lo que sigue. */}
-          {Array.isArray(pasos) && pasos.length > 0
-            ? <PipelineBar pasos={pasos} acento={acento} />
+          {/* Piezas del embudo divididas en sub-fases, por responsabilidad. */}
+          {tracks
+            ? <EmbudoTracks data={tracks} compact />
             : (
               <div style={{ height: 9, borderRadius: 999, background: T.surface2, overflow: 'hidden' }}>
                 <div style={{ height: '100%', borderRadius: 999, background: acento, transition: 'width .35s ease', width: `${e.progreso}%` }} />

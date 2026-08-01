@@ -52,6 +52,9 @@ export const api = {
   embudoPasos: () => rpc('portal_cliente_embudo_pasos', {}, () => ({})),
   // Fase de optimización por funnel lanzado: { sid: {entregados,target,extras,pendientes} }.
   optimizacion: () => rpc('portal_cliente_optimizacion', {}, () => ({})),
+  // Piezas del embudo divididas en sub-fases (VSL/Anuncios/Landing) por responsabilidad:
+  // { sid: {lanzado, simples:[...], tracks:[{label, fases:[{label,estado}]}]} }.
+  embudoTracks: () => rpc('portal_cliente_embudo_tracks', {}, () => ({})),
   carpetas:  () => rpc('portal_cliente_carpetas',  {}, () => mock.MOCK_CARPETAS),
   pipeline:  () => rpc('portal_cliente_pipeline',  {}, () => mock.MOCK_PIPELINE),
   // Las guías que el equipo mantiene en el DEL (del_guias_globales). Reemplazan
