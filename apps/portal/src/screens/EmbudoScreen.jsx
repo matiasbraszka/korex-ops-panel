@@ -21,9 +21,11 @@ export default function EmbudoScreen() {
   if (!e) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este embudo.</div></PhoneFrame>;
 
   const alAire = e.etiqueta === 'al_aire';
-  const pend = !!e.grabPendiente?.pend;
   const completo = e.etiqueta === 'completo';   // embudo viejo/entregado (status 'antiguo')
-  const terminado = alAire || completo;          // estados "verdes" (nada pendiente)
+  const terminado = alAire || completo;          // estados "verdes": el recorrido de lanzamiento ya está
+  // En un embudo entregado, el recorrido principal no tiene nada pendiente: lo que
+  // falte (grabar/revisar) es OPTIMIZACIÓN y va en su propio paso, no en el timeline.
+  const pend = !terminado && !!e.grabPendiente?.pend;
   const acento = terminado ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
   const opt = optMap?.[id];
   const m = material || {};

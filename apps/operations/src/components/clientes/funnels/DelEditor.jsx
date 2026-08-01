@@ -1771,24 +1771,6 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       })()}
                     </>
                   )}
-                  {/* Qué ve el cliente, dicho en palabras. Los dos selectores de
-                      arriba no lo dejan claro: "Revisar + Terminado" en un guion
-                      de VSL o anuncios NO lo manda a grabar, y eso se descubría
-                      recién al abrir el portal del cliente. */}
-                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (() => {
-                    const acc = s.accion_cliente || 'solo_equipo';
-                    const fin = (s.estado_seccion || 'en_construccion') === 'terminado';
-                    const v = !fin || acc === 'solo_equipo'
-                      ? { t: 'El cliente no la ve', c: '#7A8290' }
-                      : acc === 'grabarse'
-                        ? { t: 'Le aparece para grabar', c: '#15803D' }
-                        : { t: 'La ve, pero no para grabar', c: '#1D4FD8' };
-                    return (
-                      <span className="hidden lg:inline shrink-0 text-[10px] font-semibold whitespace-nowrap" style={{ color: v.c }}>
-                        {v.t}
-                      </span>
-                    );
-                  })()}
                   {editando && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => setEditTitle(s.id)} title="Renombrar" className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9098A4] hover:bg-[#F4F5F7] hover:text-[#1A1D26] border-none bg-transparent cursor-pointer"><Pencil size={13} /></button>
