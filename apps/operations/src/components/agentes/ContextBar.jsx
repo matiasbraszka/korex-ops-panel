@@ -4,7 +4,7 @@
 // la edge fn del agente lo sigue usando para encontrar el DEL.
 // Reusa los datos de useApp() (clients / strategyPages), igual que FunnelsView.
 import { useMemo } from 'react';
-import { UserCircle2, Filter, User, ChevronDown, Check } from 'lucide-react';
+import { UserCircle2, Filter, User, Mic, ChevronDown, Check } from 'lucide-react';
 import useDropdown from './useDropdown';
 import DropdownPanel from './DropdownPanel';
 
@@ -57,7 +57,7 @@ function ContextPicker(props) {
   );
 }
 
-export default function ContextBar({ clients, strategyPages, sel, onChange }) {
+export default function ContextBar({ clients, strategyPages, collaborators, sel, onChange }) {
   const clientOpts = useMemo(
     () => (clients || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((c) => ({ value: c.id, label: c.name || c.id })),
     [clients],
@@ -71,13 +71,18 @@ export default function ContextBar({ clients, strategyPages, sel, onChange }) {
     const f = (strategyPages || []).find((p) => p.id === sel.funnelId);
     return (Array.isArray(f?.avatars) ? f.avatars : []).map((a) => ({ value: a.id, label: a.name || 'Avatar' }));
   }, [strategyPages, sel.funnelId]);
+  // Encargados de grabación del cliente (los que se graban en cámara → su perfil alimenta a la IA).
+  const collabOpts = useMemo(
+    () => (collaborators || []).map((c) => ({ value: c.id, label: c.full_name || c.email || 'Encargado' })),
+    [collaborators],
+  );
 
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-2 bg-bg border border-border rounded-[11px] p-1 max-md:overflow-x-auto">
         <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-text3 pl-2.5 pr-1.5 whitespace-nowrap shrink-0">Contexto</span>
         <ContextPicker Icon={UserCircle2} label="Cliente" value={sel.clientId} options={clientOpts} placeholder="Elegí un cliente…"
-          onSelect={(v) => onChange({ clientId: v, strategyId: '', funnelId: '', avatarId: '' })} />
+          onSelect={(v) => onChange({ clientId: v, strategyId: '', funnelId: '', avatarId: '', collaboratorId: '' })} />
         <ContextPicker Icon={Filter} label="Funnel" value={sel.funnelId} options={funnelOpts} placeholder={sel.clientId ? 'Elegí un funnel…' : '—'} disabled={!sel.clientId}
           onSelect={(v) => {
             // strategyId viaja escondido: la edge fn lo usa para ubicar el DEL del funnel.
@@ -86,6 +91,9 @@ export default function ContextBar({ clients, strategyPages, sel, onChange }) {
           }} />
         <ContextPicker Icon={User} label="Avatar" value={sel.avatarId} options={avatarOpts} placeholder={sel.funnelId ? (avatarOpts.length ? 'Elegí un avatar…' : 'Sin avatares') : '—'} disabled={!sel.funnelId || !avatarOpts.length}
           onSelect={(v) => onChange({ avatarId: v })} />
+        <ContextPicker Icon={Mic} label="Encargado" value={sel.collaboratorId} options={collabOpts}
+          placeholder={sel.clientId ? (collabOpts.length ? 'Quién se graba…' : 'Sin encargados') : '—'} disabled={!sel.clientId || !collabOpts.length}
+          onSelect={(v) => onChange({ collaboratorId: v === sel.collaboratorId ? '' : v })} />
       </div>
 
       {sel.funnelId && !avatarOpts.length && (

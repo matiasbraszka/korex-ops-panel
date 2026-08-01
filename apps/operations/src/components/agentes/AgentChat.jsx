@@ -5,11 +5,38 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import {
   Send, Loader2, Lock, Sparkles, Save, Check, AlertTriangle, Square,
-  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video,
+  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video, FileOutput,
 } from 'lucide-react';
 import { agentMeta } from './agentMeta';
 import AgentMarkdown, { accentOf } from './AgentMarkdown';
 import SlashMenu from './SlashMenu';
+import { sanitizeDelHtml } from '../clientes/funnels/delSanitize';
+
+// A qué pestaña (kind) del DEL va cada agente, y cómo se titula la sección exportada.
+const DEL_KIND = { anuncios: 'anuncios', vsl: 'vsl', landing: 'pg_landing', descubrimiento: 'estrategia' };
+const DEL_LABEL = { anuncios: 'Anuncios (IA)', vsl: 'VSL (IA)', landing: 'Copy del funnel (IA)', descubrimiento: 'Descubrimiento (IA)' };
+
+// Markdown simple → HTML dentro de la whitelist del DEL (h1-h3, p, ul/li, strong, br).
+// La respuesta del agente es markdown liviano (títulos, negritas, viñetas) o texto plano.
+function mdToHtml(src) {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/__(.+?)__/g, '<strong>$1</strong>');
+  const lines = String(src || '').replace(/\r/g, '').split('\n');
+  const out = []; let list = null; let para = [];
+  const flushPara = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } };
+  const flushList = () => { if (list) { out.push('<ul>' + list.map((li) => '<li>' + inline(li) + '</li>').join('') + '</ul>'); list = null; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (h) { flushPara(); flushList(); const n = h[1].length; out.push(`<h${n}>` + inline(h[2]) + `</h${n}>`); }
+    else if (bullet) { flushPara(); (list = list || []).push(bullet[1]); }
+    else if (line.trim() === '') { flushPara(); flushList(); }
+    else { flushList(); para.push(line); }
+  }
+  flushPara(); flushList();
+  return out.join('');
+}
 
 const FEEDBACK_TAGS = ['Hook flojo', 'No va al avatar', 'Cliché', 'No alineado al VSL', 'Compliance', 'No se entiende', 'Perfecto'];
 const fbid = () => `afb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -56,6 +83,46 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
   const [sent, setSent] = useState(null);   // 'up' | 'down'
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [delState, setDelState] = useState('idle'); // idle | saving | done | error
+  const [delMsg, setDelMsg] = useState('');
+
+  // Enviar esta respuesta al DEL del funnel como una PESTAÑA nueva (un clic).
+  const enviarAlDel = async () => {
+    if (delState === 'saving' || !sel.funnelId) return;
+    setDelState('saving'); setDelMsg('');
+    try {
+      // 1 · Ubicar (o crear) el documento del DEL de este funnel.
+      const { data: page } = await supabase.from('strategy_pages')
+        .select('name,del_doc_id,strategy_id,client_id').eq('id', sel.funnelId).maybeSingle();
+      let docId = page?.del_doc_id || null;
+      if (!docId) {
+        const { data: newDoc, error: e1 } = await supabase.rpc('del_doc_create', {
+          p_client_id: sel.clientId, p_strategy_id: sel.strategyId || page?.strategy_id || null,
+          p_title: page?.name || 'DEL',
+        });
+        if (e1) throw e1;
+        docId = newDoc;
+        // Dejar el funnel apuntando a su DEL nuevo, para no crear otro en el próximo envío.
+        if (docId) await supabase.from('strategy_pages').update({ del_doc_id: docId }).eq('id', sel.funnelId);
+      }
+      if (!docId) throw new Error('No se pudo ubicar ni crear el DEL de este funnel.');
+      // 2 · Crear la sección (pestaña) en la categoría que corresponde al agente.
+      const kind = DEL_KIND[subagentKey] || 'otros';
+      const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+      const title = `${DEL_LABEL[subagentKey] || 'Contenido (IA)'} · ${fecha}`;
+      const { data: secId, error: e2 } = await supabase.rpc('del_section_add', {
+        p_doc_id: docId, p_title: title, p_kind: kind, p_after_ord: null, p_by: 'Agente IA',
+      });
+      if (e2) throw e2;
+      // 3 · Guardar el contenido (HTML limpio; el server no sanitiza).
+      const html = sanitizeDelHtml(mdToHtml(responseText || ''));
+      const { error: e3 } = await supabase.rpc('del_section_save', { p_id: secId, p_html: html, p_by: 'Agente IA' });
+      if (e3) throw e3;
+      setDelState('done'); setDelMsg(`Enviado al DEL · pestaña «${title}»`);
+    } catch (err) {
+      setDelState('error'); setDelMsg(err?.message || 'No se pudo enviar al DEL.');
+    }
+  };
 
   const submit = async (rating, tgs = [], note = '') => {
     setSaving(true);
@@ -85,6 +152,14 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
         <button onClick={onRegenerate} disabled={busy} className={actionBtn} title="Pedir otra versión">
           <RefreshCw size={14} /> Regenerar
         </button>
+        {sel.funnelId && (
+          <button onClick={enviarAlDel} disabled={delState === 'saving'} className={actionBtn}
+            title="Crear una pestaña nueva en el DEL de este funnel con esta respuesta">
+            {delState === 'saving' ? <><Loader2 size={14} className="animate-spin" /> Enviando…</>
+              : delState === 'done' ? <><Check size={14} className="text-green" /> En el DEL</>
+              : <><FileOutput size={14} /> Enviar al DEL</>}
+          </button>
+        )}
         {sent ? (
           <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-green ml-1"><Check size={13} /> ¡Gracias por el feedback!</span>
         ) : (
@@ -99,6 +174,10 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
           </>
         )}
       </div>
+
+      {delMsg && (
+        <div className={`text-[11.5px] font-semibold ${delState === 'error' ? 'text-red' : 'text-green'}`}>{delMsg}</div>
+      )}
 
       {mode === 'down' && !sent && (
         <div className="bg-bg border border-border rounded-xl p-2.5 grid gap-2 max-w-[460px]">
@@ -370,6 +449,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     const body = {
       subagent_key: agentKey,
       client_id: sel.clientId, strategy_id: sel.strategyId, funnel_id: sel.funnelId, avatar_id: sel.avatarId,
+      collaborator_id: sel.collaboratorId || null,
       mode,
       messages: historyForApi.filter((m) => m.kind !== 'ads' && m.kind !== 'vsl' && m.kind !== 'notice').map((m) => ({ role: m.role, content: m.content })),
     };

@@ -65,6 +65,7 @@ Deno.serve(async (req) => {
   const strategyId = str(body.strategy_id);
   const funnelId = str(body.funnel_id);
   const avatarId = str(body.avatar_id);
+  const collaboratorId = str(body.collaborator_id); // encargado de grabación elegido (opcional)
   const mode = str(body.mode) === "generate" ? "generate" : "chat";
   const rawMsgs = Array.isArray(body.messages) ? (body.messages as Record<string, unknown>[]) : [];
   // Descubrimiento trabaja a nivel CLIENTE: corre ANTES de que existan estrategias, funnels y
@@ -275,6 +276,19 @@ Deno.serve(async (req) => {
     .select("doc_kind,text,char_count").eq("client_id", clientId).in("doc_kind", ["briefing", "onboarding"]).order("char_count", { ascending: false });
   const briefDoc = (briefRows || []).find((d) => d.doc_kind === "briefing") || (briefRows || []).find((d) => d.doc_kind === "onboarding");
   const briefText = clip(str(briefDoc?.text), 3000);
+
+  // Encargado de grabación elegido: SU perfil (historia + personalidad) es el insumo más
+  // importante para escribir a la medida de quien de verdad va a estar en cámara.
+  let encargadoText = "";
+  let encargadoNombre = "";
+  if (collaboratorId) {
+    const [{ data: colabRow }, { data: perfilRow }] = await Promise.all([
+      supabase.from("portal_collaborators").select("full_name,role").eq("id", collaboratorId).maybeSingle(),
+      supabase.from("client_brain_docs").select("text").eq("id", `colab_${collaboratorId}`).maybeSingle(),
+    ]);
+    encargadoNombre = str(colabRow?.full_name);
+    encargadoText = clip(str(perfilRow?.text), 4000);
+  }
 
   // ── Qué paso del descubrimiento están pidiendo ──
   // Se resuelve ACÁ, antes de cargar los documentos, porque de esto depende cuánto se le da de
@@ -954,6 +968,11 @@ Deno.serve(async (req) => {
       : `\n— GUIÓN DEL VSL DEL FUNNEL (el anuncio SALE de acá) —\n${vslScript ? clip(vslScript, 5000) : "(sin guión de VSL cargado)"}`,
     pagesBlock, // a dónde LLEGA: va pegado al VSL para que se lea como un solo recorrido
     briefText ? `\n— BRIEF / PERSONALIDAD DEL LÍDER —\n${briefText}` : "",
+    // Quién SE GRABA en cámara: el encargado de grabación elegido. Su historia y personalidad
+    // mandan sobre el tono, el "yo" del guión y los ejemplos personales. Si está, escribí para ÉL.
+    encargadoText
+      ? `\n— QUIÉN SE GRABA (ENCARGADO DE GRABACIÓN)${encargadoNombre ? `: ${encargadoNombre}` : ""} —\nEsta es la persona real que va a estar en cámara: hablá en su voz, usá su historia y su personalidad, y no le pongas en boca cosas que no encajan con ella. Su perfil (respondido por ella misma):\n${encargadoText}`
+      : "",
     // Los anuncios ganadores son insumo del agente de anuncios. Para VSL, el ganador
     // relevante es el VSL que retuvo (Voomly), que ya viaja etiquetado en los ejemplos.
     subagentKey === "anuncios"

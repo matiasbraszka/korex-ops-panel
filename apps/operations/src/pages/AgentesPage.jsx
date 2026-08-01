@@ -19,9 +19,10 @@ const rid = () => `ach_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 export default function AgentesPage() {
   const { clients, strategyPages, updateStrategyPage, currentUser } = useApp();
   const navigate = useNavigate();
-  const [sel, setSel] = useState({ clientId: '', strategyId: '', funnelId: '', avatarId: '' });
+  const [sel, setSel] = useState({ clientId: '', strategyId: '', funnelId: '', avatarId: '', collaboratorId: '' });
   const [agentKey, setAgentKey] = useState('anuncios');
   const [subagents, setSubagents] = useState([]);
+  const [collabs, setCollabs] = useState([]);
   const [pipeline, setPipeline] = useState([]);
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
@@ -61,6 +62,20 @@ export default function AgentesPage() {
     return () => { alive = false; };
   }, [sel.clientId]);
 
+  // Encargados de grabación del cliente (los que tienen perfil para alinear a la IA).
+  useEffect(() => {
+    let alive = true;
+    if (!sel.clientId) { setCollabs([]); return undefined; }
+    supabase.rpc('portal_collab_list', { p_client_id: sel.clientId })
+      .then(({ data }) => {
+        if (!alive) return;
+        const list = (data?.colaboradores || []).filter((c) => c.enabled && /encargado/i.test(c.role || ''));
+        setCollabs(list);
+      })
+      .catch(() => { if (alive) setCollabs([]); });
+    return () => { alive = false; };
+  }, [sel.clientId]);
+
   // Cada agente mira SU etapa: el de anuncios espera el VSL, el de VSL espera los avatares.
   // Tiene que coincidir con STAGE_BY_AGENT de la edge fn agent-chat (que es la autoridad).
   //
@@ -95,7 +110,7 @@ export default function AgentesPage() {
 
   const openChat = useCallback(async (chat) => {
     const { data } = await supabase.from('agent_chats').select('*').eq('id', chat.id).maybeSingle();
-    setSel({ clientId: chat.client_id || '', strategyId: chat.strategy_id || '', funnelId: chat.funnel_id || '', avatarId: chat.avatar_id || '' });
+    setSel({ clientId: chat.client_id || '', strategyId: chat.strategy_id || '', funnelId: chat.funnel_id || '', avatarId: chat.avatar_id || '', collaboratorId: '' });
     if (chat.subagent_key) setAgentKey(chat.subagent_key);
     setActiveChatId(chat.id);
     setInitialMessages(Array.isArray(data?.messages) ? data.messages : []);
@@ -184,7 +199,7 @@ export default function AgentesPage() {
         </div>
 
         <div className="py-0 px-6 pb-3.5 max-md:px-3.5 max-md:pb-3">
-          <ContextBar clients={clients} strategyPages={strategyPages} sel={sel} onChange={onChange} />
+          <ContextBar clients={clients} strategyPages={strategyPages} collaborators={collabs} sel={sel} onChange={onChange} />
         </div>
       </div>
 
