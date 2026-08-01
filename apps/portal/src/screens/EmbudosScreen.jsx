@@ -18,7 +18,7 @@ export default function EmbudosScreen() {
 
   if (loading) return <Loading label="Cargando tus embudos…" />;
   const embudos = Array.isArray(data) ? data : [];
-  const alAire = embudos.filter((e) => e.etiqueta === 'al_aire' || e.etiqueta === 'completo').length;
+  const alAire = embudos.filter((e) => ['al_aire', 'completo', 'activo'].includes(e.etiqueta)).length;
   const resto = embudos.length - alAire;
   const intro = embudos.length === 0 ? 'Cuando armemos tu primera campaña, aparece aquí.'
     : resto === 0 ? `Tienes ${embudos.length === 1 ? '1 campaña y ya está al aire' : `${embudos.length} campañas y ya están todas al aire`}.`
@@ -47,16 +47,19 @@ export default function EmbudosScreen() {
 function EmbudoCard({ e, n, nav }) {
   const alAire = e.etiqueta === 'al_aire';
   const completo = e.etiqueta === 'completo';   // embudo viejo/entregado
-  const terminado = alAire || completo;
+  const activo = e.etiqueta === 'activo';        // corriendo (puede NO estar al 100%)
+  const lleno = (e.progreso ?? 0) >= 100;
+  const verde = completo || alAire || (activo && lleno);   // 100% real → verde
   const pend = !!e.grabPendiente?.pend;
-  const acento = terminado ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
-  const acentoSuave = terminado ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
-  const etiqueta = completo ? 'Completo' : alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
+  const acento = verde ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
+  const acentoSuave = verde ? 'var(--mk-green-bg)' : 'var(--mk-blue-bg)';
+  const etiqueta = completo ? 'Completo' : activo ? 'Activo' : alAire ? 'Al aire' : e.etiqueta === 'te_toca' ? 'Te toca a ti' : e.etapa === 3 ? 'Editando' : 'En armado';
   const sub = completo ? 'Embudo terminado'
+    : activo ? (e.startDate ? `Activo desde el ${fmt(e.startDate)}` : 'Activo')
     : alAire ? (e.startDate ? `Al aire desde el ${fmt(e.startDate)}` : 'Al aire')
     : (e.startDate ? `Empezado el ${fmt(e.startDate)}` : 'En curso');
   // Una sola línea de "qué falta": lo del cliente en rojo, el resto suave.
-  const falta = terminado ? null : pend ? 'Falta que grabes tus anuncios' : (e.razon || null);
+  const falta = verde ? null : pend ? 'Falta que grabes tus anuncios' : (e.razon || null);
   const pagina = e.pagina;
 
   return (
@@ -86,23 +89,23 @@ function EmbudoCard({ e, n, nav }) {
           )}
         </div>
 
-        {terminado ? (
-          <>
-            {pagina && (
-              <a href={/^https?:\/\//.test(pagina) ? pagina : 'https://' + pagina} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-bg-panel)', border: '1px solid var(--mk-border)', textDecoration: 'none' }}>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Tu página</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(pagina).replace(/^https?:\/\//, '')}</span>
-                </div>
-                <div style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <IcoExternal size={15} stroke="#fff" sw={2.4} />
-                </div>
-              </a>
-            )}
-            <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.text3 }}>
-              Ver el detalle
+        {/* La página se muestra siempre que exista (un embudo activo ya está online,
+            aunque todavía no esté al 100%). */}
+        {pagina && (
+          <a href={/^https?:\/\//.test(pagina) ? pagina : 'https://' + pagina} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--mk-bg-panel)', border: '1px solid var(--mk-border)', textDecoration: 'none' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Tu página</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.primaryInk, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(pagina).replace(/^https?:\/\//, '')}</span>
             </div>
-          </>
+            <div style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IcoExternal size={15} stroke="#fff" sw={2.4} />
+            </div>
+          </a>
+        )}
+        {verde ? (
+          <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.text3 }}>
+            Ver el detalle
+          </div>
         ) : (
           <div onClick={() => nav(`/embudo/${e.id}`)} role="button" style={{ cursor: 'pointer', height: 46, borderRadius: 999, background: acento, color: '#fff', fontSize: 11.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
             Abrir este embudo

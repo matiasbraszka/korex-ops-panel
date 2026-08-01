@@ -22,8 +22,10 @@ export default function EmbudoScreen() {
 
   const alAire = e.etiqueta === 'al_aire';
   const completo = e.etiqueta === 'completo';   // embudo viejo/entregado (status 'antiguo')
-  const terminado = alAire || completo;          // estados "verdes": el recorrido de lanzamiento ya está
-  // En un embudo entregado, el recorrido principal no tiene nada pendiente: lo que
+  const activo = e.etiqueta === 'activo';        // corriendo (puede NO estar al 100%)
+  const lleno = (e.progreso ?? 0) >= 100;
+  const terminado = completo || alAire || (activo && lleno);   // "verde": nada pendiente
+  // En un embudo terminado, el recorrido principal no tiene nada pendiente: lo que
   // falte (grabar/revisar) es OPTIMIZACIÓN y va en su propio paso, no en el timeline.
   const pend = !terminado && !!e.grabPendiente?.pend;
   const acento = terminado ? 'var(--mk-green)' : 'var(--mk-blue-ops)';
@@ -45,6 +47,8 @@ export default function EmbudoScreen() {
   const conFecha = (texto, fecha) => fecha ? `${texto} · ${fecha}` : texto;
 
   const resumen = completo ? 'Este embudo ya está terminado. Fue parte de una etapa anterior de tu proyecto.'
+    : (activo && lleno) ? 'Está activo y entregado al 100%. Seguimos optimizando los resultados.'
+    : activo ? 'Tu embudo ya está activo y corriendo. Todavía faltan cosas para dejarlo terminado al 100%.'
     : alAire ? 'Está al aire. Nosotros seguimos optimizando los resultados.'
     : pend ? 'Falta que grabes tus anuncios. Todo lo demás de este embudo ya lo tenemos.'
     : grabRecibida ? 'Ya tenemos todas tus grabaciones. Estamos editando y después lo publicamos.'
@@ -78,9 +82,9 @@ export default function EmbudoScreen() {
       state: e.etapa >= 4 ? 'done' : (e.etapa >= 3 ? 'current' : 'pending'),
       boton: (devol || e.etapa >= 4) ? { label: 'Ver lo que editamos', onClick: () => nav(`/entregables/${id}`) } : null },
     { num: 4, titulo: 'Publicado',
-      estado: alAire ? (fe.publicado ? `Al aire desde el ${fe.publicado}` : 'Al aire') : 'Cuando esté al aire lo vas a ver aquí',
-      state: alAire ? 'done' : 'pending',
-      boton: (alAire && e.pagina) ? { label: 'Ver tu página', href: /^https?:\/\//.test(e.pagina) ? e.pagina : `https://${e.pagina}` } : null },
+      estado: (activo || alAire || completo) ? (fe.publicado ? `Activo desde el ${fe.publicado}` : 'Activo y corriendo') : 'Cuando esté activo lo vas a ver aquí',
+      state: (activo || alAire || completo) ? 'done' : 'pending',
+      boton: ((activo || alAire || completo) && e.pagina) ? { label: 'Ver tu página', href: /^https?:\/\//.test(e.pagina) ? e.pagina : `https://${e.pagina}` } : null },
   ].map((s) => s.boton ? { ...s, boton: { ...s.boton, bg: acento, color: '#fff' } } : s);
 
   return (
@@ -95,7 +99,7 @@ export default function EmbudoScreen() {
           <div style={{ padding: '16px 22px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={display(28, '-0.035em')}>{e.name}</div>
-              <span style={pill(terminado ? 'var(--mk-green-bg)' : 'var(--mk-purple-bg)', terminado ? 'var(--mk-green)' : 'var(--mk-purple)')}>{completo ? 'Completo' : alAire ? 'Al aire' : 'En curso'}</span>
+              <span style={pill(terminado ? 'var(--mk-green-bg)' : activo ? 'var(--mk-blue-bg)' : 'var(--mk-purple-bg)', terminado ? 'var(--mk-green)' : activo ? 'var(--mk-blue-ops)' : 'var(--mk-purple)')}>{completo ? 'Completo' : activo ? 'Activo' : alAire ? 'Al aire' : 'En curso'}</span>
             </div>
             <div style={{ fontSize: 14.5, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{resumen}</div>
           </div>
@@ -118,8 +122,8 @@ export default function EmbudoScreen() {
           <div style={{ padding: '26px 22px 0' }}>
             <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 19, fontWeight: 800, letterSpacing: '-0.028em', color: T.ink, marginBottom: 16 }}>Cómo va</div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {timelineSteps.map((s, i) => <TimelineRow key={i} s={s} last={!opt && i === timelineSteps.length - 1} />)}
-              {opt && <OptTimelineRow opt={opt} id={id} nav={nav} />}
+              {timelineSteps.map((s, i) => <TimelineRow key={i} s={s} last={!(opt && terminado) && i === timelineSteps.length - 1} />)}
+              {opt && terminado && <OptTimelineRow opt={opt} id={id} nav={nav} />}
             </div>
           </div>
 
@@ -201,7 +205,7 @@ function OptTimelineRow({ opt, id, nav }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--mk-ink)' }}>Optimización</span>
-              <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>Al aire</span>
+              <span style={pill('var(--mk-green-bg)', 'var(--mk-green)')}>Activo</span>
             </div>
             <span style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--mk-text3)' }}>Tu embudo ya está entregado al 100%. Acá lo seguimos mejorando con anuncios nuevos.</span>
           </div>
