@@ -536,6 +536,7 @@ Deno.serve(async (req) => {
   const cfg = await cargarCfg();
 
   try {
+    if (action === "selftest") return await accionSelftest(body);
     if (action === "plan") return await accionPlan(body, clientId, cfg, by);
     if (action === "render") return await accionRender(body, clientId, cfg, by);
     if (action === "palettes") return await accionPalettes(body, clientId, by);
@@ -657,6 +658,55 @@ async function accionPlan(body: Record<string, unknown>, clientId: string, cfg: 
   });
 
   return j({ ok: true, run_id: run.id, plan, cost_usd: cost, formato, n_imagenes: nImagenes, n_logos: (plan.logos as unknown[]).length });
+}
+
+// ── Acción: selftest (temporal, diagnóstico) ─────────────────────────────────
+// Corre el mismo trabajo de píxeles que render, sobre un PNG que ya está en Storage, sin llamar al
+// generador y sin subir nada. Sirve para ver dónde revienta el límite de recursos del edge runtime
+// sin pagar una imagen por intento.
+
+async function accionSelftest(body: Record<string, unknown>) {
+  const path = str(body.path);
+  const hasta = Number(body.hasta) || 99;   // para bisecar: corta después de N pasos
+  const pasos: Record<string, unknown>[] = [];
+  const marca = (nombre: string, t0: number) => {
+    const m = (Deno as unknown as { memoryUsage?: () => { rss: number; heapUsed: number } }).memoryUsage?.();
+    pasos.push({
+      paso: nombre,
+      ms: Math.round(performance.now() - t0),
+      rss_mb: m ? Math.round(m.rss / 1048576) : null,
+      heap_mb: m ? Math.round(m.heapUsed / 1048576) : null,
+    });
+  };
+
+  let t = performance.now();
+  const dl = await supabase.storage.from(BUCKET).download(path);
+  if (!dl.data) return j({ ok: false, error: "no_baje", detail: dl.error?.message });
+  const bytes = new Uint8Array(await dl.data.arrayBuffer());
+  marca(`descarga (${Math.round(bytes.byteLength / 1024)} KB)`, t);
+  if (pasos.length >= hasta) return j({ ok: true, corte: "descarga", pasos });
+
+  t = performance.now();
+  const img = decodePng(bytes);
+  limpiarAlfa(img.rgba);
+  marca(`decode ${img.w}x${img.h}`, t);
+  if (pasos.length >= hasta) return j({ ok: true, corte: "decode", pasos });
+
+  t = performance.now();
+  const an = analizarLogo(img);
+  marca("analizarLogo", t);
+  if (pasos.length >= hasta) return j({ ok: true, corte: "analizar", pasos });
+
+  const pesos: number[] = [];
+  for (const [nombre, tinta] of [["color", [11, 21, 48]], ["negro", [0, 0, 0]], ["blanco", [255, 255, 255]]] as [string, number[]][]) {
+    t = performance.now();
+    const buf = await encodePng(recolorear(img.rgba, tinta as [number, number, number], an.whiteKnockout), img.w, img.h);
+    pesos.push(Math.round(buf.byteLength / 1024));
+    marca(`recolor+encode ${nombre}`, t);
+    if (pasos.length >= hasta) return j({ ok: true, corte: nombre, kb: pesos, pasos });
+  }
+
+  return j({ ok: true, mono: an.mono, white_knockout: an.whiteKnockout, kb: pesos, pasos });
 }
 
 // ── Acción: render (una imagen) ──────────────────────────────────────────────
@@ -793,9 +843,9 @@ async function publicarPieza(a: {
   // literalmente la misma forma.
   const tinta = hexARgb(str(logo.hex)) as [number, number, number];
   const versiones: { key: string; bytes: Uint8Array }[] = [
-    { key: "color", bytes: encodePng(recolorear(img.rgba, tinta, whiteKnockout), img.w, img.h) },
-    { key: "negro", bytes: encodePng(recolorear(img.rgba, [0, 0, 0], whiteKnockout), img.w, img.h) },
-    { key: "blanco", bytes: encodePng(recolorear(img.rgba, [255, 255, 255], whiteKnockout, [0, 0, 0]), img.w, img.h) },
+    { key: "color", bytes: await encodePng(recolorear(img.rgba, tinta, whiteKnockout), img.w, img.h) },
+    { key: "negro", bytes: await encodePng(recolorear(img.rgba, [0, 0, 0], whiteKnockout), img.w, img.h) },
+    { key: "blanco", bytes: await encodePng(recolorear(img.rgba, [255, 255, 255], whiteKnockout, [0, 0, 0]), img.w, img.h) },
   ];
 
   const recursos = [];
@@ -914,7 +964,7 @@ async function accionPalettes(body: Record<string, unknown>, clientId: string, b
     yaEnLaCarpeta.push(caracter);
 
     const groupId = "pl_" + crypto.randomUUID().slice(0, 8);
-    const bytes = dibujarPaleta(str(p.nombre), colores);
+    const bytes = await dibujarPaleta(str(p.nombre), colores);
 
     recursos.push(await subirPng(
       clientId, `paleta${i + 1}`, bytes,

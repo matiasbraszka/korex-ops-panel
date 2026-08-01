@@ -25,9 +25,101 @@ export function decodePng(bytes: Uint8Array): Rgba {
   return { w: img.width, h: img.height, rgba };
 }
 
-export function encodePng(rgba: Uint8Array, w: number, h: number): Uint8Array {
-  // El 0 final = sin pérdida (RGBA de 8 bits). No cuantiza la paleta.
-  return new Uint8Array(UPNG.encode([rgba.buffer.slice(rgba.byteOffset, rgba.byteOffset + rgba.byteLength)], w, h, 0));
+// ── Escritura de PNG con compresión NATIVA ───────────────────────────────────
+//
+// POR QUÉ NO SE USA UPNG PARA ESCRIBIR: comprime en JavaScript puro, y eso en un worker de
+// Supabase cuesta ~1,5 segundos por imagen de 1024x1024. Cada pieza son tres versiones, o sea
+// ~4,5 segundos de CPU, y el runtime corta cerca de 2: la función moría con
+// WORKER_RESOURCE_LIMIT. En una máquina de escritorio ni se nota (150 ms), por eso el problema
+// solo apareció al deployar.
+//
+// CompressionStream("deflate") es el zlib nativo del runtime — el mismo trabajo, hecho en código
+// compilado en vez de JavaScript. UPNG se sigue usando para LEER, que es barato (60 ms).
+//
+// Un PNG es: firma + IHDR (tamaño y formato) + IDAT (los píxeles comprimidos) + IEND. Cada
+// bloque lleva su CRC. Nada de esto es negociable, está en el formato.
+
+const CRC_TABLA = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(buf: Uint8Array): number {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLA[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function bloque(tipo: string, datos: Uint8Array): Uint8Array {
+  const out = new Uint8Array(12 + datos.length);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, datos.length);
+  for (let i = 0; i < 4; i++) out[4 + i] = tipo.charCodeAt(i);
+  out.set(datos, 8);
+  dv.setUint32(8 + datos.length, crc32(out.subarray(4, 8 + datos.length)));
+  return out;
+}
+
+async function comprimir(datos: Uint8Array): Promise<Uint8Array> {
+  const cs = new CompressionStream("deflate");   // formato zlib, que es el que pide el PNG
+  const w = cs.writable.getWriter();
+  w.write(datos as Uint8Array<ArrayBuffer>);
+  w.close();
+  const partes: Uint8Array[] = [];
+  const rd = cs.readable.getReader();
+  let total = 0;
+  for (;;) {
+    const { value, done } = await rd.read();
+    if (done) break;
+    partes.push(value);
+    total += value.length;
+  }
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of partes) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+export async function encodePng(rgba: Uint8Array, w: number, h: number): Promise<Uint8Array> {
+  const bpl = w * 4;
+  // Filtro "Up" (2): cada byte se guarda como la diferencia con el de la fila de arriba. En un
+  // logo, que son áreas planas y mucha transparencia, esas diferencias son casi todas cero y el
+  // compresor las liquida. La fila 0 se compara contra una fila imaginaria de ceros, o sea que va
+  // tal cual.
+  const filtrado = new Uint8Array(h * (bpl + 1));
+  for (let y = 0; y < h; y++) {
+    const o = y * (bpl + 1);
+    filtrado[o] = 2;
+    const fila = y * bpl;
+    if (y === 0) {
+      filtrado.set(rgba.subarray(fila, fila + bpl), 1);
+    } else {
+      const arriba = fila - bpl;
+      for (let x = 0; x < bpl; x++) filtrado[o + 1 + x] = (rgba[fila + x] - rgba[arriba + x]) & 0xFF;
+    }
+  }
+
+  const ihdr = new Uint8Array(13);
+  const dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w);
+  dv.setUint32(4, h);
+  ihdr[8] = 8;    // 8 bits por canal
+  ihdr[9] = 6;    // RGBA
+  // 10, 11, 12 = compresión, filtrado e interlazado estándar (todos 0)
+
+  const idat = await comprimir(filtrado);
+  const firma = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+  const b1 = bloque("IHDR", ihdr), b2 = bloque("IDAT", idat), b3 = bloque("IEND", new Uint8Array(0));
+
+  const png = new Uint8Array(firma.length + b1.length + b2.length + b3.length);
+  let o = 0;
+  for (const p of [firma, b1, b2, b3]) { png.set(p, o); o += p.length; }
+  return png;
 }
 
 /** Luminancia percibida, 0..1. */
@@ -233,8 +325,11 @@ export function recolorear(
 ): Uint8Array {
   const out = new Uint8Array(src);
   for (let i = 0; i < out.length; i += 4) {
-    if (out[i + 3] === 0) continue;
-    const c = keepKnockout && luma(out[i], out[i + 1], out[i + 2]) > 0.9 ? rgbClaro : rgb;
+    // Los píxeles invisibles TAMBIÉN se pintan. No se ven —el alfa es 0— pero si se les deja el
+    // color que traía el generador, el 85% de la imagen queda lleno de ruido distinto en cada
+    // píxel y el compresor no puede hacer nada: el archivo pasa de 90 KB a 1,2 MB y comprimirlo
+    // tarda tres veces más. Pintándolos, casi toda la imagen es un mismo valor y se comprime sola.
+    const c = out[i + 3] !== 0 && keepKnockout && luma(out[i], out[i + 1], out[i + 2]) > 0.9 ? rgbClaro : rgb;
     out[i] = c[0]; out[i + 1] = c[1]; out[i + 2] = c[2];
   }
   return out;
@@ -322,12 +417,12 @@ export type ColorPaleta = { hex: string; rol?: string; nombre?: string };
  * Dibuja el swatch de una paleta: franja con el nombre arriba, y abajo una banda por color con
  * su rol y su HEX escritos encima, en blanco o casi-negro según cuán oscura sea la banda.
  */
-export function dibujarPaleta(nombre: string, colores: ColorPaleta[]): Uint8Array {
+export async function dibujarPaleta(nombre: string, colores: ColorPaleta[]): Promise<Uint8Array> {
   const W = 1600, H = 600, CABECERA = 200, PAD = 56;
   const L = lienzo(W, H);
 
   const lista = (colores || []).filter((c) => /^#?[0-9a-f]{6}$/i.test(String(c?.hex || "")));
-  if (!lista.length) { rect(L, 0, 0, W, H, [245, 242, 236]); return encodePng(L.px, W, H); }
+  if (!lista.length) { rect(L, 0, 0, W, H, [245, 242, 236]); return await encodePng(L.px, W, H); }
 
   // La cabecera usa el color neutro si hay uno declarado; si no, el más claro de la paleta.
   const neutro = lista.find((c) => String(c.rol || "").toLowerCase() === "neutro_claro") ||
@@ -366,5 +461,5 @@ export function dibujarPaleta(nombre: string, colores: ColorPaleta[]): Uint8Arra
     rect(L, i * ancho - 2, CABECERA, 3, H - CABECERA, separador(hexARgb(lista[i - 1].hex), hexARgb(lista[i].hex)));
   }
 
-  return encodePng(L.px, W, H);
+  return await encodePng(L.px, W, H);
 }

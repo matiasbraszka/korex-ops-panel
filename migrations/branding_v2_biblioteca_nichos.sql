@@ -1,5 +1,16 @@
 -- migrations/branding_v2_biblioteca_nichos.sql
 --
+-- ⚠️  ESTE ARCHIVO YA SE APLICÓ Y QUEDÓ VIEJO. NO LO VUELVAS A CORRER.
+--
+--     Las fichas que están vivas en la base son mejores que estas: se reescribieron a partir
+--     del branding REAL de los clientes (scripts/branding-corpus-analizar.mjs, que mira las
+--     imágenes) y después se les sumó la paleta estándar de cada nicho que definió Matías
+--     (scripts/branding-estandar-nichos.mjs). Re-correr este .sql las pisaría con la versión
+--     inicial, escrita a mano y sin ver el material.
+--
+--     Para editarlas: Marketing › Biblioteca, o los dos scripts de arriba. La base manda.
+--     Este archivo queda como registro de cómo arrancó la biblioteca.
+--
 -- BIBLIOTECA DE ESTILO POR NICHO para el botón "Generar branding".
 --
 -- Es lo que hace que un cliente de salud no termine con el logo de una fintech. Cada ficha
