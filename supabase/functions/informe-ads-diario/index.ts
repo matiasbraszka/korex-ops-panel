@@ -139,6 +139,18 @@ function filasDe(c: Cliente): Row[] {
   return [{ ...c, mixto: true }, ...tipos.map(([t, r]) => ({ ...r, name: `  · ${t}` }))];
 }
 
+// Parte del cliente que NO es formulario de Meta: es donde el % carga tiene sentido, porque
+// el formulario no tiene landing. Suma todos sus funnels web.
+function soloWeb(c: Cliente): Row {
+  const acc = nuevaFila(c.name);
+  for (const [t, r] of c.tipos) {
+    if (t === "formulario") continue;
+    acc.usd += r.usd; acc.leads += r.leads; acc.impressions += r.impressions;
+    acc.clicks += r.clicks; acc.visitas += r.visitas;
+  }
+  return acc;
+}
+
 function tablaAncha(lista: Cliente[]): string {
   // El total suma CLIENTES, nunca las sub-filas: sumar ambas contaría el gasto dos veces.
   const total = lista.reduce((a, r) => ({
@@ -158,6 +170,19 @@ function tablaAncha(lista: Cliente[]): string {
   const sep = "─".repeat(anchos.reduce((a, b) => a + b, 0) + (COLS.length - 1) * SEP_COL);
 
   return "```" + [linea(COLS), sep, ...cuerpo.map((r) => linea(celdasDe(r))), sep, linea(celdasDe(total))].join("\n") + "```";
+}
+
+// Nombre legible del funnel al que pertenece cada anuncio. El evento de conversión ES el
+// funnel: Marta corre marca personal, belleza y madres, cada uno con su propio evento.
+// El mapeo lindo vive en app_settings.funnel_names; si un evento no está mapeado se le
+// saca el prefijo (`visita-pagina-vsl-`) para que entre en la columna sin quedar ilegible.
+function etiquetaFunnel(r: Record<string, unknown>, nombres: Record<string, string>): string {
+  const tipo = str(r.campaign_type);
+  if (tipo === "formulario") return "formulario";
+  const ev = str(r.web_event);
+  if (!ev) return tipo === "web" ? "sin registros" : "sin clasificar";
+  if (nombres[ev]) return nombres[ev];
+  return ev.replace(/^visita[-_]?(pagina[-_]?)?(vsl[-_]?)?/i, "").replace(/[-_]/g, " ").trim() || ev;
 }
 
 Deno.serve(async (req) => {
@@ -190,6 +215,9 @@ Deno.serve(async (req) => {
   const excludeAccounts = new Set(
     (((syncCfgRow?.value as Record<string, unknown>)?.exclude_accounts as unknown[]) ?? []).map((x) => str(x).replace(/^act_/, "")),
   );
+
+  const { data: fnRow } = await supabase.from("app_settings").select("value").eq("key", "funnel_names").maybeSingle();
+  const funnelNames = ((fnRow?.value as Record<string, string>) ?? {});
 
   // Universo del informe: clientes activos CON al menos una cuenta de anuncios real.
   // Los que no tienen ninguna (o solo cuentas 'interna') no hacen publicidad y no se
@@ -237,7 +265,7 @@ Deno.serve(async (req) => {
 
   const { data: rows } = snap
     ? await supabase.from("meta_ad_insights")
-        .select("client_id, ad_account_id, spend, leads, impressions, clicks, landing_page_views, campaign_type")
+        .select("client_id, ad_account_id, spend, leads, impressions, clicks, landing_page_views, campaign_type, web_event")
         .eq("time_window", "yesterday").eq("snapshot_date", snap)
     : { data: [] as Record<string, unknown>[] };
 
@@ -264,8 +292,9 @@ Deno.serve(async (req) => {
     monedasUsadas.add(cur);
     const usd = spend * rate * (taxAppliesTo === "all" || cur === "USD" ? 1 + taxPct / 100 : 1);
     const prev = conGasto.get(cid) ?? { ...nuevaFila(nombre), tipos: new Map<string, Row>() };
-    // Filas viejas (anteriores al desglose) y anuncios sin evidencia vienen sin tipo.
-    const tipo = str(r.campaign_type) || "sin clasificar";
+    // Se agrupa por FUNNEL: el formulario de Meta por un lado, y cada evento de registro
+    // (= cada funnel del cliente) por el suyo.
+    const tipo = etiquetaFunnel(r, funnelNames);
     const sub = prev.tipos.get(tipo) ?? nuevaFila(tipo);
     for (const f of [prev, sub]) {
       f.usd += usd;
@@ -341,7 +370,7 @@ Deno.serve(async (req) => {
       // Solo se explica el desglose si algún cliente lo tiene: si nadie corre los dos
       // tipos, la aclaración es ruido.
       if (lista.some((c) => c.tipos.size > 1)) {
-        const nota = "_formulario_ = clientes potenciales de Meta, se completa dentro de la app y por eso no genera visitas · _web_ = registro en la landing del cliente";
+        const nota = "Las sub-filas son los funnels del cliente. _formulario_ = clientes potenciales de Meta, se completa dentro de la app y por eso no genera visitas; el resto son registros en la landing de cada funnel.";
         blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: nota }] });
         partes.push(nota);
       }
@@ -371,7 +400,7 @@ Deno.serve(async (req) => {
   // Se mide SOLO sobre la parte de página web: las campañas a formulario de Meta no tienen
   // landing, y meterlas en la cuenta hundía el porcentaje de cualquiera que corra las dos.
   const cargaBaja = lista
-    .map((c) => ({ name: c.name, pct: carga(c.tipos.get("web") ?? c) }))
+    .map((c) => ({ name: c.name, pct: carga(soloWeb(c)) }))
     .filter((x): x is { name: string; pct: number } => x.pct !== null && x.pct < 80)
     .sort((a, b) => a.pct - b.pct);
   if (cargaBaja.length) {

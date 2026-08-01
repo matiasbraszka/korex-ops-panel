@@ -393,6 +393,21 @@ Deno.serve(async (req) => {
           if (t && t !== "mixta") a.campaign_type = t;
         }
 
+        // Lo mismo con el funnel: un anuncio que ese día no registró nada sigue siendo del
+        // funnel de SU campaña. Sin esto el informe le abría una sub-fila "sin registros"
+        // por cada anuncio flojo, y un gasto de $0,05 ensuciaba el desglose del cliente.
+        const eventoPorCampana = new Map<string, string>();
+        for (const a of ads) {
+          if (!a.web_event) continue;
+          const prev = eventoPorCampana.get(a.campaign_name);
+          eventoPorCampana.set(a.campaign_name, !prev ? a.web_event : (prev === a.web_event ? prev : "mixta"));
+        }
+        for (const a of ads) {
+          if (a.web_event || a.campaign_type !== "web") continue;
+          const e = eventoPorCampana.get(a.campaign_name);
+          if (e && e !== "mixta") a.web_event = e;
+        }
+
         // 2ª (y única) llamada por cuenta: estado, baneos/rechazos, país y link del anuncio.
         try {
           const { data: metaRows, usagePct: up2 } = await graphGet(
