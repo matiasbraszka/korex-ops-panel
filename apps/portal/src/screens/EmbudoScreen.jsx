@@ -97,10 +97,7 @@ export default function EmbudoScreen() {
           <div style={{ padding: '22px 22px 0' }}>
             <div style={{ background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 20, padding: 20, boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', gap: 13 }}>
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance de este embudo</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: T.textSoft }}>{e.razon}</span>
-                </div>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance de este embudo</span>
                 <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
               </div>
               {Array.isArray(pasos) && pasos.length > 0

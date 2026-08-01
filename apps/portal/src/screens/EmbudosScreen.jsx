@@ -71,10 +71,7 @@ function EmbudoCard({ e, n, nav, pasos }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textSoft }}>{e.razon}</span>
-            </div>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.text3 }}>Avance del embudo</span>
             <span style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: acento }}>{e.progreso}%</span>
           </div>
           {/* Pasos del pipeline: lo que YA entregamos (verde) vs lo que sigue. */}
