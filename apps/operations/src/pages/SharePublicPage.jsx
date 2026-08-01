@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as tus from 'tus-js-client';
 import { supabase } from '@korex/db';
-import { UploadCloud, Image as ImageIcon, Film, Loader2, Check, Send, MessageSquare, KeyRound, X, Trash2, Menu } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Film, Loader2, Check, Send, MessageSquare, KeyRound, X, Trash2, Menu, Play } from 'lucide-react';
 import { sanitizeDelHtml } from '../components/clientes/funnels/delSanitize';
 import ResourceLightbox from '../components/clientes/funnels/ResourceLightbox';
 
@@ -134,6 +134,7 @@ function FolderShare({ data, name, onReload }) {
   const [done, setDone] = useState(0);
   const [borrando, setBorrando] = useState(null);   // id del recurso que se está borrando
   const [preview, setPreview] = useState(null);     // recurso abierto a pantalla completa
+  const [playing, setPlaying] = useState(null);     // id del video que se está reproduciendo (uno a la vez)
   const fileRef = useRef(null);
   const cancelRef = useRef(null);   // { canceled, tus } de la subida en curso
 
@@ -220,19 +221,30 @@ function FolderShare({ data, name, onReload }) {
                     {borrando === r.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                   </button>
                 )}
-                {/* La miniatura tiene que MOSTRAR el contenido, no una silueta: la
-                    imagen se ve (y se abre a pantalla completa), y el video se
-                    reproduce inline (embed de Bunny o <video>). */}
+                {/* La imagen se ve y se abre a pantalla completa. Los videos NO se
+                    reproducen solos: se muestra un botón de play y recién al tocarlo
+                    se carga el reproductor (uno a la vez), para que no suenen todos
+                    juntos ni carguen 24 embeds de una. */}
                 <div className="aspect-[4/3] bg-[#F1F3F7] flex items-center justify-center overflow-hidden">
                   {r.kind === 'image' && r.public_url ? (
                     <img src={r.public_url} alt={r.title} loading="lazy" onClick={() => setPreview(r)}
                       className="w-full h-full object-cover cursor-zoom-in" />
-                  ) : r.kind === 'video' && r.public_url && r.provider === 'bunny' ? (
-                    <iframe src={r.public_url} loading="lazy" title={r.title}
-                      allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen
-                      className="w-full h-full block border-none" />
+                  ) : r.kind === 'video' && r.public_url && playing === r.id ? (
+                    r.provider === 'bunny' ? (
+                      <iframe src={`${r.public_url}${r.public_url.includes('?') ? '&' : '?'}autoplay=true`} title={r.title}
+                        allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen
+                        className="w-full h-full block border-none" />
+                    ) : (
+                      <video src={r.public_url} controls autoPlay playsInline className="w-full h-full object-cover" />
+                    )
                   ) : r.kind === 'video' && r.public_url ? (
-                    <video src={r.public_url} controls preload="metadata" className="w-full h-full object-cover" />
+                    <button type="button" onClick={() => setPlaying(r.id)} title="Reproducir"
+                      className="w-full h-full flex items-center justify-center border-none cursor-pointer relative"
+                      style={{ background: 'linear-gradient(160deg,#22262E,#0F1116)' }}>
+                      <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>
+                        <Play size={22} className="text-white" style={{ marginLeft: 2 }} />
+                      </span>
+                    </button>
                   ) : (
                     <Film size={26} className="text-[#9098A4]" />
                   )}
