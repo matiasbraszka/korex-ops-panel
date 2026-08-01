@@ -27,6 +27,9 @@ export default function EmbudoScreen() {
   const m = material || {};
   const grabs = (Array.isArray(m.grabaciones) ? m.grabaciones : []).filter((g) => g.strategyId === id);
   const grabsSubidas = grabs.length > 0 && grabs.every((g) => g.estado === 'subido');
+  // "Grabación recibida" solo si el freno NO la marca pendiente. Así el detalle
+  // nunca dice "recibimos tus videos" mientras el avance sigue trabado por grabar.
+  const grabRecibida = !pend && (grabsSubidas || e.etapa >= 3);
   const devol = (Array.isArray(m.devoluciones) ? m.devoluciones : []).find((d) => d.strategyId === id);
   const marca = Array.isArray(m.marca) ? m.marca : [];
   const fotos = marca.find((x) => x.tipo === 'fotos') || marca[0];
@@ -39,7 +42,7 @@ export default function EmbudoScreen() {
 
   const resumen = alAire ? 'Está al aire. Nosotros seguimos optimizando los resultados.'
     : pend ? 'Falta que grabes tus anuncios. Todo lo demás de este embudo ya lo tenemos.'
-    : grabsSubidas ? 'Ya tenemos todas tus grabaciones. Estamos editando y después lo publicamos.'
+    : grabRecibida ? 'Ya tenemos todas tus grabaciones. Estamos editando y después lo publicamos.'
     : e.razon;
 
   const chip = (estado) => estado === 'subido' || estado === 'listo'
@@ -52,7 +55,7 @@ export default function EmbudoScreen() {
   // (Estrategia/guiones · Grabación · Edición · Publicado), en qué estamos y el botón.
   // Todos los botones del recorrido van del MISMO color (el acento del embudo),
   // para no ensuciar la pantalla con negro/azul/blanco mezclados.
-  const btnGrab = (grabsSubidas || e.etapa >= 3)
+  const btnGrab = grabRecibida
     ? { label: 'Ver tus grabaciones', onClick: () => nav(`/entregables/${id}?tipo=grabaciones`) }
     : pend ? { label: 'Grabar mis anuncios', onClick: () => nav(`/documento/${id}/ads`) }
     : null;
@@ -62,8 +65,8 @@ export default function EmbudoScreen() {
       state: e.etapa >= 2 ? 'done' : 'current',
       boton: e.etapa >= 2 ? { label: 'Ver la estrategia y los guiones', onClick: () => nav(`/documento/${id}/estrategia`) } : null },
     { num: 2, titulo: 'Grabación',
-      estado: (grabsSubidas || e.etapa >= 3) ? conFecha('Recibimos tus videos', fe.grabacion) : pend ? 'Te toca a ti' : 'Después de los guiones',
-      state: (grabsSubidas || e.etapa >= 3) ? 'done' : (e.etapa >= 2 ? 'current' : 'pending'),
+      estado: grabRecibida ? conFecha('Recibimos tus videos', fe.grabacion) : pend ? 'Te toca a ti' : 'Después de los guiones',
+      state: grabRecibida ? 'done' : (pend || e.etapa >= 2 ? 'current' : 'pending'),
       boton: btnGrab },
     { num: 3, titulo: 'Edición',
       estado: e.etapa >= 4 ? conFecha('Terminada', fe.edicion) : e.etapa >= 3 ? (devol ? 'Estamos editando · hay videos listos' : 'Estamos editando tus videos') : 'Arranca cuando recibamos tus videos',
