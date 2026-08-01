@@ -135,6 +135,26 @@ function pickLeads(actions: any[] | undefined, convEvent: string): number {
   const std = Math.max(0, ...buckets);
   return std > 0 ? std : custom;
 }
+// Leads del FORMULARIO nativo de Meta (campañas de "clientes potenciales"): se completan
+// dentro de la app, así que NUNCA generan visitas a una landing. Son los dos buckets de
+// leadgen; se toma el mayor, nunca la suma (Meta reporta el mismo lead en los dos).
+function pickLeadsForm(actions: any[] | undefined): number {
+  return Math.max(
+    actionVal(actions, ["onsite_conversion.lead_grouped"]),
+    actionVal(actions, ["leadgen_grouped"]),
+    actionVal(actions, ["leadgen.other"]),
+  );
+}
+// Leads de la PÁGINA WEB del cliente: el evento de conversión del píxel en su landing.
+function pickLeadsWeb(actions: any[] | undefined, convEvent: string): number {
+  const custom = actionVal(actions, ["offsite_conversion.fb_pixel_custom"]);
+  if (convEvent && custom > 0) return custom;
+  return Math.max(
+    actionVal(actions, ["offsite_conversion.fb_pixel_lead"]),
+    actionVal(actions, ["onsite_web_lead"]),
+    custom,
+  );
+}
 function videoVal(arr: any[] | undefined): number {
   if (!Array.isArray(arr) || !arr.length) return 0;
   const first = arr.find((a) => String(a?.action_type) === "video_view") || arr[0];
@@ -158,6 +178,7 @@ interface AdMetrics {
   ad_id: string; ad_name: string; campaign_name: string; adset_name: string;
   spend: number; impressions: number; reach: number; frequency: number; cpm: number;
   clicks: number; inline_link_clicks: number; ctr: number; cpl: number; leads: number; landing_page_views: number;
+  leads_form: number; leads_web: number; campaign_type: string | null;
   engagement: number; engagement_rate: number;
   video_plays: number; thruplay: number; video_avg_time_watched: number;
   p25: number; p50: number; p75: number; p100: number;
@@ -180,6 +201,15 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
   const p100 = videoVal(row.video_p100_watched_actions);
   const leads = pickLeads(row.actions, convEvent);
   const landing_page_views = pickLanding(row.actions);
+  // Desglose formulario de Meta vs página web. La clasificación sale de la EVIDENCIA del
+  // anuncio, no de cómo esté configurada la campaña: un anuncio que trajo leads de leadgen
+  // es formulario; uno que registró visitas a la landing es web. Sin ninguna de las dos
+  // señales queda en null y despues hereda el tipo de su campaña.
+  const leads_form = pickLeadsForm(row.actions);
+  const leads_web = pickLeadsWeb(row.actions, convEvent);
+  const campaign_type = leads_form > 0
+    ? "formulario"
+    : (leads_web > 0 || landing_page_views > 0 ? "web" : null);
   const base = v3s || plays || 1;
   const pct = (v: number) => (base > 0 ? Math.round((v / base) * 100) : 0);
   const points = { p0: 100, p25: pct(p25), p50: pct(p50), p75: pct(p75), p100: pct(p100) };
@@ -189,7 +219,7 @@ function deriveAd(row: any, convEvent: string, includeRaw: boolean): AdMetrics {
     spend, impressions, reach: num(row.reach), frequency: num(row.frequency),
     cpm: num(row.cpm) || (impressions > 0 ? (spend / impressions) * 1000 : 0),
     clicks: num(row.clicks), inline_link_clicks: num(row.inline_link_clicks),
-    ctr: num(row.ctr), leads, landing_page_views, cpl: leads > 0 ? spend / leads : 0,
+    ctr: num(row.ctr), leads, leads_form, leads_web, campaign_type, landing_page_views, cpl: leads > 0 ? spend / leads : 0,
     engagement: interactions, engagement_rate: impressions > 0 ? (interactions / impressions) * 100 : 0,
     video_plays: v3s, thruplay, video_avg_time_watched: videoVal(row.video_avg_time_watched_actions),
     p25, p50, p75, p100,
@@ -293,6 +323,22 @@ Deno.serve(async (req) => {
         maxUsage = Math.max(maxUsage, usagePct);
         const ads = rows.map((r) => deriveAd(r, jb.convEvent, dry));
 
+        // Un anuncio sin leads ni visitas ese día no tiene evidencia para clasificarse
+        // (recién arrancado, o con el píxel roto). Hereda el tipo de su campaña. Si la
+        // campaña mezcla los dos tipos, o entera está sin evidencia, se deja sin clasificar
+        // — el informe lo muestra aparte en vez de inventarle un tipo.
+        const tipoPorCampana = new Map<string, string>();
+        for (const a of ads) {
+          if (!a.campaign_type) continue;
+          const prev = tipoPorCampana.get(a.campaign_name);
+          tipoPorCampana.set(a.campaign_name, !prev ? a.campaign_type : (prev === a.campaign_type ? prev : "mixta"));
+        }
+        for (const a of ads) {
+          if (a.campaign_type) continue;
+          const t = tipoPorCampana.get(a.campaign_name);
+          if (t && t !== "mixta") a.campaign_type = t;
+        }
+
         // 2ª (y única) llamada por cuenta: estado, baneos/rechazos, país y link del anuncio.
         try {
           const { data: metaRows, usagePct: up2 } = await graphGet(
@@ -350,6 +396,7 @@ Deno.serve(async (req) => {
         ad_id: a.ad_id, ad_name: a.ad_name, time_window: window, snapshot_date: snapshotDate,
         spend: a.spend, impressions: a.impressions, reach: a.reach, frequency: a.frequency, cpm: a.cpm,
         clicks: a.clicks, inline_link_clicks: a.inline_link_clicks, ctr: a.ctr, cpl: a.cpl, leads: a.leads, landing_page_views: a.landing_page_views,
+        leads_form: a.leads_form, leads_web: a.leads_web, campaign_type: a.campaign_type,
         engagement: a.engagement, engagement_rate: a.engagement_rate,
         video_3s: a.video_plays, thruplay: a.thruplay, video_avg_time_watched: a.video_avg_time_watched,
         hook_rate: a.hook_rate, hold_rate: a.hold_rate, retention: a.retention,

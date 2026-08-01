@@ -89,7 +89,11 @@ async function postSlack(token: string, channel: string, text: string, blocks?: 
 const intMil = (n: number) => Math.round(n).toLocaleString("es-AR");
 const pctTxt = (n: number) => String(n.toFixed(1)).replace(".", ",") + "%";
 
-interface Row { name: string; usd: number; leads: number; impressions: number; clicks: number; visitas: number; }
+interface Row { name: string; usd: number; leads: number; impressions: number; clicks: number; visitas: number; mixto?: boolean; }
+// Un cliente puede correr campañas de los dos tipos a la vez (formulario de Meta y página
+// web). Se guarda el total y, aparte, el desglose por tipo.
+interface Cliente extends Row { tipos: Map<string, Row> }
+const nuevaFila = (name: string): Row => ({ name, usd: 0, leads: 0, impressions: 0, clicks: 0, visitas: 0 });
 
 // UNA sola tabla con todas las métricas. Va dentro de un bloque de código porque es lo
 // único que Slack alinea bien: en cualquier otro formato las columnas se descuadran.
@@ -108,8 +112,11 @@ function cplDe(r: Row): number | null { return r.leads > 0 ? r.usd / r.leads : n
 
 function celdasDe(r: Row): string[] {
   const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null;
-  const crg = carga(r);
-  const reg = r.visitas > 0 ? (r.leads / r.visitas) * 100 : null;
+  // En la fila TOTAL de un cliente que corre los dos tipos, % carga y % registro no se
+  // muestran: mezclan las visitas de la web con los leads del formulario y dan un número
+  // sin sentido (a Antonio le daba 121,4%). Los porcentajes reales van en las sub-filas.
+  const crg = r.mixto ? null : carga(r);
+  const reg = r.mixto || r.visitas === 0 ? null : (r.leads / r.visitas) * 100;
   const cpl = cplDe(r);
   return [
     r.name.slice(0, 20),
@@ -124,13 +131,23 @@ function celdasDe(r: Row): string[] {
   ];
 }
 
-function tablaAncha(lista: Row[]): string {
+// Fila del cliente y, si corre los dos tipos, una sub-fila por tipo debajo. Con un solo
+// tipo no se desglosa nada: sería una sub-fila repitiendo el total.
+function filasDe(c: Cliente): Row[] {
+  const tipos = [...c.tipos.entries()].sort((a, b) => b[1].usd - a[1].usd);
+  if (tipos.length < 2) return [c];
+  return [{ ...c, mixto: true }, ...tipos.map(([t, r]) => ({ ...r, name: `  · ${t}` }))];
+}
+
+function tablaAncha(lista: Cliente[]): string {
+  // El total suma CLIENTES, nunca las sub-filas: sumar ambas contaría el gasto dos veces.
   const total = lista.reduce((a, r) => ({
     name: "TOTAL", usd: a.usd + r.usd, leads: a.leads + r.leads,
     impressions: a.impressions + r.impressions, clicks: a.clicks + r.clicks, visitas: a.visitas + r.visitas,
   }), { name: "TOTAL", usd: 0, leads: 0, impressions: 0, clicks: 0, visitas: 0 } as Row);
 
-  const filas = [COLS, ...lista.map(celdasDe), celdasDe(total)];
+  const cuerpo = lista.flatMap(filasDe);
+  const filas = [COLS, ...cuerpo.map(celdasDe), celdasDe(total)];
   // El ancho de cada columna se mide en CADA corrida, sobre el contenido real. Con anchos
   // fijos dos columnas terminan pegadas el día que aparece un "197,8%" o un total de
   // cuatro cifras ("$323,681.013"), y la tabla deja de leerse. Así queda lo más angosta
@@ -140,7 +157,7 @@ function tablaAncha(lista: Row[]): string {
     f.map((v, i) => (i === 0 ? v.padEnd(anchos[i]) : v.padStart(anchos[i] + SEP_COL))).join("").trimEnd();
   const sep = "─".repeat(anchos.reduce((a, b) => a + b, 0) + (COLS.length - 1) * SEP_COL);
 
-  return "```" + [linea(COLS), sep, ...lista.map((r) => linea(celdasDe(r))), sep, linea(celdasDe(total))].join("\n") + "```";
+  return "```" + [linea(COLS), sep, ...cuerpo.map((r) => linea(celdasDe(r))), sep, linea(celdasDe(total))].join("\n") + "```";
 }
 
 Deno.serve(async (req) => {
@@ -220,12 +237,12 @@ Deno.serve(async (req) => {
 
   const { data: rows } = snap
     ? await supabase.from("meta_ad_insights")
-        .select("client_id, ad_account_id, spend, leads, impressions, clicks, landing_page_views")
+        .select("client_id, ad_account_id, spend, leads, impressions, clicks, landing_page_views, campaign_type")
         .eq("time_window", "yesterday").eq("snapshot_date", snap)
     : { data: [] as Record<string, unknown>[] };
 
-  // Agregado por cliente, convertido a USD.
-  const conGasto = new Map<string, Row>();
+  // Agregado por cliente, convertido a USD, con el desglose por tipo de campaña.
+  const conGasto = new Map<string, Cliente>();
   const sinTipoCambio = new Map<string, Set<string>>(); // moneda -> clientes
   const monedasUsadas = new Set<string>(); // para el subtítulo: solo lo que se usó hoy
   for (const r of rows ?? []) {
@@ -245,12 +262,19 @@ Deno.serve(async (req) => {
       continue;
     }
     monedasUsadas.add(cur);
-    const prev = conGasto.get(cid) ?? { name: nombre, usd: 0, leads: 0, impressions: 0, clicks: 0, visitas: 0 };
-    prev.usd += spend * rate * (taxAppliesTo === "all" || cur === "USD" ? 1 + taxPct / 100 : 1);
-    prev.leads += num(r.leads);
-    prev.impressions += num(r.impressions);
-    prev.clicks += num(r.clicks);
-    prev.visitas += num(r.landing_page_views);
+    const usd = spend * rate * (taxAppliesTo === "all" || cur === "USD" ? 1 + taxPct / 100 : 1);
+    const prev = conGasto.get(cid) ?? { ...nuevaFila(nombre), tipos: new Map<string, Row>() };
+    // Filas viejas (anteriores al desglose) y anuncios sin evidencia vienen sin tipo.
+    const tipo = str(r.campaign_type) || "sin clasificar";
+    const sub = prev.tipos.get(tipo) ?? nuevaFila(tipo);
+    for (const f of [prev, sub]) {
+      f.usd += usd;
+      f.leads += num(r.leads);
+      f.impressions += num(r.impressions);
+      f.clicks += num(r.clicks);
+      f.visitas += num(r.landing_page_views);
+    }
+    prev.tipos.set(tipo, sub);
     conGasto.set(cid, prev);
   }
 
@@ -314,6 +338,13 @@ Deno.serve(async (req) => {
       const leyenda = "CLK = clicks del anuncio · VIS = visitas a la landing · %CRG = visitas/clicks · %REG = leads/visitas";
       blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: leyenda }] });
       partes.push(leyenda);
+      // Solo se explica el desglose si algún cliente lo tiene: si nadie corre los dos
+      // tipos, la aclaración es ruido.
+      if (lista.some((c) => c.tipos.size > 1)) {
+        const nota = "_formulario_ = clientes potenciales de Meta, se completa dentro de la app y por eso no genera visitas · _web_ = registro en la landing del cliente";
+        blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: nota }] });
+        partes.push(nota);
+      }
       // Primer día tras el deploy: la sync todavía no trajo visitas. Se avisa una vez.
       if (totalVisitas === 0) {
         const nota = "_Las Visitas (y % carga / % registro) se empiezan a medir desde la próxima sincronización de la mañana._";
@@ -325,24 +356,26 @@ Deno.serve(async (req) => {
 
   // ── Alertas accionables de RENDIMIENTO. Las de cuenta bloqueada / sin tarjeta / deuda
   // NO van acá: ya las cubren ads-runway-alert y las notificaciones meta_account_error.
-  const CHRISTIAN = "<@U0AFZF3CK8X>";
+  // SIN menciones @: Matías 2026-08-01, el informe informa, no reparte tareas.
   const alertas: string[] = [];
   const cplProm = totalLeads > 0 ? total / totalLeads : 0;
   for (const r of lista) {
     const cpl = cplDe(r);
     if (cpl === null) {
-      alertas.push(`*${r.name}* gastó ${money(r.usd)} y no registró ni un lead — ${CHRISTIAN} revisar pixel/evento`);
+      alertas.push(`*${r.name}* gastó ${money(r.usd)} y no registró ni un lead — revisar pixel/evento`);
     } else if (cplProm > 0 && cpl > 2 * cplProm) {
-      alertas.push(`*${r.name}* CPL ${money(cpl)}, más del doble del promedio del día (${money(cplProm)}) — ${CHRISTIAN} revisar`);
+      alertas.push(`*${r.name}* CPL ${money(cpl)}, más del doble del promedio del día (${money(cplProm)})`);
     }
   }
   // El % carga bajo suele afectar a varios el mismo día: va en una línea, no en cinco.
+  // Se mide SOLO sobre la parte de página web: las campañas a formulario de Meta no tienen
+  // landing, y meterlas en la cuenta hundía el porcentaje de cualquiera que corra las dos.
   const cargaBaja = lista
-    .map((r) => ({ name: r.name, pct: carga(r) }))
+    .map((c) => ({ name: c.name, pct: carga(c.tipos.get("web") ?? c) }))
     .filter((x): x is { name: string; pct: number } => x.pct !== null && x.pct < 80)
     .sort((a, b) => a.pct - b.pct);
   if (cargaBaja.length) {
-    alertas.push(`% carga < 80% (clicks que no llegan a cargar la landing): ${cargaBaja.map((x) => `${x.name} ${pctTxt(x.pct)}`).join(" · ")} — ${CHRISTIAN} revisar landing`);
+    alertas.push(`% carga < 80% (clicks que no llegan a cargar la landing): ${cargaBaja.map((x) => `${x.name} ${pctTxt(x.pct)}`).join(" · ")}`);
   }
   if (alertas.length) {
     const texto = [":warning: *Atención:*", ...alertas.map((a) => `• ${a}`)].join("\n");
