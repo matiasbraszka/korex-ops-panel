@@ -8,7 +8,7 @@ import RichTextEditor from '../../notas/RichTextEditor';
 import { sanitizeDelHtml } from './delSanitize';
 import { getCfgJump } from './cfgJump';
 import { BLUEPRINTS } from './blueprints';
-import { resolveDelTabs } from './delTabs';
+import { resolveDelTabs, esGrabable } from './delTabs';
 import { publicOrigin } from '../../../utils/helpers';
 
 // Color estable por persona (para la presencia y los comentarios).
@@ -1076,7 +1076,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const setSeccionMeta = async (s, cambios) => {
     const accion = cambios.accion ?? s.accion_cliente ?? 'solo_equipo';
     const estado = cambios.estado ?? s.estado_seccion ?? 'en_construccion';
-    const paraGrabar = (s.kind === 'vsl' || s.kind === 'anuncios') && accion === 'grabarse' && estado === 'terminado';
+    const paraGrabar = esGrabable(s.kind) && accion === 'grabarse' && estado === 'terminado';
     setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar } : x));
     const { error } = await supabase.rpc('del_section_set_meta', {
       p_id: s.id, p_accion: accion, p_estado: estado, p_para_grabar: paraGrabar,
@@ -1730,8 +1730,26 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     <option value="en_construccion">🔨 En construcción</option>
                     <option value="terminado">✔ Terminado</option>
                   </select>
+                  {/* Secciones que NO se graban (landings, formulario, thank you…):
+                      no llevan responsable ni fase, pero sí muestran que el cliente
+                      ya las aprobó o que pidió correcciones. */}
+                  {!esGrabable(s.kind) && s.grab_flujo && (() => {
+                    const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
+                    const m = {
+                      revision:   { t: '👀 Revisión', c: '#1D4FD8', b: '#EEF3FF' },
+                      correccion: { t: '✏️ Corrección', c: '#B45309', b: '#FEF6E7' },
+                      aprobado:   { t: '✅ Aprobado', c: '#15803D', b: '#DCFCE7' },
+                    }[s.grab_flujo];
+                    if (!m) return null;
+                    return (
+                      <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: m.b, color: m.c }}
+                        title={dias != null ? `Hace ${dias} día(s) en este estado` : ''}>
+                        {m.t}{dias != null ? ` · ${dias}d` : ''}
+                      </span>
+                    );
+                  })()}
                   {/* RESPONSABLE de grabación (cliente o Encargado) + estado del flujo */}
-                  {(s.kind === 'vsl' || s.kind === 'anuncios') && (
+                  {esGrabable(s.kind) && (
                     <>
                       <select
                         value={s.grab_colab_id || ''}

@@ -489,10 +489,14 @@ export default function DocumentoScreen() {
                     {esRevisar(s) && (() => {
                       const rev = estaRevisada(s);
                       const cambios = pideCambios(s);
+                      // Con comentarios el botón NO aprueba: manda a revisión.
+                      // "Pasar a grabación" solo aplica a lo que efectivamente se
+                      // graba (VSL y anuncios); una landing se aprueba y va a diseño.
                       const label = rev ? (esCopy ? 'La revisaste' : 'Lo revisaste')
-                        : cambios ? 'Enviar mis correcciones al equipo'
+                        : cambios ? 'Enviar revisión'
                         : esCopy ? 'Aprobar esta página'
-                        : 'Aprobar y pasar a grabación';
+                        : esGuion ? 'Aprobar y pasar a grabación'
+                        : 'Aprobar';
                       const bg = rev ? 'var(--mk-green-bg)' : cambios ? 'var(--mk-orange)' : T.primary;
                       const col = rev ? 'var(--mk-green)' : '#fff';
                       return (
@@ -503,7 +507,9 @@ export default function DocumentoScreen() {
                                 ? 'Dejaste comentarios. Al enviar, el equipo los corrige y te lo vuelve a habilitar.'
                                 : esCopy
                                 ? 'Si el copy de esta página está bien, apruébalo. Si algo no encaja, selecciona el texto y deja un comentario primero.'
-                                : 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, selecciona el texto y deja un comentario primero.'}
+                                : esGuion
+                                ? 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, selecciona el texto y deja un comentario primero.'
+                                : 'Si está todo bien, apruébalo. Si algo no encaja, selecciona el texto y deja un comentario primero.'}
                             </div>
                           )}
                           <div onClick={() => marcarRevisada(s)} role="button"

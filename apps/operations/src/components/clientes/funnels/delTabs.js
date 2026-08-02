@@ -25,6 +25,13 @@ const MOVE_KINDS_BASE = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelan
 // Categorías que VERSIONAN (V1/V2/V3). El avatar NO versiona; la estrategia sí.
 const VERSIONABLE_KINDS_BASE = ['estrategia', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
 
+// Lo ÚNICO que el cliente graba con la cámara. Todo lo demás (landings, formulario,
+// thank you, avatares, estrategia) se aprueba y pasa a diseño: nunca "a grabación".
+// Estaba hardcodeado como ('vsl','anuncios') en media docena de lugares con criterios
+// distintos, y por eso una landing terminaba mostrando "Esperando grabación".
+export const GRABABLE_KINDS = ['vsl', 'anuncios'];
+export const esGrabable = (kind) => GRABABLE_KINDS.includes(kind);
+
 // Plantilla DEFAULT de categorías (P9): una categoría por cada kind → el menú se ve igual
 // que antes. El admin puede reemplazarla para agregar categorías (ej. "Ventas") con sus
 // pestañas (ej. "Playbook").

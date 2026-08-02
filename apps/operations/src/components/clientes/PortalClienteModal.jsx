@@ -263,7 +263,10 @@ export default function PortalClienteModal({ client, onClose }) {
             {(grab.guiones || []).length > 0 && (
               <div className="flex flex-col">
                 {grab.guiones.map((g) => {
-                  const est = { revision: { t: '👀 Revisión', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' }, grabado: { t: '✅ Grabado', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
+                  // Solo VSL y anuncios se graban. Una landing se aprueba y va a
+                  // diseño: no le corresponde ni el estado ni el botón de grabado.
+                  const grabable = g.kind === 'vsl' || g.kind === 'anuncios';
+                  const est = { revision: { t: '👀 Revisión', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' }, grabado: { t: '✅ Grabado', c: '#15803D' }, aprobado: { t: '✅ Aprobado', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
                   return (
                     <div key={g.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
                       <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[9px] font-extrabold text-white shrink-0" style={{ background: g.responsable?.color || '#5B7CF5' }} title={g.responsable?.nombre}>
@@ -275,12 +278,12 @@ export default function PortalClienteModal({ client, onClose }) {
                       </div>
                       {/* Aprobación del equipo: en "Grabación" se puede marcar grabado;
                           en "Grabado" se puede deshacer. */}
-                      {g.flujo === 'grabacion' ? (
+                      {grabable && g.flujo === 'grabacion' ? (
                         <button onClick={() => marcarGrabado(g, true)} title="Marcar como grabado (ya verificado)"
                           className="inline-flex items-center gap-1 text-[10px] font-bold text-[#15803D] border border-[#BBF7D0] bg-white rounded-md py-1 px-1.5 cursor-pointer hover:bg-[#ECFDF5] shrink-0">
                           <BadgeCheck size={12} />Grabado
                         </button>
-                      ) : g.flujo === 'grabado' ? (
+                      ) : grabable && g.flujo === 'grabado' ? (
                         <button onClick={() => marcarGrabado(g, false)} title="Deshacer (volver a grabación)"
                           className="inline-flex items-center gap-1 text-[10px] font-bold shrink-0 rounded-md py-1 px-1.5" style={{ background: '#DCFCE7', color: '#15803D' }}>
                           <BadgeCheck size={12} />Grabado

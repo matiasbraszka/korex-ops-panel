@@ -240,7 +240,7 @@ export default function EditClientModal({ open, onClose, client, updateClient, c
             <Field label="Fin del servicio" hint="Cuándo vence el servicio. En su plataforma ve los días que le quedan.">
               <input type="date" value={form.serviceEndsAt || ''} onChange={e => set('serviceEndsAt', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Estado del proyecto">
+            <Field label="Estado del proyecto" hint="Pausado congela sus contadores: deja de sumar días de espera y en su plataforma ve “Proyecto en pausa”. Al reactivarlo siguen desde donde quedaron.">
               <select value={form.status} onChange={e => set('status', e.target.value)} className={inputClass}>
                 <option value="active">Activo</option>
                 <option value="paused">Pausado</option>

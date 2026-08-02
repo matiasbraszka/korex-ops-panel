@@ -66,10 +66,19 @@ export default function InicioScreen() {
         <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
 
-      {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte */}
-      {(serv.diasRestantes != null || (serv.diasAtraso ?? 0) > 0) && (
+      {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte.
+          Si el proyecto está en pausa no se muestra ninguno de los dos: los relojes
+          están congelados, así que un contador ahí sería mentira. */}
+      {(serv.pausado || serv.diasRestantes != null || (serv.diasAtraso ?? 0) > 0) && (
         <div style={{ padding: '14px 22px 0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {serv.diasRestantes != null && (() => {
+          {serv.pausado && (
+            <span style={servPill('var(--mk-bg2, #F4F5F7)', 'var(--mk-text2, #6B7280)')}
+              title="El proyecto está en pausa. Mientras tanto no corren los días de servicio ni los de espera.">
+              <IcoClock size={13} stroke="currentColor" sw={2.3} />
+              Proyecto en pausa{(serv.diasPausado ?? 0) > 0 ? ` · ${serv.diasPausado} ${serv.diasPausado === 1 ? 'día' : 'días'}` : ''}
+            </span>
+          )}
+          {!serv.pausado && serv.diasRestantes != null && (() => {
             const dr = serv.diasRestantes;
             const c = dr < 0 ? ['var(--mk-red-bg)', 'var(--mk-red)']
               : dr <= 14 ? ['var(--mk-orange-bg)', 'var(--mk-orange)']
@@ -79,7 +88,7 @@ export default function InicioScreen() {
               : `Te quedan ${dr} ${dr === 1 ? 'día' : 'días'} de servicio`;
             return <span style={servPill(c[0], c[1])}><IcoClock size={13} stroke="currentColor" sw={2.3} />{txt}</span>;
           })()}
-          {(serv.diasAtraso ?? 0) > 0 && (
+          {!serv.pausado && (serv.diasAtraso ?? 0) > 0 && (
             <span style={servPill('var(--mk-red-bg)', 'var(--mk-red)')} title="Días que el trabajo está frenado esperando tus grabaciones, revisiones o material">
               <IcoInfo size={13} stroke="currentColor" sw={2.3} />
               Frenado por tu parte: {serv.diasAtraso} {serv.diasAtraso === 1 ? 'día' : 'días'}
