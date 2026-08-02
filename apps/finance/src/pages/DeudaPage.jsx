@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from 'react';
 import { sbFetch } from '@korex/db';
 import PersonDrawer from '../components/PersonDrawer.jsx';
+import Combo from '../components/Combo.jsx';
 import { Search, Msg } from '../components/bits.jsx';
 import { useDirectoryResolver } from '../lib/directory.js';
 import { money, ROLE, ROLE_LABEL } from '../lib/format.js';
@@ -32,7 +33,16 @@ export default function DeudaPage() {
   const [hover, setHover] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [roster, setRoster] = useState([]);   // Base de datos: a quién le debemos / quién nos debe
   const resolve = useDirectoryResolver();
+
+  useEffect(() => {
+    sbFetch('fin_directory?select=nombre&order=nombre.asc&limit=3000')
+      .then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+  const partyOpts = useMemo(() => [...new Set(
+    roster.map((p) => String(p.nombre || '').trim()).filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b)), [roster]);
 
   // Carga (re-ejecutable). Las fuentes son vistas LIVE en Postgres, así que cada
   // fetch trae los números actuales (no hay filtro de fecha que los congele).
@@ -42,7 +52,7 @@ export default function DeudaPage() {
       sbFetch('fin_deuda_cliente_rol?select=cliente,role_key,generado,reservado,pagado,deuda&limit=3000'),
       sbFetch('fin_deuda_afiliado?select=persona,generado_total,generado_korex,pagado,deuda&order=deuda.desc.nullslast&limit=3000'),
       sbFetch('fin_cliente_debe_korex?select=cliente,debe_korex,transferido,saldo&order=saldo.desc.nullslast&limit=3000'),
-      sbFetch('fin_special_debts?select=direction,party,amount,currency,reason,detail,notes&order=amount.desc.nullslast&limit=200'),
+      sbFetch('fin_special_debts?select=id,direction,party,amount,currency,reason,detail,notes,debt_date,status,settled_date&order=debt_date.desc.nullslast&limit=200'),
       sbFetch('fin_fondo_vs_deuda?select=cliente,generado,pagado,deuda,reservado,debe_apartar,fondo_comisiones,diff,tiene_fondo&limit=500'),
       sbFetch('fin_resumen_comisiones?select=role_key,generado,reservado,pagado,deuda&limit=20'),
       sbFetch('fin_resumen_publicidad?select=fondo,neto,gastado&limit=1'),
@@ -77,10 +87,9 @@ export default function DeudaPage() {
   }, [rol]);
 
   const vm = useMemo(() => {
-    if (view === 'cuadre' || view === 'afiliado') return null; // tienen render propio
+    if (view === 'cuadre' || view === 'afiliado' || view === 'especiales') return null; // tienen render propio
     if (!rolByClient || !afi || !cli || !esp || !fondos) return null;
     const qq = q.trim().toLowerCase();
-    const m = (n, cur) => (cur === 'EUR' ? '€ ' : 'US$ ') + Math.round(Number(n) || 0).toLocaleString('es-AR');
 
     if (view === 'rol') {
       const list = rolByClient.list.filter((c) => !qq || c.cliente.toLowerCase().includes(qq));
@@ -130,17 +139,8 @@ export default function DeudaPage() {
         note: 'Foto completa por cliente: lo que generó en comisiones, lo que ya se le pagó, lo que queda pendiente (Deuda = Generado − Pagado), la reserva de afiliado, lo que se debería tener apartado (Debe apartar = Deuda pend. + Reserva) y el saldo real de su cuenta "… Comisiones" en Mercury. Diferencia = Fondo − Debe apartar; rojo/negativo = falta plata en el fondo.', count: list.length,
       };
     }
-    // especiales
-    const list = esp.filter((r) => !qq || [r.party, r.reason, r.detail, r.notes].some((x) => (x || '').toLowerCase().includes(qq)));
-    const we = list.filter((r) => r.direction === 'we_owe').reduce((a, r) => a + (+r.amount || 0), 0);
-    const they = list.filter((r) => r.direction === 'client_owes').reduce((a, r) => a + (+r.amount || 0), 0);
-    return {
-      cards: [['Debemos nosotros', money(we), 'red'], ['Nos deben clientes', money(they)]],
-      cols: [{ label: 'A quién / Cliente' }, { label: 'Dirección' }, { label: 'Monto' }, { label: 'Por qué' }, { label: 'Notas' }],
-      rows: list.map((r) => ({ name: r.party, cells: [{ v: r.direction === 'we_owe' ? 'Debemos' : 'Nos deben', color: r.direction === 'we_owe' ? '#dc2626' : '#0369a1', bold: true }, { v: m(r.amount, r.currency), color: r.direction === 'we_owe' ? '#dc2626' : '#1e293b', bold: true }, { v: r.reason || '—', color: '#475569' }, { v: r.notes || '—', color: '#94a3b8' }] })),
-      totals: null,
-      note: 'Deudas especiales/manuales: obligaciones excepcionales fuera del reparto de comisiones — reembolsos, ajustes, transferencias fallidas.', count: list.length,
-    };
+    // especiales — la pinta Especiales(), acá no se arma nada.
+    return null;
   }, [view, q, rolByClient, afi, cli, esp, fondos]);
 
   if (error) return <Msg>Error cargando deuda: {error}</Msg>;
@@ -169,6 +169,8 @@ export default function DeudaPage() {
         <Cuadre globalCom={resCom} globalPub={resPub} fondoComGlobal={fondoCom} perCliente={cuadreCli} rolRows={rol} />
       ) : view === 'afiliado' ? (
         <AfiliadosCli data={afiCli} q={q} onOpen={setOpenId} resolve={resolve} />
+      ) : view === 'especiales' ? (
+        <Especiales data={esp} q={q} onOpen={setOpenId} resolve={resolve} partyOpts={partyOpts} reload={load} />
       ) : (
       <>
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0, flexWrap: 'wrap' }}>
@@ -220,6 +222,222 @@ function Clickable({ name, id, onOpen }) {
   if (!name) return <span style={{ color: '#9AA4B2' }}>—</span>;
   if (!id) return <span>{name}</span>;
   return <span onClick={() => onOpen(id)} style={{ cursor: 'pointer', borderBottom: '1px dashed #C4CCD6' }}>{name}</span>;
+}
+
+/* ---------- Deudas especiales (la ÚNICA vista de Deuda que se edita) ----------
+   Las demás vistas son cálculo vivo del motor (deuda = generado − pagado): ahí
+   saldar es cargar un pago en Pagos. Estas son obligaciones sueltas cargadas a
+   mano — reembolsos, ajustes, transferencias fallidas — así que sí se editan. */
+const espMoney = (n, cur) => (cur === 'EUR' ? '€ ' : 'US$ ') + Math.round(Number(n) || 0).toLocaleString('es-AR');
+const hoyStr = () => new Date().toISOString().slice(0, 10);
+const numD = (x) => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? n : null; };
+// Antigüedad de la deuda, con el mismo criterio de semáforo que Seguimiento de pagos.
+const espDias = (iso) => {
+  if (!iso) return null;
+  return Math.round((Date.now() - new Date(`${iso}T00:00:00`).getTime()) / 86400000);
+};
+
+function Especiales({ data, q, onOpen, resolve, partyOpts, reload }) {
+  const [modal, setModal] = useState(null);
+  const [verSaldadas, setVerSaldadas] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const qq = (q || '').trim().toLowerCase();
+
+  const list = useMemo(() => (data || [])
+    .filter((r) => (verSaldadas ? true : r.status !== 'saldada'))
+    .filter((r) => !qq || [r.party, r.reason, r.detail, r.notes].some((x) => (x || '').toLowerCase().includes(qq))),
+  [data, qq, verSaldadas]);
+
+  // Los totales cuentan SOLO lo pendiente: una deuda saldada ya no se debe.
+  const pend = list.filter((r) => r.status !== 'saldada');
+  const we = pend.filter((r) => r.direction === 'we_owe').reduce((a, r) => a + (+r.amount || 0), 0);
+  const they = pend.filter((r) => r.direction === 'client_owes').reduce((a, r) => a + (+r.amount || 0), 0);
+  const nSaldadas = (data || []).filter((r) => r.status === 'saldada').length;
+
+  const toggleSaldada = async (r) => {
+    if (busyId) return;
+    setBusyId(r.id);
+    const saldada = r.status === 'saldada';
+    try {
+      await sbFetch(`fin_special_debts?id=eq.${r.id}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' }, throwOnError: true,
+        body: JSON.stringify(saldada ? { status: 'pendiente', settled_date: null } : { status: 'saldada', settled_date: hoyStr() }),
+      });
+      reload();
+    } catch { /* el error ya se ve porque la fila no cambia */ }
+    setBusyId(null);
+  };
+
+  const card = (label, val, color) => (
+    <div style={{ background: '#fff', border: '1px solid #E2E5EB', borderRadius: 12, padding: '11px 16px', minWidth: 170 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: color || '#8A93A2' }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, marginTop: 3, color: color || '#0D1117' }}>{val}</div>
+    </div>
+  );
+  const th = { position: 'sticky', top: 0, background: '#F8FAFC', borderBottom: '1px solid #E2E5EB', padding: '10px 14px', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'left' };
+  const td = { padding: '9px 14px', borderBottom: '1px solid #EEF1F5', borderRight: '1px solid #F4F6F9' };
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0, flexWrap: 'wrap', alignItems: 'center' }}>
+        {card('Debemos nosotros', espMoney(we, 'USD'), '#e11d48')}
+        {card('Nos deben', espMoney(they, 'USD'), '#0369a1')}
+        <button onClick={() => setModal({ mode: 'new', direction: 'we_owe', party: '', amount: '', currency: 'USD', reason: '', detail: '', notes: '', debt_date: hoyStr(), status: 'pendiente' })}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '9px 14px', cursor: 'pointer', background: '#0EA5A4' }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12h14M12 5v14" /></svg> Nueva deuda
+        </button>
+        {nSaldadas > 0 && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#64748B', cursor: 'pointer' }}>
+            <input type="checkbox" checked={verSaldadas} onChange={(e) => setVerSaldadas(e.target.checked)} style={{ cursor: 'pointer', accentColor: '#0EA5A4' }} />
+            Ver saldadas ({nSaldadas})
+          </label>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11.5, color: '#8A93A2', lineHeight: 1.45, marginBottom: 10, flexShrink: 0 }}>
+        Deudas especiales/manuales: obligaciones excepcionales fuera del reparto de comisiones — reembolsos, ajustes, transferencias fallidas.
+        Los totales cuentan solo las pendientes. Las otras pestañas de Deuda no se editan acá: salen del motor y se saldan registrando un pago en Pagos.
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', border: '1px solid #E2E5EB', borderRadius: 13, boxShadow: '0 1px 3px rgba(13,17,23,.04)' }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: 12.5, whiteSpace: 'nowrap' }}>
+          <thead><tr style={{ textAlign: 'left', color: '#64748B' }}>
+            {['A quién / Cliente', 'Fecha', 'Dirección', 'Monto', 'Por qué', 'Notas', 'Estado', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {list.map((r) => {
+              const saldada = r.status === 'saldada';
+              const dias = espDias(r.debt_date);
+              return (
+                <tr key={r.id} style={{ background: saldada ? '#F8FAFC' : '#fff', opacity: saldada ? 0.6 : 1 }}>
+                  <td style={{ ...td, fontWeight: 600 }}><Clickable name={r.party} id={resolve(r.party)} onOpen={onOpen} /></td>
+                  <td style={{ ...td, color: '#64748B' }}>
+                    {r.debt_date || <span style={{ color: '#cbd5e1' }}>—</span>}
+                    {!saldada && dias != null && dias > 30 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#b45309' }}>{dias}d</span>}
+                  </td>
+                  <td style={{ ...td, color: r.direction === 'we_owe' ? '#dc2626' : '#0369a1', fontWeight: 700 }}>{r.direction === 'we_owe' ? 'Debemos' : 'Nos deben'}</td>
+                  <td style={{ ...td, fontWeight: 700, color: r.direction === 'we_owe' ? '#dc2626' : '#1e293b', textDecoration: saldada ? 'line-through' : 'none' }}>{espMoney(r.amount, r.currency)}</td>
+                  <td style={{ ...td, color: '#475569', whiteSpace: 'normal' }}>{r.reason || '—'}</td>
+                  <td style={{ ...td, color: '#94a3b8', whiteSpace: 'normal' }}>{r.notes || '—'}</td>
+                  <td style={td}>
+                    <button onClick={() => toggleSaldada(r)} disabled={busyId === r.id}
+                      title={saldada ? `Saldada el ${r.settled_date || '—'} · clic para reabrir` : 'Marcar como saldada'}
+                      style={{ border: `1px solid ${saldada ? '#B6E8C5' : '#E2E5EB'}`, background: saldada ? '#F0FDF4' : '#fff', color: saldada ? '#15803d' : '#64748B', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: busyId === r.id ? 'default' : 'pointer' }}>
+                      {busyId === r.id ? '…' : saldada ? `✓ Saldada${r.settled_date ? ` · ${r.settled_date}` : ''}` : 'Pendiente'}
+                    </button>
+                  </td>
+                  <td style={{ ...td, borderRight: 0 }}>
+                    <button onClick={() => setModal({ mode: 'edit', ...r, amount: r.amount == null ? '' : String(r.amount), debt_date: r.debt_date || '' })}
+                      title="Editar deuda" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#B6BFCC', padding: 0, display: 'flex' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!list.length && <tr><td colSpan={8} style={{ padding: 30, textAlign: 'center', color: '#9AA4B2' }}>Sin deudas especiales{verSaldadas ? '' : ' pendientes'}.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ height: 14, flexShrink: 0 }} />
+
+      {modal && <EspecialModal form={modal} setForm={setModal} partyOpts={partyOpts} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+    </>
+  );
+}
+
+function EspecialModal({ form, setForm, partyOpts, onClose, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [err, setErr] = useState('');
+  const isEdit = form.mode === 'edit';
+  const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const ok = (form.party || '').trim() && numD(form.amount) != null;
+
+  const body = () => JSON.stringify({
+    direction: form.direction, party: (form.party || '').trim(),
+    amount: numD(form.amount), currency: form.currency || 'USD',
+    reason: (form.reason || '').trim() || null, detail: (form.detail || '').trim() || null,
+    notes: (form.notes || '').trim() || null,
+    debt_date: form.debt_date || null, status: form.status || 'pendiente',
+  });
+
+  const save = async () => {
+    if (!ok || busy) return;
+    setBusy(true); setErr('');
+    try {
+      if (isEdit) await sbFetch(`fin_special_debts?id=eq.${form.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: body() });
+      else await sbFetch('fin_special_debts', { method: 'POST', headers: { Prefer: 'return=minimal' }, throwOnError: true, body: body() });
+      onDone();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  const del = async () => {
+    if (!isEdit || busy) return;
+    setBusy(true); setErr('');
+    try {
+      await sbFetch(`fin_special_debts?id=eq.${form.id}`, { method: 'DELETE', throwOnError: true });
+      onDone();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+
+  const lab = { fontSize: 11, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 5 };
+  const inp = { width: '100%', border: '1px solid #E2E5EB', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,17,23,.4)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 540, maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(13,17,23,.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF1F5' }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>{isEdit ? 'Editar deuda especial' : 'Nueva deuda especial'}</div>
+            <div style={{ fontSize: 12, color: '#9AA4B2', marginTop: 2 }}>Obligación fuera del reparto de comisiones</div>
+          </div>
+          <button onClick={onClose} style={{ border: 0, background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#64748B', fontSize: 16 }}>✕</button>
+        </div>
+        <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><label style={lab}>Fecha de la deuda</label><input type="date" value={form.debt_date || ''} onChange={(e) => set('debt_date', e.target.value)} style={inp} /></div>
+          <div>
+            <label style={lab}>Dirección</label>
+            <select value={form.direction} onChange={(e) => set('direction', e.target.value)} style={inp}>
+              <option value="we_owe">Debemos nosotros</option>
+              <option value="client_owes">Nos deben</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lab}>A quién / Cliente <span style={{ color: '#e11d48' }}>*</span> <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· de la Base de datos</span></label>
+            <Combo value={form.party} onChange={(v) => set('party', v)} options={partyOpts} placeholder="elegir persona…" empty="No está en la base. Agregalo primero." />
+          </div>
+          <div><label style={lab}>Monto <span style={{ color: '#e11d48' }}>*</span></label><input inputMode="decimal" value={form.amount} onChange={(e) => set('amount', e.target.value)} placeholder="0" style={inp} /></div>
+          <div>
+            <label style={lab}>Divisa</label>
+            <select value={form.currency || 'USD'} onChange={(e) => set('currency', e.target.value)} style={inp}><option value="USD">USD</option><option value="EUR">EUR</option></select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Por qué</label><input value={form.reason || ''} onChange={(e) => set('reason', e.target.value)} placeholder="ej. Reembolso, Transferencia fallida, Ajuste…" style={inp} /></div>
+          <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Notas</label><input value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder="(opcional)" style={inp} /></div>
+          <label style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 12.5, color: '#475569' }}>
+            <input type="checkbox" checked={form.status === 'saldada'} onChange={(e) => set('status', e.target.checked ? 'saldada' : 'pendiente')} style={{ cursor: 'pointer', accentColor: '#16a34a' }} />
+            Ya está saldada{form.status === 'saldada' && form.settled_date ? ` · ${form.settled_date}` : ''}
+          </label>
+          {err && <div style={{ gridColumn: '1 / -1', color: '#dc2626', fontSize: 12 }}>Error: {err}</div>}
+        </div>
+        <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
+            {isEdit && (confirmDel
+              ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#be123c' }}>¿Borrar deuda?
+                  <button onClick={del} disabled={busy} style={{ border: 0, background: '#e11d48', color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>Sí, borrar</button>
+                  <button onClick={() => setConfirmDel(false)} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, padding: '6px 11px', borderRadius: 8, cursor: 'pointer' }}>No</button>
+                </span>
+              : <button onClick={() => setConfirmDel(true)} style={{ border: '1px solid #FBC9CF', background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 9, cursor: 'pointer' }}>Eliminar</button>
+            )}
+            {!confirmDel && <span style={{ fontSize: 11.5, color: ok ? '#16a34a' : '#e11d48' }}>{ok ? 'Listo para guardar' : 'Faltan la persona y el monto'}</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={{ border: '1px solid #E2E5EB', background: '#fff', color: '#475569', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={save} disabled={!ok || busy} style={{ border: 0, background: '#0EA5A4', color: '#fff', fontSize: 13, fontWeight: 700, padding: '9px 18px', borderRadius: 9, cursor: 'pointer', opacity: (!ok || busy) ? 0.6 : 1 }}>{busy ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Guardar deuda')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ---------- Afiliados agrupados por cliente ---------- */

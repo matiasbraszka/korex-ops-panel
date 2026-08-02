@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { sbFetch } from '@korex/db';
 import TagSelect from '../components/TagSelect.jsx';
+import Combo from '../components/Combo.jsx';
 import { Search, Msg } from '../components/bits.jsx';
 import { useOptions } from '../lib/options.js';
 import { money, money2, fdate, catChip, catColor } from '../lib/format.js';
@@ -19,7 +20,18 @@ export default function EgresosPage() {
   const [shown, setShown] = useState(120);
   const [modal, setModal] = useState(null);   // alta/edición (null = cerrado)
   const [busy, setBusy] = useState(false);
+  const [roster, setRoster] = useState([]);   // Base de datos: para el desplegable de cliente
   const catOpts = useOptions('categoria_egreso');
+
+  // Clientes de la Base de datos, igual que en Pagos: el cliente se elige, no se tipea.
+  useEffect(() => {
+    sbFetch('fin_directory?select=nombre,tipo,roles&order=nombre.asc&limit=3000')
+      .then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+  const clientOpts = useMemo(() => [...new Set(
+    roster.filter((p) => p.tipo === 'Cliente' || (p.roles || []).includes('Cliente'))
+      .map((p) => String(p.nombre || '').trim()).filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b)), [roster]);
 
   const load = useCallback(() => {
     sbFetch('fin_expenses?select=id,expense_date,category,reason,detail,project,paid_by,amount,amount_eur&order=expense_date.desc.nullslast&limit=6000')
@@ -168,13 +180,13 @@ export default function EgresosPage() {
       </div>
       <div style={{ height: 14, flexShrink: 0 }} />
 
-      {modal && <EgresoModal form={modal} setForm={setModal} catOpts={catOpts} onSave={saveModal} onDelete={deleteModal} busy={busy} onClose={() => setModal(null)} />}
+      {modal && <EgresoModal form={modal} setForm={setModal} catOpts={catOpts} clientOpts={clientOpts} onSave={saveModal} onDelete={deleteModal} busy={busy} onClose={() => setModal(null)} />}
     </div>
   );
 }
 
 /* ---------- modal de alta/edición/baja (mismo patrón que Ingresos) ---------- */
-function EgresoModal({ form, setForm, catOpts, onSave, onDelete, busy, onClose }) {
+function EgresoModal({ form, setForm, catOpts, clientOpts, onSave, onDelete, busy, onClose }) {
   const [rate, setRate] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const isEdit = form.mode === 'edit';
@@ -228,7 +240,7 @@ function EgresoModal({ form, setForm, catOpts, onSave, onDelete, busy, onClose }
           </div>
           <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Motivo</label><input value={form.reason} onChange={(e) => set('reason', e.target.value)} placeholder="ej. Retiro, Sueldo, Suscripción…" style={inp} /></div>
           <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Detalle</label><input value={form.detail} onChange={(e) => set('detail', e.target.value)} placeholder="(opcional)" style={inp} /></div>
-          <div><label style={lab}>Proyecto / cliente</label><input value={form.project} onChange={(e) => set('project', e.target.value)} placeholder="(opcional)" style={inp} /></div>
+          <div><label style={lab}>Proyecto / cliente <span style={{ color: '#9AA4B2', fontWeight: 400 }}>· de la Base de datos</span></label><Combo value={form.project} onChange={(v) => set('project', v)} options={clientOpts} placeholder="elegir cliente…" empty="No está en la base. Agregalo primero." /></div>
           <div><label style={lab}>Pagó</label><input value={form.paid_by} onChange={(e) => set('paid_by', e.target.value)} placeholder="(opcional)" style={inp} /></div>
         </div>
         <div style={{ padding: '14px 22px', borderTop: '1px solid #EEF1F5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

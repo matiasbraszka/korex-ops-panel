@@ -49,7 +49,7 @@ export default function IngresosPage() {
   const [refundMap, setRefundMap] = useState({});    // income_id → total reembolsado US$
 
   const load = useCallback(() => {
-    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
+    sbFetch('fin_incomes?select=id,income_date,client_id,client_name_sheet,payer_name,conector_name_sheet,afiliado_name,collected_by,income_type,effective_type,payment_method,net_usd,amount_eur,amount_usd,korex_real,sin_comision,facturado,organizado_finanzas,llego_mercury,invoice_id,invoices!fin_incomes_invoice_id_fkey(number,pdf_url,status),fin_commission_entries(role_key,amount,notes)&order=income_date.desc.nullslast&limit=6000')
       .then((d) => setRows(Array.isArray(d) ? d : []))
       .catch((e) => setError(String(e)));
     sbFetch('fin_incomes_enriched?select=id,payer_dir_id,payer_tipo,client_dir_id&limit=6000')
@@ -99,6 +99,7 @@ export default function IngresosPage() {
       bruto: String(divisa === 'USD' ? (r.amount_usd ?? '') : (r.amount_eur ?? '')),
       amount_usd: r.amount_usd == null ? '' : String(r.amount_usd), amount_eur: r.amount_eur == null ? '' : String(r.amount_eur),
       net_usd: r.net_usd == null ? '' : String(r.net_usd), netTouched: true,
+      sin_comision: !!r.sin_comision,
     });
   };
 
@@ -115,6 +116,8 @@ export default function IngresosPage() {
         collected_by: collected, income_type: f.income_type,
         amount_eur: num(f.amount_eur), amount_usd: num(f.amount_usd), net_usd: net, payment_method: f.payment_method || null,
         llego_mercury: autoMercury(f.payment_method, collected),
+        // Solo tiene sentido en PUBLICIDAD: si cambian el tipo, el flag se apaga solo.
+        sin_comision: f.income_type === 'PUBLICIDAD' ? !!f.sin_comision : false,
       };
       if (f.mode === 'edit') {
         await sbFetch(`fin_incomes?id=eq.${f.id}`, { method: 'PATCH', body: JSON.stringify(common), throwOnError: true });
@@ -226,7 +229,7 @@ export default function IngresosPage() {
 
       {/* toolbar — buscador + filtros minimalistas (tipo, cliente, conector, pagador, mes) */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, flexShrink: 0 }}>
-        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false, convTouched: false })}
+        <button onClick={() => setModal({ mode: 'new', income_date: todayStr(), income_type: 'CRM', payer_name: '', client_name_sheet: '', conector_name: '', afiliado_name: '', payment_method: PAY_OPTS[0], divisa: 'USD', bruto: '', amount_eur: '', amount_usd: '', net_usd: '', netTouched: false, convTouched: false, sin_comision: false })}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#fff', border: 0, borderRadius: 9, padding: '8px 13px', cursor: 'pointer', whiteSpace: 'nowrap', background: '#0EA5A4' }}>
           <Plus /> Nuevo ingreso
         </button>
@@ -507,6 +510,17 @@ function IngresoModal({ form, setForm, cliOpts, dir, conByClient, onSave, onDele
             </div>
           ) : (
             <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: '#6B7585' }}>Neto US$: <b style={{ color: '#0c8584' }}>{form.net_usd ? `$ ${form.net_usd}` : '—'}</b> <span style={{ color: '#9AA4B2' }}>· sin comisión (= bruto)</span></div>
+          )}
+          {form.income_type === 'PUBLICIDAD' && (
+            <label style={{ gridColumn: '1 / -1', display: 'flex', gap: 9, alignItems: 'flex-start', cursor: 'pointer', border: '1px solid #FDE68A', background: '#FFFBEB', borderRadius: 9, padding: '10px 12px' }}>
+              <input type="checkbox" checked={!!form.sin_comision} onChange={(e) => setForm((s) => ({ ...s, sin_comision: e.target.checked }))} style={{ marginTop: 2, width: 15, height: 15, cursor: 'pointer', accentColor: '#b45309' }} />
+              <span style={{ fontSize: 12.5, color: '#78350F', lineHeight: 1.45 }}>
+                <b>Va íntegro a publicidad (no genera comisiones)</b>
+                <span style={{ display: 'block', fontSize: 11, color: '#9A6B2F', marginTop: 2 }}>
+                  Todo el neto queda como presupuesto de publicidad del cliente. Nadie cobra comisión por este pago, tampoco Korex. La comisión de la pasarela ya está descontada en el neto.
+                </span>
+              </span>
+            </label>
           )}
         </div>
         <div style={{ padding: '0 22px 6px', display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#6B7585', alignItems: 'center' }}>
