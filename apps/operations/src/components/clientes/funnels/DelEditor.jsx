@@ -6,7 +6,7 @@ import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
 import { sanitizeDelHtml } from './delSanitize';
-import { getCfgJump } from './cfgJump';
+import { getCfgJump, clearCfgJump } from './cfgJump';
 import { BLUEPRINTS } from './blueprints';
 import { resolveDelTabs, esGrabable } from './delTabs';
 import { publicOrigin } from '../../../utils/helpers';
@@ -306,7 +306,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // Qué se ve en el panel derecho: 'estrategia' | 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
   // Por defecto abre en ESTRATEGIA (decisión de Matías): es la primera pestaña y la vista de arranque.
   // Excepción: si hay un salto pendiente desde el Panorama (cfgJump), arranca en CONFIGURACIÓN.
-  const [view, setView] = useState(() => (getCfgJump() ? 'config' : 'estrategia'));
+  const [view, setView] = useState(() => {
+    const j = getCfgJump();
+    if (!j) return 'estrategia';
+    return j.destino === 'del' ? 'del' : 'config';   // salto a una pestaña del DEL vs. a la configuración
+  });
   const [clientDocs, setClientDocs] = useState([]);
   // Colaboración: comentarios por sección + presencia en vivo + candado de edición.
   const [comments, setComments] = useState([]);      // todos los del DEL
@@ -329,6 +333,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [shareDelLinks, setShareDelLinks] = useState(null);  // links de comentarios activos
   const [shareDelBusy, setShareDelBusy] = useState(false);
   const [copiedDelTok, setCopiedDelTok] = useState(null);
+  const [aviso, setAviso] = useState(null);   // mensajito verde abajo, se va solo
+  const [saltoFlash, setSaltoFlash] = useState(null); // sección a la que se saltó desde el Panorama
   const scrollRef = useRef(null);
   const timers = useRef({}); // id -> timeout (debounce de guardado)
   const channelRef = useRef(null);
@@ -364,8 +370,22 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       const list = Array.isArray(rows) ? rows : [];
       setSecs(list);
       if (list.length) {
-        // Por defecto abre la sección de Estrategia (si existe); si no, la primera.
-        setActiva((a) => a || (list.find((s) => s.kind === 'estrategia')?.id ?? list[0].id));
+        // Salto desde el Panorama a una PESTAÑA del DEL (Avatar, VSL guión…):
+        // se abre esa pestaña directamente en vez de la de arranque.
+        // (FunnelRow ya comprobó que el salto es para ESTE funnel antes de abrir
+        // el DEL, así que acá solo importa el destino.)
+        const j = getCfgJump();
+        const destinoDel = j?.destino === 'del';
+        const objetivo = destinoDel ? list.find((s) => s.kind === j.campo) : null;
+        if (destinoDel) {
+          clearCfgJump();
+          setView('del');
+          setActiva(objetivo?.id ?? list[0].id);
+          setSaltoFlash(objetivo?.id ?? null);
+        } else {
+          // Por defecto abre la sección de Estrategia (si existe); si no, la primera.
+          setActiva((a) => a || (list.find((s) => s.kind === 'estrategia')?.id ?? list[0].id));
+        }
         setResolvedDoc((d) => d || list[0].doc_id);
         setResolvedClient((c) => c || list[0].client_id);
       }
@@ -373,6 +393,29 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       setErr(String(e?.message || e));
     }
   }, [strategyId, docId]);
+
+  useEffect(() => {
+    if (!aviso) return undefined;
+    const t = setTimeout(() => setAviso(null), 4000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
+  // Llegada del salto del Panorama: bajar hasta la pestaña y destacarla en amarillo,
+  // igual que hace FunnelConfigBlock con los campos de configuración.
+  useEffect(() => {
+    if (!saltoFlash) return undefined;
+    const t = setTimeout(() => {
+      const el = document.getElementById('sec-' + saltoFlash);
+      setSaltoFlash(null);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const prev = el.style.boxShadow;
+      el.style.transition = 'box-shadow .25s';
+      el.style.boxShadow = '0 0 0 3px #FFD84D';
+      setTimeout(() => { el.style.boxShadow = prev; }, 2600);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [saltoFlash]);
 
   // Carga las personas asignables (cliente + Encargados de grabarse) del cliente.
   useEffect(() => {
@@ -735,10 +778,40 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     }
     setComments((prev) => prev.map(c => c.id === tempId ? data : c));
   };
+  // Dar OK a un comentario va por RPC, no por update directo: cuando se cierra el
+  // ÚLTIMO comentario abierto del cliente, la pestaña vuelve sola a sus manos
+  // (estado "revisión" y se le limpia el "ya lo revisé"). Es el paso que antes no
+  // existía y dejaba las correcciones colgadas para siempre.
   const resolverComment = async (c) => {
     setComments((prev) => prev.map(x => x.id === c.id ? { ...x, resolved: !x.resolved } : x));
-    await supabase.from('del_comments').update({ resolved: !c.resolved }).eq('id', c.id);
+    const { data, error } = await supabase.rpc('del_comment_resolver', {
+      p_comment_id: c.id, p_resolved: !c.resolved, p_by: by,
+    });
+    if (error || data?.ok === false) {   // la base mandó: volvemos atrás
+      setComments((prev) => prev.map(x => x.id === c.id ? { ...x, resolved: c.resolved } : x));
+      return;
+    }
     emitir('comment', { action: 'upsert', row: { id: c.id, resolved: !c.resolved } });
+    if (data?.rehabilitada) {
+      setSecs((prev) => prev.map(x => x.id === c.section_id
+        ? { ...x, grab_flujo: 'revision', grab_flujo_at: new Date().toISOString(),
+            estado_seccion: 'terminado', accion_cliente: 'revisar' }
+        : x));
+      setAviso('Listo: se la devolvimos al cliente para que la revise.');
+    }
+  };
+
+  // "Habilitar para revisión" a mano: cuando el equipo corrigió sin que hubiera
+  // comentarios que cerrar, o quiere devolverla igual.
+  const rehabilitar = async (s) => {
+    const { data, error } = await supabase.rpc('del_seccion_rehabilitar', { p_section_id: s.id, p_by: by });
+    if (error || data?.ok === false) { setAviso('No se pudo habilitar. Probá de nuevo.'); return; }
+    setComments((prev) => prev.map(x => x.section_id === s.id && x.portal_client_id ? { ...x, resolved: true } : x));
+    setSecs((prev) => prev.map(x => x.id === s.id
+      ? { ...x, grab_flujo: 'revision', grab_flujo_at: new Date().toISOString(),
+          estado_seccion: 'terminado', accion_cliente: 'revisar' }
+      : x));
+    setAviso('Listo: se la devolvimos al cliente para que la revise.');
   };
   const borrarComment = async (c) => {
     // Al borrar un comentario padre, sus respuestas caen con él (FK ON DELETE CASCADE en la base).
@@ -1736,18 +1809,29 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                   {!esGrabable(s.kind) && s.grab_flujo && (() => {
                     const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
                     const m = {
-                      revision:   { t: '👀 Revisión', c: '#1D4FD8', b: '#EEF3FF' },
-                      correccion: { t: '✏️ Corrección', c: '#B45309', b: '#FEF6E7' },
-                      aprobado:   { t: '✅ Aprobado', c: '#15803D', b: '#DCFCE7' },
+                      revision:   { t: '👀 Con el cliente', c: '#1D4FD8', b: '#EEF3FF', ay: 'Está en manos del cliente: la tiene para leer y aprobar.' },
+                      correccion: { t: '✏️ Corrección', c: '#B45309', b: '#FEF6E7', ay: 'El cliente pidió cambios. Al dar OK al último comentario vuelve a él.' },
+                      aprobado:   { t: '✅ Aprobado por el cliente', c: '#15803D', b: '#DCFCE7', ay: 'El cliente le dio el OK. Lista para diseño.' },
                     }[s.grab_flujo];
                     if (!m) return null;
                     return (
                       <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: m.b, color: m.c }}
-                        title={dias != null ? `Hace ${dias} día(s) en este estado` : ''}>
+                        title={`${m.ay}${dias != null ? ` Hace ${dias} día(s) en este estado.` : ''}`}>
                         {m.t}{dias != null ? ` · ${dias}d` : ''}
                       </span>
                     );
                   })()}
+                  {/* Devolvérsela al cliente a mano. Normalmente pasa solo al dar OK
+                      al último comentario, pero si se corrigió sin comentarios que
+                      cerrar, este botón es la única forma de que vuelva a verla. */}
+                  {s.grab_flujo === 'correccion' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); rehabilitar(s); }}
+                      title="Ya lo corregimos: devolvérsela al cliente para que la revise de nuevo"
+                      className="shrink-0 inline-flex items-center gap-1 py-1 px-2 rounded-md text-[10px] font-extrabold uppercase tracking-[0.03em] border cursor-pointer outline-none bg-white text-[#1D4FD8] border-[#C7D7FE] hover:bg-[#EEF3FF]">
+                      ↩ Habilitar
+                    </button>
+                  )}
                   {/* RESPONSABLE de grabación (cliente o Encargado) + estado del flujo */}
                   {esGrabable(s.kind) && (
                     <>
@@ -1791,7 +1875,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       {s.grab_flujo && s.grab_flujo !== 'grabado' && (() => {
                         const dias = s.grab_flujo_at ? Math.max(0, Math.floor((Date.now() - new Date(s.grab_flujo_at)) / 86400000)) : null;
                         const m = {
-                          revision:   { t: '👀 Revisión', c: '#1D4FD8', b: '#EEF3FF' },
+                          revision:   { t: '👀 Con el cliente', c: '#1D4FD8', b: '#EEF3FF' },
                           correccion: { t: '✏️ Corrección', c: '#B45309', b: '#FEF6E7' },
                           grabacion:  { t: '🎬 Grabación', c: '#15803D', b: '#DCFCE7' },
                         }[s.grab_flujo];
@@ -2362,6 +2446,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
               );
             })()}
           </div>
+        </div>
+      )}
+
+      {aviso && (
+        <div className="fixed left-1/2 bottom-6 z-[60] -translate-x-1/2 flex items-center gap-2 py-2 px-3.5 rounded-lg text-[12px] font-semibold"
+          style={{ background: '#15803D', color: '#fff', boxShadow: '0 8px 24px rgba(10,22,40,.22)' }}>
+          <Check size={13} strokeWidth={3} />{aviso}
         </div>
       )}
     </div>

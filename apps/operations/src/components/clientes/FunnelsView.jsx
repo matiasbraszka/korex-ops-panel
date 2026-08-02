@@ -1017,7 +1017,7 @@ Quedo a la espera de tu respuesta`;
 
       {/* Testimonios: van POR FUNNEL (no al apartado general del cliente). Una carpeta por
           este funnel, compartida por todos sus avatares. */}
-      <div className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
+      <div data-res="testimonios" className="rounded-xl border border-[#E7EAF0] bg-white overflow-hidden">
         <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5]">
           <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#FCE7F3] text-[#DB2777] shrink-0"><ImageIcon size={15} /></span>
           <div className="min-w-0">

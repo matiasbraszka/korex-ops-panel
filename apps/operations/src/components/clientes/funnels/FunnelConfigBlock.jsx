@@ -197,16 +197,9 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
       </div>
 
       <div className="p-[18px]">
-        {/* Anuncios comprometidos: definen el 100% del funnel; los de más = optimización. */}
-        <div data-cfg="ads_target" className="mb-3.5 flex items-center gap-3 py-2.5 px-3 rounded-xl bg-[#F8FAFF] border border-[#E7EAF0]">
-          <div className="min-w-0 flex-1">
-            <div className="text-[12px] font-bold text-[#1A1D26]">Anuncios a entregar (para el 100%)</div>
-            <div className="text-[11px] text-[#9098A4]">Cuántos anuncios editados = trato cumplido. Los que hagas de más cuentan como optimización.</div>
-          </div>
-          <input type="number" min="0" defaultValue={f.ads_target ?? ''} placeholder="ej. 15"
-            onBlur={(e) => { const raw = e.target.value.trim(); const v = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0); if (v !== (f.ads_target ?? null)) onUpdate(f.id, { ads_target: v }); }}
-            className="w-20 text-center py-2 px-2 text-[14px] font-bold text-[#1A1D26] bg-white border border-[#D5DCE7] rounded-lg outline-none focus:border-[#2E69E0]" />
-        </div>
+        {/* "Anuncios a entregar" se mudó a la ficha del cliente (el botón del
+            teléfono, junto a sus credenciales y su equipo): es parte del trato
+            comercial, no de la configuración técnica del funnel. */}
         <Grupo titulo="Obligatorios" Icon={Link2} slots={SLOT_OBLIGATORIOS} f={f} onUpdate={onUpdate} contador={{ ok: okReq, total: SLOT_OBLIGATORIOS.length }} />
         <Grupo titulo="Configuración de Meta" Icon={Settings2} slots={SLOT_META} f={f} onUpdate={onUpdate} contador={{ ok: okMeta, total: SLOT_META.length }} />
 

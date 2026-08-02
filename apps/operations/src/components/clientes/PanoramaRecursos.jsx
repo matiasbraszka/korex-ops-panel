@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { Check, X, Loader2, Search, Layers, Filter, Link2, KeyRound } from 'lucide-react';
+import { Check, X, Loader2, Search, Layers, Filter, Link2, KeyRound, ExternalLink } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { setCfgJump, setPanoramaReturn } from './funnels/cfgJump';
 import ClientAccessModal from './ClientAccessModal';
@@ -282,42 +282,69 @@ export default function PanoramaRecursos() {
                       onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null}
                       onGoCrm={() => abrirAccesos(r.client_id)}
                       onGoRecurso={primerFunnelId(r) ? (bucket) => irA(r.client_id, primerFunnelId(r), bucket, 'recursos') : null} />}
-                    {/* DEL vinculado */}
+                    {/* DEL vinculado — clic abre el DEL de esta estrategia. */}
                     <td className={tdBase} style={st}>
-                      {e.del_ok
-                        ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#E6F7EE', color: '#15803D' }}><Link2 size={11} strokeWidth={3} />Vinculado</span>
-                        : <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#FDECEC', color: '#DC2626' }}><X size={11} strokeWidth={3} />Falta</span>}
+                      {(() => {
+                        const fid = (e.funnels || []).find(x => x.id)?.id;
+                        const chip = e.del_ok
+                          ? <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#E6F7EE', color: '#15803D' }}><Link2 size={11} strokeWidth={3} />Vinculado</span>
+                          : <span className="inline-flex items-center gap-1 py-0.5 px-2 rounded-full text-[11px] font-bold" style={{ background: '#FDECEC', color: '#DC2626' }}><X size={11} strokeWidth={3} />Falta</span>;
+                        if (!fid) return chip;
+                        return (
+                          <button onClick={() => irA(r.client_id, fid, 'estrategia', 'del')} title="Abrir el DEL de este embudo"
+                            className="border-none bg-transparent p-0 cursor-pointer hover:opacity-80">{chip}</button>
+                        );
+                      })()}
                     </td>
-                    {/* Avatar — por funnel (alineado con cada funnel) */}
+                    {/* Avatar — por funnel. Clic → pestaña Avatares del DEL de ese funnel. */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.tiene_avatar} /></div>))}</div>}
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (
+                            <div key={j} className="h-[18px] flex items-center">
+                              <button onClick={() => irA(r.client_id, f.id, 'avatares', 'del')}
+                                title={f.tiene_avatar ? 'Ver el avatar en el DEL' : 'Falta el avatar · clic para ir a escribirlo'}
+                                className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80"><CellDot ok={!!f.tiene_avatar} /></button>
+                            </div>))}</div>}
                     </td>
-                    {/* VSL guión — por funnel */}
+                    {/* VSL guión — por funnel. Clic → pestaña VSL del DEL. */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.vsl_guionado} /></div>))}</div>}
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (
+                            <div key={j} className="h-[18px] flex items-center">
+                              <button onClick={() => irA(r.client_id, f.id, 'vsl', 'del')}
+                                title={f.vsl_guionado ? 'Ver el guión del VSL en el DEL' : 'Falta el guión del VSL · clic para ir a escribirlo'}
+                                className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80"><CellDot ok={!!f.vsl_guionado} /></button>
+                            </div>))}</div>}
                     </td>
-                    {/* VSL editado — por funnel. Si ya está en Voomly se abre el
-                        video directo; si no, lleva a la carpeta de edición. */}
+                    {/* VSL editado — por funnel. Clic → carpeta del VSL editado, adentro
+                        del panel. Si además está en Voomly, la flechita de al lado abre
+                        el video afuera; el punto NUNCA saca de la pantalla. */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
                         : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => {
                             const url = vslUrls[f.id];
                             return (
-                              <div key={j} className="h-[18px] flex items-center">
-                                {url
-                                  ? <a href={url} target="_blank" rel="noopener" title="Abrir el VSL editado" className="inline-flex items-center hover:opacity-80"><CellDot ok /></a>
-                                  : <button onClick={() => irA(r.client_id, f.id, 'vsl_edit', 'recursos')} title={f.vsl_editado ? 'Ver la carpeta del VSL editado' : 'Falta el VSL editado · clic para ir a cargarlo'}
-                                      className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80"><CellDot ok={!!f.vsl_editado} /></button>}
+                              <div key={j} className="h-[18px] flex items-center gap-1">
+                                <button onClick={() => irA(r.client_id, f.id, 'vsl_edit', 'recursos')}
+                                  title={f.vsl_editado ? 'Ver la carpeta del VSL editado' : 'Falta el VSL editado · clic para ir a cargarlo'}
+                                  className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80"><CellDot ok={!!f.vsl_editado} /></button>
+                                {url && (
+                                  <a href={url} target="_blank" rel="noopener" title="Abrir el video en Voomly (se va del panel)"
+                                    className="inline-flex items-center text-[#AEB4BF] hover:text-[#5B7CF5]"><ExternalLink size={10} /></a>
+                                )}
                               </div>
                             );
                           })}</div>}
                     </td>
-                    {/* Testimonios — por funnel (videos cargados en la carpeta del funnel) */}
+                    {/* Testimonios — por funnel. Clic → su carpeta de testimonios. */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellCount n={f.testimonios_files || 0} /></div>))}</div>}
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (
+                            <div key={j} className="h-[18px] flex items-center">
+                              <button onClick={() => irA(r.client_id, f.id, 'testimonios', 'recursos')}
+                                title={f.testimonios_files ? 'Ver la carpeta de testimonios' : 'Sin testimonios · clic para ir a cargarlos'}
+                                className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80"><CellCount n={f.testimonios_files || 0} /></button>
+                            </div>))}</div>}
                     </td>
                     {/* Tracking (P/C/E) — por funnel */}
                     <td className={tdBase} style={st}>
@@ -368,6 +395,7 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><b>Avatar</b> = avatar cargado en el DEL · <b>VSL guión</b> = guión escrito en el DEL · <b>VSL editado</b> = video listo · <b>Testimonios</b> = videos cargados en la carpeta del funnel · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
         <span className="inline-flex items-center gap-1"><Layers size={12} />Logo/colores/imágenes son del cliente (una vez); Avatar/VSL/Testimonios/Tracking/fecha son por FUNNEL, alineados con cada funnel de la columna. Los checks leen el sistema nuevo (DEL nativo + carpetas del funnel).</span>
         <span className="inline-flex items-center gap-1"><KeyRound size={12} /><b>CRM prod</b> = acceso al CRM Korex de producción cargado en los accesos del cliente (aplica a todos sus funnels); clic para verlo o cargarlo.</span>
+        <span className="inline-flex items-center gap-1"><b>Todo el tablero es clicable</b>: cada punto lleva al lugar exacto dentro del panel (la pestaña del DEL o la carpeta) y lo destaca en amarillo. Volvés con “← Volver al Panorama”. Lo único que sale del panel es la flechita <ExternalLink size={10} className="inline" /> del VSL editado, que abre Voomly.</span>
       </div>
 
       {/* Modal de accesos del cliente (chip "CRM prod"); al cerrar se recarga el panorama. */}

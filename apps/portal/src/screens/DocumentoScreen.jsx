@@ -170,6 +170,95 @@ export default function DocumentoScreen() {
     }
   }, [loading, navState, sid, tipo]);
 
+  // ── Comentar: selección de texto → botón flotante → caja abajo ──
+  // OJO: todo esto vive ACÁ ARRIBA, antes de los `return` de abajo, porque tiene
+  // hooks adentro. Un hook declarado después de un return condicional hace que
+  // React cuente distinta cantidad de hooks entre el render "cargando" y el
+  // siguiente, y tira la pantalla entera ("Se nos trabó algo").
+  const puedeComentar = tipo !== 'guias'
+    && ['ads', 'vsl', 'avatar', 'estrategia', 'copy'].includes(data?.tipo);
+
+  // El documento se dibuja dentro de un contenedor con CSS `zoom` (85–150%). Safari
+  // NO escala por el zoom las coordenadas que devuelve getBoundingClientRect() sobre
+  // un Range, pero `position: fixed` sí usa el viewport real: por eso el botón
+  // "Comentar" aparecía desplazado, y cuanto más zoom más lejos.
+  //
+  // En vez de asumir el navegador, se mide: si el rect del contenedor ya refleja el
+  // zoom, no hay que compensar; si no, se compensa. Así se corrige solo el día que
+  // Safari lo arregle.
+  const zoomFactor = () => {
+    const el = pdfRef.current;
+    const w = el?.offsetWidth;
+    if (!el || !w) return 1;
+    const ratio = el.getBoundingClientRect().width / w;
+    return Math.abs(ratio - 1) < 0.02 ? zoom / 100 : 1;
+  };
+
+  const leerSeleccion = () => {
+    if (!puedeComentar) return;
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim() : '';
+    if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
+    let node = sel.anchorNode;
+    while (node && node.nodeType !== 1) node = node.parentNode;
+    const secEl = node?.closest?.('[data-secid]');
+    if (!secEl) { setSelBtn(null); return; }
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const f = zoomFactor();
+    setSelBtn({
+      top: r.top * f, bottom: r.bottom * f, left: (r.left + r.width / 2) * f,
+      quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid'),
+    });
+  };
+  const onDocMouseUp = leerSeleccion;
+
+  // En iOS, ajustar la selección con los tiradores no dispara ningún evento sobre
+  // el div (son UI del sistema), así que sin esto el botón se quedaba con la
+  // selección vieja o directamente desaparecía. `selectionchange` sí llega siempre.
+  useEffect(() => {
+    if (!puedeComentar) return undefined;
+    let t = null;
+    const onSel = () => {
+      if (composerRef.current) return;   // con el composer abierto la selección ya se usó
+      clearTimeout(t);
+      t = setTimeout(leerSeleccion, 120);
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
+  }); // sin deps: leerSeleccion depende de props/estado que cambian en cada render
+
+  // Fallback para el teléfono: mantener pulsado (o doble toque) sobre un párrafo
+  // abre el comentario de esa sección, sin depender de la selección nativa —
+  // que en iOS se colapsa sola apenas se toca fuera o aparece el menú del sistema.
+  const touchRef = useRef(null);
+  const onDocTouchStart = (e) => {
+    if (!puedeComentar || composer) return;
+    const t = e.touches?.[0];
+    if (!t) return;
+    const secEl = e.target?.closest?.('[data-secid]');
+    if (!secEl) return;
+    const timer = setTimeout(() => {
+      const sel = window.getSelection();
+      // Si el sistema ya armó una selección real, esa manda: no la pisamos.
+      if (sel && !sel.isCollapsed && sel.toString().trim().length >= 2) return;
+      touchRef.current = null;
+      setSelBtn(null);
+      setComposer({ sectionId: secEl.getAttribute('data-secid'), quote: '', parentId: null });
+      setDraft('');
+    }, 450);
+    touchRef.current = { x: t.clientX, y: t.clientY, timer };
+  };
+  const cancelarLongPress = () => {
+    if (touchRef.current?.timer) clearTimeout(touchRef.current.timer);
+    touchRef.current = null;
+  };
+  const onDocTouchMove = (e) => {
+    const s = touchRef.current; const t = e.touches?.[0];
+    if (!s || !t) return;
+    if (Math.abs(t.clientX - s.x) > 10 || Math.abs(t.clientY - s.y) > 10) cancelarLongPress();
+  };
+  const onDocTouchEnd = () => { cancelarLongPress(); setTimeout(leerSeleccion, 80); };
+
   if (loading) return <PhoneFrame><Loading label="Abriendo el documento…" /></PhoneFrame>;
   if (!data) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este documento.</div></PhoneFrame>;
 
@@ -225,90 +314,6 @@ export default function DocumentoScreen() {
       : { tipo: 'aprobado', txt: enCopy ? 'Aprobada. Dejamos esta página lista.' : 'Aprobado. Ya puedes grabarlo cuando quieras.' });
     setReloadKey((k) => k + 1);                  // refrescar: aprobado pasa a grabar
   };
-
-  // ── Comentar: selección de texto → botón flotante → caja abajo ──
-  // El documento se dibuja dentro de un contenedor con CSS `zoom` (85–150%). Safari
-  // NO escala por el zoom las coordenadas que devuelve getBoundingClientRect() sobre
-  // un Range, pero `position: fixed` sí usa el viewport real: por eso el botón
-  // "Comentar" aparecía desplazado, y cuanto más zoom más lejos.
-  //
-  // En vez de asumir el navegador, se mide: si el rect del contenedor ya refleja el
-  // zoom, no hay que compensar; si no, se compensa. Así se corrige solo el día que
-  // Safari lo arregle.
-  const zoomFactor = () => {
-    const el = pdfRef.current;
-    const w = el?.offsetWidth;
-    if (!el || !w) return 1;
-    const ratio = el.getBoundingClientRect().width / w;
-    return Math.abs(ratio - 1) < 0.02 ? zoom / 100 : 1;
-  };
-
-  const puedeComentar = () => esGuion || data.tipo === 'avatar' || data.tipo === 'estrategia' || data.tipo === 'copy';
-
-  const leerSeleccion = () => {
-    if (!puedeComentar()) return;
-    const sel = window.getSelection();
-    const text = sel ? sel.toString().trim() : '';
-    if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
-    let node = sel.anchorNode;
-    while (node && node.nodeType !== 1) node = node.parentNode;
-    const secEl = node?.closest?.('[data-secid]');
-    if (!secEl) { setSelBtn(null); return; }
-    const r = sel.getRangeAt(0).getBoundingClientRect();
-    const f = zoomFactor();
-    setSelBtn({
-      top: r.top * f, bottom: r.bottom * f, left: (r.left + r.width / 2) * f,
-      quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid'),
-    });
-  };
-  const onDocMouseUp = leerSeleccion;
-
-  // En iOS, ajustar la selección con los tiradores no dispara ningún evento sobre
-  // el div (son UI del sistema), así que sin esto el botón se quedaba con la
-  // selección vieja o directamente desaparecía. `selectionchange` sí llega siempre.
-  useEffect(() => {
-    if (!puedeComentar()) return undefined;
-    let t = null;
-    const onSel = () => {
-      if (composerRef.current) return;   // con el composer abierto la selección ya se usó
-      clearTimeout(t);
-      t = setTimeout(leerSeleccion, 120);
-    };
-    document.addEventListener('selectionchange', onSel);
-    return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
-  }); // sin deps: leerSeleccion depende de props/estado que cambian en cada render
-
-  // Fallback para el teléfono: mantener pulsado (o doble toque) sobre un párrafo
-  // abre el comentario de esa sección, sin depender de la selección nativa —
-  // que en iOS se colapsa sola apenas se toca fuera o aparece el menú del sistema.
-  const touchRef = useRef(null);
-  const onDocTouchStart = (e) => {
-    if (!puedeComentar() || composer) return;
-    const t = e.touches?.[0];
-    if (!t) return;
-    const secEl = e.target?.closest?.('[data-secid]');
-    if (!secEl) return;
-    const timer = setTimeout(() => {
-      const sel = window.getSelection();
-      // Si el sistema ya armó una selección real, esa manda: no la pisamos.
-      if (sel && !sel.isCollapsed && sel.toString().trim().length >= 2) return;
-      touchRef.current = null;
-      setSelBtn(null);
-      setComposer({ sectionId: secEl.getAttribute('data-secid'), quote: '', parentId: null });
-      setDraft('');
-    }, 450);
-    touchRef.current = { x: t.clientX, y: t.clientY, timer };
-  };
-  const cancelarLongPress = () => {
-    if (touchRef.current?.timer) clearTimeout(touchRef.current.timer);
-    touchRef.current = null;
-  };
-  const onDocTouchMove = (e) => {
-    const s = touchRef.current; const t = e.touches?.[0];
-    if (!s || !t) return;
-    if (Math.abs(t.clientX - s.x) > 10 || Math.abs(t.clientY - s.y) > 10) cancelarLongPress();
-  };
-  const onDocTouchEnd = () => { cancelarLongPress(); setTimeout(leerSeleccion, 80); };
 
   // "Descargar PDF": arma una copia imprimible del documento (con los estilos de la
   // app) en un iframe oculto y abre el diálogo de impresión — ahí el cliente elige

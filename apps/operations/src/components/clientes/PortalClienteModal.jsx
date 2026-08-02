@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@korex/db';
 import { Smartphone, Copy, Check, ExternalLink, RefreshCw, Eye, EyeOff, Plus, Trash2, ClipboardList, BadgeCheck, Activity, Users, Link2, Power, Film } from 'lucide-react';
 import Modal from '../Modal';
+import { useApp } from '../../context/AppContext';
 
 // URL pública del portal. Configurable por env; fallback al dominio previsto.
 const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || 'https://clientes.metodokorex.com';
@@ -48,6 +49,8 @@ export default function PortalClienteModal({ client, onClose }) {
   const [collabToken, setCollabToken] = useState(null); // token del link de colaboradores
   const [collabs, setCollabs] = useState([]);           // colaboradores registrados
   const [grab, setGrab] = useState(null);               // resumen de grabaciones
+  const { strategyPages, updateStrategyPage } = useApp();
+  const funnels = (strategyPages || []).filter((p) => p.client_id === client.id);
 
   const cargar = async () => {
     setErr('');
@@ -84,6 +87,21 @@ export default function PortalClienteModal({ client, onClose }) {
     if (data?.ok) setCollabs((prev) => prev.map((x) => x.id === c.id ? { ...x, enabled: nuevo } : x));
   };
 
+  // Dar por hecho el onboarding de un cliente anterior al sistema (o deshacerlo).
+  const darPorHecho = async (hecho) => {
+    let nota = null;
+    if (hecho) {
+      nota = window.prompt('¿Alguna aclaración? (opcional)\nEj.: "Onboarding hecho en la hoja, antes del sistema"', 'Cliente anterior al onboarding actual');
+      if (nota === null) return;   // canceló
+    } else if (!window.confirm('¿Volver a marcarlo como onboarding pendiente?')) return;
+    const { data } = await supabase.rpc('onboarding_dar_por_hecho', {
+      p_client_id: client.id, p_hecho: hecho, p_nota: nota,
+    });
+    if (!data?.ok) { setErr(data?.error || 'No se pudo guardar.'); return; }
+    setErr('');
+    cargarOnb();
+  };
+
   const reWriteback = async () => {
     const { data } = await supabase.rpc('onboarding_writeback', { p_client_id: client.id, p_force: false });
     if (!data?.ok) setErr(data?.warning || data?.error || 'No se pudo regenerar el documento.');
@@ -101,6 +119,17 @@ export default function PortalClienteModal({ client, onClose }) {
   const cargarGrab = async () => {
     const { data } = await supabase.rpc('del_grab_resumen_cliente', { p_client_id: client.id });
     if (data?.ok) setGrab(data);
+  };
+  // "Anuncios a entregar" es el trato con el cliente, no una tuerca del documento:
+  // por eso vive acá y no adentro del DEL. Se guarda por funnel (strategy_pages),
+  // con el mismo camino que usa la pantalla de funnels — así las dos vistas
+  // quedan mostrando lo mismo sin recargar nada.
+  const setAdsTarget = async (f, raw) => {
+    const t = String(raw).trim();
+    const v = t === '' ? null : Math.max(0, parseInt(t, 10) || 0);
+    if (v === (f.ads_target ?? null)) return;
+    try { await updateStrategyPage(f.id, { ads_target: v }); }
+    catch { setErr('No se pudo guardar la cantidad de anuncios.'); }
   };
   // El equipo aprueba (o desmarca) que un guión ya está grabado, tras verificarlo.
   const marcarGrabado = async (g, val) => {
@@ -208,12 +237,39 @@ export default function PortalClienteModal({ client, onClose }) {
           </div>
         )}
 
+        {/* ── ANUNCIOS A ENTREGAR: el trato con el cliente ────────────────
+            Estaba adentro del DEL, en la configuración del funnel. Es un número
+            del acuerdo comercial, no del documento: va acá, con el resto de lo
+            que define qué le prometimos. Se guarda por funnel. */}
+        {funnels.length > 0 && (
+          <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <BadgeCheck size={15} color="#5B7CF5" />
+              <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Anuncios a entregar</span>
+            </div>
+            <div className="text-[11px] text-[#6B7280] leading-relaxed -mt-1">
+              Cuántos anuncios editados son <b>trato cumplido</b> en cada embudo. Con eso el
+              cliente llega al 100%; los que se hagan de más cuentan como optimización.
+            </div>
+            <div className="flex flex-col">
+              {funnels.map((f) => (
+                <div key={f.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
+                  <div className="flex-1 min-w-0 text-[12px] font-semibold text-[#1A1D26] truncate">{f.name}</div>
+                  <input type="number" min="0" defaultValue={f.ads_target ?? ''} placeholder="ej. 15"
+                    onBlur={(e) => setAdsTarget(f, e.target.value)}
+                    className="w-20 text-center py-1.5 px-2 text-[13px] font-bold text-[#1A1D26] bg-white border border-[#D5DCE7] rounded-lg outline-none focus:border-[#2E69E0]" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── GRABACIONES: tracking de tiempos por estado + por guión ────── */}
         {grab && ((grab.guiones || []).length > 0 || (grab.recursosDiasSinSubir ?? 0) > 0) && (
           <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <Film size={15} color="#5B7CF5" />
-              <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Grabaciones</span>
+              <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Guiones y páginas</span>
               {typeof grab.recursosDiasSinSubir === 'number' && grab.recursosDiasSinSubir > 3 && (
                 <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: '#FEF3C7', color: '#B45309' }}>
                   sin subir material hace {grab.recursosDiasSinSubir}d
@@ -222,11 +278,12 @@ export default function PortalClienteModal({ client, onClose }) {
             </div>
 
             {/* Resumen por estado (cuántos + el más viejo) */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {[
-                { k: 'revision', t: 'Esperando revisión', c: '#1D4FD8', b: '#EEF3FF' },
-                { k: 'grabacion', t: 'Esperando grabación', c: '#15803D', b: '#DCFCE7' },
+                { k: 'revision', t: 'Con el cliente', c: '#1D4FD8', b: '#EEF3FF' },
                 { k: 'correccion', t: 'En corrección (Korex)', c: '#B45309', b: '#FEF6E7' },
+                { k: 'grabacion', t: 'Esperando grabación', c: '#15803D', b: '#DCFCE7' },
+                { k: 'aprobado', t: 'Aprobado por el cliente', c: '#15803D', b: '#DCFCE7' },
               ].map((x) => {
                 const r = grab.resumen?.[x.k];
                 return (
@@ -246,7 +303,7 @@ export default function PortalClienteModal({ client, onClose }) {
                   // Solo VSL y anuncios se graban. Una landing se aprueba y va a
                   // diseño: no le corresponde ni el estado ni el botón de grabado.
                   const grabable = g.kind === 'vsl' || g.kind === 'anuncios';
-                  const est = { revision: { t: '👀 Revisión', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' }, grabado: { t: '✅ Grabado', c: '#15803D' }, aprobado: { t: '✅ Aprobado', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
+                  const est = { revision: { t: '👀 Con el cliente', c: '#1D4FD8' }, correccion: { t: '✏️ Corrección', c: '#B45309' }, grabacion: { t: '🎬 Grabación', c: '#15803D' }, grabado: { t: '✅ Grabado', c: '#15803D' }, aprobado: { t: '✅ Aprobado', c: '#15803D' } }[g.flujo] || { t: g.flujo, c: '#6B7280' };
                   return (
                     <div key={g.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
                       <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[9px] font-extrabold text-white shrink-0" style={{ background: g.responsable?.color || '#5B7CF5' }} title={g.responsable?.nombre}>
@@ -388,10 +445,36 @@ export default function PortalClienteModal({ client, onClose }) {
                 </div>
               )}
             </>
-          ) : (
+          ) : onbEstado?.externo ? null : (
             <div className="text-[11.5px] text-[#AEB4BF]">
               Todavía no arrancó el onboarding.
             </div>
+          )}
+
+          {/* Clientes anteriores al onboarding actual: su onboarding se hizo por
+              fuera (en una hoja), así que acá figuraba como pendiente para
+              siempre. Esto lo da por hecho, sin inventar un cuestionario vacío. */}
+          {onbEstado?.externo ? (
+            <div className="flex items-start gap-2 rounded-lg py-2 px-2.5" style={{ background: '#DCFCE7' }}>
+              <BadgeCheck size={14} color="#15803D" className="mt-[1px] shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[11.5px] font-semibold text-[#15803D]">Onboarding hecho fuera del sistema</div>
+                <div className="text-[10.5px] text-[#15803D] opacity-80 break-words">
+                  {onbEstado.externo.nota ? `${onbEstado.externo.nota} · ` : ''}
+                  lo marcó {onbEstado.externo.por} el {new Date(onbEstado.externo.at).toLocaleDateString('es-AR')}
+                </div>
+              </div>
+              <button onClick={() => darPorHecho(false)}
+                className="text-[10.5px] font-semibold text-[#15803D] border border-[#BBF7D0] bg-white rounded-md py-1 px-1.5 cursor-pointer shrink-0 hover:bg-[#F0FDF4]">
+                Deshacer
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => darPorHecho(true)}
+              title="El cliente hizo su onboarding antes de que existiera este sistema (en una hoja). Deja de figurar como pendiente."
+              className="self-start text-[11px] font-semibold text-[#15803D] border border-[#BBF7D0] bg-white rounded-md py-1.5 px-2 cursor-pointer hover:bg-[#F0FDF4]">
+              Ya lo hizo por fuera · dar por hecho
+            </button>
           )}
 
           {onbEstado?.estado === 'completado' && (
