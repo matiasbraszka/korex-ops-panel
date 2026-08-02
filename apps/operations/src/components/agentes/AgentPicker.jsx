@@ -21,14 +21,14 @@ export default function AgentPicker({ subagents, agentKey, onChange }) {
   const ActiveIcon = (active || agentMeta(agentKey)).Icon;
 
   return (
-    <div ref={ref} className="relative flex-1 min-w-0 max-w-[380px]">
+    <div ref={ref} className="relative flex-1 min-w-0 max-w-[320px]">
       <button
         onClick={toggle}
-        className="flex items-center gap-3 w-full min-w-0 text-left py-2 px-3 rounded-xl border cursor-pointer transition-colors"
+        className="flex items-center gap-2.5 w-full min-w-0 text-left py-1.5 px-2.5 rounded-xl border cursor-pointer transition-colors"
         style={{ background: open ? 'var(--color-blue-bg)' : 'var(--color-bg)', borderColor: open ? 'var(--color-blue)' : 'var(--color-border)' }}
       >
-        <span className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-blue text-white shrink-0" style={{ boxShadow: '0 3px 10px rgba(91,124,245,.32)' }}>
-          <ActiveIcon size={20} strokeWidth={1.9} />
+        <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] bg-blue text-white shrink-0" style={{ boxShadow: '0 3px 10px rgba(91,124,245,.32)' }}>
+          <ActiveIcon size={17} strokeWidth={1.9} />
         </span>
         <span className="flex-1 min-w-0 grid gap-px">
           <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-text3">Agentes</span>

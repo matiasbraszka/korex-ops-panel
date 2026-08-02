@@ -184,22 +184,21 @@ export default function AgentesPage() {
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-white border border-border rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-      {/* Header: agente + historial + acceso a la config */}
+      {/* Header en UNA sola fila (agente · contexto · historial · config) para dejarle al chat
+          la mayor parte del alto. El contexto scrollea solo adentro si no entra. */}
       <div className="shrink-0 bg-white border-b border-border">
-        <div className="flex items-center gap-2.5 py-3 px-6 max-md:py-2.5 max-md:px-3.5">
+        <div className="flex items-center gap-2 py-2 px-4 max-md:px-3">
           <AgentPicker subagents={subagents} agentKey={agentKey} onChange={onAgentChange} />
-          <ChatHistoryMenu chats={chats} activeChatId={activeChatId} chatLabel={chatLabel}
-            onOpen={openChat} onDelete={deleteChat} onNew={newChat} />
-          <div className="ml-auto flex items-center gap-2 shrink-0">
+          <div className="hidden lg:block h-8 w-px bg-border shrink-0 mx-1" />
+          <ContextBar clients={clients} strategyPages={strategyPages} collaborators={collabs} sel={sel} onChange={onChange} />
+          <div className="flex items-center gap-2 shrink-0 pl-1">
+            <ChatHistoryMenu chats={chats} activeChatId={activeChatId} chatLabel={chatLabel}
+              onOpen={openChat} onDelete={deleteChat} onNew={newChat} />
             <button onClick={() => navigate('/marketing/config')} title="Configurar y entrenar a los agentes"
-              className="w-[38px] h-[38px] rounded-[9px] border border-border bg-white text-text2 flex items-center justify-center cursor-pointer hover:bg-surface2 hover:text-text shrink-0">
-              <SlidersHorizontal size={17} />
+              className="w-9 h-9 rounded-[9px] border border-border bg-white text-text2 flex items-center justify-center cursor-pointer hover:bg-surface2 hover:text-text shrink-0">
+              <SlidersHorizontal size={16} />
             </button>
           </div>
-        </div>
-
-        <div className="py-0 px-6 pb-3.5 max-md:px-3.5 max-md:pb-3">
-          <ContextBar clients={clients} strategyPages={strategyPages} collaborators={collabs} sel={sel} onChange={onChange} />
         </div>
       </div>
 
