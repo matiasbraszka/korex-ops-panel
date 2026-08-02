@@ -4,11 +4,20 @@
 // o rechaza (status='rejected', no vuelven a proponerse). También se puede cargar un ganador a mano.
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@korex/db';
-import { Trophy, Check, X, Plus, Loader2, Tag, Pencil } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { Trophy, Check, X, Plus, Loader2, Tag, Pencil, Megaphone, Video, LayoutTemplate } from 'lucide-react';
 
 const GREEN = '#16A34A';
-const rid = () => `mal_man_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+const rid = (tipo) => `mal_man_${tipo}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const input = 'w-full py-2 px-3 text-[13px] border border-[#E2E5EB] rounded-lg outline-none focus:border-[#16A34A] bg-white';
+
+// A qué "part" de la biblioteca va cada tipo, para que el agente correcto lo lea como ejemplo.
+//   anuncio → 'example' (agente Anuncios) · vsl → 'vsl_ficha' (agente VSL) · landing → 'cf_ficha' (agente Landing)
+const TIPOS = [
+  { key: 'anuncio', part: 'example', label: 'Anuncio', Icon: Megaphone, ph: 'Pegá el copy del anuncio ganador (hooks + texto base)…' },
+  { key: 'vsl', part: 'vsl_ficha', label: 'VSL', Icon: Video, ph: 'Pegá el guión del VSL ganador (o su estructura beat a beat)…' },
+  { key: 'landing', part: 'cf_ficha', label: 'Landing', Icon: LayoutTemplate, ph: 'Pegá el copy de la landing ganadora (título, secciones)…' },
+];
 
 function MetricChips({ metrics }) {
   if (!metrics || typeof metrics !== 'object') return null;
@@ -64,36 +73,102 @@ function CandidateCard({ item, onApprove, onReject }) {
 }
 
 function ManualAdd({ onAdded }) {
+  const { clients } = useApp();
   const [open, setOpen] = useState(false);
+  const [tipo, setTipo] = useState('anuncio');
+  const [clientId, setClientId] = useState('');
   const [title, setTitle] = useState('');
   const [niche, setNiche] = useState('');
+  const [avatar, setAvatar] = useState('');
   const [content, setContent] = useState('');
+  const [metricas, setMetricas] = useState('');
+  const [porQue, setPorQue] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const def = TIPOS.find((t) => t.key === tipo) || TIPOS[0];
+
+  // Al elegir cliente, autocompleta el nicho desde su ficha (editable igual).
+  const onCliente = (id) => {
+    setClientId(id);
+    const c = (clients || []).find((x) => x.id === id);
+    if (c?.niche && !niche.trim()) setNiche(c.niche);
+  };
+
+  const reset = () => { setTipo('anuncio'); setClientId(''); setTitle(''); setNiche(''); setAvatar(''); setContent(''); setMetricas(''); setPorQue(''); };
 
   const save = async () => {
     if (!content.trim() || !niche.trim()) return;
     setBusy(true);
-    await supabase.from('marketing_ad_library').insert({
-      id: rid(), part: 'example', status: 'approved', niche: niche.trim(),
-      niche_tags: [niche.trim()], title: title.trim() || `Ganador — ${niche.trim()}`,
-      content: content.trim(), char_count: content.trim().length,
+    const cli = (clients || []).find((x) => x.id === clientId);
+    // El "por qué funcionó" y las métricas se EMBEBEN en el content además de guardarse en
+    // metrics: así el agente los lee cuando trae esta ficha como ejemplo (no solo el copy).
+    const cabecera = [
+      porQue.trim() ? `POR QUÉ FUNCIONÓ:\n${porQue.trim()}` : '',
+      metricas.trim() ? `MÉTRICAS: ${metricas.trim()}` : '',
+      cli?.name ? `CLIENTE: ${cli.name}${cli.niche ? ` · nicho: ${cli.niche}` : ''}` : '',
+    ].filter(Boolean).join('\n');
+    const fullContent = cabecera ? `${cabecera}\n\n———\n\n${content.trim()}` : content.trim();
+
+    const { error } = await supabase.from('marketing_ad_library').insert({
+      id: rid(tipo), part: def.part, status: 'approved',
+      niche: niche.trim(), niche_tags: [niche.trim()], avatar: avatar.trim() || null,
+      title: title.trim() || `${def.label} ganador — ${niche.trim()}`,
+      content: fullContent, char_count: fullContent.length,
+      client_id: clientId || null,
+      metrics: { tier: 'ganador', por_que: porQue.trim() || null, metricas: metricas.trim() || null, cliente: cli?.name || null, tipo },
     });
-    setBusy(false); setTitle(''); setNiche(''); setContent(''); setOpen(false); onAdded();
+    setBusy(false);
+    if (error) { alert('No se pudo guardar: ' + error.message); return; }
+    reset(); setOpen(false); onAdded();
   };
 
   if (!open) return (
-    <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-[12.5px] font-semibold cursor-pointer border border-[#E2E5EB] bg-white text-[#4B5563] hover:border-[#16A34A]"><Plus size={14} /> Cargar un ganador a mano</button>
+    <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-[12.5px] font-semibold cursor-pointer border border-[#E2E5EB] bg-white text-[#4B5563] hover:border-[#16A34A]"><Plus size={14} /> Cargar a la bitácora</button>
   );
   return (
-    <div className="bg-[#FAFBFC] border border-[#E2E5EB] rounded-xl p-3.5 grid gap-2">
-      <div className="text-[12.5px] font-bold text-[#1A1D26] flex items-center gap-1.5"><Pencil size={14} /> Cargar ganador a mano (entra ya aprobado)</div>
-      <input className={input} placeholder="Título (opcional)" value={title} onChange={e => setTitle(e.target.value)} />
-      <input className={input} placeholder="Nicho (ej: cripto, salud, emprendimiento digital)" value={niche} onChange={e => setNiche(e.target.value)} />
-      <textarea className={input + ' resize-y min-h-[100px] leading-relaxed'} placeholder="Pegá el copy del anuncio ganador (hooks + texto base)…" value={content} onChange={e => setContent(e.target.value)} />
+    <div className="bg-[#FAFBFC] border border-[#E2E5EB] rounded-xl p-3.5 grid gap-2.5 w-full max-w-[560px]">
+      <div className="text-[12.5px] font-bold text-[#1A1D26] flex items-center gap-1.5"><Pencil size={14} /> Cargar un ganador a la bitácora (entra ya aprobado)</div>
+
+      {/* Tipo: define qué agente lo usa como referencia */}
+      <div className="grid grid-cols-3 gap-1.5">
+        {TIPOS.map((t) => {
+          const on = t.key === tipo; const I = t.Icon;
+          return (
+            <button key={t.key} onClick={() => setTipo(t.key)}
+              className="inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border"
+              style={on ? { background: '#E6F7EE', borderColor: GREEN, color: '#15803D' } : { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }}>
+              <I size={14} /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+        <select className={input} value={clientId} onChange={(e) => onCliente(e.target.value)}>
+          <option value="">Cliente (opcional)…</option>
+          {(clients || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((c) => (
+            <option key={c.id} value={c.id}>{c.name || c.id}</option>
+          ))}
+        </select>
+        <div className="flex items-center gap-1.5">
+          <Tag size={13} className="text-[#9CA3AF] shrink-0" />
+          <input className={input} value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Nicho (ej: viajes, salud, cripto)" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+        <input className={input} placeholder="Título (opcional)" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className={input} placeholder="Avatar (opcional, ej: mujeres viajeras)" value={avatar} onChange={(e) => setAvatar(e.target.value)} />
+      </div>
+
+      <textarea className={input + ' resize-y min-h-[110px] leading-relaxed'} placeholder={def.ph} value={content} onChange={(e) => setContent(e.target.value)} />
+      <input className={input} placeholder="Métricas (ej: CPL 1,80 · hook 32% · hold 12% · 40 registros)" value={metricas} onChange={(e) => setMetricas(e.target.value)} />
+      <textarea className={input + ' resize-y min-h-[64px] leading-relaxed'} placeholder="¿Por qué funcionó? (el ángulo, el hook, la promesa… lo que lo hizo ganar)" value={porQue} onChange={(e) => setPorQue(e.target.value)} />
+
       <div className="flex gap-2 justify-end">
-        <button onClick={() => setOpen(false)} className="py-1.5 px-3 rounded-lg text-[12px] font-semibold cursor-pointer border border-[#E2E5EB] bg-white text-[#6B7280]">Cancelar</button>
+        <button onClick={() => { reset(); setOpen(false); }} className="py-1.5 px-3 rounded-lg text-[12px] font-semibold cursor-pointer border border-[#E2E5EB] bg-white text-[#6B7280]">Cancelar</button>
         <button onClick={save} disabled={busy || !content.trim() || !niche.trim()} className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50" style={{ background: GREEN }}>
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Guardar
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Guardar en la bitácora
         </button>
       </div>
     </div>
@@ -130,8 +205,8 @@ export default function WinnerCandidates() {
     <div className="grid gap-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[15px] font-bold text-[#1A1D26] flex items-center gap-2"><Trophy size={17} className="text-[#16A34A]" /> Candidatos a ganador</div>
-          <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[560px]">Anuncios ganadores detectados por las métricas (hook, hold, CPL). Aprobalos para que el agente los use como referencia por nicho, o rechazalos. Editá el nicho antes de aprobar para categorizarlos bien.</p>
+          <div className="text-[15px] font-bold text-[#1A1D26] flex items-center gap-2"><Trophy size={17} className="text-[#16A34A]" /> Bitácora de ganadores</div>
+          <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[560px]">Anuncios ganadores detectados solos por las métricas (hook, hold, CPL): aprobalos —editá el nicho antes— y el agente de Anuncios los usa como referencia por nicho. Y con <b>“Cargar a la bitácora”</b> sumás a mano ganadores de <b>Anuncios, VSL o Landing</b> (contenido, cliente, nicho, métricas y por qué funcionó) para que cada agente se retroalimente en su próxima corrida.</p>
         </div>
         <ManualAdd onAdded={load} />
       </div>
