@@ -20,7 +20,7 @@ import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
 import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
-import { getCfgJump } from './funnels/cfgJump';
+import { getCfgJump, clearCfgJump, getPanoramaReturn, clearPanoramaReturn } from './funnels/cfgJump';
 import { openUrl, copyText } from './recursosShared';
 
 // Metadatos por tipo de documento de contexto.
@@ -544,7 +544,7 @@ function EditorMessageModal({ initial, onClose }) {
 //    desplegable — al clickear se va a la pantalla del funnel.
 //  · pantalla (forcePage=true): el cuerpo del funnel (tareas, DEL, config, avatares)
 //    se muestra entero, sin cabecera clickeable. La navegacion la maneja el padre.
-function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [], siblingDels = [], onEditarCliente }) {
+function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', clientId, clientName = '', onUpdate, onDelete, onTrack, onRefreshPage, last, navigate = false, onOpen, onBack, forcePage = false, siblings = [], siblingDels = [], onEditarCliente, onVolverPanorama }) {
   const { currentUser } = useApp();
   const meId = currentUser?.id || null;
   const [note, setNote] = useState(null);
@@ -555,9 +555,27 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   const [delOpen, setDelOpen] = useState(false);    // lector del DEL a pantalla completa
   // Salto directo del Panorama: si la instrucción apunta a ESTE funnel, abrir el
   // DEL de una (DelEditor va a arrancar en la pestaña Configuración).
+  // Con destino 'recursos' NO se abre el DEL: lo que se busca (logo, branding, el
+  // VSL editado) está en las carpetas de esta misma pantalla, así que solo hay que
+  // hacer scroll hasta la carpeta y destacarla.
   useEffect(() => {
     const j = getCfgJump();
-    if (forcePage && j && j.funnel === f.id) setDelOpen(true);
+    if (!forcePage || !j || j.funnel !== f.id) return;
+    if (j.destino === 'recursos') {
+      clearCfgJump();
+      const t = setTimeout(() => {
+        const el = document.querySelector(`[data-res="${j.campo}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const prev = el.style.boxShadow;
+        el.style.transition = 'box-shadow .25s';
+        el.style.boxShadow = '0 0 0 3px #FFD84D';
+        setTimeout(() => { el.style.boxShadow = prev; }, 2600);
+      }, 350);
+      return () => clearTimeout(t);
+    }
+    setDelOpen(true);
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forcePage, f.id]);
   const [clientResTick, setClientResTick] = useState(0); // sube al mover un recurso → recarga todas las carpetas
@@ -981,10 +999,14 @@ Quedo a la espera de tu respuesta`;
                 <div key={v} className="flex flex-col gap-1.5">
                   {vslMultiV && <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4] px-1 pt-0.5">Versión {v}</div>}
                   {VSL_BUCKETS.map(b => (
-                    <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={null}
-                      bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly} onOpenVoombly={() => setVoomlyOpen(true)}
-                      moveTargets={moveTargets} selfId={`f:vsl:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
-                      extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+                    // data-res solo en la primera versión: es adonde apunta el salto
+                    // del Panorama ("VSL editado").
+                    <div key={b.key} {...(v === vslVers[0] ? { 'data-res': b.key } : {})} className="rounded-lg">
+                      <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} avatarId={null}
+                        bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly} onOpenVoombly={() => setVoomlyOpen(true)}
+                        moveTargets={moveTargets} selfId={`f:vsl:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                        extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+                    </div>
                   ))}
                 </div>
               ))}
@@ -1023,15 +1045,18 @@ Quedo a la espera de tu respuesta`;
         </div>
         <div className="p-2.5 flex flex-col gap-1.5">
           {CLIENT_CATS.map(cat => (
-            <FunnelResourceFolder key={cat.key} clientScope clientId={clientId} bucketKey={cat.key}
-              label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
-              {...((cat.key === 'testimonios' || cat.key === 'testimonios_korex') ? { voomly: true, voomlyKind: 'Testimonio' } : {})}
-              reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
-              // Branding es la única con botón de generar: la IA arma logos y paletas y los deja
-              // acá mismo. onEditarCliente es lo que hace usable el error de datos faltantes —
-              // sin eso, "completá la tarjeta del cliente" obliga a salir y volver a navegar.
-              branding={cat.key === 'branding'}
-              onEditarCliente={cat.key === 'branding' ? onEditarCliente : undefined} />
+            // data-res: ancla del salto desde el Panorama (Logo/Colores/Imágenes).
+            <div key={cat.key} data-res={cat.key} className="rounded-lg">
+              <FunnelResourceFolder clientScope clientId={clientId} bucketKey={cat.key}
+                label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
+                {...((cat.key === 'testimonios' || cat.key === 'testimonios_korex') ? { voomly: true, voomlyKind: 'Testimonio' } : {})}
+                reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                // Branding es la única con botón de generar: la IA arma logos y paletas y los deja
+                // acá mismo. onEditarCliente es lo que hace usable el error de datos faltantes —
+                // sin eso, "completá la tarjeta del cliente" obliga a salir y volver a navegar.
+                branding={cat.key === 'branding'}
+                onEditarCliente={cat.key === 'branding' ? onEditarCliente : undefined} />
+            </div>
           ))}
         </div>
         <div className="px-4 pb-3 -mt-1 text-[11px] text-[#AEB4BF] flex items-center gap-1.5">
@@ -1050,6 +1075,12 @@ Quedo a la espera de tu respuesta`;
       {forcePage && (
         <div className="flex items-center gap-3 flex-wrap py-3.5 px-[18px] border-b border-[#EDF0F5] bg-white">
           <button onClick={() => onBack?.()} className="inline-flex items-center gap-1.5 py-2 px-3 rounded-[10px] border border-[#E2E5EB] bg-white text-[12.5px] font-semibold text-[#4B5563] cursor-pointer hover:border-[#2E69E0] hover:text-[#2E69E0] shrink-0"><ChevronLeft size={15} />Volver</button>
+          {/* Si se llegó desde el Panorama, la vuelta directa: sin esto había que
+              rehacer toda la navegación a mano para seguir revisando la tabla. */}
+          {onVolverPanorama && (
+            <button onClick={onVolverPanorama} title="Volver a la tabla del Panorama"
+              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-[10px] border border-[#C7DBFB] bg-[#EFF6FF] text-[12.5px] font-semibold text-[#2E69E0] cursor-pointer hover:bg-[#E3EEFE] shrink-0"><ChevronLeft size={15} />Volver al Panorama</button>
+          )}
           <div className="min-w-0 flex-1">
             <input key={f.id + 'nametop'} defaultValue={f.name} onBlur={e => { const v = e.target.value.trim(); if (v && v !== (f.name || '')) onUpdate(f.id, { name: v }); else if (!v) e.target.value = f.name || ''; }} title="Editar nombre del funnel" className="w-full text-[19px] font-extrabold border border-transparent hover:border-[#E2E5EB] focus:border-blue rounded-md px-1.5 py-0.5 -ml-1.5 bg-transparent focus:bg-white outline-none tracking-[-.015em]" style={{ color: '#1A1D26' }} />
             <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -1175,7 +1206,20 @@ Quedo a la espera de tu respuesta`;
 // que se llevaba puestos los funnels con sus avatares y guiones adentro, y encima
 // drive-sync recreaba la carpeta vacia en el sync de las 06:00.
 export default function FunnelsView({ clientId, onEditarCliente }) {
-  const { clients, strategies, strategyPages, addStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage, updateClient } = useApp();
+  const { clients, strategies, strategyPages, addStrategy, addStrategyPage, updateStrategyPage, deleteStrategyPage, refreshStrategyPage, updateClient, setSelectedId } = useApp();
+
+  // Vuelta al Panorama: solo si se llegó desde ahí. Deja la sub-pestaña marcada
+  // (ClientsPage la lee de localStorage al montar) y suelta el cliente.
+  const [puedeVolverPanorama, setPuedeVolverPanorama] = useState(false);
+  useEffect(() => {
+    const r = getPanoramaReturn();
+    setPuedeVolverPanorama(!!r && r.client === clientId);
+  }, [clientId]);
+  const volverPanorama = puedeVolverPanorama ? () => {
+    clearPanoramaReturn();
+    try { localStorage.setItem('clientes_current_tab', 'panorama'); } catch { /* noop */ }
+    setSelectedId?.(null);
+  } : null;
   const [accessOpen, setAccessOpen] = useState(false);   // panel de accesos del cliente
   const [portalOpen, setPortalOpen] = useState(false);   // portal del cliente (cuenta + credenciales)
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
@@ -1370,7 +1414,7 @@ export default function FunnelsView({ clientId, onEditarCliente }) {
     return (
       <div className="rounded-2xl p-[18px] -mx-1" style={{ background: '#F4F6F9' }}>
         <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #E7EAF0', boxShadow: '0 1px 2px rgba(10,22,40,.04)' }}>
-          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} onBack={() => setPageFunnelId(null)} forcePage last siblings={myFunnels} siblingDels={delTargetsFor(pageFunnel)} />
+          <FunnelRow f={pageFunnel} stages={pipeline?.[pageFunnel.id]} delText={del?.text || ''} delDocUrl={del?.web_url || ''} delDocId={del?.id || ''} clientId={clientId} clientName={client.name} onUpdate={updateStrategyPage} onDelete={(id) => { deleteStrategyPage(id); setPageFunnelId(null); }} onTrack={openTrack} onRefreshPage={refreshStrategyPage} onEditarCliente={onEditarCliente} onBack={() => setPageFunnelId(null)} onVolverPanorama={volverPanorama} forcePage last siblings={myFunnels} siblingDels={delTargetsFor(pageFunnel)} />
         </div>
       </div>
     );

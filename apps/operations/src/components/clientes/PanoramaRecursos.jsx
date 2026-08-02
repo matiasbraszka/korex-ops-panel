@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import { Check, X, Loader2, Search, Layers, Filter, Link2, KeyRound } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { setCfgJump } from './funnels/cfgJump';
+import { setCfgJump, setPanoramaReturn } from './funnels/cfgJump';
 import ClientAccessModal from './ClientAccessModal';
 
 // Panorama "qué tenemos / qué falta" por cliente Y por ESTRATEGIA (sub-pestaña de
@@ -87,19 +87,29 @@ function TipoBadge({ tipo }) {
 }
 
 // Fila compacta de un recurso (etiqueta + ✓/✗) dentro de la celda del cliente.
-function ResChip({ label, ok, count }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[10.5px]">
+// Con onGo se vuelve un botón que lleva al lugar donde ese recurso está cargado —
+// que era el punto del pedido: ver el tilde no sirve si después hay que ir a
+// buscarlo a mano.
+function ResChip({ label, ok, count, onGo, title }) {
+  const inner = (
+    <>
       <span className="w-[70px] shrink-0 text-[#9098A4] font-medium">{label}</span>
       <Have ok={ok} count={count} />
-    </span>
+    </>
+  );
+  if (!onGo) return <span className="inline-flex items-center gap-1.5 text-[10.5px]">{inner}</span>;
+  return (
+    <button onClick={onGo} title={title || `${label} · clic para ir`}
+      className="inline-flex items-center gap-1.5 text-[10.5px] border-none bg-transparent p-0 cursor-pointer text-left hover:opacity-80">
+      {inner}
+    </button>
   );
 }
 
 // Celda del cliente: ocupa (rowSpan) todas las filas de sus estrategias e incluye los
 // RECURSOS del cliente (branding/colores/imágenes/testimonios), que son compartidos por
 // todas las estrategias — por eso van una sola vez acá, no por estrategia.
-function ClienteCell({ r, rowSpan, onGoCuenta, onGoCrm }) {
+function ClienteCell({ r, rowSpan, onGoCuenta, onGoCrm, onGoRecurso }) {
   return (
     <td rowSpan={rowSpan} className="py-2.5 px-3 align-top border-r border-[#EEF1F6] bg-[#FCFDFE]"
       style={{ borderTop: '2px solid #E7EAF0', minWidth: 190 }}>
@@ -110,9 +120,14 @@ function ClienteCell({ r, rowSpan, onGoCuenta, onGoCrm }) {
         : <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#B4BAC6] bg-[#F4F5F7] py-0.5 px-1.5 rounded-md" title="Nicho sin definir">nicho —</div>}
       <div className="mt-2.5 pt-2 border-t border-[#EEF1F6] flex flex-col gap-1">
         <div className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#B4BAC6] mb-0.5">Recursos</div>
-        <ResChip label="Logo" ok={r.tiene_logo} />
-        <ResChip label="Colores" ok={r.tiene_colores} />
-        <ResChip label="Imágenes" ok={r.imagenes_files > 0} count={r.imagenes_files} />
+        {/* Logo, colores e imágenes viven en las carpetas de Recursos del cliente. */}
+        <ResChip label="Logo" ok={r.tiene_logo} onGo={onGoRecurso ? () => onGoRecurso('branding') : null}
+          title="Logo · clic para abrir la carpeta de Branding" />
+        <ResChip label="Colores" ok={r.tiene_colores} onGo={onGoRecurso ? () => onGoRecurso('branding') : null}
+          title="Paleta de colores · clic para abrir la carpeta de Branding" />
+        <ResChip label="Imágenes" ok={r.imagenes_files > 0} count={r.imagenes_files}
+          onGo={onGoRecurso ? () => onGoRecurso('autoridad') : null}
+          title="Imágenes del cliente · clic para abrir sus recursos" />
         {/* Cuenta publicitaria del cliente (clients.meta_ads): clic → config, columna Cuentas. */}
         {onGoCuenta
           ? <button onClick={onGoCuenta} title="Cuenta publicitaria del cliente · clic para ir a cargarla" className="inline-flex items-center gap-1.5 text-[10.5px] border-none bg-transparent p-0 cursor-pointer text-left hover:opacity-80">
@@ -139,14 +154,18 @@ export default function PanoramaRecursos() {
   const [soloFaltantes, setSoloFaltantes] = useState(false);
   // Cliente cuyo modal de accesos está abierto (chip "CRM prod" de su celda).
   const [accessClient, setAccessClient] = useState(null);
+  const [vslUrls, setVslUrls] = useState({});   // funnel_id → link de Voomly
   const { setSelectedId, clients } = useApp();
 
   // Salto directo: deja la instrucción en sessionStorage y navega al cliente.
   // FunnelsView → FunnelRow → DelEditor → FunnelConfigBlock la van leyendo y
   // terminan con el campo exacto resaltado (ver cfgJump.js).
-  const irA = (clientId, funnelId, campo) => {
+  // destino: 'config' (pestaña Configuración Meta y Links, el comportamiento de
+  // siempre) o 'recursos' (carpeta de recursos del cliente, para logo/branding).
+  const irA = (clientId, funnelId, campo, destino = 'config') => {
     if (!clientId || !funnelId) return;
-    setCfgJump({ client: clientId, funnel: funnelId, campo });
+    setCfgJump({ client: clientId, funnel: funnelId, campo, destino });
+    setPanoramaReturn(clientId);   // para el botón "Volver al Panorama"
     setSelectedId(clientId);
   };
   // Para el chip de cuenta (a nivel cliente): salta al PRIMER funnel que tenga.
@@ -162,6 +181,19 @@ export default function PanoramaRecursos() {
     } catch { setRows(r => r || []); }
   };
   useEffect(() => { cargar(); }, []);
+
+  // Links de Voomly por funnel: el panorama solo trae el booleano vsl_editado, y
+  // para abrir el video directo hace falta la URL. Si la función todavía no está
+  // aplicada en la base, el mapa queda vacío y los chips caen al salto a la carpeta.
+  useEffect(() => {
+    supabase.rpc('panorama_vsl_links')
+      .then(({ data }) => {
+        const m = {};
+        (Array.isArray(data) ? data : []).forEach((x) => { if (x.funnel_id && x.vsl_url) m[x.funnel_id] = x.vsl_url; });
+        setVslUrls(m);
+      })
+      .catch(() => {});
+  }, []);
 
   // Abre los accesos del cliente (el modal necesita el cliente completo del contexto).
   const abrirAccesos = (clientId) => {
@@ -246,7 +278,10 @@ export default function PanoramaRecursos() {
                 const st = cellStyle(i === 0);
                 return (
                   <tr key={r.client_id + ':' + (e.id || i)} className="hover:bg-[#FBFCFE]">
-                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} onGoCrm={() => abrirAccesos(r.client_id)} />}
+                    {i === 0 && <ClienteCell r={r} rowSpan={estr.length}
+                      onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null}
+                      onGoCrm={() => abrirAccesos(r.client_id)}
+                      onGoRecurso={primerFunnelId(r) ? (bucket) => irA(r.client_id, primerFunnelId(r), bucket, 'recursos') : null} />}
                     {/* DEL vinculado */}
                     <td className={tdBase} style={st}>
                       {e.del_ok
@@ -263,10 +298,21 @@ export default function PanoramaRecursos() {
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
                         : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.vsl_guionado} /></div>))}</div>}
                     </td>
-                    {/* VSL editado — por funnel */}
+                    {/* VSL editado — por funnel. Si ya está en Voomly se abre el
+                        video directo; si no, lleva a la carpeta de edición. */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
-                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (<div key={j} className="h-[18px] flex items-center"><CellDot ok={!!f.vsl_editado} /></div>))}</div>}
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => {
+                            const url = vslUrls[f.id];
+                            return (
+                              <div key={j} className="h-[18px] flex items-center">
+                                {url
+                                  ? <a href={url} target="_blank" rel="noopener" title="Abrir el VSL editado" className="inline-flex items-center hover:opacity-80"><CellDot ok /></a>
+                                  : <button onClick={() => irA(r.client_id, f.id, 'vsl_edit', 'recursos')} title={f.vsl_editado ? 'Ver la carpeta del VSL editado' : 'Falta el VSL editado · clic para ir a cargarlo'}
+                                      className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80"><CellDot ok={!!f.vsl_editado} /></button>}
+                              </div>
+                            );
+                          })}</div>}
                     </td>
                     {/* Testimonios — por funnel (videos cargados en la carpeta del funnel) */}
                     <td className={tdBase} style={st}>
