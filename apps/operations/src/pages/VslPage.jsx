@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
-import { ChevronDown, ChevronUp, ChevronRight, FlaskConical, ArrowLeft, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, FlaskConical, ArrowLeft, ExternalLink, Play } from 'lucide-react';
+import VslPlayer from '../components/vsl/VslPlayer';
 
 const BLUE = '#5B7CF5';          // marca (controles: filtros, botones)
 const GREEN = '#22C55E';         // semáforo de métricas: verde = bien (ver leyenda al pie)
@@ -211,6 +212,7 @@ function VslDetail({ m, rangeLabel }) {
   const r = m._row, ret = m.retention, pts = ret?.points;
   const drops = topDrops(ret);
   const [showTr, setShowTr] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const transcript = Array.isArray(r.transcript) ? r.transcript : null;
   // Rango personalizado (beta): lee de vsl_custom lo que trajo analyze.mjs de Voomly.
   const [cStart, setCStart] = useState('2026-06-15');
@@ -232,13 +234,22 @@ function VslDetail({ m, rangeLabel }) {
         <h2 className="text-[20px] font-extrabold text-text">{cleanName(r.name)}</h2>
         {ret?.duration && <span className="text-[13px] text-text3">Duración {fmtTime(ret.duration)}</span>}
         {r.voomly_id && (
+          <button onClick={() => setPlaying(true)}
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-lg border-none cursor-pointer text-white transition-colors" style={{ background: '#5B7CF5' }}>
+            <Play size={13} /> Ver VSL
+          </button>
+        )}
+        {r.voomly_id && (
+          // Link secundario: abre el Video Drive de Voomly (para el equipo logueado).
           // Los embeds públicos (embed.voomly.com/b/…) quedaron en 404 al re-subir los videos.
-          // Abrimos el Video Drive de Voomly (para el equipo logueado) — Voomly no tiene deep-link por video.
           <a href={`https://app.voomly.com/folder?file=${r.voomly_id}`} target="_blank" rel="noreferrer"
             title="Abre tu Video Drive de Voomly (tenés que estar logueado)"
             className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border hover:bg-[#FAFBFC] transition-colors" style={{ color: '#5B7CF5' }}>
             <ExternalLink size={13} /> Abrir en Voomly
           </a>
+        )}
+        {playing && r.voomly_id && (
+          <VslPlayer voomlyId={r.voomly_id} title={cleanName(r.name)} onClose={() => setPlaying(false)} />
         )}
       </div>
       <div className="grid grid-cols-5 gap-3 my-4 max-md:grid-cols-2">
