@@ -571,16 +571,24 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     run(history, k === 'ads' || k === 'vsl' ? 'generate' : 'chat');
   }
 
+  // Guarda de verdad: espera el resultado y solo marca "Guardado" si persistió. Si falla,
+  // lo dice (antes marcaba guardado a lo optimista aunque el guardado real fallara).
+  async function guardarCopy(text, key) {
+    try {
+      await onSaveCopy(text);
+      setSavedKeys((s) => ({ ...s, [key]: true }));
+    } catch (e) {
+      setMessages((m) => [...m, { role: 'assistant', kind: 'notice',
+        content: `No se pudo guardar: ${String(e?.message || e)}` }]);
+    }
+  }
+
   function saveAd(ad, idx) {
-    const key = `${sel.funnelId}:${sel.avatarId}:${JSON.stringify(ad).length}:${idx}`;
-    onSaveCopy(adToText(ad, idx));
-    setSavedKeys((s) => ({ ...s, [key]: true }));
+    guardarCopy(adToText(ad, idx), `${sel.funnelId}:${sel.avatarId}:${JSON.stringify(ad).length}:${idx}`);
   }
 
   function saveVsl(vsl) {
-    const key = `${sel.funnelId}:vsl:${JSON.stringify(vsl).length}`;
-    onSaveCopy(vslToText(vsl));
-    setSavedKeys((s) => ({ ...s, [key]: true }));
+    guardarCopy(vslToText(vsl), `${sel.funnelId}:vsl:${JSON.stringify(vsl).length}`);
   }
 
   const empty = messages.length === 0;

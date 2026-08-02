@@ -149,30 +149,36 @@ export default function AgentesPage() {
   //   anuncios → strategy_pages.avatars[].ad_script  (por avatar, dentro del array)
   //   vsl      → strategy_pages.vsl_script           (escalar, uno por funnel)
   // Siempre APPEND con sello, nunca pisar: ahí ya vive el guión que vino del DEL.
+  // Devuelve una promesa que se RECHAZA si no se pudo guardar (updateStrategyPage lanza si el
+  // PATCH falla). Así el botón solo dice "Guardado" cuando de verdad persistió, no a lo optimista.
   const onSaveCopy = useCallback((text) => {
     const page = strategyPages.find((p) => p.id === sel.funnelId);
-    if (!page) return;
+    if (!page) throw new Error('No encuentro este funnel. Recargá la página.');
 
     if (agentKey === 'vsl') {
       const prev = (page.vsl_script || '').trim();
       const stamp = `\n\n— Generado con el agente de VSL —\n${text}`;
       // Backup antes de tocar: el mismo par de campos que usa el "Deshacer" de Funnels.
-      updateStrategyPage(sel.funnelId, {
+      return updateStrategyPage(sel.funnelId, {
         vsl_script_backup: page.vsl_script || null,
         backup_at: new Date().toISOString(),
         vsl_script: prev ? prev + stamp : text,
       });
-      return;
     }
 
     const avatars = Array.isArray(page.avatars) ? page.avatars : [];
+    // Causa real del "dice guardó y no guarda": si el avatar elegido no está en el funnel, el
+    // map no cambiaba nada y el PATCH escribía lo mismo → parecía guardado. Ahora avisa.
+    if (!avatars.some((a) => a.id === sel.avatarId)) {
+      throw new Error('El avatar seleccionado no existe en este funnel. Elegí un avatar válido arriba.');
+    }
     const nextAvatars = avatars.map((a) => {
       if (a.id !== sel.avatarId) return a;
       const prev = (a.ad_script || '').trim();
       const stamp = `\n\n— Generado con el agente de Anuncios —\n${text}`;
       return { ...a, ad_script: prev ? prev + stamp : text };
     });
-    updateStrategyPage(sel.funnelId, { avatars: nextAvatars });
+    return updateStrategyPage(sel.funnelId, { avatars: nextAvatars });
   }, [strategyPages, sel.funnelId, sel.avatarId, agentKey, updateStrategyPage]);
 
   // Descubrimiento corre ANTES de que existan funnel y avatar (el avatar es su SALIDA, el
