@@ -44,8 +44,6 @@ export default function PortalClienteModal({ client, onClose }) {
   const [nuevo, setNuevo] = useState({ titulo: '', bucket: 'autoridad', target: '', bloqueante: false });
 
   const [onbEstado, setOnbEstado] = useState(null);
-  const [invitando, setInvitando] = useState(false);
-  const [invitacion, setInvitacion] = useState(null);   // { magic_link, mensaje_whatsapp, warnings }
 
   const [collabToken, setCollabToken] = useState(null); // token del link de colaboradores
   const [collabs, setCollabs] = useState([]);           // colaboradores registrados
@@ -84,24 +82,6 @@ export default function PortalClienteModal({ client, onClose }) {
     if (!nuevo && !window.confirm(`¿Quitar el acceso de ${c.full_name || c.email}? No podrá entrar hasta que lo vuelvas a habilitar.`)) return;
     const { data } = await supabase.rpc('portal_collab_set_enabled', { p_id: c.id, p_enabled: nuevo });
     if (data?.ok) setCollabs((prev) => prev.map((x) => x.id === c.id ? { ...x, enabled: nuevo } : x));
-  };
-
-  // Invita (o reenvía). La edge function verifica PRIMERO que el vínculo
-  // cliente ↔ directorio resuelva: si no, no manda nada y avisa por Slack —
-  // un cliente mal vinculado entra a la plataforma y la ve vacía, sin error.
-  const invitar = async (motivo) => {
-    setInvitando(true); setErr(''); setInvitacion(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('onboarding-invitar', {
-        body: { client_id: client.id, email: email.trim() || null, motivo },
-      });
-      if (error || !data?.ok) {
-        setErr(data?.detail || data?.error || error?.message || 'No pude enviar la invitación.');
-        return;
-      }
-      setInvitacion(data);
-      cargar(); cargarOnb();
-    } finally { setInvitando(false); }
   };
 
   const reWriteback = async () => {
@@ -351,7 +331,11 @@ export default function PortalClienteModal({ client, onClose }) {
           )}
         </div>
 
-        {/* ── ONBOARDING: invitación + avance ─────────────────────────────── */}
+        {/* ── ONBOARDING: avance ──────────────────────────────────────────────
+            Ya NO se invita desde acá. El acceso del cliente se crea solo al dar de
+            alta la venta y las credenciales se mandan por WhatsApp con el mensaje
+            que devuelve el formulario; el mail no se usa más. Para sumar a su
+            equipo está el bloque "Colaboradores del cliente" de arriba. */}
         <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <ClipboardList size={15} color="#5B7CF5" />
@@ -406,41 +390,15 @@ export default function PortalClienteModal({ client, onClose }) {
             </>
           ) : (
             <div className="text-[11.5px] text-[#AEB4BF]">
-              Todavía no lo invitaste. Al invitarlo se le crea el acceso y se le manda el link por mail.
+              Todavía no arrancó el onboarding.
             </div>
           )}
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => invitar(onbEstado?.invitadoAt ? 'reenvio' : 'alta')} disabled={invitando}
-              className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white border-none rounded-md py-1.5 px-2.5 cursor-pointer disabled:opacity-60"
-              style={{ background: '#2E69E0' }}>
-              {invitando ? <RefreshCw size={12} className="animate-spin" /> : <Smartphone size={12} />}
-              {onbEstado?.invitadoAt ? 'Reenviar acceso' : 'Invitar al onboarding'}
-            </button>
-            {onbEstado?.estado === 'completado' && (
+          {onbEstado?.estado === 'completado' && (
+            <div className="flex items-center gap-2 flex-wrap">
               <button onClick={reWriteback}
                 className="text-[11px] font-semibold text-[#6B7280] border border-[#E2E5EB] bg-white rounded-md py-1.5 px-2 cursor-pointer hover:bg-[#F4F6F9]">
                 Regenerar el documento
-              </button>
-            )}
-            {onbEstado?.inviteCount > 0 && (
-              <span className="text-[10.5px] text-[#AEB4BF]">enviado {onbEstado.inviteCount}×</span>
-            )}
-          </div>
-
-          {invitacion && (
-            <div className="rounded-lg bg-[#F8FAFF] border border-[#DDE5FB] p-2.5 flex flex-col gap-2">
-              <div className="text-[11.5px] font-semibold text-[#1D4FD8]">
-                {invitacion.email_enviado ? 'Mail enviado.' : 'Acceso listo (el mail no salió).'}
-                {' '}Copiá el mensaje y pegáselo por WhatsApp.
-              </div>
-              {(invitacion.warnings || []).map((w, i) => (
-                <div key={i} className="text-[10.5px] text-[#B45309] leading-relaxed">⚠️ {w}</div>
-              ))}
-              <button onClick={() => copiar(invitacion.mensaje_whatsapp, 'wa')}
-                className="inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold border border-[#C7D2FE] bg-white text-[#2E69E0] rounded-md py-2 cursor-pointer hover:bg-[#F5F8FF]">
-                {copied === 'wa' ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
-                {copied === 'wa' ? 'Copiado' : 'Copiar mensaje de bienvenida'}
               </button>
             </div>
           )}

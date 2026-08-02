@@ -113,6 +113,21 @@ export default function DocumentoScreen() {
   const [revisadas, setRevisadas] = useState({});  // {sectionId: bool}
   const scrollRef = useRef(null);
   const pdfRef = useRef(null);
+  // Espejo de `composer` para leerlo desde el listener de selectionchange sin
+  // tener que re-suscribirlo en cada cambio.
+  const composerRef = useRef(null);
+  useEffect(() => { composerRef.current = composer; }, [composer]);
+  // Cuánto del alto se come el teclado del teléfono (0 cuando está cerrado).
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return undefined;
+    const onResize = () => setKbInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    vv.addEventListener('resize', onResize);
+    vv.addEventListener('scroll', onResize);
+    onResize();
+    return () => { vv.removeEventListener('resize', onResize); vv.removeEventListener('scroll', onResize); };
+  }, []);
   // Zoom de lectura (queda guardado en el teléfono del cliente).
   const [zoom, setZoom] = useState(() => {
     const v = parseInt(localStorage.getItem('kx_doc_zoom') || '100', 10);
@@ -212,8 +227,26 @@ export default function DocumentoScreen() {
   };
 
   // ── Comentar: selección de texto → botón flotante → caja abajo ──
-  const onDocMouseUp = () => {
-    if (!esGuion && data.tipo !== 'avatar' && data.tipo !== 'estrategia' && data.tipo !== 'copy') return;
+  // El documento se dibuja dentro de un contenedor con CSS `zoom` (85–150%). Safari
+  // NO escala por el zoom las coordenadas que devuelve getBoundingClientRect() sobre
+  // un Range, pero `position: fixed` sí usa el viewport real: por eso el botón
+  // "Comentar" aparecía desplazado, y cuanto más zoom más lejos.
+  //
+  // En vez de asumir el navegador, se mide: si el rect del contenedor ya refleja el
+  // zoom, no hay que compensar; si no, se compensa. Así se corrige solo el día que
+  // Safari lo arregle.
+  const zoomFactor = () => {
+    const el = pdfRef.current;
+    const w = el?.offsetWidth;
+    if (!el || !w) return 1;
+    const ratio = el.getBoundingClientRect().width / w;
+    return Math.abs(ratio - 1) < 0.02 ? zoom / 100 : 1;
+  };
+
+  const puedeComentar = () => esGuion || data.tipo === 'avatar' || data.tipo === 'estrategia' || data.tipo === 'copy';
+
+  const leerSeleccion = () => {
+    if (!puedeComentar()) return;
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
     if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
@@ -221,10 +254,61 @@ export default function DocumentoScreen() {
     while (node && node.nodeType !== 1) node = node.parentNode;
     const secEl = node?.closest?.('[data-secid]');
     if (!secEl) { setSelBtn(null); return; }
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    setSelBtn({ top: rect.top, left: rect.left + rect.width / 2, quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const f = zoomFactor();
+    setSelBtn({
+      top: r.top * f, bottom: r.bottom * f, left: (r.left + r.width / 2) * f,
+      quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid'),
+    });
   };
-  const onDocTouchEnd = () => setTimeout(onDocMouseUp, 80);
+  const onDocMouseUp = leerSeleccion;
+
+  // En iOS, ajustar la selección con los tiradores no dispara ningún evento sobre
+  // el div (son UI del sistema), así que sin esto el botón se quedaba con la
+  // selección vieja o directamente desaparecía. `selectionchange` sí llega siempre.
+  useEffect(() => {
+    if (!puedeComentar()) return undefined;
+    let t = null;
+    const onSel = () => {
+      if (composerRef.current) return;   // con el composer abierto la selección ya se usó
+      clearTimeout(t);
+      t = setTimeout(leerSeleccion, 120);
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
+  }); // sin deps: leerSeleccion depende de props/estado que cambian en cada render
+
+  // Fallback para el teléfono: mantener pulsado (o doble toque) sobre un párrafo
+  // abre el comentario de esa sección, sin depender de la selección nativa —
+  // que en iOS se colapsa sola apenas se toca fuera o aparece el menú del sistema.
+  const touchRef = useRef(null);
+  const onDocTouchStart = (e) => {
+    if (!puedeComentar() || composer) return;
+    const t = e.touches?.[0];
+    if (!t) return;
+    const secEl = e.target?.closest?.('[data-secid]');
+    if (!secEl) return;
+    const timer = setTimeout(() => {
+      const sel = window.getSelection();
+      // Si el sistema ya armó una selección real, esa manda: no la pisamos.
+      if (sel && !sel.isCollapsed && sel.toString().trim().length >= 2) return;
+      touchRef.current = null;
+      setSelBtn(null);
+      setComposer({ sectionId: secEl.getAttribute('data-secid'), quote: '', parentId: null });
+      setDraft('');
+    }, 450);
+    touchRef.current = { x: t.clientX, y: t.clientY, timer };
+  };
+  const cancelarLongPress = () => {
+    if (touchRef.current?.timer) clearTimeout(touchRef.current.timer);
+    touchRef.current = null;
+  };
+  const onDocTouchMove = (e) => {
+    const s = touchRef.current; const t = e.touches?.[0];
+    if (!s || !t) return;
+    if (Math.abs(t.clientX - s.x) > 10 || Math.abs(t.clientY - s.y) > 10) cancelarLongPress();
+  };
+  const onDocTouchEnd = () => { cancelarLongPress(); setTimeout(leerSeleccion, 80); };
 
   // "Descargar PDF": arma una copia imprimible del documento (con los estilos de la
   // app) en un iframe oculto y abre el diálogo de impresión — ahí el cliente elige
@@ -330,6 +414,9 @@ export default function DocumentoScreen() {
           mark[data-cmt]{background:rgba(234,179,8,.28);border-bottom:2px solid var(--mk-yellow);border-radius:2px;color:inherit;padding:0}
           mark.marcando{background:var(--mk-blue-bg);border-radius:2px;color:inherit;padding:0}
           .doc-sel,.doc-sel *{user-select:text!important;-webkit-user-select:text!important}
+          /* En iOS el menú nativo (Copiar / Buscar / Compartir) aparece encima de lo
+             seleccionado y competía con nuestro botón "Comentar". */
+          .doc-sel,.doc-sel *{-webkit-touch-callout:none}
         `}</style>
 
         {/* Header del documento (exacto al prototipo) */}
@@ -358,7 +445,7 @@ export default function DocumentoScreen() {
         </div>
 
         {/* Fondo BLANCO en el documento: más contraste para leer (pedido de Matías). */}
-        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={onDocMouseUp} onTouchEnd={onDocTouchEnd}>
+        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={onDocMouseUp} onTouchStart={onDocTouchStart} onTouchMove={onDocTouchMove} onTouchEnd={onDocTouchEnd} onTouchCancel={cancelarLongPress}>
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
           {/* Banner ARRIBA DE TODO: la guía de grabación, imposible de no ver. */}
@@ -722,18 +809,29 @@ export default function DocumentoScreen() {
           </>
         )}
 
-        {/* Botón flotante Comentar (estilo del prototipo) */}
-        {selBtn && !composer && (
-          <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={() => { setComposer({ ...selBtn, parentId: null }); setDraft(''); setSelBtn(null); }} role="button"
-            style={{ position: 'fixed', zIndex: 70, top: Math.max(60, selBtn.top), left: Math.min(Math.max(selBtn.left, 70), (typeof window !== 'undefined' ? window.innerWidth : 400) - 70), transform: 'translate(-50%,-130%)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: 'var(--shadow-md)' }}>
-            <IcoComment size={13} stroke="currentColor" sw={2.2} />
-            Comentar
-          </div>
-        )}
+        {/* Botón flotante Comentar (estilo del prototipo).
+            Va DEBAJO de lo seleccionado siempre que entre: arriba chocaba con el
+            menú nativo de iOS ("Copiar / Buscar"), que se dibuja justo ahí. */}
+        {selBtn && !composer && (() => {
+          const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+          const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
+          const abajo = (selBtn.bottom ?? selBtn.top) + 10;
+          const cabeAbajo = abajo < vh - 80;
+          const top = cabeAbajo ? abajo : Math.max(66, selBtn.top - 46);
+          return (
+            <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={() => { setComposer({ ...selBtn, parentId: null }); setDraft(''); setSelBtn(null); }} role="button"
+              style={{ position: 'fixed', zIndex: 70, top, left: Math.min(Math.max(selBtn.left, 70), vw - 70), transform: 'translateX(-50%)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: 'var(--shadow-md)' }}>
+              <IcoComment size={13} stroke="currentColor" sw={2.2} />
+              Comentar
+            </div>
+          );
+        })()}
 
-        {/* Caja de comentario (hoja pegada abajo: el teclado no la tapa) */}
+        {/* Caja de comentario (hoja pegada abajo). `bottom: 8` a secas quedaba TAPADA
+            por el teclado del iPhone: el teclado no achica el viewport de layout, así
+            que hay que subirla a mano con lo que informa visualViewport. */}
         {composer && (
-          <div onMouseDown={(e) => e.stopPropagation()} style={{ position: 'fixed', left: 8, right: 8, bottom: 8, zIndex: 71, background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, padding: 14, boxShadow: '0 -8px 40px rgba(10,22,40,.2)', maxWidth: 560, margin: '0 auto' }}>
+          <div onMouseDown={(e) => e.stopPropagation()} style={{ position: 'fixed', left: 8, right: 8, bottom: 8 + kbInset, zIndex: 71, background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 18, padding: 14, boxShadow: '0 -8px 40px rgba(10,22,40,.2)', maxWidth: 560, margin: '0 auto' }}>
             {composer.quote && <div style={{ fontSize: 12, color: '#8A6D2B', borderLeft: '2px solid var(--mk-yellow)', paddingLeft: 8, marginBottom: 8, fontStyle: 'italic' }}>“{composer.quote.slice(0, 140)}{composer.quote.length > 140 ? '…' : ''}”</div>}
             {composer.parentId && <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.primary, marginBottom: 6 }}>Respondiendo</div>}
             <textarea value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} rows={3}

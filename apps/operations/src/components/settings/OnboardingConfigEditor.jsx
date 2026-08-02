@@ -98,7 +98,7 @@ export default function OnboardingConfigEditor() {
         </Field>
         <Field
           label="Mensaje 2 · Bienvenida a la plataforma"
-          hint="Se muestra al terminar de cargar la venta, listo para copiar. Los huecos se reemplazan solos: {NOMBRE} (primer nombre), {PORTAL_URL}, {PORTAL_EMAIL} y {PORTAL_PASSWORD} (la cuenta del cliente, que se crea sola con la venta), {CALENDAR_LINK} y {ONBOARDING_LINK}.">
+          hint="Se muestra al terminar de cargar la venta, listo para copiar. Los huecos se reemplazan solos: {NOMBRE} (primer nombre), {PORTAL_URL}, {PORTAL_EMAIL} y {PORTAL_PASSWORD} (la cuenta del cliente, que se crea sola con la venta), {COLAB_URL} (link para que su equipo se registre — sobre todo quienes se graban), {CALENDAR_LINK} y {ONBOARDING_LINK}.">
           <textarea rows={14} value={draft.onboarding_handoff_msg} onChange={(e) => update({ onboarding_handoff_msg: e.target.value })} className={area} />
         </Field>
       </Section>

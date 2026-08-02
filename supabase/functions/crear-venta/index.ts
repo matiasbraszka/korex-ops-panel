@@ -678,6 +678,11 @@ const HANDOFF_DEFAULT = [
   "",
   "En cuanto tengamos eso, arrancamos. La sesion de inicio la reservas tu desde el primer paso del onboarding.",
   "",
+  "👥 *Para tu equipo*",
+  "Quienes se van a grabar y quien te asista necesitan su propio acceso. Que se registren aqui, cada uno con su correo:",
+  "{COLAB_URL}",
+  "Importante: tienen que estar registrados ANTES de la llamada de inicio.",
+  "",
   "Cualquier duda, escribenos por aqui.",
 ].join("\n");
 
@@ -688,6 +693,7 @@ function buildHandoff(
   calendarLink: string,
   onboardingUrl: string | null,
   portal: { url: string; email: string; password: string; nombre: string },
+  colabUrl?: string | null,
 ): string {
   const tpl = template || HANDOFF_DEFAULT;
   return tpl
@@ -698,7 +704,39 @@ function buildHandoff(
     .replaceAll("{PORTAL_EMAIL}", portal.email || "(falta cargar el email del cliente)")
     .replaceAll("{PORTAL_PASSWORD}", portal.password || "(se genera al cargar el email)")
     .replaceAll("{CALENDAR_LINK}", calendarLink || "")
+    .replaceAll("{COLAB_URL}", colabUrl || "(no se pudo generar el link del equipo)")
     .replaceAll("{ONBOARDING_LINK}", onboardingUrl || "(se generará la carpeta del cliente)");
+}
+
+// Link de auto-servicio para que el equipo del cliente (sobre todo quienes se
+// graban) se cree su propia cuenta. Un token por cliente, opaco y reutilizable.
+//
+// Se inserta DIRECTO en la tabla y no por el RPC portal_collab_link: ese valida
+// is_team_member() y crear-venta corre con service-role, sin auth.uid() — el mismo
+// motivo por el que el DEL nativo se inserta a mano mas abajo.
+async function asegurarLinkColaboradores(
+  supabase: any,
+  clientId: string,
+  portalUrl: string,
+): Promise<string | null> {
+  try {
+    const { data: ya } = await supabase
+      .from("portal_collab_invites").select("token").eq("client_id", clientId).maybeSingle();
+    if (ya?.token) return `${portalUrl}/colaborador?t=${ya.token}`;
+
+    const token = (crypto.randomUUID() + crypto.randomUUID()).replaceAll("-", "");
+    const { error } = await supabase.from("portal_collab_invites")
+      .insert({ client_id: clientId, token, enabled: true, created_by: "crear-venta" });
+    if (error) {
+      // Carrera: si otro proceso lo creo primero, sirve el que quedo.
+      const { data: otro } = await supabase
+        .from("portal_collab_invites").select("token").eq("client_id", clientId).maybeSingle();
+      return otro?.token ? `${portalUrl}/colaborador?t=${otro.token}` : null;
+    }
+    return `${portalUrl}/colaborador?t=${token}`;
+  } catch {
+    return null;   // que no se caiga el alta de la venta por esto
+  }
 }
 
 // El primer nombre, para el saludo. "Maria Gonzalez Perez" -> "Maria".
@@ -1190,6 +1228,11 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Link para que el equipo corporativo del cliente (sobre todo quienes se graban)
+  // se registre solo. Va en el MISMO mensaje que las credenciales: tienen que estar
+  // dados de alta antes de la llamada de onboarding.
+  const colabUrl = await asegurarLinkColaboradores(supabase, clientId, portalUrl);
+
   // Mensaje de handoff para el cliente (plantilla editable + links + acceso).
   const handoffMessage = buildHandoff(
     str(onboardingCfg.onboarding_handoff_msg),
@@ -1201,6 +1244,7 @@ Deno.serve(async (req: Request) => {
       password: cuentaPortal.password,
       nombre: primerNombre(displayName),
     },
+    colabUrl,
   );
 
   // Resumen a Slack #onboarding-clientes con todas las preguntas-respuestas del
@@ -1260,6 +1304,7 @@ Deno.serve(async (req: Request) => {
     folder_url: driveFolderUrl,
     onboarding_url: onboardingUrl,
     handoff_message: handoffMessage,
+    colab_url: colabUrl,
     portal_url: portalUrl,
     portal_email: cuentaPortal.email,
     portal_password: cuentaPortal.password,
