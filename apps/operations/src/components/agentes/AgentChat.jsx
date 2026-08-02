@@ -10,6 +10,7 @@ import {
 import { agentMeta } from './agentMeta';
 import AgentMarkdown, { accentOf } from './AgentMarkdown';
 import SlashMenu from './SlashMenu';
+import MicDictado from './MicDictado';
 import { sanitizeDelHtml } from '../clientes/funnels/delSanitize';
 
 // A qué pestaña (kind) del DEL va cada agente, y cómo se titula la sección exportada.
@@ -554,6 +555,13 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     run([...messages, userMsg], mode);
   }
 
+  // Dictado por voz: el texto transcripto se agrega al input (no lo envía solo, así lo podés
+  // editar antes). Deja el foco en el textarea para seguir escribiendo o mandar con Enter.
+  function dictar(texto) {
+    setInput((prev) => (prev.trim() ? `${prev.trim()} ${texto}` : texto));
+    requestAnimationFrame(() => taRef.current?.focus());
+  }
+
   // Rehace la respuesta `idx`: vuelve a pedirla con el mismo historial previo.
   function regenerate(idx) {
     if (busy) return;
@@ -768,6 +776,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
             />
             <div className="flex items-center justify-between gap-2 mt-1.5">
               <div className="flex items-center gap-2 min-w-0">
+                <MicDictado onText={dictar} disabled={busy} />
                 {canGenerate && (
                   <button onClick={() => send('', 'generate')} disabled={busy || blocked}
                     title={blocked

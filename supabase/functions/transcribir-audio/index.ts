@@ -75,11 +75,11 @@ async function authorizeSoporteRead(req: Request): Promise<boolean> {
   const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", user.id);
   const roleNames = (roles || []).map((r: { role: string }) => r.role);
   if (roleNames.includes("admin")) return true;
-  if (roleNames.length === 0) return false;
-  const { data: perms } = await admin
-    .from("role_permissions").select("role")
-    .in("role", roleNames).eq("module", "soporte").eq("can_read", true).limit(1);
-  return (perms || []).length > 0;
+  // Cualquier miembro del equipo (con al menos un rol asignado) puede transcribir: lo usan la
+  // auditoría de audios de Soporte Y el dictado por voz del panel de Agentes. Es de bajo riesgo
+  // (solo convierte audio a texto; no expone datos). Antes exigía soporte:read, y eso dejaba a
+  // los usuarios de Marketing/Operaciones sin poder dictar en los agentes.
+  return roleNames.length > 0;
 }
 
 // ── Rama CLIENTE (portal) ────────────────────────────────────────────────────
