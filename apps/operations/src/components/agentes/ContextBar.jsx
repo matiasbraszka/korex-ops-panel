@@ -71,11 +71,17 @@ export default function ContextBar({ clients, strategyPages, collaborators, sel,
     const f = (strategyPages || []).find((p) => p.id === sel.funnelId);
     return (Array.isArray(f?.avatars) ? f.avatars : []).map((a) => ({ value: a.id, label: a.name || 'Avatar' }));
   }, [strategyPages, sel.funnelId]);
-  // Encargados de grabación del cliente (los que se graban en cámara → su perfil alimenta a la IA).
-  const collabOpts = useMemo(
-    () => (collaborators || []).map((c) => ({ value: c.id, label: c.full_name || c.email || 'Encargado' })),
-    [collaborators],
-  );
+  // Quién se graba en cámara → su perfil alimenta a la IA. El ENCARGADO 1 es SIEMPRE el
+  // propio cliente (titular); el resto son encargados adicionales (pareja, socio, etc.).
+  const collabOpts = useMemo(() => {
+    const opts = [];
+    if (sel.clientId) {
+      const cl = (clients || []).find((c) => c.id === sel.clientId);
+      opts.push({ value: 'cliente', label: `${cl?.name || 'Cliente'} · titular` });
+    }
+    for (const c of (collaborators || [])) opts.push({ value: c.id, label: c.full_name || c.email || 'Encargado' });
+    return opts;
+  }, [collaborators, clients, sel.clientId]);
 
   return (
     <div className="grid gap-2">
@@ -92,7 +98,7 @@ export default function ContextBar({ clients, strategyPages, collaborators, sel,
         <ContextPicker Icon={User} label="Avatar" value={sel.avatarId} options={avatarOpts} placeholder={sel.funnelId ? (avatarOpts.length ? 'Elegí un avatar…' : 'Sin avatares') : '—'} disabled={!sel.funnelId || !avatarOpts.length}
           onSelect={(v) => onChange({ avatarId: v })} />
         <ContextPicker Icon={Mic} label="Encargado" value={sel.collaboratorId} options={collabOpts}
-          placeholder={sel.clientId ? (collabOpts.length ? 'Quién se graba…' : 'Sin encargados') : '—'} disabled={!sel.clientId || !collabOpts.length}
+          placeholder={sel.clientId ? 'Quién se graba…' : '—'} disabled={!sel.clientId}
           onSelect={(v) => onChange({ collaboratorId: v === sel.collaboratorId ? '' : v })} />
       </div>
 

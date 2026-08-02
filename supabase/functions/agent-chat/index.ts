@@ -279,15 +279,26 @@ Deno.serve(async (req) => {
 
   // Encargado de grabación elegido: SU perfil (historia + personalidad) es el insumo más
   // importante para escribir a la medida de quien de verdad va a estar en cámara.
-  let encargadoText = "";
-  let encargadoNombre = "";
-  if (collaboratorId) {
+  // El ENCARGADO 1 es SIEMPRE el propio cliente (collaboratorId === "cliente"): su perfil es el
+  // BRIEF/onboarding de arriba, no hace falta cargar otro. El resto son encargados adicionales.
+  let encargadoBlock = "";
+  if (collaboratorId === "cliente") {
+    encargadoBlock = `\n— QUIÉN SE GRABA (ENCARGADO 1): ${str(client?.name) || "el cliente"} (el propio titular) —\n`
+      + "El que aparece en cámara es el mismo cliente: escribí en PRIMERA PERSONA como él, con la historia y personalidad del BRIEF de arriba. "
+      + "Si en el onboarding se ve que quiere grabarse JUNTO a otra persona (su pareja, un socio), podés proponer además una versión en combinación (dos voces / \"nosotros\"), aunque esa otra persona no tenga un perfil cargado.";
+  } else if (collaboratorId) {
     const [{ data: colabRow }, { data: perfilRow }] = await Promise.all([
       supabase.from("portal_collaborators").select("full_name,role").eq("id", collaboratorId).maybeSingle(),
       supabase.from("client_brain_docs").select("text").eq("id", `colab_${collaboratorId}`).maybeSingle(),
     ]);
-    encargadoNombre = str(colabRow?.full_name);
-    encargadoText = clip(str(perfilRow?.text), 4000);
+    const encargadoNombre = str(colabRow?.full_name);
+    const encargadoText = clip(str(perfilRow?.text), 4000);
+    if (encargadoText || encargadoNombre) {
+      encargadoBlock = `\n— QUIÉN SE GRABA (ENCARGADO DE GRABACIÓN)${encargadoNombre ? `: ${encargadoNombre}` : ""} —\n`
+        + "Esta es la persona real que va a estar en cámara: hablá en su voz, usá su historia y su personalidad, y no le pongas en boca cosas que no encajan con ella."
+        + (encargadoText ? `\nSu perfil (respondido por ella misma):\n${encargadoText}` : "")
+        + "\nSi se graba en combinación con el cliente u otra persona, podés proponer además una versión a dos voces.";
+    }
   }
 
   // ── Qué paso del descubrimiento están pidiendo ──
@@ -968,11 +979,9 @@ Deno.serve(async (req) => {
       : `\n— GUIÓN DEL VSL DEL FUNNEL (el anuncio SALE de acá) —\n${vslScript ? clip(vslScript, 5000) : "(sin guión de VSL cargado)"}`,
     pagesBlock, // a dónde LLEGA: va pegado al VSL para que se lea como un solo recorrido
     briefText ? `\n— BRIEF / PERSONALIDAD DEL LÍDER —\n${briefText}` : "",
-    // Quién SE GRABA en cámara: el encargado de grabación elegido. Su historia y personalidad
-    // mandan sobre el tono, el "yo" del guión y los ejemplos personales. Si está, escribí para ÉL.
-    encargadoText
-      ? `\n— QUIÉN SE GRABA (ENCARGADO DE GRABACIÓN)${encargadoNombre ? `: ${encargadoNombre}` : ""} —\nEsta es la persona real que va a estar en cámara: hablá en su voz, usá su historia y su personalidad, y no le pongas en boca cosas que no encajan con ella. Su perfil (respondido por ella misma):\n${encargadoText}`
-      : "",
+    // Quién SE GRABA en cámara: el encargado elegido (el cliente titular o uno adicional). Su
+    // historia y personalidad mandan sobre el tono, el "yo" del guión y los ejemplos personales.
+    encargadoBlock,
     // Los anuncios ganadores son insumo del agente de anuncios. Para VSL, el ganador
     // relevante es el VSL que retuvo (Voomly), que ya viaja etiquetado en los ejemplos.
     subagentKey === "anuncios"
