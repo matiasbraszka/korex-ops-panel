@@ -7,14 +7,6 @@ const BLUE = '#5B7CF5';          // marca (controles: filtros, botones)
 const GREEN = '#22C55E';         // semáforo de métricas: verde = bien (ver leyenda al pie)
 const DARK = '#15803D';
 
-const RANGES = [
-  { key: 'all', label: 'Todo' },
-  { key: '90d', label: '90 días' },
-  { key: '30d', label: '30 días' },
-  { key: '7d', label: '7 días' },
-  { key: 'today', label: 'Hoy' },
-];
-
 const fmtTime = (sec) => {
   sec = Math.max(0, Math.round(sec || 0));
   const m = Math.floor(sec / 60), s = sec % 60;
@@ -113,7 +105,12 @@ export default function VslPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [range, setRange] = useState('all');
+  const [range, setRange] = useState('all'); // 'all' = todo el tiempo | 'custom' = rango de fechas
+  const [cStart, setCStart] = useState('');
+  const [cEnd, setCEnd] = useState('');
+  const [customMap, setCustomMap] = useState(null); // voomly_id -> métricas del rango custom
+  const [customMsg, setCustomMsg] = useState('');
+  const [customBusy, setCustomBusy] = useState(false);
   const [selected, setSelected] = useState('all'); // 'all' = tabla comparativa | voomly_id = detalle
   const [sort, setSort] = useState({ key: 'engagement', dir: 'desc' });
 
@@ -133,9 +130,17 @@ export default function VslPage() {
     return ts ? new Date(ts) : null;
   }, [rows]);
 
-  // Métricas del rango seleccionado (fallback all-time si el VSL no tiene rangos).
+  // Métricas del rango seleccionado.
+  //  · range='custom' → lee del rango de fechas traído a vsl_custom (customMap).
+  //  · range='all'    → todo el tiempo (ranges.all o el all-time del VSL).
   const metricsFor = (r) => {
-    const fr = r.ranges && r.ranges[range];
+    if (range === 'custom') {
+      const base = (customMap && customMap[r.voomly_id]) || {
+        total_plays: 0, uniq_plays: 0, total_views: 0, uniq_views: 0, play_rate: 0, engagement: 0, completion: null, retention: null,
+      };
+      return { ...base, _row: r };
+    }
+    const fr = r.ranges && r.ranges.all;
     const base = fr || {
       total_plays: r.total_plays, uniq_plays: r.uniq_plays, total_views: r.total_views, uniq_views: r.uniq_views,
       play_rate: r.play_rate, engagement: r.engagement, completion: r.retention?.points?.p100 ?? null, retention: r.retention || null,
@@ -143,7 +148,25 @@ export default function VslPage() {
     return { ...base, _row: r };
   };
 
-  const all = useMemo(() => rows.map(metricsFor), [rows, range]);
+  // Aplicar un rango de fechas: si ya está en vsl_custom lo muestra; si no, lo encola (aparece mañana).
+  const applyCustom = async () => {
+    if (!cStart || !cEnd) { setCustomMsg('Elegí las dos fechas.'); return; }
+    if (cEnd < cStart) { setCustomMsg('La fecha "hasta" no puede ser anterior a "desde".'); return; }
+    setCustomBusy(true); setCustomMsg('Buscando…');
+    const { data } = await supabase.from('vsl_custom').select('voomly_id,metrics').eq('start_date', cStart).eq('end_date', cEnd);
+    const rowsC = data || [];
+    if (rowsC.length > 0) {
+      const map = {}; rowsC.forEach((x) => { map[x.voomly_id] = x.metrics; });
+      setCustomMap(map); setRange('custom'); setCustomMsg('');
+    } else {
+      await supabase.rpc('vsl_range_request_add', { p_start: cStart, p_end: cEnd });
+      setCustomMsg('Ese rango todavía no está guardado. Ya lo pedí — se trae solo y aparece mañana a la mañana. Por ahora te dejo en "Todos".');
+      setRange('all');
+    }
+    setCustomBusy(false);
+  };
+
+  const all = useMemo(() => rows.map(metricsFor), [rows, range, customMap]);
   const sorted = useMemo(() => {
     const arr = [...all];
     arr.sort((a, b) => {
@@ -154,7 +177,8 @@ export default function VslPage() {
     return arr;
   }, [all, sort]);
 
-  const rangeLabel = RANGES.find((r) => r.key === range)?.label || 'Todo';
+  const fmtDMY = (s) => { const [y, mo, d] = (s || '').split('-'); return d ? `${d}/${mo}/${y}` : s; };
+  const rangeLabel = range === 'custom' ? `${fmtDMY(cStart)} → ${fmtDMY(cEnd)}` : 'Todos';
   const current = selected !== 'all' ? all.find((m) => m._row.voomly_id === selected) : null;
 
   const setSortKey = (key) => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }));
@@ -172,11 +196,21 @@ export default function VslPage() {
             {lastSync && <> · Actualizado {lastSync.toLocaleDateString('es-AR')} {lastSync.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</>}
           </p>
         </div>
-        <div className="flex gap-1 bg-[#F3F4F6] p-1 rounded-xl">
-          {RANGES.map((r) => (
-            <button key={r.key} onClick={() => setRange(r.key)} className="text-[12px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
-              style={range === r.key ? { background: BLUE, color: '#fff', boxShadow: '0 1px 3px rgba(91,124,245,0.45)' } : { color: '#6B7280' }}>{r.label}</button>
-          ))}
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-end gap-1.5 flex-wrap justify-end">
+            <button onClick={() => { setRange('all'); setCustomMsg(''); }} className="text-[12px] font-semibold px-3 py-2 rounded-lg transition-colors"
+              style={range === 'all' ? { background: BLUE, color: '#fff', boxShadow: '0 1px 3px rgba(91,124,245,0.45)' } : { background: '#F3F4F6', color: '#6B7280' }}>Todos</button>
+            <label className="text-[10px] text-text3 font-medium">Desde
+              <input type="date" value={cStart} onChange={(e) => setCStart(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[12.5px] outline-none focus:border-blue" />
+            </label>
+            <label className="text-[10px] text-text3 font-medium">Hasta
+              <input type="date" value={cEnd} onChange={(e) => setCEnd(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[12.5px] outline-none focus:border-blue" />
+            </label>
+            <button onClick={applyCustom} disabled={customBusy} className="text-[12px] font-semibold px-3 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: range === 'custom' ? BLUE : '#111827' }}>
+              {customBusy ? 'Buscando…' : 'Aplicar fechas'}
+            </button>
+          </div>
+          {customMsg && <div className="text-[11.5px] text-text3 max-w-[420px] text-right bg-[#FEF9E7] border border-[#FBE7A1] rounded-lg px-2.5 py-1.5">{customMsg}</div>}
         </div>
       </div>
 
@@ -214,20 +248,6 @@ function VslDetail({ m, rangeLabel }) {
   const [showTr, setShowTr] = useState(false);
   const [playing, setPlaying] = useState(false);
   const transcript = Array.isArray(r.transcript) ? r.transcript : null;
-  // Rango personalizado (beta): lee de vsl_custom lo que trajo analyze.mjs de Voomly.
-  const [cStart, setCStart] = useState('2026-06-15');
-  const [cEnd, setCEnd] = useState('2026-06-17');
-  const [cData, setCData] = useState(null);
-  const [cMsg, setCMsg] = useState('');
-  const analyzeCustom = async () => {
-    if (!cStart || !cEnd) { setCMsg('Elegí las dos fechas.'); return; }
-    setCMsg('Buscando…'); setCData(null);
-    const { data } = await supabase.from('vsl_custom').select('metrics')
-      .eq('voomly_id', r.voomly_id).eq('start_date', cStart).eq('end_date', cEnd).maybeSingle();
-    if (data?.metrics) { setCData(data.metrics); setCMsg(''); }
-    else { setCMsg('Ese rango todavía no fue analizado. El exportador lo trae cuando se pide (node analyze.mjs).'); }
-  };
-  const cDrops = cData?.retention?.viewers?.length ? topDrops(cData.retention) : [];
   return (
     <div>
       <div className="flex items-baseline gap-3 mb-1 flex-wrap">
@@ -306,49 +326,6 @@ function VslDetail({ m, rangeLabel }) {
         </div>
       )}
 
-      {/* Rango personalizado (beta) — analiza un período exacto leyendo de vsl_custom. */}
-      <div className="bg-white border border-border rounded-xl p-4 mt-4">
-        <h3 className="text-[14px] font-bold text-text flex items-center gap-2">
-          Rango personalizado
-          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: '#FEF3C7', color: '#B45309' }}>beta</span>
-        </h3>
-        <p className="text-[11px] text-text3 mt-0.5 mb-2">Analizá un período exacto. La curva por-segundo necesita ~2-3 días; para 1 solo día se ven solo los números.</p>
-        <div className="flex items-end gap-2 flex-wrap">
-          <label className="text-[11px] text-text3">Desde<input type="date" value={cStart} onChange={(e) => setCStart(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-blue" /></label>
-          <label className="text-[11px] text-text3">Hasta<input type="date" value={cEnd} onChange={(e) => setCEnd(e.target.value)} className="block mt-0.5 border border-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-blue" /></label>
-          <button onClick={analyzeCustom} className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: BLUE }}>Analizar</button>
-        </div>
-        {cMsg && <div className="text-[12px] text-text3 mt-2">{cMsg}</div>}
-        {cData && (
-          <div className="mt-3">
-            <div className="grid grid-cols-5 gap-2 max-md:grid-cols-2 mb-3">
-              <MetricCard label="Visitas" value={fmt(cData.uniq_views)} />
-              <MetricCard label="Reproducciones" value={fmt(cData.total_plays)} color={GREEN} />
-              <MetricCard label="Tasa de play" value={(cData.play_rate ?? 0) + '%'} color={pctColor(cData.play_rate)} />
-              <MetricCard label="Retención" value={(cData.engagement ?? 0) + '%'} color={pctColor(cData.engagement)} />
-              <MetricCard label="Vieron completo" value={cData.completion != null ? cData.completion + '%' : '—'} color={pctColor(cData.completion)} />
-            </div>
-            {cData.retention?.viewers?.length ? (
-              <>
-                <RetentionChart ret={cData.retention} drops={cDrops} />
-                <div className="mt-2 space-y-1.5">
-                  {cDrops.map((d, k) => {
-                    const ph = transcriptAt(r.transcript, d.sec);
-                    return (
-                      <div key={k} className="text-[13px]">
-                        <b className="tabular-nums">{fmtTime(d.sec)}</b> <span className="text-text3">se van ~{fmt(d.lost)} personas ({d.pct}% del total)</span>
-                        {ph && <div className="text-text2 italic text-[12px] pl-2 border-l-2 border-[#C7D3FE]">“{ph}”</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <div className="text-[12px] text-text3">Voomly no da la curva por-segundo para este rango (probá un período de varios días).</div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
