@@ -70,6 +70,11 @@ function mensajeDeError(cuerpo, error) {
   if (cuerpo?.error === 'missing_api_key') return 'Falta cargar la API key de Anthropic en la configuración. Lo tiene que hacer un admin.';
   if (cuerpo?.error === 'unauthorized') return 'Tu sesión venció. Recargá la página y volvé a entrar.';
   if (detail) return detail;
+  // Fallo de RED (no llegó a la fn): conexión, corte momentáneo o sesión caída. El texto crudo
+  // de supabase-js ("Failed to send a request to the Edge Function") no le dice nada al equipo.
+  if (/Failed to send a request|Failed to fetch|NetworkError|load failed|ERR_/i.test(String(error?.message || ''))) {
+    return 'No se pudo contactar con el servidor de los agentes.\n\nSuele ser la conexión o un corte de un segundo. Esperá un momento y probá de nuevo — no se gastó nada.';
+  }
   return error?.message || 'No se pudo contactar al agente.';
 }
 
@@ -409,6 +414,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const taRef = useRef(null);
   const reqSeqRef = useRef(0); // descarta la respuesta de un pedido viejo si llega tarde
   const abortRef = useRef(null); // corta el pedido en curso de verdad (ver stopReply)
+  const mountedRef = useRef(true); // ¿seguimos en pantalla? (para no tocar estado tras salir)
 
   const meta = agentMeta(agentKey);
   const AgentIcon = meta.Icon;
@@ -431,8 +437,11 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     setBusy(false);
     setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0);
   }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Al desmontar (salir de la pestaña), lo mismo: nada de pedidos huérfanos cobrando.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // Al desmontar (salir de la pestaña) NO cortamos el pedido: el gasto del servidor YA está hecho
+  // (la llamada a la IA ya salió), así que abortar solo tiraba la respuesta y encima guardaba un
+  // error en el historial. Lo dejamos terminar en segundo plano: onTurn la persiste y aparece
+  // cuando volvés a abrir el chat. Solo marcamos que ya no estamos en pantalla.
+  useEffect(() => () => { mountedRef.current = false; }, []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
   // El textarea crece con el texto hasta un tope.
   useEffect(() => {
@@ -521,16 +530,20 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
       } else {
         assistantMsg = { role: 'assistant', content: data.reply || '(sin respuesta)' };
       }
-      if (data?.cost_usd && reqSeqRef.current === mySeq) setTotalCost((c) => c + Number(data.cost_usd));
+      if (data?.cost_usd && reqSeqRef.current === mySeq && mountedRef.current) setTotalCost((c) => c + Number(data.cost_usd));
     } catch (e) {
+      // Si se abortó a PROPÓSITO (Detener, o cambiaste de cliente/agente), no es un error: ni lo
+      // mostramos ni lo guardamos. Salir de la pestaña ya NO aborta, así que ese caso cae abajo.
+      if (ctrl.signal.aborted) return;
       assistantMsg = { role: 'assistant', kind: 'notice', content: String(e.message || e) };
     }
     if (abortRef.current === ctrl) abortRef.current = null;
     if (reqSeqRef.current !== mySeq) return; // se detuvo o fue reemplazada → descartar
-    setBusy(false);
     const finalMsgs = [...withUser, assistantMsg];
-    setMessages(finalMsgs);
-    onTurn?.(finalMsgs); // persiste la conversación (historial)
+    // Si seguís en pantalla, actualizamos la vista. Si te fuiste, no tocamos estado (evita el
+    // warning de React) pero IGUAL persistimos: la respuesta queda en el historial.
+    if (mountedRef.current) { setBusy(false); setMessages(finalMsgs); }
+    onTurn?.(finalMsgs); // persiste la conversación (historial), montados o no
   }
 
   function send(text, mode = 'chat') {
