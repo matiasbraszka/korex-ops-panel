@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import {
   Send, Loader2, Lock, Sparkles, Save, Check, AlertTriangle, Square,
-  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video, FileOutput,
+  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video, FileOutput, Plus,
 } from 'lucide-react';
 import { agentMeta } from './agentMeta';
 import AgentMarkdown, { accentOf } from './AgentMarkdown';
@@ -91,42 +91,76 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
   const [copied, setCopied] = useState(false);
   const [delState, setDelState] = useState('idle'); // idle | saving | done | error
   const [delMsg, setDelMsg] = useState('');
+  const [delOpen, setDelOpen] = useState(false);
+  const [delSecs, setDelSecs] = useState(null); // null = sin cargar | [] = sin pestañas | [...]
 
-  // Enviar esta respuesta al DEL del funnel como una PESTAÑA nueva (un clic).
-  const enviarAlDel = async () => {
+  // Abrir el selector "¿dónde lo guardo?" y traer las pestañas actuales del DEL del funnel.
+  const abrirDel = async () => {
     if (delState === 'saving' || !sel.funnelId) return;
-    setDelState('saving'); setDelMsg('');
+    const abrir = !delOpen;
+    setDelOpen(abrir);
+    if (!abrir || delSecs !== null) return;
     try {
-      // 1 · Ubicar (o crear) el documento del DEL de este funnel.
       const { data: page } = await supabase.from('strategy_pages')
-        .select('name,del_doc_id,strategy_id,client_id').eq('id', sel.funnelId).maybeSingle();
-      let docId = page?.del_doc_id || null;
-      if (!docId) {
-        const { data: newDoc, error: e1 } = await supabase.rpc('del_doc_create', {
-          p_client_id: sel.clientId, p_strategy_id: sel.strategyId || page?.strategy_id || null,
-          p_title: page?.name || 'DEL',
-        });
-        if (e1) throw e1;
-        docId = newDoc;
-        // Dejar el funnel apuntando a su DEL nuevo, para no crear otro en el próximo envío.
-        if (docId) await supabase.from('strategy_pages').update({ del_doc_id: docId }).eq('id', sel.funnelId);
+        .select('del_doc_id,strategy_id').eq('id', sel.funnelId).maybeSingle();
+      let secs = [];
+      if (page?.del_doc_id) {
+        const { data } = await supabase.from('del_sections')
+          .select('id,title,kind,ord').eq('doc_id', page.del_doc_id).order('ord');
+        secs = data || [];
+      } else if (page?.strategy_id) {
+        // Funnel sin DEL propio: las secciones cuelgan del DEL de la carpeta (por strategy_id).
+        const { data } = await supabase.from('del_sections')
+          .select('id,title,kind,ord,doc_id').eq('strategy_id', page.strategy_id).order('ord');
+        secs = data || [];
       }
-      if (!docId) throw new Error('No se pudo ubicar ni crear el DEL de este funnel.');
-      // 2 · Crear la sección (pestaña) en la categoría que corresponde al agente.
-      const kind = DEL_KIND[subagentKey] || 'otros';
-      const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-      const title = `${DEL_LABEL[subagentKey] || 'Contenido (IA)'} · ${fecha}`;
-      const { data: secId, error: e2 } = await supabase.rpc('del_section_add', {
-        p_doc_id: docId, p_title: title, p_kind: kind, p_after_ord: null, p_by: 'Agente IA',
-      });
-      if (e2) throw e2;
-      // 3 · Guardar el contenido (HTML limpio; el server no sanitiza).
+      setDelSecs(secs);
+    } catch { setDelSecs([]); }
+  };
+
+  // target: 'new' (pestaña nueva) o el id de una pestaña existente (agrega al final).
+  const guardarEnDel = async (target) => {
+    setDelOpen(false); setDelState('saving'); setDelMsg('');
+    try {
       const html = sanitizeDelHtml(mdToHtml(responseText || ''));
-      const { error: e3 } = await supabase.rpc('del_section_save', { p_id: secId, p_html: html, p_by: 'Agente IA' });
-      if (e3) throw e3;
-      setDelState('done'); setDelMsg(`Enviado al DEL · pestaña «${title}»`);
+      const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+      if (target === 'new') {
+        // Ubicar (o crear) el documento del DEL del funnel.
+        const { data: page } = await supabase.from('strategy_pages')
+          .select('name,del_doc_id,strategy_id,client_id').eq('id', sel.funnelId).maybeSingle();
+        let docId = page?.del_doc_id || null;
+        if (!docId && Array.isArray(delSecs) && delSecs[0]?.doc_id) docId = delSecs[0].doc_id;
+        if (!docId) {
+          const { data: newDoc, error: e1 } = await supabase.rpc('del_doc_create', {
+            p_client_id: sel.clientId, p_strategy_id: sel.strategyId || page?.strategy_id || null,
+            p_title: page?.name || 'DEL',
+          });
+          if (e1) throw e1;
+          docId = newDoc;
+          if (docId) await supabase.from('strategy_pages').update({ del_doc_id: docId }).eq('id', sel.funnelId);
+        }
+        if (!docId) throw new Error('No se pudo ubicar ni crear el DEL de este funnel.');
+        const kind = DEL_KIND[subagentKey] || 'otros';
+        const title = `${DEL_LABEL[subagentKey] || 'Contenido (IA)'} · ${fecha}`;
+        const { data: secId, error: e2 } = await supabase.rpc('del_section_add', {
+          p_doc_id: docId, p_title: title, p_kind: kind, p_after_ord: null, p_by: 'Agente IA',
+        });
+        if (e2) throw e2;
+        const { error: e3 } = await supabase.rpc('del_section_save', { p_id: secId, p_html: html, p_by: 'Agente IA' });
+        if (e3) throw e3;
+        setDelState('done'); setDelMsg(`Creada la pestaña «${title}» en el DEL`);
+        setDelSecs(null); // que se recargue la lista la próxima vez
+      } else {
+        // Agregar al FINAL de una pestaña existente (leo su HTML actual y concateno).
+        const { data: sec } = await supabase.from('del_sections').select('title,html').eq('id', target).maybeSingle();
+        const sep = `<hr><p><strong>— ${DEL_LABEL[subagentKey] || 'IA'} · ${fecha} —</strong></p>`;
+        const nuevo = sanitizeDelHtml(`${(sec?.html || '').trim()}${sep}${html}`);
+        const { error } = await supabase.rpc('del_section_save', { p_id: target, p_html: nuevo, p_by: 'Agente IA' });
+        if (error) throw error;
+        setDelState('done'); setDelMsg(`Agregado al final de «${sec?.title || 'la pestaña'}»`);
+      }
     } catch (err) {
-      setDelState('error'); setDelMsg(err?.message || 'No se pudo enviar al DEL.');
+      setDelState('error'); setDelMsg(err?.message || 'No se pudo guardar en el DEL.');
     }
   };
 
@@ -159,9 +193,9 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
           <RefreshCw size={14} /> Regenerar
         </button>
         {sel.funnelId && (
-          <button onClick={enviarAlDel} disabled={delState === 'saving'} className={actionBtn}
-            title="Crear una pestaña nueva en el DEL de este funnel con esta respuesta">
-            {delState === 'saving' ? <><Loader2 size={14} className="animate-spin" /> Enviando…</>
+          <button onClick={abrirDel} disabled={delState === 'saving'} className={actionBtn}
+            title="Guardar esta respuesta en el DEL: pestaña nueva o al final de una existente">
+            {delState === 'saving' ? <><Loader2 size={14} className="animate-spin" /> Guardando…</>
               : delState === 'done' ? <><Check size={14} className="text-green" /> En el DEL</>
               : <><FileOutput size={14} /> Enviar al DEL</>}
           </button>
@@ -180,6 +214,34 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
           </>
         )}
       </div>
+
+      {delOpen && (
+        <div className="bg-bg border border-border rounded-xl p-2 grid gap-1 max-w-[440px]">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text3 px-1 pt-0.5">¿Dónde lo guardo en el DEL?</div>
+          <button onClick={() => guardarEnDel('new')}
+            className="flex items-center gap-2 text-left py-1.5 px-2 rounded-lg text-[12.5px] font-semibold text-text cursor-pointer border-none bg-transparent hover:bg-surface2">
+            <Plus size={14} className="text-green shrink-0" /> Crear una pestaña nueva
+          </button>
+          {delSecs === null && <div className="px-2 py-1 text-[12px] text-text3">Cargando pestañas…</div>}
+          {Array.isArray(delSecs) && delSecs.length > 0 && (
+            <>
+              <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-text3 px-1 pt-1">Agregar al final de…</div>
+              <div className="max-h-[200px] overflow-y-auto grid gap-0.5">
+                {delSecs.map((s) => (
+                  <button key={s.id} onClick={() => guardarEnDel(s.id)} title={s.title}
+                    className="flex items-center gap-2 text-left py-1.5 px-2 rounded-lg text-[12.5px] text-text2 cursor-pointer border-none bg-transparent hover:bg-surface2">
+                    <FileOutput size={13} className="text-text3 shrink-0" />
+                    <span className="truncate">{s.title || 'Sin título'}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {Array.isArray(delSecs) && delSecs.length === 0 && (
+            <div className="px-2 py-1 text-[11.5px] text-text3">Este funnel todavía no tiene pestañas: se creará una nueva.</div>
+          )}
+        </div>
+      )}
 
       {delMsg && (
         <div className={`text-[11.5px] font-semibold ${delState === 'error' ? 'text-red' : 'text-green'}`}>{delMsg}</div>
