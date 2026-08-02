@@ -62,16 +62,52 @@ function textoAHtml(texto) {
   return html || '<p class="doc-p" style="color:var(--mk-text3);font-style:italic">Vacío</p>';
 }
 
+// Pintar de amarillo el texto comentado.
+//
+// Antes se buscaba la frase EXACTA dentro del HTML y casi nunca aparecía, así que
+// el comentario quedaba sin su marca. Dos motivos: lo que devuelve el navegador al
+// marcar trae los espacios y saltos normalizados (no los del código), y en el medio
+// suele haber etiquetas (<strong>, <em>) que parten la frase en pedazos.
+//
+// Ahora se busca palabra por palabra, aceptando entre una y otra cualquier cantidad
+// de espacios o etiquetas INLINE. No se cruzan párrafos a propósito: un <mark>
+// abierto en un párrafo y cerrado en otro genera HTML inválido.
+const ENTRE_PALABRAS = '(?:\\s|&nbsp;|<\\/?(?:strong|em|b|i|u|span|small|mark|br)\\b[^>]*>)+';
+
+function rxCita(q, maxPalabras) {
+  const palabras = esc(q).trim().split(/\s+/).filter(Boolean).map(rxEsc);
+  if (!palabras.length) return null;
+  const usar = maxPalabras ? palabras.slice(0, maxPalabras) : palabras;
+  if (!usar.length) return null;
+  try { return new RegExp('(?![^<]*>)(' + usar.join(ENTRE_PALABRAS) + ')'); } catch { return null; }
+}
+
+// Intenta con la frase entera; si no aparece, se conforma con marcar el principio.
+// Mejor media marca que ninguna: lo que importa es que el cliente vea DÓNDE dejó la
+// nota. Si la selección cruzó párrafos, se prueba también con el primer renglón
+// suelto — ese sí vive entero dentro de un <p>.
+function marcarUna(html, q, reemplazo) {
+  const primerRenglon = q.split('\n').map((s) => s.trim()).find((s) => s.length >= 2);
+  const candidatas = primerRenglon && primerRenglon !== q ? [q, primerRenglon] : [q];
+  for (const cand of candidatas) {
+    for (const n of [null, 14, 7, 4]) {
+      const rx = rxCita(cand, n);
+      if (!rx || !rx.test(html)) continue;
+      return html.replace(rx, reemplazo);
+    }
+  }
+  return html;
+}
+
 function marcarQuotes(html, cmts, marking) {
   let out = html;
   for (const c of cmts) {
     const q = (c.quote || '').trim();
     if (q.length < 2 || c.resolved) continue;
-    try { out = out.replace(new RegExp('(?![^<]*>)(' + rxEsc(esc(q)) + ')'), `<mark data-cmt="${c.id}">$1</mark>`); } catch { /* raro */ }
+    out = marcarUna(out, q, `<mark data-cmt="${c.id}">$1</mark>`);
   }
-  if (marking && (marking.quote || '').trim().length >= 2) {
-    try { out = out.replace(new RegExp('(?![^<]*>)(' + rxEsc(esc(marking.quote.trim())) + ')'), '<mark class="marcando">$1</mark>'); } catch { /* */ }
-  }
+  const m = (marking?.quote || '').trim();
+  if (m.length >= 2) out = marcarUna(out, m, '<mark class="marcando">$1</mark>');
   return out;
 }
 
@@ -178,86 +214,71 @@ export default function DocumentoScreen() {
   const puedeComentar = tipo !== 'guias'
     && ['ads', 'vsl', 'avatar', 'estrategia', 'copy'].includes(data?.tipo);
 
-  // El documento se dibuja dentro de un contenedor con CSS `zoom` (85–150%). Safari
-  // NO escala por el zoom las coordenadas que devuelve getBoundingClientRect() sobre
-  // un Range, pero `position: fixed` sí usa el viewport real: por eso el botón
-  // "Comentar" aparecía desplazado, y cuanto más zoom más lejos.
+  // ── Comentar: marcar texto → botón → caja ────────────────────────────────
   //
-  // En vez de asumir el navegador, se mide: si el rect del contenedor ya refleja el
-  // zoom, no hay que compensar; si no, se compensa. Así se corrige solo el día que
-  // Safari lo arregle.
-  const zoomFactor = () => {
-    const el = pdfRef.current;
-    const w = el?.offsetWidth;
-    if (!el || !w) return 1;
-    const ratio = el.getBoundingClientRect().width / w;
-    return Math.abs(ratio - 1) < 0.02 ? zoom / 100 : 1;
-  };
-
+  // LA REGLA, y es la que antes estaba mal: el botón "Comentar" NO se borra solo.
+  // Antes se escuchaba `selectionchange` y, si la selección venía vacía, se lo
+  // escondía. Pero el navegador COLAPSA la selección apenas apoyás el mouse en
+  // cualquier lado — incluido el propio botón — así que el botón desaparecía justo
+  // en el momento de ir a apretarlo. En el teléfono pasaba lo mismo cada vez que
+  // el sistema abría su menú de "Copiar".
+  //
+  // Ahora: la selección solo lo MUESTRA (o lo mueve). Se esconde a propósito, y
+  // solo cuando corresponde: al abrir la caja, al tocar fuera del documento o con
+  // Escape. Mientras haya un botón en pantalla, se puede apretar.
   const leerSeleccion = () => {
     if (!puedeComentar) return;
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
-    if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
+    // Selección vacía: NO se toca el botón. Puede ser el colapso de un clic.
+    if (!sel || sel.isCollapsed || text.length < 2 || !sel.rangeCount) return;
     let node = sel.anchorNode;
     while (node && node.nodeType !== 1) node = node.parentNode;
     const secEl = node?.closest?.('[data-secid]');
-    if (!secEl) { setSelBtn(null); return; }
+    if (!secEl) return;
     const r = sel.getRangeAt(0).getBoundingClientRect();
-    const f = zoomFactor();
+    if (!r || (!r.width && !r.height)) return;
+    // getBoundingClientRect() y position:fixed hablan el mismo idioma (el viewport),
+    // tengan el zoom que tengan: no hay nada que compensar.
     setSelBtn({
-      top: r.top * f, bottom: r.bottom * f, left: (r.left + r.width / 2) * f,
+      top: r.top, bottom: r.bottom, left: r.left + r.width / 2,
       quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid'),
     });
   };
-  const onDocMouseUp = leerSeleccion;
 
-  // En iOS, ajustar la selección con los tiradores no dispara ningún evento sobre
-  // el div (son UI del sistema), así que sin esto el botón se quedaba con la
-  // selección vieja o directamente desaparecía. `selectionchange` sí llega siempre.
+  // `selectionchange` es el ÚNICO evento que llega siempre: en iOS los tiradores de
+  // la selección son del sistema y no disparan nada sobre el div; en la compu llega
+  // durante todo el arrastre. Se deja pasar un instante para no ir dibujando el
+  // botón en cada píxel mientras se arrastra.
   useEffect(() => {
     if (!puedeComentar) return undefined;
     let t = null;
     const onSel = () => {
-      if (composerRef.current) return;   // con el composer abierto la selección ya se usó
+      if (composerRef.current) return;   // con la caja abierta la selección ya se usó
       clearTimeout(t);
-      t = setTimeout(leerSeleccion, 120);
+      t = setTimeout(leerSeleccion, 150);
     };
     document.addEventListener('selectionchange', onSel);
     return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
   }); // sin deps: leerSeleccion depende de props/estado que cambian en cada render
 
-  // Fallback para el teléfono: mantener pulsado (o doble toque) sobre un párrafo
-  // abre el comentario de esa sección, sin depender de la selección nativa —
-  // que en iOS se colapsa sola apenas se toca fuera o aparece el menú del sistema.
-  const touchRef = useRef(null);
-  const onDocTouchStart = (e) => {
-    if (!puedeComentar || composer) return;
-    const t = e.touches?.[0];
-    if (!t) return;
-    const secEl = e.target?.closest?.('[data-secid]');
-    if (!secEl) return;
-    const timer = setTimeout(() => {
-      const sel = window.getSelection();
-      // Si el sistema ya armó una selección real, esa manda: no la pisamos.
-      if (sel && !sel.isCollapsed && sel.toString().trim().length >= 2) return;
-      touchRef.current = null;
+  // Esconder el botón solo cuando el usuario deja claro que no lo quiere: toca
+  // fuera del documento, o aprieta Escape.
+  useEffect(() => {
+    if (!selBtn) return undefined;
+    const fuera = (e) => {
+      if (e.target?.closest?.('[data-sel-btn]') || e.target?.closest?.('[data-secid]')) return;
       setSelBtn(null);
-      setComposer({ sectionId: secEl.getAttribute('data-secid'), quote: '', parentId: null });
-      setDraft('');
-    }, 450);
-    touchRef.current = { x: t.clientX, y: t.clientY, timer };
-  };
-  const cancelarLongPress = () => {
-    if (touchRef.current?.timer) clearTimeout(touchRef.current.timer);
-    touchRef.current = null;
-  };
-  const onDocTouchMove = (e) => {
-    const s = touchRef.current; const t = e.touches?.[0];
-    if (!s || !t) return;
-    if (Math.abs(t.clientX - s.x) > 10 || Math.abs(t.clientY - s.y) > 10) cancelarLongPress();
-  };
-  const onDocTouchEnd = () => { cancelarLongPress(); setTimeout(leerSeleccion, 80); };
+    };
+    const esc = (e) => { if (e.key === 'Escape') setSelBtn(null); };
+    // `pointerdown` en captura: llega antes de que el navegador colapse la selección.
+    document.addEventListener('pointerdown', fuera, true);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', fuera, true);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [selBtn]);
 
   if (loading) return <PhoneFrame><Loading label="Abriendo el documento…" /></PhoneFrame>;
   if (!data) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este documento.</div></PhoneFrame>;
@@ -418,10 +439,12 @@ export default function DocumentoScreen() {
           .doc-p{font-size:15px;line-height:1.62;color:var(--mk-text);margin:0 0 14px}
           mark[data-cmt]{background:rgba(234,179,8,.28);border-bottom:2px solid var(--mk-yellow);border-radius:2px;color:inherit;padding:0}
           mark.marcando{background:var(--mk-blue-bg);border-radius:2px;color:inherit;padding:0}
+          /* Marcar texto tiene que funcionar con el gesto de SIEMPRE del teléfono:
+             mantener pulsado. Por eso acá NO se toca -webkit-touch-callout: al
+             desactivarlo, iOS deja de armar la selección al mantener pulsado (era
+             justo lo que impedía marcar). El menú nativo de Copiar aparece arriba
+             de lo seleccionado y nuestro botón va abajo, así no compiten. */
           .doc-sel,.doc-sel *{user-select:text!important;-webkit-user-select:text!important}
-          /* En iOS el menú nativo (Copiar / Buscar / Compartir) aparece encima de lo
-             seleccionado y competía con nuestro botón "Comentar". */
-          .doc-sel,.doc-sel *{-webkit-touch-callout:none}
         `}</style>
 
         {/* Header del documento (exacto al prototipo) */}
@@ -450,7 +473,7 @@ export default function DocumentoScreen() {
         </div>
 
         {/* Fondo BLANCO en el documento: más contraste para leer (pedido de Matías). */}
-        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={onDocMouseUp} onTouchStart={onDocTouchStart} onTouchMove={onDocTouchMove} onTouchEnd={onDocTouchEnd} onTouchCancel={cancelarLongPress}>
+        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={leerSeleccion} onTouchEnd={() => setTimeout(leerSeleccion, 80)}>
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
           {/* Banner ARRIBA DE TODO: la guía de grabación, imposible de no ver. */}
@@ -824,9 +847,16 @@ export default function DocumentoScreen() {
           const cabeAbajo = abajo < vh - 80;
           const top = cabeAbajo ? abajo : Math.max(66, selBtn.top - 46);
           return (
-            <div onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={() => { setComposer({ ...selBtn, parentId: null }); setDraft(''); setSelBtn(null); }} role="button"
-              style={{ position: 'fixed', zIndex: 70, top, left: Math.min(Math.max(selBtn.left, 70), vw - 70), transform: 'translateX(-50%)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: 'var(--shadow-md)' }}>
-              <IcoComment size={13} stroke="currentColor" sw={2.2} />
+            // `data-sel-btn` lo salva del "tocaste fuera": sin eso, el pointerdown
+            // que lo va a apretar lo esconde antes de que llegue el clic.
+            // `preventDefault` en pointerdown/mousedown evita que el navegador
+            // colapse la selección y que iOS lo tome como un toque en el texto.
+            <div data-sel-btn
+              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onClick={() => { setComposer({ ...selBtn, parentId: null }); setDraft(''); setSelBtn(null); }} role="button"
+              style={{ position: 'fixed', zIndex: 70, top, left: Math.min(Math.max(selBtn.left, 76), vw - 76), transform: 'translateX(-50%)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 15px', borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: 'var(--shadow-md)', touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none' }}>
+              <IcoComment size={14} stroke="currentColor" sw={2.2} />
               Comentar
             </div>
           );

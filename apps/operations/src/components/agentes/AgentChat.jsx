@@ -96,7 +96,11 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
         <button onClick={onRegenerate} disabled={busy} className={actionBtn} title="Pedir otra versión">
           <RefreshCw size={14} /> Regenerar
         </button>
-        <SaveToDel sel={sel} subagentKey={subagentKey} text={responseText} label="Enviar al DEL" />
+        {/* Guardar en el DEL tiene que verse igual de fácil en TODOS los agentes:
+            antes solo las tarjetas de anuncios tenían un botón destacado y en una
+            respuesta de texto quedaba un chip gris que se perdía entre los demás. */}
+        <SaveToDel sel={sel} subagentKey={subagentKey} text={responseText}
+          label="Enviar al DEL" variant="card" accent={accentOf(subagentKey)?.c} />
         {sent ? (
           <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-green ml-1"><Check size={13} /> ¡Gracias por el feedback!</span>
         ) : (

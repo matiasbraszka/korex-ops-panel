@@ -850,18 +850,48 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     return m;
   }, [comments]);
 
-  // Al soltar el mouse sobre el texto: si hay una frase marcada, muestro el botón flotante.
+  // Marcar una frase muestra el botón flotante para comentarla.
+  //
+  // La selección solo lo MUESTRA: nunca lo esconde. El navegador colapsa la
+  // selección apenas se apoya el mouse en cualquier lado (el propio botón
+  // incluido), así que esconderlo ahí lo hacía desaparecer justo al ir a
+  // apretarlo. Se esconde a propósito: al abrir la caja, al tocar fuera o con Esc.
   const onDocMouseUp = () => {
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
-    if (!sel || sel.isCollapsed || text.length < 2) { setSelBtn(null); return; }
+    if (!sel || sel.isCollapsed || text.length < 2 || !sel.rangeCount) return;
     let node = sel.anchorNode;
     while (node && node.nodeType !== 1) node = node.parentNode;
     const secEl = node?.closest?.('[data-secid]');
-    if (!secEl) { setSelBtn(null); return; }
+    if (!secEl) return;
     const rect = sel.getRangeAt(0).getBoundingClientRect();
-    setSelBtn({ top: rect.top, left: rect.left + rect.width / 2, quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
+    if (!rect || (!rect.width && !rect.height)) return;
+    setSelBtn({ top: rect.top, bottom: rect.bottom, left: rect.left + rect.width / 2, quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
   };
+
+  // En el teléfono/tablet los tiradores de la selección son del sistema y no
+  // disparan mouseup: `selectionchange` es el único que llega siempre.
+  useEffect(() => {
+    let t = null;
+    const onSel = () => { clearTimeout(t); t = setTimeout(onDocMouseUp, 150); };
+    document.addEventListener('selectionchange', onSel);
+    return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
+  }); // sin deps: onDocMouseUp se reconstruye en cada render
+
+  useEffect(() => {
+    if (!selBtn) return undefined;
+    const fuera = (e) => {
+      if (e.target?.closest?.('[data-sel-btn]') || e.target?.closest?.('[data-secid]')) return;
+      setSelBtn(null);
+    };
+    const esc = (e) => { if (e.key === 'Escape') setSelBtn(null); };
+    document.addEventListener('pointerdown', fuera, true);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', fuera, true);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [selBtn]);
 
   // Guardar el comentario anclado a la frase (optimista, con reversión).
   const comentarQuote = async () => {
@@ -881,17 +911,38 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     emitir('comment', { action: 'upsert', row: data });
   };
 
-  // Resalta en el html las frases comentadas (primer match de texto plano, fuera de tags).
+  // Resalta en el html las frases comentadas.
+  //
+  // Buscar la frase EXACTA casi nunca funcionaba: lo que devuelve el navegador al
+  // marcar trae los espacios normalizados, y en el medio suele haber etiquetas
+  // (<strong>, <em>, <br>) que la parten. Resultado: comentario sin su marca.
+  // Ahora se busca palabra por palabra, tolerando espacios y etiquetas inline; si
+  // la selección cruzó párrafos, se marca al menos el primer renglón.
   const highlightHtml = useCallback((html, cmts) => {
+    const rxEsc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ENTRE = '(?:\\s|&nbsp;|<\\/?(?:strong|em|b|i|u|span|small|mark|br)\\b[^>]*>)+';
+    const rxDe = (q, max) => {
+      const w = q.trim().split(/\s+/).filter(Boolean).map(rxEsc);
+      const usar = max ? w.slice(0, max) : w;
+      if (!usar.length) return null;
+      try { return new RegExp('(?![^<]*>)(' + usar.join(ENTRE) + ')'); } catch { return null; }
+    };
     let out = html || '';
     for (const c of cmts) {
       const q = (c.quote || '').trim();
       if (q.length < 2 || c.resolved) continue;
-      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      try {
-        const re = new RegExp('(?![^<]*>)(' + esc + ')');
-        out = out.replace(re, `<mark data-cmt="${c.id}" class="del-cmt">$1</mark>`);
-      } catch { /* frase con caracteres raros: sin resaltar */ }
+      const primer = q.split(/\n/).map(s => s.trim()).find(s => s.length >= 2);
+      const cands = primer && primer !== q ? [q, primer] : [q];
+      let hecho = false;
+      for (const cand of cands) {
+        for (const n of [null, 14, 7, 4]) {
+          const re = rxDe(cand, n);
+          if (!re || !re.test(out)) continue;
+          out = out.replace(re, `<mark data-cmt="${c.id}" class="del-cmt">$1</mark>`);
+          hecho = true; break;
+        }
+        if (hecho) break;
+      }
     }
     return out;
   }, []);
@@ -1383,8 +1434,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // la hoja gana esos ~300px y queda protagonista, tipo Google Docs.
   const showComments = view === 'del' && !editando && comments.length > 0;
 
+  // Ojo: este contenedor NO esconde el botón "Comentar" con onMouseDown. Eso lo
+  // borraba al empezar a marcar y, sobre todo, justo al ir a apretarlo. De
+  // esconderlo se encarga el listener de "tocaste fuera", que respeta el botón.
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }} onMouseDown={() => { if (selBtn) setSelBtn(null); }}>
+    <div ref={scrollRef} className="h-full overflow-y-auto" style={{ background: '#FBFCFD' }}>
       <style>{`
         .del-rich mark.del-cmt{background:#FEF3C7;border-bottom:2px solid #EAB308;border-radius:2px;padding:0 1px;cursor:pointer;transition:background .2s,box-shadow .2s}
         .del-rich mark.del-cmt.is-active{background:#FDBA74;box-shadow:0 0 0 3px rgba(249,115,22,.45);border-bottom-color:#EA580C;animation:delCmtPulse 1.8s ease-out}
@@ -1786,8 +1840,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       solo_ver: { background: '#ECFEFF', color: '#0891B2', borderColor: '#A5F3FC' },
                       solo_equipo: { background: '#F4F5F7', color: '#7A8290', borderColor: '#E2E5EB' },
                     }[s.accion_cliente || 'solo_equipo']}>
-                    <option value="grabarse">🎬 Grabarse</option>
-                    <option value="revisar">Revisar</option>
+                    {/* "Grabarse" SOLO en lo que se graba de verdad (VSL y anuncios).
+                        En una landing no existe grabar: se revisa y se aprueba, y de
+                        ahí pasa a diseño. Ofrecerlo era lo que metía el vocabulario de
+                        grabación en las páginas del funnel. Si alguna quedó marcada
+                        así de antes, la opción se muestra igual para poder sacarla. */}
+                    {(esGrabable(s.kind) || s.accion_cliente === 'grabarse') && <option value="grabarse">🎬 Grabarse</option>}
+                    <option value="revisar">{esGrabable(s.kind) ? 'Revisar' : 'Revisar y aprobar'}</option>
                     <option value="solo_ver">Solo ver</option>
                     <option value="solo_equipo">Solo equipo</option>
                   </select>
@@ -2218,13 +2277,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       </div>
 
       {/* Botón flotante al marcar texto + caja para escribir el comentario. */}
-      {selBtn && !composer && (
-        <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={() => { setComposer({ quote: selBtn.quote, sectionId: selBtn.sectionId, top: selBtn.top, left: selBtn.left }); setDraft(''); setSelBtn(null); }}
-          className="fixed z-[70] inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-[#1A1D26] text-white text-[12px] font-semibold cursor-pointer shadow-lg"
-          style={{ top: Math.max(52, selBtn.top), left: Math.min(Math.max(selBtn.left, 64), (typeof window !== 'undefined' ? window.innerWidth : 1200) - 64), transform: 'translate(-50%,-130%)' }}>
-          <MessageSquare size={13} />Comentar
-        </button>
-      )}
+      {selBtn && !composer && (() => {
+        // Debajo de lo marcado si entra: arriba se superpone con el menú nativo
+        // del teléfono (Copiar / Buscar), que se dibuja justo ahí.
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+        const abajo = (selBtn.bottom ?? selBtn.top) + 10;
+        const cabeAbajo = abajo < vh - 70;
+        return (
+          <button data-sel-btn
+            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onClick={() => { setComposer({ quote: selBtn.quote, sectionId: selBtn.sectionId, top: selBtn.top, left: selBtn.left }); setDraft(''); setSelBtn(null); }}
+            className="fixed z-[70] inline-flex items-center gap-1.5 py-2 px-3.5 rounded-full bg-[#1A1D26] text-white text-[12.5px] font-semibold cursor-pointer shadow-lg select-none"
+            style={{ top: cabeAbajo ? abajo : Math.max(52, selBtn.top - 44), left: Math.min(Math.max(selBtn.left, 70), vw - 70), transform: 'translateX(-50%)', touchAction: 'manipulation' }}>
+            <MessageSquare size={13} />Comentar
+          </button>
+        );
+      })()}
       {composer && (
         /* En mobile el composer va como hoja pegada abajo (el teclado no lo tapa);
            en desktop flota anclado a la frase, como siempre. */

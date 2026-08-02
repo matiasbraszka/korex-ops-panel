@@ -7,9 +7,27 @@ import { supabase } from '@korex/db';
 import { FileOutput, Plus, Loader2, Check } from 'lucide-react';
 import { sanitizeDelHtml } from '../clientes/funnels/delSanitize';
 
-// A qué pestaña (kind) del DEL va cada agente, y cómo se titula la sección exportada.
+// A qué pestaña (kind) del DEL va cada agente por defecto, y cómo se titula la
+// sección exportada. Es solo la sugerencia: el destino se elige a mano (abajo).
 const DEL_KIND = { anuncios: 'anuncios', vsl: 'vsl', landing: 'pg_landing', descubrimiento: 'estrategia' };
 const DEL_LABEL = { anuncios: 'Anuncios (IA)', vsl: 'VSL (IA)', landing: 'Copy del funnel (IA)', descubrimiento: 'Descubrimiento (IA)' };
+
+// Todas las categorías del DEL. Cualquier agente puede escribir en cualquiera:
+// el de VSL puede dejar una idea en Anuncios, el de Descubrimiento en Avatares.
+// Antes el destino lo fijaba el agente y no había forma de cambiarlo.
+const CATEGORIAS = [
+  { kind: 'estrategia', label: 'Estrategia' },
+  { kind: 'avatares', label: 'Avatares' },
+  { kind: 'vsl', label: 'VSL' },
+  { kind: 'anuncios', label: 'Anuncios' },
+  { kind: 'pg_prelanding', label: 'Pre-landing' },
+  { kind: 'pg_landing', label: 'Landing' },
+  { kind: 'pg_formulario', label: 'Formulario' },
+  { kind: 'pg_thankyou', label: 'Thank you' },
+  { kind: 'pg_testimonios', label: 'Testimonios' },
+  { kind: 'mensajes', label: 'Mensajes' },
+  { kind: 'otros', label: 'Otros' },
+];
 
 // Markdown simple → HTML dentro de la whitelist del DEL (h1-h3, p, ul/li, strong, br).
 function mdToHtml(src) {
@@ -62,7 +80,7 @@ export default function SaveToDel({ sel, subagentKey, text, label = 'Guardar en 
     } catch { setSecs([]); }
   };
 
-  const guardar = async (target) => {
+  const guardar = async (target, kindElegido) => {
     setOpen(false); setState('saving'); setMsg('');
     try {
       const html = sanitizeDelHtml(mdToHtml(text || ''));
@@ -81,8 +99,13 @@ export default function SaveToDel({ sel, subagentKey, text, label = 'Guardar en 
           if (docId) await supabase.from('strategy_pages').update({ del_doc_id: docId }).eq('id', sel.funnelId);
         }
         if (!docId) throw new Error('No se pudo ubicar ni crear el DEL de este funnel.');
-        const kind = DEL_KIND[subagentKey] || 'otros';
-        const title = `${DEL_LABEL[subagentKey] || 'Contenido (IA)'} · ${fecha}`;
+        const kind = kindElegido || DEL_KIND[subagentKey] || 'otros';
+        const nombreCat = CATEGORIAS.find((c) => c.kind === kind)?.label;
+        // Si el destino no es el propio del agente, el título lo dice: así en el
+        // DEL se entiende de dónde salió sin tener que abrirlo.
+        const title = kindElegido && kindElegido !== (DEL_KIND[subagentKey] || 'otros')
+          ? `${nombreCat} (IA) · ${fecha}`
+          : `${DEL_LABEL[subagentKey] || 'Contenido (IA)'} · ${fecha}`;
         const { data: secId, error: e2 } = await supabase.rpc('del_section_add', {
           p_doc_id: docId, p_title: title, p_kind: kind, p_after_ord: null, p_by: 'Agente IA',
         });
@@ -122,11 +145,26 @@ export default function SaveToDel({ sel, subagentKey, text, label = 'Guardar en 
       {open && (
         <div className="absolute top-full right-0 mt-1 z-20 bg-white border border-border rounded-xl p-2 grid gap-1 w-[300px] shadow-lg">
           <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text3 px-1 pt-0.5">¿Dónde lo guardo en el DEL?</div>
-          <button onClick={() => guardar('new')}
-            className="flex items-center gap-2 text-left py-1.5 px-2 rounded-lg text-[12.5px] font-semibold text-text cursor-pointer border-none bg-transparent hover:bg-surface2">
-            <Plus size={14} className="text-green shrink-0" /> Crear una pestaña nueva
-            <span className="text-[10.5px] text-text3 font-normal ml-auto">{DEL_LABEL[subagentKey] || 'IA'}</span>
-          </button>
+
+          {/* Pestaña NUEVA, en la categoría que se elija. La del propio agente va
+              primera y marcada; el resto está disponible igual. */}
+          <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-text3 px-1">Crear una pestaña nueva en…</div>
+          <div className="max-h-[176px] overflow-y-auto grid gap-0.5">
+            {[...CATEGORIAS].sort((a, b) => {
+              const propio = DEL_KIND[subagentKey] || 'otros';
+              return (b.kind === propio) - (a.kind === propio);
+            }).map((c) => {
+              const propio = c.kind === (DEL_KIND[subagentKey] || 'otros');
+              return (
+                <button key={c.kind} onClick={() => guardar('new', c.kind)}
+                  className="flex items-center gap-2 text-left py-1.5 px-2 rounded-lg text-[12.5px] font-semibold text-text cursor-pointer border-none bg-transparent hover:bg-surface2">
+                  <Plus size={14} className={propio ? 'text-green shrink-0' : 'text-text3 shrink-0'} /> {c.label}
+                  {propio && <span className="text-[10px] text-green font-bold ml-auto">sugerida</span>}
+                </button>
+              );
+            })}
+          </div>
+
           {secs === null && <div className="px-2 py-1 text-[12px] text-text3">Cargando pestañas…</div>}
           {Array.isArray(secs) && secs.length > 0 && (
             <>
