@@ -281,11 +281,17 @@ Deno.serve(async (req) => {
   // importante para escribir a la medida de quien de verdad va a estar en cámara.
   // El ENCARGADO 1 es SIEMPRE el propio cliente (collaboratorId === "cliente"): su perfil es el
   // BRIEF/onboarding de arriba, no hace falta cargar otro. El resto son encargados adicionales.
+  // Regla de voces (determinística, para NO mezclar historias sin que lo pidan):
+  //   · Quien está seleccionado en "Encargado" es QUIEN HABLA. Su historia/anécdotas/"yo" son
+  //     las únicas que van en el guión.
+  //   · Si el encargado NO es el cliente, el BRIEF del líder queda como CONTEXTO DEL NEGOCIO
+  //     (oferta/nicho/avatar/restricciones), nunca como la historia personal del que habla.
+  //   · Combinar dos historias (a dos voces) SOLO si el usuario lo pide en el mensaje.
   let encargadoBlock = "";
   if (collaboratorId === "cliente") {
-    encargadoBlock = `\n— QUIÉN SE GRABA (ENCARGADO 1): ${str(client?.name) || "el cliente"} (el propio titular) —\n`
-      + "El que aparece en cámara es el mismo cliente: escribí en PRIMERA PERSONA como él, con la historia y personalidad del BRIEF de arriba. "
-      + "Si en el onboarding se ve que quiere grabarse JUNTO a otra persona (su pareja, un socio), podés proponer además una versión en combinación (dos voces / \"nosotros\"), aunque esa otra persona no tenga un perfil cargado.";
+    encargadoBlock = `\n— QUIÉN HABLA EN CÁMARA: ${str(client?.name) || "el cliente"} (el titular) —\n`
+      + "Graba el propio cliente. Escribí en PRIMERA PERSONA como él/ella: su historia, sus anécdotas y su voz son las del BRIEF de arriba. "
+      + "Una sola voz, salvo que en el pedido te digan EXPRESAMENTE que lo hagas a dos voces (con su pareja/socio); recién ahí combinás.";
   } else if (collaboratorId) {
     const [{ data: colabRow }, { data: perfilRow }] = await Promise.all([
       supabase.from("portal_collaborators").select("full_name,role").eq("id", collaboratorId).maybeSingle(),
@@ -294,10 +300,14 @@ Deno.serve(async (req) => {
     const encargadoNombre = str(colabRow?.full_name);
     const encargadoText = clip(str(perfilRow?.text), 4000);
     if (encargadoText || encargadoNombre) {
-      encargadoBlock = `\n— QUIÉN SE GRABA (ENCARGADO DE GRABACIÓN)${encargadoNombre ? `: ${encargadoNombre}` : ""} —\n`
-        + "Esta es la persona real que va a estar en cámara: hablá en su voz, usá su historia y su personalidad, y no le pongas en boca cosas que no encajan con ella."
-        + (encargadoText ? `\nSu perfil (respondido por ella misma):\n${encargadoText}` : "")
-        + "\nSi se graba en combinación con el cliente u otra persona, podés proponer además una versión a dos voces.";
+      encargadoBlock = `\n— QUIÉN HABLA EN CÁMARA${encargadoNombre ? `: ${encargadoNombre}` : ""} (NO es el cliente titular) —\n`
+        + "REGLA DURA sobre las voces:\n"
+        + `· El "yo", la historia personal, las anécdotas y el tono salen SOLO de esta persona (su perfil, abajo). Escribí en SU voz.\n`
+        + "· El BRIEF / PERSONALIDAD DEL LÍDER de arriba es CONTEXTO DEL NEGOCIO (nicho, oferta, promesa, restricciones, avatar), NO la historia personal de quien habla. NO mezcles la vida del cliente titular con la de esta persona, ni le pongas en boca lo que le pasó al otro.\n"
+        + `· Combiná las dos historias (a dos voces / "nosotros") SOLO si te lo piden explícitamente en el mensaje. Por defecto: una sola voz, la de esta persona.`
+        + (encargadoText
+          ? `\n\nPerfil de quien habla (respondido por ella misma):\n${encargadoText}`
+          : "\n\n(Todavía no cargó su perfil: pedí los datos que falten o trabajá con lo que haya, SIN inventarle una historia.)");
     }
   }
 
