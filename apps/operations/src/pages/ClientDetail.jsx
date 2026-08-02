@@ -13,7 +13,6 @@ import FunnelsView from '../components/clientes/FunnelsView';
 import ContratoTab from '../components/clientes/ContratoTab';
 import DmeClientPanel from '../components/dme/DmeClientPanel';
 import EditClientModal from '../components/clientes/EditClientModal';
-import MetaAdAccountsManager from '../components/clientes/MetaAdAccountsManager';
 import ObjetivosView from '../components/tareas/ObjetivosView';
 import SatisfaccionTab from '../components/clientes/SatisfaccionTab';
 
@@ -270,7 +269,13 @@ export default function ClientDetail({ client: c }) {
                         ) : (
                         m.pauseReason ? <div className="text-[12px] text-red py-3">{'⚠'} {m.pauseReason}</div> : <div className="text-center text-text3 text-xs py-6" style={{ color: '#9CA3AF' }}>Sin datos de publicidad recientes</div>
                       )}
-                      <MetaAdAccountsManager client={c} updateClient={updateClient} />
+                      {/* Las cuentas publicitarias se cargaban acá Y en Links, con
+                          dos formularios distintos sobre el mismo dato (y solo uno
+                          dejaba elegir la divisa). Ahora viven en un solo lugar:
+                          Funnels › el funnel › Configuración de Meta y links. */}
+                      <div className="mt-3 pt-3 border-t border-border text-[11.5px] text-text3">
+                        Las cuentas publicitarias se cargan en <strong className="text-text2">Funnels › Configuración de Meta y links</strong>, junto con su divisa.
+                      </div>
                     </div>
                   );
                 })()}

@@ -2,13 +2,31 @@ import { useApp } from '../context/AppContext';
 import { initials } from '../utils/helpers';
 import KpiRow from '../components/KpiRow';
 
-// Approximate exchange rates — updated by agent when it runs
-const RATES_TO_USD = { USD: 1, EUR: 1.08, MXN: 0.058 };
+// Tipos de cambio a USD. Mismos valores que motor_config.fx_rates del motor de
+// métricas, para que las dos vistas den el mismo número.
+const RATES_TO_USD = { USD: 1, EUR: 1.08, MXN: 0.058, ARS: 0.000909, COP: 0.000238, CLP: 0.00102 };
 
 function toUSD(amount, currency) {
   if (!amount) return 0;
   const rate = RATES_TO_USD[currency] || 1;
   return amount * rate;
+}
+
+// Divisa con la que convertir el gasto de un cliente. metaMetrics.currency es una
+// sola por cliente (la de la cuenta que más gastó en la corrida), así que para
+// quien tiene cuentas en dos monedas se queda corta: en ese caso mandan las
+// cuentas cargadas en Links, que es donde se declara la divisa de cada una.
+function monedaDe(c) {
+  const cuentas = (c.metaAds || []).filter((a) => a.status !== 'interna' && a.currency);
+  const unicas = [...new Set(cuentas.map((a) => String(a.currency).toUpperCase()))];
+  if (unicas.length === 1) return unicas[0];
+  return c.metaMetrics?.currency || unicas[0] || 'USD';
+}
+// true si el cliente tiene cuentas en monedas distintas: ahí el total del panel es
+// una aproximación (el gasto viene mezclado desde Meta) y conviene avisarlo.
+function monedaMixta(c) {
+  const u = [...new Set((c.metaAds || []).filter((a) => a.status !== 'interna' && a.currency).map((a) => String(a.currency).toUpperCase()))];
+  return u.length > 1;
 }
 
 export default function PublicidadPage() {
@@ -20,11 +38,9 @@ export default function PublicidadPage() {
   const pausedClients = clientsWithAds.filter(c => !c.metaMetrics || !c.metaMetrics.adsActive);
   const noAds = clients.filter(c => !isKorexClient(c) && (!c.metaAds || c.metaAds.length === 0 || c.metaAds.every(a => a.status === 'interna')));
 
-  // Total spend converted to USD
-  const totalSpend7dUSD = activeClients.reduce((s, c) => {
-    const m = c.metaMetrics;
-    return s + toUSD(m?.totalSpend7d || 0, m?.currency || 'USD');
-  }, 0);
+  // Total en USD. Antes usaba metaMetrics.currency a secas: cuando ese campo no
+  // estaba escrito caía a USD y sumaba euros como si fueran dólares.
+  const totalSpend7dUSD = activeClients.reduce((s, c) => s + toUSD(c.metaMetrics?.totalSpend7d || 0, monedaDe(c)), 0);
   const totalLeads7d = activeClients.reduce((s, c) => s + (c.metaMetrics?.totalConversions7d || 0), 0);
 
   const openClient = (id) => { setSelectedId(id); setView('clients'); };
@@ -50,7 +66,7 @@ export default function PublicidadPage() {
           <div className="grid gap-3.5 mb-5 max-md:gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))' }}>
             {activeClients.map(c => {
               const m = c.metaMetrics;
-              const curr = m.currency || 'USD';
+              const curr = monedaDe(c);
               return (
                 <div key={c.id} className="bg-white border border-border rounded-xl py-4 px-[18px] cursor-pointer transition-all duration-150 hover:border-blue hover:shadow-sm max-md:py-3 max-md:px-3" onClick={() => openClient(c.id)}>
                   <div className="flex items-center gap-2.5 mb-3">
@@ -74,6 +90,11 @@ export default function PublicidadPage() {
                     <div className="flex justify-between items-center text-[11px] text-text2 py-1"><span>CTR</span><strong>{m.ctr7d?.toFixed(2) || '\u2014'}%</strong></div>
                   </div>
                   <div className="mt-2 text-[10px] text-text3">Actualizado: {m.lastUpdated || '\u2014'}{curr !== 'USD' && <span className="ml-1">({curr} convertido a USD)</span>}</div>
+                  {monedaMixta(c) && (
+                    <div className="mt-1 text-[10px]" style={{ color: '#B45309' }} title="Este cliente tiene cuentas en monedas distintas. Meta entrega el gasto ya sumado, as\u00ed que el total se convierte con una sola tasa y es aproximado.">
+                      \u26a0\ufe0f Cuentas en varias monedas \u00b7 total aproximado
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -103,7 +124,7 @@ export default function PublicidadPage() {
               {sortedWithAds.map(c => {
                 const m = c.metaMetrics || {};
                 const isActive = m.adsActive;
-                const curr = m.currency || 'USD';
+                const curr = monedaDe(c);
                 return (
                   <tr key={c.id} className="cursor-pointer hover:bg-blue-bg2" style={!isActive ? { opacity: 0.7 } : {}} onClick={() => openClient(c.id)}>
                     <td className="py-2 px-2.5 border border-border">

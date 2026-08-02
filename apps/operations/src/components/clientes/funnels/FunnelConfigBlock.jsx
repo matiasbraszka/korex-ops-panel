@@ -238,6 +238,23 @@ export default function FunnelConfigBlock({ f, onUpdate, events, onTrack }) {
                         onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                         className={inputFila + ' text-[11px] text-[#9098A4]'} style={mono} />
                     </div>
+                    {/* DIVISA de la cuenta. Es el dato que necesita el motor de
+                        métricas para no sumar euros con dólares: el gasto viene de
+                        Meta en moneda local y acá se declara cuál es. Todo termina
+                        convertido a USD. */}
+                    <select value={a.currency || 'USD'} title="Divisa de esta cuenta publicitaria · el motor convierte todo a USD"
+                      onChange={(e) => guardarCuentas(cuentas.map((x, j) => j === i ? { ...x, currency: e.target.value } : x))}
+                      className="shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold border border-[#E2E5EB] bg-white text-[#4B5563] cursor-pointer outline-none">
+                      {['USD', 'EUR', 'MXN', 'ARS', 'COP', 'CLP'].map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select value={a.status || 'activa'} title="Estado de la cuenta. Las internas no entran en las métricas del cliente."
+                      onChange={(e) => guardarCuentas(cuentas.map((x, j) => j === i ? { ...x, status: e.target.value } : x))}
+                      className="shrink-0 py-1 px-1.5 rounded-md text-[11px] font-bold border cursor-pointer outline-none"
+                      style={(a.status || 'activa') === 'activa' ? { background: '#ECFDF5', color: '#15803D', borderColor: '#BBF7D0' } : { background: '#F4F5F7', color: '#6B7280', borderColor: '#E2E5EB' }}>
+                      <option value="activa">Activa</option>
+                      <option value="pausada">Pausada</option>
+                      <option value="interna">Interna</option>
+                    </select>
                     <button onClick={() => accId && copyText(accId)} title="Copiar el ID" className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#9CA3AF] cursor-pointer hover:text-[#2E69E0] hover:border-[#C7D2FE] shrink-0"><Copy size={12} /></button>
                     <button onClick={() => { if (window.confirm(`¿Sacar la cuenta "${a.name || accId}" del cliente?`)) guardarCuentas(cuentas.filter((_, j) => j !== i)); }} title="Sacar esta cuenta"
                       className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E2E5EB] bg-white text-[#C3C9D4] cursor-pointer hover:text-[#EF4444] hover:border-[#FECACA] shrink-0"><Trash2 size={12} /></button>

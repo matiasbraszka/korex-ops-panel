@@ -11,20 +11,26 @@
 --   Korex               |    5 |   1.920,78 | idem, con el nombre acortado
 --
 -- Los 5 "Korex" de julio (286,20 / 381,80 / 763,60 / 190,90 / 298,28) coinciden
--- EXACTO en monto y fecha con filas de stripe_payouts. Es plata real entrando:
--- filtrarlos borraria ~190k de ingresos y romperia la trazabilidad Stripe->Mercury.
--- Las transferencias internas de verdad ya se excluyen por otro lado (kind
--- 'internalTransfer' y los counterparty 'Mercury Checking%' / 'Mercury Savings%'),
--- y esos filtros quedan intactos.
+-- EXACTO en monto y fecha con filas de stripe_payouts. Las transferencias internas
+-- de verdad ya se excluyen por otro lado (kind 'internalTransfer' y los
+-- counterparty 'Mercury Checking%' / 'Mercury Savings%'), y esos filtros quedan
+-- intactos.
 --
--- Lo que SI habia era el bug opuesto: Mercury acorto el nombre de "Korex Project
--- LL" a "Korex" el 22/07/2026, y el matcher buscaba 'Korex Project%'. Desde esa
--- fecha los payouts dejaron de marcarse como "Pago de Stripe": se perdio el chip
--- morado, el desglose de clientes que componen cada payout y el cruce con
--- stripe_payouts_x / stripe_charges_x.
+-- Decision de Matias: esos movimientos NO se muestran en la pestana de Ingresos.
+-- Son plata que ya se conto en Stripe y que recien aterriza en Mercury; listarlos
+-- ahi la duplicaba. El filtro se hace en la PANTALLA (MercuryPage), que es el unico
+-- consumidor de esta vista — verificado por grep. Nada de mercury_transactions ni
+-- del area de Finanzas se toca: no hay riesgo de mover un numero contable.
+--
+-- Para poder filtrarlos primero hay que reconocerlos, y ahi estaba el bug: Mercury
+-- acorto el nombre de "Korex Project LL" a "Korex" el 22/07/2026, y el matcher
+-- buscaba 'Korex Project%'. Desde esa fecha los payouts dejaron de marcarse como
+-- Stripe: se perdio el chip morado, el desglose de clientes de cada payout y el
+-- cruce con stripe_payouts_x / stripe_charges_x.
 --
 -- Fix: ampliar el patron a 'Korex%'. Verificado que no genera falsos positivos —
--- no existe ningun ingreso con 'korex' en el nombre que no sea un payout.
+-- no existe ningun ingreso con 'korex' en el nombre que no sea un payout. Esta
+-- migracion solo redefine VISTAS (calculo de lectura): no altera ni una fila.
 --
 -- Base: la definicion viva sacada con pg_get_viewdef (coincide con
 -- migrations/stripe_v4_setup_traceid_arrival.sql).

@@ -241,7 +241,12 @@ export default function MercuryPage() {
       supabase.from('stripe_payout_items')
         .select('payout_id, customer_name, customer_email, product_name, category, category_auto, client_id, charge_amount, charge_currency, net_usd, type'),
     ]);
-    setIngresos(ingRes.data || []);
+    // Los payouts de Stripe (llegan como "Korex Project LL" o, desde el 22/07/2026,
+    // como "Korex") NO son un ingreso nuevo: es plata que ya se contó en Stripe y
+    // que recién ahora aterriza en Mercury. Mostrarlos acá la duplicaba.
+    // Se filtran SOLO de esta pantalla: la vista, las transacciones y todo el área
+    // de Finanzas quedan intactas.
+    setIngresos((ingRes.data || []).filter((i) => !i.is_stripe_payout));
     setStripeItems(itRes.data || []);
     setIngLoading(false);
   }, []);
@@ -261,6 +266,9 @@ export default function MercuryPage() {
     return m;
   }, [stripeItems]);
 
+  // `ingresos` ya viene sin los payouts de Stripe, así que el total es lo que
+  // entró por fuera de Stripe. stripe/nStripe quedan en 0 y el resumen no los
+  // muestra (ver el bloque "De Stripe" más abajo, que se apaga solo).
   const ingSummary = useMemo(() => {
     let total = 0, stripe = 0, nStripe = 0;
     for (const i of ingresos) {
