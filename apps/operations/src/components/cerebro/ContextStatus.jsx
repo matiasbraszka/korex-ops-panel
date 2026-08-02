@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@korex/db';
 import { CheckCircle2, AlertTriangle, FileText, BookOpen, Layers, Trophy, Cpu, Loader2 } from 'lucide-react';
+import { MARKETING_AGENTS } from './agents';
 
 function StatCard({ Icon, label, value, sub, ok = true }) {
   return (
@@ -22,7 +23,8 @@ function StatCard({ Icon, label, value, sub, ok = true }) {
   );
 }
 
-export default function ContextStatus({ subagentKey = 'anuncios' }) {
+export default function ContextStatus({ subagentKey: initialKey = 'anuncios' }) {
+  const [agentKey, setAgentKey] = useState(initialKey);
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,7 +34,9 @@ export default function ContextStatus({ subagentKey = 'anuncios' }) {
     const CORPUS = {
       anuncios: { blueprintId: 'mal_blueprint', example: 'example', section: 'blueprint_section' },
       vsl: { blueprintId: 'mal_vsl_blueprint', example: 'vsl_ficha', section: 'vsl_section' },
+      landing: { blueprintId: 'mal_cf_blueprint', example: 'cf_ficha', section: 'cf_section' },
     };
+    const subagentKey = agentKey;
     const c = CORPUS[subagentKey] || CORPUS.anuncios;
     const [{ data: subs }, { data: bp }, { data: mats }, { data: examples }, { data: sections }, { data: cands }, { data: apiRow }] = await Promise.all([
       supabase.from('marketing_subagents').select('key,name,instructions,updated_at').order('position'),
@@ -68,15 +72,38 @@ export default function ContextStatus({ subagentKey = 'anuncios' }) {
       empties: (subs || []).filter(s => s.key !== 'general' && !(s.instructions || '').trim()).map(s => s.name),
     });
     setLoading(false);
-  }, [subagentKey]);
+  }, [agentKey]);
   useEffect(() => { load(); }, [load]);
 
-  if (loading || !state) return <div className="text-[#9CA3AF] text-center py-16 text-[13px]"><Loader2 size={18} className="animate-spin inline mr-2" />Cargando estado…</div>;
+  const subagentKey = agentKey; // alias para el JSX de abajo (mantiene las condiciones por-agente)
+
+  const Selector = (
+    <div className="flex gap-1.5 flex-wrap">
+      {MARKETING_AGENTS.map((a) => {
+        const on = a.key === agentKey;
+        return (
+          <button key={a.key} onClick={() => setAgentKey(a.key)}
+            className="py-1.5 px-3 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
+            style={on ? { background: '#EEF2FF', borderColor: '#5B7CF5', color: '#1A1D26' } : { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }}>
+            {a.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (loading || !state) return (
+    <div className="grid gap-4">
+      {Selector}
+      <div className="text-[#9CA3AF] text-center py-16 text-[13px]"><Loader2 size={18} className="animate-spin inline mr-2" />Cargando estado…</div>
+    </div>
+  );
 
   const nicheList = Object.entries(state.nicheCounts).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="grid gap-4">
+      {Selector}
       <div>
         <div className="text-[15px] font-bold text-[#1A1D26]">Qué tiene cargado el agente de {state.specialistName}</div>
         <p className="text-[12.5px] text-[#6B7280] mt-1">Todo esto entra automáticamente en el contexto del agente cada vez que le escribís. Verde = listo; amarillo = conviene completarlo.</p>
@@ -84,7 +111,7 @@ export default function ContextStatus({ subagentKey = 'anuncios' }) {
 
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}>
         <StatCard Icon={FileText} label="Instrucciones" value={`${state.instrLen.toLocaleString('es-AR')} car.`} ok={state.instrLen > 500} sub={state.instrLen > 500 ? 'El "skill" del agente' : 'Está corto — reforzalo'} />
-        <StatCard Icon={BookOpen} label="Resumen del método (siempre activo)" value={`${state.blueprintLen.toLocaleString('es-AR')} car.`} ok={state.blueprintLen > 500} sub={subagentKey === 'vsl' ? 'Núcleo + esqueleto de 10 secciones' : 'Base + tabla de compliance Meta'} />
+        <StatCard Icon={BookOpen} label="Resumen del método (siempre activo)" value={`${state.blueprintLen.toLocaleString('es-AR')} car.`} ok={state.blueprintLen > 500} sub={subagentKey === 'vsl' ? 'Núcleo + esqueleto de 10 secciones' : subagentKey === 'landing' ? 'Estructura de páginas del funnel' : 'Base + tabla de compliance Meta'} />
         <StatCard Icon={BookOpen} label="Secciones del blueprint (buscables)" value={`${state.sectionCount}`} ok={state.sectionCount > 0} sub="El método completo, por sección" />
         <StatCard Icon={Layers} label="Material de capacitación" value={`${state.materialCount}`} ok={state.materialCount > 0} sub="Guías, ejemplos, reglas" />
         <StatCard Icon={Trophy} label={subagentKey === 'vsl' ? 'VSLs de la biblioteca (buscables)' : 'Ejemplos buscables por nicho'} value={`${state.exampleCount}`} ok={state.exampleCount > 0}

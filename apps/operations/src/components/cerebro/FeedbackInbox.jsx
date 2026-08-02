@@ -3,7 +3,16 @@
 // el cambio al toque (llama a apply-improvement): un ejemplo entra a la biblioteca; una regla edita las instrucciones.
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@korex/db';
-import { MessageSquareHeart, Check, X, Loader2, Sparkles, BookOpen, ScrollText, StickyNote, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { MessageSquareHeart, Check, X, Loader2, Sparkles, BookOpen, ScrollText, StickyNote, ThumbsUp, ThumbsDown, Plus, Pencil } from 'lucide-react';
+
+const AGENTES = [
+  { key: 'general', label: 'General (todos)' },
+  { key: 'anuncios', label: 'Anuncios' },
+  { key: 'vsl', label: 'VSL' },
+  { key: 'landing', label: 'Landing' },
+  { key: 'descubrimiento', label: 'Descubrimiento' },
+];
+const imp_input = 'w-full py-2 px-3 text-[13px] border border-[#E2E5EB] rounded-lg outline-none focus:border-[#5B7CF5] bg-white';
 
 const KIND = {
   example: { label: 'Ejemplo', Icon: BookOpen, color: '#16A34A', bg: '#E6F7EE', hint: 'Entra a la biblioteca (barato, no infla el prompt)' },
@@ -43,6 +52,86 @@ function ProposalCard({ p, onApprove, onReject }) {
       <div className="flex gap-2 mt-2.5 justify-end">
         <button onClick={() => act(() => onReject(p))} disabled={busy} className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[12px] font-semibold cursor-pointer border border-[#E2E5EB] text-[#6B7280] bg-white hover:bg-[#F9FAFB] disabled:opacity-50"><X size={14} /> Descartar</button>
         <button onClick={() => act(() => onApprove(p))} disabled={busy} className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50" style={{ background: '#16A34A' }}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Aprobar y aplicar</button>
+      </div>
+    </div>
+  );
+}
+
+// Cargar una mejora a mano (sin esperar feedback del chat). Entra como propuesta y se aprueba/aplica igual.
+function ManualImprovement({ onAdded }) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState('example');
+  const [agent, setAgent] = useState('anuncios');
+  const [title, setTitle] = useState('');
+  const [rationale, setRationale] = useState('');
+  const [content, setContent] = useState('');   // para 'example'
+  const [niche, setNiche] = useState('');        // para 'example'
+  const [find, setFind] = useState('');          // para 'rule'
+  const [replace, setReplace] = useState('');    // para 'rule'
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => { setKind('example'); setAgent('anuncios'); setTitle(''); setRationale(''); setContent(''); setNiche(''); setFind(''); setReplace(''); };
+
+  const ready = title.trim() && (
+    (kind === 'example' && content.trim()) ||
+    (kind === 'rule' && find.trim() && replace.trim()) ||
+    (kind === 'note')
+  );
+
+  const save = async () => {
+    if (!ready) return;
+    setBusy(true);
+    const payload = kind === 'example' ? { content: content.trim(), niche: niche.trim() || null }
+      : kind === 'rule' ? { find: find.trim(), replace: replace.trim() }
+      : {};
+    const { error } = await supabase.from('agent_improvements').insert({
+      id: `imp_man_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      subagent_key: agent, kind, title: title.trim(), rationale: rationale.trim() || null,
+      cost_note: kind === 'rule' ? 'Edita las instrucciones del agente' : null,
+      payload, status: 'proposed',
+    });
+    setBusy(false);
+    if (error) { alert('No se pudo guardar: ' + error.message); return; }
+    reset(); setOpen(false); onAdded();
+  };
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-[12.5px] font-semibold cursor-pointer border border-[#E2E5EB] bg-white text-[#4B5563] hover:border-[#5B7CF5]"><Plus size={14} /> Cargar mejora a mano</button>
+  );
+  return (
+    <div className="bg-[#FAFBFC] border border-[#E2E5EB] rounded-xl p-3.5 grid gap-2.5 w-full max-w-[560px]">
+      <div className="text-[12.5px] font-bold text-[#1A1D26] flex items-center gap-1.5"><Pencil size={14} /> Cargar una mejora a mano (entra como propuesta para aprobar)</div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {Object.entries(KIND).map(([k, meta]) => {
+          const on = k === kind; const I = meta.Icon;
+          return (
+            <button key={k} onClick={() => setKind(k)} className="inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border"
+              style={on ? { background: meta.bg, borderColor: meta.color, color: meta.color } : { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }}>
+              <I size={14} /> {meta.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+        <select className={imp_input} value={agent} onChange={(e) => setAgent(e.target.value)}>
+          {AGENTES.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
+        </select>
+        <input className={imp_input} placeholder="Título de la mejora" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </div>
+      <input className={imp_input} placeholder="Por qué / contexto (opcional)" value={rationale} onChange={(e) => setRationale(e.target.value)} />
+      {kind === 'example' && <>
+        <input className={imp_input} placeholder="Nicho (opcional)" value={niche} onChange={(e) => setNiche(e.target.value)} />
+        <textarea className={imp_input + ' resize-y min-h-[90px] leading-relaxed'} placeholder="El ejemplo que querés que el agente tenga en cuenta…" value={content} onChange={(e) => setContent(e.target.value)} />
+      </>}
+      {kind === 'rule' && <>
+        <textarea className={imp_input + ' resize-y min-h-[54px]'} placeholder="Texto actual de la instrucción a cambiar (Saca)…" value={find} onChange={(e) => setFind(e.target.value)} />
+        <textarea className={imp_input + ' resize-y min-h-[54px]'} placeholder="Texto nuevo (Pone)…" value={replace} onChange={(e) => setReplace(e.target.value)} />
+      </>}
+      <div className="flex gap-2 justify-end">
+        <button onClick={() => { reset(); setOpen(false); }} className="py-1.5 px-3 rounded-lg text-[12px] font-semibold cursor-pointer border border-[#E2E5EB] bg-white text-[#6B7280]">Cancelar</button>
+        <button onClick={save} disabled={busy || !ready} className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50" style={{ background: '#5B7CF5' }}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Guardar propuesta
+        </button>
       </div>
     </div>
   );
@@ -94,9 +183,12 @@ export default function FeedbackInbox() {
           <div className="text-[15px] font-bold text-[#1A1D26] flex items-center gap-2"><MessageSquareHeart size={17} className="text-[#5B7CF5]" /> Feedback y mejoras</div>
           <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[600px]">El equipo deja feedback en el chat; cada día se procesa en lote y acá aparecen las propuestas. Aprobá las que quieras y se aplican solas. La mayoría suma <b>ejemplos</b> a la biblioteca (no infla el agente); las <b>reglas</b> son raras y se editan con tu OK.</p>
         </div>
-        <button onClick={analyzeNow} disabled={analyzing || fbStats.nuevos === 0} title={fbStats.nuevos === 0 ? 'No hay feedback nuevo' : 'Procesar el feedback ahora'} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-white text-[12.5px] font-semibold cursor-pointer disabled:opacity-40" style={{ background: '#5B7CF5' }}>
-          {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Analizar ahora
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <ManualImprovement onAdded={load} />
+          <button onClick={analyzeNow} disabled={analyzing || fbStats.nuevos === 0} title={fbStats.nuevos === 0 ? 'No hay feedback nuevo del chat para procesar' : 'Procesar el feedback ahora'} className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-white text-[12.5px] font-semibold cursor-pointer disabled:opacity-40" style={{ background: '#5B7CF5' }}>
+            {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Analizar ahora
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -110,8 +202,14 @@ export default function FeedbackInbox() {
         : proposals.length === 0
           ? <div className="text-center py-14 px-5 border border-dashed border-[#D8DDE6] rounded-2xl">
               <MessageSquareHeart size={26} className="text-[#C3C9D4] mx-auto mb-2" />
-              <div className="text-[13px] font-semibold text-[#4B5563]">No hay propuestas pendientes</div>
-              <div className="text-[12px] text-[#9098A4] mt-1 max-w-[440px] mx-auto">Cuando el equipo deje feedback en el chat, cada día vas a ver acá las propuestas de mejora ya razonadas, listas para aprobar. También podés apretar "Analizar ahora".</div>
+              <div className="text-[13px] font-semibold text-[#4B5563]">Todavía no hay propuestas</div>
+              <div className="text-[12px] text-[#9098A4] mt-1 max-w-[480px] mx-auto">
+                Esta bandeja se llena solita: cuando alguien del equipo toca <b>👍 / 👎</b> en las respuestas de un agente (dentro del chat de Agentes), cada día se procesan en lote y aparecen acá las mejoras razonadas para aprobar.
+                {fbStats.nuevos === 0
+                  ? ' Ahora mismo no hay ningún 👍/👎 sin procesar, por eso está vacío.'
+                  : ` Hay ${fbStats.nuevos} sin procesar — tocá “Analizar ahora”.`}
+                <br />También podés usar <b>“Cargar mejora a mano”</b> arriba para anotar una vos mismo.
+              </div>
             </div>
           : <div className="grid gap-3">{proposals.map(p => <ProposalCard key={p.id} p={p} onApprove={approve} onReject={reject} />)}</div>}
     </div>

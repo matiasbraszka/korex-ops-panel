@@ -168,7 +168,7 @@ const TABS = [
   { key: 'capacitacion', label: 'Capacitación', Icon: GraduationCap },
   { key: 'estado', label: 'Estado del agente', Icon: Gauge },
   { key: 'blueprint', label: 'Blueprint y Compliance', Icon: BookOpen },
-  { key: 'ganadores', label: 'Candidatos a ganador', Icon: Trophy },
+  { key: 'ganadores', label: 'Ganadores y bitácora', Icon: Trophy },
   { key: 'feedback', label: 'Feedback y mejoras', Icon: MessageSquareHeart },
 ];
 
@@ -221,7 +221,7 @@ export default function CerebroPage() {
         <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg" style={{ background: '#EEF2FF', color: BLUE }}><Brain size={18} /></div>
         <h1 className="text-[22px] font-extrabold text-text">Configuración de agentes</h1>
       </div>
-      <p className="text-[13px] text-text3 mb-4">Entrená a cada agente, mirá qué tiene cargado, editá el blueprint con el compliance de Meta y aprobá los anuncios ganadores.</p>
+      <p className="text-[13px] text-text3 mb-4">Entrená a cada agente (Anuncios, VSL, Landing…), mirá qué tiene cargado, editá el blueprint de cada uno y gestioná la bitácora de ganadores.</p>
 
       {/* Barra de pestañas */}
       <div className="flex gap-1.5 mb-5 border-b border-[#EEF0F4] flex-wrap">
@@ -281,6 +281,11 @@ export default function CerebroPage() {
             {/* Material */}
             <div>
               <div className="text-[13px] font-bold text-[#1A1D26] mb-2">Material de entrenamiento</div>
+              {['anuncios', 'vsl', 'landing'].includes(selected) && (
+                <div className="text-[11.5px] text-[#6B7280] bg-[#F4F5F7] border border-[#E7E9ED] rounded-lg px-3 py-2 mb-2.5">
+                  Ojo: acá solo ves el material que subiste <b>a mano</b>. Además, este agente lee una <b>biblioteca de referencia</b> mucho más grande (ejemplos, fichas, guiones) — mirala en las pestañas <b>Estado del agente</b> y <b>Ganadores y bitácora</b>.
+                </div>
+              )}
               <div className="mb-3"><AddMaterial scope={selected} onAdded={() => loadMaterial(selected)} /></div>
               {regular.length === 0
                 ? <div className="text-[12.5px] text-[#9CA3AF] py-3">Todavía no hay material. Agregá guías, ejemplos, reglas, links o archivos arriba.</div>

@@ -4,27 +4,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@korex/db';
 import { BookOpen, Save, Loader2, ShieldCheck } from 'lucide-react';
+import { BLUEPRINT_AGENTS } from './agents';
 
 const BLUE = '#5B7CF5';
 const COMPLIANCE_MARK = 'GUARDIA DE COMPLIANCE META';
 
 export default function BlueprintEditor() {
+  const [agentKey, setAgentKey] = useState('anuncios');
   const [content, setContent] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const taRef = useRef(null);
 
+  const agent = BLUEPRINT_AGENTS.find((a) => a.key === agentKey) || BLUEPRINT_AGENTS[0];
+  const blueprintId = agent.blueprintId;
+
   const load = useCallback(async () => {
-    const { data } = await supabase.from('marketing_ad_library').select('content').eq('id', 'mal_blueprint').maybeSingle();
+    setLoading(true);
+    const { data } = await supabase.from('marketing_ad_library').select('content').eq('id', blueprintId).maybeSingle();
     setContent(data?.content || '');
     setDirty(false); setLoading(false);
-  }, []);
+  }, [blueprintId]);
   useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     setSaving(true);
-    await supabase.from('marketing_ad_library').update({ content, char_count: content.length }).eq('id', 'mal_blueprint');
+    await supabase.from('marketing_ad_library').update({ content, char_count: content.length }).eq('id', blueprintId);
     setDirty(false); setSaving(false);
   };
 
@@ -41,14 +47,35 @@ export default function BlueprintEditor() {
 
   const hasCompliance = content.includes(COMPLIANCE_MARK);
 
-  if (loading) return <div className="text-[#9CA3AF] text-center py-16 text-[13px]"><Loader2 size={18} className="animate-spin inline mr-2" />Cargando blueprint…</div>;
+  const Selector = (
+    <div className="flex gap-1.5 flex-wrap">
+      {BLUEPRINT_AGENTS.map((a) => {
+        const on = a.key === agentKey;
+        return (
+          <button key={a.key} onClick={() => { setDirty(false); setAgentKey(a.key); }}
+            className="py-1.5 px-3 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
+            style={on ? { background: '#EEF2FF', borderColor: BLUE, color: '#1A1D26' } : { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }}>
+            {a.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (loading) return (
+    <div className="grid gap-3">
+      {Selector}
+      <div className="text-[#9CA3AF] text-center py-16 text-[13px]"><Loader2 size={18} className="animate-spin inline mr-2" />Cargando blueprint…</div>
+    </div>
+  );
 
   return (
     <div className="grid gap-3">
+      {Selector}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[15px] font-bold text-[#1A1D26] flex items-center gap-2"><BookOpen size={17} className="text-[#5B7CF5]" /> Blueprint maestro de anuncios</div>
-          <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[620px]">El método oficial que el agente sigue al pie: ángulos, hooks, textos base y la <strong>Guardia de Compliance de Meta</strong>. {content.length.toLocaleString('es-AR')} caracteres.</p>
+          <div className="text-[15px] font-bold text-[#1A1D26] flex items-center gap-2"><BookOpen size={17} className="text-[#5B7CF5]" /> Blueprint maestro · {agent.label}</div>
+          <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[620px]">El método oficial que el agente sigue al pie: ángulos, hooks, textos base{hasCompliance ? <> y la <strong>Guardia de Compliance de Meta</strong></> : ''}. {content.length.toLocaleString('es-AR')} caracteres.</p>
         </div>
         <div className="flex gap-2">
           {hasCompliance && (
