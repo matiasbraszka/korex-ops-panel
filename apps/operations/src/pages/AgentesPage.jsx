@@ -15,7 +15,7 @@ import AgentChat from '../components/agentes/AgentChat';
 import { chatAgents, agentMeta } from '../components/agentes/agentMeta';
 
 export default function AgentesPage() {
-  const { clients, strategyPages, updateStrategyPage, currentUser } = useApp();
+  const { clients, strategyPages, currentUser } = useApp();
   const navigate = useNavigate();
   const [sel, setSel] = useState({ clientId: '', strategyId: '', funnelId: '', avatarId: '', collaboratorId: '' });
   const [agentKey, setAgentKey] = useState('anuncios');
@@ -142,42 +142,6 @@ export default function AgentesPage() {
     loadChats();
   }, [activeChatId, agentKey, sel, loadChats]);
 
-  // Guardar lo generado. Cada agente escribe en el campo que alimenta SU etapa del pipeline:
-  //   anuncios → strategy_pages.avatars[].ad_script  (por avatar, dentro del array)
-  //   vsl      → strategy_pages.vsl_script           (escalar, uno por funnel)
-  // Siempre APPEND con sello, nunca pisar: ahí ya vive el guión que vino del DEL.
-  // Devuelve una promesa que se RECHAZA si no se pudo guardar (updateStrategyPage lanza si el
-  // PATCH falla). Así el botón solo dice "Guardado" cuando de verdad persistió, no a lo optimista.
-  const onSaveCopy = useCallback((text) => {
-    const page = strategyPages.find((p) => p.id === sel.funnelId);
-    if (!page) throw new Error('No encuentro este funnel. Recargá la página.');
-
-    if (agentKey === 'vsl') {
-      const prev = (page.vsl_script || '').trim();
-      const stamp = `\n\n— Generado con el agente de VSL —\n${text}`;
-      // Backup antes de tocar: el mismo par de campos que usa el "Deshacer" de Funnels.
-      return updateStrategyPage(sel.funnelId, {
-        vsl_script_backup: page.vsl_script || null,
-        backup_at: new Date().toISOString(),
-        vsl_script: prev ? prev + stamp : text,
-      });
-    }
-
-    const avatars = Array.isArray(page.avatars) ? page.avatars : [];
-    // Causa real del "dice guardó y no guarda": si el avatar elegido no está en el funnel, el
-    // map no cambiaba nada y el PATCH escribía lo mismo → parecía guardado. Ahora avisa.
-    if (!avatars.some((a) => a.id === sel.avatarId)) {
-      throw new Error('El avatar seleccionado no existe en este funnel. Elegí un avatar válido arriba.');
-    }
-    const nextAvatars = avatars.map((a) => {
-      if (a.id !== sel.avatarId) return a;
-      const prev = (a.ad_script || '').trim();
-      const stamp = `\n\n— Generado con el agente de Anuncios —\n${text}`;
-      return { ...a, ad_script: prev ? prev + stamp : text };
-    });
-    return updateStrategyPage(sel.funnelId, { avatars: nextAvatars });
-  }, [strategyPages, sel.funnelId, sel.avatarId, agentKey, updateStrategyPage]);
-
   // Descubrimiento corre ANTES de que existan funnel y avatar (el avatar es su SALIDA, el
   // paso 5): le alcanza con el cliente. Los demás siguen necesitando el avatar, que es de
   // donde sacan el dolor. El flag vive en agentMeta.js y la edge fn lo replica server-side.
@@ -208,7 +172,7 @@ export default function AgentesPage() {
 
       {ready ? (
         <AgentChat sel={sel} gate={gate} agentKey={agentKey} agentName={agentName} currentUser={currentUser}
-          onSaveCopy={onSaveCopy} chatKey={chatKey} initialMessages={initialMessages} onPersist={onPersist} />
+          chatKey={chatKey} initialMessages={initialMessages} onPersist={onPersist} />
       ) : (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-16 px-5 gap-2.5">
           <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-surface2 text-text3"><MousePointerClick size={24} /></span>

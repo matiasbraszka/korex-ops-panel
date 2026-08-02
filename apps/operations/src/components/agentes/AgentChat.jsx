@@ -4,44 +4,18 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { supabase } from '@korex/db';
 import {
-  Send, Loader2, Lock, Sparkles, Save, Check, AlertTriangle, Square,
-  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video, FileOutput, Plus,
+  Send, Loader2, Lock, Sparkles, Check, AlertTriangle, Square,
+  ThumbsUp, ThumbsDown, Copy, RefreshCw, Video,
 } from 'lucide-react';
 import { agentMeta } from './agentMeta';
 import AgentMarkdown, { accentOf } from './AgentMarkdown';
 import SlashMenu from './SlashMenu';
 import MicDictado from './MicDictado';
-import { sanitizeDelHtml } from '../clientes/funnels/delSanitize';
-
-// A qué pestaña (kind) del DEL va cada agente, y cómo se titula la sección exportada.
-const DEL_KIND = { anuncios: 'anuncios', vsl: 'vsl', landing: 'pg_landing', descubrimiento: 'estrategia' };
-const DEL_LABEL = { anuncios: 'Anuncios (IA)', vsl: 'VSL (IA)', landing: 'Copy del funnel (IA)', descubrimiento: 'Descubrimiento (IA)' };
+import SaveToDel from './SaveToDel';
 
 // Id de conversación (mismo formato que usa AgentesPage) para poder crear el chat apenas se
 // manda el primer mensaje, sin esperar la respuesta.
 const newConvId = () => `ach_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
-// Markdown simple → HTML dentro de la whitelist del DEL (h1-h3, p, ul/li, strong, br).
-// La respuesta del agente es markdown liviano (títulos, negritas, viñetas) o texto plano.
-function mdToHtml(src) {
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/__(.+?)__/g, '<strong>$1</strong>');
-  const lines = String(src || '').replace(/\r/g, '').split('\n');
-  const out = []; let list = null; let para = [];
-  const flushPara = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } };
-  const flushList = () => { if (list) { out.push('<ul>' + list.map((li) => '<li>' + inline(li) + '</li>').join('') + '</ul>'); list = null; } };
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    const h = /^(#{1,3})\s+(.*)$/.exec(line);
-    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
-    if (h) { flushPara(); flushList(); const n = h[1].length; out.push(`<h${n}>` + inline(h[2]) + `</h${n}>`); }
-    else if (bullet) { flushPara(); (list = list || []).push(bullet[1]); }
-    else if (line.trim() === '') { flushPara(); flushList(); }
-    else { flushList(); para.push(line); }
-  }
-  flushPara(); flushList();
-  return out.join('');
-}
 
 const FEEDBACK_TAGS = ['Hook flojo', 'No va al avatar', 'Cliché', 'No alineado al VSL', 'Compliance', 'No se entiende', 'Perfecto'];
 const fbid = () => `afb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -93,80 +67,6 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
   const [sent, setSent] = useState(null);   // 'up' | 'down'
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [delState, setDelState] = useState('idle'); // idle | saving | done | error
-  const [delMsg, setDelMsg] = useState('');
-  const [delOpen, setDelOpen] = useState(false);
-  const [delSecs, setDelSecs] = useState(null); // null = sin cargar | [] = sin pestañas | [...]
-
-  // Abrir el selector "¿dónde lo guardo?" y traer las pestañas actuales del DEL del funnel.
-  const abrirDel = async () => {
-    if (delState === 'saving' || !sel.funnelId) return;
-    const abrir = !delOpen;
-    setDelOpen(abrir);
-    if (!abrir || delSecs !== null) return;
-    try {
-      const { data: page } = await supabase.from('strategy_pages')
-        .select('del_doc_id,strategy_id').eq('id', sel.funnelId).maybeSingle();
-      let secs = [];
-      if (page?.del_doc_id) {
-        const { data } = await supabase.from('del_sections')
-          .select('id,title,kind,ord').eq('doc_id', page.del_doc_id).order('ord');
-        secs = data || [];
-      } else if (page?.strategy_id) {
-        // Funnel sin DEL propio: las secciones cuelgan del DEL de la carpeta (por strategy_id).
-        const { data } = await supabase.from('del_sections')
-          .select('id,title,kind,ord,doc_id').eq('strategy_id', page.strategy_id).order('ord');
-        secs = data || [];
-      }
-      setDelSecs(secs);
-    } catch { setDelSecs([]); }
-  };
-
-  // target: 'new' (pestaña nueva) o el id de una pestaña existente (agrega al final).
-  const guardarEnDel = async (target) => {
-    setDelOpen(false); setDelState('saving'); setDelMsg('');
-    try {
-      const html = sanitizeDelHtml(mdToHtml(responseText || ''));
-      const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-      if (target === 'new') {
-        // Ubicar (o crear) el documento del DEL del funnel.
-        const { data: page } = await supabase.from('strategy_pages')
-          .select('name,del_doc_id,strategy_id,client_id').eq('id', sel.funnelId).maybeSingle();
-        let docId = page?.del_doc_id || null;
-        if (!docId && Array.isArray(delSecs) && delSecs[0]?.doc_id) docId = delSecs[0].doc_id;
-        if (!docId) {
-          const { data: newDoc, error: e1 } = await supabase.rpc('del_doc_create', {
-            p_client_id: sel.clientId, p_strategy_id: sel.strategyId || page?.strategy_id || null,
-            p_title: page?.name || 'DEL',
-          });
-          if (e1) throw e1;
-          docId = newDoc;
-          if (docId) await supabase.from('strategy_pages').update({ del_doc_id: docId }).eq('id', sel.funnelId);
-        }
-        if (!docId) throw new Error('No se pudo ubicar ni crear el DEL de este funnel.');
-        const kind = DEL_KIND[subagentKey] || 'otros';
-        const title = `${DEL_LABEL[subagentKey] || 'Contenido (IA)'} · ${fecha}`;
-        const { data: secId, error: e2 } = await supabase.rpc('del_section_add', {
-          p_doc_id: docId, p_title: title, p_kind: kind, p_after_ord: null, p_by: 'Agente IA',
-        });
-        if (e2) throw e2;
-        const { error: e3 } = await supabase.rpc('del_section_save', { p_id: secId, p_html: html, p_by: 'Agente IA' });
-        if (e3) throw e3;
-        setDelState('done'); setDelMsg(`Creada la pestaña «${title}» en el DEL`);
-        setDelSecs(null); // que se recargue la lista la próxima vez
-      } else {
-        // Agregar al FINAL de una pestaña existente (leo su HTML actual y concateno).
-        const { data: sec } = await supabase.from('del_sections').select('title,html').eq('id', target).maybeSingle();
-        const sep = `<hr><p><strong>— ${DEL_LABEL[subagentKey] || 'IA'} · ${fecha} —</strong></p>`;
-        const nuevo = sanitizeDelHtml(`${(sec?.html || '').trim()}${sep}${html}`);
-        const { error } = await supabase.rpc('del_section_save', { p_id: target, p_html: nuevo, p_by: 'Agente IA' });
-        if (error) throw error;
-        setDelState('done'); setDelMsg(`Agregado al final de «${sec?.title || 'la pestaña'}»`);
-      }
-    } catch (err) {
-      setDelState('error'); setDelMsg(err?.message || 'No se pudo guardar en el DEL.');
-    }
-  };
 
   const submit = async (rating, tgs = [], note = '') => {
     setSaving(true);
@@ -196,14 +96,7 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
         <button onClick={onRegenerate} disabled={busy} className={actionBtn} title="Pedir otra versión">
           <RefreshCw size={14} /> Regenerar
         </button>
-        {sel.funnelId && (
-          <button onClick={abrirDel} disabled={delState === 'saving'} className={actionBtn}
-            title="Guardar esta respuesta en el DEL: pestaña nueva o al final de una existente">
-            {delState === 'saving' ? <><Loader2 size={14} className="animate-spin" /> Guardando…</>
-              : delState === 'done' ? <><Check size={14} className="text-green" /> En el DEL</>
-              : <><FileOutput size={14} /> Enviar al DEL</>}
-          </button>
-        )}
+        <SaveToDel sel={sel} subagentKey={subagentKey} text={responseText} label="Enviar al DEL" />
         {sent ? (
           <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-green ml-1"><Check size={13} /> ¡Gracias por el feedback!</span>
         ) : (
@@ -218,38 +111,6 @@ function MessageActions({ sel, chatId, subagentKey, userPrompt, responseText, on
           </>
         )}
       </div>
-
-      {delOpen && (
-        <div className="bg-bg border border-border rounded-xl p-2 grid gap-1 max-w-[440px]">
-          <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text3 px-1 pt-0.5">¿Dónde lo guardo en el DEL?</div>
-          <button onClick={() => guardarEnDel('new')}
-            className="flex items-center gap-2 text-left py-1.5 px-2 rounded-lg text-[12.5px] font-semibold text-text cursor-pointer border-none bg-transparent hover:bg-surface2">
-            <Plus size={14} className="text-green shrink-0" /> Crear una pestaña nueva
-          </button>
-          {delSecs === null && <div className="px-2 py-1 text-[12px] text-text3">Cargando pestañas…</div>}
-          {Array.isArray(delSecs) && delSecs.length > 0 && (
-            <>
-              <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-text3 px-1 pt-1">Agregar al final de…</div>
-              <div className="max-h-[200px] overflow-y-auto grid gap-0.5">
-                {delSecs.map((s) => (
-                  <button key={s.id} onClick={() => guardarEnDel(s.id)} title={s.title}
-                    className="flex items-center gap-2 text-left py-1.5 px-2 rounded-lg text-[12.5px] text-text2 cursor-pointer border-none bg-transparent hover:bg-surface2">
-                    <FileOutput size={13} className="text-text3 shrink-0" />
-                    <span className="truncate">{s.title || 'Sin título'}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          {Array.isArray(delSecs) && delSecs.length === 0 && (
-            <div className="px-2 py-1 text-[11.5px] text-text3">Este funnel todavía no tiene pestañas: se creará una nueva.</div>
-          )}
-        </div>
-      )}
-
-      {delMsg && (
-        <div className={`text-[11.5px] font-semibold ${delState === 'error' ? 'text-red' : 'text-green'}`}>{delMsg}</div>
-      )}
 
       {mode === 'down' && !sent && (
         <div className="bg-bg border border-border rounded-xl p-2.5 grid gap-2 max-w-[460px]">
@@ -339,7 +200,7 @@ function GateBanner({ gate, agentKey }) {
   );
 }
 
-function VslCard({ vsl, onSave, saved }) {
+function VslCard({ vsl, sel }) {
   const hooks = Array.isArray(vsl.hooks) ? vsl.hooks : [];
   const secs = Array.isArray(vsl.secciones) ? vsl.secciones : [];
   const a = accentOf('vsl');
@@ -353,11 +214,7 @@ function VslCard({ vsl, onSave, saved }) {
           {vsl.duracion_estimada && <span className="font-semibold text-[11px] py-0.5 px-2 rounded-full" style={{ background: a.bg, color: a.c }}>{vsl.duracion_estimada}</span>}
           {vsl.palabras > 0 && <span className="text-[11px] text-text3 font-normal">{vsl.palabras} palabras</span>}
         </span>
-        <button onClick={() => onSave(vsl)} disabled={saved}
-          className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-semibold cursor-pointer border shrink-0 disabled:cursor-default"
-          style={saved ? { background: 'var(--color-green-bg)', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: a.c, borderColor: a.c + '66' }}>
-          {saved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> Guardar en el funnel</>}
-        </button>
+        <SaveToDel sel={sel} subagentKey="vsl" text={vslToText(vsl)} variant="card" accent={a.c} />
       </div>
       <div className="p-3 grid gap-3 text-[12.5px] text-[#374151]">
         {vsl.caso_base && (
@@ -424,7 +281,7 @@ function VslCard({ vsl, onSave, saved }) {
   );
 }
 
-function AdCard({ ad, idx, onSave, saved }) {
+function AdCard({ ad, idx, sel }) {
   const hooks = adHooks(ad);
   const a = accentOf('anuncios');
   return (
@@ -434,11 +291,7 @@ function AdCard({ ad, idx, onSave, saved }) {
           <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-md text-white text-[10px] font-bold" style={{ background: a.c }}>{idx + 1}</span>
           {ad.angle || `Ángulo ${idx + 1}`}
         </span>
-        <button onClick={() => onSave(ad, idx)} disabled={saved}
-          className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-semibold cursor-pointer border shrink-0 disabled:cursor-default"
-          style={saved ? { background: 'var(--color-green-bg)', color: '#15803D', borderColor: '#C7EBD4' } : { background: '#fff', color: '#2E69E0', borderColor: 'var(--color-blue-light)' }}>
-          {saved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> Guardar en avatar</>}
-        </button>
+        <SaveToDel sel={sel} subagentKey="anuncios" text={adToText(ad, idx)} variant="card" accent={a.c} />
       </div>
       <div className="p-3 grid gap-2.5 text-[12.5px] text-[#374151]">
         {ad.headline && <div><span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: a.c }}>Titular</span><div className="mt-0.5 font-semibold text-text">{ad.headline}</div></div>}
@@ -471,11 +324,10 @@ function AdCard({ ad, idx, onSave, saved }) {
   );
 }
 
-export default function AgentChat({ sel, gate, agentKey, agentName, currentUser, onSaveCopy, chatKey, initialMessages = [], onPersist }) {
+export default function AgentChat({ sel, gate, agentKey, agentName, currentUser, chatKey, initialMessages = [], onPersist }) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [savedKeys, setSavedKeys] = useState({});
   const [totalCost, setTotalCost] = useState(0);
   const scrollRef = useRef(null);
   const taRef = useRef(null);
@@ -651,25 +503,6 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     run(history, k === 'ads' || k === 'vsl' ? 'generate' : 'chat');
   }
 
-  // Guarda de verdad: espera el resultado y solo marca "Guardado" si persistió. Si falla,
-  // lo dice (antes marcaba guardado a lo optimista aunque el guardado real fallara).
-  async function guardarCopy(text, key) {
-    try {
-      await onSaveCopy(text);
-      setSavedKeys((s) => ({ ...s, [key]: true }));
-    } catch (e) {
-      setMessages((m) => [...m, { role: 'assistant', kind: 'notice',
-        content: `No se pudo guardar: ${String(e?.message || e)}` }]);
-    }
-  }
-
-  function saveAd(ad, idx) {
-    guardarCopy(adToText(ad, idx), `${sel.funnelId}:${sel.avatarId}:${JSON.stringify(ad).length}:${idx}`);
-  }
-
-  function saveVsl(vsl) {
-    guardarCopy(vslToText(vsl), `${sel.funnelId}:vsl:${JSON.stringify(vsl).length}`);
-  }
 
   const empty = messages.length === 0;
   const suggestions = useMemo(() => meta.suggestions || [], [meta]);
@@ -793,14 +626,12 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
                   {m.kind === 'ads' ? (
                     <div className="grid gap-2.5">
                       {m.ads.map((ad, idx) => (
-                        <AdCard key={idx} ad={ad} idx={idx} onSave={saveAd}
-                          saved={!!savedKeys[`${sel.funnelId}:${sel.avatarId}:${JSON.stringify(ad).length}:${idx}`]} />
+                        <AdCard key={idx} ad={ad} idx={idx} sel={sel} />
                       ))}
                       {m.notes && <div className="text-[12px] text-text2 bg-bg border border-border rounded-xl p-3">💡 {m.notes}</div>}
                     </div>
                   ) : m.kind === 'vsl' ? (
-                    <VslCard vsl={m.vsl} onSave={saveVsl}
-                      saved={!!savedKeys[`${sel.funnelId}:vsl:${JSON.stringify(m.vsl).length}`]} />
+                    <VslCard vsl={m.vsl} sel={sel} />
                   ) : (
                     <div className="bg-white border border-border rounded-[4px_16px_16px_16px] py-4 px-[18px]"
                       style={{ boxShadow: '0 1px 2px rgba(10,22,40,.04), 0 1px 3px rgba(10,22,40,.06)' }}>
