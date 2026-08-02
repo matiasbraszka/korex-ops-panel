@@ -360,7 +360,7 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     abortRef.current = null;
     reqSeqRef.current++;
     setBusy(false);
-    setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0);
+    setMessages(initialMessages || []); setTotalCost(0);
     convIdRef.current = chatKey && !String(chatKey).startsWith('new:') ? String(chatKey) : null;
   }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Al desmontar (salir de la pestaña) NO cortamos el pedido: el gasto del servidor YA está hecho
