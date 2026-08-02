@@ -1210,16 +1210,15 @@ export default function FunnelsView({ clientId, onEditarCliente }) {
 
   // Vuelta al Panorama: solo si se llegó desde ahí. Deja la sub-pestaña marcada
   // (ClientsPage la lee de localStorage al montar) y suelta el cliente.
-  const [puedeVolverPanorama, setPuedeVolverPanorama] = useState(false);
-  useEffect(() => {
+  const volverPanorama = useMemo(() => {
     const r = getPanoramaReturn();
-    setPuedeVolverPanorama(!!r && r.client === clientId);
-  }, [clientId]);
-  const volverPanorama = puedeVolverPanorama ? () => {
-    clearPanoramaReturn();
-    try { localStorage.setItem('clientes_current_tab', 'panorama'); } catch { /* noop */ }
-    setSelectedId?.(null);
-  } : null;
+    if (!r || r.client !== clientId) return null;
+    return () => {
+      clearPanoramaReturn();
+      try { localStorage.setItem('clientes_current_tab', 'panorama'); } catch { /* noop */ }
+      setSelectedId?.(null);
+    };
+  }, [clientId, setSelectedId]);
   const [accessOpen, setAccessOpen] = useState(false);   // panel de accesos del cliente
   const [portalOpen, setPortalOpen] = useState(false);   // portal del cliente (cuenta + credenciales)
   const client = useMemo(() => (clients || []).find(c => c.id === clientId) || {}, [clients, clientId]);
