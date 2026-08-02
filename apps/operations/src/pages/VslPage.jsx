@@ -231,10 +231,13 @@ function VslDetail({ m, rangeLabel }) {
       <div className="flex items-baseline gap-3 mb-1 flex-wrap">
         <h2 className="text-[20px] font-extrabold text-text">{cleanName(r.name)}</h2>
         {ret?.duration && <span className="text-[13px] text-text3">Duración {fmtTime(ret.duration)}</span>}
-        {r.embed_id && (
-          <a href={`https://embed.voomly.com/b/${r.embed_id}`} target="_blank" rel="noreferrer"
+        {r.voomly_id && (
+          // Los embeds públicos (embed.voomly.com/b/…) quedaron en 404 al re-subir los videos.
+          // Abrimos el Video Drive de Voomly (para el equipo logueado) — Voomly no tiene deep-link por video.
+          <a href={`https://app.voomly.com/folder?file=${r.voomly_id}`} target="_blank" rel="noreferrer"
+            title="Abre tu Video Drive de Voomly (tenés que estar logueado)"
             className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border hover:bg-[#FAFBFC] transition-colors" style={{ color: '#5B7CF5' }}>
-            <ExternalLink size={13} /> Ver en Voomly
+            <ExternalLink size={13} /> Abrir en Voomly
           </a>
         )}
       </div>
