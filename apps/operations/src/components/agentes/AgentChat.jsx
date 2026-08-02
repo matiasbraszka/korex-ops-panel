@@ -17,6 +17,10 @@ import { sanitizeDelHtml } from '../clientes/funnels/delSanitize';
 const DEL_KIND = { anuncios: 'anuncios', vsl: 'vsl', landing: 'pg_landing', descubrimiento: 'estrategia' };
 const DEL_LABEL = { anuncios: 'Anuncios (IA)', vsl: 'VSL (IA)', landing: 'Copy del funnel (IA)', descubrimiento: 'Descubrimiento (IA)' };
 
+// Id de conversación (mismo formato que usa AgentesPage) para poder crear el chat apenas se
+// manda el primer mensaje, sin esperar la respuesta.
+const newConvId = () => `ach_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
 // Markdown simple → HTML dentro de la whitelist del DEL (h1-h3, p, ul/li, strong, br).
 // La respuesta del agente es markdown liviano (títulos, negritas, viñetas) o texto plano.
 function mdToHtml(src) {
@@ -467,7 +471,7 @@ function AdCard({ ad, idx, onSave, saved }) {
   );
 }
 
-export default function AgentChat({ sel, gate, agentKey, agentName, currentUser, onSaveCopy, chatKey, initialMessages = [], onTurn }) {
+export default function AgentChat({ sel, gate, agentKey, agentName, currentUser, onSaveCopy, chatKey, initialMessages = [], onPersist }) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -478,6 +482,9 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const reqSeqRef = useRef(0); // descarta la respuesta de un pedido viejo si llega tarde
   const abortRef = useRef(null); // corta el pedido en curso de verdad (ver stopReply)
   const mountedRef = useRef(true); // ¿seguimos en pantalla? (para no tocar estado tras salir)
+  // Id de la conversación viva. Para un chat del historial = su id; para uno nuevo empieza null y
+  // se le asigna al mandar el primer mensaje (así el chat se guarda YA, sin esperar la respuesta).
+  const convIdRef = useRef(chatKey && !String(chatKey).startsWith('new:') ? String(chatKey) : null);
 
   const meta = agentMeta(agentKey);
   const AgentIcon = meta.Icon;
@@ -494,11 +501,15 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   // Si había una respuesta en vuelo, se corta: cambiaste de cliente o de agente, esa respuesta
   // ya no va a ningún lado y seguiría facturándose sola.
   useEffect(() => {
+    // Si el chatKey cambió SOLO porque a este mismo chat recién se le asignó su id (al guardarlo
+    // apenas mandaste el mensaje), NO reseteamos ni abortamos: es la misma conversación en curso.
+    if (String(chatKey) === convIdRef.current) return;
     abortRef.current?.abort();
     abortRef.current = null;
     reqSeqRef.current++;
     setBusy(false);
     setMessages(initialMessages || []); setSavedKeys({}); setTotalCost(0);
+    convIdRef.current = chatKey && !String(chatKey).startsWith('new:') ? String(chatKey) : null;
   }, [chatKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Al desmontar (salir de la pestaña) NO cortamos el pedido: el gasto del servidor YA está hecho
   // (la llamada a la IA ya salió), así que abortar solo tiraba la respuesta y encima guardaba un
@@ -517,11 +528,12 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   const blocked = gate?.status === 'bloqueado';
   const chatId = chatKey && !String(chatKey).startsWith('new:') ? String(chatKey) : null;
 
-  async function callAgent(historyForApi, mode, signal) {
+  async function callAgent(historyForApi, mode, signal, convId) {
     const body = {
       subagent_key: agentKey,
       client_id: sel.clientId, strategy_id: sel.strategyId, funnel_id: sel.funnelId, avatar_id: sel.avatarId,
       collaborator_id: sel.collaboratorId || null,
+      chat_id: convId || null, // así la edge fn guarda la respuesta aunque te salgas del chat
       mode,
       messages: historyForApi.filter((m) => m.kind !== 'ads' && m.kind !== 'vsl' && m.kind !== 'notice').map((m) => ({ role: m.role, content: m.content })),
     };
@@ -575,13 +587,18 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
   async function run(withUser, mode) {
     setMessages(withUser);
     setBusy(true);
+    // Asegurar el id de la conversación y GUARDAR YA el mensaje del usuario (antes de la respuesta):
+    // así el chat aparece en el historial al instante y no se pierde si te salís antes de que termine.
+    if (!convIdRef.current) convIdRef.current = newConvId();
+    const convId = convIdRef.current;
+    onPersist?.(convId, withUser);
     const mySeq = ++reqSeqRef.current;
     abortRef.current?.abort(); // nunca dos pedidos en vuelo a la vez
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     let assistantMsg;
     try {
-      const data = await callAgent(withUser, mode, ctrl.signal);
+      const data = await callAgent(withUser, mode, ctrl.signal, convId);
       if (!data?.ok) {
         const faltante = isVsl ? 'Faltan los avatares del DEL en este funnel para escribir el guión.' : 'Falta el VSL de este funnel para generar anuncios.';
         const detail = data?.detail || (data?.error === 'gate_blocked' ? faltante : 'Ocurrió un problema.');
@@ -604,9 +621,10 @@ export default function AgentChat({ sel, gate, agentKey, agentName, currentUser,
     if (reqSeqRef.current !== mySeq) return; // se detuvo o fue reemplazada → descartar
     const finalMsgs = [...withUser, assistantMsg];
     // Si seguís en pantalla, actualizamos la vista. Si te fuiste, no tocamos estado (evita el
-    // warning de React) pero IGUAL persistimos: la respuesta queda en el historial.
+    // warning de React) pero IGUAL persistimos: la respuesta queda en el historial. (La edge fn
+    // además la guarda server-side, así que el chat termina aunque el navegador nos haya matado.)
     if (mountedRef.current) { setBusy(false); setMessages(finalMsgs); }
-    onTurn?.(finalMsgs); // persiste la conversación (historial), montados o no
+    onPersist?.(convId, finalMsgs);
   }
 
   function send(text, mode = 'chat') {

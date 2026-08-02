@@ -14,8 +14,6 @@ import ChatHistoryMenu from '../components/agentes/ChatHistoryMenu';
 import AgentChat from '../components/agentes/AgentChat';
 import { chatAgents, agentMeta } from '../components/agentes/agentMeta';
 
-const rid = () => `ach_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
 export default function AgentesPage() {
   const { clients, strategyPages, updateStrategyPage, currentUser } = useApp();
   const navigate = useNavigate();
@@ -123,25 +121,24 @@ export default function AgentesPage() {
     loadChats();
   }, [activeChatId, loadChats, newChat]);
 
-  // Persistir cada turno (lo llama AgentChat al terminar de responder).
-  const saveTurn = useCallback(async (msgs) => {
-    if (!msgs.some((m) => m.role === 'user')) return;
+  // Persistir la conversación. AgentChat lo llama DOS veces por turno con un id ya fijado:
+  //   1) apenas mandás el mensaje (con tu mensaje, sin la respuesta) → el chat entra al historial YA
+  //   2) cuando llega la respuesta → se completa
+  // Así, si te salís antes de que termine, el chat NO desaparece (y la edge fn lo completa server-side).
+  const onPersist = useCallback(async (id, msgs) => {
+    if (!id || !msgs?.some((m) => m.role === 'user')) return;
     const firstUser = msgs.find((m) => m.role === 'user');
     const title = (firstUser?.content || 'Chat').slice(0, 70);
-    let id = activeChatId;
-    if (!id) {
-      id = rid();
-      setInitialMessages(msgs);   // evita que el reset por cambio de chatKey borre lo recién escrito
-      setActiveChatId(id);
-      let uid = null;
-      try { uid = (await supabase.auth.getUser())?.data?.user?.id || null; } catch { /* nada */ }
-      await supabase.from('agent_chats').insert({
-        id, subagent_key: agentKey, client_id: sel.clientId, strategy_id: sel.strategyId,
-        funnel_id: sel.funnelId, avatar_id: sel.avatarId, title, messages: msgs, created_by: uid,
-      });
-    } else {
-      await supabase.from('agent_chats').update({ messages: msgs, title, updated_at: new Date().toISOString() }).eq('id', id);
-    }
+    // Marcar este chat como el activo (para el historial). Como AgentChat ignora el cambio de
+    // chatKey cuando es su propio id, esto NO corta la respuesta en vuelo.
+    if (id !== activeChatId) { setActiveChatId(id); setInitialMessages(msgs); }
+    let uid = null;
+    try { uid = (await supabase.auth.getUser())?.data?.user?.id || null; } catch { /* nada */ }
+    await supabase.from('agent_chats').upsert({
+      id, subagent_key: agentKey, client_id: sel.clientId, strategy_id: sel.strategyId,
+      funnel_id: sel.funnelId, avatar_id: sel.avatarId, title, messages: msgs, created_by: uid,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
     loadChats();
   }, [activeChatId, agentKey, sel, loadChats]);
 
@@ -211,7 +208,7 @@ export default function AgentesPage() {
 
       {ready ? (
         <AgentChat sel={sel} gate={gate} agentKey={agentKey} agentName={agentName} currentUser={currentUser}
-          onSaveCopy={onSaveCopy} chatKey={chatKey} initialMessages={initialMessages} onTurn={saveTurn} />
+          onSaveCopy={onSaveCopy} chatKey={chatKey} initialMessages={initialMessages} onPersist={onPersist} />
       ) : (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center py-16 px-5 gap-2.5">
           <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-surface2 text-text3"><MousePointerClick size={24} /></span>

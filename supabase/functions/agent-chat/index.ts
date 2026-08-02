@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
   const funnelId = str(body.funnel_id);
   const avatarId = str(body.avatar_id);
   const collaboratorId = str(body.collaborator_id); // encargado de grabación elegido (opcional)
+  const chatId = str(body.chat_id); // id del chat en agent_chats: para guardar la respuesta aunque el cliente se vaya
   const mode = str(body.mode) === "generate" ? "generate" : "chat";
   const rawMsgs = Array.isArray(body.messages) ? (body.messages as Record<string, unknown>[]) : [];
   // Descubrimiento trabaja a nivel CLIENTE: corre ANTES de que existan estrategias, funnels y
@@ -1318,6 +1319,33 @@ Deno.serve(async (req) => {
       cache_read_tokens: cacheReadTok, cache_write_tokens: cacheWriteTok, fresh_tokens: freshTok,
     },
   });
+
+  // Persistencia server-side del historial: aunque el cliente se vaya (cambió de pestaña, el
+  // navegador descartó la página, se cortó la red), la respuesta queda guardada en el chat. El
+  // cliente ya dejó el chat creado con el mensaje del usuario (lo guarda al mandarlo); acá sólo le
+  // agregamos la respuesta del agente, en el MISMO formato que usa el frontend (kind ads/vsl o texto).
+  if (chatId) {
+    try {
+      const adCopyOut = subagentKey === "vsl" ? null : adCopy;
+      const vslOut = subagentKey === "vsl" ? adCopy : null;
+      let aMsg: Record<string, unknown>;
+      if (mode === "generate" && adCopyOut && Array.isArray(adCopyOut.ads) && adCopyOut.ads.length) {
+        aMsg = { role: "assistant", kind: "ads", ads: adCopyOut.ads, notes: adCopyOut.notes || "" };
+      } else if (mode === "generate" && vslOut && Array.isArray(vslOut.secciones) && vslOut.secciones.length) {
+        aMsg = { role: "assistant", kind: "vsl", vsl: vslOut };
+      } else {
+        aMsg = { role: "assistant", content: reply || "(sin respuesta)" };
+      }
+      const { data: chatRow } = await supabase.from("agent_chats").select("messages").eq("id", chatId).maybeSingle();
+      if (chatRow && Array.isArray(chatRow.messages)) {
+        const prev = chatRow.messages as Record<string, unknown>[];
+        const last = prev[prev.length - 1];
+        // Si el último ya es del asistente, el cliente se nos adelantó: no duplicar.
+        const next = last && last.role === "assistant" ? prev : [...prev, aMsg];
+        await supabase.from("agent_chats").update({ messages: next, updated_at: new Date().toISOString() }).eq("id", chatId);
+      }
+    } catch (_) { /* la respuesta al cliente no depende de esto */ }
+  }
 
   // ad_copy se mantiene por compatibilidad con el frontend de anuncios; el de VSL lee vsl_script.
   return j({
