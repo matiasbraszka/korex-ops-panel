@@ -866,7 +866,42 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (!secEl) return;
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     if (!rect || (!rect.width && !rect.height)) return;
-    setSelBtn({ top: rect.top, bottom: rect.bottom, left: rect.left + rect.width / 2, quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
+    // El botón va al MARGEN de la hoja (como Google Docs), a la altura de lo
+    // marcado. Nunca encima del texto: si tapa el texto, hay que esquivarlo para
+    // volver a marcar, que era el problema.
+    const hoja = secEl.getBoundingClientRect();
+    setSelBtn({
+      top: rect.top, margenIzq: hoja.right + 12, quote: text.slice(0, 300),
+      sectionId: secEl.getAttribute('data-secid'),
+    });
+  };
+
+  // Soltar el mouse dentro del documento sin dejar nada marcado = "estoy leyendo":
+  // ahí sí se apaga. Nunca se apaga solo por quedarse sin selección.
+  const onDocPointerUp = () => {
+    setTimeout(() => {
+      const s = window.getSelection();
+      if (!s || s.isCollapsed || s.toString().trim().length < 2) setSelBtn(null);
+      else onDocMouseUp();
+    }, 120);
+  };
+
+  // Al apretar "Comentar" se relee la selección real: si marcaste mal y volviste a
+  // marcar, manda lo último, no lo que estaba guardado.
+  const abrirComentario = () => {
+    const sel = window.getSelection();
+    const texto = sel ? sel.toString().trim() : '';
+    let elegido = selBtn;
+    if (texto.length >= 2 && sel?.rangeCount) {
+      let node = sel.anchorNode;
+      while (node && node.nodeType !== 1) node = node.parentNode;
+      const secEl = node?.closest?.('[data-secid]');
+      if (secEl) elegido = { ...selBtn, quote: texto.slice(0, 300), sectionId: secEl.getAttribute('data-secid') };
+    }
+    if (!elegido?.sectionId) return;
+    setComposer({ quote: elegido.quote, sectionId: elegido.sectionId, top: elegido.top, left: elegido.margenIzq });
+    setDraft('');
+    setSelBtn(null);
   };
 
   // En el teléfono/tablet los tiradores de la selección son del sistema y no
@@ -880,17 +915,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
 
   useEffect(() => {
     if (!selBtn) return undefined;
-    const fuera = (e) => {
-      if (e.target?.closest?.('[data-sel-btn]') || e.target?.closest?.('[data-secid]')) return;
-      setSelBtn(null);
-    };
-    const esc = (e) => { if (e.key === 'Escape') setSelBtn(null); };
-    document.addEventListener('pointerdown', fuera, true);
+    const esc = (e) => { if (e.key === 'Escape') { setSelBtn(null); window.getSelection()?.removeAllRanges?.(); } };
     document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('pointerdown', fuera, true);
-      document.removeEventListener('keydown', esc);
-    };
+    return () => document.removeEventListener('keydown', esc);
   }, [selBtn]);
 
   // Guardar el comentario anclado a la frase (optimista, con reversión).
@@ -1443,6 +1470,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
         .del-rich mark.del-cmt{background:#FEF3C7;border-bottom:2px solid #EAB308;border-radius:2px;padding:0 1px;cursor:pointer;transition:background .2s,box-shadow .2s}
         .del-rich mark.del-cmt.is-active{background:#FDBA74;box-shadow:0 0 0 3px rgba(249,115,22,.45);border-bottom-color:#EA580C;animation:delCmtPulse 1.8s ease-out}
         @keyframes delCmtPulse{0%,55%{background:#FB923C}100%{background:#FDBA74}}
+        /* Latido del botón "Comentar": avisa que hay algo marcado, sin taparlo. */
+        @keyframes delLate{0%,100%{box-shadow:0 0 0 0 rgba(26,29,38,.35)}50%{box-shadow:0 0 0 7px rgba(26,29,38,0)}}
+        @media (prefers-reduced-motion:reduce){@keyframes delLate{0%,100%{box-shadow:none}}}
       `}</style>
       <div className="grid gap-5 items-start mx-auto py-5 px-6" style={isMobile
         ? { maxWidth: '100%', gridTemplateColumns: 'minmax(0,1fr)', padding: '10px 10px 48px', gap: 12 }
@@ -1653,7 +1683,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
 
         {/* En el celular la selección llega con el dedo: el touchend se revisa con un
             pequeño delay para que la selección termine de asentarse (igual que /compartir). */}
-        <div className="min-w-0 flex flex-col gap-3 w-full" style={editando && view === 'del' ? { maxWidth: 1040, marginInline: 'auto' } : undefined} onMouseUp={view === 'del' ? onDocMouseUp : undefined} onTouchEnd={view === 'del' ? () => setTimeout(onDocMouseUp, 80) : undefined}>
+        <div className="min-w-0 flex flex-col gap-3 w-full" style={editando && view === 'del' ? { maxWidth: 1040, marginInline: 'auto' } : undefined} onPointerUp={view === 'del' ? onDocPointerUp : undefined}>
           {/* Tres rayitas para las vistas que no tienen barra propia (Estrategia, Config, Recursos, docs del cliente). */}
           {(isMobile || sidebarOculta) && view !== 'del' && (
             <div className="sticky top-0 z-10 py-1.5" style={{ background: '#FBFCFD' }}>
@@ -2277,20 +2307,25 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       </div>
 
       {/* Botón flotante al marcar texto + caja para escribir el comentario. */}
+      {/* Botón "Comentar" AL MARGEN de la hoja, a la altura de lo marcado — como
+          Google Docs. Antes flotaba encima del texto: había que esquivarlo para
+          volver a marcar y desaparecía al tocarlo. Si no hay margen (pantalla
+          angosta) cae abajo a la derecha, pero nunca sobre el texto. */}
       {selBtn && !composer && (() => {
-        // Debajo de lo marcado si entra: arriba se superpone con el menú nativo
-        // del teléfono (Copiar / Buscar), que se dibuja justo ahí.
-        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
         const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-        const abajo = (selBtn.bottom ?? selBtn.top) + 10;
-        const cabeAbajo = abajo < vh - 70;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+        const cabeAlMargen = selBtn.margenIzq && selBtn.margenIzq < vw - 130;
+        const pos = cabeAlMargen
+          ? { top: Math.min(Math.max(56, selBtn.top - 6), vh - 60), left: selBtn.margenIzq }
+          : { bottom: 18, right: 18 };
         return (
           <button data-sel-btn
             onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onClick={() => { setComposer({ quote: selBtn.quote, sectionId: selBtn.sectionId, top: selBtn.top, left: selBtn.left }); setDraft(''); setSelBtn(null); }}
+            onClick={abrirComentario}
+            title="Comentar lo que marcaste"
             className="fixed z-[70] inline-flex items-center gap-1.5 py-2 px-3.5 rounded-full bg-[#1A1D26] text-white text-[12.5px] font-semibold cursor-pointer shadow-lg select-none"
-            style={{ top: cabeAbajo ? abajo : Math.max(52, selBtn.top - 44), left: Math.min(Math.max(selBtn.left, 70), vw - 70), transform: 'translateX(-50%)', touchAction: 'manipulation' }}>
+            style={{ ...pos, touchAction: 'manipulation', animation: 'delLate 1.4s ease-in-out infinite' }}>
             <MessageSquare size={13} />Comentar
           </button>
         );

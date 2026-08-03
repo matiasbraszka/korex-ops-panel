@@ -236,14 +236,8 @@ export default function DocumentoScreen() {
     while (node && node.nodeType !== 1) node = node.parentNode;
     const secEl = node?.closest?.('[data-secid]');
     if (!secEl) return;
-    const r = sel.getRangeAt(0).getBoundingClientRect();
-    if (!r || (!r.width && !r.height)) return;
-    // getBoundingClientRect() y position:fixed hablan el mismo idioma (el viewport),
-    // tengan el zoom que tengan: no hay nada que compensar.
-    setSelBtn({
-      top: r.top, bottom: r.bottom, left: r.left + r.width / 2,
-      quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid'),
-    });
+    // No hace falta saber DÓNDE está la selección: el botón no se mueve.
+    setSelBtn({ quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
   };
 
   // `selectionchange` es el ÚNICO evento que llega siempre: en iOS los tiradores de
@@ -262,23 +256,48 @@ export default function DocumentoScreen() {
     return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
   }); // sin deps: leerSeleccion depende de props/estado que cambian en cada render
 
-  // Esconder el botón solo cuando el usuario deja claro que no lo quiere: toca
-  // fuera del documento, o aprieta Escape.
+  // Al apretar "Comentar" se vuelve a leer la selección de VERDAD, en ese
+  // momento. Si el cliente marcó mal y volvió a marcar, manda lo último que
+  // marcó — no lo que habíamos guardado. `selBtn` es solo el respaldo para el
+  // teléfono, donde el sistema a veces suelta la selección al tocar el botón.
+  const abrirComentario = () => {
+    if (!puedeComentar) return;
+    const sel = window.getSelection();
+    const texto = sel ? sel.toString().trim() : '';
+    let elegido = selBtn;
+    if (texto.length >= 2 && sel?.rangeCount) {
+      let node = sel.anchorNode;
+      while (node && node.nodeType !== 1) node = node.parentNode;
+      const secEl = node?.closest?.('[data-secid]');
+      if (secEl) elegido = { quote: texto.slice(0, 300), sectionId: secEl.getAttribute('data-secid') };
+    }
+    if (!elegido?.sectionId) return;
+    setComposer({ quote: elegido.quote, sectionId: elegido.sectionId, parentId: null });
+    setDraft('');
+    setSelBtn(null);
+  };
+
+  // Apagar el botón cuando el usuario deja claro que no va a comentar: toca fuera
+  // del documento (sin marcar nada) o aprieta Escape.
   useEffect(() => {
     if (!selBtn) return undefined;
-    const fuera = (e) => {
-      if (e.target?.closest?.('[data-sel-btn]') || e.target?.closest?.('[data-secid]')) return;
-      setSelBtn(null);
-    };
-    const esc = (e) => { if (e.key === 'Escape') setSelBtn(null); };
-    // `pointerdown` en captura: llega antes de que el navegador colapse la selección.
-    document.addEventListener('pointerdown', fuera, true);
+    const esc = (e) => { if (e.key === 'Escape') { setSelBtn(null); window.getSelection()?.removeAllRanges?.(); } };
     document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('pointerdown', fuera, true);
-      document.removeEventListener('keydown', esc);
-    };
+    return () => document.removeEventListener('keydown', esc);
   }, [selBtn]);
+
+  // Soltar el dedo (o el mouse) DENTRO del documento es lo único que apaga el
+  // botón, y solo si no quedó nada marcado: un toque suelto sobre el texto es
+  // "estoy leyendo". A propósito NO se apaga solo por quedarse sin selección: el
+  // teléfono la suelta por su cuenta todo el tiempo, y era justo lo que dejaba al
+  // cliente sin poder comentar lo que acababa de marcar.
+  const onDocPointerUp = () => {
+    setTimeout(() => {
+      const s = window.getSelection();
+      if (!s || s.isCollapsed || s.toString().trim().length < 2) setSelBtn(null);
+      else leerSeleccion();
+    }, 120);
+  };
 
   if (loading) return <PhoneFrame><Loading label="Abriendo el documento…" /></PhoneFrame>;
   if (!data) return <PhoneFrame><div style={{ padding: 40, textAlign: 'center', color: T.text3 }}>No encontramos este documento.</div></PhoneFrame>;
@@ -445,6 +464,10 @@ export default function DocumentoScreen() {
              justo lo que impedía marcar). El menú nativo de Copiar aparece arriba
              de lo seleccionado y nuestro botón va abajo, así no compiten. */
           .doc-sel,.doc-sel *{user-select:text!important;-webkit-user-select:text!important}
+          /* El latido del botón "Comentar" cuando hay texto marcado: es lo que le
+             dice al cliente que ahora puede comentar, sin taparle nada. */
+          @keyframes kxLate{0%,100%{box-shadow:0 0 0 0 rgba(46,105,224,.45)}50%{box-shadow:0 0 0 6px rgba(46,105,224,0)}}
+          @media (prefers-reduced-motion:reduce){@keyframes kxLate{0%,100%{box-shadow:none}}}
         `}</style>
 
         {/* Header del documento (exacto al prototipo) */}
@@ -460,10 +483,30 @@ export default function DocumentoScreen() {
             <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.12em', color: doc.accent }}>{doc.eyebrow}</div>
             <div style={{ fontSize: 13, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo}</div>
           </div>
+          {/* EL BOTÓN DE COMENTAR VIVE ACÁ, QUIETO.
+              Antes flotaba pegado a lo marcado y era un problema: se metía justo
+              encima del texto, así que para volver a marcar había que esquivarlo, y
+              el navegador lo borraba en cuanto se tocaba cualquier cosa. Ahora está
+              siempre en el mismo lugar: cuando hay algo marcado se enciende y late,
+              y con eso alcanza. Nunca tapa el texto ni estorba para re-marcar. */}
           {!esGuias && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--mk-border)', background: '#fff', color: T.textSoft, fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 999, flex: 'none' }}>
+            <div onPointerDown={(e) => { if (puedeComentar && selBtn) { e.preventDefault(); e.stopPropagation(); } }}
+              onClick={abrirComentario} role="button"
+              aria-label={selBtn ? 'Comentar lo que marcaste' : `${topComs.length} comentarios`}
+              title={selBtn ? 'Comentar lo que marcaste' : (puedeComentar ? 'Marcá un texto del documento y este botón se enciende' : `${topComs.length} comentarios`)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700,
+                padding: '7px 12px', borderRadius: 999, flex: 'none',
+                cursor: selBtn ? 'pointer' : 'default',
+                border: selBtn ? '1px solid var(--mk-blue-ops)' : '1px solid var(--mk-border)',
+                background: selBtn ? 'var(--mk-blue-ops)' : '#fff',
+                color: selBtn ? '#fff' : T.textSoft,
+                animation: selBtn ? 'kxLate 1.4s ease-in-out infinite' : 'none',
+                transition: 'background .15s, color .15s, border-color .15s',
+                userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'manipulation',
+              }}>
               <IcoComment size={14} stroke="currentColor" sw={2} />
-              {topComs.length}
+              {selBtn ? 'Comentar' : topComs.length}
             </div>
           )}
           {/* "?" → la página de Guías (adentro del portal, para todos los DEL) */}
@@ -473,7 +516,7 @@ export default function DocumentoScreen() {
         </div>
 
         {/* Fondo BLANCO en el documento: más contraste para leer (pedido de Matías). */}
-        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onMouseUp={leerSeleccion} onTouchEnd={() => setTimeout(leerSeleccion, 80)}>
+        <div ref={scrollRef} className="kxs doc-sel" style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', background: '#fff' }} onPointerUp={onDocPointerUp}>
           {isDemo() && <div style={{ padding: '10px 14px 0' }}><DemoBanner /></div>}
 
           {/* Banner ARRIBA DE TODO: la guía de grabación, imposible de no ver. */}
@@ -837,30 +880,10 @@ export default function DocumentoScreen() {
           </>
         )}
 
-        {/* Botón flotante Comentar (estilo del prototipo).
-            Va DEBAJO de lo seleccionado siempre que entre: arriba chocaba con el
-            menú nativo de iOS ("Copiar / Buscar"), que se dibuja justo ahí. */}
-        {selBtn && !composer && (() => {
-          const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-          const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
-          const abajo = (selBtn.bottom ?? selBtn.top) + 10;
-          const cabeAbajo = abajo < vh - 80;
-          const top = cabeAbajo ? abajo : Math.max(66, selBtn.top - 46);
-          return (
-            // `data-sel-btn` lo salva del "tocaste fuera": sin eso, el pointerdown
-            // que lo va a apretar lo esconde antes de que llegue el clic.
-            // `preventDefault` en pointerdown/mousedown evita que el navegador
-            // colapse la selección y que iOS lo tome como un toque en el texto.
-            <div data-sel-btn
-              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onClick={() => { setComposer({ ...selBtn, parentId: null }); setDraft(''); setSelBtn(null); }} role="button"
-              style={{ position: 'fixed', zIndex: 70, top, left: Math.min(Math.max(selBtn.left, 76), vw - 76), transform: 'translateX(-50%)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 15px', borderRadius: 999, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: 'var(--shadow-md)', touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none' }}>
-              <IcoComment size={14} stroke="currentColor" sw={2.2} />
-              Comentar
-            </div>
-          );
-        })()}
+        {/* Acá vivía el botón flotante "Comentar", pegado a lo marcado. Se sacó:
+            se dibujaba encima del texto, así que para volver a marcar había que
+            esquivarlo, y desaparecía en cuanto el navegador soltaba la selección.
+            Ahora el botón está quieto en el header y se enciende al marcar. */}
 
         {/* Caja de comentario (hoja pegada abajo). `bottom: 8` a secas quedaba TAPADA
             por el teclado del iPhone: el teclado no achica el viewport de layout, así
