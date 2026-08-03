@@ -182,22 +182,54 @@ export default function GuionesTabScreen() {
           <div style={introCaption}>Toca las <b style={{ color: T.textSoft }}>tres rayitas</b> arriba a la izquierda y elige el guion que quieras.</div>
         </div>
 
-        {/* 2 · Comenta (subrayado animado kxHi + botón kxPop) */}
+        {/* 2 · Comenta. El demo imita la pantalla real: la barra de arriba con su
+            botón, y abajo el texto marcándose. Los tres tiempos del bucle son el
+            gesto de verdad: mantener pulsado marca una palabra, los tiradores la
+            estiran, y recién ahí se enciende el botón de arriba. */}
         <div style={introCard}>
           <div style={introHead}>
             <span style={introNum}>2</span>
             <div style={introTitle}>Comenta lo que quieras cambiar</div>
           </div>
-          <div style={{ position: 'relative', background: 'var(--mk-bg-panel)', border: '1px solid #EEF0F4', borderRadius: 14, padding: '16px 16px 46px', overflow: 'hidden' }}>
-            <div style={{ fontSize: 13, lineHeight: 1.72, color: T.text3, fontWeight: 500 }}>
-              Si estás cansado de <span style={{ backgroundImage: 'linear-gradient(rgba(234,179,8,.42),rgba(234,179,8,.42))', backgroundRepeat: 'no-repeat', backgroundPosition: 'left center', backgroundSize: '0% 82%', borderRadius: 3, color: T.textSoft, fontWeight: 600, animation: 'kxHi 3.6s ease-in-out infinite' }}>perseguir a amigos y familiares</span> para que se sumen a tu negocio, quédate 30 segundos.
+          <div className="kx-demo-comentar" style={{ background: 'var(--mk-bg-panel)', border: '1px solid #EEF0F4', borderRadius: 14, overflow: 'hidden' }}>
+            {/* Barra de arriba, igual que en el documento real */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', background: '#fff', borderBottom: '1px solid var(--mk-border)' }}>
+              <div style={{ width: 24, height: 24, borderRadius: 7, background: T.surface2, flexShrink: 0 }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: '0.12em', color: T.primary }}>ADS</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap' }}>Ads avatar 1</div>
+              </div>
+              {/* El botón: apagado hasta que hay algo marcado. Y el toque al final. */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <span className="kx-boton" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 999, border: '1px solid var(--mk-border)', background: '#fff', color: T.text3, animation: 'kxBotonOn 4.4s ease-in-out infinite' }}>
+                  <IcoComment size={13} stroke="currentColor" sw={2.2} />
+                  2
+                </span>
+                <span style={{ position: 'absolute', inset: -4, border: '2px solid var(--mk-blue-ops)', borderRadius: 999, animation: 'kxDedo 4.4s ease-in-out infinite', pointerEvents: 'none' }} />
+              </div>
             </div>
-            <div style={{ position: 'absolute', right: 14, bottom: 12, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '7px 12px', borderRadius: 999, boxShadow: 'var(--shadow-md)', animation: 'kxPop 3.6s ease-in-out infinite' }}>
-              <IcoComment size={13} stroke="currentColor" sw={2.2} />
-              Comentar
+
+            {/* El texto, con la marca que se estira */}
+            <div style={{ padding: '14px 15px 16px', fontSize: 13, lineHeight: 1.78, color: T.text3, fontWeight: 500 }}>
+              Si estás cansado de{' '}
+              <span className="kx-marca" style={{ position: 'relative', display: 'inline-block', backgroundImage: 'linear-gradient(rgba(91,124,245,.30),rgba(91,124,245,.30))', backgroundRepeat: 'no-repeat', backgroundPosition: 'left center', backgroundSize: '0% 82%', borderRadius: 3, color: T.textSoft, fontWeight: 600, animation: 'kxMarca 4.4s ease-in-out infinite' }}>
+                perseguir a amigos y familiares
+                {/* Los dos tiradores del teléfono: el de la izquierda queda fijo,
+                    el de la derecha viaja mientras la marca crece. */}
+                <span style={{ position: 'absolute', left: 0, top: -3, bottom: -3, width: 2, background: 'var(--mk-blue-ink)', pointerEvents: 'none' }}>
+                  <span style={{ position: 'absolute', left: -4, top: -5, width: 10, height: 10, borderRadius: 999, background: 'var(--mk-blue-ink)' }} />
+                </span>
+                <span className="kx-tirador-der" style={{ position: 'absolute', left: 0, top: -3, bottom: -3, width: 2, background: 'var(--mk-blue-ink)', animation: 'kxTirador 4.4s ease-in-out infinite', pointerEvents: 'none' }}>
+                  <span style={{ position: 'absolute', left: -4, bottom: -5, width: 10, height: 10, borderRadius: 999, background: 'var(--mk-blue-ink)' }} />
+                </span>
+              </span>{' '}
+              para que se sumen a tu negocio, quédate 30 segundos.
             </div>
           </div>
-          <div style={introCaption}>Mantén el dedo y <b style={{ color: T.textSoft }}>selecciona un fragmento</b>. Aparece el botón para dejar tu nota.</div>
+          <div style={introCaption}>
+            <b style={{ color: T.textSoft }}>Mantén el dedo</b> sobre una palabra para marcarla y estira con las bolitas
+            hasta donde quieras. Después toca el <b style={{ color: T.textSoft }}>botón de arriba</b>, que se pone azul.
+          </div>
         </div>
 
         {/* 3 · Graba y sube todo junto */}

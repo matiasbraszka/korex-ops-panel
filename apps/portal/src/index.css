@@ -74,6 +74,28 @@ button { font-family: inherit; }
 @keyframes kxSlide { 0%,14% { transform: translateX(-108%); } 40%,92% { transform: translateX(0); } 100% { transform: translateX(-108%); } }
 @keyframes kxPop { 0%,45% { transform: scale(0); opacity: 0; } 62% { transform: scale(1.08); opacity: 1; } 75%,100% { transform: scale(1); opacity: 1; } }
 
+/* ── Demo de "cómo comentar" (bienvenida de Guiones) ────────────────────────
+   Cuenta el gesto real, en tres tiempos y en bucle:
+     1) mantener pulsado marca una palabra,
+     2) los tiradores estiran la marca a más palabras,
+     3) el botón de arriba se enciende y se toca.
+   Los cuatro keyframes comparten los mismos tiempos para que se vean como un
+   solo movimiento. */
+@keyframes kxMarca { 0%,10% { background-size: 0% 82%; } 26%,40% { background-size: 38% 82%; } 56%,100% { background-size: 100% 82%; } }
+@keyframes kxTirador { 0%,10% { left: 0%; } 26%,40% { left: 38%; } 56%,100% { left: 100%; } }
+@keyframes kxBotonOn {
+  0%,50% { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
+  58%,100% { background: var(--mk-blue-ops); border-color: var(--mk-blue-ops); color: #fff; }
+}
+@keyframes kxDedo { 0%,62% { transform: scale(.4); opacity: 0; } 72% { transform: scale(1); opacity: 1; } 88%,100% { transform: scale(1.9); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .kx-demo-comentar * { animation: none !important; }
+  .kx-demo-comentar .kx-marca { background-size: 100% 82% !important; }
+  .kx-demo-comentar .kx-tirador-der { left: 100% !important; }
+  .kx-demo-comentar .kx-boton { background: var(--mk-blue-ops) !important; border-color: var(--mk-blue-ops) !important; color: #fff !important; }
+}
+
 @keyframes mk-spin { to { transform: rotate(360deg); } }
 .mk-spin { animation: mk-spin 0.9s linear infinite; }
 

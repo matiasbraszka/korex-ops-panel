@@ -702,10 +702,10 @@ export default function DocumentoScreen() {
                               {cambios
                                 ? 'Dejaste comentarios. Al enviar, el equipo los corrige y te lo vuelve a habilitar.'
                                 : esCopy
-                                ? 'Si el copy de esta página está bien, apruébalo. Si algo no encaja, selecciona el texto y deja un comentario primero.'
+                                ? 'Si el copy de esta página está bien, apruébalo. Si algo no encaja, marca el texto y toca el botón de comentar, arriba a la derecha.'
                                 : esGuion
-                                ? 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, selecciona el texto y deja un comentario primero.'
-                                : 'Si está todo bien, apruébalo. Si algo no encaja, selecciona el texto y deja un comentario primero.'}
+                                ? 'Si está todo bien, apruébalo y pasa directo a grabación. Si algo no encaja, marca el texto y toca el botón de comentar, arriba a la derecha.'
+                                : 'Si está todo bien, apruébalo. Si algo no encaja, marca el texto y toca el botón de comentar, arriba a la derecha.'}
                             </div>
                           )}
                           <div onClick={() => marcarRevisada(s)} role="button"
