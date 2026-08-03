@@ -237,7 +237,11 @@ export default function DocumentoScreen() {
     const secEl = node?.closest?.('[data-secid]');
     if (!secEl) return;
     // No hace falta saber DÓNDE está la selección: el botón no se mueve.
-    setSelBtn({ quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') });
+    const quote = text.slice(0, 300);
+    const sectionId = secEl.getAttribute('data-secid');
+    // Solo se guarda si CAMBIÓ: mientras se arrastran los tiradores esto se llama
+    // muchas veces, y cada guardado vuelve a dibujar la pantalla al pedo.
+    setSelBtn((a) => (a && a.quote === quote && a.sectionId === sectionId ? a : { quote, sectionId }));
   };
 
   // `selectionchange` es el ÚNICO evento que llega siempre: en iOS los tiradores de
@@ -428,7 +432,18 @@ export default function DocumentoScreen() {
     });
   };
 
-  const marking = composer && !composer.parentId ? composer : selBtn;
+  // ACÁ ESTABA EL PROBLEMA DE FONDO de "marco y desaparece".
+  //
+  // Esto pintaba de azul lo que estabas marcando, en vivo. Para hacerlo había que
+  // reescribir el HTML de la sección… y al reescribirlo el navegador TIRA la
+  // selección: los pedazos de texto que la sostenían dejan de existir. O sea que
+  // el propio dibujito de "lo estás marcando" era lo que borraba la marca, en el
+  // teléfono y en la compu.
+  //
+  // Ahora el texto NO se toca mientras marcás: la selección nativa queda viva, con
+  // sus tiradores para agrandarla. El resaltado azul aparece recién al abrir la
+  // caja de comentario, que es cuando ya sirve para recordar qué estás comentando.
+  const marking = composer && !composer.parentId ? composer : null;
 
   // Comentarios inline de una sección (tarjeta "Yo" del prototipo).
   const comsDe = (sec) => topComs.filter((c) => (c.sectionId || c.section_id) === sec.id).map((c) => (

@@ -870,10 +870,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     // marcado. Nunca encima del texto: si tapa el texto, hay que esquivarlo para
     // volver a marcar, que era el problema.
     const hoja = secEl.getBoundingClientRect();
-    setSelBtn({
-      top: rect.top, margenIzq: hoja.right + 12, quote: text.slice(0, 300),
-      sectionId: secEl.getAttribute('data-secid'),
-    });
+    const quote = text.slice(0, 300);
+    const sectionId = secEl.getAttribute('data-secid');
+    const margenIzq = hoja.right + 12;
+    // Solo si cambió: arrastrar los tiradores dispara esto muchas veces y cada
+    // guardado vuelve a dibujar la pantalla sin necesidad.
+    setSelBtn((a) => (a && a.quote === quote && a.sectionId === sectionId && Math.abs((a.top ?? 0) - rect.top) < 2
+      ? a : { top: rect.top, margenIzq, quote, sectionId }));
   };
 
   // Soltar el mouse dentro del documento sin dejar nada marcado = "estoy leyendo":
