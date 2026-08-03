@@ -322,7 +322,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [activeApi, setActiveApi] = useState(null);  // API de la sección enfocada (barra única)
   // Comentarios estilo Google Docs: marcás una frase → botón flotante → se guarda con
   // la frase (quote) y aparece en el margen derecho, con la frase resaltada en el texto.
-  const [selBtn, setSelBtn] = useState(null);        // botón flotante: {top,left,quote,sectionId}
+  // (Lo marcado NO vive en el estado: va en `selRef`, más abajo, para no
+  //  redibujar el documento mientras se está marcando.)
   const [composer, setComposer] = useState(null);    // caja de escribir: {quote,sectionId}
   const [flashCmt, setFlashCmt] = useState(null);     // id del comentario a destacar
   const [imgPicker, setImgPicker] = useState(null);   // selector de imagen de Recursos: {insert}
@@ -856,6 +857,32 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // selección apenas se apoya el mouse en cualquier lado (el propio botón
   // incluido), así que esconderlo ahí lo hacía desaparecer justo al ir a
   // apretarlo. Se esconde a propósito: al abrir la caja, al tocar fuera o con Esc.
+  // Lo marcado NO va al estado de React: cada guardado redibuja el documento, y
+  // redibujar el documento le suelta la selección al navegador. Va en un `ref` y
+  // el botón se mueve/enciende escribiéndole el estilo directo al elemento.
+  const selRef = useRef(null);     // { quote, sectionId, top, margenIzq }
+  const btnRef = useRef(null);
+
+  const pintarBoton = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    const s = selRef.current;
+    if (!s) { el.style.display = 'none'; return; }
+    const vw = window.innerWidth; const vh = window.innerHeight;
+    // Al MARGEN de la hoja (como Google Docs), a la altura de lo marcado. Nunca
+    // encima del texto: si lo tapa, hay que esquivarlo para volver a marcar.
+    const cabe = s.margenIzq && s.margenIzq < vw - 130;
+    el.style.display = composer ? 'none' : 'inline-flex';
+    if (cabe) {
+      el.style.top = `${Math.min(Math.max(56, s.top - 6), vh - 60)}px`;
+      el.style.left = `${s.margenIzq}px`;
+      el.style.bottom = 'auto'; el.style.right = 'auto';
+    } else {
+      el.style.top = 'auto'; el.style.left = 'auto';
+      el.style.bottom = '18px'; el.style.right = '18px';
+    }
+  };
+
   const onDocMouseUp = () => {
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
@@ -866,25 +893,25 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (!secEl) return;
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     if (!rect || (!rect.width && !rect.height)) return;
-    // El botón va al MARGEN de la hoja (como Google Docs), a la altura de lo
-    // marcado. Nunca encima del texto: si tapa el texto, hay que esquivarlo para
-    // volver a marcar, que era el problema.
     const hoja = secEl.getBoundingClientRect();
-    const quote = text.slice(0, 300);
-    const sectionId = secEl.getAttribute('data-secid');
-    const margenIzq = hoja.right + 12;
-    // Solo si cambió: arrastrar los tiradores dispara esto muchas veces y cada
-    // guardado vuelve a dibujar la pantalla sin necesidad.
-    setSelBtn((a) => (a && a.quote === quote && a.sectionId === sectionId && Math.abs((a.top ?? 0) - rect.top) < 2
-      ? a : { top: rect.top, margenIzq, quote, sectionId }));
+    selRef.current = {
+      quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid'),
+      top: rect.top, margenIzq: hoja.right + 12,
+    };
+    pintarBoton();
   };
+
+  const apagarBoton = () => { selRef.current = null; pintarBoton(); };
+
+  // Cambiar de pestaña o de vista deja el botón colgado: se apaga.
+  useEffect(() => { apagarBoton(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, activa]);
 
   // Soltar el mouse dentro del documento sin dejar nada marcado = "estoy leyendo":
   // ahí sí se apaga. Nunca se apaga solo por quedarse sin selección.
   const onDocPointerUp = () => {
     setTimeout(() => {
       const s = window.getSelection();
-      if (!s || s.isCollapsed || s.toString().trim().length < 2) setSelBtn(null);
+      if (!s || s.isCollapsed || s.toString().trim().length < 2) apagarBoton();
       else onDocMouseUp();
     }, 120);
   };
@@ -894,17 +921,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const abrirComentario = () => {
     const sel = window.getSelection();
     const texto = sel ? sel.toString().trim() : '';
-    let elegido = selBtn;
+    let elegido = selRef.current;
     if (texto.length >= 2 && sel?.rangeCount) {
       let node = sel.anchorNode;
       while (node && node.nodeType !== 1) node = node.parentNode;
       const secEl = node?.closest?.('[data-secid]');
-      if (secEl) elegido = { ...selBtn, quote: texto.slice(0, 300), sectionId: secEl.getAttribute('data-secid') };
+      if (secEl) elegido = { ...selRef.current, quote: texto.slice(0, 300), sectionId: secEl.getAttribute('data-secid') };
     }
     if (!elegido?.sectionId) return;
-    setComposer({ quote: elegido.quote, sectionId: elegido.sectionId, top: elegido.top, left: elegido.margenIzq });
+    const pos = { top: elegido.top, left: elegido.margenIzq };
+    apagarBoton();
+    setComposer({ quote: elegido.quote, sectionId: elegido.sectionId, ...pos });
     setDraft('');
-    setSelBtn(null);
   };
 
   // En el teléfono/tablet los tiradores de la selección son del sistema y no
@@ -917,11 +945,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   }); // sin deps: onDocMouseUp se reconstruye en cada render
 
   useEffect(() => {
-    if (!selBtn) return undefined;
-    const esc = (e) => { if (e.key === 'Escape') { setSelBtn(null); window.getSelection()?.removeAllRanges?.(); } };
+    const esc = (e) => {
+      if (e.key !== 'Escape' || !selRef.current) return;
+      apagarBoton();
+      window.getSelection()?.removeAllRanges?.();
+    };
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
-  }, [selBtn]);
+  });
 
   // Guardar el comentario anclado a la frase (optimista, con reversión).
   const comentarQuote = async () => {
@@ -929,7 +960,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (!body || !composer) return;
     const comp = composer;
     const sec = secs?.find(x => x.id === comp.sectionId);
-    setDraft(''); setComposer(null); setSelBtn(null);
+    setDraft(''); setComposer(null); apagarBoton();
     const tempId = 'tmp_' + Date.now();
     setComments(prev => [...prev, { id: tempId, section_id: comp.sectionId, quote: comp.quote, body, author_name: myName, author_id: by, resolved: false, created_at: new Date().toISOString() }]);
     const { data, error } = await supabase.from('del_comments').insert({
@@ -2309,30 +2340,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
         )}
       </div>
 
-      {/* Botón flotante al marcar texto + caja para escribir el comentario. */}
       {/* Botón "Comentar" AL MARGEN de la hoja, a la altura de lo marcado — como
-          Google Docs. Antes flotaba encima del texto: había que esquivarlo para
-          volver a marcar y desaparecía al tocarlo. Si no hay margen (pantalla
-          angosta) cae abajo a la derecha, pero nunca sobre el texto. */}
-      {selBtn && !composer && (() => {
-        const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-        const cabeAlMargen = selBtn.margenIzq && selBtn.margenIzq < vw - 130;
-        const pos = cabeAlMargen
-          ? { top: Math.min(Math.max(56, selBtn.top - 6), vh - 60), left: selBtn.margenIzq }
-          : { bottom: 18, right: 18 };
-        return (
-          <button data-sel-btn
-            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onClick={abrirComentario}
-            title="Comentar lo que marcaste"
-            className="fixed z-[70] inline-flex items-center gap-1.5 py-2 px-3.5 rounded-full bg-[#1A1D26] text-white text-[12.5px] font-semibold cursor-pointer shadow-lg select-none"
-            style={{ ...pos, touchAction: 'manipulation', animation: 'delLate 1.4s ease-in-out infinite' }}>
-            <MessageSquare size={13} />Comentar
-          </button>
-        );
-      })()}
+          Google Docs. Nunca encima del texto: si lo tapa, hay que esquivarlo para
+          volver a marcar. Si la pantalla es angosta cae abajo a la derecha.
+
+          Está SIEMPRE montado y arranca oculto: mostrarlo y moverlo se hace
+          escribiéndole el estilo directo (ver pintarBoton), no con estado de
+          React. Montarlo/desmontarlo obliga a redibujar, y redibujar mientras el
+          usuario marca le suelta la selección al navegador. */}
+      <button ref={btnRef} data-sel-btn
+        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={abrirComentario}
+        title="Comentar lo que marcaste"
+        className="fixed z-[70] items-center gap-1.5 py-2 px-3.5 rounded-full bg-[#1A1D26] text-white text-[12.5px] font-semibold cursor-pointer shadow-lg select-none"
+        style={{ display: 'none', touchAction: 'manipulation', animation: 'delLate 1.4s ease-in-out infinite' }}>
+        <MessageSquare size={13} />Comentar
+      </button>
+
       {composer && (
         /* En mobile el composer va como hoja pegada abajo (el teclado no lo tapa);
            en desktop flota anclado a la frase, como siempre. */

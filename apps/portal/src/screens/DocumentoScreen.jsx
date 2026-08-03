@@ -137,7 +137,8 @@ export default function DocumentoScreen() {
   const [revAviso, setRevAviso] = useState(null);   // feedback tras aprobar/corregir
 
   const [drawer, setDrawer] = useState(false);
-  const [selBtn, setSelBtn] = useState(null);     // {top,left,quote,sectionId}
+  // (Lo que está marcado NO vive acá: va en `selRef`, más abajo, para no
+  //  redibujar la pantalla mientras el cliente marca.)
   const [composer, setComposer] = useState(null); // {quote,sectionId,parentId?}
   const [draft, setDraft] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -226,22 +227,36 @@ export default function DocumentoScreen() {
   // Ahora: la selección solo lo MUESTRA (o lo mueve). Se esconde a propósito, y
   // solo cuando corresponde: al abrir la caja, al tocar fuera del documento o con
   // Escape. Mientras haya un botón en pantalla, se puede apretar.
+  // LO MARCADO NO VIVE EN EL ESTADO DE REACT, A PROPÓSITO.
+  //
+  // Es la corrección de fondo, después de tres intentos que no daban en el clavo.
+  // Guardarlo en el estado obliga a redibujar la pantalla en cada movimiento de
+  // los tiradores, y redibujar es justamente lo que le suelta la selección al
+  // teléfono: se marcaba una palabra y se desmarcaba sola.
+  //
+  // Acá la selección se guarda en una caja aparte (un `ref`, que NO redibuja
+  // nada) y el botón se enciende tocándole la clase al elemento directamente.
+  // Mientras marcás, en la pantalla no se mueve ni un píxel: la selección nativa
+  // queda intacta, con sus tiradores para agrandarla palabra por palabra.
+  const selRef = useRef(null);          // { quote, sectionId } o null
+  const btnComentarRef = useRef(null);
+  const pintarBoton = (activo) => {
+    const el = btnComentarRef.current;
+    if (el) el.dataset.activo = activo ? '1' : '0';
+  };
+
   const leerSeleccion = () => {
     if (!puedeComentar) return;
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
-    // Selección vacía: NO se toca el botón. Puede ser el colapso de un clic.
+    // Selección vacía: NO se apaga nada. Suele ser un colapso momentáneo.
     if (!sel || sel.isCollapsed || text.length < 2 || !sel.rangeCount) return;
     let node = sel.anchorNode;
     while (node && node.nodeType !== 1) node = node.parentNode;
     const secEl = node?.closest?.('[data-secid]');
     if (!secEl) return;
-    // No hace falta saber DÓNDE está la selección: el botón no se mueve.
-    const quote = text.slice(0, 300);
-    const sectionId = secEl.getAttribute('data-secid');
-    // Solo se guarda si CAMBIÓ: mientras se arrastran los tiradores esto se llama
-    // muchas veces, y cada guardado vuelve a dibujar la pantalla al pedo.
-    setSelBtn((a) => (a && a.quote === quote && a.sectionId === sectionId ? a : { quote, sectionId }));
+    selRef.current = { quote: text.slice(0, 300), sectionId: secEl.getAttribute('data-secid') };
+    pintarBoton(true);
   };
 
   // `selectionchange` es el ÚNICO evento que llega siempre: en iOS los tiradores de
@@ -260,15 +275,19 @@ export default function DocumentoScreen() {
     return () => { clearTimeout(t); document.removeEventListener('selectionchange', onSel); };
   }); // sin deps: leerSeleccion depende de props/estado que cambian en cada render
 
-  // Al apretar "Comentar" se vuelve a leer la selección de VERDAD, en ese
-  // momento. Si el cliente marcó mal y volvió a marcar, manda lo último que
-  // marcó — no lo que habíamos guardado. `selBtn` es solo el respaldo para el
-  // teléfono, donde el sistema a veces suelta la selección al tocar el botón.
+  const apagarBoton = () => { selRef.current = null; pintarBoton(false); };
+
+  // Al cambiar de documento el botón no puede quedar encendido con una marca vieja.
+  useEffect(() => { apagarBoton(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [sid, tipo]);
+
+  // Al apretar "Comentar" se lee la selección de VERDAD, en ese momento. Si
+  // marcaste mal y volviste a marcar, manda lo último. Lo guardado en `selRef` es
+  // el respaldo para el teléfono, que a veces suelta la selección al tocar.
   const abrirComentario = () => {
     if (!puedeComentar) return;
     const sel = window.getSelection();
     const texto = sel ? sel.toString().trim() : '';
-    let elegido = selBtn;
+    let elegido = selRef.current;
     if (texto.length >= 2 && sel?.rangeCount) {
       let node = sel.anchorNode;
       while (node && node.nodeType !== 1) node = node.parentNode;
@@ -276,29 +295,29 @@ export default function DocumentoScreen() {
       if (secEl) elegido = { quote: texto.slice(0, 300), sectionId: secEl.getAttribute('data-secid') };
     }
     if (!elegido?.sectionId) return;
+    apagarBoton();
     setComposer({ quote: elegido.quote, sectionId: elegido.sectionId, parentId: null });
     setDraft('');
-    setSelBtn(null);
   };
 
-  // Apagar el botón cuando el usuario deja claro que no va a comentar: toca fuera
-  // del documento (sin marcar nada) o aprieta Escape.
   useEffect(() => {
-    if (!selBtn) return undefined;
-    const esc = (e) => { if (e.key === 'Escape') { setSelBtn(null); window.getSelection()?.removeAllRanges?.(); } };
+    const esc = (e) => {
+      if (e.key !== 'Escape' || !selRef.current) return;
+      apagarBoton();
+      window.getSelection()?.removeAllRanges?.();
+    };
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
-  }, [selBtn]);
+  });
 
   // Soltar el dedo (o el mouse) DENTRO del documento es lo único que apaga el
   // botón, y solo si no quedó nada marcado: un toque suelto sobre el texto es
-  // "estoy leyendo". A propósito NO se apaga solo por quedarse sin selección: el
-  // teléfono la suelta por su cuenta todo el tiempo, y era justo lo que dejaba al
-  // cliente sin poder comentar lo que acababa de marcar.
+  // "estoy leyendo". A propósito NO se apaga por quedarse sin selección: el
+  // teléfono la suelta por su cuenta todo el tiempo.
   const onDocPointerUp = () => {
     setTimeout(() => {
       const s = window.getSelection();
-      if (!s || s.isCollapsed || s.toString().trim().length < 2) setSelBtn(null);
+      if (!s || s.isCollapsed || s.toString().trim().length < 2) apagarBoton();
       else leerSeleccion();
     }, 120);
   };
@@ -411,7 +430,7 @@ export default function DocumentoScreen() {
       const r = await api.comentar(composer.sectionId, body, composer.quote || null, composer.parentId || null);
       if (r?.ok) {
         setLocalComs((prev) => [...prev, { id: r.id || 'tmp' + Date.now(), sectionId: composer.sectionId, body, quote: composer.quote || null, parentId: composer.parentId || null, resolved: false, authorName: 'Tú', isTeam: false, isCliente: true, createdAt: new Date().toISOString() }]);
-        setDraft(''); setComposer(null); setSelBtn(null);
+        setDraft(''); setComposer(null); apagarBoton();
       } else window.alert('No pude guardar el comentario. Prueba de nuevo.');
     } finally { setEnviando(false); }
   };
@@ -479,10 +498,19 @@ export default function DocumentoScreen() {
              justo lo que impedía marcar). El menú nativo de Copiar aparece arriba
              de lo seleccionado y nuestro botón va abajo, así no compiten. */
           .doc-sel,.doc-sel *{user-select:text!important;-webkit-user-select:text!important}
-          /* El latido del botón "Comentar" cuando hay texto marcado: es lo que le
-             dice al cliente que ahora puede comentar, sin taparle nada. */
+          /* El botón de comentar. Apagado y encendido ocupan EXACTAMENTE lo mismo:
+             solo cambian colores. Se enciende escribiéndole data-activo="1" al
+             elemento, sin pasar por React, para no redibujar nada mientras el
+             cliente está marcando. */
+          [data-comentar]{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;
+            padding:7px 12px;border-radius:999px;flex:none;cursor:default;
+            border:1px solid var(--mk-border);background:#fff;color:var(--mk-text-soft);
+            user-select:none;-webkit-user-select:none;touch-action:manipulation;
+            transition:background .15s,color .15s,border-color .15s}
+          [data-comentar][data-activo="1"]{cursor:pointer;background:var(--mk-blue-ops);
+            border-color:var(--mk-blue-ops);color:#fff;animation:kxLate 1.4s ease-in-out infinite}
           @keyframes kxLate{0%,100%{box-shadow:0 0 0 0 rgba(46,105,224,.45)}50%{box-shadow:0 0 0 6px rgba(46,105,224,0)}}
-          @media (prefers-reduced-motion:reduce){@keyframes kxLate{0%,100%{box-shadow:none}}}
+          @media (prefers-reduced-motion:reduce){[data-comentar][data-activo="1"]{animation:none}}
         `}</style>
 
         {/* Header del documento (exacto al prototipo) */}
@@ -504,24 +532,19 @@ export default function DocumentoScreen() {
               el navegador lo borraba en cuanto se tocaba cualquier cosa. Ahora está
               siempre en el mismo lugar: cuando hay algo marcado se enciende y late,
               y con eso alcanza. Nunca tapa el texto ni estorba para re-marcar. */}
+          {/* Botón de comentar: SIEMPRE del mismo tamaño y en el mismo lugar.
+              Al marcar solo cambia de color y late — no cambia de texto ni crece,
+              porque cualquier movimiento del layout puede hacerle soltar la
+              selección al teléfono. El contenido tampoco cambia: el número de
+              comentarios se queda quieto. */}
           {!esGuias && (
-            <div onPointerDown={(e) => { if (puedeComentar && selBtn) { e.preventDefault(); e.stopPropagation(); } }}
+            <div ref={btnComentarRef} data-comentar data-activo="0"
+              onPointerDown={(e) => { if (puedeComentar && selRef.current) { e.preventDefault(); e.stopPropagation(); } }}
               onClick={abrirComentario} role="button"
-              aria-label={selBtn ? 'Comentar lo que marcaste' : `${topComs.length} comentarios`}
-              title={selBtn ? 'Comentar lo que marcaste' : (puedeComentar ? 'Marcá un texto del documento y este botón se enciende' : `${topComs.length} comentarios`)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700,
-                padding: '7px 12px', borderRadius: 999, flex: 'none',
-                cursor: selBtn ? 'pointer' : 'default',
-                border: selBtn ? '1px solid var(--mk-blue-ops)' : '1px solid var(--mk-border)',
-                background: selBtn ? 'var(--mk-blue-ops)' : '#fff',
-                color: selBtn ? '#fff' : T.textSoft,
-                animation: selBtn ? 'kxLate 1.4s ease-in-out infinite' : 'none',
-                transition: 'background .15s, color .15s, border-color .15s',
-                userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'manipulation',
-              }}>
+              aria-label="Comentar lo que marcaste"
+              title={puedeComentar ? 'Marcá un texto del documento y este botón se enciende' : `${topComs.length} comentarios`}>
               <IcoComment size={14} stroke="currentColor" sw={2} />
-              {selBtn ? 'Comentar' : topComs.length}
+              {topComs.length}
             </div>
           )}
           {/* "?" → la página de Guías (adentro del portal, para todos los DEL) */}
