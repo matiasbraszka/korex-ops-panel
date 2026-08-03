@@ -75,25 +75,59 @@ button { font-family: inherit; }
 @keyframes kxPop { 0%,45% { transform: scale(0); opacity: 0; } 62% { transform: scale(1.08); opacity: 1; } 75%,100% { transform: scale(1); opacity: 1; } }
 
 /* ── Demo de "cómo comentar" (bienvenida de Guiones) ────────────────────────
-   Cuenta el gesto real, en tres tiempos y en bucle:
+   Un ciclo cuenta la historia COMPLETA, de punta a punta:
      1) mantener pulsado marca una palabra,
      2) los tiradores estiran la marca a más palabras,
-     3) el botón de arriba se enciende y se toca.
-   Los cuatro keyframes comparten los mismos tiempos para que se vean como un
-   solo movimiento. */
-@keyframes kxMarca { 0%,10% { background-size: 0% 82%; } 26%,40% { background-size: 38% 82%; } 56%,100% { background-size: 100% 82%; } }
-@keyframes kxTirador { 0%,10% { left: 0%; } 26%,40% { left: 38%; } 56%,100% { left: 100%; } }
-@keyframes kxBotonOn {
-  0%,50% { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
-  58%,100% { background: var(--mk-blue-ops); border-color: var(--mk-blue-ops); color: #fff; }
+     3) el botón de arriba se enciende y se toca,
+     4) sube la caja y se escribe la nota,
+     5) se envía: la frase queda en amarillo y el contador sube.
+   Todos los keyframes comparten la misma línea de tiempo (los mismos
+   porcentajes), así se ve como un solo movimiento y no como piezas sueltas. */
+@keyframes kxMarca {
+  0%,   6%   { background-size: 0% 82%;   background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
+  18%, 26%   { background-size: 38% 82%;  background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
+  38%, 68%   { background-size: 100% 82%; background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
+  72%, 100%  { background-size: 100% 82%; background-image: linear-gradient(rgba(234,179,8,.42), rgba(234,179,8,.42)); }
 }
-@keyframes kxDedo { 0%,62% { transform: scale(.4); opacity: 0; } 72% { transform: scale(1); opacity: 1; } 88%,100% { transform: scale(1.9); opacity: 0; } }
+@keyframes kxTirador {
+  0%,   6%   { left: 0%;   opacity: 1; }
+  18%, 26%   { left: 38%;  opacity: 1; }
+  38%, 68%   { left: 100%; opacity: 1; }
+  72%, 100%  { left: 100%; opacity: 0; }
+}
+@keyframes kxTiradorIzq { 0%, 68% { opacity: 1; } 72%, 100% { opacity: 0; } }
+@keyframes kxBotonOn {
+  0%,  34%   { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
+  40%, 70%   { background: var(--mk-blue-ops); border-color: var(--mk-blue-ops); color: #fff; }
+  74%, 100%  { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
+}
+@keyframes kxDedo {
+  0%,  42%   { transform: scale(.4); opacity: 0; }
+  48%        { transform: scale(1);  opacity: 1; }
+  58%, 100%  { transform: scale(1.9); opacity: 0; }
+}
+@keyframes kxCaja {
+  0%,  50%   { transform: translateY(120%); opacity: 0; }
+  57%, 68%   { transform: translateY(0);    opacity: 1; }
+  73%, 100%  { transform: translateY(120%); opacity: 0; }
+}
+@keyframes kxEscribe { 0%, 58% { width: 0; } 67%, 100% { width: 100%; } }
+@keyframes kxCursor  { 0%, 57% { opacity: 0; } 58%, 67% { opacity: 1; } 68%, 100% { opacity: 0; } }
+@keyframes kxOk {
+  0%,  72%   { opacity: 0; transform: translateY(7px); }
+  78%, 93%   { opacity: 1; transform: translateY(0); }
+  100%       { opacity: 0; transform: translateY(0); }
+}
+@keyframes kxNumViejo { 0%, 70% { opacity: 1; } 74%, 100% { opacity: 0; } }
+@keyframes kxNumNuevo { 0%, 70% { opacity: 0; } 74%, 100% { opacity: 1; } }
 
+/* Con "reducir movimiento" el demo se queda quieto en el final de la historia:
+   la frase ya comentada, en amarillo, y el contador con el comentario nuevo. */
 @media (prefers-reduced-motion: reduce) {
   .kx-demo-comentar * { animation: none !important; }
-  .kx-demo-comentar .kx-marca { background-size: 100% 82% !important; }
-  .kx-demo-comentar .kx-tirador-der { left: 100% !important; }
-  .kx-demo-comentar .kx-boton { background: var(--mk-blue-ops) !important; border-color: var(--mk-blue-ops) !important; color: #fff !important; }
+  .kx-demo-comentar .kx-marca { background-size: 100% 82% !important; background-image: linear-gradient(rgba(234,179,8,.42), rgba(234,179,8,.42)) !important; }
+  .kx-demo-comentar .kx-tirador-der, .kx-demo-comentar .kx-tirador-izq, .kx-demo-comentar .kx-caja, .kx-demo-comentar .kx-num-viejo { opacity: 0 !important; }
+  .kx-demo-comentar .kx-num-nuevo, .kx-demo-comentar .kx-ok { opacity: 1 !important; }
 }
 
 @keyframes mk-spin { to { transform: rotate(360deg); } }

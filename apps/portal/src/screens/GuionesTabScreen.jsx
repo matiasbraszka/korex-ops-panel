@@ -12,6 +12,10 @@ import logo from '../assets/logo-korex.svg';
 
 const WELCOME_KEY = 'korex_portal_guiones_bienvenida';
 
+// Duración del bucle del demo de "cómo comentar". Todas las piezas usan ESTE
+// valor: si se cambia acá, la historia entera sigue sincronizada.
+const DEMO = '8.4s';
+
 // Duración estimada de lectura (~2.4 palabras/seg) → "< 1 min" / "2:30 min".
 const durLabel = (palabras) => {
   const seg = Math.round((palabras || 0) / 2.4);
@@ -205,7 +209,7 @@ export default function GuionesTabScreen() {
             <span style={introNum}>2</span>
             <div style={introTitle}>Comenta lo que quieras cambiar</div>
           </div>
-          <div className="kx-demo-comentar" style={{ background: 'var(--mk-bg-panel)', border: '1px solid #EEF0F4', borderRadius: 14, overflow: 'hidden' }}>
+          <div className="kx-demo-comentar" style={{ position: 'relative', background: 'var(--mk-bg-panel)', border: '1px solid #EEF0F4', borderRadius: 14, overflow: 'hidden' }}>
             {/* Barra de arriba, igual que en el documento real */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', background: '#fff', borderBottom: '1px solid var(--mk-border)' }}>
               <div style={{ width: 24, height: 24, borderRadius: 7, background: T.surface2, flexShrink: 0 }} />
@@ -213,36 +217,70 @@ export default function GuionesTabScreen() {
                 <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: '0.12em', color: T.primary }}>ADS</div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap' }}>Ads avatar 1</div>
               </div>
-              {/* El botón: apagado hasta que hay algo marcado. Y el toque al final. */}
+              {/* El botón: apagado hasta que hay algo marcado, y el toque encima.
+                  Al final el contador sube de 2 a 3 — los dos números están
+                  superpuestos para que el botón no cambie de ancho. */}
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <span className="kx-boton" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 999, border: '1px solid var(--mk-border)', background: '#fff', color: T.text3, animation: 'kxBotonOn 4.4s ease-in-out infinite' }}>
+                <span className="kx-boton" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 999, border: '1px solid var(--mk-border)', background: '#fff', color: T.text3, animation: `kxBotonOn ${DEMO} ease-in-out infinite` }}>
                   <IcoComment size={13} stroke="currentColor" sw={2.2} />
-                  2
+                  <span style={{ position: 'relative', display: 'inline-block', width: 7, textAlign: 'center' }}>
+                    <span className="kx-num-viejo" style={{ animation: `kxNumViejo ${DEMO} ease-in-out infinite` }}>2</span>
+                    <span className="kx-num-nuevo" style={{ position: 'absolute', left: 0, right: 0, opacity: 0, animation: `kxNumNuevo ${DEMO} ease-in-out infinite` }}>3</span>
+                  </span>
                 </span>
-                <span style={{ position: 'absolute', inset: -4, border: '2px solid var(--mk-blue-ops)', borderRadius: 999, animation: 'kxDedo 4.4s ease-in-out infinite', pointerEvents: 'none' }} />
+                <span style={{ position: 'absolute', inset: -4, border: '2px solid var(--mk-blue-ops)', borderRadius: 999, animation: `kxDedo ${DEMO} ease-in-out infinite`, pointerEvents: 'none' }} />
               </div>
             </div>
 
-            {/* El texto, con la marca que se estira */}
-            <div style={{ padding: '14px 15px 16px', fontSize: 13, lineHeight: 1.78, color: T.text3, fontWeight: 500 }}>
+            {/* El texto, con la marca que se estira y termina en amarillo */}
+            <div style={{ padding: '14px 15px 74px', fontSize: 13, lineHeight: 1.78, color: T.text3, fontWeight: 500 }}>
               Si estás cansado de{' '}
-              <span className="kx-marca" style={{ position: 'relative', display: 'inline-block', backgroundImage: 'linear-gradient(rgba(91,124,245,.30),rgba(91,124,245,.30))', backgroundRepeat: 'no-repeat', backgroundPosition: 'left center', backgroundSize: '0% 82%', borderRadius: 3, color: T.textSoft, fontWeight: 600, animation: 'kxMarca 4.4s ease-in-out infinite' }}>
+              <span className="kx-marca" style={{ position: 'relative', display: 'inline-block', backgroundImage: 'linear-gradient(rgba(91,124,245,.30),rgba(91,124,245,.30))', backgroundRepeat: 'no-repeat', backgroundPosition: 'left center', backgroundSize: '0% 82%', borderRadius: 3, color: T.textSoft, fontWeight: 600, animation: `kxMarca ${DEMO} ease-in-out infinite` }}>
                 perseguir a amigos y familiares
                 {/* Los dos tiradores del teléfono: el de la izquierda queda fijo,
-                    el de la derecha viaja mientras la marca crece. */}
-                <span style={{ position: 'absolute', left: 0, top: -3, bottom: -3, width: 2, background: 'var(--mk-blue-ink)', pointerEvents: 'none' }}>
+                    el de la derecha viaja mientras la marca crece. Los dos se van
+                    cuando el comentario ya quedó guardado. */}
+                <span className="kx-tirador-izq" style={{ position: 'absolute', left: 0, top: -3, bottom: -3, width: 2, background: 'var(--mk-blue-ink)', animation: `kxTiradorIzq ${DEMO} ease-in-out infinite`, pointerEvents: 'none' }}>
                   <span style={{ position: 'absolute', left: -4, top: -5, width: 10, height: 10, borderRadius: 999, background: 'var(--mk-blue-ink)' }} />
                 </span>
-                <span className="kx-tirador-der" style={{ position: 'absolute', left: 0, top: -3, bottom: -3, width: 2, background: 'var(--mk-blue-ink)', animation: 'kxTirador 4.4s ease-in-out infinite', pointerEvents: 'none' }}>
+                <span className="kx-tirador-der" style={{ position: 'absolute', left: 0, top: -3, bottom: -3, width: 2, background: 'var(--mk-blue-ink)', animation: `kxTirador ${DEMO} ease-in-out infinite`, pointerEvents: 'none' }}>
                   <span style={{ position: 'absolute', left: -4, bottom: -5, width: 10, height: 10, borderRadius: 999, background: 'var(--mk-blue-ink)' }} />
                 </span>
               </span>{' '}
               para que se sumen a tu negocio, quédate 30 segundos.
             </div>
+
+            {/* La caja: sube, se escribe la nota sola y se envía. */}
+            <div className="kx-caja" style={{ position: 'absolute', left: 10, right: 10, bottom: 10, background: '#fff', border: '1px solid var(--mk-border)', borderRadius: 12, padding: 9, boxShadow: '0 -6px 20px rgba(10,22,40,.12)', animation: `kxCaja ${DEMO} ease-in-out infinite` }}>
+              <div style={{ fontSize: 9.5, color: '#8A6D2B', borderLeft: '2px solid var(--mk-yellow)', paddingLeft: 6, marginBottom: 6, fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                “perseguir a amigos y familiares”
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ flex: 1, minWidth: 0, border: '1px solid var(--mk-border)', borderRadius: 8, padding: '5px 7px', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ display: 'inline-block', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, color: T.text, animation: `kxEscribe ${DEMO} steps(22, end) infinite` }}>
+                    Esto no lo digo así
+                  </span>
+                  <span style={{ width: 1.5, height: 12, background: 'var(--mk-blue-ops)', marginLeft: 1, animation: `kxCursor ${DEMO} steps(1, end) infinite` }} />
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--mk-blue-ops)', color: '#fff', fontSize: 10.5, fontWeight: 800, padding: '6px 10px', borderRadius: 999, flexShrink: 0 }}>
+                  <IcoComment size={11} stroke="currentColor" sw={2.4} />
+                  Enviar
+                </span>
+              </div>
+            </div>
+
+            {/* El final feliz: quedó guardado. */}
+            <div className="kx-ok" style={{ position: 'absolute', left: 0, right: 0, bottom: 14, display: 'flex', justifyContent: 'center', opacity: 0, animation: `kxOk ${DEMO} ease-in-out infinite`, pointerEvents: 'none' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--mk-green-bg)', color: 'var(--mk-green)', border: '1px solid color-mix(in srgb, var(--mk-green) 28%, transparent)', fontSize: 11, fontWeight: 800, padding: '6px 12px', borderRadius: 999 }}>
+                <IcoCheck size={12} stroke="currentColor" sw={2.6} />
+                Comentario enviado
+              </span>
+            </div>
           </div>
           <div style={introCaption}>
-            <b style={{ color: T.textSoft }}>Mantén el dedo</b> sobre una palabra para marcarla y estira con las bolitas
-            hasta donde quieras. Después toca el <b style={{ color: T.textSoft }}>botón de arriba</b>, que se pone azul.
+            <b style={{ color: T.textSoft }}>Mantén el dedo</b> sobre una palabra y estira con las bolitas hasta donde
+            quieras. Toca el <b style={{ color: T.textSoft }}>botón de arriba</b>, que se pone azul, escribe tu nota y
+            envíala. La frase queda <b style={{ color: '#8A6D2B' }}>marcada en amarillo</b>: el equipo ya la tiene.
           </div>
         </div>
 
